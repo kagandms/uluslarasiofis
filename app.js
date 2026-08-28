@@ -930,7 +930,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Yardımcı: etiket kelimesinin sağında (aynı satır) VEYA hemen altında (aynı sütun) olan değer kelimeleri bul
         // maxX: opsiyonel X sınırı — sol kolon etiketleri için sağ kolona taşmayı önler
-        const findValueWordsForLabel = (labelWord, maxX = null) => {
+        const findValueWordsForLabel = (labelWord, maxX = null, skipCountryFilter = false) => {
             // Etiket sol kolondaysa (midpoint'in solunda), maxX'i otomatik hesapla
             const effectiveMaxX = maxX !== null ? maxX : (labelWord.bbox.x0 < midpoint ? midpoint : null);
             
@@ -949,8 +949,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!isRight && !isBelow) return false;
                     if (coordFormLabels.test(w.text)) return false; // Form etiketlerini atla
                     
-                    // Ülke adı filtresi — ad/soyad gibi alanlara bulaşmasını önler
-                    if (knownCountryNames.test(w.text.replace(/[^A-ZÇĞİÖŞÜa-zçğıöşü]/g, ''))) return false;
+                    // Ülke adı filtresi — ad/soyad gibi alanlara bulaşmasını önler (uyruk için devre dışı)
+                    if (!skipCountryFilter && knownCountryNames.test(w.text.replace(/[^A-ZÇĞİÖŞÜa-zçğıöşü]/g, ''))) return false;
                     
                     // OCR Halüsinasyon filtresi
                     const labelH = labelWord.bbox.y1 - labelWord.bbox.y0;
@@ -1064,8 +1064,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 if (skip) continue;
                 
-                // Uyruğu sağ sütunda — midpoint kısıtlaması yok
-                const values = findValueWordsForLabel(w);
+                // Uyruğu sağ sütunda — midpoint kısıtlaması yok, ülke adı filtresi kapalı
+                const values = findValueWordsForLabel(w, null, true);
                 if (values.length > 0) {
                     const uniqueValues = [...new Set(values)];
                     extracted.uyrugu = uniqueValues.join(' ');
@@ -1084,7 +1084,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     );
                     if (hasIn) continue;
                     
-                    const values = findValueWordsForLabel(w);
+                    const values = findValueWordsForLabel(w, null, true);
                     if (values.length > 0) {
                         extracted.uyrugu = values.join(' ');
                         console.log('[Koordinat] Uyruğu (Nationality) bulundu:', extracted.uyrugu);
