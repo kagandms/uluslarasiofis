@@ -187,6 +187,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    
+    // --- Manual Entry Logic ---
+    const btnManualEntry = document.getElementById('btn-manual-entry');
+    if (btnManualEntry) {
+        btnManualEntry.addEventListener('click', () => {
+            const resultForm = document.getElementById('result-form');
+            if (resultForm) resultForm.reset();
+            document.querySelectorAll('.glass-input').forEach(el => {
+                el.classList.remove('success', 'field-filled');
+            });
+            // Clear cropped images since this is manual
+            croppedImages = [];
+            page1ImageObj = null;
+            setActiveStep(3);
+            showToast('Manuel giriş moduna geçildi.', 'info');
+        });
+    }
+
     // Initial setup
     setActiveStep(1);
 
