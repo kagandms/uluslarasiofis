@@ -1672,19 +1672,19 @@ document.addEventListener('DOMContentLoaded', () => {
             container.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;';
             container.innerHTML = `
                 <style>
-                    .pt { width: 100%; border-collapse: collapse; margin-bottom: 3px; }
-                    .pt th, .pt td { border: 1px solid #000; padding: 7px 8px; text-align: left; vertical-align: middle; font-size: 13px; font-family: 'Times New Roman', serif; }
+                    .pt { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+                    .pt th, .pt td { border: 1px solid #000; padding: 9px 10px; text-align: left; vertical-align: middle; font-size: 14px; font-family: 'Times New Roman', serif; }
                     .pt th { font-weight: bold; }
                 </style>
                 <div style="font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;min-height:1120px;">
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-                        <div style="width: 55px; height: 55px; overflow: hidden; display: flex; align-items: center; border-radius: 5px;">
-                            <img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" style="height: 55px; width: auto; max-width: none;" crossorigin="anonymous">
+                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-start;">
+                            <img src="topkapi_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
                         </div>
-                        <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 6px 0; text-align: center; font-size: 15px; font-weight: bold;">
+                        <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 8px 0; text-align: center; font-size: 16px; font-weight: bold;">
                             İSTANBUL TOPKAPI ÜNİVERSİTESİ
                         </div>
-                        <div style="width: 55px; height: 55px; display: flex; align-items: center; justify-content: flex-end;">
+                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-end;">
                             <img src="goc_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
                         </div>
                     </div>
@@ -1722,9 +1722,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     <p style="text-align:justify;font-size:11.5px;margin:6px 0;line-height:1.3;text-indent:30px;">
                         6458 sayılı Kanunun 38. maddesi çerçevesinde istenilen aşağıdaki belgelerin ekte sunulduğuna dair işbu tebliğ ve tebellüğ belgesi tanzim edilerek taraflarca imza altına alınmış, belgenin bir sureti tarafınıza teslim edilmiş olup, diğer sureti İl Göç İdaresi Müdürlüğüne gönderilecektir.
                     </p>
-                    <p style="text-align:right;font-size:11.5px;margin-bottom:4px;">___ / ___ / 202_<br><u>(Tarih)</u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
+
                     <p style="font-weight:bold;font-size:12px;margin:8px 0 4px 0;">BELGELER:</p>
-                    <ul style="list-style:none;padding:0 0 0 10px;margin:0;font-size:11.5px;line-height:1.2;">
+                    <ul style="list-style:none;padding:0 0 0 10px;margin:0;font-size:10.5px;line-height:1.2;">
                         <li style="margin-bottom:1px;">☐ İkamet izni kayıt/başvuru formu (öğrenci tarafından ıslak imzalı şekilde)</li>
                         <li style="margin-bottom:1px;">☐ Pasaport ya da pasaport yerine geçen belge (aslı görüldü şeklinde)</li>
                         <li style="margin-bottom:1px;">☐ Öğrencilik durumunu gösterir belge</li>
@@ -1743,7 +1743,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <li style="margin-bottom:1px;">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
                     </ul>
                     <p style="font-weight:bold;font-size:12px;margin:12px 0 4px 0;text-align:center;border:1px solid #000;padding:6px;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
-                    <div style="display:flex;justify-content:space-around;font-weight:bold;font-size:12px;margin-top:35px;">
+                    <div style="display:flex;justify-content:space-around;font-weight:bold;font-size:13px;margin-top:40px;">
                         <div style="text-align:center;"><u>TEBLİĞ EDEN</u><br><br>Üniversite Personeli</div>
                         <div style="text-align:center;"><u>TEBELLÜĞ EDEN</u><br><br>Yabancı Öğrenci</div>
                     </div>
@@ -1820,20 +1820,20 @@ document.addEventListener('DOMContentLoaded', () => {
             // Generate HTML for the print area
             const printHtml = `
                 <style>
-                    .print-table { width: 100%; border-collapse: collapse; margin-bottom: 3px; }
-                    .print-table th, .print-table td { border: 1px solid #000; padding: 4px; text-align: left; vertical-align: middle; font-size: 12px; }
+                    .print-table { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+                    .print-table th, .print-table td { border: 1px solid #000; padding: 9px 10px; text-align: left; vertical-align: middle; font-size: 14px; }
                     .print-table th { font-weight: bold; }
                 </style>
                 <div id="pdf-content" style="font-family: 'Times New Roman', Times, serif; padding: 5mm 10mm; color: black; background: white; border: 4px double black; box-sizing: border-box; min-height: 264mm; max-width: 210mm; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; page-break-inside: avoid; display: flex; flex-direction: column;">
                     
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                        <div style="width: 55px; height: 55px; overflow: hidden; display: flex; align-items: center; border-radius: 5px;">
-                            <img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" style="height: 55px; width: auto; max-width: none;">
+                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-start;">
+                            <img src="topkapi_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;">
                         </div>
-                        <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 6px 0; text-align: center; font-size: 15px; font-weight: bold;">
+                        <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 8px 0; text-align: center; font-size: 16px; font-weight: bold;">
                             İSTANBUL TOPKAPI ÜNİVERSİTESİ
                         </div>
-                        <div style="width: 55px; height: 55px; display: flex; align-items: center; justify-content: flex-end;">
+                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-end;">
                             <img src="goc_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;">
                         </div>
                     </div>
@@ -1874,10 +1874,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6458 sayılı Kanunun 38. maddesi çerçevesinde istenilen aşağıdaki belgelerin ekte sunulduğuna dair işbu tebliğ ve tebellüğ belgesi tanzim edilerek taraflarca imza altına alınmış, belgenin bir sureti tarafınıza teslim edilmiş olup, diğer sureti İl Göç İdaresi Müdürlüğüne gönderilecektir.
                     </p>
                     
-                    <p style="text-align: right; font-size: 12px; margin-bottom: 2px;">___ / ___/ 202_<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(Tarih)</p>
+
                     
                     <p style="font-weight: bold; font-size: 12px; margin-bottom: 4px; margin-top: 15px;">BELGELER:</p>
-                    <ul style="list-style: none; padding: 0; margin: 0; font-size: 12px; padding-left: 15px;">
+                    <ul style="list-style: none; padding: 0; margin: 0; font-size: 11px; padding-left: 15px; line-height: 1.1;">
                         <li style="margin-bottom: 2px;">☐ İkamet izni kayıt/başvuru formu (öğrenci tarafından ıslak imzalı şekilde)</li>
                         <li style="margin-bottom: 2px;">☐ Pasaport ya da pasaport yerine geçen belge (aslı görüldü şeklinde)</li>
                         <li style="margin-bottom: 2px;">☐ Öğrencilik durumunu gösterir belge</li>
@@ -1898,7 +1898,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     <p style="font-weight: bold; font-size: 12px; margin: 12px 0 4px 0; text-align: center; border: 1px solid #000; padding: 6px;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
                     
-                    <div style="margin-top: auto; display: flex; justify-content: space-around; font-weight: bold; font-size: 12px; padding-bottom: 20mm; padding-top: 6px; page-break-before: avoid; break-before: avoid;">
+                    <div style="margin-top: auto; display: flex; justify-content: space-around; font-weight: bold; font-size: 13px; padding-bottom: 15mm; padding-top: 15px; page-break-before: avoid; break-before: avoid;">
                         <div style="text-align: center;"><span style="text-decoration: underline;">TEBLİĞ EDEN</span><br>Üniversite Personeli</div>
                         <div style="text-align: center;"><span style="text-decoration: underline;">TEBELLÜĞ EDEN</span><br>Yabancı Öğrenci</div>
                     </div>
