@@ -108,7 +108,7 @@ h1, h2, h3 {
 
 /* Header */
 .app-header {
-    background: #ffffff;
+    background: var(--card-bg);
     border-bottom: 2px solid var(--accent);
     padding: 1rem 2rem;
     position: sticky;

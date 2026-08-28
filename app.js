@@ -662,14 +662,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- OCR İptal Fonksiyonu ---
     function cancelOCR() {
+        let aborted = false;
         if (activeAbortController) {
             activeAbortController.abort();
             activeAbortController = null;
+            aborted = true;
         }
         isProcessingPage2 = false;
         isSequentialCapture = false;
+        croppedImages = [];
+        page1ImageObj = null;
+        
+        // Reset form if going home
+        const resultForm = document.getElementById('result-form');
+        if (resultForm) resultForm.reset();
+        document.querySelectorAll('.glass-input').forEach(el => {
+            el.classList.remove('success', 'field-filled');
+        });
+        
         setActiveStep(1);
-        showToast('İşlem iptal edildi.', 'info');
+        
+        if (aborted) {
+            showToast('İşlem iptal edildi.', 'info');
+        }
     }
 
     // cancelOCR'u global scope'a taşı (logo onclick için)
