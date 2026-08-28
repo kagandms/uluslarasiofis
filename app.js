@@ -1641,9 +1641,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     .pt th { font-weight: bold; }
                 </style>
                 <div style="font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;min-height:1120px;">
-                    <div style="border:1px solid black;margin:0 auto 8px auto;width:70%;padding:5px 10px;text-align:center;font-size:14px;display:flex;align-items:center;justify-content:center;gap:10px;">
-                        <img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" style="height:40px;width:auto;" crossorigin="anonymous">
-                        <span>İSTANBUL TOPKAPI ÜNİVERSİTESİ</span>
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                        <div style="width: 55px; height: 55px; overflow: hidden; display: flex; align-items: center; border-radius: 5px;">
+                            <img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" style="height: 55px; width: auto; max-width: none;" crossorigin="anonymous">
+                        </div>
+                        <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 6px 0; text-align: center; font-size: 15px; font-weight: bold;">
+                            İSTANBUL TOPKAPI ÜNİVERSİTESİ
+                        </div>
+                        <div style="width: 55px; height: 55px; display: flex; align-items: center; justify-content: flex-end;">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a6/G%C3%B6%C3%A7_%C4%B0daresi.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
+                        </div>
                     </div>
                     <table class="pt" style="margin-bottom:4px;">
                         <tr><td colspan="4" style="height:18px;"></td></tr>
@@ -1677,7 +1684,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </tr>
                     </table>
                     <p style="text-align:justify;font-size:11.5px;margin:6px 0;line-height:1.3;text-indent:30px;">
-                        6458 sayılı Kanunun 38. maddesi çerçevesinde istenilen aşağıdaki belgelerin ekte sunulduğuna dair işbu tebliğ tebellüğ belgesi düzenlenerek altı imza altına alınmış, tebliğ belgesinin bir sureti tarafınıza verilmiş olup, bir sureti il göç idaresi müdürlüğüne gönderilecektir.
+                        6458 sayılı Kanunun 38. maddesi çerçevesinde istenilen aşağıdaki belgelerin ekte sunulduğuna dair işbu tebliğ ve tebellüğ belgesi tanzim edilerek taraflarca imza altına alınmış, belgenin bir sureti tarafınıza teslim edilmiş olup, diğer sureti İl Göç İdaresi Müdürlüğüne gönderilecektir.
                     </p>
                     <p style="text-align:right;font-size:11.5px;margin-bottom:4px;">___ / ___ / 202_<br><u>(Tarih)</u>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
                     <p style="font-weight:bold;font-size:12px;margin:8px 0 4px 0;">BELGELER:</p>
@@ -1699,7 +1706,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <li style="margin-bottom:1px;">☐ İkamet izni belge bedelinin ödendiğine dair makbuz</li>
                         <li style="margin-bottom:1px;">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
                     </ul>
-                    <p style="font-weight:bold;font-size:12px;margin:12px 0 4px 0;text-align:center;border:1px solid #000;padding:6px;">📅 Tebliğ belgelerinizi almak için en erken gelebileceğiniz tarih: ${vTebligatTarihi}</p>
+                    <p style="font-weight:bold;font-size:12px;margin:12px 0 4px 0;text-align:center;border:1px solid #000;padding:6px;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
                     <div style="display:flex;justify-content:space-around;font-weight:bold;font-size:12px;margin-top:35px;">
                         <div style="text-align:center;"><u>TEBLİĞ EDEN</u><br><br>Üniversite Personeli</div>
                         <div style="text-align:center;"><u>TEBELLÜĞ EDEN</u><br><br>Yabancı Öğrenci</div>
@@ -1774,9 +1781,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 </style>
                 <div id="pdf-content" style="font-family: 'Times New Roman', Times, serif; padding: 5mm 10mm; color: black; background: white; border: 4px double black; box-sizing: border-box; min-height: 264mm; max-width: 210mm; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; page-break-inside: avoid; display: flex; flex-direction: column;">
                     
-                    <div style="border: 1px solid black; margin: 0 auto 5px auto; width: 70%; padding: 4px 10px; text-align: center; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 10px;">
-                        <img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" style="height: 40px; width: auto;">
-                        <span>İSTANBUL TOPKAPI ÜNİVERSİTESİ</span>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <div style="width: 55px; height: 55px; overflow: hidden; display: flex; align-items: center; border-radius: 5px;">
+                            <img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" style="height: 55px; width: auto; max-width: none;">
+                        </div>
+                        <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 6px 0; text-align: center; font-size: 15px; font-weight: bold;">
+                            İSTANBUL TOPKAPI ÜNİVERSİTESİ
+                        </div>
+                        <div style="width: 55px; height: 55px; display: flex; align-items: center; justify-content: flex-end;">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a6/G%C3%B6%C3%A7_%C4%B0daresi.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;">
+                        </div>
                     </div>
                     
                     <table class="print-table" style="margin-bottom: 3px;">
@@ -1812,7 +1826,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </table>
                     
                     <p style="text-align: justify; font-size: 12px; margin-bottom: 5px; line-height: 1.1; margin-top: 5px;">
-                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6458 sayılı Kanunun 38. maddesi çerçevesinde istenilen aşağıdaki belgelerin ekte sunulduğuna dair işbu tebliğ tebellüğ belgesi düzenlenerek altı imza altına alınmış, tebliğ belgesinin bir sureti tarafınıza verilmiş olup, bir sureti il göç idaresi müdürlüğüne gönderilecektir.
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6458 sayılı Kanunun 38. maddesi çerçevesinde istenilen aşağıdaki belgelerin ekte sunulduğuna dair işbu tebliğ ve tebellüğ belgesi tanzim edilerek taraflarca imza altına alınmış, belgenin bir sureti tarafınıza teslim edilmiş olup, diğer sureti İl Göç İdaresi Müdürlüğüne gönderilecektir.
                     </p>
                     
                     <p style="text-align: right; font-size: 12px; margin-bottom: 2px;">___ / ___/ 202_<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(Tarih)</p>
@@ -1837,7 +1851,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <li style="margin-bottom: 2px; line-height: 1.1;">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
                     </ul>
                     
-                    <p style="font-weight: bold; font-size: 12px; margin: 12px 0 4px 0; text-align: center; border: 1px solid #000; padding: 6px;">📅 Tebliğ belgelerinizi almak için en erken gelebileceğiniz tarih: ${vTebligatTarihi}</p>
+                    <p style="font-weight: bold; font-size: 12px; margin: 12px 0 4px 0; text-align: center; border: 1px solid #000; padding: 6px;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
                     
                     <div style="margin-top: auto; display: flex; justify-content: space-around; font-weight: bold; font-size: 12px; padding-bottom: 20mm; padding-top: 6px; page-break-before: avoid; break-before: avoid;">
                         <div style="text-align: center;"><span style="text-decoration: underline;">TEBLİĞ EDEN</span><br>Üniversite Personeli</div>
