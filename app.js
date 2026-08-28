@@ -1642,7 +1642,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             İSTANBUL TOPKAPI ÜNİVERSİTESİ
                         </div>
                         <div style="width: 55px; height: 55px; display: flex; align-items: center; justify-content: flex-end;">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a6/G%C3%B6%C3%A7_%C4%B0daresi.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
+                            <img src="goc_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
                         </div>
                     </div>
                     <table class="pt" style="margin-bottom:4px;">
@@ -1782,7 +1782,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             İSTANBUL TOPKAPI ÜNİVERSİTESİ
                         </div>
                         <div style="width: 55px; height: 55px; display: flex; align-items: center; justify-content: flex-end;">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/a/a6/G%C3%B6%C3%A7_%C4%B0daresi.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;">
+                            <img src="goc_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;">
                         </div>
                     </div>
                     
