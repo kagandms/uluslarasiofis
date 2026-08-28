@@ -463,13 +463,6 @@ document.addEventListener('DOMContentLoaded', () => {
         croppedImages = [];
     });
 
-    document.getElementById('btn-crop-skip')?.addEventListener('click', () => {
-        cleanupCropper();
-        if (currentImageObj) {
-            processNextStep(currentImageObj);
-        }
-    });
-
     document.getElementById('btn-crop-confirm')?.addEventListener('click', () => {
         getCroppedImage((img) => {
             cleanupCropper();
