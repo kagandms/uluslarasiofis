@@ -19,7 +19,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <!-- CSS -->
-    <link rel="stylesheet" href="index.css?v=1.61.12">
+    <link rel="stylesheet" href="index.css?v=1.61.13">
     
     <!-- CDNs -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
@@ -29,7 +29,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <!-- App Script -->
-    <script src="app.js?v=1.61.12" defer></script>
+    <script src="app.js?v=1.61.13" defer></script>
 </head>
 <body>
     <!-- Main App Content -->
@@ -40,7 +40,7 @@
                 <div style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
                     <h1>İkamet/Kimlik Kapak Hazırlayıcısı</h1>
                     <div style="display: flex; align-items: center;">
-                        <span class="version-badge">v1.61.12</span>
+                        <span class="version-badge">v1.61.13</span>
                     </div>
                 </div>
             </div>
@@ -230,7 +230,8 @@
             </div>
             
             <div class="modal-actions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 15px;">
-                <button type="button" id="btn-crop-cancel" class="btn btn-outline" style="grid-column: span 2; width: 100%; padding: 10px 5px; font-size: 0.9rem;">İptal</button>
+                <button type="button" id="btn-crop-cancel" class="btn btn-outline" style="width: 100%; padding: 10px 5px; font-size: 0.9rem;">İptal</button>
+                <button type="button" id="btn-crop-skip" class="btn btn-secondary" style="width: 100%; padding: 10px 5px; font-size: 0.9rem;">Kırpmadan İşle</button>
                 <button type="button" id="btn-skip-capture-next" class="btn btn-secondary" style="grid-column: span 2; display: none; width: 100%; padding: 12px; font-size: 1rem;">Kırpmadan 2. Sayfayı Çek</button>
                 
                 <button type="button" id="btn-crop-capture-next" class="btn btn-secondary" style="grid-column: span 2; display: none; width: 100%; padding: 12px; font-size: 1rem;">Kırp ve 2. Sayfayı Çek</button>
