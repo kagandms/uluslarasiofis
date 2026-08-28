@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Steps
     const step1 = document.getElementById('step-1');
+    const stepPage2 = document.getElementById('step-page2');
     const step2 = document.getElementById('step-2');
     const step3 = document.getElementById('step-3');
     
@@ -58,6 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCopyOcr = document.getElementById('btn-copy-ocr');
     const btnInstallPwa = document.getElementById('btn-install-pwa');
     const btnCancelOcr = document.getElementById('btn-cancel-ocr');
+    const btnUploadPage2 = document.getElementById('btn-upload-page2');
+    const btnCancelPage2 = document.getElementById('btn-cancel-page2');
 
     // PWA Install Logic for iOS fallback display
     if (btnInstallPwa) {
@@ -126,21 +129,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Step Management ---
     function setActiveStep(stepNumber) {
-        [step1, step2, step3].forEach((section, index) => {
-            if (section) {
-                section.classList.remove('active', 'hidden');
-                if (index + 1 === stepNumber) {
-                    section.classList.add('active');
-                }
-            }
+        [step1, stepPage2, step2, step3].forEach((section) => {
+            if (section) section.classList.remove('active', 'hidden');
         });
+
+        if (stepNumber === 1 && step1) step1.classList.add('active');
+        if (stepNumber === 1.5 && stepPage2) stepPage2.classList.add('active');
+        if (stepNumber === 2 && step2) step2.classList.add('active');
+        if (stepNumber === 3 && step3) step3.classList.add('active');
 
         [1, 2, 3].forEach(num => {
             const indicator = document.getElementById(`indicator-${num}`);
             if (indicator) {
                 indicator.classList.remove('active', 'completed');
-                if (num < stepNumber) indicator.classList.add('completed');
-                if (num === stepNumber) indicator.classList.add('active');
+                if (num < Math.floor(stepNumber)) indicator.classList.add('completed');
+                if (num === Math.floor(stepNumber)) indicator.classList.add('active');
             }
         });
     }
@@ -257,6 +260,26 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target.files && e.target.files[0]) {
                 isProcessingPage2 = true;
                 handleFile(e.target.files[0]);
+            }
+        });
+    }
+
+
+    if (btnUploadPage2) {
+        btnUploadPage2.addEventListener('click', () => {
+            if (fileInputPage2) fileInputPage2.click();
+        });
+    }
+
+    if (btnCancelPage2) {
+        btnCancelPage2.addEventListener('click', () => {
+            if (page1ImageObj) {
+                isProcessingPage2 = false;
+                isSequentialCapture = false;
+                processAndRunOCR(page1ImageObj);
+                page1ImageObj = null;
+            } else {
+                setActiveStep(1);
             }
         });
     }
@@ -488,18 +511,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-skip-capture-next')?.addEventListener('click', () => {
         cleanupCropper();
         if (currentImageObj) {
-            croppedImages.push(currentImageObj.src);
+            croppedImages.push(currentImageObj);
             page1ImageObj = currentImageObj;
             isSequentialCapture = true;
             isProcessingPage2 = true;
-            showToast('1. sayfa kaydedildi. Lütfen 2. sayfayı yükleyin/çekin.', 'info');
-            setTimeout(() => {
-                if (fileInputPage2) {
-                    fileInputPage2.click();
-                } else {
-                    fileInput.click();
-                }
-            }, 500);
+            setActiveStep(1.5);
         }
     });
 
@@ -508,14 +524,15 @@ document.addEventListener('DOMContentLoaded', () => {
             cleanupCropper();
             if (img) {
                 croppedImages.push(img);
+                page1ImageObj = img;
             } else if (currentImageObj) {
                 croppedImages.push(currentImageObj);
+                page1ImageObj = currentImageObj;
             }
             
-            if (useCameraForPage2) {
-                fileInput.setAttribute('capture', 'environment');
-            }
-            fileInput.click();
+            isSequentialCapture = true;
+            isProcessingPage2 = true;
+            setActiveStep(1.5);
         });
     });
 
@@ -1596,14 +1613,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Word Document Generation
+    let generatedPdf = null;
+    let generatedPdfName = "";
+
     if (btnDownload) {
         btnDownload.addEventListener('click', async () => {
+            if (generatedPdf) {
+                generatedPdf.save(generatedPdfName);
+                showToast('PDF indiriliyor...', 'success');
+                // Reset button after download
+                generatedPdf = null;
+                btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> PDF İndir`;
+                btnDownload.style.backgroundColor = '';
+                btnDownload.classList.remove('pdf-ready');
+                return;
+            }
+
             if (typeof html2canvas === 'undefined' || typeof jspdf === 'undefined') {
                 showToast('PDF kütüphanesi yüklenemedi, lütfen sayfayı yenileyip tekrar deneyin.', 'error');
                 return;
             }
 
-            showToast('PDF hazırlanıyor...', 'info');
+            btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg> Hazırlanıyor...`;
+            showToast('PDF hazırlanıyor, lütfen bekleyin...', 'info');
 
             // Form değerlerini topla (print handler ile aynı mantık)
             const vBasvuruNo = fields.basvuruNo.value.trim() || ' ';
@@ -1726,12 +1758,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const fName = vAdi.trim() ? vAdi.trim() : 'Ad';
                 const fSurname = vSoyadi.trim() ? vSoyadi.trim() : 'Soyad';
-                pdf.save(`ONBILGI_${fSurname}_${fName}.pdf`);
-                showToast('PDF başarıyla oluşturuldu!', 'success');
+                
+                generatedPdf = pdf;
+                generatedPdfName = `ONBILGI_${fSurname}_${fName}.pdf`;
+                
+                // Update button
+                btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> PDF Hazır - Tıkla İndir`;
+                btnDownload.style.backgroundColor = 'var(--success)';
+                btnDownload.classList.add('pdf-ready');
+                
+                showToast('PDF oluşturuldu! İndirmek için butona tekrar tıklayın.', 'success');
             } catch (err) {
                 if (document.body.contains(container)) document.body.removeChild(container);
                 console.error('PDF hatası:', err);
                 showToast('PDF oluşturulurken hata: ' + err.message, 'error');
+                btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> PDF İndir`;
             }
         });
     }
