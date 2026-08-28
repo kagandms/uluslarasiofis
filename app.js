@@ -620,9 +620,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
 
                     try {
-                        // EU endpoint — 8 sn zaman aşımı
+                        // EU endpoint — 20 sn zaman aşımı (görsel upload + API işleme süresi için)
                         const euController = new AbortController();
-                        const euTimeout = setTimeout(() => euController.abort(), 8000);
+                        const euTimeout = setTimeout(() => euController.abort(), 20000);
                         response = await tryFetch(euUrl, euController.signal);
                         clearTimeout(euTimeout);
                     } catch (euErr) {
