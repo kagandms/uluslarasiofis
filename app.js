@@ -148,6 +148,37 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    
+    // --- Dark Mode Logic ---
+    const btnDarkMode = document.getElementById('btn-dark-mode');
+    const isDark = localStorage.getItem('theme') === 'dark';
+    
+    if (isDark) {
+        document.body.classList.add('dark-mode');
+    }
+    
+    if (btnDarkMode) {
+        btnDarkMode.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            if (document.body.classList.contains('dark-mode')) {
+                localStorage.setItem('theme', 'dark');
+            } else {
+                localStorage.setItem('theme', 'light');
+            }
+        });
+    }
+
+    // --- Service Worker Registration ---
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').then(reg => {
+                console.log('Service Worker registered', reg);
+            }).catch(err => {
+                console.warn('Service Worker registration failed', err);
+            });
+        });
+    }
+
     // Initial setup
     setActiveStep(1);
 
@@ -1625,6 +1656,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Word Document Generation
     let generatedPdf = null;
+
+    // --- Lazy Load PDF Libraries ---
+    let pdfLibsLoaded = false;
+    let isPdfLoading = false;
+    async function loadPdfLibraries() {
+        if (pdfLibsLoaded) return true;
+        if (isPdfLoading) {
+            // Wait for it to finish if it's currently loading
+            while(isPdfLoading) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+            return pdfLibsLoaded;
+        }
+        
+        isPdfLoading = true;
+        showToast('PDF modülleri yükleniyor, lütfen bekleyin...', 'info');
+        
+        try {
+            await Promise.all([
+                new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                }),
+                new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                })
+            ]);
+            pdfLibsLoaded = true;
+            return true;
+        } catch (e) {
+            showToast('PDF kütüphaneleri yüklenemedi. İnternet bağlantınızı kontrol edin.', 'error');
+            return false;
+        } finally {
+            isPdfLoading = false;
+        }
+    }
+
     let generatedPdfName = "";
 
     if (btnDownload) {
@@ -1640,10 +1715,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            if (typeof html2canvas === 'undefined' || typeof jspdf === 'undefined') {
-                showToast('PDF kütüphanesi yüklenemedi, lütfen sayfayı yenileyip tekrar deneyin.', 'error');
-                return;
-            }
+            const loaded = await loadPdfLibraries();
+            if (!loaded) return;
 
             btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg> Hazırlanıyor...`;
             showToast('PDF hazırlanıyor, lütfen bekleyin...', 'info');
