@@ -335,18 +335,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const btnConfirm = document.getElementById('btn-crop-confirm');
             const btnNext = document.getElementById('btn-crop-next');
             const btnCaptureNext = document.getElementById('btn-crop-capture-next');
+            const btnSkipCaptureNext = document.getElementById('btn-skip-capture-next');
             
             if (pendingFiles.length > 0) {
                 if (btnConfirm) btnConfirm.style.display = 'none';
                 if (btnCaptureNext) btnCaptureNext.style.display = 'none';
+                if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'none';
                 if (btnNext) btnNext.style.display = 'block';
             } else if (croppedImages.length === 0 && !isProcessingPage2) {
                 if (btnConfirm) btnConfirm.style.display = 'block';
                 if (btnCaptureNext) btnCaptureNext.style.display = 'block';
+                if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'block';
                 if (btnNext) btnNext.style.display = 'none';
             } else {
                 if (btnConfirm) btnConfirm.style.display = 'block';
                 if (btnCaptureNext) btnCaptureNext.style.display = 'none';
+                if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'none';
                 if (btnNext) btnNext.style.display = 'none';
             }
             
@@ -486,6 +490,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentImageObj) processNextStep(currentImageObj);
             }
         });
+    });
+
+    document.getElementById('btn-skip-capture-next')?.addEventListener('click', () => {
+        cleanupCropper();
+        if (currentImageObj) {
+            croppedImages.push(currentImageObj.src);
+            page1ImageObj = currentImageObj;
+            isSequentialCapture = true;
+            isProcessingPage2 = true;
+            showToast('1. sayfa kaydedildi. Lütfen 2. sayfayı yükleyin/çekin.', 'info');
+            setTimeout(() => {
+                if (fileInputPage2) {
+                    fileInputPage2.click();
+                } else {
+                    fileInput.click();
+                }
+            }, 500);
+        }
     });
 
     document.getElementById('btn-crop-capture-next')?.addEventListener('click', () => {
@@ -654,9 +676,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         // EU endpoint — 20 sn zaman aşımı (görsel upload + API işleme süresi için)
                         const euController = new AbortController();
                         const euTimeout = setTimeout(() => euController.abort(), 20000);
+                        const abortHandler = () => euController.abort();
+                        controller.signal.addEventListener('abort', abortHandler);
+                        
                         response = await tryFetch(euUrl, euController.signal);
+                        
+                        controller.signal.removeEventListener('abort', abortHandler);
                         clearTimeout(euTimeout);
+                        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
                     } catch (euErr) {
+                        if (controller.signal.aborted) throw euErr;
                         // EU bloke veya timeout → global endpoint'e düş
                         if (progressText) progressText.innerText = 'Alternatif sunucuya bağlanılıyor...';
                         response = await tryFetch(globalUrl, controller.signal);
@@ -770,6 +799,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } catch (error) {
+            if (error.name === 'AbortError' || error.message === 'Aborted') {
+                console.log('OCR isteği iptal edildi.');
+                return false;
+            }
             console.error("OCR Error:", error);
             
             let userMsg = error.message ? error.message : 'OCR işlemi başarısız. Lütfen daha net bir fotoğraf yükleyin.';
