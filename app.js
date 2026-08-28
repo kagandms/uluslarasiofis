@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Kota (aylık 1000 limit) dolduğunda sistem otomatik olarak sıradakine geçer.
     const GOOGLE_VISION_API_KEYS = [
         'AIzaSyDYxXNcg1XH9YR-I6fyVdsoZjxryFj27tU', // 1. API
-        '', // 2. API (buraya yapıştırın)
+        'AIzaSyDdi7G0dHDDPOEuhaGYhYmVfIA2mYhuniM', // 2. API
         ''  // 3. API (buraya yapıştırın)
     ];
     let currentApiKeyIndex = 0; 
