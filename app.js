@@ -155,6 +155,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const yyyy = today.getFullYear();
     if (fields.teslimTarihi) fields.teslimTarihi.value = `${dd}.${mm}.${yyyy}`;
 
+    // --- Tebligat Tarihi Hesaplama ---
+    // Formül: Verilen tarihten sonraki haftanın Cuma günü
+    // Örnek: Cuma verilirse → 7 gün sonraki Cuma, Pazartesi verilirse → o haftanın Cumasından sonraki Cuma
+    function calculateTebligatDate(dateStr) {
+        // dateStr format: dd.mm.yyyy
+        const parts = dateStr.split('.');
+        if (parts.length !== 3) return '';
+        const d = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1; // JS ayları 0-indexed
+        const y = parseInt(parts[2], 10);
+        if (isNaN(d) || isNaN(m) || isNaN(y)) return '';
+        
+        const date = new Date(y, m, d);
+        const dayOfWeek = date.getDay(); // 0=Pazar, 5=Cuma
+        
+        // Bu haftanın Cumasını bul, sonra +7 gün ekle
+        let daysToThisFriday = (5 - dayOfWeek + 7) % 7; // 0 = zaten Cuma
+        const daysToNextFriday = daysToThisFriday + 7; // Sonraki haftanın Cuması
+        
+        const tebligatDate = new Date(y, m, d + daysToNextFriday);
+        const tdd = String(tebligatDate.getDate()).padStart(2, '0');
+        const tmm = String(tebligatDate.getMonth() + 1).padStart(2, '0');
+        const tyyyy = tebligatDate.getFullYear();
+        
+        // Gün adını Türkçe olarak al
+        const gunAdlari = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+        const gunAdi = gunAdlari[tebligatDate.getDay()];
+        
+        return `${tdd}.${tmm}.${tyyyy} (${gunAdi})`;
+    }
+
     // --- Image Upload & Camera ---
     
     // Trigger file input when clicking the zone (if no child clicked specifically)
@@ -1121,7 +1152,73 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // Pasaport No artık extractFields (Regex) tarafına bırakıldı, çünkü koordinat bazlı arama formdaki uyarı metinlerindeki 'Belge' / 'Document' kelimeleriyle karışabiliyor.
+        // --- PASAPORT NO (Belge No) ---
+        if (!extracted.pasaportNo) {
+            for (let i = 0; i < words.length; i++) {
+                const w = words[i];
+                // "Belge", "Document", veya "Pasaport" etiketini ara
+                if (!/\b(Belge|Document|Pasaport|Passport)\b/i.test(w.text)) continue;
+                
+                // "seyahat belgesi", "belge bedeli" gibi ilişkisiz bağlamları atla
+                const nextWords = words.slice(i + 1, i + 4);
+                const nearbyText = nextWords.map(nw => nw.text).join(' ');
+                if (/bedel|makbuz|izni|seyahat|travel|receipt/i.test(nearbyText)) continue;
+                
+                // "No", "Number", "Numarası" kelimesi yakınında mı?
+                const hasNoLabel = nextWords.some(nw => 
+                    /^(No|Number|Numaras)/i.test(nw.text) && sameRow(w, nw)
+                );
+                // Etiketin kendisi "Belge" ise yakınında "No" olması gerekiyor
+                if (/^Belge$/i.test(w.text) && !hasNoLabel) continue;
+                
+                // Etiketin sağında ve/veya altında alfanumerik pasaport numarası ara
+                const passportCandidates = words.filter(pw => {
+                    if (pw === w) return false;
+                    // Form etiketlerini atla
+                    if (coordFormLabels.test(pw.text)) return false;
+                    // Ülke adlarını atla
+                    if (knownCountryNames.test(pw.text.replace(/[^A-ZÇĞİÖŞÜa-zçğıöşü]/g, ''))) return false;
+                    
+                    // Aynı satırda sağda mı?
+                    const isRight = sameRow(w, pw) && pw.bbox.x0 > w.bbox.x1;
+                    // Veya altında mı? (hücre yapısı yüzünden bir alt satırda olabilir)
+                    const labelH = w.bbox.y1 - w.bbox.y0;
+                    const isBelow = pw.bbox.y0 > w.bbox.y0 && pw.bbox.y0 < w.bbox.y1 + labelH * 3;
+                    
+                    if (!isRight && !isBelow) return false;
+                    
+                    // Pasaport numarası formatı: harf(ler) + rakamlar (ör: A2596273, P09986286)
+                    const cleaned = pw.text.replace(/[\s\-]/g, '');
+                    if (/^[A-Za-z]{1,2}\d{5,9}$/.test(cleaned)) return true;
+                    // Sadece rakamlardan oluşan pasaport no (bazı ülkeler)
+                    if (/^\d{7,10}$/.test(cleaned)) return true;
+                    
+                    return false;
+                }).sort((a, b) => {
+                    // Etikete en yakın olanı tercih et
+                    const aDist = Math.abs(a.bbox.y0 - w.bbox.y0) + Math.abs(a.bbox.x0 - w.bbox.x1);
+                    const bDist = Math.abs(b.bbox.y0 - w.bbox.y0) + Math.abs(b.bbox.x0 - w.bbox.x1);
+                    return aDist - bDist;
+                });
+                
+                if (passportCandidates.length > 0) {
+                    let passNo = passportCandidates[0].text.replace(/[\s\-]/g, '').toUpperCase();
+                    // OCR rakam düzeltmeleri (harf kısmını koru)
+                    const letterPart = passNo.match(/^([A-Z]*)/)[0];
+                    const digitPart = passNo.substring(letterPart.length);
+                    passNo = letterPart + digitPart
+                        .replace(/[Oo]/g, '0').replace(/[Ss]/g, '5')
+                        .replace(/[Zz]/g, '2').replace(/[l]/g, '1');
+                    
+                    // GC ile başlayan barkod numarasını filtrele
+                    if (!/^GC/i.test(passNo)) {
+                        extracted.pasaportNo = passNo;
+                        console.log('[Koordinat] Pasaport No bulundu:', extracted.pasaportNo);
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     function extractFields(text) {
@@ -1499,6 +1596,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const vAdres = fields.adres.value.trim() || ' ';
             const vTel = fields.tel.value.trim() || ' ';
             const currentYear = new Date().getFullYear();
+            const vTebligatTarihi = calculateTebligatDate(vTeslim);
 
             // Aynı yazdırma şablonunu gizli div'e render et
             const container = document.createElement('div');
@@ -1510,8 +1608,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     .pt th { font-weight: bold; }
                 </style>
                 <div style="font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;min-height:1120px;">
-                    <div style="border:1px solid black;margin:0 auto 8px auto;width:60%;padding:5px 0;text-align:center;font-size:14px;">
-                        İSTANBUL TOPKAPI ÜNİVERSİTESİ
+                    <div style="border:1px solid black;margin:0 auto 8px auto;width:70%;padding:5px 10px;text-align:center;font-size:14px;display:flex;align-items:center;justify-content:center;gap:10px;">
+                        <img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" style="height:40px;width:auto;" crossorigin="anonymous">
+                        <span>İSTANBUL TOPKAPI ÜNİVERSİTESİ</span>
                     </div>
                     <table class="pt" style="margin-bottom:4px;">
                         <tr><td colspan="4" style="height:18px;"></td></tr>
@@ -1567,6 +1666,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <li style="margin-bottom:1px;">☐ İkamet izni belge bedelinin ödendiğine dair makbuz</li>
                         <li style="margin-bottom:1px;">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
                     </ul>
+                    <p style="font-weight:bold;font-size:12px;margin:12px 0 4px 0;text-align:center;border:1px solid #000;padding:6px;">📅 Tebliğ belgelerinizi almak için en erken gelebileceğiniz tarih: ${vTebligatTarihi}</p>
                     <div style="display:flex;justify-content:space-around;font-weight:bold;font-size:12px;margin-top:35px;">
                         <div style="text-align:center;"><u>TEBLİĞ EDEN</u><br><br>Üniversite Personeli</div>
                         <div style="text-align:center;"><u>TEBELLÜĞ EDEN</u><br><br>Yabancı Öğrenci</div>
@@ -1630,6 +1730,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Gelecek seneler için dinamik yıl oluştur
             const currentYear = new Date().getFullYear();
+            const vTebligatTarihi = calculateTebligatDate(vTeslim);
 
             // Generate HTML for the print area
             const printHtml = `
@@ -1640,8 +1741,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 </style>
                 <div id="pdf-content" style="font-family: 'Times New Roman', Times, serif; padding: 5mm 10mm; color: black; background: white; border: 4px double black; box-sizing: border-box; min-height: 264mm; max-width: 210mm; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; page-break-inside: avoid; display: flex; flex-direction: column;">
                     
-                    <div style="border: 1px solid black; margin: 0 auto 5px auto; width: 65%; padding: 4px 0; text-align: center; font-size: 15px;">
-                        İSTANBUL TOPKAPI ÜNİVERSİTESİ<br><br>
+                    <div style="border: 1px solid black; margin: 0 auto 5px auto; width: 70%; padding: 4px 10px; text-align: center; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                        <img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" style="height: 40px; width: auto;">
+                        <span>İSTANBUL TOPKAPI ÜNİVERSİTESİ</span>
                     </div>
                     
                     <table class="print-table" style="margin-bottom: 3px;">
@@ -1701,6 +1803,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <li style="margin-bottom: 2px;">☐ İkamet izni belge bedelinin ödendiğine dair makbuz</li>
                         <li style="margin-bottom: 2px; line-height: 1.1;">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
                     </ul>
+                    
+                    <p style="font-weight: bold; font-size: 12px; margin: 12px 0 4px 0; text-align: center; border: 1px solid #000; padding: 6px;">📅 Tebliğ belgelerinizi almak için en erken gelebileceğiniz tarih: ${vTebligatTarihi}</p>
                     
                     <div style="margin-top: auto; display: flex; justify-content: space-around; font-weight: bold; font-size: 12px; padding-bottom: 20mm; padding-top: 6px; page-break-before: avoid; break-before: avoid;">
                         <div style="text-align: center;"><span style="text-decoration: underline;">TEBLİĞ EDEN</span><br>Üniversite Personeli</div>
