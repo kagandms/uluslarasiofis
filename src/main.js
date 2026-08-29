@@ -1164,10 +1164,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (progressText) progressText.innerText = 'Belgeler eşzamanlı okunuyor...';
             
             // Hız optimizasyonu: İki sayfa sırayla değil, paralel (aynı anda) sunucuya gönderilir
-            await Promise.all([
+            const results = await Promise.all([
                 runOCR(prep1.dataUrl, prep1.canvas, true, false), // Page 1
                 runOCR(prep2.dataUrl, prep2.canvas, true, true)   // Page 2
             ]);
+            
+            // Eğer herhangi biri iptal edildiyse veya başarısız olduysa (false döndüyse)
+            if (results.includes(false)) {
+                console.log('Paralel OCR iptal edildi veya başarısız oldu.');
+                return;
+            }
             
             isProcessingPage2 = false;
             
@@ -1177,6 +1183,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setActiveStep(3);
             
         } catch (error) {
+            if (progressBar && progressBar.dataset.intervalId) { clearInterval(progressBar.dataset.intervalId); delete progressBar.dataset.intervalId; }
             console.error("Multiple OCR Error:", error);
             isProcessingPage2 = false;
             activeAbortControllers.clear();
