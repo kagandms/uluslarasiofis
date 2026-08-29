@@ -2265,51 +2265,51 @@ document.addEventListener('DOMContentLoaded', () => {
             container.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;';
             container.innerHTML = `
                 <style>
-                    .pt { width: 100%; border-collapse: collapse; margin-bottom: 5px; table-layout: fixed; word-wrap: break-word; }
+                    .pt { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
                     .pt th, .pt td { border: 1px solid #000; padding: 9px 10px; text-align: left; vertical-align: middle; font-size: 14px; font-family: 'Times New Roman', serif; }
                     .pt th { font-weight: bold; }
                 </style>
-                <div style="font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;min-height:1120px;">
+                <div style="font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;min-height:1120px;display:flex;flex-direction:column;">
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-                        <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: flex-start;">
-                            <img src="topkapi_logo.jpg" style="max-height: 100%; max-width: 100%; mix-blend-mode: multiply;" crossorigin="anonymous">
+                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-start;">
+                            <img src="topkapi_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
                         </div>
                         <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 8px 0; text-align: center; font-size: 16px; font-weight: bold;">
                             İSTANBUL TOPKAPI ÜNİVERSİTESİ
                         </div>
-                        <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: flex-end;">
-                            <img src="goc_logo.png" style="max-height: 100%; max-width: 100%;" crossorigin="anonymous">
+                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-end;">
+                            <img src="goc_logo.png" style="height: 100%; width: auto;" crossorigin="anonymous">
                         </div>
                     </div>
                     <table class="pt" style="margin-bottom:4px;">
-                        <tr><td colspan="4" style="height:18px; border: 1px solid #000;"></td></tr>
+                        <tr><td colspan="4" style="height:18px;"></td></tr>
                         <tr>
                             <th width="25%"><u>e</u>-İkamet<br>Başvuru No</th><td width="25%">${currentYear}-${vBasvuruNo.replace(new RegExp('^' + currentYear + '-'), '')}</td>
                             <th width="25%">Öğrencinin Evraklarını<br>Ofise Teslim Tarihi</th><td width="25%">${vTeslim}</td>
                         </tr>
                         <tr>
-                            <th width="25%">Yabancı Kimlik<br>No</th><td width="25%">${vYabanciKimlik}</td>
-                            <th width="25%">Pasaport No</th><td width="25%">${vPasaportNo}</td>
+                            <th>Yabancı Kimlik<br>No</th><td>${vYabanciKimlik}</td>
+                            <th>Pasaport No</th><td>${vPasaportNo}</td>
                         </tr>
                         <tr>
-                            <th width="25%">Adı</th><td width="25%">${vAdi}</td>
-                            <th width="25%">Soyadı</th><td width="25%">${vSoyadi}</td>
+                            <th>Adı</th><td>${vAdi}</td>
+                            <th>Soyadı</th><td>${vSoyadi}</td>
                         </tr>
                         <tr>
-                            <th width="25%">Uyruğu</th><td width="25%">${vUyrugu}</td>
-                            <th width="25%">Doğum Tarihi</th><td width="25%">${vDogum}</td>
+                            <th>Uyruğu</th><td>${vUyrugu}</td>
+                            <th>Doğum Tarihi</th><td>${vDogum}</td>
                         </tr>
                         <tr>
-                            <td width="25%"></td>
-                            <td width="25%" style="text-align:center;">Adres</td>
-                            <td width="25%" style="text-align:center;">Tel No</td>
-                            <td width="25%" style="text-align:center;">Mail</td>
+                            <td></td>
+                            <td style="text-align:center;">Adres</td>
+                            <td style="text-align:center;">Tel No</td>
+                            <td style="text-align:center;">Mail</td>
                         </tr>
                         <tr>
-                            <th width="25%">Öğrencinin<br>İletişim Bilgisi</th>
-                            <td width="25%">${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
-                            <td width="25%">${vTel}</td>
-                            <td width="25%">${vMail}</td>
+                            <th>Öğrencinin<br>İletişim Bilgisi</th>
+                            <td>${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
+                            <td>${vTel}</td>
+                            <td>${vMail}</td>
                         </tr>
                     </table>
                     <p style="text-align:justify;font-size:11.5px;margin:6px 0;line-height:1.3;text-indent:30px;">
@@ -2336,7 +2336,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <li style="margin-bottom:1px;">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
                     </ul>
                     <p style="font-weight:bold;font-size:12px;margin:12px 0 4px 0;text-align:center;border:1px solid #000;padding:6px;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
-                    <div style="display:flex;justify-content:space-around;font-weight:bold;font-size:13px;margin-top:40px;">
+                    <div style="margin-top:auto;display:flex;justify-content:space-around;font-weight:bold;font-size:13px;padding-bottom:15mm;padding-top:15px;">
                         <div style="text-align:center;"><u>TEBLİĞ EDEN</u><br><br>Üniversite Personeli</div>
                         <div style="text-align:center;"><u>TEBELLÜĞ EDEN</u><br><br>Yabancı Öğrenci</div>
                     </div>
@@ -2416,53 +2416,53 @@ document.addEventListener('DOMContentLoaded', () => {
             // Generate HTML for the print area
             const printHtml = `
                 <style>
-                    .print-table { width: 100%; border-collapse: collapse; margin-bottom: 5px; table-layout: fixed; word-wrap: break-word; }
+                    .print-table { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
                     .print-table th, .print-table td { border: 1px solid #000; padding: 9px 10px; text-align: left; vertical-align: middle; font-size: 14px; }
                     .print-table th { font-weight: bold; }
                 </style>
                 <div id="pdf-content" style="font-family: 'Times New Roman', Times, serif; padding: 5mm 10mm; color: black; background: white; border: 4px double black; box-sizing: border-box; min-height: 264mm; max-width: 210mm; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; page-break-inside: avoid; display: flex; flex-direction: column;">
                     
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                        <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: flex-start;">
-                            <img src="topkapi_logo.jpg" style="max-height: 100%; max-width: 100%; mix-blend-mode: multiply;">
+                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-start;">
+                            <img src="topkapi_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;">
                         </div>
                         <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 8px 0; text-align: center; font-size: 16px; font-weight: bold;">
                             İSTANBUL TOPKAPI ÜNİVERSİTESİ
                         </div>
-                        <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: flex-end;">
-                            <img src="goc_logo.png" style="max-height: 100%; max-width: 100%;">
+                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-end;">
+                            <img src="goc_logo.png" style="height: 100%; width: auto;">
                         </div>
                     </div>
                     
                     <table class="print-table" style="margin-bottom: 3px;">
-                        <tr><td colspan="4" style="height: 15px; border: 1px solid #000;"></td></tr>
+                        <tr><td colspan="4" style="height: 15px;"></td></tr>
                         <tr>
                             <th width="25%"><span style="text-decoration: underline;">e</span>-İkamet<br>Başvuru No</th><td width="25%">${currentYear}-${vBasvuruNo.replace(new RegExp('^' + currentYear + '-'), '')}</td>
                             <th width="25%">Öğrencinin Evraklarını<br>Ofise Teslim Tarihi</th><td width="25%">${vTeslim}</td>
                         </tr>
                         <tr>
-                            <th width="25%">Yabancı Kimlik<br>No</th><td width="25%">${vYabanciKimlik}</td>
-                            <th width="25%">Pasaport No</th><td width="25%">${vPasaportNo}</td>
+                            <th>Yabancı Kimlik<br>No</th><td>${vYabanciKimlik}</td>
+                            <th>Pasaport No</th><td>${vPasaportNo}</td>
                         </tr>
                         <tr>
-                            <th width="25%">Adı</th><td width="25%">${vAdi}</td>
-                            <th width="25%">Soyadı</th><td width="25%">${vSoyadi}</td>
+                            <th>Adı</th><td>${vAdi}</td>
+                            <th>Soyadı</th><td>${vSoyadi}</td>
                         </tr>
                         <tr>
-                            <th width="25%">Uyruğu</th><td width="25%">${vUyrugu}</td>
-                            <th width="25%">Doğum Tarihi</th><td width="25%">${vDogum}</td>
+                            <th>Uyruğu</th><td>${vUyrugu}</td>
+                            <th>Doğum Tarihi</th><td>${vDogum}</td>
                         </tr>
                         <tr>
-                            <td width="25%" style="border: 1px solid black; border-top: none; border-bottom: none;"></td>
-                            <td width="25%" style="text-align: center; font-weight: normal;">Adres</td>
-                            <td width="25%" style="text-align: center; font-weight: normal;">Tel No</td>
-                            <td width="25%" style="text-align: center; font-weight: normal;">Mail</td>
+                            <td style="border: 1px solid black; border-top: none; border-bottom: none;"></td>
+                            <td style="text-align: center; font-weight: normal;">Adres</td>
+                            <td style="text-align: center; font-weight: normal;">Tel No</td>
+                            <td style="text-align: center; font-weight: normal;">Mail</td>
                         </tr>
                         <tr>
-                            <th width="25%">Öğrencinin<br>İletişim Bilgisi</th>
-                            <td width="25%">${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
-                            <td width="25%">${vTel}</td>
-                            <td width="25%">${vMail}</td>
+                            <th>Öğrencinin<br>İletişim Bilgisi</th>
+                            <td>${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
+                            <td>${vTel}</td>
+                            <td>${vMail}</td>
                         </tr>
                     </table>
                     
