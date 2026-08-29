@@ -2505,26 +2505,55 @@ document.addEventListener('DOMContentLoaded', () => {
             const currentYear = new Date().getFullYear();
             const vTebligatTarihi = calculateTebligatDate(vTeslim);
 
-            // Generate HTML for the print area
-            const printHtml = getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, true);
-            
-            
-            // Native window.print() yöntemine dönüldü
-            let printArea = document.getElementById('print-area');
-            if (!printArea) {
-                printArea = document.createElement('div');
-                printArea.id = 'print-area';
-                document.body.appendChild(printArea);
-            }
-            printArea.innerHTML = printHtml;
-            
-            // Geçmişe kaydet
-            historyManager.save('print');
             
             showToast('Yazdırma ekranı hazırlanıyor...', 'info');
-            setTimeout(() => {
-                window.print();
-            }, 300);
+            
+            // Use html2canvas so print perfectly matches the PDF
+            loadPdfLibraries().then(async (loaded) => {
+                if (!loaded) {
+                    showToast('Yazdırma modülü yüklenemedi.', 'error');
+                    return;
+                }
+                
+                const container = document.createElement('div');
+                container.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;';
+                container.innerHTML = getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, false);
+                document.body.appendChild(container);
+                
+                try {
+                    const canvas = await html2canvas(container.lastElementChild, {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor: '#ffffff',
+                        logging: false
+                    });
+                    document.body.removeChild(container);
+                    
+                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                    
+                    let printArea = document.getElementById('print-area');
+                    if (!printArea) {
+                        printArea = document.createElement('div');
+                        printArea.id = 'print-area';
+                        document.body.appendChild(printArea);
+                    }
+                    
+                    // Put the generated image inside print area, stretched to A4 size perfectly
+                    printArea.innerHTML = `<img src="${imgData}" style="width: 210mm; height: 297mm; display: block; margin: 0 auto; object-fit: fill;">`;
+                    
+                    // Geçmişe kaydet
+                    historyManager.save('print');
+                    
+                    setTimeout(() => {
+                        window.print();
+                    }, 500);
+                } catch (err) {
+                    console.error(err);
+                    showToast('Yazdırma sırasında bir hata oluştu.', 'error');
+                    if(document.body.contains(container)) document.body.removeChild(container);
+                }
+            });
+
         });
     }
 });
