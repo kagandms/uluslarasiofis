@@ -2206,8 +2206,26 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnDownload) {
         btnDownload.addEventListener('click', async () => {
             if (generatedPdf) {
-                generatedPdf.save(generatedPdfName);
-                showToast('PDF indiriliyor...', 'success');
+                const pdfBlob = generatedPdf.output('blob');
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                if (isIOS && navigator.share) {
+                    const file = new File([pdfBlob], generatedPdfName, { type: 'application/pdf' });
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: generatedPdfName,
+                        });
+                        showToast('PDF Paylaşım menüsü açıldı.', 'success');
+                    } catch (e) {
+                        console.log('Share API iptal edildi veya desteklenmiyor', e);
+                        generatedPdf.save(generatedPdfName);
+                        showToast('PDF indiriliyor...', 'success');
+                    }
+                } else {
+                    generatedPdf.save(generatedPdfName);
+                    showToast('PDF indiriliyor...', 'success');
+                }
+                
                 // Reset button after download
                 generatedPdf = null;
                 btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> PDF İndir`;
@@ -2247,51 +2265,51 @@ document.addEventListener('DOMContentLoaded', () => {
             container.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;';
             container.innerHTML = `
                 <style>
-                    .pt { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+                    .pt { width: 100%; border-collapse: collapse; margin-bottom: 5px; table-layout: fixed; word-wrap: break-word; }
                     .pt th, .pt td { border: 1px solid #000; padding: 9px 10px; text-align: left; vertical-align: middle; font-size: 14px; font-family: 'Times New Roman', serif; }
                     .pt th { font-weight: bold; }
                 </style>
                 <div style="font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;min-height:1120px;">
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-start;">
-                            <img src="topkapi_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
+                        <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: flex-start;">
+                            <img src="topkapi_logo.jpg" style="max-height: 100%; max-width: 100%; mix-blend-mode: multiply;" crossorigin="anonymous">
                         </div>
                         <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 8px 0; text-align: center; font-size: 16px; font-weight: bold;">
                             İSTANBUL TOPKAPI ÜNİVERSİTESİ
                         </div>
-                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-end;">
-                            <img src="goc_logo.png" style="height: 100%; width: auto;" crossorigin="anonymous">
+                        <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: flex-end;">
+                            <img src="goc_logo.png" style="max-height: 100%; max-width: 100%;" crossorigin="anonymous">
                         </div>
                     </div>
                     <table class="pt" style="margin-bottom:4px;">
-                        <tr><td colspan="4" style="height:18px;"></td></tr>
+                        <tr><td colspan="4" style="height:18px; border: 1px solid #000;"></td></tr>
                         <tr>
                             <th width="25%"><u>e</u>-İkamet<br>Başvuru No</th><td width="25%">${currentYear}-${vBasvuruNo.replace(new RegExp('^' + currentYear + '-'), '')}</td>
                             <th width="25%">Öğrencinin Evraklarını<br>Ofise Teslim Tarihi</th><td width="25%">${vTeslim}</td>
                         </tr>
                         <tr>
-                            <th>Yabancı Kimlik<br>No</th><td>${vYabanciKimlik}</td>
-                            <th>Pasaport No</th><td>${vPasaportNo}</td>
+                            <th width="25%">Yabancı Kimlik<br>No</th><td width="25%">${vYabanciKimlik}</td>
+                            <th width="25%">Pasaport No</th><td width="25%">${vPasaportNo}</td>
                         </tr>
                         <tr>
-                            <th>Adı</th><td>${vAdi}</td>
-                            <th>Soyadı</th><td>${vSoyadi}</td>
+                            <th width="25%">Adı</th><td width="25%">${vAdi}</td>
+                            <th width="25%">Soyadı</th><td width="25%">${vSoyadi}</td>
                         </tr>
                         <tr>
-                            <th>Uyruğu</th><td>${vUyrugu}</td>
-                            <th>Doğum Tarihi</th><td>${vDogum}</td>
+                            <th width="25%">Uyruğu</th><td width="25%">${vUyrugu}</td>
+                            <th width="25%">Doğum Tarihi</th><td width="25%">${vDogum}</td>
                         </tr>
                         <tr>
-                            <td></td>
-                            <td style="text-align:center;">Adres</td>
-                            <td style="text-align:center;">Tel No</td>
-                            <td style="text-align:center;">Mail</td>
+                            <td width="25%"></td>
+                            <td width="25%" style="text-align:center;">Adres</td>
+                            <td width="25%" style="text-align:center;">Tel No</td>
+                            <td width="25%" style="text-align:center;">Mail</td>
                         </tr>
                         <tr>
-                            <th>Öğrencinin<br>İletişim Bilgisi</th>
-                            <td>${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
-                            <td>${vTel}</td>
-                            <td>${vMail}</td>
+                            <th width="25%">Öğrencinin<br>İletişim Bilgisi</th>
+                            <td width="25%">${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
+                            <td width="25%">${vTel}</td>
+                            <td width="25%">${vMail}</td>
                         </tr>
                     </table>
                     <p style="text-align:justify;font-size:11.5px;margin:6px 0;line-height:1.3;text-indent:30px;">
@@ -2398,53 +2416,53 @@ document.addEventListener('DOMContentLoaded', () => {
             // Generate HTML for the print area
             const printHtml = `
                 <style>
-                    .print-table { width: 100%; border-collapse: collapse; margin-bottom: 5px; }
+                    .print-table { width: 100%; border-collapse: collapse; margin-bottom: 5px; table-layout: fixed; word-wrap: break-word; }
                     .print-table th, .print-table td { border: 1px solid #000; padding: 9px 10px; text-align: left; vertical-align: middle; font-size: 14px; }
                     .print-table th { font-weight: bold; }
                 </style>
                 <div id="pdf-content" style="font-family: 'Times New Roman', Times, serif; padding: 5mm 10mm; color: black; background: white; border: 4px double black; box-sizing: border-box; min-height: 264mm; max-width: 210mm; margin: 0 auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; page-break-inside: avoid; display: flex; flex-direction: column;">
                     
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-start;">
-                            <img src="topkapi_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;">
+                        <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: flex-start;">
+                            <img src="topkapi_logo.jpg" style="max-height: 100%; max-width: 100%; mix-blend-mode: multiply;">
                         </div>
                         <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 8px 0; text-align: center; font-size: 16px; font-weight: bold;">
                             İSTANBUL TOPKAPI ÜNİVERSİTESİ
                         </div>
-                        <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-end;">
-                            <img src="goc_logo.png" style="height: 100%; width: auto;">
+                        <div style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: flex-end;">
+                            <img src="goc_logo.png" style="max-height: 100%; max-width: 100%;">
                         </div>
                     </div>
                     
                     <table class="print-table" style="margin-bottom: 3px;">
-                        <tr><td colspan="4" style="height: 15px;"></td></tr>
+                        <tr><td colspan="4" style="height: 15px; border: 1px solid #000;"></td></tr>
                         <tr>
                             <th width="25%"><span style="text-decoration: underline;">e</span>-İkamet<br>Başvuru No</th><td width="25%">${currentYear}-${vBasvuruNo.replace(new RegExp('^' + currentYear + '-'), '')}</td>
                             <th width="25%">Öğrencinin Evraklarını<br>Ofise Teslim Tarihi</th><td width="25%">${vTeslim}</td>
                         </tr>
                         <tr>
-                            <th>Yabancı Kimlik<br>No</th><td>${vYabanciKimlik}</td>
-                            <th>Pasaport No</th><td>${vPasaportNo}</td>
+                            <th width="25%">Yabancı Kimlik<br>No</th><td width="25%">${vYabanciKimlik}</td>
+                            <th width="25%">Pasaport No</th><td width="25%">${vPasaportNo}</td>
                         </tr>
                         <tr>
-                            <th>Adı</th><td>${vAdi}</td>
-                            <th>Soyadı</th><td>${vSoyadi}</td>
+                            <th width="25%">Adı</th><td width="25%">${vAdi}</td>
+                            <th width="25%">Soyadı</th><td width="25%">${vSoyadi}</td>
                         </tr>
                         <tr>
-                            <th>Uyruğu</th><td>${vUyrugu}</td>
-                            <th>Doğum Tarihi</th><td>${vDogum}</td>
+                            <th width="25%">Uyruğu</th><td width="25%">${vUyrugu}</td>
+                            <th width="25%">Doğum Tarihi</th><td width="25%">${vDogum}</td>
                         </tr>
                         <tr>
-                            <td style="border: 1px solid black; border-top: none; border-bottom: none;"></td>
-                            <td style="text-align: center; font-weight: normal;">Adres</td>
-                            <td style="text-align: center; font-weight: normal;">Tel No</td>
-                            <td style="text-align: center; font-weight: normal;">Mail</td>
+                            <td width="25%" style="border: 1px solid black; border-top: none; border-bottom: none;"></td>
+                            <td width="25%" style="text-align: center; font-weight: normal;">Adres</td>
+                            <td width="25%" style="text-align: center; font-weight: normal;">Tel No</td>
+                            <td width="25%" style="text-align: center; font-weight: normal;">Mail</td>
                         </tr>
                         <tr>
-                            <th>Öğrencinin<br>İletişim Bilgisi</th>
-                            <td>${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
-                            <td>${vTel}</td>
-                            <td>${vMail}</td>
+                            <th width="25%">Öğrencinin<br>İletişim Bilgisi</th>
+                            <td width="25%">${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
+                            <td width="25%">${vTel}</td>
+                            <td width="25%">${vMail}</td>
                         </tr>
                     </table>
                     
