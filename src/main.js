@@ -1147,8 +1147,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const prep2 = prepareImageForOCR(img2);
         
         try {
-            if (progressBar) progressBar.style.width = '10%';
-            if (progressText) progressText.innerText = '1. ve 2. Sayfa eşzamanlı işleniyor...';
+            
+        if (progressBar) {
+            progressBar.style.width = '10%';
+            progressBar.style.transition = 'width 0.3s ease-out';
+            let currentProgress = 10;
+            progressBar.dataset.intervalId = setInterval(() => {
+                if (currentProgress < 85) {
+                    currentProgress += Math.floor(Math.random() * 5) + 2;
+                    if (currentProgress > 85) currentProgress = 85;
+                    progressBar.style.width = currentProgress + '%';
+                }
+            }, 300);
+        }
+
+            if (progressText) progressText.innerText = 'Belgeler eşzamanlı okunuyor...';
             
             // Hız optimizasyonu: İki sayfa sırayla değil, paralel (aynı anda) sunucuya gönderilir
             await Promise.all([
@@ -1223,7 +1236,21 @@ document.addEventListener('DOMContentLoaded', () => {
     async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPage2 = isProcessingPage2) {
         try {
             if (progressBar) progressBar.style.width = '0%';
-            if (progressText) progressText.innerText = 'OCR başlatılıyor...';
+            if (progressText) progressText.innerText = 'Belgeler okunuyor...';
+
+        if (progressBar) {
+            progressBar.style.width = '5%';
+            progressBar.style.transition = 'width 0.3s ease-out';
+            let currentProgress = 5;
+            progressBar.dataset.intervalId = setInterval(() => {
+                if (currentProgress < 85) {
+                    currentProgress += Math.floor(Math.random() * 5) + 2; 
+                    if (currentProgress > 85) currentProgress = 85;
+                    progressBar.style.width = currentProgress + '%';
+                }
+            }, 300);
+        }
+
 
             // Wait a moment for UI to update
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -1264,7 +1291,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             continue;
                         }
 
-                        if (progressText) progressText.innerText = `Yapay Zeka ile Analiz Ediliyor (API ${currentApiKeyIndex + 1})...`;
+                        if (progressText) progressText.innerText = 'Belgeler okunuyor, analiz ediliyor...';
 
                         const euUrl = `https://eu-vision.googleapis.com/v1/images:annotate?key=${CURRENT_KEY}`;
                         const globalUrl = `https://vision.googleapis.com/v1/images:annotate?key=${CURRENT_KEY}`;
@@ -1356,7 +1383,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             });
                         }
                         
-                        if (progressBar) progressBar.style.width = '90%';
+                        if (progressBar && progressBar.dataset.intervalId) { clearInterval(progressBar.dataset.intervalId); delete progressBar.dataset.intervalId; }
+                        if (progressBar) { progressBar.style.transition = 'width 0.3s ease-out'; progressBar.style.width = '90%'; }
                         if (progressText) progressText.innerText = 'Veriler çözümleniyor...';
                         
                         const rawTextEl = document.getElementById('ocr-raw-text');
@@ -1427,6 +1455,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('OCR isteği iptal edildi.');
                 return false;
             }
+            if (progressBar && progressBar.dataset.intervalId) { clearInterval(progressBar.dataset.intervalId); delete progressBar.dataset.intervalId; }
             console.error("OCR Error:", error);
             
             let userMsg = error.message ? error.message : 'OCR işlemi başarısız. Lütfen daha net bir fotoğraf yükleyin.';
