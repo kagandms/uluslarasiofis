@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ikamet-ocr-v2.0';
+const CACHE_NAME = 'ikamet-ocr-v2.0.1';
 const ASSETS = [
     './',
     './index.html',
@@ -7,7 +7,12 @@ const ASSETS = [
     './manifest.json',
     './pwa-icon.png',
     './topkapi_logo.jpg',
-    './goc_logo.png'
+    './goc_logo.png',
+    'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css',
+    'https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js'
 ];
 
 self.addEventListener('install', (event) => {

@@ -686,6 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnManualEntry = document.getElementById('btn-manual-entry');
     if (btnManualEntry) {
         btnManualEntry.addEventListener('click', () => {
+            restoreDraft();
             clearFormExceptTeslimTarihi();
             croppedImages = [];
             page1ImageObj = null;
@@ -2332,6 +2333,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnClear) {
         btnClear.addEventListener('click', () => {
+            localStorage.removeItem('ikamet_draft');
             Object.values(fields).forEach(field => {
                 if (field && field.id !== 'field-teslim-tarihi') {
                     field.value = '';
@@ -2556,4 +2558,81 @@ document.addEventListener('DOMContentLoaded', () => {
 
         });
     }
+});
+
+
+// --- OFFLINE AND SHORTCUT HANDLERS ---
+function updateOnlineStatus() {
+    const btnUpload = document.getElementById('btn-upload');
+    if (!navigator.onLine) {
+        if(btnUpload) {
+            btnUpload.disabled = true;
+            btnUpload.style.opacity = '0.5';
+            btnUpload.title = "İnternet bağlantısı koptu. Tarama yapılamaz.";
+        }
+        showToast('İnternet yok. Tarama yapılamaz, manuel giriş yapabilirsiniz.', 'warning');
+    } else {
+        if(btnUpload) {
+            btnUpload.disabled = false;
+            btnUpload.style.opacity = '1';
+            btnUpload.title = "";
+        }
+    }
+}
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+window.addEventListener('DOMContentLoaded', updateOnlineStatus);
+
+// Intercept Ctrl+P / Cmd+P
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        const step3 = document.getElementById('step-3');
+        if (step3 && step3.classList.contains('active')) {
+            const btnPrint = document.getElementById('btn-print');
+            if (btnPrint) btnPrint.click();
+        } else {
+            showToast('Yazdırmak için önce bir form hazırlamalısınız.', 'info');
+        }
+    }
+});
+
+// Draft Auto-Save
+function saveDraft() {
+    const draft = {};
+    const fieldIds = ['basvuruNo', 'teslimTarihi', 'pasaportNo', 'adi', 'soyadi', 'uyrugu', 'dogumTarihi', 'adres', 'tel', 'mail'];
+    fieldIds.forEach(id => {
+        if (fields[id]) draft[id] = fields[id].value;
+    });
+    localStorage.setItem('ikamet_draft', JSON.stringify(draft));
+}
+
+function restoreDraft() {
+    const draftStr = localStorage.getItem('ikamet_draft');
+    if (draftStr) {
+        try {
+            const draft = JSON.parse(draftStr);
+            let hasData = false;
+            Object.keys(draft).forEach(k => {
+                if (fields[k] && draft[k]) {
+                    fields[k].value = draft[k];
+                    hasData = true;
+                }
+            });
+            if (hasData) {
+                showToast('Kaldığınız yerden devam ediyorsunuz (Taslak yüklendi).', 'info');
+            }
+        } catch(e) {}
+    }
+}
+
+// Bind save draft to inputs
+document.addEventListener('DOMContentLoaded', () => {
+    const fieldIds = ['basvuruNo', 'teslimTarihi', 'pasaportNo', 'adi', 'soyadi', 'uyrugu', 'dogumTarihi', 'adres', 'tel', 'mail'];
+    fieldIds.forEach(id => {
+        if (fields[id]) {
+            fields[id].addEventListener('input', saveDraft);
+            fields[id].addEventListener('change', saveDraft);
+        }
+    });
 });
