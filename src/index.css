@@ -1021,3 +1021,18 @@ body.dark-mode .history-item-action-label {
 body.dark-mode .history-badge {
     box-shadow: 0 2px 4px rgba(255, 77, 77, 0.2);
 }
+
+
+.btn-primary-outline {
+    background: transparent;
+    color: var(--primary-color);
+    border: 2px solid var(--primary-color);
+    font-weight: 600;
+}
+.btn-primary-outline:hover {
+    background: rgba(139, 0, 0, 0.05);
+}
+.btn-primary-outline svg {
+    margin-right: 6px;
+    vertical-align: middle;
+}
