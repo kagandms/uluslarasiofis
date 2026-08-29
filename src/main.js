@@ -136,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const img = new Image();
             img.onload = () => {
                 showCropperForFile(img, {
-                    isSequential: isSequentialCapture,
+                    isFirstImage: croppedImages.length === 0,
                     isPage2: isProcessingPage2,
                     hasMoreFiles: pendingFiles.length > 0
                 });
@@ -252,6 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
             getCroppedImage((img) => processNextStep(img));
         },
         onSkipCaptureNext: () => {
+            isSequentialCapture = true;
             const imgEl = document.getElementById('cropper-image');
             const newImg = new Image();
             newImg.src = imgEl.src;
@@ -263,6 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
         onCropCaptureNext: () => {
+            isSequentialCapture = true;
             getCroppedImage((img) => {
                 processNextStep(img);
                 if (fileInputPage2) {

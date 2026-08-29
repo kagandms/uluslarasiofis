@@ -28,17 +28,30 @@ export function showCropperForFile(img, options) {
     baseRotation = 0;
 
     // Display correct buttons based on state
-    document.getElementById('btn-skip-capture-next').style.display = (customOptions.isSequential && !customOptions.isPage2) ? 'flex' : 'none';
-    document.getElementById('btn-crop-capture-next').style.display = (customOptions.isSequential && !customOptions.isPage2) ? 'flex' : 'none';
-    document.getElementById('btn-crop-next').style.display = (customOptions.hasMoreFiles && !customOptions.isSequential) ? 'flex' : 'none';
-    document.getElementById('btn-crop-confirm').style.display = (!customOptions.hasMoreFiles && (!customOptions.isSequential || customOptions.isPage2)) ? 'flex' : 'none';
-    
-    // Fallback if none shown
-    if (!document.getElementById('btn-skip-capture-next').style.display.includes('flex') &&
-        !document.getElementById('btn-crop-capture-next').style.display.includes('flex') &&
-        !document.getElementById('btn-crop-next').style.display.includes('flex') &&
-        !document.getElementById('btn-crop-confirm').style.display.includes('flex')) {
-        document.getElementById('btn-crop-confirm').style.display = 'flex';
+    const btnSkipCaptureNext = document.getElementById('btn-skip-capture-next');
+    const btnCropCaptureNext = document.getElementById('btn-crop-capture-next');
+    const btnCropNext = document.getElementById('btn-crop-next');
+    const btnCropConfirm = document.getElementById('btn-crop-confirm');
+    const btnCropSkip = document.getElementById('btn-crop-skip');
+
+    if (customOptions.hasMoreFiles) {
+        if (btnCropConfirm) btnCropConfirm.style.display = 'none';
+        if (btnCropSkip) btnCropSkip.style.display = 'none';
+        if (btnCropCaptureNext) btnCropCaptureNext.style.display = 'none';
+        if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'none';
+        if (btnCropNext) btnCropNext.style.display = 'flex';
+    } else if (customOptions.isFirstImage && !customOptions.isPage2) {
+        if (btnCropConfirm) btnCropConfirm.style.display = 'flex';
+        if (btnCropSkip) btnCropSkip.style.display = 'flex';
+        if (btnCropCaptureNext) btnCropCaptureNext.style.display = 'flex';
+        if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'flex';
+        if (btnCropNext) btnCropNext.style.display = 'none';
+    } else {
+        if (btnCropConfirm) btnCropConfirm.style.display = 'flex';
+        if (btnCropSkip) btnCropSkip.style.display = 'flex';
+        if (btnCropCaptureNext) btnCropCaptureNext.style.display = 'none';
+        if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'none';
+        if (btnCropNext) btnCropNext.style.display = 'none';
     }
 
     cropperInstance = new window.Cropper(cropperImage, {
