@@ -559,9 +559,17 @@
     }
     export function extractPage2FromCoordinates(words) {
         // Eski bilgilerin kalmaması için önce alanları temizle
-        const extractedPage2 = { adres: '', tel: '', mail: '' };
-        
-        
+        const adresField = document.getElementById('field-adres');
+        const telField = document.getElementById('field-tel');
+        const mailField = document.getElementById('field-mail');
+        if (adresField) {
+            adresField.value = '';
+            adresField.classList.remove('field-filled');
+        }
+        if (telField) {
+            telField.value = '';
+            telField.classList.remove('field-filled');
+        }
         if (mailField) {
             mailField.value = '';
             mailField.classList.remove('field-filled');
@@ -666,11 +674,106 @@
         }
 
         if (foundAdres) {
-            const extractedPage2 = { adres: '', tel: '', mail: '' };
-                if (mailField) {
-                    extractedPage2.mail = foundMail;
+            const adresField = document.getElementById('field-adres');
+            if (adresField) {
+                adresField.value = foundAdres.substring(0, 100);
+                adresField.classList.add('field-filled');
+            }
+        }
+
+        if (foundTel) {
+            const telField = document.getElementById('field-tel');
+            if (telField) {
+                telField.value = foundTel;
+                telField.classList.add('field-filled');
+            }
+        }
+
+        // --- E-POSTA ---
+        // "E Posta" / "E-mail" / "E-Mail" etiketini bul, ardından aynı satırda veya hemen altında @ içeren metni al
+        let foundMail = '';
+        let epostaLabelY = -1;
+        let epostaLabelX = -1;
+
+        for (let i = 0; i < sectionWords.length; i++) {
+            const w = sectionWords[i];
+            // "E Posta", "E-Posta", "E-mail", "E-Mail", "Email" etiketlerini tanı
+            const isEpostaLabel = /^E[-\s]?Posta$/i.test(w.text) || /^E[-\s]?mail$/i.test(w.text);
+            // OCR bazen "E" ve "Posta"yı ayrı kelimeler olarak verir
+            const isESplit = /^E$/i.test(w.text) && i + 1 < sectionWords.length && 
+                /^Posta$/i.test(sectionWords[i + 1].text) && sameRow(w, sectionWords[i + 1]);
+            
+            if (isEpostaLabel || isESplit) {
+                if (w.bbox.x0 > midpoint * 0.7) { // Sağ taraftaki etiketi al
+                    epostaLabelY = w.bbox.y0;
+                    epostaLabelX = w.bbox.x0;
+                    console.log('[Page2] E-Posta etiketi bulundu:', w.text, 'Y:', epostaLabelY);
                 }
             }
+        }
+
+        if (epostaLabelY !== -1) {
+            // Etiketin yüksekliğinin ~3 katı kadar aşağıya bak
+            const searchRangeY = epostaLabelY + 80;
+            
+            // Önce tüm bölgede @ içeren kelimeleri ara
+            const mailCandidates = sectionWords.filter(w =>
+                w.text.includes('@') &&
+                w.bbox.y0 >= epostaLabelY - 15 &&
+                w.bbox.y0 <= searchRangeY
+            );
+
+            if (mailCandidates.length > 0) {
+                // @ içeren kelimeyi bulduk — bu direkt e-posta adresi olabilir
+                foundMail = mailCandidates[0].text.trim();
+                console.log('[Page2] E-Posta bulundu (@ içeren kelime):', foundMail);
+            } else {
+                // OCR bazen e-posta adresini parçalara ayırır (ör: "GURBANNAZAR" "@en-gmail-bgd" ".com")
+                // Etiketin sağındaki ve altındaki kelimeleri birleştir
+                const nearbyWords = sectionWords.filter(w =>
+                    w.bbox.y0 >= epostaLabelY - 10 &&
+                    w.bbox.y0 <= searchRangeY &&
+                    w.bbox.x0 >= epostaLabelX - 20
+                ).sort((a, b) => {
+                    if (Math.abs(a.bbox.y0 - b.bbox.y0) > 15) return a.bbox.y0 - b.bbox.y0;
+                    return a.bbox.x0 - b.bbox.x0;
+                });
+
+                // Etiket kelimelerini atla, geri kalanları birleştir
+                const valueParts = nearbyWords
+                    .filter(w => !/^(?:E[-\s]?Posta|E[-\s]?mail|E[-\s]?Mail|Phone|Telefon)$/i.test(w.text))
+                    .map(w => w.text);
+
+                const combined = valueParts.join('');
+                if (combined.includes('@')) {
+                    foundMail = combined.trim();
+                    console.log('[Page2] E-Posta bulundu (birleştirilmiş):', foundMail);
+                }
+            }
+        }
+
+        // Eğer etiket bulunamazsa, fallback: tüm bölgede @ içeren kelime ara
+        if (!foundMail) {
+            for (const w of sectionWords) {
+                if (w.text.includes('@') && w.text.includes('.')) {
+                    foundMail = w.text.trim();
+                    console.log('[Page2] E-Posta bulundu (fallback @ taraması):', foundMail);
+                    break;
+                }
+            }
+        }
+
+        // E-posta temizliği: gereksiz boşlukları kaldır, küçük harfe dönüştür
+        if (foundMail) {
+            foundMail = foundMail.replace(/\s+/g, '').toLowerCase();
+            // Basit doğrulama: @ ve . içermeli
+            if (foundMail.includes('@') && foundMail.includes('.')) {
+                const mailField = document.getElementById('field-mail');
+                if (mailField) {
+                    mailField.value = foundMail;
+                    mailField.classList.add('field-filled');
+                    console.log('[Page2] E-Posta form alanına yazıldı:', foundMail);
+                }
             }
         }
     }
