@@ -1,11 +1,11 @@
-const CACHE_NAME = 'ikamet-ocr-v1.61.16';
+const CACHE_NAME = 'ikamet-ocr-v1.62.12';
 const ASSETS = [
     './',
     './index.html',
     './index.css',
     './app.js',
     './manifest.json',
-    './icon.jpg',
+    './pwa-icon.png',
     './topkapi_logo.jpg',
     './goc_logo.png'
 ];
