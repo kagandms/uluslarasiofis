@@ -1444,7 +1444,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Field Extraction ---
     // === 2. SAYFA KOORDİNAT BAZLI EXTRACTION ===
-    function extractPage2FromCoordinates(words) {
     // === KOORDİNAT BAZLI EXTRACTION (1. Sayfa Tablo hücreleri için) ===
 
     // --- Populate Form ---
@@ -1753,7 +1752,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
         });
-}
     }
 });
 
