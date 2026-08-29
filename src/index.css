@@ -408,7 +408,7 @@ h1 {
 .progress-container {
     width: 100%;
     max-width: 400px;
-    height: 8px;
+    height: 20px;
     background: var(--card-border);
     border-radius: 4px;
     margin: 1.5rem 0;
