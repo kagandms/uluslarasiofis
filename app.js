@@ -2597,12 +2597,27 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Draft Auto-Save
+// Draft Auto-Save (Fixed Scope)
+function getDraftFields() {
+    return {
+        basvuruNo: document.getElementById('field-basvuru-no'),
+        teslimTarihi: document.getElementById('field-teslim-tarihi'),
+        pasaportNo: document.getElementById('field-pasaport-no'),
+        adi: document.getElementById('field-adi'),
+        soyadi: document.getElementById('field-soyadi'),
+        uyrugu: document.getElementById('field-uyrugu'),
+        dogumTarihi: document.getElementById('field-dogum-tarihi'),
+        adres: document.getElementById('field-adres'),
+        tel: document.getElementById('field-tel'),
+        mail: document.getElementById('field-mail')
+    };
+}
+
 function saveDraft() {
     const draft = {};
-    const fieldIds = ['basvuruNo', 'teslimTarihi', 'pasaportNo', 'adi', 'soyadi', 'uyrugu', 'dogumTarihi', 'adres', 'tel', 'mail'];
-    fieldIds.forEach(id => {
-        if (fields[id]) draft[id] = fields[id].value;
+    const formFields = getDraftFields();
+    Object.keys(formFields).forEach(id => {
+        if (formFields[id]) draft[id] = formFields[id].value;
     });
     localStorage.setItem('ikamet_draft', JSON.stringify(draft));
 }
@@ -2613,9 +2628,10 @@ function restoreDraft() {
         try {
             const draft = JSON.parse(draftStr);
             let hasData = false;
+            const formFields = getDraftFields();
             Object.keys(draft).forEach(k => {
-                if (fields[k] && draft[k]) {
-                    fields[k].value = draft[k];
+                if (formFields[k] && draft[k]) {
+                    formFields[k].value = draft[k];
                     hasData = true;
                 }
             });
@@ -2628,11 +2644,11 @@ function restoreDraft() {
 
 // Bind save draft to inputs
 document.addEventListener('DOMContentLoaded', () => {
-    const fieldIds = ['basvuruNo', 'teslimTarihi', 'pasaportNo', 'adi', 'soyadi', 'uyrugu', 'dogumTarihi', 'adres', 'tel', 'mail'];
-    fieldIds.forEach(id => {
-        if (fields[id]) {
-            fields[id].addEventListener('input', saveDraft);
-            fields[id].addEventListener('change', saveDraft);
+    const formFields = getDraftFields();
+    Object.keys(formFields).forEach(id => {
+        if (formFields[id]) {
+            formFields[id].addEventListener('input', saveDraft);
+            formFields[id].addEventListener('change', saveDraft);
         }
     });
 });
