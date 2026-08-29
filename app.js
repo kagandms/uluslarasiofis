@@ -115,6 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const HISTORY_MAX_DAYS = 30;
 
     const historyManager = {
+        isDeleteMode: false,
+        selectedIds: new Set(),
         getAll() {
             try {
                 return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
@@ -151,6 +153,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const filtered = history.filter(h => new Date(h.timestamp) > cutoff);
 
             localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered));
+            this.render();
+        },
+
+        toggleSelection(id) {
+            if (this.selectedIds.has(id)) {
+                this.selectedIds.delete(id);
+            } else {
+                this.selectedIds.add(id);
+            }
+            this.render();
+        },
+        
+        deleteSelected() {
+            const history = this.getAll().filter(h => !this.selectedIds.has(h.id));
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+            this.selectedIds.clear();
+            this.isDeleteMode = false;
             this.render();
         },
 
@@ -275,26 +294,46 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (uyruk === 'OTHER' && item.fields.uyruguOther) uyruk = item.fields.uyruguOther;
                     const actionIcon = item.action === 'pdf' ? '📄' : '🖨️';
                     const actionLabel = item.action === 'pdf' ? 'PDF' : 'Yazdır';
+                    const isSelected = this.selectedIds.has(item.id);
+                    const selectedClass = isSelected ? 'selected' : '';
+                    
+                    const checkboxHtml = this.isDeleteMode ? `
+                        <div class="history-checkbox ${selectedClass}">
+                            ${isSelected ? '✓' : ''}
+                        </div>
+                    ` : '';
 
-                    html += `<div class="history-item" data-id="${item.id}" title="Tıkla → formu doldur">
-                        <div class="history-item-main">
-                            <span class="history-item-name">${name}</span>
-                            <span class="history-item-time">${actionIcon} ${item.time}</span>
+                    html += `<div class="history-item ${this.isDeleteMode ? 'delete-mode' : ''} ${selectedClass}" data-id="${item.id}" title="${this.isDeleteMode ? 'Seç / Bırak' : 'Tıkla → formu doldur'}">
+                        ${checkboxHtml}
+                        <div class="history-item-content">
+                            <div class="history-item-main">
+                                <span class="history-item-name">${name}</span>
+                                <span class="history-item-time">${actionIcon} ${item.time}</span>
+                            </div>
+                            <div class="history-item-detail">
+                                ${basvuruNo ? `<span>${basvuruNo}</span>` : ''}
+                                ${uyruk ? `<span>• ${uyruk}</span>` : ''}
+                                <span class="history-item-action-label">${actionLabel}</span>
+                            </div>
                         </div>
-                        <div class="history-item-detail">
-                            ${basvuruNo ? `<span>${basvuruNo}</span>` : ''}
-                            ${uyruk ? `<span>• ${uyruk}</span>` : ''}
-                            <span class="history-item-action-label">${actionLabel}</span>
-                        </div>
-                        <button class="history-delete-btn" data-delete-id="${item.id}" title="Sil">✕</button>
+                        ${!this.isDeleteMode ? `<button class="history-delete-btn" data-delete-id="${item.id}" title="Sil">✕</button>` : ''}
                     </div>`;
                 });
 
                 html += '</div>';
             });
 
-            // Tümünü temizle butonu
-            html += `<button class="history-clear-all" id="btn-history-clear">🗑️ Tüm Geçmişi Temizle (${totalCount})</button>`;
+            html += `<div class="history-actions-row">`;
+            
+            if (this.isDeleteMode) {
+                html += `<button class="history-btn-secondary" id="btn-history-cancel">İptal</button>`;
+                html += `<button class="history-btn-danger" id="btn-history-delete-selected" ${this.selectedIds.size === 0 ? 'disabled' : ''}>🗑️ Seçilenleri Sil (${this.selectedIds.size})</button>`;
+            } else {
+                html += `<button class="history-btn-secondary" id="btn-history-delete-mode">Kayıt Seçerek Sil</button>`;
+                html += `<button class="history-btn-danger" id="btn-history-clear">🗑️ Tüm Geçmişi Temizle (${totalCount})</button>`;
+            }
+            
+            html += `</div>`;
 
             body.innerHTML = html;
 
@@ -302,7 +341,11 @@ document.addEventListener('DOMContentLoaded', () => {
             body.querySelectorAll('.history-item').forEach(el => {
                 el.addEventListener('click', (e) => {
                     if (e.target.closest('.history-delete-btn')) return;
-                    this.restore(el.dataset.id);
+                    if (this.isDeleteMode) {
+                        this.toggleSelection(el.dataset.id);
+                    } else {
+                        this.restore(el.dataset.id);
+                    }
                 });
             });
 
@@ -318,6 +361,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearBtn.addEventListener('click', () => {
                     if (confirm('Tüm geçmiş silinecek. Emin misiniz?')) {
                         this.clearAll();
+                    }
+                });
+            }
+
+            const deleteModeBtn = document.getElementById('btn-history-delete-mode');
+            if (deleteModeBtn) {
+                deleteModeBtn.addEventListener('click', () => {
+                    this.isDeleteMode = true;
+                    this.selectedIds.clear();
+                    this.render();
+                });
+            }
+
+            const cancelBtn = document.getElementById('btn-history-cancel');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => {
+                    this.isDeleteMode = false;
+                    this.selectedIds.clear();
+                    this.render();
+                });
+            }
+
+            const deleteSelectedBtn = document.getElementById('btn-history-delete-selected');
+            if (deleteSelectedBtn) {
+                deleteSelectedBtn.addEventListener('click', () => {
+                    if (confirm(`${this.selectedIds.size} kaydı silmek istediğinize emin misiniz?`)) {
+                        this.deleteSelected();
                     }
                 });
             }
