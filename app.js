@@ -686,8 +686,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnManualEntry = document.getElementById('btn-manual-entry');
     if (btnManualEntry) {
         btnManualEntry.addEventListener('click', () => {
-            restoreDraft();
             clearFormExceptTeslimTarihi();
+            restoreDraft();
             croppedImages = [];
             page1ImageObj = null;
             setActiveStep(3);
@@ -2569,6 +2569,7 @@ function updateOnlineStatus() {
             btnUpload.disabled = true;
             btnUpload.style.opacity = '0.5';
             btnUpload.title = "İnternet bağlantısı koptu. Tarama yapılamaz.";
+            btnUpload.style.pointerEvents = 'none';
         }
         showToast('İnternet yok. Tarama yapılamaz, manuel giriş yapabilirsiniz.', 'warning');
     } else {
@@ -2576,6 +2577,7 @@ function updateOnlineStatus() {
             btnUpload.disabled = false;
             btnUpload.style.opacity = '1';
             btnUpload.title = "";
+            btnUpload.style.pointerEvents = 'auto';
         }
     }
 }
