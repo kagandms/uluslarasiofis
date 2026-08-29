@@ -903,7 +903,8 @@ body.dark-mode .history-item-action-label {
     background: rgba(255, 77, 77, 0.15);
 }
 
-.history-delete-btn {
+.history-delete-btn,
+.history-restore-btn {
     background: none;
     border: none;
     color: var(--text-secondary);
@@ -916,6 +917,11 @@ body.dark-mode .history-item-action-label {
 
 .history-delete-btn:hover {
     color: var(--danger);
+    transform: scale(1.1);
+}
+
+.history-restore-btn:hover {
+    color: var(--success);
     transform: scale(1.1);
 }
 
