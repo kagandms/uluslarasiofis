@@ -41,12 +41,19 @@ export function populateForm(data) {
                 }
                 if (optionExists) {
                     selectEl.value = data[key];
-                    if(fields.uyruguOther) fields.uyruguOther.style.display = 'none';
+                    if (data[key] === 'OTHER') {
+                        if(fields.uyruguOther) {
+                            fields.uyruguOther.style.display = 'block';
+                            fields.uyruguOther.value = data['uyruguOther'] || '';
+                        }
+                    } else {
+                        if(fields.uyruguOther) fields.uyruguOther.style.display = 'none';
+                    }
                 } else {
                     selectEl.value = 'OTHER';
                     if(fields.uyruguOther) {
                         fields.uyruguOther.style.display = 'block';
-                        fields.uyruguOther.value = data[key];
+                        fields.uyruguOther.value = data['uyruguOther'] || data[key];
                     }
                 }
             } else {
