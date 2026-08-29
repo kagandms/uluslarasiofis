@@ -2208,6 +2208,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (generatedPdf) {
                 const pdfBlob = generatedPdf.output('blob');
                 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+                
+                // Geçmişe kaydet - Sadece kullanıcı gerçekten indirmeye çalıştığında
+                historyManager.save('pdf');
+
                 if (isIOS && navigator.share) {
                     const file = new File([pdfBlob], generatedPdfName, { type: 'application/pdf' });
                     try {
@@ -2365,9 +2369,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 generatedPdf = pdf;
                 generatedPdfName = `ONBILGI_${fSurname}_${fName}.pdf`;
-                
-                // Geçmişe kaydet
-                historyManager.save('pdf');
                 
                 // Update button
                 btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> PDF Hazır - Tıkla İndir`;
