@@ -822,6 +822,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (page1ImageObj) {
                 isProcessingPage2 = false;
                 isSequentialCapture = false;
+                croppedImages = [];
+                croppedImages = [];
                 processAndRunOCR(page1ImageObj);
                 page1ImageObj = null;
             } else {
@@ -1438,6 +1440,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast(userMsg, 'error');
                 setActiveStep(1);
             }
+            isProcessingPage2 = false;
+            isSequentialCapture = false;
+            croppedImages = [];
+            page1ImageObj = null;
+            pendingFiles = [];
             throw error;
         }
     }
