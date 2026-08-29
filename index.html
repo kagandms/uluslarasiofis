@@ -137,8 +137,11 @@
                 <div class="card glass-card processing-card">
                     <div class="spinner"></div>
                     <h2 id="progress-text">Form Analiz Ediliyor...</h2>
-                    <div class="progress-container">
-                        <div id="progress-bar" class="progress-bar"></div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+                        <div class="progress-container" style="flex: 1;">
+                            <div id="progress-bar" class="progress-bar"></div>
+                        </div>
+                        <span id="progress-percentage" style="font-weight: bold; color: var(--accent); min-width: 45px; text-align: right; font-size: 0.9rem;">%0</span>
                     </div>
                     <p class="processing-subtitle">Sistem metinleri çözümlüyor, lütfen bekleyin.</p>
                     <button type="button" id="btn-cancel-ocr" class="btn btn-outline btn-cancel-ocr">
