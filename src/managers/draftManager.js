@@ -1,5 +1,5 @@
 import { STORAGE_KEYS } from '../config/constants.js';
-import { getFormElements, getFormData, populateForm } from '../ui/formManager.js';
+import { getFormElements, getFormData, populateForm, clearFormExceptTeslimTarihi } from '../ui/formManager.js';
 import { showToast } from '../ui/toastManager.js';
 
 export function saveDraft() {
@@ -32,6 +32,7 @@ export function restoreDraft() {
                     showToast('Taslak form başarıyla yüklendi.', 'success');
                 } else {
                     localStorage.removeItem(STORAGE_KEYS.DRAFT);
+                    clearFormExceptTeslimTarihi();
                 }
             }
         }

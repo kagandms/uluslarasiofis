@@ -42,7 +42,7 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
     };
 
     try {
-        updateProgress('Sunucuya bağlanılıyor...', 10);
+        updateProgress('Belge taranıyor...', 10);
         const base64Data = imageDataUrl.split(',')[1];
         let useVercel = false;
         
@@ -99,7 +99,7 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
                 }
 
                 try {
-                    updateProgress('API ile görüşülüyor (EU)...', 40);
+                    updateProgress('Görsel işleniyor...', 40);
                     response = await tryFetch(`https://eu-vision.googleapis.com/v1/images:annotate?key=${currentKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -107,7 +107,7 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
                     });
                 } catch (e) {
                     if (e.name === 'AbortError' && !controller.signal.aborted) {
-                        updateProgress('EU Sunucusu zaman aşımı, Global sunucu deneniyor...', 45);
+                        updateProgress('Alternatif sunucuya bağlanılıyor...', 45);
                         response = await tryFetch(`https://vision.googleapis.com/v1/images:annotate?key=${currentKey}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -137,7 +137,7 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
         }
 
         if (useVercel) {
-            updateProgress('Güvenli bağlantı (Vercel) kuruluyor...', 30);
+            updateProgress('Bağlantı şifreleniyor...', 30);
             response = await tryFetch('/api/ocr', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -150,7 +150,7 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
             data = await response.json();
         }
 
-        updateProgress('Metinler çözümleniyor...', 90);
+        updateProgress('Metinler okunuyor...', 90);
 
         if (!data || !data.responses || !data.responses[0].textAnnotations || data.responses[0].textAnnotations.length === 0) {
             throw new Error('Görselde okunabilir bir metin bulunamadı. Lütfen daha net bir fotoğraf çekin.');

@@ -77,6 +77,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Make daily counter widget open history
+    const dailyCounterWidget = document.getElementById('daily-counter-widget');
+    if (dailyCounterWidget) {
+        dailyCounterWidget.style.cursor = 'pointer';
+        dailyCounterWidget.addEventListener('click', () => {
+            const toggle = document.getElementById('history-toggle');
+            if (toggle) toggle.click();
+        });
+    }
+    
     // --- Manual Entry & Form Clear ---
     const btnManualEntry = document.getElementById('btn-manual-entry');
     if (btnManualEntry) {
@@ -87,6 +97,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // Manuel doldurmada "2. sayfayı ekle" resim yükleme butonunu gizle
             const btnAddPage2 = document.getElementById('btn-add-page2-step3');
             if (btnAddPage2) btnAddPage2.style.display = 'none';
+
+            // Manuel doldurmada Tekrar Tara butonuna gerek yok
+            const btnRescan = document.getElementById('btn-rescan');
+            if (btnRescan) btnRescan.style.display = 'none';
+
+            // Formun içini sıfırla ki eski OCR vs kırıntısı kalmasın, draft yüklenmezse boş gelsin
+            clearFormExceptTeslimTarihi();
 
             setActiveStep(STEP_IDS.FORM_RESULT);
             restoreDraft();
@@ -121,6 +138,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const btnAddPage2 = document.getElementById('btn-add-page2-step3');
         if (btnAddPage2) btnAddPage2.style.display = 'inline-flex';
+        
+        const btnRescan = document.getElementById('btn-rescan');
+        if (btnRescan) btnRescan.style.display = 'inline-flex';
         
         handleFile(pendingFiles.shift());
     }
