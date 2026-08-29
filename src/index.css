@@ -411,7 +411,7 @@ h1 {
     height: 8px;
     background: var(--card-border);
     border-radius: 4px;
-    margin: 1.5rem 0;
+    
     overflow: hidden;
 }
 
