@@ -219,13 +219,10 @@ export async function generateAndDownloadPdf(btnDownload) {
 }
 
 export async function printDocument(btnPrint) {
-    const libsReady = await loadPdfLibraries();
-    if (!libsReady) return;
-
     const originalText = btnPrint.innerHTML;
     btnPrint.innerHTML = `<span class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin-right: 8px;"></span> Hazırlanıyor...`;
 
-    setTimeout(async () => {
+    setTimeout(() => {
         try {
             const data = getFormData();
             const fields = getFormElements();
@@ -249,23 +246,9 @@ export async function printDocument(btnPrint) {
 
             const vTebligatTarihi = calculateTebligatDate(vTeslim);
 
-            const container = document.createElement('div');
-            container.style.position = 'fixed';
-            container.style.left = '-9999px';
-            container.innerHTML = getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, true);
-            document.body.appendChild(container);
-
-            const canvas = await window.html2canvas(container.querySelector('#pdf-content'), {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff'
-            });
-            document.body.removeChild(container);
-
-            const imgData = canvas.toDataURL('image/jpeg', 0.95);
             const printArea = document.getElementById('print-area');
             if (printArea) {
-                printArea.innerHTML = `<img src="${imgData}" style="width:210mm; max-width:100%;">`;
+                printArea.innerHTML = getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, true);
             }
 
             historyManager.save('print');

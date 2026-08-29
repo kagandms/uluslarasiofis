@@ -77,13 +77,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Make daily counter widget open history
     const dailyCounterWidget = document.getElementById('daily-counter-widget');
     if (dailyCounterWidget) {
         dailyCounterWidget.style.cursor = 'pointer';
         dailyCounterWidget.addEventListener('click', () => {
             const toggle = document.getElementById('history-toggle');
             if (toggle) toggle.click();
+            setTimeout(() => {
+                const panel = document.getElementById('history-panel');
+                if (panel) panel.scrollIntoView({ behavior: 'smooth' });
+            }, 50);
         });
     }
     
@@ -147,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function handleFile(file) {
         if (!file) {
+            cleanupCropper();
             processMultipleImages(croppedImages[0], croppedImages[1]);
             return;
         }
