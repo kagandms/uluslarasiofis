@@ -406,38 +406,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
     
     // --- Manual Entry Logic ---
+    function clearFormExceptTeslimTarihi() {
+        const savedTeslim = fields.teslimTarihi ? fields.teslimTarihi.value : '';
+        
+        Object.entries(fields).forEach(([key, field]) => {
+            if (!field || key === 'teslimTarihi') return;
+            if (field.tagName === 'SELECT') {
+                field.selectedIndex = 0; 
+            } else {
+                field.value = '';
+            }
+            field.classList.remove('success', 'field-filled');
+        });
+        
+        const otherInput = document.getElementById('field-uyrugu-other');
+        if (otherInput) {
+            otherInput.value = '';
+            otherInput.style.display = 'none';
+        }
+        
+        if (fields.teslimTarihi) fields.teslimTarihi.value = savedTeslim;
+    }
+
     const btnManualEntry = document.getElementById('btn-manual-entry');
     if (btnManualEntry) {
         btnManualEntry.addEventListener('click', () => {
-            // Teslim tarihini koru, diğer tüm alanları temizle
-            const savedTeslim = fields.teslimTarihi ? fields.teslimTarihi.value : '';
-            
-            // Tüm input/select alanlarını tek tek temizle (teslim tarihi hariç)
-            Object.entries(fields).forEach(([key, field]) => {
-                if (!field || key === 'teslimTarihi') return;
-                if (field.tagName === 'SELECT') {
-                    field.selectedIndex = 0; // "Uyruk Seç" default seçeneğine dön
-                } else {
-                    field.value = '';
-                }
-                field.classList.remove('success', 'field-filled');
-            });
-            
-            // Uyrugu "Diğer" input'unu gizle
-            const otherInput = document.getElementById('field-uyrugu-other');
-            if (otherInput) {
-                otherInput.value = '';
-                otherInput.style.display = 'none';
-            }
-            
-            // Teslim tarihini geri yükle
-            if (fields.teslimTarihi) fields.teslimTarihi.value = savedTeslim;
-            
-            // Clear cropped images since this is manual
+            clearFormExceptTeslimTarihi();
             croppedImages = [];
             page1ImageObj = null;
             setActiveStep(3);
             showToast('Manuel giriş moduna geçildi.', 'info');
+        });
+    }
+
+    const btnClearForm = document.getElementById('btn-clear-form');
+    if (btnClearForm) {
+        btnClearForm.addEventListener('click', () => {
+            if (confirm('Teslim tarihi dışındaki tüm bilgileri silmek istediğinize emin misiniz?')) {
+                clearFormExceptTeslimTarihi();
+                showToast('Form temizlendi.', 'info');
+            }
         });
     }
 
@@ -2095,7 +2103,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         isPdfLoading = true;
-        showToast('PDF modülleri yükleniyor, lütfen bekleyin...', 'info');
         
         try {
             await Promise.all([
