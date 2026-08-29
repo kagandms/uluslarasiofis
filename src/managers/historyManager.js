@@ -342,11 +342,11 @@ export function initHistoryPanel() {
             const icon = document.querySelector('.history-toggle-icon');
             if (!body || !icon) return;
             
-            if (body.classList.contains('expanded')) {
-                body.classList.remove('expanded');
+            if (body.classList.contains('open')) {
+                body.classList.remove('open');
                 icon.textContent = '▼';
             } else {
-                body.classList.add('expanded');
+                body.classList.add('open');
                 icon.textContent = '▲';
             }
         });

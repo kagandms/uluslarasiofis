@@ -256,7 +256,9 @@ export async function printDocument(btnPrint) {
             setTimeout(() => {
                 window.print();
                 btnPrint.innerHTML = originalText;
-                if (printArea) printArea.innerHTML = '';
+                // iPhone/iOS Safari asenkron (non-blocking) çalışır.
+                // Anında temizleme yaparsak ekrana boş sayfa yansır.
+                // HTML zaten CSS ile gizli olduğu için kodun burada kalması zararsızdır.
             }, 500);
 
         } catch (err) {
