@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ikamet-ocr-v1.62.12';
+const CACHE_NAME = 'ikamet-ocr-v2.0';
 const ASSETS = [
     './',
     './index.html',
