@@ -1,16 +1,16 @@
 {
-  "name": "Topkapı Üniversitesi İkamet",
+  "name": "Topkapı Üni İkamet",
   "short_name": "Topkapı İkamet",
   "description": "İstanbul Topkapı Üniversitesi İkamet İzni OCR Sistemi",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#820A28",
+  "theme_color": "#820A28",
   "icons": [
     {
-      "src": "./icon.jpg",
-      "sizes": "192x192 512x512",
-      "type": "image/jpeg"
+      "src": "./pwa-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
   ]
 }

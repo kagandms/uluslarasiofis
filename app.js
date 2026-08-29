@@ -95,8 +95,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, isPrint = false) {
         const wrapperStyle = isPrint 
-            ? "font-family:'Times New Roman',Times,serif;padding:5mm 10mm;color:black;background:white;border:4px double black;box-sizing:border-box;min-height:264mm;max-width:210mm;margin:0 auto;display:flex;flex-direction:column;-webkit-print-color-adjust:exact;print-color-adjust:exact;"
-            : "font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;min-height:1120px;display:flex;flex-direction:column;";
+            ? "font-family:'Times New Roman',Times,serif;padding:5mm 10mm;color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;"
+            : "font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;";
             
         return `
             <style>
@@ -171,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <li style="margin-bottom:1px;">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
                 </ul>
                 <p style="font-weight:bold;font-size:12px;margin:12px 0 4px 0;text-align:center;border:1px solid #000;padding:6px;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
-                <div style="margin-top:auto;display:flex;justify-content:space-around;font-weight:bold;font-size:13px;padding-bottom:15mm;padding-top:15px;">
+                <div style="margin-top:40px;display:flex;justify-content:space-around;font-weight:bold;font-size:13px;padding-bottom:15mm;padding-top:15px;page-break-before:avoid;break-before:avoid;">
                     <div style="text-align:center;"><u>TEBLİĞ EDEN</u><br><br>Üniversite Personeli</div>
                     <div style="text-align:center;"><u>TEBELLÜĞ EDEN</u><br><br>Yabancı Öğrenci</div>
                 </div>
