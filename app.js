@@ -472,11 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (this.isTrashMode) {
                     html += `<button class="history-btn-secondary" id="btn-history-back">← Geri Dön</button>`;
                     html += `<button class="history-btn-danger" id="btn-history-empty-trash">💥 Çöp Kutusunu Boşalt</button>`;
-                } else if (this.isDeleteMode) {
-                    html += `<button class="history-btn-secondary" id="btn-history-cancel">İptal</button>`;
-                    html += `<button class="history-btn-danger" id="btn-history-delete-selected" ${this.selectedIds.size === 0 ? 'disabled' : ''}>🗑️ Seçilenleri Sil (${this.selectedIds.size})</button>`;
                 } else {
-                    html += `<button class="history-btn-secondary" id="btn-history-delete-mode">Kayıt Seçerek Sil</button>`;
                     if (trashCount > 0) {
                         html += `<button class="history-btn-secondary" id="btn-history-trash">🗑️ Çöp Kutusu (${trashCount})</button>`;
                     }
@@ -534,30 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            const deleteModeBtn = document.getElementById('btn-history-delete-mode');
-            if (deleteModeBtn) {
-                deleteModeBtn.addEventListener('click', () => {
-                    this.isDeleteMode = true;
-                    this.selectedIds.clear();
-                    this.render();
-                });
-            }
-
-            const cancelBtn = document.getElementById('btn-history-cancel');
-            if (cancelBtn) {
-                cancelBtn.addEventListener('click', () => {
-                    this.isDeleteMode = false;
-                    this.selectedIds.clear();
-                    this.render();
-                });
-            }
-
-            const deleteSelectedBtn = document.getElementById('btn-history-delete-selected');
-            if (deleteSelectedBtn) {
-                deleteSelectedBtn.addEventListener('click', () => {
-                    this.deleteSelected();
-                });
-            }
+            
             
             const backBtn = document.getElementById('btn-history-back');
             if (backBtn) {
