@@ -51,8 +51,8 @@ export async function loadPdfLibraries() {
 
 export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, isPrint = false) {
     const wrapperStyle = isPrint 
-        ? "font-family:'Times New Roman',Times,serif;padding:5mm 10mm;color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;"
-        : "font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;";
+        ? "font-family:'Times New Roman',Times,serif;padding:5mm 10mm;color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;min-height:280mm;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;"
+        : "font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;min-height:1122px;display:flex;flex-direction:column;";
         
     return `
         <style>
@@ -61,7 +61,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
             .pt th { font-weight: bold; }
         </style>
         <div id="${isPrint ? 'pdf-content' : 'pdf-canvas-content'}" style="${wrapperStyle}">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-shrink: 0;">
                 <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-start;">
                     <img src="topkapi_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
                 </div>
@@ -72,7 +72,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
                     <img src="goc_logo.png" style="height: 100%; width: auto;" crossorigin="anonymous">
                 </div>
             </div>
-            <table class="pt" style="margin-bottom:4px;">
+            <table class="pt" style="margin-bottom:4px; flex-shrink: 0;">
                 <tr><td colspan="4" style="height:18px;"></td></tr>
                 <tr>
                     <th width="25%"><u>e</u>-İkamet<br>Başvuru No</th><td width="25%">${currentYear}-${vBasvuruNo.replace(new RegExp('^' + currentYear + '-'), '')}</td>
@@ -103,12 +103,12 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
                     <td>${vMail}</td>
                 </tr>
             </table>
-            <p style="text-align:justify;font-size:11.5px;margin:6px 0;line-height:1.3;text-indent:30px;">
+            <p style="text-align:justify;font-size:11.5px;margin:6px 0;line-height:1.3;text-indent:30px; flex-shrink: 0;">
                 6458 sayılı Kanunun 38. maddesi çerçevesinde istenilen aşağıdaki belgelerin ekte sunulduğuna dair işbu tebliğ ve tebellüğ belgesi tanzim edilerek taraflarca imza altına alınmış, belgenin bir sureti tarafınıza teslim edilmiş olup, diğer sureti İl Göç İdaresi Müdürlüğüne gönderilecektir.
             </p>
 
-            <p style="font-weight:bold;font-size:12px;margin:8px 0 4px 0;">BELGELER:</p>
-            <ul style="list-style:none;padding:0 0 0 10px;margin:0;font-size:10.5px;line-height:1.2;">
+            <p style="font-weight:bold;font-size:12px;margin:8px 0 4px 0; flex-shrink: 0;">BELGELER:</p>
+            <ul style="list-style:none;padding:0 0 0 10px;margin:0;font-size:10.5px;line-height:1.2; flex-shrink: 0;">
                 <li style="margin-bottom:1px;">☐ İkamet izni kayıt/başvuru formu (öğrenci tarafından ıslak imzalı şekilde)</li>
                 <li style="margin-bottom:1px;">☐ Pasaport ya da pasaport yerine geçen belge (aslı görüldü şeklinde)</li>
                 <li style="margin-bottom:1px;">☐ Öğrencilik durumunu gösterir belge</li>
@@ -126,8 +126,12 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
                 <li style="margin-bottom:1px;">☐ İkamet izni belge bedelinin ödendiğine dair makbuz</li>
                 <li style="margin-bottom:1px;">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
             </ul>
-            <p style="font-weight:bold;font-size:12px;margin:12px 0 4px 0;text-align:center;border:1px solid #000;padding:6px;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
-            <div style="margin-top:40px;display:flex;justify-content:space-around;font-weight:bold;font-size:13px;padding-bottom:15mm;padding-top:15px;page-break-before:avoid;break-before:avoid;">
+            <p style="font-weight:bold;font-size:12px;margin:12px 0 4px 0;text-align:center;border:1px solid #000;padding:6px; flex-shrink: 0;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
+            
+            <!-- This pushes the signature block to the bottom of the page -->
+            <div style="flex-grow: 1;"></div>
+
+            <div style="margin-top:20px;display:flex;justify-content:space-around;font-weight:bold;font-size:13px;padding-bottom:15mm;padding-top:15px;page-break-before:avoid;break-before:avoid; flex-shrink: 0;">
                 <div style="text-align:center;"><u>TEBLİĞ EDEN</u><br><br>Üniversite Personeli</div>
                 <div style="text-align:center;"><u>TEBELLÜĞ EDEN</u><br><br>Yabancı Öğrenci</div>
             </div>
