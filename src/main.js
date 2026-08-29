@@ -238,6 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
             page1ImageObj = null;
             isProcessingPage2 = false;
             isSequentialCapture = false;
+            setActiveStep(STEP_IDS.UPLOAD);
         },
         onSkip: () => {
             const img = document.getElementById('cropper-image');
