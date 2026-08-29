@@ -158,20 +158,20 @@ export async function generateAndDownloadPdf(btnDownload) {
             const fields = getFormElements();
             
             const currentYear = new Date().getFullYear();
-            const vBasvuruNo = data.basvuruNo || "__________________";
-            const vTeslim = data.teslimTarihi || "__________________";
-            const vYabanciKimlik = "__________________"; 
-            const vPasaportNo = data.pasaportNo || "__________________";
-            const vAdi = data.adi || "__________________";
-            const vSoyadi = data.soyadi || "__________________";
-            const vDogum = data.dogumTarihi || "__________________";
-            const vAdres = data.adres || "__________________";
-            const vTel = data.tel || "__________________";
-            const vMail = data.mail || "__________________";
+            const vBasvuruNo = data.basvuruNo || "";
+            const vTeslim = data.teslimTarihi || "";
+            const vYabanciKimlik = ""; 
+            const vPasaportNo = data.pasaportNo || "";
+            const vAdi = data.adi || "";
+            const vSoyadi = data.soyadi || "";
+            const vDogum = data.dogumTarihi || "";
+            const vAdres = data.adres || "";
+            const vTel = data.tel || "";
+            const vMail = data.mail || "";
             
-            let vUyrugu = data.uyrugu || "__________________";
+            let vUyrugu = data.uyrugu || "";
             if (fields.uyrugu && fields.uyrugu.value === 'OTHER' && fields.uyruguOther) {
-                vUyrugu = fields.uyruguOther.value || "__________________";
+                vUyrugu = fields.uyruguOther.value || "";
             }
 
             const vTebligatTarihi = calculateTebligatDate(vTeslim);
@@ -228,20 +228,20 @@ export async function printDocument(btnPrint) {
             const fields = getFormElements();
 
             const currentYear = new Date().getFullYear();
-            const vBasvuruNo = data.basvuruNo || "__________________";
-            const vTeslim = data.teslimTarihi || "__________________";
-            const vYabanciKimlik = "__________________"; 
-            const vPasaportNo = data.pasaportNo || "__________________";
-            const vAdi = data.adi || "__________________";
-            const vSoyadi = data.soyadi || "__________________";
-            const vDogum = data.dogumTarihi || "__________________";
-            const vAdres = data.adres || "__________________";
-            const vTel = data.tel || "__________________";
-            const vMail = data.mail || "__________________";
+            const vBasvuruNo = data.basvuruNo || "";
+            const vTeslim = data.teslimTarihi || "";
+            const vYabanciKimlik = ""; 
+            const vPasaportNo = data.pasaportNo || "";
+            const vAdi = data.adi || "";
+            const vSoyadi = data.soyadi || "";
+            const vDogum = data.dogumTarihi || "";
+            const vAdres = data.adres || "";
+            const vTel = data.tel || "";
+            const vMail = data.mail || "";
             
-            let vUyrugu = data.uyrugu || "__________________";
+            let vUyrugu = data.uyrugu || "";
             if (fields.uyrugu && fields.uyrugu.value === 'OTHER' && fields.uyruguOther) {
-                vUyrugu = fields.uyruguOther.value || "__________________";
+                vUyrugu = fields.uyruguOther.value || "";
             }
 
             const vTebligatTarihi = calculateTebligatDate(vTeslim);
