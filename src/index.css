@@ -586,9 +586,6 @@ select.glass-input {
         display: none;
     }
 }
-        display: none;
-    }
-}
 
 .page2-actions {
     display: inline-flex;
