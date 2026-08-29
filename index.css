@@ -909,12 +909,8 @@ body.dark-mode .history-item-action-label {
     color: var(--text-secondary);
     cursor: pointer;
     padding: 0.25rem;
-    font-size: 1rem;
+    font-size: 1.1rem;
     transition: var(--transition);
-    opacity: 0;
-}
-
-.history-item:hover .history-delete-btn {
     opacity: 1;
 }
 
