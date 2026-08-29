@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ikamet-ocr-v2.0.6';
+const CACHE_NAME = 'ikamet-ocr-v2.0';
 const ASSETS = [
     './',
     './index.html',
@@ -47,7 +47,7 @@ self.addEventListener('fetch', (event) => {
     }
 
     event.respondWith(
-        caches.match(event.request).then((response) => {
+        caches.match(event.request, { ignoreSearch: true }).then((response) => {
             // Return cached response if found, otherwise fetch from network
             return response || fetch(event.request).then((fetchRes) => {
                 // Optionally cache new successful responses (like fonts or lazy loaded scripts)

@@ -196,7 +196,7 @@ h1 {
 }
 
 .step-label {
-    font-size: 0.875rem;
+    font-size: 0.95rem;
     color: var(--text-secondary);
     transition: var(--transition);
 }
@@ -432,7 +432,7 @@ h1 {
 
 .processing-subtitle {
     color: var(--text-secondary);
-    font-size: 0.875rem;
+    font-size: 0.95rem;
 }
 
 .btn-cancel-ocr {
@@ -481,9 +481,9 @@ h1 {
 }
 
 label {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    font-weight: 500;
+    font-size: 1rem;
+    color: var(--text-primary);
+    font-weight: 600;
 }
 
 .glass-input {
@@ -545,7 +545,7 @@ select.glass-input {
     text-align: center;
     padding: 2rem;
     color: var(--text-secondary);
-    font-size: 0.875rem;
+    font-size: 0.95rem;
     margin-top: auto;
 }
 

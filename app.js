@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let useCameraForPage2 = false;
     let pendingFiles = [];
     let croppedImages = [];
-    let activeAbortController = null; // İptal butonu için aktif OCR isteğini takip eder
+    let activeAbortControllers = new Set(); // İptal butonu için aktif OCR isteklerini takip eder
 
     // Steps
     const step1 = document.getElementById('step-1');
@@ -705,8 +705,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Formül: Verilen tarihten sonraki haftanın Cuma günü
     // Örnek: Cuma verilirse → 7 gün sonraki Cuma, Pazartesi verilirse → o haftanın Cumasından sonraki Cuma
     function calculateTebligatDate(dateStr) {
-        // dateStr format: dd.mm.yyyy
-        const parts = dateStr.split('.');
+        if (!dateStr) return '';
+        // Normalize separators: replace /, -, and spaces with dots
+        const normalizedDate = dateStr.replace(/[\/\-\s]/g, '.');
+        const parts = normalizedDate.split('.');
         if (parts.length !== 3) return '';
         const d = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10) - 1; // JS ayları 0-indexed
@@ -981,11 +983,18 @@ document.addEventListener('DOMContentLoaded', () => {
             callback(null);
             return;
         }
-        const croppedImg = new Image();
-        croppedImg.onload = () => {
-            callback(croppedImg);
-        };
-        croppedImg.src = croppedCanvas.toDataURL('image/jpeg', 0.8);
+        croppedCanvas.toBlob((blob) => {
+            if (!blob) return callback(null);
+            const croppedImg = new Image();
+            const objectUrl = URL.createObjectURL(blob);
+            croppedImg.onload = () => {
+                callback(croppedImg);
+                // ObjectURL temizlenecekse callback sonrasına bir revoke eklenebilir
+                // ancak şu anki mimaride image objecti daha sonra da kullanılıyor, 
+                // bu yüzden Base64 yerine blob referansı tutmak yine de RAM'i muazzam rahatlatır.
+            };
+            croppedImg.src = objectUrl;
+        }, 'image/jpeg', 0.8);
     }
 
     function cleanupCropper() {
@@ -1154,7 +1163,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error("Multiple OCR Error:", error);
             isProcessingPage2 = false;
-            activeAbortController = null;
+            activeAbortControllers.clear();
             
             // Kullanıcı iptal ettiyse farklı mesaj göster
             if (error.name === 'AbortError') {
@@ -1175,9 +1184,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- OCR İptal Fonksiyonu ---
     function cancelOCR() {
         let aborted = false;
-        if (activeAbortController) {
-            activeAbortController.abort();
-            activeAbortController = null;
+        if (activeAbortControllers.size > 0) {
+            activeAbortControllers.forEach(ctrl => ctrl.abort());
+            activeAbortControllers.clear();
             aborted = true;
         }
         isProcessingPage2 = false;
@@ -1221,7 +1230,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const base64Data = imageDataUrl.split(',')[1];
                 
                 const controller = new AbortController();
-                activeAbortController = controller;
+                activeAbortControllers.add(controller);
                 const timeoutId = setTimeout(() => controller.abort(), 60000);
                 
                 let fetchBody;
@@ -1283,19 +1292,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         // Check for quota errors
                         if (!response.ok) {
-                            const clone = response.clone();
-                            try {
-                                const errorData = await clone.json();
-                                if (response.status === 403 || response.status === 429) {
-                                    const errorMsg = errorData.error?.message?.toLowerCase() || '';
-                                    if (errorMsg.includes('quota') || errorMsg.includes('billing') || errorMsg.includes('rate limit')) {
-                                        console.warn(`API Key ${currentApiKeyIndex + 1} kota sınırına ulaştı, sonrakine geçiliyor...`);
-                                        currentApiKeyIndex++;
-                                        continue; // try next API key in the loop
-                                    }
-                                }
-                            } catch (e) {
-                                // ignore JSON parse errors on error response
+                            if (response.status === 403 || response.status === 429) {
+                                console.warn(`API Key ${currentApiKeyIndex + 1} kota veya yetki sınırına ulaştı, sonrakine geçiliyor...`);
+                                currentApiKeyIndex++;
+                                continue; // try next API key in the loop
                             }
                         }
 
@@ -1321,6 +1321,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
                 clearTimeout(timeoutId);
+                activeAbortControllers.delete(controller);
                 
                 if (response.ok) {
                     const data = await response.json();
