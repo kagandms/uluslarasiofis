@@ -1,4 +1,4 @@
-import { extractFromCoordinates, extractPage2FromCoordinates } from "./utils/parser.js";
+import { extractFromCoordinates, extractPage2FromCoordinates, extractFields } from "./utils/parser.js";
 // --- PWA Installation Logic ---
 let deferredPrompt;
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;

@@ -301,7 +301,7 @@
         }
     }
 
-    function extractFields(text) {
+    export function extractFields(text) {
         // Normalize newlines for easier regex matching
         const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
         const fullText = lines.join('\n');
