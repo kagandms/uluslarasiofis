@@ -1256,6 +1256,28 @@ document.addEventListener('DOMContentLoaded', () => {
         btnCancelOcr.addEventListener('click', cancelOCR);
     }
 
+    
+    document.getElementById('file-input-page2-step3')?.addEventListener('change', (e) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const file = e.target.files[0];
+        
+        // Reset
+        e.target.value = '';
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                isProcessingPage2 = true;
+                setActiveStep(2);
+                const prep = prepareImageForOCR(img);
+                runOCR(prep.dataUrl, prep.canvas, false, true); // skipStep3 = false (returns to step 3), isPage2 = true
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
     // --- OCR Processing ---
     async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPage2 = isProcessingPage2) {
         try {
@@ -1877,10 +1899,21 @@ function getDraftFields() {
 function saveDraft() {
     const draft = {};
     const formFields = getDraftFields();
+    let hasRealData = false;
     Object.keys(formFields).forEach(id => {
-        if (formFields[id]) draft[id] = formFields[id].value;
+        if (formFields[id]) {
+            const val = formFields[id].value;
+            draft[id] = val;
+            if (val && val.trim() !== '' && id !== 'field-teslim-tarihi') {
+                hasRealData = true;
+            }
+        }
     });
-    localStorage.setItem('ikamet_draft', JSON.stringify(draft));
+    if (hasRealData) {
+        localStorage.setItem('ikamet_draft', JSON.stringify(draft));
+    } else {
+        localStorage.removeItem('ikamet_draft');
+    }
 }
 
 function restoreDraft() {
