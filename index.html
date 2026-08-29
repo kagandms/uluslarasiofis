@@ -19,7 +19,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <!-- CSS -->
-    <link rel="stylesheet" href="index.css?v=1.61.22">
+    <link rel="stylesheet" href="index.css?v=1.62.0">
     
     <!-- CDNs -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
@@ -28,7 +28,7 @@
 
     
     <!-- App Script -->
-    <script src="app.js?v=1.61.22" defer></script>
+    <script src="app.js?v=1.62.0" defer></script>
 </head>
 <body>
     <!-- Main App Content -->
@@ -50,7 +50,7 @@
                         <button id="btn-dark-mode" class="btn-header icon-only" title="Gece/Gündüz Modu">
                             <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
                         </button>
-                        <span class="version-badge">v1.61.22</span>
+                        <span class="version-badge">v1.62.0</span>
                     </div>
                 </div>
             </div>
@@ -92,6 +92,19 @@
                             <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                             Formu Manuel Doldur
                         </button>
+                    </div>
+                    <!-- Geçmiş / İşlem Logu Paneli -->
+                    <div id="history-panel" class="history-panel">
+                        <div class="history-header" id="history-toggle">
+                            <div class="history-header-left">
+                                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span class="history-count">Henüz işlem yok</span>
+                            </div>
+                            <span class="history-toggle-icon">▼</span>
+                        </div>
+                        <div class="history-body">
+                            <p class="history-empty">Henüz kayıt bulunmuyor. PDF indirdiğinizde veya yazdırdığınızda burada görünecek.</p>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -136,7 +149,10 @@
             <!-- Step 3: Results Section -->
             <section id="step-3" class="step-content">
                 <div class="card glass-card result-form">
-                    <h2 class="subtitle">Kontrol ve Düzenleme</h2>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+                        <h2 class="subtitle" style="margin-bottom: 0;">Kontrol ve Düzenleme</h2>
+                        <span id="history-today-badge" class="history-badge" style="display: none;">Bugün: 0</span>
+                    </div>
                     <form id="data-form">
                         <div class="form-grid">
                             <div class="form-group">
@@ -183,6 +199,10 @@
                                 <label for="field-tel" style="font-size: 0.75rem;">Tel No</label>
                                 <input type="text" id="field-tel" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
                             </div>
+                            <div class="form-group">
+                                <label for="field-mail" style="font-size: 0.75rem;">E-Posta</label>
+                                <input type="text" id="field-mail" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
                             <div class="form-group full-width">
                                 <label for="field-adres" style="font-size: 0.75rem;">Adres</label>
                                 <input type="text" id="field-adres" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
@@ -198,15 +218,10 @@
                                 <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                                 Yazdır
                             </button>
-                            <button type="button" id="btn-scan-page2" class="btn btn-secondary btn-action" onclick="document.getElementById('file-input-page2').click()">
-                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-                                2. Sayfa Seç
-                            </button>
                             <button type="button" id="btn-rescan" class="btn btn-outline btn-action">
                                 <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M21 2v6h-6"></path><path d="M21 13a9 9 0 1 1-3-7.7L21 8"></path></svg>
                                 Tekrar Tara
                             </button>
-                            <input type="file" id="file-input-page2" accept="image/*" class="hidden-input">
                         </div>
                     </form>
                 </div>

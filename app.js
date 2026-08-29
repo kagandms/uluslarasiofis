@@ -104,7 +104,224 @@ document.addEventListener('DOMContentLoaded', () => {
         uyrugu: document.getElementById('field-uyrugu'),
         dogumTarihi: document.getElementById('field-dogum-tarihi'),
         adres: document.getElementById('field-adres'),
-        tel: document.getElementById('field-tel')
+        tel: document.getElementById('field-tel'),
+        mail: document.getElementById('field-mail')
+    };
+
+    // ===========================================
+    // GEÇMIŞ / İŞLEM LOGU SİSTEMİ
+    // ===========================================
+    const HISTORY_KEY = 'ikamet-history';
+    const HISTORY_MAX_DAYS = 30;
+
+    const historyManager = {
+        getAll() {
+            try {
+                return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+            } catch { return []; }
+        },
+
+        save(action) {
+            const now = new Date();
+            const entry = {
+                id: `${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
+                timestamp: now.toISOString(),
+                date: `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`,
+                time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+                action: action, // 'pdf' veya 'print'
+                fields: {}
+            };
+            // Tüm form alanlarını kaydet
+            Object.entries(fields).forEach(([key, field]) => {
+                if (!field) return;
+                entry.fields[key] = field.value || '';
+            });
+            // Uyrugu "OTHER" ise diğer input'u da kaydet
+            const otherInput = document.getElementById('field-uyrugu-other');
+            if (otherInput && fields.uyrugu && fields.uyrugu.value === 'OTHER') {
+                entry.fields.uyruguOther = otherInput.value || '';
+            }
+
+            const history = this.getAll();
+            history.unshift(entry); // En yeni başa
+
+            // 30 günden eski kayıtları temizle
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - HISTORY_MAX_DAYS);
+            const filtered = history.filter(h => new Date(h.timestamp) > cutoff);
+
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered));
+            this.render();
+        },
+
+        deleteEntry(id) {
+            const history = this.getAll().filter(h => h.id !== id);
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+            this.render();
+        },
+
+        clearAll() {
+            localStorage.removeItem(HISTORY_KEY);
+            this.render();
+        },
+
+        getTodayCount() {
+            const today = new Date();
+            const todayStr = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
+            return this.getAll().filter(h => h.date === todayStr).length;
+        },
+
+        getGroupedByDate() {
+            const history = this.getAll();
+            const groups = {};
+            history.forEach(h => {
+                if (!groups[h.date]) groups[h.date] = [];
+                groups[h.date].push(h);
+            });
+            return groups;
+        },
+
+        _formatDateLabel(dateStr) {
+            const today = new Date();
+            const todayStr = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = `${String(yesterday.getDate()).padStart(2, '0')}.${String(yesterday.getMonth() + 1).padStart(2, '0')}.${yesterday.getFullYear()}`;
+
+            if (dateStr === todayStr) return 'Bugün';
+            if (dateStr === yesterdayStr) return 'Dün';
+            return dateStr;
+        },
+
+        restore(id) {
+            const entry = this.getAll().find(h => h.id === id);
+            if (!entry || !entry.fields) return;
+
+            // Teslim tarihi dahil tüm alanları doldur
+            Object.entries(entry.fields).forEach(([key, value]) => {
+                if (key === 'uyruguOther') return; // Ayrı işle
+                const field = fields[key];
+                if (!field) return;
+                field.value = value;
+                if (value) field.classList.add('field-filled');
+                else field.classList.remove('field-filled');
+            });
+
+            // Uyrugu "OTHER" ise diğer input'u göster
+            const otherInput = document.getElementById('field-uyrugu-other');
+            if (otherInput) {
+                if (entry.fields.uyrugu === 'OTHER' && entry.fields.uyruguOther) {
+                    otherInput.value = entry.fields.uyruguOther;
+                    otherInput.style.display = 'block';
+                } else {
+                    otherInput.value = '';
+                    otherInput.style.display = 'none';
+                }
+            }
+
+            // Step 3'e geç
+            croppedImages = [];
+            page1ImageObj = null;
+            setActiveStep(3);
+            
+            const name = [entry.fields.adi, entry.fields.soyadi].filter(Boolean).join(' ') || 'Kayıt';
+            showToast(`${name} bilgileri yüklendi.`, 'success');
+        },
+
+        render() {
+            const todayCount = this.getTodayCount();
+            const groups = this.getGroupedByDate();
+            const totalCount = this.getAll().length;
+
+            // Step 3 badge güncelle
+            const badge = document.getElementById('history-today-badge');
+            if (badge) {
+                badge.textContent = `Bugün: ${todayCount}`;
+                badge.style.display = todayCount > 0 ? 'inline-flex' : 'none';
+            }
+
+            // Ana sayfa paneli
+            const panel = document.getElementById('history-panel');
+            if (!panel) return;
+
+            const header = panel.querySelector('.history-header');
+            const body = panel.querySelector('.history-body');
+            if (!header || !body) return;
+
+            // Sayaç güncelle
+            const countEl = header.querySelector('.history-count');
+            if (countEl) countEl.textContent = todayCount > 0 ? `Bugün: ${todayCount} işlem` : 'Henüz işlem yok';
+
+            if (totalCount === 0) {
+                body.innerHTML = '<p class="history-empty">Henüz kayıt bulunmuyor. PDF indirdiğinizde veya yazdırdığınızda burada görünecek.</p>';
+                return;
+            }
+
+            let html = '';
+            const dates = Object.keys(groups);
+            dates.forEach(date => {
+                const label = this._formatDateLabel(date);
+                const items = groups[date];
+                html += `<div class="history-date-group">
+                    <div class="history-date-title">
+                        <span>${label}</span>
+                        <span class="history-date-count">${items.length} kayıt</span>
+                    </div>`;
+                
+                items.forEach(item => {
+                    const name = [item.fields.adi, item.fields.soyadi].filter(Boolean).join(' ') || '—';
+                    const basvuruNo = item.fields.basvuruNo || '';
+                    let uyruk = item.fields.uyrugu || '';
+                    if (uyruk === 'OTHER' && item.fields.uyruguOther) uyruk = item.fields.uyruguOther;
+                    const actionIcon = item.action === 'pdf' ? '📄' : '🖨️';
+                    const actionLabel = item.action === 'pdf' ? 'PDF' : 'Yazdır';
+
+                    html += `<div class="history-item" data-id="${item.id}" title="Tıkla → formu doldur">
+                        <div class="history-item-main">
+                            <span class="history-item-name">${name}</span>
+                            <span class="history-item-time">${actionIcon} ${item.time}</span>
+                        </div>
+                        <div class="history-item-detail">
+                            ${basvuruNo ? `<span>${basvuruNo}</span>` : ''}
+                            ${uyruk ? `<span>• ${uyruk}</span>` : ''}
+                            <span class="history-item-action-label">${actionLabel}</span>
+                        </div>
+                        <button class="history-delete-btn" data-delete-id="${item.id}" title="Sil">✕</button>
+                    </div>`;
+                });
+
+                html += '</div>';
+            });
+
+            // Tümünü temizle butonu
+            html += `<button class="history-clear-all" id="btn-history-clear">🗑️ Tüm Geçmişi Temizle (${totalCount})</button>`;
+
+            body.innerHTML = html;
+
+            // Event delegation
+            body.querySelectorAll('.history-item').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    if (e.target.closest('.history-delete-btn')) return;
+                    this.restore(el.dataset.id);
+                });
+            });
+
+            body.querySelectorAll('.history-delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteEntry(btn.dataset.deleteId);
+                });
+            });
+
+            const clearBtn = document.getElementById('btn-history-clear');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    if (confirm('Tüm geçmiş silinecek. Emin misiniz?')) {
+                        this.clearAll();
+                    }
+                });
+            }
+        }
     };
 
     // --- Toast System ---
@@ -192,11 +409,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnManualEntry = document.getElementById('btn-manual-entry');
     if (btnManualEntry) {
         btnManualEntry.addEventListener('click', () => {
-            const resultForm = document.getElementById('result-form');
-            if (resultForm) resultForm.reset();
-            document.querySelectorAll('.glass-input').forEach(el => {
-                el.classList.remove('success', 'field-filled');
+            // Teslim tarihini koru, diğer tüm alanları temizle
+            const savedTeslim = fields.teslimTarihi ? fields.teslimTarihi.value : '';
+            
+            // Tüm input/select alanlarını tek tek temizle (teslim tarihi hariç)
+            Object.entries(fields).forEach(([key, field]) => {
+                if (!field || key === 'teslimTarihi') return;
+                if (field.tagName === 'SELECT') {
+                    field.selectedIndex = 0; // "Uyruk Seç" default seçeneğine dön
+                } else {
+                    field.value = '';
+                }
+                field.classList.remove('success', 'field-filled');
             });
+            
+            // Uyrugu "Diğer" input'unu gizle
+            const otherInput = document.getElementById('field-uyrugu-other');
+            if (otherInput) {
+                otherInput.value = '';
+                otherInput.style.display = 'none';
+            }
+            
+            // Teslim tarihini geri yükle
+            if (fields.teslimTarihi) fields.teslimTarihi.value = savedTeslim;
+            
             // Clear cropped images since this is manual
             croppedImages = [];
             page1ImageObj = null;
@@ -214,6 +450,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const yyyy = today.getFullYear();
     if (fields.teslimTarihi) fields.teslimTarihi.value = `${dd}.${mm}.${yyyy}`;
+
+    // --- Geçmiş paneli ilk render ---
+    historyManager.render();
+    
+    // Toggle açılır/kapanır
+    const historyToggle = document.getElementById('history-toggle');
+    const historyBody = document.querySelector('.history-body');
+    if (historyToggle && historyBody) {
+        historyToggle.addEventListener('click', () => {
+            const isOpen = historyBody.classList.toggle('open');
+            historyToggle.querySelector('.history-toggle-icon').textContent = isOpen ? '▲' : '▼';
+        });
+    }
 
     // --- Tebligat Tarihi Hesaplama ---
     // Formül: Verilen tarihten sonraki haftanın Cuma günü
@@ -960,6 +1209,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Eski bilgilerin kalmaması için önce alanları temizle
         const adresField = document.getElementById('field-adres');
         const telField = document.getElementById('field-tel');
+        const mailField = document.getElementById('field-mail');
         if (adresField) {
             adresField.value = '';
             adresField.classList.remove('field-filled');
@@ -967,6 +1217,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (telField) {
             telField.value = '';
             telField.classList.remove('field-filled');
+        }
+        if (mailField) {
+            mailField.value = '';
+            mailField.classList.remove('field-filled');
         }
 
         if (!words || words.length === 0) return;
@@ -1080,6 +1334,94 @@ document.addEventListener('DOMContentLoaded', () => {
             if (telField) {
                 telField.value = foundTel;
                 telField.classList.add('field-filled');
+            }
+        }
+
+        // --- E-POSTA ---
+        // "E Posta" / "E-mail" / "E-Mail" etiketini bul, ardından aynı satırda veya hemen altında @ içeren metni al
+        let foundMail = '';
+        let epostaLabelY = -1;
+        let epostaLabelX = -1;
+
+        for (let i = 0; i < sectionWords.length; i++) {
+            const w = sectionWords[i];
+            // "E Posta", "E-Posta", "E-mail", "E-Mail", "Email" etiketlerini tanı
+            const isEpostaLabel = /^E[-\s]?Posta$/i.test(w.text) || /^E[-\s]?mail$/i.test(w.text);
+            // OCR bazen "E" ve "Posta"yı ayrı kelimeler olarak verir
+            const isESplit = /^E$/i.test(w.text) && i + 1 < sectionWords.length && 
+                /^Posta$/i.test(sectionWords[i + 1].text) && sameRow(w, sectionWords[i + 1]);
+            
+            if (isEpostaLabel || isESplit) {
+                if (w.bbox.x0 > midpoint * 0.7) { // Sağ taraftaki etiketi al
+                    epostaLabelY = w.bbox.y0;
+                    epostaLabelX = w.bbox.x0;
+                    console.log('[Page2] E-Posta etiketi bulundu:', w.text, 'Y:', epostaLabelY);
+                }
+            }
+        }
+
+        if (epostaLabelY !== -1) {
+            // Etiketin yüksekliğinin ~3 katı kadar aşağıya bak
+            const searchRangeY = epostaLabelY + 80;
+            
+            // Önce tüm bölgede @ içeren kelimeleri ara
+            const mailCandidates = sectionWords.filter(w =>
+                w.text.includes('@') &&
+                w.bbox.y0 >= epostaLabelY - 15 &&
+                w.bbox.y0 <= searchRangeY
+            );
+
+            if (mailCandidates.length > 0) {
+                // @ içeren kelimeyi bulduk — bu direkt e-posta adresi olabilir
+                foundMail = mailCandidates[0].text.trim();
+                console.log('[Page2] E-Posta bulundu (@ içeren kelime):', foundMail);
+            } else {
+                // OCR bazen e-posta adresini parçalara ayırır (ör: "GURBANNAZAR" "@en-gmail-bgd" ".com")
+                // Etiketin sağındaki ve altındaki kelimeleri birleştir
+                const nearbyWords = sectionWords.filter(w =>
+                    w.bbox.y0 >= epostaLabelY - 10 &&
+                    w.bbox.y0 <= searchRangeY &&
+                    w.bbox.x0 >= epostaLabelX - 20
+                ).sort((a, b) => {
+                    if (Math.abs(a.bbox.y0 - b.bbox.y0) > 15) return a.bbox.y0 - b.bbox.y0;
+                    return a.bbox.x0 - b.bbox.x0;
+                });
+
+                // Etiket kelimelerini atla, geri kalanları birleştir
+                const valueParts = nearbyWords
+                    .filter(w => !/^(?:E[-\s]?Posta|E[-\s]?mail|E[-\s]?Mail|Phone|Telefon)$/i.test(w.text))
+                    .map(w => w.text);
+
+                const combined = valueParts.join('');
+                if (combined.includes('@')) {
+                    foundMail = combined.trim();
+                    console.log('[Page2] E-Posta bulundu (birleştirilmiş):', foundMail);
+                }
+            }
+        }
+
+        // Eğer etiket bulunamazsa, fallback: tüm bölgede @ içeren kelime ara
+        if (!foundMail) {
+            for (const w of sectionWords) {
+                if (w.text.includes('@') && w.text.includes('.')) {
+                    foundMail = w.text.trim();
+                    console.log('[Page2] E-Posta bulundu (fallback @ taraması):', foundMail);
+                    break;
+                }
+            }
+        }
+
+        // E-posta temizliği: gereksiz boşlukları kaldır, küçük harfe dönüştür
+        if (foundMail) {
+            foundMail = foundMail.replace(/\s+/g, '').toLowerCase();
+            // Basit doğrulama: @ ve . içermeli
+            if (foundMail.includes('@') && foundMail.includes('.')) {
+                const mailField = document.getElementById('field-mail');
+                if (mailField) {
+                    mailField.value = foundMail;
+                    mailField.classList.add('field-filled');
+                    console.log('[Page2] E-Posta form alanına yazıldı:', foundMail);
+                }
             }
         }
     }
@@ -1656,8 +1998,8 @@ document.addEventListener('DOMContentLoaded', () => {
             uyrugu: data.uyrugu,
             dogumTarihi: data.dogumTarihi
         };
-        // yabanciKimlik, adres, tel, mail are NOT extracted from OCR
-        // They remain empty for manual entry
+        // yabanciKimlik is NOT extracted from OCR — it remains empty for manual entry
+        // adres, tel, mail are extracted from Page 2 via extractPage2FromCoordinates
 
         for (const [key, value] of Object.entries(mapping)) {
             const field = fields[key];
@@ -1819,6 +2161,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const vDogum = fields.dogumTarihi.value ? fields.dogumTarihi.value.trim() : ' ';
             const vAdres = fields.adres.value.trim() || ' ';
             const vTel = fields.tel.value.trim() || ' ';
+            const vMail = fields.mail.value.trim() || ' ';
             const currentYear = new Date().getFullYear();
             const vTebligatTarihi = calculateTebligatDate(vTeslim);
 
@@ -1871,7 +2214,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <th>Öğrencinin<br>İletişim Bilgisi</th>
                             <td>${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
                             <td>${vTel}</td>
-                            <td>xxxx</td>
+                            <td>${vMail}</td>
                         </tr>
                     </table>
                     <p style="text-align:justify;font-size:11.5px;margin:6px 0;line-height:1.3;text-indent:30px;">
@@ -1928,6 +2271,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 generatedPdf = pdf;
                 generatedPdfName = `ONBILGI_${fSurname}_${fName}.pdf`;
                 
+                // Geçmişe kaydet
+                historyManager.save('pdf');
+                
                 // Update button
                 btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> PDF Hazır - Tıkla İndir`;
                 btnDownload.style.backgroundColor = 'var(--success)';
@@ -1966,7 +2312,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const vDogum = fields.dogumTarihi.value ? fields.dogumTarihi.value.trim() : ' ';
             const vAdres = fields.adres.value.trim() || ' ';
             const vTel = fields.tel.value.trim() || ' ';
-            const vMail = ' '; // Not available in fields
+            const vMail = fields.mail.value.trim() || ' ';
 
             // Gelecek seneler için dinamik yıl oluştur
             const currentYear = new Date().getFullYear();
@@ -2069,6 +2415,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.body.appendChild(printArea);
             }
             printArea.innerHTML = printHtml;
+            
+            // Geçmişe kaydet
+            historyManager.save('print');
             
             setTimeout(() => {
                 window.print();

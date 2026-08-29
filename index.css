@@ -756,3 +756,203 @@ select.glass-input {
         justify-content: center;
     }
 }
+
+/* --- Geçmiş / İşlem Logu Paneli --- */
+.history-panel {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    margin-top: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    transition: var(--transition);
+}
+
+.history-header {
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    background: rgba(139, 0, 0, 0.03);
+    border-bottom: 1px solid transparent;
+    transition: var(--transition);
+}
+
+body.dark-mode .history-header {
+    background: rgba(255, 77, 77, 0.05);
+}
+
+.history-header:hover {
+    background: rgba(139, 0, 0, 0.08);
+}
+
+.history-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.history-toggle-icon {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    transition: transform 0.3s ease;
+}
+
+.history-body {
+    max-height: 0;
+    overflow-y: auto;
+    transition: max-height 0.4s ease, padding 0.4s ease;
+}
+
+.history-body.open {
+    max-height: 500px;
+    padding: 1.5rem;
+    border-top: 1px solid var(--card-border);
+}
+
+.history-empty {
+    color: var(--text-secondary);
+    text-align: center;
+    font-size: 0.9rem;
+    padding: 1rem 0;
+}
+
+.history-date-group {
+    margin-bottom: 1.5rem;
+}
+
+.history-date-group:last-child {
+    margin-bottom: 0;
+}
+
+.history-date-title {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 0.25rem;
+}
+
+.history-date-count {
+    font-size: 0.75rem;
+    background: var(--card-border);
+    padding: 2px 6px;
+    border-radius: 10px;
+}
+
+.history-item {
+    background: var(--bg-color);
+    border: 1px solid var(--card-border);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.history-item:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.history-item-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.history-item-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.history-item-detail {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.history-item-time {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.history-item-action-label {
+    background: rgba(139, 0, 0, 0.1);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+body.dark-mode .history-item-action-label {
+    background: rgba(255, 77, 77, 0.15);
+}
+
+.history-delete-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.25rem;
+    font-size: 1rem;
+    transition: var(--transition);
+    opacity: 0;
+}
+
+.history-item:hover .history-delete-btn {
+    opacity: 1;
+}
+
+.history-delete-btn:hover {
+    color: var(--danger);
+    transform: scale(1.1);
+}
+
+.history-clear-all {
+    display: block;
+    width: 100%;
+    margin-top: 1.5rem;
+    padding: 0.75rem;
+    background: none;
+    border: 1px dashed var(--danger);
+    color: var(--danger);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.history-clear-all:hover {
+    background: rgba(220, 53, 69, 0.1);
+}
+
+/* History Badge */
+.history-badge {
+    background: var(--accent);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(139, 0, 0, 0.2);
+}
+
+body.dark-mode .history-badge {
+    box-shadow: 0 2px 4px rgba(255, 77, 77, 0.2);
+}
