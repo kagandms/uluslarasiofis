@@ -381,12 +381,26 @@ document.addEventListener('DOMContentLoaded', () => {
             const totalCount = itemsToRender.length;
             const trashCount = this.getTrashAll().length;
 
+            
             // Step 3 badge güncelle
             const badge = document.getElementById('history-today-badge');
             if (badge) {
                 badge.textContent = `Bugün: ${todayCount}`;
                 badge.style.display = todayCount > 0 ? 'inline-flex' : 'none';
             }
+
+            // Ana sayfa Widget Güncelleme
+            const dailyCounterCount = document.getElementById('daily-counter-count');
+            const dailyCounterDate = document.getElementById('daily-counter-date');
+            if (dailyCounterCount && dailyCounterDate) {
+                dailyCounterCount.textContent = todayCount;
+                const today = new Date();
+                const dd = String(today.getDate()).padStart(2, '0');
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const yyyy = today.getFullYear();
+                dailyCounterDate.textContent = `${dd}.${mm}.${yyyy}`;
+            }
+
 
             // Ana sayfa paneli
             const panel = document.getElementById('history-panel');
