@@ -83,6 +83,11 @@ document.addEventListener('DOMContentLoaded', () => {
         btnManualEntry.addEventListener('click', () => {
             croppedImages = [];
             page1ImageObj = null;
+            
+            // Manuel doldurmada "2. sayfayı ekle" resim yükleme butonunu gizle
+            const btnAddPage2 = document.getElementById('btn-add-page2-step3');
+            if (btnAddPage2) btnAddPage2.style.display = 'none';
+
             setActiveStep(STEP_IDS.FORM_RESULT);
             restoreDraft();
         });
@@ -113,6 +118,9 @@ document.addEventListener('DOMContentLoaded', () => {
         croppedImages = [];
         page1ImageObj = null;
         isSequentialCapture = false;
+        
+        const btnAddPage2 = document.getElementById('btn-add-page2-step3');
+        if (btnAddPage2) btnAddPage2.style.display = 'inline-flex';
         
         handleFile(pendingFiles.shift());
     }
@@ -363,6 +371,13 @@ document.addEventListener('DOMContentLoaded', () => {
         btnRescan.addEventListener('click', () => {
             const fileInput = document.getElementById('file-input');
             if (fileInput) fileInput.click();
+        });
+    }
+
+    const btnGoHome = document.getElementById('btn-go-home');
+    if (btnGoHome) {
+        btnGoHome.addEventListener('click', () => {
+            setActiveStep(STEP_IDS.UPLOAD);
         });
     }
 
