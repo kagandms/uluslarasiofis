@@ -81,8 +81,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dailyCounterWidget) {
         dailyCounterWidget.style.cursor = 'pointer';
         dailyCounterWidget.addEventListener('click', () => {
-            const toggle = document.getElementById('history-toggle');
-            if (toggle) toggle.click();
+            const body = document.querySelector('.history-body');
+            if (body && !body.classList.contains('open')) {
+                const toggle = document.getElementById('history-toggle');
+                if (toggle) toggle.click();
+            }
             setTimeout(() => {
                 const panel = document.getElementById('history-panel');
                 if (panel) panel.scrollIntoView({ behavior: 'smooth' });
