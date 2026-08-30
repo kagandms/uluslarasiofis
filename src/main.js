@@ -191,9 +191,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const file = e.target.files[0];
             if (file) {
                 isProcessingPage2 = true;
-                croppedImages = [];
-                pendingFiles = [];
-                handleFile(file);
+                setActiveStep(STEP_IDS.OCR_PROGRESS);
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = async () => {
+                        try {
+                            const prep = prepareImageForOCR(img);
+                            await runOCR(prep.dataUrl, prep.canvas, true, true);
+                            showToast('2. sayfa bilgileri eklendi.', 'success');
+                            setActiveStep(STEP_IDS.FORM_RESULT);
+                            saveDraft();
+                        } catch (err) {
+                            setActiveStep(STEP_IDS.FORM_RESULT);
+                        }
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
                 e.target.value = '';
             }
         });
@@ -286,16 +301,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const prep = prepareImageForOCR(img);
             await runOCR(prep.dataUrl, prep.canvas, false, isProcessingPage2);
-            if (isProcessingPage2) {
-                showToast('2. sayfa bilgileri eklendi.', 'success');
-                setActiveStep(STEP_IDS.FORM_RESULT);
-                saveDraft();
-            }
         } catch (error) {
             console.error(error);
-            if (isProcessingPage2) {
-                setActiveStep(STEP_IDS.FORM_RESULT);
-            }
         }
     }
 
