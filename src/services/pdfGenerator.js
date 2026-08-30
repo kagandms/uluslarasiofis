@@ -4,8 +4,6 @@ import { historyManager } from '../managers/historyManager.js';
 import { showToast } from '../ui/toastManager.js';
 import { calculateTebligatDate } from '../utils/dateUtils.js';
 
-let generatedPdf = null;
-let generatedPdfName = "";
 let pdfLibsLoaded = false;
 let isPdfLoading = false;
 
@@ -242,20 +240,14 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
     `;
 }
 
-export async function generateAndDownloadPdf(btnDownload, formWrapper) {
-    if (generatedPdf) {
-        generatedPdf.save(generatedPdfName);
-        historyManager.save('pdf');
-        
-        btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg> PDF İndir`;
-        btnDownload.style.backgroundColor = '#c0392b';
-        btnDownload.style.borderColor = '#c0392b';
-        generatedPdf = null;
-        return;
-    }
 
+export async function generateAndDownloadPdf(btnDownload, formWrapper) {
     const libsReady = await loadPdfLibraries();
     if (!libsReady) return;
+
+    const originalHtml = btnDownload.innerHTML;
+    const originalBg = btnDownload.style.backgroundColor;
+    const originalBorder = btnDownload.style.borderColor;
 
     btnDownload.innerHTML = `<span class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin-right: 8px;"></span> Hazırlanıyor...`;
 
@@ -307,24 +299,26 @@ export async function generateAndDownloadPdf(btnDownload, formWrapper) {
             const pdfH = (canvas.height * pdfW) / canvas.width;
             pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
             
-            generatedPdf = pdf;
-            
             const fName = vAdi.replace(/[^a-zA-ZğüşıöçĞÜŞİÖÇ\s]/g, '').trim().split(' ').join('_');
             const fSurname = vSoyadi.replace(/[^a-zA-ZğüşıöçĞÜŞİÖÇ\s]/g, '').trim().split(' ').join('_');
-            generatedPdfName = `ONBILGI_${fSurname}_${fName}.pdf`;
+            const pdfName = `ONBILGI_${fSurname}_${fName}.pdf`;
 
-            btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> PDF Hazır - Tıkla İndir`;
-            btnDownload.style.backgroundColor = '#27ae60';
-            btnDownload.style.borderColor = '#27ae60';
+            pdf.save(pdfName);
+            historyManager.save('pdf', data);
+
+            btnDownload.innerHTML = originalHtml;
+            btnDownload.style.backgroundColor = originalBg;
+            btnDownload.style.borderColor = originalBorder;
 
         } catch (err) {
             console.error('PDF oluşturma hatası:', err);
             showToast('PDF oluşturulurken bir hata meydana geldi.', 'error');
-            btnDownload.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg> PDF İndir`;
+            btnDownload.innerHTML = originalHtml;
+            btnDownload.style.backgroundColor = originalBg;
+            btnDownload.style.borderColor = originalBorder;
         }
     }, 100);
 }
-
 export async function printDocument(btnPrint, formWrapper) {
     const originalText = btnPrint.innerHTML;
     btnPrint.innerHTML = `<span class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin-right: 8px;"></span> Hazırlanıyor...`;
@@ -358,7 +352,7 @@ export async function printDocument(btnPrint, formWrapper) {
                 printArea.innerHTML = getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, true);
             }
 
-            historyManager.save('print');
+            historyManager.save('print', data);
 
             setTimeout(() => {
                 window.print();

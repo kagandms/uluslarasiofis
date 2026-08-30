@@ -1,5 +1,5 @@
 import { STORAGE_KEYS, HISTORY_MAX_DAYS } from '../config/constants.js';
-import { getFormData, getFormElements } from '../ui/formManager.js';
+import { getFormDataFromNode } from '../ui/formManager.js';
 import { setActiveStep, STEP_IDS } from '../ui/stepWizard.js';
 import { showToast } from '../ui/toastManager.js';
 
@@ -40,7 +40,7 @@ export const historyManager = {
         localStorage.removeItem(STORAGE_KEYS.TRASH);
         this.render();
     },
-    save(action) {
+    save(action, data) {
         const now = new Date();
         const entry = {
             id: `${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -48,7 +48,7 @@ export const historyManager = {
             date: `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`,
             time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
             action: action, // 'pdf' veya 'print'
-            fields: getFormData()
+            fields: data || {}
         };
 
         const history = this.getAll();
