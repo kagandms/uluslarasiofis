@@ -264,6 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (countEl) countEl.textContent = studentsQueue.length;
                 setActiveStep(STEP_IDS.BATCH_QUEUE);
             } else {
+                cleanupCropper();
                 // Final process
                 if (page1ImageObj && img) {
                     studentsQueue.push([page1ImageObj, img]);

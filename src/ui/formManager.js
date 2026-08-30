@@ -132,6 +132,13 @@ export function renderStudentForms(studentsDataArray) {
         container.appendChild(clone);
     });
     
+    const lastWrapper = container.lastElementChild;
+    if (lastWrapper) {
+        lastWrapper.style.marginBottom = '0';
+        lastWrapper.style.borderBottom = 'none';
+        lastWrapper.style.paddingBottom = '0';
+    }
+    
     initDynamicEvents();
 }
 
