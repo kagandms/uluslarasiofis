@@ -67,14 +67,14 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         boxMargin: '16px 0 8px 0',
         boxPad: '10px',
         sigFont: '15px',
-        sigPadBottom: '12mm'
+        sigPadBottom: '16mm'
     };
 
     // Yazdırırken (isPrint = true) vh (ekran boyutu) KULLANMIYORUZ çünkü mobilde sayfayı kesiyor.
-    // Doğrudan A4 boyutu olan 295mm kullanıyoruz (297mm tam A4, 2mm tarayıcı payı).
+    // Doğrudan A4 boyutu olan 287mm kullanıyoruz (Tüm sanal yazıcıların kenar boşluklarına sığması için 297mm yerine 287mm).
     // PDF (isPrint = false) için tam oran olan 1122px kullanıyoruz.
     const wrapperStyle = isPrint 
-        ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;height:295mm;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
+        ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;height:287mm;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
         : `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;height:1122px;display:flex;flex-direction:column;overflow:hidden;`;
         
     return `
