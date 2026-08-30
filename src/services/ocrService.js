@@ -134,6 +134,11 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
                     break;
                 }
             }
+            
+            // Eğer tüm anahtarlar denendi ve limit (billing) dolduysa Vercel'e geç
+            if (!success && attempts >= maxAttempts) {
+                useVercel = true;
+            }
         }
 
         if (useVercel) {
