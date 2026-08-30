@@ -44,117 +44,47 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
     try {
         updateProgress('Belge taranıyor...', 10);
         const base64Data = imageDataUrl.split(',')[1];
-        let useVercel = false;
         
-        const buildVisionBody = () => JSON.stringify({
-            requests: [{
-                image: { content: base64Data },
-                features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
-                imageContext: { languageHints: ["tr", "en"] }
-            }]
-        });
-
         let response = null;
         let data = null;
 
         const tryFetch = async (url, options) => {
-            const euController = new AbortController();
-            const euTimeout = setTimeout(() => euController.abort(), url.includes('eu-vision') ? 20000 : 60000);
+            const apiController = new AbortController();
+            const apiTimeout = setTimeout(() => apiController.abort(), 60000);
             
             const abortHandler = () => {
-                clearTimeout(euTimeout);
-                euController.abort();
+                clearTimeout(apiTimeout);
+                apiController.abort();
             };
             controller.signal.addEventListener('abort', abortHandler);
 
             try {
                 const res = await fetch(url, {
                     ...options,
-                    signal: euController.signal
+                    signal: apiController.signal
                 });
-                clearTimeout(euTimeout);
+                clearTimeout(apiTimeout);
                 controller.signal.removeEventListener('abort', abortHandler);
                 return res;
             } catch (e) {
-                clearTimeout(euTimeout);
+                clearTimeout(apiTimeout);
                 controller.signal.removeEventListener('abort', abortHandler);
                 throw e;
             }
         };
 
-        let currentKey = GOOGLE_VISION_API_KEYS[currentApiKeyIndex];
+        updateProgress('Sunucuya bağlanılıyor...', 40);
         
-        if (!currentKey || currentKey.trim() === '') {
-            useVercel = true;
-        } else {
-            let success = false;
-            let attempts = 0;
-            const maxAttempts = GOOGLE_VISION_API_KEYS.length;
+        response = await tryFetch('/api/ocr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageContent: base64Data })
+        });
 
-            while (!success && attempts < maxAttempts) {
-                currentKey = GOOGLE_VISION_API_KEYS[currentApiKeyIndex];
-                if (!currentKey || currentKey.trim() === '') {
-                    useVercel = true;
-                    break;
-                }
-
-                try {
-                    updateProgress('Görsel işleniyor...', 40);
-                    response = await tryFetch(`https://eu-vision.googleapis.com/v1/images:annotate?key=${currentKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: buildVisionBody()
-                    });
-                } catch (e) {
-                    if (e.name === 'AbortError' && !controller.signal.aborted) {
-                        updateProgress('Alternatif sunucuya bağlanılıyor...', 45);
-                        response = await tryFetch(`https://vision.googleapis.com/v1/images:annotate?key=${currentKey}`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: buildVisionBody()
-                        });
-                    } else {
-                        throw e;
-                    }
-                }
-
-                if (response && response.ok) {
-                    data = await response.json();
-                    success = true;
-                } else if (response && (response.status === 403 || response.status === 429)) {
-                    const errorText = await response.text();
-                    if (errorText.includes("billing")) {
-                        currentApiKeyIndex = (currentApiKeyIndex + 1) % GOOGLE_VISION_API_KEYS.length;
-                        attempts++;
-                    } else {
-                        useVercel = true;
-                        break;
-                    }
-                } else {
-                    useVercel = true;
-                    break;
-                }
-            }
-            
-            // Eğer tüm anahtarlar denendi ve limit (billing) dolduysa Vercel'e geç
-            if (!success && attempts >= maxAttempts) {
-                useVercel = true;
-            }
+        if (!response.ok) {
+            throw new Error(response.status === 500 ? 'Sunucu ayarları eksik veya tüm servisler başarısız oldu.' : `Sunucu Hatası: ${response.status}`);
         }
-
-        if (useVercel) {
-            updateProgress('Bağlantı şifreleniyor...', 30);
-            response = await tryFetch('/api/ocr', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageContent: base64Data })
-            });
-
-            if (!response.ok) {
-                throw new Error(response.status === 500 ? 'Sunucu ayarları eksik.' : `Sunucu Hatası: ${response.status}`);
-            }
-            data = await response.json();
-        }
+        data = await response.json();
 
         updateProgress('Metinler okunuyor...', 90);
 
