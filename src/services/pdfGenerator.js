@@ -84,23 +84,23 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         },
         'MOBILE_PRINT': {
             wrapperWidth: '210mm',
-            wrapperHeight: '270mm', // Biraz daha uzatarak alt kısma yer açtık (hala tek sayfa sınırında)
-            wrapperPad: '4mm 10mm',
-            tableFont: '13px',
-            tablePad: '6px 8px',
-            pFont: '13px',
-            pMargin: '10px 0',
-            pLineHeight: '1.4',
-            titleFont: '14px',
-            listFont: '12.5px',
-            listLineHeight: '1.4',
-            listMb: '4px',
+            wrapperHeight: '250mm', // Taştığı için eski güvenli yüksekliğe (tek sayfa garantisi) geri çektik
+            wrapperPad: '3mm 8mm',  // Üst/Alt kenar boşluklarını biraz daha kıstık
+            tableFont: '12.5px',    // Yarım punto ufalttık
+            tablePad: '5px 6px',    // Tabloyu biraz daha daralttık
+            pFont: '12.5px',
+            pMargin: '6px 0',       // Paragraf altı/üstü boşlukları kıstık (yer açmak için)
+            pLineHeight: '1.35',
+            titleFont: '13.5px',
+            listFont: '12px',
+            listLineHeight: '1.35',
+            listMb: '3px',          // Madde imleri arasını kıstık
             innerListMb: '2px',
-            boxFont: '14.5px',
-            boxMargin: '12px 0 6px 0',
-            boxPad: '8px',
+            boxFont: '13.5px',
+            boxMargin: '8px 0 4px 0',
+            boxPad: '6px',
             sigFont: '14px',
-            sigPadBottom: '35mm' // 12mm'den 35mm'ye çıkardık, imza için devasa bir boşluk oluşacak
+            sigPadBottom: '25mm'    // 35mm taşırdı, 12mm dardı. Yukarıdan kazandığımız yerle 25mm tam sığacaktır.
         },
         'PC_PDF': {
             wrapperWidth: '794px',
