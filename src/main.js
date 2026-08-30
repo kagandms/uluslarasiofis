@@ -9,6 +9,16 @@ import { runOCR, cancelOCR } from './services/ocrService.js';
 import { generateAndDownloadPdf, printDocument } from './services/pdfGenerator.js';
 import { showToast } from './ui/toastManager.js';
 
+// --- Clear Old PWA Service Workers ---
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for(let registration of registrations) {
+            registration.unregister();
+            console.log('Eski Service Worker silindi');
+        }
+    });
+}
+
 
 
 // --- State ---
