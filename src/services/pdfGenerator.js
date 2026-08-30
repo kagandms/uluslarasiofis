@@ -84,8 +84,8 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         },
         'MOBILE_PRINT': {
             wrapperWidth: '210mm',
-            wrapperHeight: '250mm', // Telefon yazıcılarında 2 sayfaya taşmaması için daraltılmış yükseklik
-            wrapperPad: '4mm 10mm', // Daha dar kenar boşlukları
+            wrapperHeight: '270mm', // Biraz daha uzatarak alt kısma yer açtık (hala tek sayfa sınırında)
+            wrapperPad: '4mm 10mm',
             tableFont: '13px',
             tablePad: '6px 8px',
             pFont: '13px',
@@ -100,7 +100,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
             boxMargin: '12px 0 6px 0',
             boxPad: '8px',
             sigFont: '14px',
-            sigPadBottom: '12mm'
+            sigPadBottom: '35mm' // 12mm'den 35mm'ye çıkardık, imza için devasa bir boşluk oluşacak
         },
         'PC_PDF': {
             wrapperWidth: '794px',
