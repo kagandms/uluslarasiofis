@@ -160,7 +160,7 @@
         if (!extracted.uyrugu) {
             for (let i = 0; i < words.length; i++) {
                 const w = words[i];
-                if (!/\b(Uyru[gğ]u|Nationality)\b/i.test(w.text)) continue;
+                if (!/Uyru[gğ]u|Nationality/i.test(w.text)) continue;
                 if (/(Di[gğ]er|Other|Do[gğ]um|Born|Bom)/i.test(w.text)) continue;
                 
                 // Önceki kelimelere bakarak "Diğer Uyruğu" veya "Doğumdaki Uyruğu" ise atla
@@ -483,7 +483,7 @@
         // ============================================
         // 4. UYRUĞU — standalone, skip Diğer/Doğumdaki
         // ============================================
-        const uyrukRegex = /\bUyru[gğ]u\b/gi;
+        const uyrukRegex = /Uyru[gğ]u/gi;
         let uM;
         while ((uM = uyrukRegex.exec(fullText)) !== null) {
             const before = fullText.substring(Math.max(0, uM.index - 15), uM.index);
@@ -614,18 +614,22 @@
         let addressText = "";
         let phoneText = "";
         let mailText = "";
-        let inTurkeyAddress = false;
+        let inTurkeyAddress = true; // Default true in case they cropped only the address part
 
         for (let i = 0; i < lines.length; i++) {
             const lineWords = lines[i].map(w => w.text);
             const lineStr = lineWords.join(" ").toUpperCase();
             
             // Region detection
-            if (lineStr.includes("TÜRKİYE'DE") || lineStr.includes("MAIN ADDRESS") || lineStr.includes("TÜRKİYE")) {
+            if (lineStr.includes("DAİMİ") || lineStr.includes("PERMANENT") || lineStr.includes("AÇIK ADRES")) {
+                inTurkeyAddress = false;
+                continue;
+            }
+            if (lineStr.includes("TÜRKİYE") || lineStr.includes("TURK") || lineStr.includes("MAIN ADDRESS") || lineStr.includes("ANA ADRES")) {
                 inTurkeyAddress = true;
                 continue;
             }
-            if (lineStr.includes("ÖĞRENİM") || lineStr.includes("CONTINUING EDUCATION") || lineStr.includes("ÖĞRENIM")) {
+            if (lineStr.includes("ÖĞRENİM") || lineStr.includes("OGRENIM") || lineStr.includes("CONTINUING")) {
                 inTurkeyAddress = false;
                 break; // We reached the next section, stop parsing address
             }
