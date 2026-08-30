@@ -3,7 +3,7 @@ import { extractFromCoordinates, extractPage2FromCoordinates, extractFields } fr
 import { prepareImageForOCR } from './imageProcessor.js';
 import { showToast } from '../ui/toastManager.js';
 import { setActiveStep, STEP_IDS } from '../ui/stepWizard.js';
-import { populateForm } from '../ui/formManager.js';
+
 
 let currentApiKeyIndex = 0;
 const activeAbortControllers = new Set();
@@ -115,8 +115,10 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
             confidence: 1.0
         }));
 
+
+        let extractedData = {};
         if (isPage2) {
-            extractPage2FromCoordinates(serverWords);
+            extractedData = extractPage2FromCoordinates(serverWords);
         } else {
             let serverExtracted = {};
             extractFromCoordinates(serverWords, serverExtracted);
@@ -127,9 +129,8 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
                     serverExtracted[key] = fallbackExtracted[key];
                 }
             });
-            populateForm(serverExtracted);
+            extractedData = serverExtracted;
         }
-
         updateProgress('İşlem Tamamlandı', 100);
         activeAbortControllers.delete(controller);
         
@@ -139,7 +140,7 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
             }, 500);
         }
 
-        return data;
+        return extractedData;
 
     } catch (error) {
         activeAbortControllers.delete(controller);
