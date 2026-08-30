@@ -9,29 +9,7 @@ import { runOCR, cancelOCR } from './services/ocrService.js';
 import { generateAndDownloadPdf, printDocument } from './services/pdfGenerator.js';
 import { showToast } from './ui/toastManager.js';
 
-// --- PWA Setup ---
-let deferredPrompt;
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    const installBtn = document.getElementById('btn-install-pwa');
-    if (installBtn && !isStandalone) {
-        installBtn.style.display = 'inline-flex';
-    }
-});
-
-window.addEventListener('load', () => {
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js').then(reg => {
-            console.log('Service Worker kayıtlı', reg.scope);
-        }).catch(err => {
-            console.log('Service Worker kayıt hatası:', err);
-        });
-    }
-});
 
 // --- State ---
 let pendingFiles = [];
@@ -56,26 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setDefaultDeliveryDate();
     }
     
-    // Handle PWA Install Button
-    const btnInstallPwa = document.getElementById('btn-install-pwa');
-    if (btnInstallPwa) {
-        if (isIOS && !isStandalone) {
-            btnInstallPwa.style.display = 'inline-flex';
-        }
-        btnInstallPwa.addEventListener('click', async () => {
-            if (isIOS) {
-                const iosModal = document.getElementById('ios-pwa-modal');
-                if (iosModal) iosModal.style.display = 'flex';
-            } else if (deferredPrompt) {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
-                    btnInstallPwa.style.display = 'none';
-                }
-                deferredPrompt = null;
-            }
-        });
-    }
+
     
     const dailyCounterWidget = document.getElementById('daily-counter-widget');
     if (dailyCounterWidget) {
