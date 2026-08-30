@@ -54,25 +54,24 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
     const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
     // Sadece "Mobilde Yazdır" işlemi için daraltılmış fontları kullanacağız.
-    // PC (Yazdır + PDF) ve Mobil (PDF) için kullanıcının onayladığı büyük fontlar kalacak!
     const useCompact = isMobile && isPrint;
 
     const s = {
-        wrapperPad: useCompact ? '3mm 8mm' : '4mm 14mm',
-        tableFont: useCompact ? '12px' : '14px',
-        tablePad: useCompact ? '4px 6px' : '7px 10px',
-        pFont: useCompact ? '12px' : '14px',
-        pMargin: useCompact ? '6px 0' : '14px 0',
-        pLineHeight: useCompact ? '1.3' : '1.6',
-        titleFont: useCompact ? '13px' : '15px',
-        listFont: useCompact ? '11px' : '13.5px',
-        listLineHeight: useCompact ? '1.25' : '1.5',
-        listMb: useCompact ? '2px' : '5px',
-        innerListMb: useCompact ? '1px' : '4px',
-        boxFont: useCompact ? '13px' : '15.5px',
-        boxMargin: useCompact ? '8px 0 4px 0' : '16px 0 8px 0',
-        boxPad: useCompact ? '6px' : '10px',
-        sigFont: useCompact ? '13px' : '15px',
+        wrapperPad: useCompact ? '4mm 10mm' : '4mm 14mm',
+        tableFont: useCompact ? '12.5px' : '14px',
+        tablePad: useCompact ? '5px 8px' : '7px 10px',
+        pFont: useCompact ? '12.5px' : '14px',
+        pMargin: useCompact ? '8px 0' : '14px 0',
+        pLineHeight: useCompact ? '1.35' : '1.6',
+        titleFont: useCompact ? '13.5px' : '15px',
+        listFont: useCompact ? '11.5px' : '13.5px',
+        listLineHeight: useCompact ? '1.3' : '1.5',
+        listMb: useCompact ? '3px' : '5px',
+        innerListMb: useCompact ? '1.5px' : '4px',
+        boxFont: useCompact ? '13.5px' : '15.5px',
+        boxMargin: useCompact ? '10px 0 6px 0' : '16px 0 8px 0',
+        boxPad: useCompact ? '8px' : '10px',
+        sigFont: useCompact ? '13.5px' : '15px',
         sigPadBottom: useCompact ? '12mm' : '16mm' 
     };
 
