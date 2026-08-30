@@ -97,6 +97,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- File Handling & Drag Drop ---
     const uploadZone = document.getElementById('upload-zone');
     const fileInput = document.getElementById('file-input');
+    
+    const btnBatchProcess = document.getElementById('btn-batch-process');
+    if (btnBatchProcess) {
+        btnBatchProcess.addEventListener('click', () => {
+            processAllStudents(studentsQueue);
+        });
+    }
+
+    const btnBatchAddNew = document.getElementById('btn-batch-add-new');
+    if (btnBatchAddNew) {
+        btnBatchAddNew.addEventListener('click', () => {
+            const fileInput = document.getElementById('file-input');
+            if (fileInput) {
+                fileInput.removeAttribute('capture');
+                fileInput.click();
+            }
+        });
+    }
+
     const fileInputPage2 = document.getElementById('file-input-page2');
     
     function handleMultipleFilesSelection(fileList) {
@@ -240,12 +259,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 isProcessingPage2 = false;
                 isSequentialCapture = false;
                 
-                // Prompt user to select/scan first page for next student
-                const fileInput = document.getElementById('file-input');
-                if (fileInput) {
-                    fileInput.removeAttribute('capture');
-                    fileInput.click();
-                }
+                // Show intermediate batch queue step
+                const countEl = document.getElementById('batch-queue-count');
+                if (countEl) countEl.textContent = studentsQueue.length;
+                setActiveStep(STEP_IDS.BATCH_QUEUE);
             } else {
                 // Final process
                 if (page1ImageObj && img) {
