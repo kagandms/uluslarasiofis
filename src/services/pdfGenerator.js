@@ -49,23 +49,42 @@ export async function loadPdfLibraries() {
     }
 }
 
-export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, isPrint = false) {
+    // PDF İndir (Bilgisayar) için büyük fontlar, Yazdır (Mobil) için sığacak küçük fontlar
+    const s = {
+        wrapperPad: isPrint ? '6mm 10mm' : '4mm 14mm',
+        tableFont: isPrint ? '13px' : '14px',
+        tablePad: isPrint ? '6px 8px' : '7px 10px',
+        pFont: isPrint ? '12px' : '14px',
+        pMargin: isPrint ? '8px 0' : '14px 0',
+        pLineHeight: isPrint ? '1.4' : '1.6',
+        titleFont: isPrint ? '12.5px' : '15px',
+        listFont: isPrint ? '11.5px' : '13.5px',
+        listLineHeight: isPrint ? '1.3' : '1.5',
+        listMb: isPrint ? '2px' : '5px',
+        innerListMb: isPrint ? '1px' : '4px',
+        boxFont: isPrint ? '13px' : '15.5px',
+        boxMargin: isPrint ? '12px 0 6px 0' : '16px 0 8px 0',
+        boxPad: isPrint ? '6px' : '10px',
+        sigFont: isPrint ? '14px' : '15px',
+        sigPadBottom: isPrint ? '15mm' : '12mm'
+    };
+
     const wrapperStyle = isPrint 
-        ? "font-family:'Times New Roman',Times,serif;padding:6mm 10mm;color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;height:98vh;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;"
-        : "font-family:'Times New Roman',Times,serif;padding:12mm 14mm;color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;height:1122px;display:flex;flex-direction:column;overflow:hidden;";
+        ? \`font-family:'Times New Roman',Times,serif;padding:\${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;height:98vh;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;\`
+        : \`font-family:'Times New Roman',Times,serif;padding:\${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;height:1122px;display:flex;flex-direction:column;overflow:hidden;\`;
         
-    return `
+    return \`
         <style>
             .pt { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
-            .pt th, .pt td { border: 1px solid #000; padding: 6px 8px; text-align: left; vertical-align: middle; font-size: 13px; font-family: 'Times New Roman', serif; }
+            .pt th, .pt td { border: 1px solid #000; padding: \${s.tablePad}; text-align: left; vertical-align: middle; font-size: \${s.tableFont}; font-family: 'Times New Roman', serif; }
             .pt th { font-weight: bold; }
         </style>
-        <div id="${isPrint ? 'pdf-content' : 'pdf-canvas-content'}" style="${wrapperStyle}">
+        <div id="\${isPrint ? 'pdf-content' : 'pdf-canvas-content'}" style="\${wrapperStyle}">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-shrink: 0;">
                 <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-start;">
                     <img src="topkapi_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
                 </div>
-                <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 6px 0; text-align: center; font-size: 15px; font-weight: bold;">
+                <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 6px 0; text-align: center; font-size: 16px; font-weight: bold;">
                     İSTANBUL TOPKAPI ÜNİVERSİTESİ
                 </div>
                 <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-end;">
@@ -75,20 +94,20 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
             <table class="pt" style="margin-bottom:6px; flex-shrink: 0;">
                 <tr><td colspan="4" style="height:12px;"></td></tr>
                 <tr>
-                    <th width="25%"><u>e</u>-İkamet<br>Başvuru No</th><td width="25%">${currentYear}-${vBasvuruNo.replace(new RegExp('^' + currentYear + '-'), '')}</td>
-                    <th width="25%">Öğrencinin Evraklarını<br>Ofise Teslim Tarihi</th><td width="25%">${vTeslim}</td>
+                    <th width="25%"><u>e</u>-İkamet<br>Başvuru No</th><td width="25%">\${currentYear}-\${vBasvuruNo.replace(new RegExp('^' + currentYear + '-'), '')}</td>
+                    <th width="25%">Öğrencinin Evraklarını<br>Ofise Teslim Tarihi</th><td width="25%">\${vTeslim}</td>
                 </tr>
                 <tr>
-                    <th>Yabancı Kimlik<br>No</th><td>${vYabanciKimlik}</td>
-                    <th>Pasaport No</th><td>${vPasaportNo}</td>
+                    <th>Yabancı Kimlik<br>No</th><td>\${vYabanciKimlik}</td>
+                    <th>Pasaport No</th><td>\${vPasaportNo}</td>
                 </tr>
                 <tr>
-                    <th>Adı</th><td>${vAdi}</td>
-                    <th>Soyadı</th><td>${vSoyadi}</td>
+                    <th>Adı</th><td>\${vAdi}</td>
+                    <th>Soyadı</th><td>\${vSoyadi}</td>
                 </tr>
                 <tr>
-                    <th>Uyruğu</th><td>${vUyrugu}</td>
-                    <th>Doğum Tarihi</th><td>${vDogum}</td>
+                    <th>Uyruğu</th><td>\${vUyrugu}</td>
+                    <th>Doğum Tarihi</th><td>\${vDogum}</td>
                 </tr>
                 <tr>
                     <td></td>
@@ -98,45 +117,45 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
                 </tr>
                 <tr>
                     <th>Öğrencinin<br>İletişim Bilgisi</th>
-                    <td>${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
-                    <td>${vTel}</td>
-                    <td>${vMail}</td>
+                    <td>\${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}\${vAdres}</td>
+                    <td>\${vTel}</td>
+                    <td>\${vMail}</td>
                 </tr>
             </table>
-            <p style="text-align:justify;font-size:12px;margin:8px 0;line-height:1.4;text-indent:30px; flex-shrink: 0;">
+            <p style="text-align:justify;font-size:\${s.pFont};margin:\${s.pMargin};line-height:\${s.pLineHeight};text-indent:30px; flex-shrink: 0;">
                 6458 sayılı Kanunun 38. maddesi çerçevesinde istenilen aşağıdaki belgelerin ekte sunulduğuna dair işbu tebliğ ve tebellüğ belgesi tanzim edilerek taraflarca imza altına alınmış, belgenin bir sureti tarafınıza teslim edilmiş olup, diğer sureti İl Göç İdaresi Müdürlüğüne gönderilecektir.
             </p>
 
-            <p style="font-weight:bold;font-size:12.5px;margin:8px 0 4px 0; flex-shrink: 0;">BELGELER:</p>
-            <ul style="list-style:none;padding:0 0 0 10px;margin:0;font-size:11.5px;line-height:1.3; flex-shrink: 0;">
-                <li style="margin-bottom:2px;">☐ İkamet izni kayıt/başvuru formu (öğrenci tarafından ıslak imzalı şekilde)</li>
-                <li style="margin-bottom:2px;">☐ Pasaport ya da pasaport yerine geçen belge (aslı görüldü şeklinde)</li>
-                <li style="margin-bottom:2px;">☐ Öğrencilik durumunu gösterir belge</li>
-                <li style="margin-bottom:2px;">☐ 4 adet biometrik fotoğraf</li>
-                <li style="margin-bottom:2px;">☐ Geçerli sağlık sigortası (GSS ya da ikamet izni talep süresini kapsayan özel sağlık sigortası)</li>
-                <li style="margin-bottom:2px;">☐ Kalacağı adres bilgilerini gösterir belge
+            <p style="font-weight:bold;font-size:\${s.titleFont};margin:8px 0 4px 0; flex-shrink: 0;">BELGELER:</p>
+            <ul style="list-style:none;padding:0 0 0 10px;margin:0;font-size:\${s.listFont};line-height:\${s.listLineHeight}; flex-shrink: 0;">
+                <li style="margin-bottom:\${s.listMb};">☐ İkamet izni kayıt/başvuru formu (öğrenci tarafından ıslak imzalı şekilde)</li>
+                <li style="margin-bottom:\${s.listMb};">☐ Pasaport ya da pasaport yerine geçen belge (aslı görüldü şeklinde)</li>
+                <li style="margin-bottom:\${s.listMb};">☐ Öğrencilik durumunu gösterir belge</li>
+                <li style="margin-bottom:\${s.listMb};">☐ 4 adet biometrik fotoğraf</li>
+                <li style="margin-bottom:\${s.listMb};">☐ Geçerli sağlık sigortası (GSS ya da ikamet izni talep süresini kapsayan özel sağlık sigortası)</li>
+                <li style="margin-bottom:\${s.listMb};">☐ Kalacağı adres bilgilerini gösterir belge
                     <ul style="list-style-type:disc;padding-left:20px;margin:2px 0;">
-                        <li style="margin-bottom:1px;">Kendi evinde kalıyorsa, tapu fotokopisi (uzatma başvurularında "yerleşim yeri belgesi ve fatura" yeterlidir)</li>
-                        <li style="margin-bottom:1px;">Kira sözleşmesi ile kalıyorsa, kira sözleşmesinin noter onaylı örneği</li>
-                        <li style="margin-bottom:1px;">Otel vb. konaklama yerlerinde kalınıyorsa, bu yerlerde kalındığına dair belge</li>
-                        <li style="margin-bottom:1px;">Öğrenci yurtlarında kalınıyorsa, yurtta kalındığına dair belge</li>
-                        <li style="margin-bottom:1px;">Destekleyici yanında kalınıyorsa, yanında kaldığı kişinin noter onaylı taahhüdü (Destekleyici evli ise ayrıca eşinin de noter onaylı taahhüdü)</li>
+                        <li style="margin-bottom:\${s.innerListMb};">Kendi evinde kalıyorsa, tapu fotokopisi (uzatma başvurularında "yerleşim yeri belgesi ve fatura" yeterlidir)</li>
+                        <li style="margin-bottom:\${s.innerListMb};">Kira sözleşmesi ile kalıyorsa, kira sözleşmesinin noter onaylı örneği</li>
+                        <li style="margin-bottom:\${s.innerListMb};">Otel vb. konaklama yerlerinde kalınıyorsa, bu yerlerde kalındığına dair belge</li>
+                        <li style="margin-bottom:\${s.innerListMb};">Öğrenci yurtlarında kalınıyorsa, yurtta kalındığına dair belge</li>
+                        <li style="margin-bottom:\${s.innerListMb};">Destekleyici yanında kalınıyorsa, yanında kaldığı kişinin noter onaylı taahhüdü (Destekleyici evli ise ayrıca eşinin de noter onaylı taahhüdü)</li>
                     </ul>
                 </li>
-                <li style="margin-bottom:2px;">☐ İkamet izni belge bedelinin ödendiğine dair makbuz</li>
-                <li style="margin-bottom:2px;">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
+                <li style="margin-bottom:\${s.listMb};">☐ İkamet izni belge bedelinin ödendiğine dair makbuz</li>
+                <li style="margin-bottom:\${s.listMb};">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
             </ul>
-            <p style="font-weight:bold;font-size:13px;margin:12px 0 6px 0;text-align:center;border:1px solid #000;padding:6px; flex-shrink: 0;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
+            <p style="font-weight:bold;font-size:\${s.boxFont};margin:\${s.boxMargin};text-align:center;border:1px solid #000;padding:\${s.boxPad}; flex-shrink: 0;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: \${vTebligatTarihi}</p>
             
             <!-- This pushes the signature block to the bottom of the page -->
             <div style="flex-grow: 1;"></div>
 
-            <div style="margin-top:10px;display:flex;justify-content:space-around;font-weight:bold;font-size:14px;padding-bottom:15mm;padding-top:10px;page-break-before:avoid;break-before:avoid; flex-shrink: 0;">
+            <div style="margin-top:10px;display:flex;justify-content:space-around;font-weight:bold;font-size:\${s.sigFont};padding-bottom:\${s.sigPadBottom};padding-top:10px;page-break-before:avoid;break-before:avoid; flex-shrink: 0;">
                 <div style="text-align:center;"><u>TEBLİĞ EDEN</u><br><br>Üniversite Personeli</div>
                 <div style="text-align:center;"><u>TEBELLÜĞ EDEN</u><br><br>Yabancı Öğrenci</div>
             </div>
         </div>
-    `;
+    \`;
 }
 
 export async function generateAndDownloadPdf(btnDownload) {
