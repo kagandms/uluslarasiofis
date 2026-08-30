@@ -1,5 +1,5 @@
 import { CDN_URLS } from '../config/constants.js';
-import { getFormData, getFormElements } from '../ui/formManager.js';
+import { getFormDataFromNode, getFormElements } from '../ui/formManager.js';
 import { historyManager } from '../managers/historyManager.js';
 import { showToast } from '../ui/toastManager.js';
 import { calculateTebligatDate } from '../utils/dateUtils.js';
@@ -242,7 +242,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
     `;
 }
 
-export async function generateAndDownloadPdf(btnDownload) {
+export async function generateAndDownloadPdf(btnDownload, formWrapper) {
     if (generatedPdf) {
         generatedPdf.save(generatedPdfName);
         historyManager.save('pdf');
@@ -261,8 +261,8 @@ export async function generateAndDownloadPdf(btnDownload) {
 
     setTimeout(async () => {
         try {
-            const data = getFormData();
-            const fields = getFormElements();
+            const data = getFormDataFromNode(formWrapper);
+            const fields = getFormElements(formWrapper);
             
             const currentYear = new Date().getFullYear();
             const vBasvuruNo = data.basvuruNo || "";
@@ -325,14 +325,14 @@ export async function generateAndDownloadPdf(btnDownload) {
     }, 100);
 }
 
-export async function printDocument(btnPrint) {
+export async function printDocument(btnPrint, formWrapper) {
     const originalText = btnPrint.innerHTML;
     btnPrint.innerHTML = `<span class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin-right: 8px;"></span> Hazırlanıyor...`;
 
     setTimeout(() => {
         try {
-            const data = getFormData();
-            const fields = getFormElements();
+            const data = getFormDataFromNode(formWrapper);
+            const fields = getFormElements(formWrapper);
 
             const currentYear = new Date().getFullYear();
             const vBasvuruNo = data.basvuruNo || "";

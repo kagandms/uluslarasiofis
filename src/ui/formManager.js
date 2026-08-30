@@ -1,20 +1,44 @@
-export function getFormElements() {
+export function getFormElements(node = document) {
     return {
-        basvuruNo: document.getElementById('field-basvuru-no'),
-        teslimTarihi: document.getElementById('field-teslim-tarihi'),
-        pasaportNo: document.getElementById('field-pasaport-no'),
-        adi: document.getElementById('field-adi'),
-        soyadi: document.getElementById('field-soyadi'),
-        uyrugu: document.getElementById('field-uyrugu'),
-        dogumTarihi: document.getElementById('field-dogum-tarihi'),
-        adres: document.getElementById('field-adres'),
-        tel: document.getElementById('field-tel'),
-        mail: document.getElementById('field-mail'),
-        uyruguOther: document.getElementById('field-uyrugu-other')
+        basvuruNo: node.querySelector('[data-field="basvuru-no"]'),
+        teslimTarihi: node.querySelector('[data-field="teslim-tarihi"]'),
+        pasaportNo: node.querySelector('[data-field="pasaport-no"]'),
+        adi: node.querySelector('[data-field="adi"]'),
+        soyadi: node.querySelector('[data-field="soyadi"]'),
+        uyrugu: node.querySelector('[data-field="uyrugu"]'),
+        dogumTarihi: node.querySelector('[data-field="dogum-tarihi"]'),
+        adres: node.querySelector('[data-field="adres"]'),
+        tel: node.querySelector('[data-field="tel"]'),
+        mail: node.querySelector('[data-field="mail"]'),
+        uyruguOther: node.querySelector('[data-field="uyrugu-other"]')
     };
 }
 
-export function populateForm(data) {
+export function getAllFormsData() {
+    const wrappers = document.querySelectorAll('.student-form-wrapper');
+    const dataArray = [];
+    wrappers.forEach(wrapper => {
+        dataArray.push(getFormDataFromNode(wrapper));
+    });
+    return dataArray;
+}
+
+export function getFormDataFromNode(node) {
+    const fields = getFormElements(node);
+    const data = {};
+    Object.entries(fields).forEach(([key, field]) => {
+        if (field && key !== 'uyruguOther') {
+            data[key] = field.value || '';
+        }
+    });
+    
+    if (fields.uyrugu && fields.uyrugu.value === 'OTHER' && fields.uyruguOther) {
+        data.uyruguOther = fields.uyruguOther.value || '';
+    }
+    return data;
+}
+
+export function populateFormNode(node, data) {
     const mapping = {
         'basvuruNo': 'basvuruNo',
         'soyadi': 'soyadi',
@@ -24,12 +48,13 @@ export function populateForm(data) {
         'pasaportNo': 'pasaportNo',
         'adres': 'adres',
         'tel': 'tel',
-        'mail': 'mail'
+        'mail': 'mail',
+        'teslimTarihi': 'teslimTarihi'
     };
 
-    const fields = getFormElements();
+    const fields = getFormElements(node);
     Object.keys(mapping).forEach(key => {
-        if (data[key] && fields[key]) {
+        if (data[key] !== undefined && fields[key]) {
             if (key === 'uyrugu') {
                 const selectEl = fields.uyrugu;
                 let optionExists = false;
@@ -59,75 +84,85 @@ export function populateForm(data) {
             } else {
                 fields[key].value = data[key];
             }
-            fields[key].classList.add('field-filled');
+            if (fields[key].value) {
+                fields[key].classList.add('field-filled');
+            }
         }
     });
 }
 
-export function clearFormExceptTeslimTarihi() {
-    const fields = getFormElements();
-    Object.entries(fields).forEach(([key, field]) => {
-        if (!field) return;
-        if (key === 'teslimTarihi') return;
-        field.value = '';
-        field.classList.remove('field-filled');
-    });
-    if (fields.uyruguOther) {
-        fields.uyruguOther.style.display = 'none';
-        fields.uyruguOther.value = '';
+export function renderStudentForms(studentsDataArray) {
+    const container = document.getElementById('students-forms-container');
+    const template = document.getElementById('student-form-template');
+    if (!container || !template) return;
+    
+    container.innerHTML = '';
+    
+    if (!studentsDataArray || studentsDataArray.length === 0) {
+        studentsDataArray = [{}];
     }
-}
-
-export function clearAllFields() {
-    const fields = getFormElements();
-    Object.entries(fields).forEach(([key, field]) => {
-        if (field) {
-            field.value = '';
-            field.classList.remove('field-filled');
+    
+    studentsDataArray.forEach((data, index) => {
+        const clone = template.content.cloneNode(true);
+        const formWrapper = clone.querySelector('.student-form-wrapper');
+        formWrapper.dataset.index = index;
+        
+        const title = clone.querySelector('.student-form-title');
+        if (data.adi || data.soyadi) {
+            title.textContent = `${index + 1}. Öğrenci - ${data.adi || ''} ${data.soyadi || ''}`;
+        } else {
+            title.textContent = `${index + 1}. Öğrenci`;
         }
-    });
-    if (fields.uyruguOther) {
-        fields.uyruguOther.style.display = 'none';
-        fields.uyruguOther.value = '';
-    }
-}
-
-export function setDefaultDeliveryDate() {
-    const fields = getFormElements();
-    if (!fields.teslimTarihi) return;
-    const today = new Date();
-    const dd = String(today.getDate()).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const yyyy = today.getFullYear();
-    fields.teslimTarihi.value = `${dd}.${mm}.${yyyy}`;
-}
-
-export function getFormData() {
-    const fields = getFormElements();
-    const data = {};
-    Object.entries(fields).forEach(([key, field]) => {
-        if (field && key !== 'uyruguOther') {
-            data[key] = field.value || '';
+        
+        // Ensure teslim tarihi is set if empty
+        if (!data.teslimTarihi) {
+            const today = new Date();
+            const dd = String(today.getDate()).padStart(2, '0');
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const yyyy = today.getFullYear();
+            data.teslimTarihi = `${dd}.${mm}.${yyyy}`;
         }
+        
+        populateFormNode(clone, data);
+        container.appendChild(clone);
     });
     
-    if (fields.uyrugu && fields.uyrugu.value === 'OTHER' && fields.uyruguOther) {
-        data.uyruguOther = fields.uyruguOther.value || '';
-    }
-    return data;
+    initDynamicEvents();
 }
 
-export function initFormEvents() {
-    const fields = getFormElements();
-    if (fields.uyrugu && fields.uyruguOther) {
-        fields.uyrugu.addEventListener('change', (e) => {
-            if (e.target.value === 'OTHER') {
-                fields.uyruguOther.style.display = 'block';
-                fields.uyruguOther.focus();
-            } else {
-                fields.uyruguOther.style.display = 'none';
-                fields.uyruguOther.value = '';
-            }
+function initDynamicEvents() {
+    const wrappers = document.querySelectorAll('.student-form-wrapper');
+    wrappers.forEach(wrapper => {
+        const fields = getFormElements(wrapper);
+        
+        if (fields.uyrugu && fields.uyruguOther) {
+            // Remove old listener to avoid duplicates if re-init
+            const oldUyrugu = fields.uyrugu.cloneNode(true);
+            fields.uyrugu.parentNode.replaceChild(oldUyrugu, fields.uyrugu);
+            fields.uyrugu = oldUyrugu; // Update reference
+            
+            fields.uyrugu.addEventListener('change', (e) => {
+                if (e.target.value === 'OTHER') {
+                    fields.uyruguOther.style.display = 'block';
+                    fields.uyruguOther.focus();
+                } else {
+                    fields.uyruguOther.style.display = 'none';
+                    fields.uyruguOther.value = '';
+                }
+            });
+        }
+        
+        // Trigger draft save on inputs
+        Object.values(fields).forEach(field => {
+            if (!field) return;
+            field.addEventListener('input', () => {
+                if (field.value) field.classList.add('field-filled');
+                else field.classList.remove('field-filled');
+                window.dispatchEvent(new Event('formChanged'));
+            });
+            field.addEventListener('change', () => {
+                window.dispatchEvent(new Event('formChanged'));
+            });
         });
-    }
+    });
 }

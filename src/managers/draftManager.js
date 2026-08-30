@@ -1,15 +1,20 @@
 import { STORAGE_KEYS } from '../config/constants.js';
-import { getFormElements, getFormData, populateForm, clearFormExceptTeslimTarihi } from '../ui/formManager.js';
+import { getAllFormsData, renderStudentForms } from '../ui/formManager.js';
 import { showToast } from '../ui/toastManager.js';
 
 export function saveDraft() {
-    const data = getFormData();
+    const dataArray = getAllFormsData();
     
-    // Sadece teslim tarihi olan boş formu kaydetme
-    const hasData = Object.keys(data).some(key => key !== 'teslimTarihi' && data[key].trim() !== '');
+    // Check if there is any data other than teslimTarihi across all forms
+    let hasData = false;
+    dataArray.forEach(data => {
+        if (Object.keys(data).some(key => key !== 'teslimTarihi' && data[key].trim() !== '')) {
+            hasData = true;
+        }
+    });
     
     if (hasData) {
-        localStorage.setItem(STORAGE_KEYS.DRAFT, JSON.stringify(data));
+        localStorage.setItem(STORAGE_KEYS.DRAFT, JSON.stringify(dataArray));
     } else {
         localStorage.removeItem(STORAGE_KEYS.DRAFT);
     }
@@ -19,26 +24,29 @@ export function restoreDraft() {
     try {
         const draftStr = localStorage.getItem(STORAGE_KEYS.DRAFT);
         if (draftStr) {
-            const data = JSON.parse(draftStr);
-            if (Object.keys(data).length > 0) {
-                if (confirm('Önceki oturumdan kalan kaydedilmemiş bir formunuz var. Geri yüklemek ister misiniz?')) {
-                    populateForm(data);
-                    
-                    // Trigger input event to re-save draft
-                    const fields = getFormElements();
-                    if(fields.basvuruNo) {
-                        fields.basvuruNo.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
+            let dataArray = JSON.parse(draftStr);
+            if (!Array.isArray(dataArray)) {
+                // Backward compatibility for single object draft
+                dataArray = [dataArray];
+            }
+            if (dataArray.length > 0 && Object.keys(dataArray[0]).length > 0) {
+                if (confirm('Önceki oturumdan kalan kaydedilmemiş form verileriniz var. Geri yüklemek ister misiniz?')) {
+                    renderStudentForms(dataArray);
                     showToast('Taslak form başarıyla yüklendi.', 'success');
                 } else {
                     localStorage.removeItem(STORAGE_KEYS.DRAFT);
-                    clearFormExceptTeslimTarihi();
+                    renderStudentForms([{}]);
                 }
+            } else {
+                renderStudentForms([{}]);
             }
+        } else {
+            renderStudentForms([{}]);
         }
     } catch (e) {
         console.error('Draft okuma hatası:', e);
         localStorage.removeItem(STORAGE_KEYS.DRAFT);
+        renderStudentForms([{}]);
     }
 }
 
@@ -47,15 +55,5 @@ export function clearDraft() {
 }
 
 export function initDraftAutoSave() {
-    const fields = getFormElements();
-    
-    Object.values(fields).forEach(field => {
-        if (!field) return;
-        field.addEventListener('input', () => {
-            if (field.value) field.classList.add('field-filled');
-            else field.classList.remove('field-filled');
-            saveDraft();
-        });
-        field.addEventListener('change', saveDraft);
-    });
+    window.addEventListener('formChanged', saveDraft);
 }
