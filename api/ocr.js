@@ -84,15 +84,41 @@ export default async function handler(req, res) {
 
         const azureData = await azureResponse.json();
 
-        // Frontend kodunuzu bozmamak için, Azure'un verdiği cevabı Google formatına dönüştürüyoruz
-        const fullText = azureData.readResult ? azureData.readResult.content : "";
+        let fullText = "";
+        let textAnnotations = [];
+
+        if (azureData.readResult && azureData.readResult.blocks) {
+            let allText = [];
+            
+            // Google Vision'un beklediği ilk eleman (tüm metin)
+            textAnnotations.push({ description: "" });
+            
+            azureData.readResult.blocks.forEach(block => {
+                if (block.lines) {
+                    block.lines.forEach(line => {
+                        allText.push(line.text);
+                        if (line.words) {
+                            line.words.forEach(word => {
+                                textAnnotations.push({
+                                    description: word.text,
+                                    boundingPoly: {
+                                        vertices: word.boundingPolygon
+                                    }
+                                });
+                            });
+                        }
+                    });
+                }
+            });
+            
+            fullText = allText.join('\n');
+            textAnnotations[0].description = fullText;
+        }
         
         const mappedResponse = {
             responses: [
                 {
-                    textAnnotations: [
-                        { description: fullText }
-                    ]
+                    textAnnotations: textAnnotations
                 }
             ]
         };
