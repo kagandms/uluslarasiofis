@@ -48,25 +48,29 @@ export async function loadPdfLibraries() {
         return false;
     }
 }
+export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, isPrint = false) {
+    
+    // Bilgisayar ve Mobil ayrımı
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
-    // PDF İndir (Bilgisayar) için büyük fontlar, Yazdır (Mobil) için sığacak küçük fontlar
+    // Bilgisayarda (Yazdır ve PDF) büyük fontlar, Mobilde (Yazdır ve PDF) küçük fontlar
     const s = {
-        wrapperPad: isPrint ? '6mm 10mm' : '4mm 14mm',
-        tableFont: isPrint ? '13px' : '14px',
-        tablePad: isPrint ? '6px 8px' : '7px 10px',
-        pFont: isPrint ? '12px' : '14px',
-        pMargin: isPrint ? '8px 0' : '14px 0',
-        pLineHeight: isPrint ? '1.4' : '1.6',
-        titleFont: isPrint ? '12.5px' : '15px',
-        listFont: isPrint ? '11.5px' : '13.5px',
-        listLineHeight: isPrint ? '1.3' : '1.5',
-        listMb: isPrint ? '2px' : '5px',
-        innerListMb: isPrint ? '1px' : '4px',
-        boxFont: isPrint ? '13px' : '15.5px',
-        boxMargin: isPrint ? '12px 0 6px 0' : '16px 0 8px 0',
-        boxPad: isPrint ? '6px' : '10px',
-        sigFont: isPrint ? '14px' : '15px',
-        sigPadBottom: isPrint ? '15mm' : '12mm'
+        wrapperPad: isMobile ? '6mm 10mm' : '4mm 14mm',
+        tableFont: isMobile ? '13px' : '14px',
+        tablePad: isMobile ? '6px 8px' : '7px 10px',
+        pFont: isMobile ? '12px' : '14px',
+        pMargin: isMobile ? '8px 0' : '14px 0',
+        pLineHeight: isMobile ? '1.4' : '1.6',
+        titleFont: isMobile ? '12.5px' : '15px',
+        listFont: isMobile ? '11.5px' : '13.5px',
+        listLineHeight: isMobile ? '1.3' : '1.5',
+        listMb: isMobile ? '2px' : '5px',
+        innerListMb: isMobile ? '1px' : '4px',
+        boxFont: isMobile ? '13px' : '15.5px',
+        boxMargin: isMobile ? '12px 0 6px 0' : '16px 0 8px 0',
+        boxPad: isMobile ? '6px' : '10px',
+        sigFont: isMobile ? '14px' : '15px',
+        sigPadBottom: isMobile ? '15mm' : '12mm'
     };
 
     const wrapperStyle = isPrint 
