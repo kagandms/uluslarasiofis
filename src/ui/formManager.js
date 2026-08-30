@@ -63,29 +63,30 @@ export function populateFormNode(node, data) {
                 const normalizedData = normalize(data[key]);
 
                 for (let i = 0; i < selectEl.options.length; i++) {
+                    selectEl.options[i].removeAttribute('selected'); // Ensure no other option has it
                     if (normalize(selectEl.options[i].value) === normalizedData) {
                         data[key] = selectEl.options[i].value; // Fix the data to exactly match option value
                         selectEl.options[i].selected = true;
+                        selectEl.options[i].setAttribute('selected', 'selected'); // Set attribute so it survives appendChild
                         optionExists = true;
-                        break;
                     }
                 }
                 if (optionExists) {
                     selectEl.value = data[key];
-                    if (data[key] === 'OTHER') {
-                        if(fields.uyruguOther) {
-                            fields.uyruguOther.style.display = 'block';
-                            fields.uyruguOther.value = data['uyruguOther'] || '';
-                        }
-                    } else {
-                        if(fields.uyruguOther) fields.uyruguOther.style.display = 'none';
-                    }
+                    if(fields.uyruguOther) fields.uyruguOther.style.display = 'none';
                 } else {
                     selectEl.value = 'OTHER';
+                    for (let i = 0; i < selectEl.options.length; i++) {
+                        if (selectEl.options[i].value === 'OTHER') {
+                            selectEl.options[i].selected = true;
+                            selectEl.options[i].setAttribute('selected', 'selected');
+                        }
+                    }
                     if(fields.uyruguOther) {
                         fields.uyruguOther.style.display = 'block';
                         fields.uyruguOther.value = data['uyruguOther'] || data[key];
                     }
+                    if (fields.basvuruNo) fields.basvuruNo.value = "UYRUK BULUNAMADI: " + data[key];
                 }
             } else {
                 fields[key].value = data[key];
@@ -149,10 +150,12 @@ function initDynamicEvents() {
         const fields = getFormElements(wrapper);
         
         if (fields.uyrugu && fields.uyruguOther) {
-            // Remove old listener to avoid duplicates if re-init
+            // Remove existing listeners by cloning (must preserve value which is lost during cloneNode)
+            const currentValue = fields.uyrugu.value;
             const oldUyrugu = fields.uyrugu.cloneNode(true);
             fields.uyrugu.parentNode.replaceChild(oldUyrugu, fields.uyrugu);
             fields.uyrugu = oldUyrugu; // Update reference
+            fields.uyrugu.value = currentValue; // Restore value
             
             fields.uyrugu.addEventListener('change', (e) => {
                 if (e.target.value === 'OTHER') {
