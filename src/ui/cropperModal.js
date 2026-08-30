@@ -34,7 +34,9 @@ export function showCropperForFile(img, options) {
     const btnCropConfirm = document.getElementById('btn-crop-confirm');
     const btnCropSkip = document.getElementById('btn-crop-skip');
     const btnCropAddStudent = document.getElementById('btn-crop-add-student');
+    const btnCropSkipAddStudent = document.getElementById('btn-crop-skip-add-student');
 
+    
     
     if (customOptions.hasMoreFiles) {
         if (btnCropConfirm) btnCropConfirm.style.display = 'none';
@@ -43,6 +45,7 @@ export function showCropperForFile(img, options) {
         if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'none';
         if (btnCropNext) btnCropNext.style.display = 'flex';
         if (btnCropAddStudent) btnCropAddStudent.style.display = 'none';
+        if (btnCropSkipAddStudent) btnCropSkipAddStudent.style.display = 'none';
     } else if (customOptions.isFirstImage && !customOptions.isPage2) {
         if (btnCropConfirm) btnCropConfirm.style.display = 'flex';
         if (btnCropSkip) btnCropSkip.style.display = 'flex';
@@ -50,6 +53,7 @@ export function showCropperForFile(img, options) {
         if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'flex';
         if (btnCropNext) btnCropNext.style.display = 'none';
         if (btnCropAddStudent) btnCropAddStudent.style.display = 'none';
+        if (btnCropSkipAddStudent) btnCropSkipAddStudent.style.display = 'none';
     } else {
         if (btnCropConfirm) btnCropConfirm.style.display = 'flex';
         if (btnCropSkip) btnCropSkip.style.display = 'flex';
@@ -57,6 +61,7 @@ export function showCropperForFile(img, options) {
         if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'none';
         if (btnCropNext) btnCropNext.style.display = 'none';
         if (btnCropAddStudent) btnCropAddStudent.style.display = 'flex';
+        if (btnCropSkipAddStudent) btnCropSkipAddStudent.style.display = 'flex';
     }
 
     cropperInstance = new window.Cropper(cropperImage, {
@@ -132,4 +137,5 @@ export function initCropperControls(handlers) {
     document.getElementById('btn-skip-capture-next')?.addEventListener('click', handlers.onSkipCaptureNext);
     document.getElementById('btn-crop-capture-next')?.addEventListener('click', handlers.onCropCaptureNext);
     document.getElementById('btn-crop-add-student')?.addEventListener('click', handlers.onCropAddStudent);
+    document.getElementById('btn-crop-skip-add-student')?.addEventListener('click', handlers.onCropSkipAddStudent);
 }

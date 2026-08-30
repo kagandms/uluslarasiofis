@@ -299,6 +299,12 @@ document.addEventListener('DOMContentLoaded', () => {
         onCropAddStudent: () => {
             getCroppedImage((img) => processNextStep(img, true));
         },
+        onCropSkipAddStudent: () => {
+            const imgEl = document.getElementById('cropper-image');
+            const newImg = new Image();
+            newImg.src = imgEl.src;
+            processNextStep(newImg, true);
+        },
         onNext: () => {
             getCroppedImage((img) => processNextStep(img));
         },
