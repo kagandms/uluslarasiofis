@@ -87,8 +87,8 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         // 2. Durum: Yazdır
         wrapperWidth = '210mm'; // max-width
         if (isMobile) {
-            // Mobil Yazdır: 2 sayfaya taşmayı engellemek için 275mm
-            wrapperHeight = '275mm';
+            // Mobil Yazdır: US Letter (279mm) kağıtlarına bile sığması için 265mm
+            wrapperHeight = '265mm';
         } else {
             // PC Yazdır: Alt kenarı sayfanın en altına itmek için 99.5vh
             wrapperHeight = '99.5vh';
@@ -101,6 +101,10 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         
     return `
         <style>
+            @media print {
+                @page { margin: 0; }
+                body { margin: 0; padding: 0; }
+            }
             .pt { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
             .pt th, .pt td { border: 1px solid #000; padding: ${s.tablePad}; text-align: left; vertical-align: middle; font-size: ${s.tableFont}; font-family: 'Times New Roman', serif; }
             .pt th { font-weight: bold; }
