@@ -315,14 +315,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (p2) {
                 const progressBar = document.getElementById('progress-bar');
                 const progressText = document.getElementById('progress-text');
-                if (progressText) progressText.textContent = '1. Sayfa analiz ediliyor...';
+                if (progressText) progressText.textContent = '1. ve 2. Sayfa analiz ediliyor...';
                 
-                await runOCR(p1.dataUrl, p1.canvas, true, false);
+                // İki sayfayı aynı anda sunucuya gönder (Paralel İşlem - Hızlandırma)
+                await Promise.all([
+                    runOCR(p1.dataUrl, p1.canvas, true, false),
+                    runOCR(p2.dataUrl, p2.canvas, true, true)
+                ]);
                 
-                if (progressText) progressText.textContent = '2. Sayfa analiz ediliyor...';
-                if (progressBar) progressBar.style.width = '60%';
-                
-                await runOCR(p2.dataUrl, p2.canvas, true, true);
+                if (progressBar) progressBar.style.width = '100%';
                 
                 setActiveStep(STEP_IDS.FORM_RESULT);
                 showToast('İki sayfa da başarıyla analiz edildi.', 'success');

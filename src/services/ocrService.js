@@ -43,7 +43,12 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
 
     try {
         updateProgress('Belge taranıyor...', 10);
-        const base64Data = imageDataUrl.split(',')[1];
+        
+        // Canvas üzerinden Blob oluştur (Base64'ten %33 daha ufak payload)
+        // Azure JPEG formatını sorunsuz desteklediği için image/jpeg kullanıyoruz
+        const blob = await new Promise(resolve => {
+            sourceCanvas.toBlob(resolve, 'image/jpeg', 0.85);
+        });
         
         let response = null;
         let data = null;
@@ -77,8 +82,8 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
         
         response = await tryFetch('/api/ocr', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageContent: base64Data })
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: blob
         });
 
         if (!response.ok) {

@@ -8,10 +8,16 @@ export default async function handler(req, res) {
     const googleApiKey = process.env.GOOGLE_VISION_API_KEY;
 
     try {
-        const { imageContent } = req.body;
-
-        if (!imageContent) {
-            return res.status(400).json({ error: 'No image content provided.' });
+        let imageBuffer;
+        
+        // Vercel, application/octet-stream isteklerinde req.body'yi Buffer olarak verir.
+        if (Buffer.isBuffer(req.body)) {
+            imageBuffer = req.body;
+        } else if (req.body && req.body.imageContent) {
+            // Geriye dönük uyumluluk (Eski Base64 formatı gelirse)
+            imageBuffer = Buffer.from(req.body.imageContent, 'base64');
+        } else {
+            return res.status(400).json({ error: 'No image data provided.' });
         }
 
         // ==========================================
@@ -26,7 +32,6 @@ export default async function handler(req, res) {
             }
 
             const azureUrl = `${azureEndpoint}/computervision/imageanalysis:analyze?features=read&api-version=2023-10-01`;
-            const imageBuffer = Buffer.from(imageContent, 'base64');
 
             try {
                 const azureResponse = await fetch(azureUrl, {
@@ -104,7 +109,7 @@ export default async function handler(req, res) {
         const googleRequestBody = {
             requests: [
                 {
-                    image: { content: imageContent },
+                    image: { content: imageBuffer.toString('base64') },
                     features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
                     imageContext: { languageHints: ["tr", "en"] }
                 }
