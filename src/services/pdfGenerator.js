@@ -50,53 +50,105 @@ export async function loadPdfLibraries() {
 }
 export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, isPrint = false) {
     
-    // PC ve Mobil ayrımı
+    // Cihaz tespiti
     const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
-    // Sadece "Mobilde Yazdır" işlemi için daraltılmış fontları kullanacağız.
-    const useCompact = isMobile && isPrint;
+    // 4 farklı senaryo (Mod) belirliyoruz
+    let mode = '';
+    if (isMobile && !isPrint) mode = 'MOBILE_PDF';
+    else if (isMobile && isPrint) mode = 'MOBILE_PRINT';
+    else if (!isMobile && !isPrint) mode = 'PC_PDF';
+    else if (!isMobile && isPrint) mode = 'PC_PRINT';
 
-    const s = {
-        wrapperPad: useCompact ? '4mm 10mm' : '4mm 14mm',
-        tableFont: useCompact ? '13px' : '14px',
-        tablePad: useCompact ? '6px 8px' : '7px 10px',
-        pFont: useCompact ? '13px' : '14px',
-        pMargin: useCompact ? '10px 0' : '14px 0',
-        pLineHeight: useCompact ? '1.4' : '1.6',
-        titleFont: useCompact ? '14px' : '15px',
-        listFont: useCompact ? '12.5px' : '13.5px',
-        listLineHeight: useCompact ? '1.4' : '1.5',
-        listMb: useCompact ? '4px' : '5px',
-        innerListMb: useCompact ? '2px' : '4px',
-        boxFont: useCompact ? '14.5px' : '15.5px',
-        boxMargin: useCompact ? '12px 0 6px 0' : '16px 0 8px 0',
-        boxPad: useCompact ? '8px' : '10px',
-        sigFont: useCompact ? '14px' : '15px',
-        sigPadBottom: useCompact ? '12mm' : '16mm' 
+    // 4 Senaryo için ayrı ayrı ince ayar (ölçek) tanımlamaları
+    const profiles = {
+        'MOBILE_PDF': {
+            wrapperWidth: '794px',   // A4 piksel genişliği
+            wrapperHeight: '1122px', // A4 piksel yüksekliği
+            wrapperPad: '4mm 14mm',
+            tableFont: '14px',
+            tablePad: '7px 10px',
+            pFont: '14px',
+            pMargin: '14px 0',
+            pLineHeight: '1.6',
+            titleFont: '15px',
+            listFont: '13.5px',
+            listLineHeight: '1.5',
+            listMb: '5px',
+            innerListMb: '4px',
+            boxFont: '15.5px',
+            boxMargin: '16px 0 8px 0',
+            boxPad: '10px',
+            sigFont: '15px',
+            sigPadBottom: '16mm'
+        },
+        'MOBILE_PRINT': {
+            wrapperWidth: '210mm',
+            wrapperHeight: '250mm', // Telefon yazıcılarında 2 sayfaya taşmaması için daraltılmış yükseklik
+            wrapperPad: '4mm 10mm', // Daha dar kenar boşlukları
+            tableFont: '13px',
+            tablePad: '6px 8px',
+            pFont: '13px',
+            pMargin: '10px 0',
+            pLineHeight: '1.4',
+            titleFont: '14px',
+            listFont: '12.5px',
+            listLineHeight: '1.4',
+            listMb: '4px',
+            innerListMb: '2px',
+            boxFont: '14.5px',
+            boxMargin: '12px 0 6px 0',
+            boxPad: '8px',
+            sigFont: '14px',
+            sigPadBottom: '12mm'
+        },
+        'PC_PDF': {
+            wrapperWidth: '794px',
+            wrapperHeight: '1122px',
+            wrapperPad: '4mm 14mm',
+            tableFont: '14px',
+            tablePad: '7px 10px',
+            pFont: '14px',
+            pMargin: '14px 0',
+            pLineHeight: '1.6',
+            titleFont: '15px',
+            listFont: '13.5px',
+            listLineHeight: '1.5',
+            listMb: '5px',
+            innerListMb: '4px',
+            boxFont: '15.5px',
+            boxMargin: '16px 0 8px 0',
+            boxPad: '10px',
+            sigFont: '15px',
+            sigPadBottom: '16mm'
+        },
+        'PC_PRINT': {
+            wrapperWidth: '210mm',
+            wrapperHeight: '99.5vh', // PC'de imza kısmını tam sayfa altına itmek için
+            wrapperPad: '4mm 14mm',
+            tableFont: '14px',
+            tablePad: '7px 10px',
+            pFont: '14px',
+            pMargin: '14px 0',
+            pLineHeight: '1.6',
+            titleFont: '15px',
+            listFont: '13.5px',
+            listLineHeight: '1.5',
+            listMb: '5px',
+            innerListMb: '4px',
+            boxFont: '15.5px',
+            boxMargin: '16px 0 8px 0',
+            boxPad: '10px',
+            sigFont: '15px',
+            sigPadBottom: '16mm'
+        }
     };
 
-    let wrapperHeight;
-    let wrapperWidth;
-    
-    if (!isPrint) {
-        // 1. Durum: PDF İndir (PC veya Mobil fark etmez)
-        wrapperHeight = '1122px';
-        wrapperWidth = '794px';
-    } else {
-        // 2. Durum: Yazdır
-        wrapperWidth = '210mm'; // max-width
-        if (isMobile) {
-            // Mobil Yazdır: US Letter (279mm) dahil TÜR YAZICILARDA TEK SAYFA OLMASI İÇİN 250mm
-            wrapperHeight = '250mm';
-        } else {
-            // PC Yazdır: Alt kenarı sayfanın en altına itmek için 99.5vh
-            wrapperHeight = '99.5vh';
-        }
-    }
+    const s = profiles[mode];
 
     const wrapperStyle = isPrint 
-        ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:${wrapperWidth};height:${wrapperHeight};margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
-        : `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;width:${wrapperWidth};height:${wrapperHeight};display:flex;flex-direction:column;overflow:hidden;`;
+        ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:${s.wrapperWidth};height:${s.wrapperHeight};margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
+        : `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;width:${s.wrapperWidth};height:${s.wrapperHeight};display:flex;flex-direction:column;overflow:hidden;`;
         
     return `
         <style>
