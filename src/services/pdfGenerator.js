@@ -87,8 +87,8 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         // 2. Durum: Yazdır
         wrapperWidth = '210mm'; // max-width
         if (isMobile) {
-            // Mobil Yazdır: US Letter (279mm) kağıtlarına bile sığması için 265mm
-            wrapperHeight = '265mm';
+            // Mobil Yazdır: US Letter (279mm) dahil TÜR YAZICILARDA TEK SAYFA OLMASI İÇİN 250mm
+            wrapperHeight = '250mm';
         } else {
             // PC Yazdır: Alt kenarı sayfanın en altına itmek için 99.5vh
             wrapperHeight = '99.5vh';
@@ -106,8 +106,11 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
                 body { margin: 0; padding: 0; }
             }
             .pt { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
-            .pt th, .pt td { border: 1px solid #000; padding: ${s.tablePad}; text-align: left; vertical-align: middle; font-size: ${s.tableFont}; font-family: 'Times New Roman', serif; }
-            .pt th { font-weight: bold; }
+            .pt th, .pt td { border: 1.5px solid black; padding: ${s.tablePad}; text-align: left; font-size: ${s.tableFont}; }
+            .pt th { background-color: #f8f8f8; font-weight: bold; width: 30%; }
+            .pt td { width: 20%; }
+            .sig-table { width: 100%; margin-top: auto; border: none; }
+            .sig-table th, .sig-table td { border: none; text-align: center; }
         </style>
         <div id="${isPrint ? 'pdf-content' : 'pdf-canvas-content'}" style="${wrapperStyle}">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-shrink: 0;">
