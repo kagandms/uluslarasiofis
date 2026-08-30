@@ -127,7 +127,8 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
                         currentApiKeyIndex = (currentApiKeyIndex + 1) % GOOGLE_VISION_API_KEYS.length;
                         attempts++;
                     } else {
-                        throw new Error(`Google API Yetki Hatası (${response.status})`);
+                        useVercel = true;
+                        break;
                     }
                 } else {
                     useVercel = true;
