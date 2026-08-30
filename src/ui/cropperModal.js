@@ -35,6 +35,7 @@ export function showCropperForFile(img, options) {
     const btnCropSkip = document.getElementById('btn-crop-skip');
     const btnCropAddStudent = document.getElementById('btn-crop-add-student');
 
+    
     if (customOptions.hasMoreFiles) {
         if (btnCropConfirm) btnCropConfirm.style.display = 'none';
         if (btnCropSkip) btnCropSkip.style.display = 'none';
@@ -48,7 +49,6 @@ export function showCropperForFile(img, options) {
         if (btnCropCaptureNext) btnCropCaptureNext.style.display = 'flex';
         if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'flex';
         if (btnCropNext) btnCropNext.style.display = 'none';
-        if (btnCropAddStudent) btnCropAddStudent.style.display = 'flex';
         if (btnCropAddStudent) btnCropAddStudent.style.display = 'none';
     } else {
         if (btnCropConfirm) btnCropConfirm.style.display = 'flex';
@@ -56,6 +56,7 @@ export function showCropperForFile(img, options) {
         if (btnCropCaptureNext) btnCropCaptureNext.style.display = 'none';
         if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'none';
         if (btnCropNext) btnCropNext.style.display = 'none';
+        if (btnCropAddStudent) btnCropAddStudent.style.display = 'flex';
     }
 
     cropperInstance = new window.Cropper(cropperImage, {
