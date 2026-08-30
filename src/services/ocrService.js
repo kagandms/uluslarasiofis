@@ -129,6 +129,10 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
                     serverExtracted[key] = fallbackExtracted[key];
                 }
             });
+            if (!serverExtracted.uyrugu && fallbackExtracted._rawText) {
+                // If it still failed, dump raw OCR text to basvuruNo for the user to see/screenshot
+                serverExtracted.basvuruNo = "OCR HATA: " + fallbackExtracted._rawText.replace(/\n/g, ' ').substring(0, 150);
+            }
             extractedData = serverExtracted;
         }
         updateProgress('İşlem Tamamlandı', 100);

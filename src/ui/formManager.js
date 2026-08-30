@@ -65,6 +65,7 @@ export function populateFormNode(node, data) {
                 for (let i = 0; i < selectEl.options.length; i++) {
                     if (normalize(selectEl.options[i].value) === normalizedData) {
                         data[key] = selectEl.options[i].value; // Fix the data to exactly match option value
+                        selectEl.options[i].selected = true;
                         optionExists = true;
                         break;
                     }

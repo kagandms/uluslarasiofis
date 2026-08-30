@@ -320,7 +320,7 @@
         const fullText = lines.join('\n');
         
         const extracted = {
-            basvuruNo: '', pasaportNo: '', adi: '', soyadi: '', uyrugu: '', dogumTarihi: ''
+            basvuruNo: '', pasaportNo: '', adi: '', soyadi: '', uyrugu: '', dogumTarihi: '', _rawText: fullText
         };
 
         // Known form label words — stops name extraction at right-column labels (OCR hataları dahil)
