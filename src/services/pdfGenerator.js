@@ -50,33 +50,54 @@ export async function loadPdfLibraries() {
 }
 export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, isPrint = false) {
     
-    // PDF İndir (isPrint=false) için dokunulmayan, kullanıcının beğendiği boyutlar.
-    // Yazdır (isPrint=true) için A4 fiziki sınırlarına ve tarayıcı kenar boşluklarına sığacak BİRAZ daha küçük boyutlar.
+    // PC ve Mobil ayrımı
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+
+    // Sadece "Mobilde Yazdır" işlemi için daraltılmış fontları kullanacağız.
+    // PC (Yazdır + PDF) ve Mobil (PDF) için kullanıcının onayladığı büyük fontlar kalacak!
+    const useCompact = isMobile && isPrint;
+
     const s = {
-        wrapperPad: isPrint ? '4mm 10mm' : '4mm 14mm',
-        tableFont: isPrint ? '13px' : '14px',
-        tablePad: isPrint ? '5px 8px' : '7px 10px',
-        pFont: isPrint ? '12.5px' : '14px',
-        pMargin: isPrint ? '8px 0' : '14px 0',
-        pLineHeight: isPrint ? '1.4' : '1.6',
-        titleFont: isPrint ? '13.5px' : '15px',
-        listFont: isPrint ? '11.5px' : '13.5px',
-        listLineHeight: isPrint ? '1.3' : '1.5',
-        listMb: isPrint ? '3px' : '5px',
-        innerListMb: isPrint ? '2px' : '4px',
-        boxFont: isPrint ? '13.5px' : '15.5px',
-        boxMargin: isPrint ? '10px 0 6px 0' : '16px 0 8px 0',
-        boxPad: isPrint ? '8px' : '10px',
-        sigFont: isPrint ? '14px' : '15px',
-        sigPadBottom: '16mm' // İmza altı boşluk (iki tarafta da geniş kalsın)
+        wrapperPad: useCompact ? '4mm 10mm' : '4mm 14mm',
+        tableFont: useCompact ? '13px' : '14px',
+        tablePad: useCompact ? '5px 8px' : '7px 10px',
+        pFont: useCompact ? '12.5px' : '14px',
+        pMargin: useCompact ? '8px 0' : '14px 0',
+        pLineHeight: useCompact ? '1.4' : '1.6',
+        titleFont: useCompact ? '13.5px' : '15px',
+        listFont: useCompact ? '11.5px' : '13.5px',
+        listLineHeight: useCompact ? '1.3' : '1.5',
+        listMb: useCompact ? '3px' : '5px',
+        innerListMb: useCompact ? '2px' : '4px',
+        boxFont: useCompact ? '13.5px' : '15.5px',
+        boxMargin: useCompact ? '10px 0 6px 0' : '16px 0 8px 0',
+        boxPad: useCompact ? '8px' : '10px',
+        sigFont: useCompact ? '14px' : '15px',
+        sigPadBottom: '16mm' // İmza altı boşluk sabit
     };
 
-    // Yazdırırken 275mm yüksekliğe zorluyoruz ki 2 sayfaya BÖLÜNMESİN.
-    // İçerik küçüldüğü için 275mm'ye rahatça sığacak ve flex-grow imzayı aşağı itecek.
-    // PDF (isPrint = false) için tam oran olan 1122px kalıyor.
+    let wrapperHeight;
+    let wrapperWidth;
+    
+    if (!isPrint) {
+        // 1. Durum: PDF İndir (PC veya Mobil fark etmez)
+        wrapperHeight = '1122px';
+        wrapperWidth = '794px';
+    } else {
+        // 2. Durum: Yazdır
+        wrapperWidth = '210mm'; // max-width
+        if (isMobile) {
+            // Mobil Yazdır: 2 sayfaya taşmayı engellemek için 275mm
+            wrapperHeight = '275mm';
+        } else {
+            // PC Yazdır: Alt kenarı sayfanın en altına itmek için 99.5vh
+            wrapperHeight = '99.5vh';
+        }
+    }
+
     const wrapperStyle = isPrint 
-        ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;height:275mm;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
-        : `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;height:1122px;display:flex;flex-direction:column;overflow:hidden;`;
+        ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:${wrapperWidth};height:${wrapperHeight};margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
+        : `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;width:${wrapperWidth};height:${wrapperHeight};display:flex;flex-direction:column;overflow:hidden;`;
         
     return `
         <style>
