@@ -629,7 +629,7 @@
                 inTurkeyAddress = true;
                 continue;
             }
-            if (lineStr.includes("ÖĞRENİM") || lineStr.includes("OGRENIM") || lineStr.includes("CONTINUING")) {
+            if (/Ö[GĞ]REN[İI][MN]/i.test(lineStr) || lineStr.includes("CONTINUING")) {
                 inTurkeyAddress = false;
                 break; // We reached the next section, stop parsing address
             }
