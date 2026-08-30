@@ -50,33 +50,31 @@ export async function loadPdfLibraries() {
 }
 export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, isPrint = false) {
     
-    // Bilgisayar ve Mobil ayrımı
-    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
-
-    // Bilgisayarda (Yazdır ve PDF) büyük fontlar, Mobilde (Yazdır ve PDF) küçük fontlar
+    // PC'deki çok beğenilen büyük ve okunaklı ayarları her iki cihaza da uyguluyoruz
     const s = {
-        wrapperPad: isMobile ? '6mm 10mm' : '4mm 14mm',
-        tableFont: isMobile ? '13px' : '14px',
-        tablePad: isMobile ? '6px 8px' : '7px 10px',
-        pFont: isMobile ? '12px' : '14px',
-        pMargin: isMobile ? '8px 0' : '14px 0',
-        pLineHeight: isMobile ? '1.4' : '1.6',
-        titleFont: isMobile ? '12.5px' : '15px',
-        listFont: isMobile ? '11.5px' : '13.5px',
-        listLineHeight: isMobile ? '1.3' : '1.5',
-        listMb: isMobile ? '2px' : '5px',
-        innerListMb: isMobile ? '1px' : '4px',
-        boxFont: isMobile ? '13px' : '15.5px',
-        boxMargin: isMobile ? '12px 0 6px 0' : '16px 0 8px 0',
-        boxPad: isMobile ? '6px' : '10px',
-        sigFont: isMobile ? '14px' : '15px',
-        sigPadBottom: isMobile ? '15mm' : '12mm'
+        wrapperPad: '4mm 14mm',
+        tableFont: '14px',
+        tablePad: '7px 10px',
+        pFont: '14px',
+        pMargin: '14px 0',
+        pLineHeight: '1.6',
+        titleFont: '15px',
+        listFont: '13.5px',
+        listLineHeight: '1.5',
+        listMb: '5px',
+        innerListMb: '4px',
+        boxFont: '15.5px',
+        boxMargin: '16px 0 8px 0',
+        boxPad: '10px',
+        sigFont: '15px',
+        sigPadBottom: '12mm'
     };
 
-    const printHeight = isMobile ? '98vh' : '99.5vh';
-
+    // Yazdırırken (isPrint = true) vh (ekran boyutu) KULLANMIYORUZ çünkü mobilde sayfayı kesiyor.
+    // Doğrudan A4 boyutu olan 295mm kullanıyoruz (297mm tam A4, 2mm tarayıcı payı).
+    // PDF (isPrint = false) için tam oran olan 1122px kullanıyoruz.
     const wrapperStyle = isPrint 
-        ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;height:${printHeight};margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
+        ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;height:295mm;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
         : `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;height:1122px;display:flex;flex-direction:column;overflow:hidden;`;
         
     return `
