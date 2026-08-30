@@ -55,7 +55,7 @@
                     // Veya aynı sütunda altta mı? (Sıkı X toleransı ile alt satıra taşan uzun veriler için)
                     const labelCenterX = (labelWord.bbox.x0 + labelWord.bbox.x1) / 2;
                     const wCenterX = (w.bbox.x0 + w.bbox.x1) / 2;
-                    const isBelow = w.bbox.y0 > labelWord.bbox.y0 + 5 && Math.abs(wCenterX - labelCenterX) < 30;
+                    const isBelow = w.bbox.y0 > labelWord.bbox.y0 + 5 && Math.abs(wCenterX - labelCenterX) < 120;
                     
                     if (!isRight && !isBelow) return false;
                     if (coordFormLabels.test(w.text)) return false; // Form etiketlerini atla
@@ -499,7 +499,7 @@
                 if (formLabels.test(word) || /personel|personal|information/i.test(word)) {
                     if (validParts.length > 0) break; // Ülke adından sonra etiket gelirse dur
                     skipped++;
-                    if (skipped > 4) break;
+                    if (skipped > 12) break;
                     continue; // Başlangıçtaki etiketleri (örn: Foreign, ID, Number) atla
                 }
                 
@@ -521,7 +521,7 @@
         }
 
         if (!extracted.uyrugu) {
-            const countryMatch = fullText.match(/(?:^|\s|[^a-zA-Z0-9_ğüşıöçĞÜŞİÖÇ])(T[ÜU]RKMEN[İI]STAN|[ÖO]ZBEK[İI]STAN|KIRGIZ[İI]STAN|KAZAK[İI]STAN|TAC[İI]K[İI]STAN|AZERBAYCAN|RUSYA|G[ÜU]RC[İI]STAN|ERMENISTAN|AFGAN[İI]STAN|PAK[İI]STAN|[İI]RAN|IRAK|S[UÜ]R[İI]YE|MISIR|LIBYA|TUNUS|FAS|SOMALI|YEMEN|L[İI]BNAN|FILISTIN)(?:$|\s|[^a-zA-Z0-9_ğüşıöçĞÜŞİÖÇ])/i);
+            const countryMatch = fullText.match(/(T[ÜU]RKMEN[İI]STAN|[ÖO]ZBEK[İI]STAN|KIRGIZ[İI]STAN|KAZAK[İI]STAN|TAC[İI]K[İI]STAN|AZERBAYCAN|RUSYA|G[ÜU]RC[İI]STAN|ERMENISTAN|AFGAN[İI]STAN|PAK[İI]STAN|[İI]RAN|IRAK|S[UÜ]R[İI]YE|MISIR|LIBYA|TUNUS|FAS|SOMALI|YEMEN|L[İI]BNAN|FILISTIN)/i);
             if (countryMatch) {
                 extracted.uyrugu = countryMatch[1].toLocaleUpperCase('tr-TR');
             }
