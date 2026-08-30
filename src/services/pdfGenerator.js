@@ -73,8 +73,10 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         sigPadBottom: isMobile ? '15mm' : '12mm'
     };
 
+    const printHeight = isMobile ? '98vh' : '99.5vh';
+
     const wrapperStyle = isPrint 
-        ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;height:98vh;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
+        ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:210mm;height:${printHeight};margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
         : `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;width:794px;height:1122px;display:flex;flex-direction:column;overflow:hidden;`;
         
     return `
