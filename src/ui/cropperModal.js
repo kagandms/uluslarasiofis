@@ -66,6 +66,11 @@ export function showCropperForFile(img, options) {
         cropBoxResizable: true,
         toggleDragModeOnDblclick: false,
         ready() {
+            // Telefonla çekilen fotoğrafların EXIF dönüş yönünü (örn: 90 derece)
+            // sıfırlamamak için resmin mevcut rotasyonunu temel (base) olarak alıyoruz.
+            const imageData = cropperInstance.getImageData();
+            baseRotation = imageData.rotate || 0;
+            
             window.dispatchEvent(new CustomEvent('cropperReady'));
         }
     });
