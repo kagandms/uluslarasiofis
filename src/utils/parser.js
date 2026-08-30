@@ -521,9 +521,9 @@
         }
 
         if (!extracted.uyrugu) {
-            const countryMatch = fullText.match(/\b(T[ÜU]RKMEN[İI]STAN|[ÖO]ZBEK[İI]STAN|KIRGIZ[İI]STAN|KAZAK[İI]STAN|TAC[İI]K[İI]STAN|AZERBAYCAN|RUSYA|G[ÜU]RC[İI]STAN|ERMENISTAN|AFGAN[İI]STAN|PAK[İI]STAN|[İI]RAN|IRAK|S[UÜ]R[İI]YE|MISIR|LIBYA|TUNUS|FAS|SOMALI|YEMEN|L[İI]BNAN|FILISTIN)\b/i);
+            const countryMatch = fullText.match(/(?:^|\s|[^a-zA-Z0-9_ğüşıöçĞÜŞİÖÇ])(T[ÜU]RKMEN[İI]STAN|[ÖO]ZBEK[İI]STAN|KIRGIZ[İI]STAN|KAZAK[İI]STAN|TAC[İI]K[İI]STAN|AZERBAYCAN|RUSYA|G[ÜU]RC[İI]STAN|ERMENISTAN|AFGAN[İI]STAN|PAK[İI]STAN|[İI]RAN|IRAK|S[UÜ]R[İI]YE|MISIR|LIBYA|TUNUS|FAS|SOMALI|YEMEN|L[İI]BNAN|FILISTIN)(?:$|\s|[^a-zA-Z0-9_ğüşıöçĞÜŞİÖÇ])/i);
             if (countryMatch) {
-                extracted.uyrugu = countryMatch[0];
+                extracted.uyrugu = countryMatch[1].toLocaleUpperCase('tr-TR');
             }
         }
 
@@ -643,23 +643,35 @@
                 // Address extraction
                 const adresIdx = lineStr.indexOf('ADRES');
                 const telIdx = lineStr.indexOf('TELEFON');
+                const phoneIdx = lineStr.indexOf('PHONE');
                 
+                // Remove mail and phone strings from line to not pollute address
+                let cleanAddrLine = lineStr;
+                if (mailMatch) cleanAddrLine = cleanAddrLine.replace(mailMatch[0], '');
+                if (phoneMatch) cleanAddrLine = cleanAddrLine.replace(phoneMatch[0], '');
+                
+                let endIdx = cleanAddrLine.length;
+                if (telIdx !== -1) endIdx = Math.min(endIdx, telIdx);
+                if (phoneIdx !== -1) endIdx = Math.min(endIdx, phoneIdx);
+                if (cleanAddrLine.indexOf('E POSTA') !== -1) endIdx = Math.min(endIdx, cleanAddrLine.indexOf('E POSTA'));
+                if (cleanAddrLine.indexOf('E-MAIL') !== -1) endIdx = Math.min(endIdx, cleanAddrLine.indexOf('E-MAIL'));
+                if (cleanAddrLine.indexOf('TAŞINMA') !== -1) endIdx = Math.min(endIdx, cleanAddrLine.indexOf('TAŞINMA'));
+                if (cleanAddrLine.indexOf('MOVING') !== -1) endIdx = Math.min(endIdx, cleanAddrLine.indexOf('MOVING'));
+
                 if (adresIdx !== -1) {
-                    let addrPart = lineStr.substring(adresIdx + 5).replace(/ADDRESS/i, '').trim();
-                    if (telIdx !== -1 && telIdx > adresIdx) {
-                        addrPart = lineStr.substring(adresIdx + 5, telIdx).replace(/ADDRESS/i, '').trim();
-                    }
+                    let addrPart = cleanAddrLine.substring(adresIdx + 5, endIdx).replace(/ADDRESS/i, '').trim();
                     if (addrPart.length > 5) {
                         addressText = addrPart;
                     }
-                } else if (addressText !== "" && !lineStr.includes("TELEFON") && !lineStr.includes("TAŞINMA") && !lineStr.includes("POSTA") && !lineStr.includes("MAIL") && !lineStr.includes("DATE") && !lineStr.includes("PHONE")) {
-                    // Append multi-line address
-                    let cleanLine = lineStr;
-                    if (telIdx !== -1) {
-                        cleanLine = lineStr.substring(0, telIdx).trim();
-                    }
-                    if (cleanLine.length > 3) {
-                        addressText += " " + cleanLine;
+                } else {
+                    let cleanLine = cleanAddrLine.substring(0, endIdx).replace(/ADDRESS/i, '').trim();
+                    // Exclude lines that are just labels
+                    if (!cleanLine.includes("TELEFON") && !cleanLine.includes("TAŞINMA") && !cleanLine.includes("POSTA") && !cleanLine.includes("MAIL") && !cleanLine.includes("DATE") && !cleanLine.includes("PHONE") && !cleanLine.includes("MOVING")) {
+                        if (addressText !== "") {
+                            if (cleanLine.length > 3) addressText += " " + cleanLine;
+                        } else if (cleanLine.length > 5) {
+                            addressText = cleanLine;
+                        }
                     }
                 }
             }

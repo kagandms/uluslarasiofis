@@ -58,8 +58,13 @@ export function populateFormNode(node, data) {
             if (key === 'uyrugu') {
                 const selectEl = fields.uyrugu;
                 let optionExists = false;
+                
+                const normalize = (str) => str ? str.toLocaleUpperCase('tr-TR').replace(/[UÜ]/g, 'U').replace(/[Iİ]/g, 'I').replace(/[OÖ]/g, 'O').replace(/[GĞ]/g, 'G').replace(/[SŞ]/g, 'S').replace(/[CÇ]/g, 'C').trim() : '';
+                const normalizedData = normalize(data[key]);
+
                 for (let i = 0; i < selectEl.options.length; i++) {
-                    if (selectEl.options[i].value === data[key]) {
+                    if (normalize(selectEl.options[i].value) === normalizedData) {
+                        data[key] = selectEl.options[i].value; // Fix the data to exactly match option value
                         optionExists = true;
                         break;
                     }
