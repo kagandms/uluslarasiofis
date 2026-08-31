@@ -21,7 +21,7 @@ export function showCropperForFile(img, options) {
 
     currentImageObj = img;
     cropperImage.src = img.src;
-    cropperModal.style.display = 'flex';
+    cropperModal.classList.add('show');
     customOptions = options || {};
 
     if (rotationSlider) rotationSlider.value = 0;
@@ -117,7 +117,7 @@ export function cleanupCropper() {
         cropperInstance = null;
     }
     if (cropperModal) {
-        cropperModal.style.display = 'none';
+        cropperModal.classList.remove('show');
     }
     currentImageObj = null;
     if (rotationSlider) rotationSlider.value = 0;
