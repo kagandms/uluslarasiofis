@@ -81,8 +81,8 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
             sigPadBottom: '16mm'
         },
         'MOBILE_PRINT': {
-            wrapperWidth: '100%',
-            wrapperHeight: '98.5vh', // 250mm yerine dinamik A4 yüksekliği (alt boşluğu kapatmak ve tek sayfada tutmak için)
+            wrapperWidth: '210mm',
+            wrapperHeight: '296mm', // A4 boyutu, orantılı küçülmesi için
             wrapperPad: '3mm 8mm',  
             tableFont: '12.5px',    
             tablePad: '5px 6px',    
@@ -98,7 +98,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
             boxMargin: '8px 0 4px 0',
             boxPad: '6px',
             sigFont: '14px',
-            sigPadBottom: '16mm'    // vh kullandığımız için alt boşluk dinamik ayarlanacak, çok devasa bir boşluğa gerek yok.
+            sigPadBottom: '16mm'    
         },
         'PC_PDF': {
             wrapperWidth: '794px',
