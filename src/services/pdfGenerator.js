@@ -82,7 +82,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         },
         'MOBILE_PRINT': {
             wrapperWidth: '210mm',
-            wrapperHeight: '287mm', // Hafif taşma (2. sayfa ucundan görünecek) bırakıldı ki yazıcı onu tek sayfaya kusursuz preslesin.
+            wrapperHeight: '282mm', // Taşmayı biraz daha azalttık, önizlemede minimal görünecek şekilde.
             wrapperPad: '3mm 8mm',  
             tableFont: '12.5px',    
             tablePad: '5px 6px',    

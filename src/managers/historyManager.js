@@ -1,5 +1,5 @@
 import { STORAGE_KEYS, HISTORY_MAX_DAYS } from '../config/constants.js';
-import { getFormDataFromNode } from '../ui/formManager.js';
+import { getFormDataFromNode, getFormElements } from '../ui/formManager.js';
 import { setActiveStep, STEP_IDS } from '../ui/stepWizard.js';
 import { showToast } from '../ui/toastManager.js';
 
