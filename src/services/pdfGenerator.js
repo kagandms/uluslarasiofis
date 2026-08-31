@@ -81,24 +81,24 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
             sigPadBottom: '16mm'
         },
         'MOBILE_PRINT': {
-            wrapperWidth: '210mm',
-            wrapperHeight: '250mm', // Taştığı için eski güvenli yüksekliğe (tek sayfa garantisi) geri çektik
-            wrapperPad: '3mm 8mm',  // Üst/Alt kenar boşluklarını biraz daha kıstık
-            tableFont: '12.5px',    // Yarım punto ufalttık
-            tablePad: '5px 6px',    // Tabloyu biraz daha daralttık
+            wrapperWidth: '100%',
+            wrapperHeight: '98.5vh', // 250mm yerine dinamik A4 yüksekliği (alt boşluğu kapatmak ve tek sayfada tutmak için)
+            wrapperPad: '3mm 8mm',  
+            tableFont: '12.5px',    
+            tablePad: '5px 6px',    
             pFont: '12.5px',
-            pMargin: '6px 0',       // Paragraf altı/üstü boşlukları kıstık (yer açmak için)
+            pMargin: '6px 0',       
             pLineHeight: '1.35',
             titleFont: '13.5px',
             listFont: '12px',
             listLineHeight: '1.35',
-            listMb: '3px',          // Madde imleri arasını kıstık
+            listMb: '3px',          
             innerListMb: '2px',
             boxFont: '13.5px',
             boxMargin: '8px 0 4px 0',
             boxPad: '6px',
             sigFont: '14px',
-            sigPadBottom: '25mm'    // 35mm taşırdı, 12mm dardı. Yukarıdan kazandığımız yerle 25mm tam sığacaktır.
+            sigPadBottom: '16mm'    // vh kullandığımız için alt boşluk dinamik ayarlanacak, çok devasa bir boşluğa gerek yok.
         },
         'PC_PDF': {
             wrapperWidth: '794px',
