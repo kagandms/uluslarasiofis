@@ -82,7 +82,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         },
         'MOBILE_PRINT': {
             wrapperWidth: '210mm',
-            wrapperHeight: '277mm', // 296mm 2. sayfaya taşırdı, 250mm kısa kaldı. 277mm yazıcı paylarını (top/bottom) tolere edecek ideal oran.
+            wrapperHeight: '287mm', // Hafif taşma (2. sayfa ucundan görünecek) bırakıldı ki yazıcı onu tek sayfaya kusursuz preslesin.
             wrapperPad: '3mm 8mm',  
             tableFont: '12.5px',    
             tablePad: '5px 6px',    
