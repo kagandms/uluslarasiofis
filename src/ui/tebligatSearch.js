@@ -69,6 +69,6 @@ export function initTebligatSearch() {
                 console.error(err);
                 searchResults.innerHTML = '<div style="color: red; text-align: center;">Bağlantı hatası oluştu.</div>';
             }
-        }, 400); // 400ms debounce
+        }, 200); // 200ms debounce
     });
 }
