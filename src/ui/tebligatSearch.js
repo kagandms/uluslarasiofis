@@ -50,7 +50,10 @@ export function initTebligatSearch() {
                     return;
                 }
 
-                searchResults.innerHTML = data.results.map(res => `
+                // Yeniden eskiye doğru sıralamak için sonuçları ters çevir
+                const reversedResults = [...data.results].reverse();
+
+                searchResults.innerHTML = reversedResults.map(res => `
                     <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px;">
                         <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">${res.isim}</div>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 0.95rem; color: var(--text-secondary);">
