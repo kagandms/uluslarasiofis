@@ -72,3 +72,58 @@ if (action === "unmark") {
 -------------------------------------------------
 ONEMLI NOT:
 Google Apps Script uzerinde bu degisiklikleri yaptiktan sonra mutlaka "Yeni Dagitim" (New Deployment) veya "Dagitimi Yonet -> Duzenle -> Yeni Surum" (Manage Deployments -> Edit -> New Version) diyerek kodlarinizi guncellemeyi unutmayin!
+
+-------------------------------------------------
+3. KOD BLOGU: SIFIRDAN YENI OGRENCI "EKLE" (ADD) ISLEMINI TANIMLAMA
+-------------------------------------------------
+Nereye eklenecek: doPost veya doGet fonksiyonunuzda action'lari (ornek: action === 'update') kontrol ettiginiz if/else veya switch/case yapisina, daha once ekledigimiz 'unmark' kodunun altina veya ustune eklenecek.
+Ne ise yariyor: Yazdirma ekranindaki "E-Tabloya Ekle" butonuna basildiginda ogrencinin otomatik olarak tabloya yeni bir numara (en son kalinan numara + 1) ile kaydedilmesini saglar.
+
+Eklenecek Kod:
+
+if (action === "add") {
+    var sayfa = e.parameter.sayfa; // Sekme adi (Haftanin pazartesi gunu GG.AA.YYYY formatinda gelir)
+    var isim = e.parameter.isim;   // Kisi adi ve soyadi (birlestirilmis halde gelir)
+    
+    // Gelen sayfa (sekme) adiyla o sayfayi ac
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sayfa);
+    
+    // Sayfa henuz yoksa hata donduruyoruz:
+    if (!sheet) {
+        return ContentService.createTextOutput(JSON.stringify({ 
+            success: false, 
+            error: "Bu haftanin sekmekesi (" + sayfa + ") bulunamadi. Lutfen once e-tablolarda bu adla bir sekme acin." 
+        })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var data = sheet.getDataRange().getValues();
+    
+    // B sutunundaki (No sutunu) en buyuk numarayi bulalim
+    var maxNo = 0;
+    
+    // Satirlari tara (0. satir baslik oldugu icin 1'den basliyoruz)
+    for (var i = 1; i < data.length; i++) {
+        var num = parseInt(data[i][1], 10);
+        if (!isNaN(num) && num > maxNo) {
+            maxNo = num;
+        }
+    }
+    
+    // Yeni numara: en buyuk numaranin 1 fazlasi. 
+    // Eger listede hic numara yoksa 1'den baslat.
+    var yeniNo = maxNo > 0 ? maxNo + 1 : 1;
+    
+    // Yeni yazilacak bos satiri bulalim.
+    var yeniSatir = sheet.getLastRow() + 1;
+    
+    // A sutununa Ismi, B sutununa Yeni Numarayi atiyoruz.
+    sheet.getRange(yeniSatir, 1).setValue(isim);
+    sheet.getRange(yeniSatir, 2).setValue(yeniNo);
+    
+    // Arayuze basarili mesaji ve atanan numarayi dondur
+    return ContentService.createTextOutput(JSON.stringify({ 
+        success: true, 
+        message: "Kayit eklendi",
+        assignedNo: yeniNo
+    })).setMimeType(ContentService.MimeType.JSON);
+}
