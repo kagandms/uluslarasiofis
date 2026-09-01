@@ -1,7 +1,11 @@
 import { verifyToken } from "./_auth.js";
 
 export default async function handler(req, res) {
-    if (!verifyToken(req)) {
+    const authStatus = verifyToken(req);
+    if (authStatus === "MISSING_CONFIG") {
+        return res.status(401).json({ error: "Sistemde SITE_PASSWORD ve JWT_SECRET ayarlanmamis!" });
+    }
+    if (!authStatus) {
         return res.status(401).json({ error: "Unauthorized" });
     }
     if (req.method !== 'POST') {
