@@ -130,7 +130,7 @@ export function initTebligatSearch() {
 
                     // Çakışmaları temizle
                     highlightedIsim = highlightedIsim.replace(/<mark[^>]*><mark[^>]*>/g, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px;">');
-                    highlightedIsim = highlightedIsim.replace(/<\\/mark><\\/mark>/g, '</mark>');
+                    highlightedIsim = highlightedIsim.replace(/<\/mark><\/mark>/g, '</mark>');
 
                     return `
                     <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px;">
