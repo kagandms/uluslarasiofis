@@ -57,8 +57,11 @@
                     <svg class="toggle-icon" style="transition: transform 0.3s;" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
                 <div class="card-body" id="tebligat-search-body" style="display: none; padding: 15px; border-top: 1px solid rgba(0,0,0,0.05);">
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <input type="search" id="tebligat-search-input" class="form-control" placeholder="Kişi ismi yazın (En az 2 harf)..." autocomplete="off" style="font-size: 1rem; padding: 12px; border: 2px solid var(--border-color); border-radius: 8px;">
+                    <div class="form-group" style="margin-bottom: 0; position: relative;">
+                        <input type="text" id="tebligat-search-input" class="form-control" placeholder="Kişi ismi yazın (En az 2 harf)..." autocomplete="off" style="font-size: 1rem; padding: 12px; padding-right: 40px; border: 2px solid var(--border-color); border-radius: 8px; width: 100%;">
+                        <button id="tebligat-search-clear" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 5px; cursor: pointer; color: var(--text-secondary); display: none; align-items: center; justify-content: center;">
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
                     </div>
                     <div id="tebligat-search-results" style="margin-top: 15px; max-height: 400px; overflow-y: auto;">
                         <!-- Sonuçlar buraya eklenecek -->

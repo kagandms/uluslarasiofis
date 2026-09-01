@@ -3,6 +3,7 @@ export function initTebligatSearch() {
     const searchBody = document.getElementById('tebligat-search-body');
     const searchInput = document.getElementById('tebligat-search-input');
     const searchResults = document.getElementById('tebligat-search-results');
+    const clearBtn = document.getElementById('tebligat-search-clear');
 
     if (!toggleBtn || !searchBody || !searchInput || !searchResults) return;
 
@@ -21,11 +22,24 @@ export function initTebligatSearch() {
         }
     });
 
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            clearBtn.style.display = 'none';
+            searchResults.innerHTML = '';
+            searchInput.focus();
+        });
+    }
+
     let debounceTimeout;
 
     searchInput.addEventListener('input', (e) => {
         const query = e.target.value.trim();
         
+        if (clearBtn) {
+            clearBtn.style.display = query.length > 0 ? 'flex' : 'none';
+        }
+
         clearTimeout(debounceTimeout);
 
         if (query.length < 2) {
