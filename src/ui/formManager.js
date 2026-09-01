@@ -131,6 +131,23 @@ export function renderStudentForms(studentsDataArray) {
         }
         
         populateFormNode(clone, data);
+        
+        const btnRetake1 = clone.querySelector('.btn-retake-page1');
+        const btnRecrop1 = clone.querySelector('.btn-recrop-page1');
+        const btnRetake2 = clone.querySelector('.btn-retake-page2');
+        const btnRecrop2 = clone.querySelector('.btn-recrop-page2');
+        
+        if (btnRetake1) btnRetake1.addEventListener('click', () => window.dispatchEvent(new CustomEvent('requestRetake', { detail: { index, page: 1 } })));
+        if (btnRecrop1) {
+            btnRecrop1.disabled = !data._page1Record;
+            btnRecrop1.addEventListener('click', () => window.dispatchEvent(new CustomEvent('requestRecrop', { detail: { index, page: 1, record: data._page1Record } })));
+        }
+        if (btnRetake2) btnRetake2.addEventListener('click', () => window.dispatchEvent(new CustomEvent('requestRetake', { detail: { index, page: 2 } })));
+        if (btnRecrop2) {
+            btnRecrop2.disabled = !data._page2Record;
+            btnRecrop2.addEventListener('click', () => window.dispatchEvent(new CustomEvent('requestRecrop', { detail: { index, page: 2, record: data._page2Record } })));
+        }
+        
         container.appendChild(clone);
     });
     

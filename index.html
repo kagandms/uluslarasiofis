@@ -110,6 +110,7 @@
                     <div id="upload-zone" style="border: none; padding: 0; min-height: 0; background: transparent; cursor: default;">
                         <input type="file" id="file-input" accept="image/*" class="hidden-input" multiple>
                         <input type="file" id="file-input-page2" accept="image/*" class="hidden-input">
+                        <input type="file" id="file-input-update" accept="image/*" class="hidden-input">
                         <img id="preview-image" alt="Önizleme" class="hidden">
                     </div>
                     
@@ -256,6 +257,11 @@
                                 <label for="field-dogum-tarihi" style="font-size: 0.75rem;">Doğum Tarihi</label>
                                 <input type="text" data-field="dogum-tarihi" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
                             </div>
+                            <div class="form-group full-width" style="display: flex; gap: 10px; margin-top: 5px; margin-bottom: 15px;">
+                                <button type="button" class="btn btn-outline btn-retake-page1" style="flex: 1; font-size: 0.75rem; padding: 0.4rem; color: var(--text-primary); border-color: var(--card-border);">📷 1. Sayfayı Tekrar Çek</button>
+                                <button type="button" class="btn btn-outline btn-recrop-page1" style="flex: 1; font-size: 0.75rem; padding: 0.4rem; color: var(--text-primary); border-color: var(--card-border);">✂️ 1. Sayfayı Yeniden Kırp</button>
+                            </div>
+                            
                             <div class="form-group full-width" style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
                                 <h3 style="font-size: 0.9rem; color: var(--text-primary); margin: 0;">2. Sayfa Bilgileri (İletişim)</h3>
                             </div>
@@ -270,6 +276,11 @@
                             <div class="form-group full-width">
                                 <label for="field-adres" style="font-size: 0.75rem;">Adres</label>
                                 <input type="text" data-field="adres" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
+                            
+                            <div class="form-group full-width" style="display: flex; gap: 10px; margin-top: 5px; margin-bottom: 15px;">
+                                <button type="button" class="btn btn-outline btn-retake-page2" style="flex: 1; font-size: 0.75rem; padding: 0.4rem; color: var(--text-primary); border-color: var(--card-border);">📷 2. Sayfayı Tekrar Çek</button>
+                                <button type="button" class="btn btn-outline btn-recrop-page2" style="flex: 1; font-size: 0.75rem; padding: 0.4rem; color: var(--text-primary); border-color: var(--card-border);">✂️ 2. Sayfayı Yeniden Kırp</button>
                             </div>
                         </div>
 
@@ -359,6 +370,10 @@
                 <button type="button" id="btn-crop-confirm" class="btn btn-primary" style="grid-column: span 2; width: 100%; padding: 12px; font-size: 1.05rem; align-items: center; justify-content: center; background-color: #c0392b; border-color: #c0392b; color: white;">
                     <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     Kırp ve İşle
+                </button>
+                <button type="button" id="btn-crop-update" class="btn btn-primary" style="grid-column: span 2; display: none; width: 100%; padding: 12px; font-size: 1.05rem; align-items: center; justify-content: center; background-color: #27ae60; border-color: #27ae60; color: white;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Güncelle
                 </button>
                 <button type="button" id="btn-skip-capture-next" class="btn btn-primary" style="grid-column: span 2; display: none; width: 100%; padding: 12px; font-size: 1rem; align-items: center; justify-content: center;">
                     <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>

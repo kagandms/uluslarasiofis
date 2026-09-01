@@ -1,6 +1,6 @@
 import { initTheme } from './ui/themeManager.js';
 import { setActiveStep, STEP_IDS } from './ui/stepWizard.js';
-import { renderStudentForms, getAllFormsData } from './ui/formManager.js';
+import { renderStudentForms, getAllFormsData, populateFormNode } from './ui/formManager.js';
 import { saveDraft, restoreDraft, clearDraft, initDraftAutoSave } from './managers/draftManager.js';
 import { historyManager, initHistoryPanel } from './managers/historyManager.js';
 import { showCropperForFile, getCroppedImage, cleanupCropper, initCropperControls } from './ui/cropperModal.js';
@@ -30,6 +30,8 @@ let isProcessingPage2 = false;
 let isSequentialCapture = false;
 let useCameraForPage2 = false;
 let studentsQueue = [];
+let page1BackgroundPromise = null;
+let updateState = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- Initializations ---
@@ -146,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (croppedImages.length > 0) {
                 for (let i = 0; i < croppedImages.length; i += 2) {
-                    studentsQueue.push([croppedImages[i], croppedImages[i+1] || null]);
+                    studentsQueue.push({ page1: croppedImages[i], page2: croppedImages[i+1] || null });
                 }
             }
             processAllStudents(studentsQueue);
@@ -188,6 +190,41 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    
+    const fileInputUpdate = document.getElementById('file-input-update');
+    if (fileInputUpdate) {
+        fileInputUpdate.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        showCropperForFile(img, { isUpdate: true, isPage2: updateState.page === 2 });
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(e.target.files[0]);
+                e.target.value = '';
+            }
+        });
+    }
+
+    window.addEventListener('requestRetake', (e) => {
+        updateState = e.detail;
+        if (fileInputUpdate) {
+            fileInputUpdate.setAttribute('capture', 'environment');
+            fileInputUpdate.click();
+        }
+    });
+
+    window.addEventListener('requestRecrop', (e) => {
+        updateState = e.detail;
+        if (updateState.record && updateState.record.original) {
+            showCropperForFile(updateState.record.original, { isUpdate: true, isPage2: updateState.page === 2 });
+        } else {
+            showToast('Orijinal görüntü bulunamadı.', 'error');
+        }
+    });
     
     if (uploadZone) {
         uploadZone.addEventListener('dragover', (e) => {
@@ -243,36 +280,52 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Cropper UI Handlers ---
     
-    function processNextStep(img, isAddingStudent = false) {
-        croppedImages.push(img);
+    function getCurrentOriginalImg() {
+        const el = document.getElementById('cropper-image');
+        if (!el || !el.src) return null;
+        const newImg = new Image();
+        newImg.src = el.src;
+        return newImg;
+    }
+
+    function processNextStep(img, isAddingStudent = false, isSkip = false) {
+        const originalImg = isSkip ? img : (getCurrentOriginalImg() || img);
+        const imgRecord = { cropped: img, original: originalImg };
+        
+        croppedImages.push(imgRecord);
+        
         if (isSequentialCapture && !isProcessingPage2) {
-            page1ImageObj = img;
+            page1ImageObj = imgRecord;
             cleanupCropper();
+            
+            // BACKGROUND OCR
+            const prep = prepareImageForOCR(imgRecord.cropped);
+            page1BackgroundPromise = runOCR(prep.dataUrl, prep.canvas, true, false, true);
+            page1ImageObj.backgroundPromise = page1BackgroundPromise;
+            
             setActiveStep(STEP_IDS.PAGE2_UPLOAD);
         } else {
             if (pendingFiles.length > 0) {
                 handleFile(pendingFiles.shift());
             } else if (isAddingStudent) {
-                // Add to queue and restart for new student
-                studentsQueue.push([page1ImageObj, img]);
+                studentsQueue.push({ page1: page1ImageObj, page2: imgRecord });
                 cleanupCropper();
                 croppedImages = [];
                 page1ImageObj = null;
                 isProcessingPage2 = false;
                 isSequentialCapture = false;
+                page1BackgroundPromise = null;
                 
-                // Show intermediate batch queue step
                 const countEl = document.getElementById('batch-queue-count');
                 if (countEl) countEl.textContent = studentsQueue.length;
                 setActiveStep(STEP_IDS.BATCH_QUEUE);
             } else {
                 cleanupCropper();
-                // Final process
-                if (page1ImageObj && img) {
-                    studentsQueue.push([page1ImageObj, img]);
+                if (page1ImageObj && imgRecord) {
+                    studentsQueue.push({ page1: page1ImageObj, page2: imgRecord });
                 } else if (croppedImages.length > 0) {
                     for (let i = 0; i < croppedImages.length; i += 2) {
-                        studentsQueue.push([croppedImages[i], croppedImages[i+1] || null]);
+                        studentsQueue.push({ page1: croppedImages[i], page2: croppedImages[i+1] || null });
                     }
                 }
                 processAllStudents(studentsQueue);
@@ -294,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const img = document.getElementById('cropper-image');
             const newImg = new Image();
             newImg.src = img.src;
-            processNextStep(newImg);
+            processNextStep(newImg, false, true);
         },
         onConfirm: () => {
             getCroppedImage((img) => processNextStep(img, false));
@@ -306,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const imgEl = document.getElementById('cropper-image');
             const newImg = new Image();
             newImg.src = imgEl.src;
-            processNextStep(newImg, true);
+            processNextStep(newImg, true, true);
         },
         onNext: () => {
             getCroppedImage((img) => processNextStep(img));
@@ -316,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const imgEl = document.getElementById('cropper-image');
             const newImg = new Image();
             newImg.src = imgEl.src;
-            processNextStep(newImg);
+            processNextStep(newImg, false, true);
             if (fileInputPage2) {
                 if(useCameraForPage2) fileInputPage2.setAttribute('capture', 'environment');
                 else fileInputPage2.removeAttribute('capture');
@@ -331,6 +384,44 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(useCameraForPage2) fileInputPage2.setAttribute('capture', 'environment');
                     else fileInputPage2.removeAttribute('capture');
                     fileInputPage2.click();
+                }
+            });
+        },
+        onUpdate: () => {
+            getCroppedImage(async (img) => {
+                const state = updateState;
+                updateState = null;
+                const originalImg = getCurrentOriginalImg() || img;
+                const imgRecord = { cropped: img, original: originalImg };
+                cleanupCropper();
+                
+                if (state) {
+                    const isPage2 = state.page === 2;
+                    const studentRecord = studentsQueue[state.index];
+                    if (studentRecord) {
+                        if (isPage2) studentRecord.page2 = imgRecord;
+                        else studentRecord.page1 = imgRecord;
+                    }
+                    
+                    setActiveStep(STEP_IDS.OCR_PROGRESS);
+                    try {
+                        const prep = prepareImageForOCR(imgRecord.cropped);
+                        const result = await runOCR(prep.dataUrl, prep.canvas, true, isPage2);
+                        
+                        const wrappers = document.querySelectorAll('.student-form-wrapper');
+                        const wrapper = Array.from(wrappers).find(w => parseInt(w.dataset.index) === state.index);
+                        if (wrapper && result) {
+                            populateFormNode(wrapper, result);
+                            showToast(`${state.page}. Sayfa başarıyla güncellendi.`, 'success');
+                            window.dispatchEvent(new Event('formChanged'));
+                        }
+                        setActiveStep(STEP_IDS.FORM_RESULT);
+                    } catch (err) {
+                        console.error('Update OCR Error', err);
+                        if (err.name !== 'AbortError' && err.message !== 'Aborted') {
+                            setActiveStep(STEP_IDS.FORM_RESULT);
+                        }
+                    }
                 }
             });
         }
@@ -377,28 +468,43 @@ document.addEventListener('DOMContentLoaded', () => {
         if (progressText) progressText.textContent = `${queue.length} öğrencinin belgeleri analiz ediliyor...`;
         
         try {
-            const ocrPromises = queue.map(studentImages => {
-                const img1 = studentImages[0];
-                const img2 = studentImages[1];
-                const p1 = prepareImageForOCR(img1);
-                const p2 = img2 ? prepareImageForOCR(img2) : null;
+            const results = [];
+            for (let i = 0; i < queue.length; i++) {
+                const studentImages = queue[i];
+                const page1Record = studentImages.page1;
+                const page2Record = studentImages.page2;
+                
+                const p1 = prepareImageForOCR(page1Record.cropped);
+                const p2 = page2Record ? prepareImageForOCR(page2Record.cropped) : null;
+                
+                let studentResult = {};
+                if (progressText) progressText.textContent = `${queue.length} öğrencinin ${i + 1}.si analiz ediliyor...`;
+                
+                let res1;
+                if (page1Record.backgroundPromise) {
+                    res1 = await page1Record.backgroundPromise;
+                } else {
+                    res1 = await runOCR(p1.dataUrl, p1.canvas, true, false);
+                }
                 
                 if (p2) {
-                    return Promise.all([
-                        runOCR(p1.dataUrl, p1.canvas, true, false),
-                        runOCR(p2.dataUrl, p2.canvas, true, true)
-                    ]).then(results => {
-                        // Merge results
-                        return { ...results[0], ...results[1] };
-                    });
+                    const res2 = await runOCR(p2.dataUrl, p2.canvas, true, true);
+                    studentResult = { ...res1, ...res2 };
                 } else {
-                    return runOCR(p1.dataUrl, p1.canvas, false, false);
+                    studentResult = res1 || {};
                 }
-            });
-            
-            const results = await Promise.all(ocrPromises);
-            
-            if (progressBar) progressBar.style.width = '100%';
+                
+                studentResult._page1Record = page1Record;
+                studentResult._page2Record = page2Record;
+                
+                results.push(studentResult);
+                
+                if (progressBar) {
+                    const percent = Math.round(((i + 1) / queue.length) * 100);
+                    progressBar.style.width = percent + '%';
+                    document.querySelectorAll('#progress-percentage').forEach(el => el.textContent = '%' + percent);
+                }
+            }
             
             renderStudentForms(results);
             setActiveStep(STEP_IDS.FORM_RESULT);

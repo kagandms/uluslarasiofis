@@ -36,9 +36,18 @@ export function showCropperForFile(img, options) {
     const btnCropAddStudent = document.getElementById('btn-crop-add-student');
     const btnCropSkipAddStudent = document.getElementById('btn-crop-skip-add-student');
 
+    const btnCropUpdate = document.getElementById('btn-crop-update');
     
-    
-    if (customOptions.hasMoreFiles) {
+    if (customOptions.isUpdate) {
+        if (btnCropConfirm) btnCropConfirm.style.display = 'none';
+        if (btnCropSkip) btnCropSkip.style.display = 'flex';
+        if (btnCropCaptureNext) btnCropCaptureNext.style.display = 'none';
+        if (btnSkipCaptureNext) btnSkipCaptureNext.style.display = 'none';
+        if (btnCropNext) btnCropNext.style.display = 'none';
+        if (btnCropAddStudent) btnCropAddStudent.style.display = 'none';
+        if (btnCropSkipAddStudent) btnCropSkipAddStudent.style.display = 'none';
+        if (btnCropUpdate) btnCropUpdate.style.display = 'flex';
+    } else if (customOptions.hasMoreFiles) {
         if (btnCropConfirm) btnCropConfirm.style.display = 'none';
         if (btnCropSkip) btnCropSkip.style.display = 'none';
         if (btnCropCaptureNext) btnCropCaptureNext.style.display = 'none';
@@ -46,6 +55,7 @@ export function showCropperForFile(img, options) {
         if (btnCropNext) btnCropNext.style.display = 'flex';
         if (btnCropAddStudent) btnCropAddStudent.style.display = 'none';
         if (btnCropSkipAddStudent) btnCropSkipAddStudent.style.display = 'none';
+        if (btnCropUpdate) btnCropUpdate.style.display = 'none';
     } else if (customOptions.isFirstImage && !customOptions.isPage2) {
         if (btnCropConfirm) btnCropConfirm.style.display = 'flex';
         if (btnCropSkip) btnCropSkip.style.display = 'flex';
@@ -54,6 +64,7 @@ export function showCropperForFile(img, options) {
         if (btnCropNext) btnCropNext.style.display = 'none';
         if (btnCropAddStudent) btnCropAddStudent.style.display = 'none';
         if (btnCropSkipAddStudent) btnCropSkipAddStudent.style.display = 'none';
+        if (btnCropUpdate) btnCropUpdate.style.display = 'none';
     } else {
         if (btnCropConfirm) btnCropConfirm.style.display = 'flex';
         if (btnCropSkip) btnCropSkip.style.display = 'flex';
@@ -62,6 +73,7 @@ export function showCropperForFile(img, options) {
         if (btnCropNext) btnCropNext.style.display = 'none';
         if (btnCropAddStudent) btnCropAddStudent.style.display = 'flex';
         if (btnCropSkipAddStudent) btnCropSkipAddStudent.style.display = 'flex';
+        if (btnCropUpdate) btnCropUpdate.style.display = 'none';
     }
 
     cropperInstance = new window.Cropper(cropperImage, {
@@ -138,4 +150,5 @@ export function initCropperControls(handlers) {
     document.getElementById('btn-crop-capture-next')?.addEventListener('click', handlers.onCropCaptureNext);
     document.getElementById('btn-crop-add-student')?.addEventListener('click', handlers.onCropAddStudent);
     document.getElementById('btn-crop-skip-add-student')?.addEventListener('click', handlers.onCropSkipAddStudent);
+    document.getElementById('btn-crop-update')?.addEventListener('click', handlers.onUpdate);
 }

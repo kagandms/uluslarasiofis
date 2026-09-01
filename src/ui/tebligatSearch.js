@@ -24,6 +24,8 @@ export function initTebligatSearch() {
 
         if (isHidden) {
             searchInput.focus();
+        } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     });
 

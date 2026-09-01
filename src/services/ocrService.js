@@ -26,7 +26,7 @@ export function cancelOCR() {
 // Global access for UI inline onclicks
 window.cancelOCR = cancelOCR;
 
-export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPage2 = false) {
+export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPage2 = false, isSilent = false) {
     const controller = new AbortController();
     activeAbortControllers.add(controller);
 
@@ -34,6 +34,7 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
     const progressText = document.getElementById('progress-text');
 
     const updateProgress = (text, percent) => {
+        if (isSilent) return;
         if (progressText) progressText.textContent = text;
         if (progressBar) {
             progressBar.style.width = percent + '%';
@@ -129,10 +130,6 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
                     serverExtracted[key] = fallbackExtracted[key];
                 }
             });
-            if (!serverExtracted.uyrugu && fallbackExtracted._rawText) {
-                // If it still failed, dump raw OCR text to basvuruNo for the user to see/screenshot
-                serverExtracted.basvuruNo = "OCR HATA: " + fallbackExtracted._rawText.replace(/\n/g, ' ').substring(0, 150);
-            }
             extractedData = serverExtracted;
         }
         updateProgress('İşlem Tamamlandı', 100);
@@ -150,7 +147,7 @@ export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPa
         activeAbortControllers.delete(controller);
         if (error.name === 'AbortError' || error.message === 'Aborted') {
             console.log('OCR İptal Edildi');
-            return null;
+            throw error;
         }
 
         console.error('OCR Hatası:', error);
