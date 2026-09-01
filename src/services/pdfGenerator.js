@@ -82,7 +82,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         },
         'MOBILE_PRINT': {
             wrapperWidth: '210mm',
-            wrapperHeight: '274mm', // Taşmayı biraz daha azalttık, önizlemede minimal görünecek şekilde.
+            wrapperHeight: '271mm', // Taşmayı biraz daha azalttık, önizlemede minimal görünecek şekilde.
             wrapperPad: '3mm 8mm',  
             tableFont: '12.5px',    
             tablePad: '5px 6px',    
