@@ -1,8 +1,3 @@
-export const GOOGLE_VISION_API_KEYS = [
-    'AIzaSyDYxXNcg1XH9YR-I6fyVdsoZjxryFj27tU', // 1. API
-    'AIzaSyDdi7G0dHDDPOEuhaGYhYmVfIA2mYhuniM', // 2. API
-    ''  // 3. API
-];
 
 export const STORAGE_KEYS = {
     HISTORY: 'ikamet-history',

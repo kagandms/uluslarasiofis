@@ -1,4 +1,3 @@
-import { GOOGLE_VISION_API_KEYS } from '../config/constants.js';
 import { extractFromCoordinates, extractPage2FromCoordinates, extractFields } from '../utils/parser.js';
 import { prepareImageForOCR } from './imageProcessor.js';
 import { showToast } from '../ui/toastManager.js';
