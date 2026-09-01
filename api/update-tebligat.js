@@ -1,4 +1,9 @@
+import { verifyToken } from "./_auth.js";
+
 export default async function handler(req, res) {
+    if (!verifyToken(req)) {
+        return res.status(401).json({ error: "Unauthorized" });
+    }
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }

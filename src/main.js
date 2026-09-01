@@ -1,3 +1,98 @@
+
+// --- Authentication Logic ---
+let currentToken = localStorage.getItem('site_token') || sessionStorage.getItem('site_token');
+
+function checkAuth() {
+    const overlay = document.getElementById('login-overlay');
+    if (!overlay) return;
+
+    if (currentToken) {
+        overlay.style.display = 'none';
+    } else {
+        overlay.style.display = 'flex';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    checkAuth();
+
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('login-password').value;
+            const rememberMe = document.getElementById('login-remember').checked;
+            const btn = document.getElementById('btn-login-submit');
+            const errorDiv = document.getElementById('login-error');
+
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> Bekleyiniz...';
+            btn.disabled = true;
+            errorDiv.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password, rememberMe })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.token) {
+                    currentToken = data.token;
+                    if (rememberMe) {
+                        localStorage.setItem('site_token', data.token);
+                    } else {
+                        sessionStorage.setItem('site_token', data.token);
+                    }
+                    document.getElementById('login-overlay').style.display = 'none';
+                    if (window.showToast) window.showToast('Giriş başarılı!', 'success');
+                } else {
+                    throw new Error(data.error || 'Giriş başarısız');
+                }
+            } catch (err) {
+                errorDiv.textContent = err.message;
+                errorDiv.style.display = 'block';
+            } finally {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        });
+    }
+});
+
+// Intercept fetch calls to add Authorization header and handle 401
+const originalFetch = window.fetch;
+window.fetch = async function() {
+    let [resource, config] = arguments;
+    
+    // Sadece /api isteklerine token ekle (ve login harici)
+    if (typeof resource === 'string' && resource.startsWith('/api') && !resource.startsWith('/api/login')) {
+        config = config || {};
+        config.headers = config.headers || {};
+        
+        // Headers nesnesiyse veya düz objeyse Authorization ekle
+        if (config.headers instanceof Headers) {
+            config.headers.append('Authorization', `Bearer ${currentToken}`);
+        } else {
+            config.headers['Authorization'] = `Bearer ${currentToken}`;
+        }
+    }
+    
+    const response = await originalFetch(resource, config);
+    
+    if (response.status === 401 && typeof resource === 'string' && resource.startsWith('/api') && !resource.startsWith('/api/login')) {
+        // Token expired or invalid
+        currentToken = null;
+        localStorage.removeItem('site_token');
+        sessionStorage.removeItem('site_token');
+        const overlay = document.getElementById('login-overlay');
+        if (overlay) overlay.style.display = 'flex';
+        if (window.showToast) window.showToast('Oturum süresi doldu, lütfen tekrar giriş yapın.', 'warning');
+    }
+    
+    return response;
+};
 import { initTheme } from './ui/themeManager.js';
 import { setActiveStep, STEP_IDS } from './ui/stepWizard.js';
 import { renderStudentForms, getAllFormsData, populateFormNode } from './ui/formManager.js';
