@@ -8,6 +8,7 @@ import { prepareImageForOCR } from './services/imageProcessor.js';
 import { runOCR, cancelOCR } from './services/ocrService.js';
 import { generateAndDownloadPdf, printDocument } from './services/pdfGenerator.js';
 import { showToast } from './ui/toastManager.js';
+import { initTebligatSearch } from './ui/tebligatSearch.js';
 
 // --- Clear Old PWA Service Workers ---
 if ('serviceWorker' in navigator) {
@@ -34,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Initializations ---
     initTheme();
     initHistoryPanel();
+    initTebligatSearch();
     
     initDraftAutoSave();
     
