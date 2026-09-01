@@ -135,9 +135,15 @@ export function initTebligatSearch() {
                     highlightedIsim = highlightedIsim.replace(/<\/mark><\/mark>/g, '</mark>');
 
                     return `
-                    <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px;">
-                        <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">${highlightedIsim}</div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 0.95rem; color: var(--text-secondary);">
+                    <div class="tebligat-result-card" data-sayfa="${res.sayfa}" data-isim="${res.isim}" data-no="${res.no || ''}" style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary); flex: 1;">${highlightedIsim}</div>
+                            <button class="btn btn-outline btn-mark-tebligat" style="padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; display: flex; align-items: center; gap: 4px; border-color: var(--card-border); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;" title="İşaretle ve Tarih Ekle">
+                                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                İşaretle
+                            </button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; color: var(--text-secondary);">
                             <span style="display: flex; align-items: center; gap: 4px;">
                                 <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
                                 Sayfa: ${res.sayfa}
@@ -155,5 +161,59 @@ export function initTebligatSearch() {
                 searchResults.innerHTML = '<div style="color: red; text-align: center;">Bağlantı hatası oluştu.</div>';
             }
         }, 200); // 200ms debounce
+    });
+
+    // Delegasyon ile işaretleme butonlarını dinle
+    searchResults.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.btn-mark-tebligat');
+        if (!btn) return;
+
+        const card = btn.closest('.tebligat-result-card');
+        if (!card) return;
+
+        const sayfa = card.dataset.sayfa;
+        const isim = card.dataset.isim;
+        const no = card.dataset.no;
+
+        // Butonu yükleniyor durumuna al
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> İşleniyor...';
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/api/update-tebligat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ sayfa, isim, no })
+            });
+
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                // Başarılı durumu
+                btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
+                btn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+                btn.style.color = '#27ae60';
+                btn.style.borderColor = '#27ae60';
+                
+                // İsteğe bağlı olarak toast mesajı gösterebiliriz
+                if (window.showToast) {
+                    window.showToast('E-Tablo güncellendi (İsim yeşil oldu, C kolonuna tarih yazıldı).', 'success');
+                }
+            } else {
+                throw new Error(data.error || 'Güncelleme başarısız');
+            }
+        } catch (error) {
+            console.error('Update error:', error);
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+            if (window.showToast) {
+                window.showToast('Hata: ' + error.message, 'error');
+            } else {
+                alert('Hata: ' + error.message);
+            }
+        }
     });
 }
