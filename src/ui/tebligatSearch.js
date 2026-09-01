@@ -59,7 +59,7 @@ export function initTebligatSearch() {
                                 Sayfa: ${res.sayfa}
                             </span>
                             <span style="font-weight: 600; color: var(--accent); background: rgba(33, 150, 243, 0.1); padding: 4px 8px; border-radius: 12px;">
-                                No: ${res.no || '-'} (Satır: ${res.satir})
+                                No: ${res.no || '-'}
                             </span>
                         </div>
                     </div>
