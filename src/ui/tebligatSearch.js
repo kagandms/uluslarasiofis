@@ -141,15 +141,25 @@ export function initTebligatSearch() {
                     // Eğer API'den 'isMarked' veya 'isaretli' gibi bir alan gelirse onu da destekleyelim
                     const isMarked = res.isMarked || res.isaretli || isMarkedLocally;
 
-                    const buttonHtml = isMarked
-                        ? `<button class="btn btn-outline btn-mark-tebligat marked" style="padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; display: flex; align-items: center; gap: 4px; border-color: #27ae60; color: #27ae60; background-color: rgba(39, 174, 96, 0.1); cursor: default;" disabled title="İşaretlendi">
-                                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                İşaretlendi
-                           </button>`
-                        : `<button class="btn btn-outline btn-mark-tebligat" style="padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; display: flex; align-items: center; gap: 4px; border-color: var(--card-border); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;" title="İşaretle ve Tarih Ekle">
-                                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                                İşaretle
-                           </button>`;
+                    const markBtnStyle = isMarked
+                        ? `border-color: #27ae60; color: #27ae60; background-color: rgba(39, 174, 96, 0.1); cursor: default;`
+                        : `border-color: var(--card-border); color: var(--text-secondary); cursor: pointer;`;
+                    
+                    const markBtnContent = isMarked
+                        ? `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi`
+                        : `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> İşaretle`;
+
+                    const buttonHtml = `
+                        <div class="tebligat-actions" style="display: flex; gap: 6px;">
+                            <button class="btn btn-outline btn-mark-tebligat ${isMarked ? 'marked' : ''}" ${isMarked ? 'disabled' : ''} style="padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; display: flex; align-items: center; gap: 4px; transition: all 0.2s; ${markBtnStyle}" title="İşaretle">
+                                ${markBtnContent}
+                            </button>
+                            <button class="btn btn-outline btn-unmark-tebligat" style="display: ${isMarked ? 'flex' : 'none'}; padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; align-items: center; gap: 4px; border-color: #e74c3c; color: #e74c3c; background-color: rgba(231, 76, 60, 0.1); cursor: pointer; transition: all 0.2s;" title="İşareti Kaldır">
+                                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                Kaldır
+                            </button>
+                        </div>
+                    `;
 
                     return `
                     <div class="tebligat-result-card" data-sayfa="${res.sayfa}" data-isim="${res.isim}" data-no="${res.no || ''}" style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
@@ -214,6 +224,13 @@ export function initTebligatSearch() {
                 btn.style.borderColor = '#27ae60';
                 btn.style.cursor = 'default';
                 btn.classList.add('marked');
+                btn.disabled = true;
+                
+                // Kaldır butonunu görünür yap
+                const unmarkBtn = card.querySelector('.btn-unmark-tebligat');
+                if (unmarkBtn) {
+                    unmarkBtn.style.display = 'flex';
+                }
                 
                 // LocalStorage'a kaydet ki sayfayı yenileyince de yeşil kalsın
                 const uniqueId = `${sayfa}-${isim}-${no || ''}`;
@@ -228,6 +245,75 @@ export function initTebligatSearch() {
             }
         } catch (error) {
             console.error('Update error:', error);
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+            if (window.showToast) {
+                window.showToast('Hata: ' + error.message, 'error');
+            } else {
+                alert('Hata: ' + error.message);
+            }
+        }
+    });
+
+    // Delegasyon ile işareti kaldırma butonlarını dinle
+    searchResults.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.btn-unmark-tebligat');
+        if (!btn) return;
+        if (btn.disabled) return;
+
+        const card = btn.closest('.tebligat-result-card');
+        if (!card) return;
+
+        const sayfa = card.dataset.sayfa;
+        const isim = card.dataset.isim;
+        const no = card.dataset.no;
+
+        // Butonu yükleniyor durumuna al
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div>...';
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/api/unmark-tebligat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ sayfa, isim, no })
+            });
+
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                // Başarılı durumu: Kaldır butonunu gizle
+                btn.style.display = 'none';
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+
+                // İşaretle butonunu eski haline getir
+                const markBtn = card.querySelector('.btn-mark-tebligat');
+                if (markBtn) {
+                    markBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> İşaretle';
+                    markBtn.style.backgroundColor = 'transparent';
+                    markBtn.style.color = 'var(--text-secondary)';
+                    markBtn.style.borderColor = 'var(--card-border)';
+                    markBtn.style.cursor = 'pointer';
+                    markBtn.classList.remove('marked');
+                    markBtn.disabled = false;
+                }
+                
+                // LocalStorage'dan sil
+                const uniqueId = `${sayfa}-${isim}-${no || ''}`;
+                localStorage.removeItem('tebligat_marked_' + uniqueId);
+                
+                if (window.showToast) {
+                    window.showToast('İşaret başarıyla kaldırıldı.', 'success');
+                }
+            } else {
+                throw new Error(data.error || 'İşlem başarısız');
+            }
+        } catch (error) {
+            console.error('Unmark error:', error);
             btn.innerHTML = originalHtml;
             btn.disabled = false;
             if (window.showToast) {
