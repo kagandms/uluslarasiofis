@@ -104,16 +104,32 @@ export function initTebligatSearch() {
 
                 const reversedResults = [...data.results].reverse();
                 
-                // Güvenli regex ile aranan kelimeyi bulmak için query'yi temizle
                 const safeQuery = query.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-                const highlightRegex = new RegExp(`(${safeQuery})`, 'gi');
+                const words = safeQuery.split(/\\s+/).filter(w => w.length > 0);
 
                 searchResults.innerHTML = reversedResults.map(res => {
-                    // İsim içindeki aranan metni vurgula
-                    const highlightedIsim = res.isim.replace(
-                        highlightRegex, 
-                        '<span style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px;">$1</span>'
-                    );
+                    let highlightedIsim = res.isim;
+                    
+                    // Her kelime için ayrı ayrı (ve esnek) vurgulama yap
+                    words.forEach(word => {
+                        // Sesli harfleri ve V/W harflerini esnek yap
+                        let pattern = word.replace(/[aeıioöuüAEIİOÖUÜ]/g, '[aeıioöuüAEIİOÖUÜ]');
+                        pattern = pattern.replace(/[vwVW]/g, '[vwVW]');
+                        
+                        try {
+                            // HTML tagları içine girmemesi için basit bir kontrol (isimlerde 'span' vs geçmez varsayıyoruz)
+                            const highlightRegex = new RegExp(`(${pattern})`, 'gi');
+                            // Sadece bir kere highlight etmek için (çakışmaları önlemek adına)
+                            highlightedIsim = highlightedIsim.replace(
+                                highlightRegex, 
+                                '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px; background-image: none;">$1</mark>'
+                            );
+                        } catch(e) {}
+                    });
+
+                    // Eğer üst üste mark eklendiyse temizle (basit güvenlik)
+                    highlightedIsim = highlightedIsim.replace(/<mark[^>]*><mark[^>]*>/g, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px;">');
+                    highlightedIsim = highlightedIsim.replace(/<\\/mark><\\/mark>/g, '</mark>');
 
                     return `
                     <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px;">
