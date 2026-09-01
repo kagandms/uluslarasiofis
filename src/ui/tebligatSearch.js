@@ -11,6 +11,11 @@ export function initTebligatSearch() {
         const isHidden = searchBody.style.display === 'none';
         searchBody.style.display = isHidden ? 'block' : 'none';
         
+        const hint = document.getElementById('tebligat-search-hint');
+        if (hint) {
+            hint.style.display = isHidden ? 'none' : 'inline';
+        }
+        
         // Ok yönünü değiştir
         const icon = toggleBtn.querySelector('.toggle-icon');
         if (icon) {

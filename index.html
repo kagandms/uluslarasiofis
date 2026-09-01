@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
@@ -48,11 +48,11 @@
 
         <main class="container">
             <!-- Tebligat Arama Paneli -->
-            <section class="card" style="margin-bottom: 20px; border: 1px solid var(--accent); overflow: hidden;">
+            <section class="card" style="margin-bottom: 50px; border: 1px solid var(--accent); overflow: hidden;">
                 <div class="card-header" id="tebligat-search-toggle" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 15px; background: rgba(33, 150, 243, 0.05);">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="var(--accent)" stroke-width="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                        <h2 class="section-title" style="margin-bottom: 0; font-size: 1.1rem; color: var(--accent);">Tebliğ / Tebligat Arama</h2>
+                        <h2 class="section-title" style="margin-bottom: 0; font-size: 1.1rem; color: var(--accent);">Tebliğ / Tebligat Arama <span id="tebligat-search-hint" style="font-size: 0.85rem; font-weight: normal; color: var(--text-secondary); margin-left: 10px;">(Aramak için tıklayınız)</span></h2>
                     </div>
                     <svg class="toggle-icon" style="transition: transform 0.3s;" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </div>
@@ -70,7 +70,7 @@
             </section>
 
             <!-- Step Indicators -->
-            <div class="step-indicators">
+            <div class="step-indicators" style="margin-bottom: 1.5rem;">
                 <div id="indicator-1" class="step active" data-step="1">
                     <div class="step-circle">1</div>
                     <div class="step-label">Yükle</div>
@@ -102,6 +102,11 @@
                     </div>
 
                 <div class="card glass-card">
+                    <div style="text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--card-border);">
+                        <h2 style="font-size: 1.3rem; color: var(--text-primary); margin-bottom: 8px;">İkamet Dosyası Kapağı Hazırlama</h2>
+                        <p style="font-size: 0.95rem; color: var(--text-secondary);">Kapak oluşturmak için belge fotoğrafı yükleyin veya formu manuel doldurun.</p>
+                    </div>
+
                     <div id="upload-zone" style="border: none; padding: 0; min-height: 0; background: transparent; cursor: default;">
                         <input type="file" id="file-input" accept="image/*" class="hidden-input" multiple>
                         <input type="file" id="file-input-page2" accept="image/*" class="hidden-input">
