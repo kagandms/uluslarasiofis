@@ -16,11 +16,11 @@ export default async function handler(req, res) {
     }
 
     try {
-        const fetchUrl = \\?key=\&q=\\;
+        const fetchUrl = `${appsScriptUrl}?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}`;
         const response = await fetch(fetchUrl);
         
         if (!response.ok) {
-            throw new Error(\Apps Script responded with status: \\);
+            throw new Error(`Apps Script responded with status: ${response.status}`);
         }
 
         const data = await response.json();
