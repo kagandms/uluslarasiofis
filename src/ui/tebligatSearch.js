@@ -110,16 +110,12 @@ export function initTebligatSearch() {
                 searchResults.innerHTML = reversedResults.map(res => {
                     let highlightedIsim = res.isim;
                     
-                    // Her kelime için ayrı ayrı (ve esnek) vurgulama yap
+                    // Sadece I/İ/i/ı harflerini esnek yap
                     words.forEach(word => {
-                        // Sesli harfleri ve V/W harflerini esnek yap
-                        let pattern = word.replace(/[aeıioöuüAEIİOÖUÜ]/g, '[aeıioöuüAEIİOÖUÜ]');
-                        pattern = pattern.replace(/[vwVW]/g, '[vwVW]');
+                        let pattern = word.replace(/[iıiİI]/gi, '[iıiİI]');
                         
                         try {
-                            // HTML tagları içine girmemesi için basit bir kontrol (isimlerde 'span' vs geçmez varsayıyoruz)
                             const highlightRegex = new RegExp(`(${pattern})`, 'gi');
-                            // Sadece bir kere highlight etmek için (çakışmaları önlemek adına)
                             highlightedIsim = highlightedIsim.replace(
                                 highlightRegex, 
                                 '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px; background-image: none;">$1</mark>'
@@ -127,7 +123,7 @@ export function initTebligatSearch() {
                         } catch(e) {}
                     });
 
-                    // Eğer üst üste mark eklendiyse temizle (basit güvenlik)
+                    // Çakışmaları temizle
                     highlightedIsim = highlightedIsim.replace(/<mark[^>]*><mark[^>]*>/g, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px;">');
                     highlightedIsim = highlightedIsim.replace(/<\\/mark><\\/mark>/g, '</mark>');
 
