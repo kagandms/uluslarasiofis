@@ -8,7 +8,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Query must be at least 2 characters long' });
     }
 
-    const appsScriptUrl = process.env.APPS_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbzfsugfRmiLNav44HsSS3FErz8TkLdBtYnZgU0F8esHkJDWWV5ZX4gcNIxtnpS4JfsCJQ/exec";
+    const appsScriptUrl = process.env.APPS_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbwEHZ6-Iz-uohq4yeJRMvgNn5zXeHB6vqBRfBqvpBKai-elnKwJFSiX3EuprOPihnWHOQ/exec";
     const apiKey = process.env.APPS_SCRIPT_API_KEY || 'GIZLI_SIFRE_123';
 
     if (!appsScriptUrl) {
