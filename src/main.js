@@ -590,6 +590,65 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    document.addEventListener('click', async (e) => {
+        const btnAdd = e.target.closest('.btn-add-to-sheet');
+        if (btnAdd) {
+            const wrapper = btnAdd.closest('.student-form-wrapper');
+            if (!wrapper) return;
+
+            // Get Adı and Soyadı
+            const inputAdi = wrapper.querySelector('input[data-field="adi"]');
+            const inputSoyadi = wrapper.querySelector('input[data-field="soyadi"]');
+            const isim = `${inputAdi ? inputAdi.value.trim() : ''} ${inputSoyadi ? inputSoyadi.value.trim() : ''}`.trim();
+
+            if (!isim) {
+                showToast('Lütfen önce ad ve soyad bilgisini doldurun.', 'warning');
+                return;
+            }
+
+            // Calculate Monday's date for current week
+            const today = new Date();
+            const day = today.getDay();
+            const diff = today.getDate() - day + (day === 0 ? -6 : 1); 
+            const monday = new Date(today.setDate(diff));
+            const dd = String(monday.getDate()).padStart(2, '0');
+            const mm = String(monday.getMonth() + 1).padStart(2, '0');
+            const yyyy = monday.getFullYear();
+            const sayfa = `${dd}.${mm}.${yyyy}`;
+
+            // Set button to loading
+            const originalHtml = btnAdd.innerHTML;
+            btnAdd.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> Ekleniyor...';
+            btnAdd.disabled = true;
+
+            try {
+                const response = await fetch('/api/add-tebligat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sayfa, isim })
+                });
+                
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    btnAdd.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> Eklendi: No ${data.assignedNo || '-'}`;
+                    btnAdd.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+                    btnAdd.style.color = '#27ae60';
+                    btnAdd.style.borderColor = '#27ae60';
+                    btnAdd.style.cursor = 'default';
+                    // We keep it disabled so it can't be added twice
+                    showToast(`Başarılı: ${sayfa} sayfasına ${data.assignedNo || '-'} numarasıyla eklendi!`, 'success');
+                } else {
+                    throw new Error(data.error || 'Ekleme başarısız');
+                }
+            } catch (err) {
+                console.error(err);
+                btnAdd.innerHTML = originalHtml;
+                btnAdd.disabled = false;
+                showToast(`Hata: ${err.message}`, 'error');
+            }
+        }
+    });
+
     
     // --- Online/Offline Listener ---
     const updateOnlineStatus = () => {
