@@ -156,7 +156,6 @@ export function initTebligatSearch() {
         abortController = new AbortController();
 
         debounceTimeout = setTimeout(async () => {
-            // Skeleton (Yükleniyor) Gösterimi
             const skeletonHTML = `
                 <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
                     <div class="skeleton-box" style="height: 20px; width: 60%; border-radius: 4px;"></div>
@@ -170,86 +169,46 @@ export function initTebligatSearch() {
             
             let allResults = [];
             const qLower = query.toLowerCase();
-            
-            // 1. Önce Cache'den Ara (Anında Sonuç)
-            const cachedStr = localStorage.getItem('tebligat_excel_cache');
-            if (cachedStr) {
-                try {
-                    const cacheArr = JSON.parse(cachedStr);
-                    const cacheMatches = cacheArr.filter(r => r.isim.toLowerCase().includes(qLower));
-                    // Sadece benzersizleri ekle (isim ve no bazında)
-                    cacheMatches.forEach(match => {
-                        allResults.push(match);
-                    });
-                } catch (e) {}
-            }
-            
-            // 2. Canlı Sunucudan Ara (Sadece son aylar taranırsa çok hızlı döner)
-            try {
-                const response = await fetch(`/api/search-tebligat?q=${encodeURIComponent(query)}`, {
-                    signal: abortController.signal
-                });
-                const data = await response.json();
-                
-                if (data.results && data.results.length > 0) {
-                    data.results.forEach(apiRes => {
-                        // Eğer cache'den bulduğumuzla çakışıyorsa, API'den geleni tercih edebiliriz (daha güncel olabilir)
-                        // Şimdilik sadece array'e ekleyip uniq filtresi yapalım
-                        allResults.push(apiRes);
-                    });
+
+            // Render fonksiyonu
+            const renderResults = (resultsArray, isFinal = false, errorMessage = null) => {
+                if (resultsArray.length === 0) {
+                    if (isFinal) {
+                        searchResults.innerHTML = errorMessage 
+                            ? `<div style="color: red; text-align: center;">Hata: ${errorMessage}</div>` 
+                            : '<div style="text-align: center; color: var(--text-secondary); padding: 10px;">Sonuç bulunamadı.</div>';
+                    }
+                    return;
                 }
-            } catch (err) {
-                if (err.name === 'AbortError') return;
-                console.error(err);
-                // Sunucu hata verse bile cache'den sonuç bulmuş olabiliriz, o yüzden işlemi tamamen kesmiyoruz.
-            }
-            
-            // Sonuçları tekilleştir
-            const uniqueResults = [];
-            const seen = new Set();
-            for (const r of allResults) {
-                const key = r.sayfa + '_' + r.no;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    uniqueResults.push(r);
+
+                const uniqueResults = [];
+                const seen = new Set();
+                for (const r of resultsArray) {
+                    const key = r.sayfa + '_' + r.no;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        uniqueResults.push(r);
+                    }
                 }
-            }
 
-            if (uniqueResults.length === 0) {
-                searchResults.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 10px;">Sonuç bulunamadı.</div>';
-                return;
-            }
+                const reversedResults = uniqueResults.reverse();
+                const safeQuery = query.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const words = safeQuery.split(/\s+/).filter(w => w.length > 0);
 
-            const reversedResults = uniqueResults.reverse();
-            
-            const safeQuery = query.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-            const words = safeQuery.split(/\s+/).filter(w => w.length > 0);
-
-            searchResults.innerHTML = reversedResults.map(res => {
+                let html = reversedResults.map(res => {
                     let highlightedIsim = res.isim;
-                    
-                    // Sadece I/İ/i/ı harflerini esnek yap
                     words.forEach(word => {
                         let pattern = word.replace(/[iıiİI]/gi, '[iıiİI]');
-                        
                         try {
                             const highlightRegex = new RegExp(`(${pattern})`, 'gi');
-                            highlightedIsim = highlightedIsim.replace(
-                                highlightRegex, 
-                                '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px; background-image: none;">$1</mark>'
-                            );
+                            highlightedIsim = highlightedIsim.replace(highlightRegex, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px; background-image: none;">$1</mark>');
                         } catch(e) {}
                     });
-
-                    // Çakışmaları temizle
                     highlightedIsim = highlightedIsim.replace(/<mark[^>]*><mark[^>]*>/g, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px;">');
                     highlightedIsim = highlightedIsim.replace(/<\/mark><\/mark>/g, '</mark>');
 
-                    // İşaretlenme durumunu Local Storage'dan kontrol et
                     const uniqueId = `${res.sayfa}-${res.isim}-${res.no || ''}`;
                     const isMarkedLocally = localStorage.getItem('tebligat_marked_' + uniqueId) === 'true';
-                    
-                    // Eğer API'den 'isMarked' veya 'isaretli' gibi bir alan gelirse onu da destekleyelim
                     const isMarked = res.isMarked || res.isaretli || isMarkedLocally;
 
                     const markBtnStyle = isMarked
@@ -291,13 +250,52 @@ export function initTebligatSearch() {
                     `;
                 }).join('');
 
-            } catch (err) {
-                if (err.name === 'AbortError') {
-                    // İstek iptal edildi, loglamaya veya hata göstermeye gerek yok
+                if (errorMessage) {
+                    html += `<div style="text-align: center; color: #e67e22; padding: 10px; font-size: 0.85rem; font-weight: bold;">Uyarı: API yanıt vermedi. Yalnızca önbellekteki (Excel) veriler listelendi. Yeni kayıtlar için tekrar deneyin.</div>`;
+                } else if (!isFinal) {
+                    html += `<div style="text-align: center; color: var(--text-secondary); padding: 10px; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 6px;"><div class="spinner" style="width:12px; height:12px; border-width: 2px;"></div> Sunucuda yeni kayıtlar aranıyor...</div>`;
+                }
+
+                searchResults.innerHTML = html;
+            };
+
+            // 1. Önce Cache'den Ara (Anında Sonuç)
+            const cachedStr = localStorage.getItem('tebligat_excel_cache');
+            if (cachedStr) {
+                try {
+                    const cacheArr = JSON.parse(cachedStr);
+                    const cacheMatches = cacheArr.filter(r => r.isim.toLowerCase().includes(qLower));
+                    cacheMatches.forEach(match => allResults.push(match));
+                    
+                    if (allResults.length > 0) {
+                        renderResults(allResults, false);
+                    }
+                } catch (e) {}
+            }
+            
+            // 2. Canlı Sunucudan Ara
+            try {
+                const response = await fetch(`/api/search-tebligat?q=${encodeURIComponent(query)}`, {
+                    signal: abortController.signal
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    renderResults(allResults, true, data.error);
                     return;
                 }
+
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach(apiRes => allResults.push(apiRes));
+                }
+                
+                renderResults(allResults, true);
+                
+            } catch (err) {
+                if (err.name === 'AbortError') return;
                 console.error(err);
-                searchResults.innerHTML = '<div style="color: red; text-align: center;">Bağlantı hatası oluştu.</div>';
+                // Sunucu hata verse bile cache ekranda kalır
+                renderResults(allResults, true, "Zaman aşımı");
             }
         }, 400); // 400ms debounce
     });
@@ -439,3 +437,5 @@ export function initTebligatSearch() {
         }
     });
 }
+
+
