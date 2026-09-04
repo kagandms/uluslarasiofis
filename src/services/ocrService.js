@@ -1,0 +1,165 @@
+import { extractFromCoordinates, extractPage2FromCoordinates, extractFields } from '../utils/parser.js';
+import { prepareImageForOCR } from './imageProcessor.js';
+import { showToast } from '../ui/toastManager.js';
+import { setActiveStep, STEP_IDS } from '../ui/stepWizard.js';
+
+
+let currentApiKeyIndex = 0;
+const activeAbortControllers = new Set();
+
+export function cancelOCR() {
+    let aborted = false;
+    for (const controller of activeAbortControllers) {
+        controller.abort();
+        aborted = true;
+    }
+    activeAbortControllers.clear();
+    
+    // Clear processing UI state handled by main.js via event
+    if (aborted) {
+        window.dispatchEvent(new CustomEvent('ocrCancelled'));
+        showToast('İşlem iptal edildi.', 'info');
+    }
+}
+
+// Global access for UI inline onclicks
+window.cancelOCR = cancelOCR;
+
+export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPage2 = false, isSilent = false) {
+    const controller = new AbortController();
+    activeAbortControllers.add(controller);
+
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+
+    const updateProgress = (text, percent) => {
+        if (isSilent) return;
+        if (progressText) progressText.textContent = text;
+        if (progressBar) {
+            progressBar.style.width = percent + '%';
+            document.querySelectorAll('#progress-percentage').forEach(el => el.textContent = '%' + percent);
+        }
+    };
+
+    try {
+        updateProgress('Belge taranıyor...', 10);
+        
+        // Canvas üzerinden Blob oluştur (Base64'ten %33 daha ufak payload)
+        // Azure JPEG formatını sorunsuz desteklediği için image/jpeg kullanıyoruz
+        const blob = await new Promise(resolve => {
+            sourceCanvas.toBlob(resolve, 'image/jpeg', 0.85);
+        });
+        
+        let response = null;
+        let data = null;
+
+        const tryFetch = async (url, options) => {
+            const apiController = new AbortController();
+            const apiTimeout = setTimeout(() => apiController.abort(), 60000);
+            
+            const abortHandler = () => {
+                clearTimeout(apiTimeout);
+                apiController.abort();
+            };
+            controller.signal.addEventListener('abort', abortHandler);
+
+            try {
+                const res = await fetch(url, {
+                    ...options,
+                    signal: apiController.signal
+                });
+                clearTimeout(apiTimeout);
+                controller.signal.removeEventListener('abort', abortHandler);
+                return res;
+            } catch (e) {
+                clearTimeout(apiTimeout);
+                controller.signal.removeEventListener('abort', abortHandler);
+                throw e;
+            }
+        };
+
+        updateProgress('Sunucuya bağlanılıyor...', 40);
+        
+        response = await tryFetch('/api/ocr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: blob
+        });
+
+        if (!response.ok) {
+            throw new Error(response.status === 500 ? 'Sunucu ayarları eksik veya tüm servisler başarısız oldu.' : `Sunucu Hatası: ${response.status}`);
+        }
+        data = await response.json();
+
+        updateProgress('Metinler okunuyor...', 90);
+
+        if (!data || !data.responses || !data.responses[0].textAnnotations || data.responses[0].textAnnotations.length === 0) {
+            throw new Error('Görselde okunabilir bir metin bulunamadı. Lütfen daha net bir fotoğraf çekin.');
+        }
+
+        const annotations = data.responses[0].textAnnotations;
+        const serverText = annotations[0].description;
+        
+        if (!isPage2 && document.getElementById('ocr-raw-text')) {
+            document.getElementById('ocr-raw-text').value = serverText;
+        }
+        
+        const serverWords = annotations.slice(1).map(ann => ({
+            text: ann.description,
+            bbox: {
+                x0: ann.boundingPoly.vertices[0].x,
+                y0: ann.boundingPoly.vertices[0].y,
+                x1: ann.boundingPoly.vertices[2].x,
+                y1: ann.boundingPoly.vertices[2].y
+            },
+            confidence: 1.0
+        }));
+
+
+        let extractedData = {};
+        if (isPage2) {
+            extractedData = extractPage2FromCoordinates(serverWords);
+        } else {
+            let serverExtracted = {};
+            extractFromCoordinates(serverWords, serverExtracted);
+            let fallbackExtracted = extractFields(serverText);
+
+            ['basvuruNo', 'soyadi', 'adi', 'uyrugu', 'dogumTarihi', 'pasaportNo'].forEach(key => {
+                if (!serverExtracted[key] && fallbackExtracted[key]) {
+                    serverExtracted[key] = fallbackExtracted[key];
+                }
+            });
+            extractedData = serverExtracted;
+        }
+        updateProgress('İşlem Tamamlandı', 100);
+        activeAbortControllers.delete(controller);
+        
+        if (!skipStep3) {
+            setTimeout(() => {
+                setActiveStep(STEP_IDS.FORM_RESULT);
+            }, 500);
+        }
+
+        return extractedData;
+
+    } catch (error) {
+        activeAbortControllers.delete(controller);
+        if (error.name === 'AbortError' || error.message === 'Aborted') {
+            console.log('OCR İptal Edildi');
+            throw error;
+        }
+
+        console.error('OCR Hatası:', error);
+        
+        let msg = error.message || 'Okuma sırasında bir hata oluştu.';
+        if (msg.includes('Failed to fetch') || msg.includes('Load failed')) {
+            msg = 'İnternet bağlantınızı kontrol edip tekrar deneyin.';
+        }
+        
+        msg = msg.length > 150 ? msg.substring(0, 147) + "..." : msg;
+        showToast(msg, 'error');
+        
+        window.dispatchEvent(new CustomEvent('ocrError'));
+        throw error;
+    }
+}

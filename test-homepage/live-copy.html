@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>İstanbul Topkapı Üniversitesi Uluslararası Öğrenci İşlemleri Portalı</title>
+    <link rel="icon" type="image/png" href="/icon.png?v=3">
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#f8fafc">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="İkamet">
+    <link rel="apple-touch-icon" href="/icon.png?v=3">
+
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="./live-copy.css">
+    
+    <!-- CDNs -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    
+    <!-- App Script -->
+    <script type="module" src="./app.js"></script>
+</head>
+<body>
+    <!-- LOGIN OVERLAY -->
+    <div id="login-overlay" style="display: none;">
+        <div class="card glass-card" style="width: 100%; max-width: 400px; padding: 2rem; text-align: center;">
+            <img src="../header_logo.jpg" alt="Logo" style="height: 60px; margin-bottom: 1rem; border-radius: 8px;">
+            <h2 class="title" style="font-size: 1.5rem; margin-bottom: 1.5rem;">Sisteme Giriş</h2>
+            
+            <form id="login-form" style="display: flex; flex-direction: column; gap: 1rem;">
+                <div class="form-group" style="text-align: left;">
+                    <label for="login-password" style="font-size: 0.85rem; margin-bottom: 0.5rem; display: block;">Şifre</label>
+                    <input type="password" id="login-password" class="glass-input" placeholder="Şifrenizi giriniz" required style="width: 100%; padding: 0.8rem;">
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-start; margin-bottom: 0.5rem;">
+                    <input type="checkbox" id="login-remember" style="width: 16px; height: 16px; accent-color: var(--accent);">
+                    <label for="login-remember" style="font-size: 0.85rem; cursor: pointer;">Beni Hatırla</label>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" id="btn-login-submit" style="width: 100%; padding: 0.8rem; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+                    Giriş Yap
+                </button>
+                <div id="login-error" style="color: #e74c3c; font-size: 0.85rem; margin-top: 0.5rem; display: none;">Hatalı şifre!</div>
+            </form>
+        </div>
+    </div>
+    <!-- Main App Content -->
+    <div id="app-content">
+        <header class="app-header">
+            <div class="header-content">
+                <a href="/"><img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" alt="İstanbul Topkapı Üniversitesi" class="logo-img"></a>
+                <div style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
+                    <h1>İstanbul Topkapı Üniversitesi Uluslararası Öğrenci İşlemleri Portalı</h1>
+                    <div class="header-actions" style="display: flex; align-items: center; gap: 8px;">
+
+                        <button id="btn-install-pwa" class="btn-header" title="Uygulamayı Yükle" style="display: none;">
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <span class="hide-mobile">Yükle</span>
+                        </button>
+                        <button onclick="if(window.caches){caches.keys().then(k=>k.forEach(c=>caches.delete(c))).then(()=>{window.location.href = window.location.pathname + '?v=' + new Date().getTime()})}else{window.location.href = window.location.pathname + '?v=' + new Date().getTime()}" class="btn-header" title="Sistemi Güncelle">
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                            <span class="hide-mobile">Güncelle</span>
+                        </button>
+                        <button id="btn-dark-mode" class="btn-header icon-only" title="Gece/Gündüz Modu">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                        </button>
+                        <span class="version-badge">v2.0</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="container">
+            <section id="home-screen" class="home-screen" aria-labelledby="home-screen-title">
+                <div class="home-screen-intro">
+                    <span class="home-screen-kicker">İŞLEM MERKEZİ</span>
+                    <h2 id="home-screen-title">Bugün ne yapmak istersiniz?</h2>
+                    <p>Devam etmek için bir işlem seçin.</p>
+                </div>
+                <div class="home-actions" role="list" aria-label="İşlem seçenekleri">
+                    <button class="home-action" type="button" data-view="ykn">
+                        <span class="home-action-icon">⌕</span>
+                        <span class="home-action-copy"><strong>YKN</strong><small>Apply Topkapı’da öğrenci ara</small></span>
+                        <span class="home-action-arrow" aria-hidden="true">→</span>
+                    </button>
+                    <button class="home-action" type="button" data-view="cover">
+                        <span class="home-action-icon">▣</span>
+                        <span class="home-action-copy"><strong>Kapak Hazırla</strong><small>İkamet dosyası kapağı oluştur</small></span>
+                        <span class="home-action-arrow" aria-hidden="true">→</span>
+                    </button>
+                    <button class="home-action" type="button" data-view="teblig">
+                        <span class="home-action-icon">⌕</span>
+                        <span class="home-action-copy"><strong>Tebliğ Bul</strong><small>e-Tablolarda kayıt ara</small></span>
+                        <span class="home-action-arrow" aria-hidden="true">→</span>
+                    </button>
+                </div>
+            </section>
+
+            <div id="workspace-content" class="workspace-content hidden">
+                <div class="workspace-toolbar">
+                    <button id="back-to-home" class="back-home" type="button">← Ana menü</button>
+                    <span id="workspace-label" class="workspace-label">İşlem alanı</span>
+                </div>
+                <nav class="workspace-nav" aria-label="İşlem alanları">
+                    <button type="button" data-view="ykn">YKN</button>
+                    <button type="button" data-view="cover">Kapak Hazırla</button>
+                    <button type="button" data-view="teblig">Tebliğ Bul</button>
+                </nav>
+            <!-- Tebligat Arama Paneli -->
+            <section id="teblig-view" class="view-panel card" style="margin-bottom: 50px; border: 1px solid var(--accent); overflow: hidden;">
+                <div class="card-header" id="tebligat-search-toggle" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 15px; background: rgba(33, 150, 243, 0.05);">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="var(--accent)" stroke-width="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <h2 class="section-title" style="margin-bottom: 0; font-size: 1.1rem; color: var(--accent);">Tebliğ / Tebligat Arama <span id="tebligat-search-hint" style="font-size: 0.85rem; font-weight: normal; color: var(--text-secondary); margin-left: 10px;">(Aramak için tıklayınız)</span></h2>
+                    </div>
+                    <svg class="toggle-icon" style="transition: transform 0.3s;" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+                <div class="card-body" id="tebligat-search-body" style="display: none; padding: 15px; border-top: 1px solid rgba(0,0,0,0.05);">
+                    <div class="form-group" style="margin-bottom: 0; position: relative;">
+                        <input type="text" id="tebligat-search-input" class="form-control" placeholder="Kişi ismi yazın (En az 2 harf)..." autocomplete="off" style="font-size: 1rem; padding: 12px; padding-right: 40px; border: 2px solid var(--border-color); border-radius: 8px; width: 100%;">
+                        <button id="tebligat-search-clear" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 5px; cursor: pointer; color: var(--text-secondary); display: none; align-items: center; justify-content: center;">
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                    </div>
+                    <div id="tebligat-search-results" style="margin-top: 15px; max-height: 400px; overflow-y: auto;">
+                        <!-- Sonuçlar buraya eklenecek -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- YKN Operasyon Paneli -->
+            <section id="ykn-view" class="view-panel card glass-card" style="margin-bottom: 2rem; border: 1px solid var(--accent); overflow: hidden;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: rgba(139, 0, 0, 0.05);">
+                    <div style="display: flex; align-items: center; gap: 8px;"><span style="color: var(--accent); font-size: 1.25rem;">⌕</span><h2 class="section-title" style="margin: 0; font-size: 1.1rem; color: var(--accent);">YKN İşlemleri</h2></div>
+                    <span style="font-size: 0.75rem; color: var(--success);">● Eklenti hazır</span>
+                </div>
+                <div class="card-body" style="padding: 18px;">
+                    <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 14px;">Pasaport numarasıyla Apply Topkapı’da öğrenci arayın.</p>
+                    <form id="student-search-form" style="display: flex; gap: 10px; align-items: end; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 220px;"><label for="passport-number" style="display: block; margin-bottom: 6px; font-size: 0.8rem; font-weight: 600;">Pasaport Numarası</label><input id="passport-number" name="passport" type="text" class="form-control" placeholder="Pasaport numarasını giriniz" autocomplete="off" style="width: 100%; padding: 11px; border: 1px solid var(--border-color); border-radius: 7px;"></div>
+                        <button class="btn btn-primary" type="submit">Apply’da Ara ⌕</button>
+                    </form>
+                    <small style="display: block; margin-top: 8px; color: var(--text-secondary); font-size: 0.7rem;">Apply Topkapı’da oturumunuz açık olmalıdır.</small>
+                </div>
+            </section>
+
+            <div class="step-indicators ykn-dependent" style="margin-bottom: 1.5rem;">
+                <div class="step active"><div class="step-circle">1</div><div class="step-label">Apply araması</div></div><div class="step-line"></div><div class="step"><div class="step-circle">2</div><div class="step-label">Bilgileri hazırlama</div></div><div class="step-line"></div><div class="step"><div class="step-circle">3</div><div class="step-label">YÖKSİS aktarımı</div></div>
+            </div>
+
+            <section class="card glass-card ykn-dependent" id="student-result" style="margin-bottom: 1.5rem; min-height: 240px;" aria-live="polite">
+                <div class="empty-state" id="empty-state" style="min-height: 240px; display: grid; place-content: center; justify-items: center; text-align: center;"><div style="color: var(--accent); font-size: 1.5rem;">⌕</div><h2 style="font-size: 1.1rem; margin: 8px 0 4px;">Öğrenci araması bekleniyor</h2><p style="color: var(--text-secondary); font-size: 0.8rem;">Arama sonucunda öğrenci bilgileri burada görüntülenecek.</p></div>
+                <div class="result-content hidden" id="result-content" style="padding: 20px;"><div style="display: flex; justify-content: space-between; align-items: center;"><div><small style="color: var(--accent); font-weight: 700; letter-spacing: .08em;">APPLY TOPKAPI SONUCU</small><h2 style="font-size: 1.2rem; margin: 4px 0 0;">Öğrenci Bulundu</h2></div><span style="color: var(--success); font-size: .75rem;">● Profil hazır</span></div><div style="display:flex; align-items:center; gap:10px; margin:16px 0; padding:13px 0; border-top:1px solid var(--card-border); border-bottom:1px solid var(--card-border);"><div style="width:36px;height:36px;display:grid;place-items:center;color:var(--accent);background:#f9e9ec;border-radius:50%;font-weight:700;font-size:10px;">AM</div><div><strong style="display:block; font-size:13px;">Ahmet Mehmetov</strong><span id="student-passport" style="display:block;color:var(--text-secondary);font-size:10px;margin-top:3px;">U12345678 · Azerbaycan</span></div></div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;"><div style="padding:9px;border-left:3px solid var(--success);background:#f7fbf8;font-size:10px;">✓ Öğrenci bilgileri<small id="info-status" style="display:block;color:var(--text-secondary);margin-top:3px;">Hazır</small></div><div style="padding:9px;border-left:3px solid var(--success);background:#f7fbf8;font-size:10px;">✓ Pasaport tarihleri<small id="passport-status" style="display:block;color:var(--text-secondary);margin-top:3px;">Hazır</small></div><div id="letter-status-card" style="padding:9px;border-left:3px solid #b7791f;background:#fffaf2;font-size:10px;">○ Kabul mektubu kodu<small id="letter-status" style="display:block;color:var(--text-secondary);margin-top:3px;">Henüz alınmadı</small></div></div><div class="action-buttons" style="display:flex;gap:9px;flex-wrap:wrap;margin-top:16px;"><button class="btn btn-primary" id="copy-info" type="button">Bilgileri Kopyala</button><button class="btn" id="copy-letter" type="button" style="background: transparent; color: var(--accent); border: 1px solid var(--accent);">Kabul Mektubu Kodunu Kopyala</button></div><div class="result-feedback hidden" id="result-feedback" style="margin-top:10px;padding:9px;background:#f0f8f2;color:var(--success);font-size:10px;"></div></div>
+            </section>
+
+            <section class="card glass-card hidden ykn-dependent" id="transfer-card" style="margin-bottom: 1.5rem; border-left: 4px solid var(--accent);"><div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px;"><div><small style="color:var(--accent);font-weight:700;letter-spacing:.08em;">SONRAKİ ADIM</small><h2 style="font-size:1.15rem;margin:4px 0;">YÖKSİS’e Aktarım</h2><p style="color:var(--text-secondary);font-size:.8rem;margin:0;">Kabul kodu hazır. YÖKSİS’te aramayı başlatabilirsiniz.</p></div><div style="display:grid;gap:8px;justify-items:end;"><button class="btn btn-primary" id="send-yoksis" type="button">YÖKSİS’e Aktar ↗</button><button class="text-button" id="paste-yoksis" type="button" style="border:0;background:none;color:var(--accent);font-size:10px;">Bilgileri YÖKSİS’e Yapıştır</button></div></div></section>
+
+            <!-- Step Indicators -->
+            <div class="step-indicators cover-dependent" style="margin-bottom: 1.5rem;">
+                <div id="indicator-1" class="step active" data-step="1">
+                    <div class="step-circle">1</div>
+                    <div class="step-label">Yükle</div>
+                </div>
+                <div class="step-line"></div>
+                <div id="indicator-2" class="step" data-step="2">
+                    <div class="step-circle">2</div>
+                    <div class="step-label">İşleniyor</div>
+                </div>
+                <div class="step-line"></div>
+                <div id="indicator-3" class="step" data-step="3">
+                    <div class="step-circle">3</div>
+                    <div class="step-label">Sonuç</div>
+                </div>
+            </div>
+
+            <!-- Step 1: Upload Section -->
+            <section id="cover-view" class="view-panel">
+            <section id="step-1" class="step-content active">
+                
+                    <div id="daily-counter-widget" class="daily-counter" style="display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); border: 1px solid var(--card-border); padding: 12px 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="var(--accent)" stroke-width="2" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                            <span id="daily-counter-date" style="font-weight: 500; color: var(--text-primary);">Tarih</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="color: var(--text-secondary); font-size: 0.9rem;">Bugün İşlenen:</span>
+                            <span id="daily-counter-count" style="background: var(--accent); color: white; padding: 4px 12px; border-radius: 20px; font-weight: bold; font-size: 1rem;">0</span>
+                        </div>
+                    </div>
+
+                <div class="card glass-card">
+                    <div style="text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--card-border);">
+                        <h2 style="font-size: 1.3rem; color: var(--text-primary); margin-bottom: 8px;">İkamet Dosyası Kapağı Hazırlama</h2>
+                        <p style="font-size: 0.95rem; color: var(--text-secondary);">Kapak oluşturmak için belge fotoğrafı yükleyin veya formu manuel doldurun.</p>
+                    </div>
+
+                    <div id="upload-zone" style="border: none; padding: 0; min-height: 0; background: transparent; cursor: default;">
+                        <input type="file" id="file-input" accept="image/*" class="hidden-input" multiple>
+                        <input type="file" id="file-input-page2" accept="image/*" class="hidden-input">
+                        <input type="file" id="file-input-update" accept="image/*" class="hidden-input">
+                        <img id="preview-image" alt="Önizleme" class="hidden">
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <div id="upload-wrapper" style="display:inline-block;" onclick="if(!navigator.onLine) showToast('İnternet yok. Tarama yapılamaz, manuel giriş yapabilirsiniz.', 'warning');">
+                            <button id="btn-upload" class="btn btn-primary" onclick="document.getElementById('file-input').removeAttribute('capture'); document.getElementById('file-input').click()">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                            Fotoğraf Yükle
+                        </button>
+                        </div>
+                        <button id="btn-manual-entry" class="btn" style="background: var(--card-border); color: var(--text-primary); border-color: var(--card-border);">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            Formu Manuel Doldur
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 1.5: Page 2 Capture (Ara Adım) -->
+            <section id="step-page2" class="step-content">
+                <div class="card glass-card" style="text-align: center; padding: 2rem;">
+                    <svg viewBox="0 0 24 24" width="48" height="48" stroke="var(--accent)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem;">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                    </svg>
+                    <h2 style="margin-bottom: 0.5rem; font-size: 1.2rem;">1. Sayfa Kaydedildi ✓</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.95rem;">Şimdi belgenin <strong>2. sayfasını</strong> yükleyin.</p>
+                    <button type="button" id="btn-upload-page2" class="btn btn-primary" style="width: 100%; padding: 0.9rem; font-size: 1rem;">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        2. Sayfa Fotoğrafı Yükle
+                    </button>
+                    <button type="button" id="btn-cancel-page2" class="btn btn-outline" style="width: 100%; margin-top: 0.75rem; padding: 0.7rem; font-size: 0.9rem;">
+                        Vazgeç (Sadece 1. Sayfayı İşle)
+                    </button>
+                </div>
+            </section>
+
+            
+            <!-- Step 1.8: Batch Queue -->
+            <section id="step-batch-queue" class="step-content hidden">
+                <div class="card glass-card" style="text-align: center; padding: 2.5rem 1.5rem;">
+                    <div style="width: 64px; height: 64px; background: var(--accent); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem auto; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                        <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </div>
+                    <h2 style="margin-bottom: 0.5rem; font-size: 1.5rem; color: var(--text-primary);"><span id="batch-queue-count" style="color: var(--accent); font-weight: 800;">1</span> Öğrenci Sırada</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 2rem; font-size: 0.95rem; line-height: 1.5;">Fotoğraflar başarıyla sıraya alındı.<br>Yeni bir öğrenci ekleyebilir veya sıradakileri tek seferde işleyebilirsiniz.</p>
+                    
+                    <button type="button" id="btn-batch-process" class="btn btn-secondary" style="width: 100%; padding: 1rem; font-size: 1.05rem; margin-bottom: 1rem; justify-content: center;">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 8px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        Sıradakileri İşle
+                    </button>
+                    
+                    <button type="button" id="btn-batch-add-new" class="btn btn-primary" style="width: 100%; padding: 1rem; font-size: 1.05rem; justify-content: center;">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 8px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        Yeni Öğrenci Ekle (1. Fotoğrafı Çek)
+                    </button>
+                </div>
+            </section>
+            
+            <!-- Step 2: Processing Section -->
+            <section id="step-2" class="step-content">
+                <div class="card glass-card processing-card">
+                    <div class="spinner"></div>
+                    <h2 id="progress-text">Form Analiz Ediliyor...</h2>
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 15px; width: 100%; max-width: 400px; margin: 1.5rem 0;">
+                        <div class="progress-container" style="flex: 1;">
+                            <div id="progress-bar" class="progress-bar"></div>
+                        </div>
+                        <span id="progress-percentage" style="font-weight: bold; color: var(--accent); min-width: 45px; text-align: right; font-size: 0.9rem;">%0</span>
+                    </div>
+                    <p class="processing-subtitle">Sistem metinleri çözümlüyor, lütfen bekleyin.</p>
+                    <button type="button" id="btn-cancel-ocr" class="btn btn-outline btn-cancel-ocr">
+                        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        İptal Et
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 3: Results Section -->
+            <section id="step-3" class="step-content">
+                <div class="card glass-card result-form">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+                        <h2 class="subtitle" style="margin-bottom: 0;">Kontrol ve Düzenleme</h2>
+                        <span id="history-today-badge" class="history-badge" style="display: none;">Bugün: 0</span>
+                    </div>
+                    
+                    <div id="students-forms-container"></div>
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        
+                        <button type="button" id="btn-clear-form-global" class="btn btn-outline" style="flex: 1; color: var(--text-secondary); border-color: var(--card-border);">
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            Tümünü Temizle
+                        </button>
+                        <button type="button" id="btn-go-home-global" class="btn btn-outline" style="flex: 1; color: var(--text-primary); border-color: var(--card-border);">
+                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                            Ana Ekran
+                        </button>
+                    </div>
+                    
+                    <template id="student-form-template">
+                        <div class="student-form-wrapper" style="margin-bottom: 2rem; border-bottom: 2px dashed var(--border-color); padding-bottom: 1.5rem;">
+                            <h3 class="student-form-title" style="margin-bottom: 1rem; color: var(--accent);">Öğrenci</h3>
+                            <form class="student-data-form">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="field-basvuru-no" style="font-size: 0.75rem;">Başvuru No</label>
+                                <input type="text" data-field="basvuru-no" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
+                            <div class="form-group">
+                                <label for="field-teslim-tarihi" style="font-size: 0.75rem;">Teslim Tarihi</label>
+                                <input type="text" data-field="teslim-tarihi" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
+                            <div class="form-group">
+                                <label for="field-pasaport-no" style="font-size: 0.75rem;">Pasaport No</label>
+                                <input type="text" data-field="pasaport-no" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="field-adi" style="font-size: 0.75rem;">Adı</label>
+                                <input type="text" data-field="adi" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
+                            <div class="form-group">
+                                <label for="field-soyadi" style="font-size: 0.75rem;">Soyadı</label>
+                                <input type="text" data-field="soyadi" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
+                            <div class="form-group">
+                                <label for="field-uyrugu" style="font-size: 0.75rem;">Uyruğu</label>
+                                <select data-field="uyrugu" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                                    <option value="" disabled selected>Uyruk Seç</option>
+                                    <option value="TÜRKMENİSTAN">Türkmenistan</option>
+                                    <option value="ÖZBEKİSTAN">Özbekistan</option>
+                                    <option value="KIRGIZİSTAN">Kırgızistan</option>
+                                    <option value="RUSYA FEDERASYONU">Rusya Federasyonu</option>
+                                    <option value="AFGANİSTAN">Afganistan</option>
+                                    <option value="PAKİSTAN">Pakistan</option>
+                                    <option value="OTHER">Diğer...</option>
+                                </select>
+                                <input type="text" data-field="uyrugu-other" class="glass-input" style="display: none; margin-top: 5px; padding: 0.5rem; font-size: 0.85rem;" placeholder="Uyruk yazınız...">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="field-dogum-tarihi" style="font-size: 0.75rem;">Doğum Tarihi</label>
+                                <input type="text" data-field="dogum-tarihi" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
+                            <div class="form-group full-width" style="display: flex; gap: 10px; margin-top: 5px; margin-bottom: 15px;">
+                                <button type="button" class="btn btn-outline btn-retake-page1" style="flex: 1; font-size: 0.75rem; padding: 0.4rem; color: var(--text-primary); border-color: var(--card-border);">📷 1. Sayfayı Tekrar Çek</button>
+                                <button type="button" class="btn btn-outline btn-recrop-page1" style="flex: 1; font-size: 0.75rem; padding: 0.4rem; color: var(--text-primary); border-color: var(--card-border);">✂️ 1. Sayfayı Yeniden Kırp</button>
+                            </div>
+                            
+                            <div class="form-group full-width" style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
+                                <h3 style="font-size: 0.9rem; color: var(--text-primary); margin: 0;">2. Sayfa Bilgileri (İletişim)</h3>
+                            </div>
+                            <div class="form-group">
+                                <label for="field-tel" style="font-size: 0.75rem;">Tel No</label>
+                                <input type="text" data-field="tel" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
+                            <div class="form-group">
+                                <label for="field-mail" style="font-size: 0.75rem;">E-Posta</label>
+                                <input type="text" data-field="mail" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
+                            <div class="form-group full-width">
+                                <label for="field-adres" style="font-size: 0.75rem;">Adres</label>
+                                <input type="text" data-field="adres" class="glass-input" style="padding: 0.5rem; font-size: 0.85rem;">
+                            </div>
+                            
+                            <div class="form-group full-width" style="display: flex; gap: 10px; margin-top: 5px; margin-bottom: 15px;">
+                                <button type="button" class="btn btn-outline btn-retake-page2" style="flex: 1; font-size: 0.75rem; padding: 0.4rem; color: var(--text-primary); border-color: var(--card-border);">📷 2. Sayfayı Tekrar Çek</button>
+                                <button type="button" class="btn btn-outline btn-recrop-page2" style="flex: 1; font-size: 0.75rem; padding: 0.4rem; color: var(--text-primary); border-color: var(--card-border);">✂️ 2. Sayfayı Yeniden Kırp</button>
+                            </div>
+                        </div>
+
+                        
+                        <div class="form-actions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <button type="button" class="btn btn-primary btn-action btn-download-student" style="background-color: #c0392b; border-color: #c0392b;">
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                                PDF İndir
+                            </button>
+                            <button type="button" class="btn btn-primary btn-action btn-print-student">
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                Yazdır
+                            </button>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <button type="button" class="btn btn-primary btn-action btn-add-to-sheet" style="width: 100%; background-color: #27ae60; border-color: #27ae60;">
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line><line x1="15" y1="13" x2="15" y2="17"></line><line x1="13" y1="15" x2="17" y2="15"></line></svg>
+                                E-Tabloya Ekle
+                            </button>
+                        </div>
+        
+                    </form>
+                        </div>
+                    </template>
+    
+                </div>
+            </section>
+
+            <!-- Geçmiş / İşlem Logu Paneli -->
+            <div id="history-panel" class="history-panel">
+                <div class="history-header" id="history-toggle">
+                    <div class="history-header-left">
+                        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        <span class="history-count">Henüz işlem yok</span>
+                    </div>
+                    <span class="history-toggle-icon">▼</span>
+                </div>
+                <div class="history-body">
+                    <p class="history-empty">Henüz kayıt bulunmuyor. PDF indirdiğinizde veya yazdırdığınızda burada görünecek.</p>
+                </div>
+            </div>
+
+            </section>
+
+            </div>
+        </main>
+        <footer class="app-footer">
+            <p>Uluslararası Öğrenci Ofisi</p>
+        </footer>
+    </div>
+
+    <!-- Cropper Modal -->
+    <div id="cropper-modal" class="modal-overlay">
+        <div class="modal-card">
+            <h2>Fotoğrafı Kırp</h2>
+            <p>Daha iyi sonuç almak için okunacak belgeyi çerçevenin içine alın.</p>
+            <div class="cropper-container-wrapper">
+                <img id="cropper-image" src="" alt="Kırpılacak Görüntü">
+            </div>
+            
+            <!-- Döndürme Kontrolleri -->
+            <div class="rotation-controls" style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 1.5rem; background: var(--bg-color); padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
+                    <label for="rotation-slider" style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 5px;">İnce Ayar (Düzleştir)</label>
+                    <div style="display: flex; width: 100%; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.2rem; color: var(--text-secondary); cursor: pointer; user-select: none;" onclick="document.getElementById('rotation-slider').value = parseFloat(document.getElementById('rotation-slider').value) - 0.5; document.getElementById('rotation-slider').dispatchEvent(new Event('input'))">-</span>
+                        <input type="range" id="rotation-slider" min="-15" max="15" value="0" step="0.5" style="flex: 1;">
+                        <span style="font-size: 1.2rem; color: var(--text-secondary); cursor: pointer; user-select: none;" onclick="document.getElementById('rotation-slider').value = parseFloat(document.getElementById('rotation-slider').value) + 0.5; document.getElementById('rotation-slider').dispatchEvent(new Event('input'))">+</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-actions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-top: 15px;">
+                <button type="button" id="btn-crop-cancel" class="btn btn-outline" style="width: 100%; padding: 10px 5px; font-size: 0.9rem;">
+                    İptal
+                </button>
+                <button type="button" id="btn-crop-skip" class="btn btn-secondary" style="width: 100%; padding: 10px 5px; font-size: 0.9rem;">
+                    Kırpmadan İşle
+                </button>
+                
+                <button type="button" id="btn-crop-next" class="btn btn-primary-outline" style="grid-column: span 2; display: none; width: 100%; padding: 12px; font-size: 1rem; align-items: center; justify-content: center;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                    Kırp ve 2. Sayfaya Geç
+                </button>
+                
+                <button type="button" id="btn-crop-skip-add-student" class="btn btn-primary-outline" style="grid-column: span 2; display: none; width: 100%; padding: 12px; font-size: 1rem; align-items: center; justify-content: center;">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 8px;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                    Kırpmadan ve Yeni Öğr. Ekle
+                </button>
+                
+                <button type="button" id="btn-crop-add-student" class="btn btn-primary-outline" style="grid-column: span 2; display: none; width: 100%; padding: 12px; font-size: 1rem; align-items: center; justify-content: center;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                    Kırp ve Yeni Öğrenci Ekle
+                </button>
+                
+                <button type="button" id="btn-crop-confirm" class="btn btn-primary" style="grid-column: span 2; width: 100%; padding: 12px; font-size: 1.05rem; align-items: center; justify-content: center; background-color: #c0392b; border-color: #c0392b; color: white;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Kırp ve İşle
+                </button>
+                <button type="button" id="btn-crop-update" class="btn btn-primary" style="grid-column: span 2; display: none; width: 100%; padding: 12px; font-size: 1.05rem; align-items: center; justify-content: center; background-color: #27ae60; border-color: #27ae60; color: white;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    Güncelle
+                </button>
+                <button type="button" id="btn-skip-capture-next" class="btn btn-primary" style="grid-column: span 2; display: none; width: 100%; padding: 12px; font-size: 1rem; align-items: center; justify-content: center;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                    Kırpmadan 2. Sayfayı Çek
+                </button>
+                
+                <button type="button" id="btn-crop-capture-next" class="btn btn-primary" style="grid-column: span 2; display: none; width: 100%; padding: 12px; font-size: 1rem; align-items: center; justify-content: center;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                    Kırp ve 2. Sayfayı Çek
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key Modal -->
+
+
+
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Hidden Print Area -->
+    <div id="print-area"></div>
+</body>
+</html>

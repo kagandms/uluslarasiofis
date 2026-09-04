@@ -1,0 +1,37 @@
+İKAMET/KİMLİK PROJESİ - KULLANICI KABUL TESTİ (UAT) LİSTESİ
+Sürüm: v2.0.0
+
+Bu liste, projenin canlı ortama alınmadan önce veya büyük güncellemelerden sonra
+hata kontrolü (QA) yapmak için kullanılacak manuel test adımlarını içerir.
+
+1. TEMEL OKUMA VE ÇİFT SAYFA HIZI TESTİ
+[ ] Tek Sayfa Testi: Sisteme bir belge yükleyin, kırpın ve onaylayın. Hızın ve okunan metinlerin doğruluğunu kontrol edin.
+[ ] Paralel Çift Sayfa Testi: Bir belge yükleyin, "Kırp ve 2. Sayfayı Çek" butonuna basıp ikinci bir sayfa ekleyin.
+[ ] Doğrulama: "1. ve 2. Sayfa analiz ediliyor..." uyarısını görün ve işlemin paralel olarak (çok daha hızlı) bittiğini teyit edin.
+
+2. KIRPMA ARACI (CROPPER) İNCE AYAR TESTİ
+[ ] Dikey Fotoğraf Testi: Telefonla dik çekilmiş (EXIF rotasyonu olan) bir fotoğraf yükleyin.
+[ ] Yumuşak Dönüş Testi: "İnce Ayar" çubuğundaki [+] veya [-] yazısına tıklayın.
+[ ] Doğrulama: Resmin aniden 90 derece yan yatmadığını, sadece 0.5 derece kayarak yumuşakça döndüğünü onaylayin.
+[ ] Kırpmadan Geç Testi: Görseli ayarladıktan sonra "Kırpmadan İşle" butonunun sorunsuz çalıştığını kontrol edin.
+
+3. OTOMATİK KAYIT (DRAFT) VE FORM MANTIĞI TESTİ
+[ ] Veri Kurtarma: OCR bittikten sonra sayfayı kasıtlı olarak yenileyin (F5).
+[ ] Doğrulama: "Önceki oturumdan kalan kaydedilmemiş formunuz var" uyarısını görüp onayladığınızda formun geri geldiğini doğrulayın.
+[ ] Uyruk Seçimi: Formdaki "Uyruğu" kutusundan "Diğer..." seçeneğini seçin. Altta açılan kutuya manuel bir ülke yazıp (Örn: ALMANYA), PDF'te o ülkenin çıktığını test edin.
+
+4. ÇIKTI VE ÖLÇEK (PDF / YAZDIRMA) TESTLERİ (EN ÖNEMLİ KISIM)
+[ ] Senaryo 1 (PC'de PDF İndir): Bilgisayardan butona basın. İnen PDF dosyasının yerleşiminin (A4 formunun) düzgün olduğunu onaylayın.
+[ ] Senaryo 2 (PC'de Yazdır): Yazdırma ekranında imza kısımlarının tam en alta (sayfa sonuna) itildiğini teyit edin.
+[ ] Senaryo 3 (Telefonda PDF İndir): Telefondan indirdiğiniz PDF'in standart A4 oranında olduğunu görün.
+[ ] Senaryo 4 (Telefonda Yazdır): Telefondan "Yazdır"a basın. Önizlemede kağıdın 2 SAYFAYA TAŞMADIĞINI ve en alttaki imza atılacak boşluğun (yaklaşık 2.5cm) gayet ferah olduğunu onaylayın.
+
+5. GEÇMİŞ VE SAYAÇ TESTLERİ
+[ ] Günlük Sayaç: PDF indirdiğinizde veya yazdırdığınızda üstteki "Bugün İşlenen" sayacının 1 arttığını kontrol edin.
+[ ] Geçmiş Paneli: Sağ alttaki "Geçmiş" panelini açın. İşlemin oraya düştüğünü, üzerine tıklandığında eski formun geri yüklendiğini test edin.
+[ ] Tema Testi: Gece/Gündüz (Dark/Light mode) modları arası geçişte tasarımın bozulmadığını görün.
+
+6. İNTERNET KESİNTİSİ (ÇEVRİMDIŞI) TESTİ
+[ ] Wi-Fi/İnternet Kapatma: İşlem sırasında veya ana ekranda interneti kesin (Uçak modu).
+[ ] Doğrulama: Sistemin "Çevrimdışı moda geçildi" uyarısı verdiğini ve "Fotoğraf Yükle" butonunu kapattığını görün.
+[ ] Manuel Devam: İnternet yokken "Formu Manuel Doldur" diyerek işleme internetsiz de devam edilebildiğini (ve PDF oluşturulabildiğini) teyit edin.

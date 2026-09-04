@@ -1,0 +1,289 @@
+var API_KEY = "GIZLI_SIFRE_123";
+
+// Sadece icinde "dd.mm" (gun.ay) gecen sayfalari tarar (Yil zorunlulugu kaldirildi).
+// Boylece sayfa adi "17.08" de olsa, "17.08.2026" da olsa tum tebligat sayfalari taranir.
+var TARIH_DESENI = new RegExp("\\d{2}\\.\\d{2}");
+
+// Arama yapilirken once en yeni (son olusturulan) bu kadar sekme
+// taranir - "hizli yol". Cogu ogrenci yakin haftalarda kayitli
+// oldugu icin sonuc genelde burada bulunur ve arama hemen biter.
+// Sonuc bulunamazsa geri kalan (daha eski) sekmeler de taranir,
+// boylece tam kapsam yine de garanti edilir.
+var HIZLI_TARAMA_SAYFA_SAYISI = 6;
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+      .setMimeType(ContentService.MimeType.JSON);
+}
+
+function hataDondur_(mesaj) {
+  return json_({ success: false, error: mesaj });
+}
+
+function parametreKontrol_(e, alanlar) {
+  for (var i = 0; i < alanlar.length; i++) {
+    var ad = alanlar[i];
+    if (!e.parameter[ad] || e.parameter[ad].toString().trim() === "") {
+      return ad;
+    }
+  }
+  return null;
+}
+
+function doGet(e) {
+  try {
+    if (e.parameter.key !== API_KEY) {
+      return hataDondur_("Yetkisiz erisim");
+    }
+
+    var action = e.parameter.action;
+    var q = e.parameter.q;
+
+    if (action === "unmark") return islemUnmark_(e);
+    if (action === "add") return islemAdd_(e);
+    if (action === "update") return islemUpdate_(e);
+    if (action === "remove") return islemRemove_(e);
+    if (q) return islemArama_(q);
+
+    return hataDondur_("Gecersiz istek");
+
+  } catch (err) {
+    // Beklenmeyen her hata icin bile gecerli JSON donuyoruz
+    return hataDondur_("Sunucu hatasi: " + err.message);
+  }
+}
+
+// ------------------------------------------------------------
+// ISARET KALDIRMA
+// ------------------------------------------------------------
+function islemUnmark_(e) {
+  var eksik = parametreKontrol_(e, ["sayfa", "isim", "no"]);
+  if (eksik) return hataDondur_("Eksik parametre: " + eksik);
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (err) {
+    return hataDondur_("Sistem mesgul, lutfen tekrar deneyin.");
+  }
+
+  try {
+    var sayfa = e.parameter.sayfa;
+    var isim = e.parameter.isim;
+    var no = e.parameter.no;
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sayfa);
+    if (!sheet) return hataDondur_("Sayfa bulunamadi: " + sayfa);
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (var i = 0; i < data.length; i++) {
+        if (data[i][0] == isim && data[i][1] == no) {
+          var rowIndex = i + 2;
+          sheet.getRange(rowIndex, 3).clearContent();
+          sheet.getRange(rowIndex, 1).setBackground(null);
+          return json_({ success: true, message: "Isaret kaldirildi" });
+        }
+      }
+    }
+    return hataDondur_("Kayit bulunamadi");
+
+  } catch (err) {
+    return hataDondur_("Isaret kaldirma hatasi: " + err.message);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ------------------------------------------------------------
+// KAYIT EKLEME
+// ------------------------------------------------------------
+function islemAdd_(e) {
+  var eksik = parametreKontrol_(e, ["sayfa", "isim"]);
+  if (eksik) return hataDondur_("Eksik parametre: " + eksik);
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (err) {
+    return hataDondur_("Sistem mesgul, lutfen tekrar deneyin.");
+  }
+
+  try {
+    var sayfa = e.parameter.sayfa;
+    var isim = e.parameter.isim;
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sayfa);
+    if (!sheet) return hataDondur_("Bu haftanin sekmesi bulunamadi.");
+
+    var lastRow = sheet.getLastRow();
+    var maxNo = 0;
+    if (lastRow > 1) {
+      var numData = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
+      for (var i = 0; i < numData.length; i++) {
+        var num = parseInt(numData[i][0], 10);
+        if (!isNaN(num) && num > maxNo) maxNo = num;
+      }
+    }
+    var yeniNo = maxNo + 1;
+    var yeniSatir = lastRow + 1;
+
+    // Tek cagrida toplu yazim
+    sheet.getRange(yeniSatir, 1, 1, 2).setValues([[isim, yeniNo]]);
+
+    return json_({ success: true, message: "Kayit eklendi", assignedNo: yeniNo });
+
+  } catch (err) {
+    return hataDondur_("Kayit ekleme hatasi: " + err.message);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ------------------------------------------------------------
+// KAYIT SILME (TABLODAN TAMAMEN KALDIRMA)
+// ------------------------------------------------------------
+function islemRemove_(e) {
+  var eksik = parametreKontrol_(e, ["sayfa", "isim", "no"]);
+  if (eksik) return hataDondur_("Eksik parametre: " + eksik);
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (err) {
+    return hataDondur_("Sistem mesgul, lutfen tekrar deneyin.");
+  }
+
+  try {
+    var sayfa = e.parameter.sayfa;
+    var isim = e.parameter.isim;
+    var no = e.parameter.no;
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sayfa);
+    if (!sheet) return hataDondur_("Sayfa bulunamadi: " + sayfa);
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (var i = 0; i < data.length; i++) {
+        if (data[i][0] == isim && data[i][1] == no) {
+          var rowIndex = i + 2;
+          sheet.deleteRow(rowIndex);
+          return json_({ success: true, message: "Kayit tablodan kaldirildi" });
+        }
+      }
+    }
+    return hataDondur_("Kayit bulunamadi");
+
+  } catch (err) {
+    return hataDondur_("Kayit silme hatasi: " + err.message);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ------------------------------------------------------------
+// ISARETLEME (TESLIM EDILDI)
+// ------------------------------------------------------------
+function islemUpdate_(e) {
+  var eksik = parametreKontrol_(e, ["sayfa", "isim", "no"]);
+  if (eksik) return hataDondur_("Eksik parametre: " + eksik);
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (err) {
+    return hataDondur_("Sistem mesgul, lutfen tekrar deneyin.");
+  }
+
+  try {
+    var sayfa = e.parameter.sayfa;
+    var isim = e.parameter.isim;
+    var no = e.parameter.no;
+
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sayfa);
+    if (!sheet) return hataDondur_("Sayfa bulunamadi: " + sayfa);
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (var i = 0; i < data.length; i++) {
+        if (data[i][0] == isim && data[i][1] == no) {
+          var rowIndex = i + 2;
+          var now = new Date();
+          var formattedDate = Utilities.formatDate(now, Session.getScriptTimeZone(), "dd.MM.yyyy HH:mm:ss");
+          sheet.getRange(rowIndex, 3).setValue(formattedDate);
+
+          // TESLIM EDILDI (ISARETLENDI) OLDUGUNDA A SUTUNUNDAKI ISIM HUCRESINI YESILE BOYA
+          sheet.getRange(rowIndex, 1).setBackground("#b6d7a8");
+
+          return json_({ success: true, message: "Isaretlendi" });
+        }
+      }
+    }
+    return hataDondur_("Kayit bulunamadi");
+
+  } catch (err) {
+    return hataDondur_("Isaretleme hatasi: " + err.message);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ------------------------------------------------------------
+// ARAMA
+// ------------------------------------------------------------
+function islemArama_(q) {
+  try {
+    var rawQ = q.toString();
+    q = rawQ.toLowerCase();
+    var sonuclar = [];
+    var benzersizKontrol = {};
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var tarihliSayfalar = ss.getSheets().filter(function(sheet) {
+      return TARIH_DESENI.test(sheet.getName());
+    }).reverse();
+
+    // Tum dosyadaki TextFinder taramasi buyuk tablolarda web uygulamasini zaman asimina sokuyordu.
+    // Once en yeni sekmelerde yalnizca gerekli uc sutun okunur; sonuc bulunmazsa eski sekmeler taranir.
+    for (var s = 0; s < tarihliSayfalar.length; s++) {
+      var sheet = tarihliSayfalar[s];
+      var sayfaAdi = sheet.getName();
+      
+      var lastRow = sheet.getLastRow();
+      if (lastRow <= 1) continue;
+      
+      var data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+      
+      for (var r = 0; r < data.length; r++) {
+        var rowData = data[r];
+        var isim = rowData[0] ? rowData[0].toString().toLowerCase() : "";
+        
+        if (isim.indexOf(q) !== -1) {
+          var isaretliMi = (rowData[2] !== "" && rowData[2] !== null && rowData[2] !== undefined);
+          var no = rowData[1];
+          var anahtar = sayfaAdi + "_" + no;
+          
+          if (!benzersizKontrol[anahtar]) {
+            benzersizKontrol[anahtar] = true;
+            sonuclar.push({
+              sayfa: sayfaAdi,
+              isim: rowData[0],
+              no: no,
+              isaretli: isaretliMi
+            });
+          }
+        }
+      }
+
+      if (sonuclar.length > 0 && s >= HIZLI_TARAMA_SAYFA_SAYISI - 1) break;
+    }
+    
+    return json_({ results: sonuclar });
+
+  } catch (err) {
+    return hataDondur_("Arama hatasi: " + err.message);
+  }
+}
