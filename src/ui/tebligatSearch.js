@@ -191,7 +191,26 @@ export function initTebligatSearch() {
                     }
                 }
 
-                const reversedResults = uniqueResults.reverse();
+                const parseDateStr = (sayfaStr) => {
+                    const match = sayfaStr.match(/(\d{2})\.(\d{2})(?:\.(\d{4}))?/);
+                    if (!match) return 0;
+                    const d = parseInt(match[1], 10);
+                    const m = parseInt(match[2], 10);
+                    const y = match[3] ? parseInt(match[3], 10) : new Date().getFullYear();
+                    return y * 10000 + m * 100 + d;
+                };
+
+                const reversedResults = uniqueResults.sort((a, b) => {
+                    const dateA = parseDateStr(a.sayfa);
+                    const dateB = parseDateStr(b.sayfa);
+                    if (dateB !== dateA) {
+                        return dateB - dateA; // Tarihe göre azalan (yeni en üstte)
+                    }
+                    // Tarihler aynıysa (veya tarih yoksa), numarasına göre sırala
+                    const noA = parseInt(a.no) || 0;
+                    const noB = parseInt(b.no) || 0;
+                    return noB - noA;
+                });
                 const safeQuery = query.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
                 const words = safeQuery.split(/\s+/).filter(w => w.length > 0);
 
