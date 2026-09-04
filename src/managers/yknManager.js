@@ -184,7 +184,8 @@ export function initYknManager() {
         }
         else if (event.data.type === 'EVENT' && event.data.action === 'STUDENT_NOT_FOUND') {
             studentName.textContent = "Bulunamadı";
-            addStatus('Apply Topkapı üzerinde öğrenci bulunamadı.', 'error');
+            const errorMsg = event.data.error ? 'Hata: ' + event.data.error : 'Apply Topkapı üzerinde öğrenci bulunamadı.';
+            addStatus(errorMsg, 'error');
         }
     });
 }
