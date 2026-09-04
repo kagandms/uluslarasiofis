@@ -3,9 +3,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Sadece GET isteklerine izin verilir' });
   }
 
-  const scriptUrl = process.env.GOOGLE_SCRIPT_URL;
+  const appsScriptUrl = process.env.APPS_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbwEHZ6-Iz-uohq4yeJRMvgNn5zXeHB6vqBRfBqvpBKai-elnKwJFSiX3EuprOPihnWHOQ/exec";
+  const apiKey = process.env.APPS_SCRIPT_API_KEY || 'GIZLI_SIFRE_123';
 
-  if (!scriptUrl) {
+  if (!appsScriptUrl) {
     return res.status(500).json({ error: 'Sunucu yapilandirma hatasi (URL eksik)' });
   }
 
@@ -13,7 +14,7 @@ export default async function handler(req, res) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000); 
 
-    const url = scriptUrl + '?action=getAll';
+    const url = `${appsScriptUrl}?key=${encodeURIComponent(apiKey)}&action=getAll`;
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
 
