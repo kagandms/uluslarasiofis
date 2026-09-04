@@ -41,6 +41,73 @@ export function initTebligatSearch() {
     let debounceTimeout;
     let abortController;
 
+    // --- EXCEL CACHE MANTIĞI EKLENDİ ---
+    const btnLoadExcel = document.getElementById('btn-load-excel');
+    const excelInput = document.getElementById('excel-cache-input');
+    const cacheStatusText = document.getElementById('cache-status-text');
+
+    // Eğer cache varsa durum metnini güncelle
+    if (cacheStatusText && localStorage.getItem('tebligat_excel_cache')) {
+        const cachedData = JSON.parse(localStorage.getItem('tebligat_excel_cache'));
+        cacheStatusText.textContent = `Cache: Yüklü (${cachedData.length} Kayıt)`;
+        cacheStatusText.style.color = "var(--success)";
+    }
+
+    if (btnLoadExcel && excelInput) {
+        btnLoadExcel.addEventListener('click', () => {
+            excelInput.click();
+        });
+
+        excelInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    cacheStatusText.textContent = "Okunuyor...";
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    
+                    let allCachedRows = [];
+                    // Sadece Tarih formatındaki sayfaları (örn: 17.08 vb.) al
+                    const tarihDeseni = /\d{2}\.\d{2}/;
+                    
+                    workbook.SheetNames.forEach(sheetName => {
+                        if (tarihDeseni.test(sheetName)) {
+                            const worksheet = workbook.Sheets[sheetName];
+                            // Başlık satırı genelde İsim (A), No (B), Teslim (C)
+                            const rows = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                            // İlk satır başlık kabul edilirse atlıyoruz (rows.slice(1))
+                            rows.slice(1).forEach(row => {
+                                if (row[0]) {
+                                    allCachedRows.push({
+                                        sayfa: sheetName,
+                                        isim: String(row[0]).trim(),
+                                        no: row[1] || '',
+                                        isaretli: (row[2] && String(row[2]).trim() !== '') ? true : false
+                                    });
+                                }
+                            });
+                        }
+                    });
+
+                    localStorage.setItem('tebligat_excel_cache', JSON.stringify(allCachedRows));
+                    cacheStatusText.textContent = `Cache: Başarıyla Yüklendi (${allCachedRows.length} Kayıt)`;
+                    cacheStatusText.style.color = "var(--success)";
+                    if (window.showToast) window.showToast('Excel arama önbelleği başarıyla oluşturuldu!', 'success');
+                } catch (err) {
+                    console.error(err);
+                    cacheStatusText.textContent = "Cache: Hata Oluştu!";
+                    cacheStatusText.style.color = "red";
+                    if (window.showToast) window.showToast('Excel dosyası okunurken hata oluştu.', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+    // --- EXCEL CACHE BİTTİ ---
+
     // 1. Skeleton Animasyonu için CSS Ekle (Eğer yoksa)
     if (!document.getElementById('tebligat-skeleton-styles')) {
         const style = document.createElement('style');
@@ -99,30 +166,66 @@ export function initTebligatSearch() {
                     </div>
                 </div>
             `;
-            searchResults.innerHTML = skeletonHTML.repeat(3); // 3 adet sahte kart göster
+            searchResults.innerHTML = skeletonHTML.repeat(3);
             
+            let allResults = [];
+            const qLower = query.toLowerCase();
+            
+            // 1. Önce Cache'den Ara (Anında Sonuç)
+            const cachedStr = localStorage.getItem('tebligat_excel_cache');
+            if (cachedStr) {
+                try {
+                    const cacheArr = JSON.parse(cachedStr);
+                    const cacheMatches = cacheArr.filter(r => r.isim.toLowerCase().includes(qLower));
+                    // Sadece benzersizleri ekle (isim ve no bazında)
+                    cacheMatches.forEach(match => {
+                        allResults.push(match);
+                    });
+                } catch (e) {}
+            }
+            
+            // 2. Canlı Sunucudan Ara (Sadece son aylar taranırsa çok hızlı döner)
             try {
                 const response = await fetch(`/api/search-tebligat?q=${encodeURIComponent(query)}`, {
                     signal: abortController.signal
                 });
                 const data = await response.json();
                 
-                if (data.error) {
-                    searchResults.innerHTML = `<div style="color: red; text-align: center;">Hata: ${data.error}</div>`;
-                    return;
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach(apiRes => {
+                        // Eğer cache'den bulduğumuzla çakışıyorsa, API'den geleni tercih edebiliriz (daha güncel olabilir)
+                        // Şimdilik sadece array'e ekleyip uniq filtresi yapalım
+                        allResults.push(apiRes);
+                    });
                 }
-
-                if (!data.results || data.results.length === 0) {
-                    searchResults.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 10px;">Sonuç bulunamadı.</div>';
-                    return;
+            } catch (err) {
+                if (err.name === 'AbortError') return;
+                console.error(err);
+                // Sunucu hata verse bile cache'den sonuç bulmuş olabiliriz, o yüzden işlemi tamamen kesmiyoruz.
+            }
+            
+            // Sonuçları tekilleştir
+            const uniqueResults = [];
+            const seen = new Set();
+            for (const r of allResults) {
+                const key = r.sayfa + '_' + r.no;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    uniqueResults.push(r);
                 }
+            }
 
-                const reversedResults = [...data.results].reverse();
-                
-                const safeQuery = query.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-                const words = safeQuery.split(/\\s+/).filter(w => w.length > 0);
+            if (uniqueResults.length === 0) {
+                searchResults.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 10px;">Sonuç bulunamadı.</div>';
+                return;
+            }
 
-                searchResults.innerHTML = reversedResults.map(res => {
+            const reversedResults = uniqueResults.reverse();
+            
+            const safeQuery = query.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const words = safeQuery.split(/\s+/).filter(w => w.length > 0);
+
+            searchResults.innerHTML = reversedResults.map(res => {
                     let highlightedIsim = res.isim;
                     
                     // Sadece I/İ/i/ı harflerini esnek yap
