@@ -41,72 +41,54 @@ export function initTebligatSearch() {
     let debounceTimeout;
     let abortController;
 
-    // --- EXCEL CACHE MANTIĞI EKLENDİ ---
-    const btnLoadExcel = document.getElementById('btn-load-excel');
-    const excelInput = document.getElementById('excel-cache-input');
+    // --- CLOUD SYNC CACHE MANTIĞI ---
+    const btnSyncCloud = document.getElementById('btn-sync-cloud');
     const cacheStatusText = document.getElementById('cache-status-text');
 
     // Eğer cache varsa durum metnini güncelle
     if (cacheStatusText && localStorage.getItem('tebligat_excel_cache')) {
         const cachedData = JSON.parse(localStorage.getItem('tebligat_excel_cache'));
-        cacheStatusText.textContent = `Cache: Yüklü (${cachedData.length} Kayıt)`;
-        cacheStatusText.style.color = "var(--success)";
+        cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--success); font-weight: bold;">Güncel (${cachedData.length} Kayıt)</span>`;
     }
 
-    if (btnLoadExcel && excelInput) {
-        btnLoadExcel.addEventListener('click', () => {
-            excelInput.click();
-        });
+    if (btnSyncCloud) {
+        btnSyncCloud.addEventListener('click', async () => {
+            if (cacheStatusText) {
+                cacheStatusText.innerHTML = `<span style="color: var(--accent);"><div class="spinner" style="width:12px; height:12px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 5px;"></div> İndiriliyor, lütfen bekleyin (5-10 sn)...</span>`;
+            }
+            
+            const originalHtml = btnSyncCloud.innerHTML;
+            btnSyncCloud.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> İndiriliyor...';
+            btnSyncCloud.disabled = true;
 
-        excelInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                try {
-                    cacheStatusText.textContent = "Okunuyor...";
-                    const data = new Uint8Array(evt.target.result);
-                    const workbook = XLSX.read(data, {type: 'array'});
-                    
-                    let allCachedRows = [];
-                    // Sadece Tarih formatındaki sayfaları (örn: 17.08 vb.) al
-                    const tarihDeseni = /\d{2}\.\d{2}/;
-                    
-                    workbook.SheetNames.forEach(sheetName => {
-                        if (tarihDeseni.test(sheetName)) {
-                            const worksheet = workbook.Sheets[sheetName];
-                            // Başlık satırı genelde İsim (A), No (B), Teslim (C)
-                            const rows = XLSX.utils.sheet_to_json(worksheet, {header: 1});
-                            // İlk satır başlık kabul edilirse atlıyoruz (rows.slice(1))
-                            rows.slice(1).forEach(row => {
-                                if (row[0]) {
-                                    allCachedRows.push({
-                                        sayfa: sheetName,
-                                        isim: String(row[0]).trim(),
-                                        no: row[1] || '',
-                                        isaretli: (row[2] && String(row[2]).trim() !== '') ? true : false
-                                    });
-                                }
-                            });
-                        }
-                    });
-
+            try {
+                const response = await fetch('/api/get-all-tebligat');
+                const data = await response.json();
+                
+                if (response.ok && data.results) {
+                    const allCachedRows = data.results;
                     localStorage.setItem('tebligat_excel_cache', JSON.stringify(allCachedRows));
-                    cacheStatusText.textContent = `Cache: Başarıyla Yüklendi (${allCachedRows.length} Kayıt)`;
-                    cacheStatusText.style.color = "var(--success)";
-                    if (window.showToast) window.showToast('Excel arama önbelleği başarıyla oluşturuldu!', 'success');
-                } catch (err) {
-                    console.error(err);
-                    cacheStatusText.textContent = "Cache: Hata Oluştu!";
-                    cacheStatusText.style.color = "red";
-                    if (window.showToast) window.showToast('Excel dosyası okunurken hata oluştu.', 'error');
+                    
+                    if (cacheStatusText) {
+                        cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--success); font-weight: bold;">Güncellendi (${allCachedRows.length} Kayıt)</span>`;
+                    }
+                    if (window.showToast) window.showToast('Veritabanı başarıyla cihazınıza senkronize edildi!', 'success');
+                } else {
+                    throw new Error(data.error || 'Bilinmeyen bir hata oluştu');
                 }
-            };
-            reader.readAsArrayBuffer(file);
+            } catch (err) {
+                console.error(err);
+                if (cacheStatusText) {
+                    cacheStatusText.innerHTML = `<span style="color: #e74c3c;">Senkronizasyon Hatası</span>`;
+                }
+                if (window.showToast) window.showToast('Hata: ' + err.message, 'error');
+            } finally {
+                btnSyncCloud.innerHTML = originalHtml;
+                btnSyncCloud.disabled = false;
+            }
         });
     }
-    // --- EXCEL CACHE BİTTİ ---
+    // --- CLOUD SYNC BİTTİ ---
 
     // 1. Skeleton Animasyonu için CSS Ekle (Eğer yoksa)
     if (!document.getElementById('tebligat-skeleton-styles')) {

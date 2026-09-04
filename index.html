@@ -189,11 +189,13 @@
                     
                     <div style="margin-top: 15px; border-top: 1px dashed var(--border-color); padding-top: 15px; text-align: center;">
                         <input type="file" id="excel-cache-input" accept=".xls,.xlsx" style="display: none;">
-                        <button type="button" class="btn btn-outline" id="btn-load-excel" style="width: 100%; font-size: 0.9rem; padding: 8px;">
-                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 5px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                            Eski Aylar İçin Hızlı Cache (Excel Yükle)
-                        </button>
-                        <span id="cache-status-text" style="display:block; margin-top:8px; font-size:0.85rem; color:var(--text-secondary);">Cache: Yüklü Değil</span>
+                        <div style="display: flex; gap: 10px; justify-content: center; align-items: center;">
+                            <button type="button" id="btn-sync-cloud" class="btn btn-outline" style="font-size: 0.9rem; padding: 6px 12px; display: flex; align-items: center; gap: 5px;">
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                Veritabanını Buluttan Güncelle (Sync)
+                            </button>
+                            <div id="cache-status-text" style="font-size: 0.85rem; color: var(--text-secondary);">Bulut verisi: Henüz güncellenmedi.</div>
+                        </div>
                     </div>
 
                     <div id="tebligat-search-results" style="margin-top: 15px; max-height: 400px; overflow-y: auto;">
