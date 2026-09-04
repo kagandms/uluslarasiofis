@@ -318,7 +318,7 @@ function islemGetAll_(e) {
             sayfa: sheetName,
             isim: isim,
             no: data[r][1],
-            isaretli: (data[r][2] !== """" && data[r][2] !== null && data[r][2] !== undefined)
+            isaretli: (data[r][2] !== "" && data[r][2] !== null && data[r][2] !== undefined)
           });
         }
       }
