@@ -62,7 +62,13 @@ export function initTebligatSearch() {
             btnSyncCloud.disabled = true;
 
             try {
-                const response = await fetch('/api/get-all-tebligat');
+                // Vercel'in 10-12 saniyelik timeout sınırına takılmamak için 
+                // doğrudan Google Apps Script'e bağlanıyoruz.
+                const scriptUrl = "https://script.google.com/macros/s/AKfycbwEHZ6-Iz-uohq4yeJRMvgNn5zXeHB6vqBRfBqvpBKai-elnKwJFSiX3EuprOPihnWHOQ/exec";
+                const apiKey = "GIZLI_SIFRE_123";
+                const fetchUrl = `${scriptUrl}?key=${apiKey}&action=getAll`;
+                
+                const response = await fetch(fetchUrl);
                 const data = await response.json();
                 
                 if (response.ok && data.results) {
