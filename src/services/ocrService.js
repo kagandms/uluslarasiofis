@@ -140,7 +140,7 @@ export async function runOCR(sourceCanvas, skipStep3 = false, isPage2 = false, i
             }, 500);
         }
 
-        return extractedData;
+        return { ...extractedData, _rawText: serverText };
 
     } catch (error) {
         activeAbortControllers.delete(controller);
