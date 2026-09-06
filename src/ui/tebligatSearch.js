@@ -5,6 +5,7 @@ export function initTebligatSearch() {
     const toggleBtn = document.getElementById('tebligat-search-toggle');
     const searchBody = document.getElementById('tebligat-search-body');
     const searchInput = document.getElementById('tebligat-search-input');
+    const yearSelect = document.getElementById('tebligat-year-select');
     const searchResults = document.getElementById('tebligat-search-results');
     const clearBtn = document.getElementById('tebligat-search-clear');
 
@@ -43,6 +44,13 @@ export function initTebligatSearch() {
 
     let debounceTimeout;
     let abortController;
+
+    const selectedYear = () => yearSelect?.value || '2026';
+    const getSheetYear = (sheetName) => {
+        const match = sheetName.match(/(?:^|\.)(\d{4})(?:$|\.)/);
+        return match ? match[1] : String(new Date().getFullYear());
+    };
+    const belongsToSelectedYear = (row) => getSheetYear(row.sayfa) === selectedYear();
 
     // --- CLOUD SYNC CACHE MANTIĞI ---
     const btnSyncCloud = document.getElementById('btn-sync-cloud');
@@ -148,9 +156,9 @@ export function initTebligatSearch() {
         document.head.appendChild(style);
     }
 
-    searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.trim();
-        
+    const runSearch = (event) => {
+        const query = event.target.value.trim();
+
         if (clearBtn) {
             clearBtn.style.display = query.length > 0 ? 'flex' : 'none';
         }
@@ -295,7 +303,7 @@ export function initTebligatSearch() {
             if (cachedStr) {
                 try {
                     const cacheArr = JSON.parse(cachedStr);
-                    const cacheMatches = cacheArr.filter(r => r.isim.toLowerCase().includes(qLower));
+                    const cacheMatches = cacheArr.filter(r => belongsToSelectedYear(r) && r.isim.toLowerCase().includes(qLower));
                     cacheMatches.forEach(match => allResults.push(match));
                     
                     if (allResults.length > 0) {
@@ -306,7 +314,7 @@ export function initTebligatSearch() {
             
             // 2. Canlı Sunucudan Ara
             try {
-                const response = await fetch(`/api/search-tebligat?q=${encodeURIComponent(query)}`, {
+                const response = await fetch(`/api/search-tebligat?q=${encodeURIComponent(query)}&year=${encodeURIComponent(selectedYear())}`, {
                     signal: abortController.signal
                 });
                 const data = await response.json();
@@ -317,7 +325,7 @@ export function initTebligatSearch() {
                 }
 
                 if (data.results && data.results.length > 0) {
-                    data.results.forEach(apiRes => allResults.push(apiRes));
+                    data.results.filter(belongsToSelectedYear).forEach(apiRes => allResults.push(apiRes));
                 }
                 
                 renderResults(allResults, true);
@@ -329,7 +337,16 @@ export function initTebligatSearch() {
                 renderResults(allResults, true, "Zaman aşımı");
             }
         }, 400); // 400ms debounce
-    });
+    };
+
+    searchInput.addEventListener('input', runSearch);
+    if (yearSelect) {
+        yearSelect.addEventListener('change', () => {
+            if (searchInput.value.trim().length >= 2) {
+                runSearch({ target: searchInput });
+            }
+        });
+    }
 
     // Delegasyon ile işaretleme butonlarını dinle
     searchResults.addEventListener('click', async (e) => {
@@ -468,4 +485,3 @@ export function initTebligatSearch() {
         }
     });
 }
-

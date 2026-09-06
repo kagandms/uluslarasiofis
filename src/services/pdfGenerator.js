@@ -227,7 +227,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
                 <li style="margin-bottom:${s.listMb};">☐ İkamet izni belge bedelinin ödendiğine dair makbuz</li>
                 <li style="margin-bottom:${s.listMb};">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
             </ul>
-            <p style="font-weight:bold;font-size:${s.boxFont};margin:${s.boxMargin};text-align:center;border:1px solid #000;padding:${s.boxPad}; flex-shrink: 0;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
+            <p style="font-weight:bold;font-size:${s.boxFont};margin:${s.boxMargin};text-align:center;border:1px solid #000;padding:${s.boxPad}; flex-shrink: 0;">Belgelerinizi teslim almak için ${vTebligatTarihi} tarihinde veya daha sonra gelebilirsiniz.</p>
             
             <!-- This pushes the signature block to the bottom of the page -->
             <div style="flex-grow: 1;"></div>

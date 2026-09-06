@@ -3,6 +3,7 @@ var API_KEY = "GIZLI_SIFRE_123";
 // Sadece icinde "dd.mm" (gun.ay) gecen sayfalari tarar (Yil zorunlulugu kaldirildi).
 // Boylece sayfa adi "17.08" de olsa, "17.08.2026" da olsa tum tebligat sayfalari taranir.
 var TARIH_DESENI = new RegExp("\\d{2}\\.\\d{2}");
+var YIL_DESENI = new RegExp("(?:^|\\.)(\\d{4})(?:$|\\.)");
 
 // Arama yapilirken once en yeni (son olusturulan) bu kadar sekme
 // taranir - "hizli yol". Cogu ogrenci yakin haftalarda kayitli
@@ -137,7 +138,7 @@ function doGet(e) {
       return islemRemove_(e);
     }
     if (action === "getAll") return islemGetAll_(e);
-    if (q) return islemArama_(q);
+    if (q) return islemArama_(q, e.parameter.year);
 
     return hataDondur_("Gecersiz istek");
 
@@ -328,16 +329,21 @@ function islemUpdate_(e) {
 // ------------------------------------------------------------
 // ARAMA
 // ------------------------------------------------------------
-function islemArama_(q) {
+function islemArama_(q, year) {
   try {
     var rawQ = q.toString();
     q = rawQ.toLowerCase();
+    year = /^\d{4}$/.test(year || "") ? year : String(new Date().getFullYear());
     var sonuclar = [];
     var benzersizKontrol = {};
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+    // Yil filtresi kaynakta uygulanir; yili yazili 2025/2024 sekmeleri okunmaz.
+    // Yilsiz "dd.mm" sekmeler mevcut yil olarak kabul edilir.
     var tarihliSayfalar = ss.getSheets().filter(function(sheet) {
-      return TARIH_DESENI.test(sheet.getName());
+      var sheetName = sheet.getName();
+      var yearMatch = sheetName.match(YIL_DESENI);
+      return TARIH_DESENI.test(sheetName) && (!yearMatch || yearMatch[1] === year);
     }).reverse();
 
     // Tum dosyadaki TextFinder taramasi buyuk tablolarda web uygulamasini zaman asimina sokuyordu.

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ikamet-cache-v2';
+const CACHE_NAME = 'ikamet-cache-v3';
 
 const PRECACHE_ASSETS = [
   '/',

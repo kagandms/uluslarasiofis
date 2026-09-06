@@ -11,10 +11,11 @@ export function calculateTebligatDate(dateStr) {
     const date = new Date(y, m, d);
     const dayOfWeek = date.getDay();
     
-    let daysToThisFriday = (5 - dayOfWeek + 7) % 7;
-    const daysToNextFriday = daysToThisFriday + 7;
-    
-    const tebligatDate = new Date(y, m, d + daysToNextFriday);
+    // Evrak teslim haftasini takip eden haftanin Carsamba gunu baslangictir.
+    // Pazartesi tesliminde +9, cuma tesliminde +5 gun eder.
+    const daysFromMonday = (dayOfWeek + 6) % 7;
+    const daysToFollowingWednesday = 9 - daysFromMonday;
+    const tebligatDate = new Date(y, m, d + daysToFollowingWednesday);
     const tdd = String(tebligatDate.getDate()).padStart(2, '0');
     const tmm = String(tebligatDate.getMonth() + 1).padStart(2, '0');
     const tyyyy = tebligatDate.getFullYear();

@@ -13,8 +13,12 @@ export default async function handler(req, res) {
     }
 
     const query = req.query.q;
+    const year = req.query.year || '2026';
     if (!query || query.length < 2) {
         return res.status(400).json({ error: 'Query must be at least 2 characters long' });
+    }
+    if (!/^\d{4}$/.test(year)) {
+        return res.status(400).json({ error: 'Year must be a four-digit value' });
     }
 
     const appsScriptUrl = process.env.APPS_SCRIPT_URL || "https://script.google.com/macros/s/AKfycbwEHZ6-Iz-uohq4yeJRMvgNn5zXeHB6vqBRfBqvpBKai-elnKwJFSiX3EuprOPihnWHOQ/exec";
@@ -25,7 +29,7 @@ export default async function handler(req, res) {
     }
 
     try {
-        const fetchUrl = `${appsScriptUrl}?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}`;
+        const fetchUrl = `${appsScriptUrl}?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}&year=${encodeURIComponent(year)}`;
         const response = await fetch(fetchUrl, {
             redirect: 'follow',
             signal: AbortSignal.timeout(12000)
