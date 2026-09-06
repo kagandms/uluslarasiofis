@@ -9,8 +9,7 @@ export const STORAGE_KEYS = {
 export const HISTORY_MAX_DAYS = 30;
 
 export const IMAGE_CONFIG = {
-    OCR_MAX_WIDTH: 800,
-    OCR_QUALITY: 0.65,
+    OCR_MAX_WIDTH: 1200,
     CROPPER_MAX_DIMENSION: 1500,
     CROPPER_QUALITY: 0.8
 };

@@ -1,4 +1,64 @@
-    export function extractFromCoordinates(words, extracted) {
+const APPLICATION_NUMBER_LABEL = /(?:kay[ıi]t\s*(?:numaras[ıi]?|no)|registration\s*number|application\s*number|ba[sş]vuru\s*(?:no|numara))/i;
+const APPLICATION_NUMBER_CHARACTERS = /^[0-9OQZILSB\s./-]+$/i;
+const APPLICATION_NUMBER_TOKEN = /[0-9OQZILSB]{4}(?:[\s./-]*[0-9OQZILSB]{2})(?:[\s./-]*[0-9OQZILSB]{5,8})/gi;
+
+function normalizeApplicationNumber(value) {
+    if (!APPLICATION_NUMBER_CHARACTERS.test(value)) return '';
+
+    const digits = value
+        .toUpperCase()
+        .replace(/[OQ]/g, '0')
+        .replace(/B/g, '8')
+        .replace(/Z/g, '2')
+        .replace(/[IL]/g, '1')
+        .replace(/S/g, '5')
+        .replace(/[^0-9]/g, '');
+    const match = digits.match(/^(20\d{2})(\d{2})(\d{5,8})$/);
+
+    return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+}
+
+function extractApplicationNumberFromText(fullText) {
+    const lines = fullText.split('\n').map(line => line.trim()).filter(Boolean);
+
+    for (let index = 0; index < lines.length; index++) {
+        const labelContext = lines.slice(index, index + 2).join(' ');
+        if (!APPLICATION_NUMBER_LABEL.test(labelContext)) continue;
+
+        const candidateContext = lines.slice(index, index + 4).join(' ');
+        for (const match of candidateContext.matchAll(APPLICATION_NUMBER_TOKEN)) {
+            const normalized = normalizeApplicationNumber(match[0]);
+            if (normalized) return normalized;
+        }
+    }
+
+    return '';
+}
+
+function extractApplicationNumberFromCoordinates(words) {
+    const labelWords = words.filter(word => /^(kay[ıi]t|registration)$/i.test(word.text));
+
+    for (const labelWord of labelWords) {
+        const labelHeight = labelWord.bbox.y1 - labelWord.bbox.y0;
+        const candidates = words
+            .filter(word => {
+                const isRightOfLabel = word.bbox.x0 > labelWord.bbox.x1;
+                const isSameCellRow = Math.abs(word.bbox.y0 - labelWord.bbox.y0) < labelHeight * 3;
+                return isRightOfLabel && isSameCellRow && APPLICATION_NUMBER_CHARACTERS.test(word.text);
+            })
+            .sort((first, second) => first.bbox.x0 - second.bbox.x0);
+
+        for (let index = 0; index < candidates.length; index++) {
+            const candidateText = candidates.slice(index, index + 3).map(word => word.text).join(' ');
+            const normalized = normalizeApplicationNumber(candidateText);
+            if (normalized) return normalized;
+        }
+    }
+
+    return '';
+}
+
+export function extractFromCoordinates(words, extracted) {
         if (!words || words.length === 0) return;
         
         // Yardımcı: iki kelime aynı hücrede/satırda mı?
@@ -99,6 +159,10 @@
             
             return result.slice(0, 3); // En fazla 3 kelime al
         };
+
+        if (!extracted.basvuruNo) {
+            extracted.basvuruNo = extractApplicationNumberFromCoordinates(words);
+        }
         
         
         // --- SOYADI ---
@@ -123,7 +187,6 @@
                 const values = findValueWordsForLabel(w);
                 if (values.length > 0) {
                     extracted.soyadi = values.join(' ');
-                    console.log('[Koordinat] Soyadı bulundu:', extracted.soyadi);
                     break;
                 }
             }
@@ -151,7 +214,6 @@
                 const values = findValueWordsForLabel(w);
                 if (values.length > 0) {
                     extracted.adi = values.join(' ');
-                    console.log('[Koordinat] Adı bulundu:', extracted.adi);
                     break;
                 }
             }
@@ -180,7 +242,6 @@
                 if (values.length > 0) {
                     const uniqueValues = [...new Set(values)];
                     extracted.uyrugu = uniqueValues.join(' ');
-                    console.log('[Koordinat] Uyruğu bulundu:', extracted.uyrugu);
                     break;
                 }
                 
@@ -211,7 +272,6 @@
                     const values = findValueWordsForLabel(w, null, true);
                     if (values.length > 0) {
                         extracted.uyrugu = values.join(' ');
-                        console.log('[Koordinat] Uyruğu (Nationality) bulundu:', extracted.uyrugu);
                         break;
                     }
                 }
@@ -239,7 +299,6 @@
                 const match = cleanDate.match(/(3[01]|[12]\d|0?[1-9])\s*[/.\-\s]+\s*(1[0-2]|0?[1-9])\s*[/.\-\s]+\s*(\d{4})/);
                 if (match) {
                     extracted.dogumTarihi = `${match[1].padStart(2, '0')}/${match[2].padStart(2, '0')}/${match[3]}`;
-                    console.log('[Koordinat] Doğum Tarihi bulundu:', extracted.dogumTarihi);
                     break;
                 }
             }
@@ -306,7 +365,6 @@
                     // GC ile başlayan barkod numarasını filtrele
                     if (!/^GC/i.test(passNo)) {
                         extracted.pasaportNo = passNo;
-                        console.log('[Koordinat] Pasaport No bulundu:', extracted.pasaportNo);
                         break;
                     }
                 }
@@ -366,42 +424,8 @@
             return result.join(' ');
         };
 
-        // ============================================
-        // 1. BAŞVURU NO (Kayıt Numarası)
-        //    Azure satırları bölebilir veya O/0, Z/2, I/1 karıştırabilir.
-        // ============================================
-        const normalizeApplicationNumber = (year, branch, sequence) => {
-            const normalizeDigits = (value) => value
-                .toUpperCase()
-                .replace(/[OQ]/g, '0')
-                .replace(/[Z]/g, '2')
-                .replace(/[ILS]/g, (char) => char === 'S' ? '5' : '1')
-                .replace(/[^0-9]/g, '');
-            const normalizedYear = normalizeDigits(year);
-            const normalizedBranch = normalizeDigits(branch);
-            const normalizedSequence = normalizeDigits(sequence);
-            if (!/^20\d{2}$/.test(normalizedYear) || !/^\d{2}$/.test(normalizedBranch)) return '';
-            if (!/^\d{5,8}$/.test(normalizedSequence)) return '';
-            return `${normalizedYear}-${normalizedBranch}-${normalizedSequence}`;
-        };
-
-        const numberPattern = '([0-9OQZILS]{4})[^0-9OQZILS]{0,8}([0-9OQZILS]{2})[^0-9OQZILS]{0,8}([0-9OQZILS]{5,8})';
-        const labelMatch = fullText.match(new RegExp(
-            `(?:ba[sş]vuru|e[- ]?[iıİI]kamet\\s+ba[sş]vuru|application|kay[ıi]t|registration)[^\\n]{0,80}?${numberPattern}`,
-            'i'
-        ));
-        if (labelMatch) extracted.basvuruNo = normalizeApplicationNumber(labelMatch[1], labelMatch[2], labelMatch[3]);
-
-        if (!extracted.basvuruNo) {
-            const compactText = fullText.replace(/[^0-9OQZILS]/gi, '');
-            const compactMatch = compactText.match(/(20[0-9OQZILS]{2})([0-9OQZILS]{2})([0-9OQZILS]{5,8})/i);
-            if (compactMatch) extracted.basvuruNo = normalizeApplicationNumber(compactMatch[1], compactMatch[2], compactMatch[3]);
-        }
-
-        if (!extracted.basvuruNo) {
-            const genericMatch = fullText.match(new RegExp(`\\b${numberPattern}\\b`, 'i'));
-            if (genericMatch) extracted.basvuruNo = normalizeApplicationNumber(genericMatch[1], genericMatch[2], genericMatch[3]);
-        }
+        // Registration numbers are deliberately extracted only in label context.
+        extracted.basvuruNo = extractApplicationNumberFromText(fullText);
 
         // ============================================
         // 2. SOYADI VE ADI

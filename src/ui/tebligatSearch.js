@@ -1,3 +1,6 @@
+const CLOUD_SYNC_TIMEOUT_MS = 90_000;
+const CLOUD_SYNC_PROGRESS_INTERVAL_MS = 1_000;
+
 export function initTebligatSearch() {
     const toggleBtn = document.getElementById('tebligat-search-toggle');
     const searchBody = document.getElementById('tebligat-search-body');
@@ -53,8 +56,21 @@ export function initTebligatSearch() {
 
     if (btnSyncCloud) {
         btnSyncCloud.addEventListener('click', async () => {
+            const syncController = new AbortController();
+            const syncStartedAt = performance.now();
+            const syncTimeoutId = window.setTimeout(
+                () => syncController.abort(),
+                CLOUD_SYNC_TIMEOUT_MS
+            );
+            const syncProgressId = window.setInterval(() => {
+                const elapsedSeconds = Math.floor((performance.now() - syncStartedAt) / 1000);
+                if (cacheStatusText) {
+                    cacheStatusText.innerHTML = `<span style="color: var(--accent);"><div class="spinner" style="width:12px; height:12px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 5px;"></div> Bulut verisi indiriliyor (${elapsedSeconds} sn)...</span>`;
+                }
+            }, CLOUD_SYNC_PROGRESS_INTERVAL_MS);
+
             if (cacheStatusText) {
-                cacheStatusText.innerHTML = `<span style="color: var(--accent);"><div class="spinner" style="width:12px; height:12px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 5px;"></div> İndiriliyor, lütfen bekleyin (5-10 sn)...</span>`;
+                cacheStatusText.innerHTML = `<span style="color: var(--accent);"><div class="spinner" style="width:12px; height:12px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 5px;"></div> Bulut verisi indiriliyor (0 sn)...</span>`;
             }
             
             const originalHtml = btnSyncCloud.innerHTML;
@@ -68,7 +84,7 @@ export function initTebligatSearch() {
                 const apiKey = "GIZLI_SIFRE_123";
                 const fetchUrl = `${scriptUrl}?key=${apiKey}&action=getAll`;
                 
-                const response = await fetch(fetchUrl);
+                const response = await fetch(fetchUrl, { signal: syncController.signal });
                 const data = await response.json();
                 
                 if (response.ok && data.results) {
@@ -85,10 +101,18 @@ export function initTebligatSearch() {
             } catch (err) {
                 console.error(err);
                 if (cacheStatusText) {
-                    cacheStatusText.innerHTML = `<span style="color: #e74c3c;">Senkronizasyon Hatası</span>`;
+                    const isTimeout = err.name === 'AbortError';
+                    cacheStatusText.innerHTML = `<span style="color: #e74c3c;">${isTimeout ? 'Senkronizasyon 90 saniye içinde tamamlanamadı' : 'Senkronizasyon Hatası'}</span>`;
                 }
-                if (window.showToast) window.showToast('Hata: ' + err.message, 'error');
+                if (window.showToast) {
+                    const message = err.name === 'AbortError'
+                        ? 'Bulut verisi 90 saniye içinde alınamadı. Mevcut bağlantıyı ve veri kaynağını kontrol edin.'
+                        : 'Hata: ' + err.message;
+                    window.showToast(message, 'error');
+                }
             } finally {
+                window.clearTimeout(syncTimeoutId);
+                window.clearInterval(syncProgressId);
                 btnSyncCloud.innerHTML = originalHtml;
                 btnSyncCloud.disabled = false;
             }
@@ -444,5 +468,4 @@ export function initTebligatSearch() {
         }
     });
 }
-
 

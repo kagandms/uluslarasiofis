@@ -25,7 +25,7 @@ export function cancelOCR() {
 // Global access for UI inline onclicks
 window.cancelOCR = cancelOCR;
 
-export async function runOCR(imageDataUrl, sourceCanvas, skipStep3 = false, isPage2 = false, isSilent = false) {
+export async function runOCR(sourceCanvas, skipStep3 = false, isPage2 = false, isSilent = false) {
     const controller = new AbortController();
     activeAbortControllers.add(controller);
 

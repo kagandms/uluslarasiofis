@@ -367,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     img.onload = async () => {
                         try {
                             const prep = prepareImageForOCR(img);
-                            await runOCR(prep.dataUrl, prep.canvas, true, true);
+                            await runOCR(prep.canvas, true, true);
                             showToast('2. sayfa bilgileri eklendi.', 'success');
                             setActiveStep(STEP_IDS.FORM_RESULT);
                             saveDraft();
@@ -405,7 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // BACKGROUND OCR
             const prep = prepareImageForOCR(imgRecord.cropped);
-            page1BackgroundPromise = runOCR(prep.dataUrl, prep.canvas, true, false, true);
+            page1BackgroundPromise = runOCR(prep.canvas, true, false, true);
             page1ImageObj.backgroundPromise = page1BackgroundPromise;
             
             setActiveStep(STEP_IDS.PAGE2_UPLOAD);
@@ -511,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     setActiveStep(STEP_IDS.OCR_PROGRESS);
                     try {
                         const prep = prepareImageForOCR(imgRecord.cropped);
-                        const result = await runOCR(prep.dataUrl, prep.canvas, true, isPage2);
+                        const result = await runOCR(prep.canvas, true, isPage2);
                         
                         const wrappers = document.querySelectorAll('.student-form-wrapper');
                         const wrapper = Array.from(wrappers).find(w => parseInt(w.dataset.index) === state.index);
@@ -559,7 +559,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setActiveStep(STEP_IDS.OCR_PROGRESS);
         try {
             const prep = prepareImageForOCR(img);
-            await runOCR(prep.dataUrl, prep.canvas, false, isProcessingPage2);
+            await runOCR(prep.canvas, false, isProcessingPage2);
         } catch (error) {
             console.error(error);
         }
@@ -589,11 +589,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (page1Record.backgroundPromise) {
                     res1 = await page1Record.backgroundPromise;
                 } else {
-                    res1 = await runOCR(p1.dataUrl, p1.canvas, true, false);
+                    res1 = await runOCR(p1.canvas, true, false);
                 }
                 
                 if (p2) {
-                    const res2 = await runOCR(p2.dataUrl, p2.canvas, true, true);
+                    const res2 = await runOCR(p2.canvas, true, true);
                     studentResult = { ...res1, ...res2 };
                 } else {
                     studentResult = res1 || {};

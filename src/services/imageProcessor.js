@@ -20,8 +20,5 @@ export function prepareImageForOCR(img) {
     ctx.filter = 'grayscale(100%) contrast(160%) brightness(105%)';
     ctx.drawImage(img, 0, 0, width, height);
     
-    return {
-        dataUrl: canvas.toDataURL('image/webp', IMAGE_CONFIG.OCR_QUALITY),
-        canvas: canvas
-    };
+    return { canvas };
 }

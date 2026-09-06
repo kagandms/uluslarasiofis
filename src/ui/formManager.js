@@ -1,3 +1,16 @@
+export function formatApplicationNumberInput(value, fallbackYear = String(new Date().getFullYear())) {
+    const digits = value.replace(/\D/g, '').slice(0, 14);
+    const hasYearPrefix = /^20\d{2}/.test(digits);
+    const year = hasYearPrefix ? digits.slice(0, 4) : fallbackYear;
+    const numberPart = hasYearPrefix ? digits.slice(4) : digits;
+    const branch = numberPart.slice(0, 2);
+    const sequence = numberPart.slice(2, 10);
+
+    if (!branch) return `${year}-`;
+    if (!sequence) return `${year}-${branch}`;
+    return `${year}-${branch}-${sequence}`;
+}
+
 export function getFormElements(node = document) {
     return {
         basvuruNo: node.querySelector('[data-field="basvuru-no"]'),
@@ -132,7 +145,7 @@ export function renderStudentForms(studentsDataArray) {
         
         // Başvuru no default format
         if (!data.basvuruNo) {
-            data.basvuruNo = '2026-';
+            data.basvuruNo = `${new Date().getFullYear()}-`;
         }
         
         populateFormNode(clone, data);
@@ -185,30 +198,13 @@ function initDynamicEvents() {
         
         if (fields.basvuruNo) {
             fields.basvuruNo.addEventListener('input', (e) => {
-                let val = e.target.value.replace(/\D/g, '');
-                
-                if (val.startsWith('2026')) {
-                    val = val.substring(4);
-                } else if ('2026'.startsWith(val)) {
-                    val = '';
-                }
-                
-                val = val.substring(0, 9);
-                
-                let formatted = '2026-';
-                if (val.length > 0) {
-                    formatted += val.substring(0, 2);
-                }
-                if (val.length > 2) {
-                    formatted += '-' + val.substring(2, 9);
-                }
-                
-                e.target.value = formatted;
+                e.target.value = formatApplicationNumberInput(e.target.value);
             });
             
             fields.basvuruNo.addEventListener('focus', (e) => {
-                if (!e.target.value || e.target.value === '2026-') {
-                    e.target.value = '2026-';
+                const defaultValue = `${new Date().getFullYear()}-`;
+                if (!e.target.value || e.target.value === defaultValue) {
+                    e.target.value = defaultValue;
                     setTimeout(() => {
                         e.target.setSelectionRange(e.target.value.length, e.target.value.length);
                     }, 0);

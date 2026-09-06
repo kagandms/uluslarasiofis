@@ -73,14 +73,13 @@ export function initYknManager() {
                     canvas.height = img.height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0);
-                    const dataUrl = canvas.toDataURL('image/jpeg');
                     
                     // main.js veya global'den runOCR import edilmiş mi bakmalıyız
                     // Ama dosyanın başına runOCR'ı ekleyelim (import { runOCR } from '../services/ocrService.js';)
                     const { runOCR } = await import('../services/ocrService.js');
                     
                     // Azure OCR çağır (skipStep3 = true, isPage2 = false, isSilent = true)
-                    const ocrData = await runOCR(dataUrl, canvas, true, false, true);
+                    const ocrData = await runOCR(canvas, true, false, true);
                     
                     // Düzenleme ve Bitiş tarihini currentStudentData'ya ekle
                     // Normalde ocrService.js içinde 'dogumTarihi', 'pasaportNo' falan var.

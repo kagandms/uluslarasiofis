@@ -10,6 +10,9 @@ var TARIH_DESENI = new RegExp("\\d{2}\\.\\d{2}");
 // Sonuc bulunamazsa geri kalan (daha eski) sekmeler de taranir,
 // boylece tam kapsam yine de garanti edilir.
 var HIZLI_TARAMA_SAYFA_SAYISI = 6;
+var GET_ALL_CACHE_PREFIX = "tebligat_get_all_v1_";
+var GET_ALL_CACHE_TTL_SECONDS = 300;
+var GET_ALL_CACHE_CHUNK_SIZE = 45000;
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
@@ -18,6 +21,84 @@ function json_(obj) {
 
 function hataDondur_(mesaj) {
   return json_({ success: false, error: mesaj });
+}
+
+function invalidateGetAllCache_() {
+  var cache = CacheService.getScriptCache();
+  var manifestKey = GET_ALL_CACHE_PREFIX + "manifest";
+  var manifestText = cache.get(manifestKey);
+  var keys = [manifestKey];
+
+  if (manifestText) {
+    try {
+      var manifest = JSON.parse(manifestText);
+      for (var i = 0; i < manifest.chunkCount; i++) {
+        keys.push(GET_ALL_CACHE_PREFIX + i);
+      }
+    } catch (err) {
+      // Bozuk manifest yalnızca manifest anahtarını temizlemeyi gerektirir.
+    }
+  }
+
+  cache.removeAll(keys);
+}
+
+function readGetAllCache_() {
+  var cache = CacheService.getScriptCache();
+  var manifestText = cache.get(GET_ALL_CACHE_PREFIX + "manifest");
+  if (!manifestText) return null;
+
+  try {
+    var manifest = JSON.parse(manifestText);
+    var keys = [];
+    for (var i = 0; i < manifest.chunkCount; i++) {
+      keys.push(GET_ALL_CACHE_PREFIX + i);
+    }
+
+    var chunkMap = cache.getAll(keys);
+    var allData = [];
+    for (var c = 0; c < keys.length; c++) {
+      if (!chunkMap[keys[c]]) return null;
+      allData = allData.concat(JSON.parse(chunkMap[keys[c]]));
+    }
+    return allData;
+  } catch (err) {
+    invalidateGetAllCache_();
+    return null;
+  }
+}
+
+function writeGetAllCache_(allData) {
+  var cache = CacheService.getScriptCache();
+  var entries = {};
+  var currentChunk = [];
+  var currentSize = 2;
+  var chunkCount = 0;
+
+  var flushChunk = function() {
+    if (currentChunk.length === 0) return;
+    entries[GET_ALL_CACHE_PREFIX + chunkCount] = JSON.stringify(currentChunk);
+    chunkCount++;
+    currentChunk = [];
+    currentSize = 2;
+  };
+
+  for (var i = 0; i < allData.length; i++) {
+    var rowText = JSON.stringify(allData[i]);
+    if (currentChunk.length > 0 && currentSize + rowText.length + 1 > GET_ALL_CACHE_CHUNK_SIZE) {
+      flushChunk();
+    }
+    currentChunk.push(allData[i]);
+    currentSize += rowText.length + 1;
+  }
+  flushChunk();
+
+  entries[GET_ALL_CACHE_PREFIX + "manifest"] = JSON.stringify({ chunkCount: chunkCount });
+  try {
+    cache.putAll(entries, GET_ALL_CACHE_TTL_SECONDS);
+  } catch (err) {
+    // Cache başarısızlığı veri üretimini engellememeli.
+  }
 }
 
 function parametreKontrol_(e, alanlar) {
@@ -39,10 +120,22 @@ function doGet(e) {
     var action = e.parameter.action;
     var q = e.parameter.q;
 
-    if (action === "unmark") return islemUnmark_(e);
-    if (action === "add") return islemAdd_(e);
-    if (action === "update") return islemUpdate_(e);
-    if (action === "remove") return islemRemove_(e);
+    if (action === "unmark") {
+      invalidateGetAllCache_();
+      return islemUnmark_(e);
+    }
+    if (action === "add") {
+      invalidateGetAllCache_();
+      return islemAdd_(e);
+    }
+    if (action === "update") {
+      invalidateGetAllCache_();
+      return islemUpdate_(e);
+    }
+    if (action === "remove") {
+      invalidateGetAllCache_();
+      return islemRemove_(e);
+    }
     if (action === "getAll") return islemGetAll_(e);
     if (q) return islemArama_(q);
 
@@ -294,6 +387,11 @@ function islemArama_(q) {
 // ------------------------------------------------------------
 function islemGetAll_(e) {
   try {
+    var cachedData = readGetAllCache_();
+    if (cachedData !== null) {
+      return json_({ success: true, results: cachedData, cached: true });
+    }
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheets = ss.getSheets();
     var allData = [];
@@ -324,7 +422,8 @@ function islemGetAll_(e) {
       }
     }
     
-    return json_({ success: true, results: allData });
+    writeGetAllCache_(allData);
+    return json_({ success: true, results: allData, cached: false });
   } catch (err) {
     return hataDondur_("GetAll hatasi: " + err.message);
   }
