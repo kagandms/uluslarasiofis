@@ -87,10 +87,19 @@ export function initYknManager() {
 
     let currentStudentData = null;
     let activeSearchRequestId = null;
+    let searchTimeoutTimer = null;
+    let extensionBridgeActive = false;
     const pendingDocumentReads = new Set();
 
     function createRequestId() {
         return 'ykn-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    }
+
+    function clearSearchTimeout() {
+        if (searchTimeoutTimer) {
+            clearTimeout(searchTimeoutTimer);
+            searchTimeoutTimer = null;
+        }
     }
 
     function resetStudentActions() {
@@ -180,6 +189,7 @@ export function initYknManager() {
             }
             
             clearStatus();
+            clearSearchTimeout();
             currentStudentData = null;
             activeSearchRequestId = createRequestId();
             resetStudentActions();
@@ -187,6 +197,16 @@ export function initYknManager() {
             studentName.textContent = "Aranıyor... (" + passportNo + ")";
             addStatus('Apply Topkapı eklentisi üzerinden arama başlatıldı...', 'info');
             
+            // Eklenti varlık yoklaması
+            window.postMessage({
+                source: 'WEB_APP',
+                payload: {
+                    action: 'PING',
+                    requestId: activeSearchRequestId
+                }
+            }, '*');
+
+            // Asıl arama isteği
             window.postMessage({
                 source: 'WEB_APP',
                 payload: {
@@ -195,6 +215,17 @@ export function initYknManager() {
                     requestId: activeSearchRequestId
                 }
             }, '*');
+
+            // 14 saniyelik güvenlik zaman aşımı
+            searchTimeoutTimer = setTimeout(() => {
+                if (studentName.textContent.startsWith('Aranıyor...')) {
+                    studentName.textContent = 'Bağlantı Zaman Aşımı';
+                    addStatus('Eklentiden veya Apply sekmesinden zamanında yanıt alınamadı.', 'error');
+                    addStatus('1. Apply Topkapı sekmesinin açık olduğunu kontrol edin.', 'error');
+                    addStatus('2. Apply Topkapı ve bu portal sekmesini yenileyin (F5).', 'error');
+                    addStatus('3. Chrome Eklentinizin (YÖKSİS Otomasyonu) açık olduğundan emin olun.', 'error');
+                }
+            }, 14000);
         });
     }
 
@@ -261,6 +292,12 @@ export function initYknManager() {
         const requestId = event.data.requestId;
         if (requestId !== activeSearchRequestId) return;
 
+        if (event.data.type === 'PONG') {
+            extensionBridgeActive = true;
+            addStatus('Eklenti köprüsü hazır.', 'info');
+            return;
+        }
+
         if (event.data.type === 'RESPONSE') {
             const response = event.data.response;
             if (event.data.action === 'SEARCH_STUDENT' && response?.success) {
@@ -272,6 +309,7 @@ export function initYknManager() {
             } else if (event.data.action === 'FILL_YOKSIS_FORM' && response?.success) {
                 addStatus('YÖKSİS alanları dolduruldu. Göndermeden önce kontrol edin.', 'success');
             } else if (response?.error) {
+                clearSearchTimeout();
                 if (event.data.action === 'SEARCH_STUDENT') studentName.textContent = 'Arama başlatılamadı';
                 addStatus(response.error, 'error');
             }
@@ -291,23 +329,27 @@ export function initYknManager() {
         }
 
         if (event.data.type === 'EVENT' && event.data.action === 'STUDENT_FOUND') {
+            clearSearchTimeout();
             currentStudentData = event.data.data;
             studentName.textContent = currentStudentData.fullName || "İsim Bulunamadı";
             updateStudentActions(currentStudentData);
             addStatus('Öğrenci bulundu. Profil belgeleri taranıyor...', 'success');
         }
         else if (event.data.type === 'EVENT' && event.data.action === 'STUDENT_DOCUMENTS_FOUND') {
+            clearSearchTimeout();
             currentStudentData = { ...currentStudentData, ...event.data.data, documentsReady: true };
             updateStudentActions(currentStudentData);
             addStatus('Pasaport ve kabul mektubu bağlantıları bulundu.', 'success');
         }
         else if (event.data.type === 'EVENT' && event.data.action === 'DOCUMENTS_NOT_FOUND') {
+            clearSearchTimeout();
             addStatus(event.data.error || 'Profil belgeleri bulunamadı.', 'error');
         }
         else if (event.data.type === 'EVENT' && (
             event.data.action === 'STUDENT_NOT_FOUND' ||
             event.data.action === 'REQUEST_FAILED'
         )) {
+            clearSearchTimeout();
             studentName.textContent = "Bulunamadı";
             const errorMsg = event.data.error ? 'Hata: ' + event.data.error : 'Apply Topkapı üzerinde öğrenci bulunamadı.';
             addStatus(errorMsg, 'error');
