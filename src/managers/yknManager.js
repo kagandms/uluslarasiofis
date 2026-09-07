@@ -216,6 +216,13 @@ export function initYknManager() {
                 }
             }, '*');
 
+            // 2.5 saniye sonra eklenti köprüsü hala ses vermediyse erken uyarı ver
+            setTimeout(() => {
+                if (!extensionBridgeActive && studentName.textContent.startsWith('Aranıyor...')) {
+                    addStatus('Eklenti köprüsü henüz yanıt vermedi. Lütfen chrome://extensions sekmesinden eklentiyi Yenileyip (↻) bu sayfayı F5 ile tazeleyin.', 'error');
+                }
+            }, 2500);
+
             // 14 saniyelik güvenlik zaman aşımı
             searchTimeoutTimer = setTimeout(() => {
                 if (studentName.textContent.startsWith('Aranıyor...')) {
