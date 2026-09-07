@@ -1,5 +1,5 @@
 import { showToast } from '../ui/toastManager.js';
-import { extractPassportDatesFromText, extractYoksisIdFromText } from '../utils/ykn-document-parser.js';
+import { extractPassportDatesFromText, extractYoksisIdFromText, isValidYoksisId } from '../utils/ykn-document-parser.js';
 
 async function extractPdfText(documentBytes) {
     if (!window.pdfjsLib) throw new Error('PDF okuyucu hazır değil.');
@@ -115,7 +115,7 @@ export function initYknManager() {
         if (btnCopyLetter) btnCopyLetter.disabled = !hasStudent;
         if (btnPasteYoksis) btnPasteYoksis.disabled = !hasStudent;
         if (btnTransferYoksis) {
-            btnTransferYoksis.style.display = studentData?.yoksisId ? 'block' : 'none';
+            btnTransferYoksis.style.display = (studentData?.yoksisId && isValidYoksisId(studentData.yoksisId)) ? 'block' : 'none';
         }
     }
 
@@ -341,7 +341,7 @@ export function initYknManager() {
                 return;
             }
 
-            if (currentStudentData.yoksisId) {
+            if (currentStudentData.yoksisId && isValidYoksisId(currentStudentData.yoksisId)) {
                 try {
                     await navigator.clipboard.writeText(currentStudentData.yoksisId);
                     addStatus(`Kabul mektubu kodu panoya kopyalandı: ${currentStudentData.yoksisId}`, 'success');
@@ -461,14 +461,15 @@ export function initYknManager() {
                 }
             } else if (event.data.action === 'EXTRACT_KABUL_CODE') {
                 if (response?.success) {
-                    if (response.kabulId) {
-                        currentStudentData = { ...currentStudentData, yoksisId: response.kabulId };
+                    const validCode = isValidYoksisId(response.kabulId) ? response.kabulId : '';
+                    if (validCode) {
+                        currentStudentData = { ...currentStudentData, yoksisId: validCode };
                         if (navigator.clipboard?.writeText) {
-                            navigator.clipboard.writeText(response.kabulId).catch(() => {});
+                            navigator.clipboard.writeText(validCode).catch(() => {});
                         }
                         updateStudentActions(currentStudentData);
-                        addStatus(`Kabul mektubu kodu bulundu ve panoya kopyalandı: ${response.kabulId}`, 'success');
-                        showToast(`Kabul Kodu: ${response.kabulId}`, 'success');
+                        addStatus(`Kabul mektubu kodu bulundu ve panoya kopyalandı: ${validCode}`, 'success');
+                        showToast(`Kabul Kodu: ${validCode}`, 'success');
                     } else if (response.acceptanceLetterUrl) {
                         currentStudentData = { ...currentStudentData, acceptanceLetterUrl: response.acceptanceLetterUrl };
                         addStatus('Kabul mektubu bağlantısı bulundu, PDF okunuyor...', 'info');
@@ -513,14 +514,28 @@ export function initYknManager() {
 
         if (event.data.type === 'EVENT' && event.data.action === 'STUDENT_FOUND') {
             clearSearchTimeout();
-            currentStudentData = event.data.data;
+            const incoming = event.data.data || {};
+            const rawId = incoming.yoksisId || incoming.kabulId || '';
+            const safeYoksisId = isValidYoksisId(rawId) ? rawId : '';
+            currentStudentData = {
+                ...incoming,
+                yoksisId: safeYoksisId
+            };
             studentName.textContent = currentStudentData.fullName || "İsim Bulunamadı";
             updateStudentActions(currentStudentData);
             addStatus('Öğrenci bulundu. Bilgileri veya kabul kodunu kopyalayabilirsiniz.', 'success');
         }
         else if (event.data.type === 'EVENT' && event.data.action === 'STUDENT_DOCUMENTS_FOUND') {
             clearSearchTimeout();
-            currentStudentData = { ...currentStudentData, ...event.data.data, documentsReady: true };
+            const incoming = event.data.data || {};
+            const rawId = incoming.yoksisId || incoming.kabulId || '';
+            const safeYoksisId = isValidYoksisId(rawId) ? rawId : (isValidYoksisId(currentStudentData?.yoksisId) ? currentStudentData.yoksisId : '');
+            currentStudentData = {
+                ...currentStudentData,
+                ...incoming,
+                yoksisId: safeYoksisId,
+                documentsReady: true
+            };
             updateStudentActions(currentStudentData);
             if (currentStudentData.yoksisId) {
                 addStatus(`Kabul mektubu kodu algılandı: ${currentStudentData.yoksisId}`, 'success');

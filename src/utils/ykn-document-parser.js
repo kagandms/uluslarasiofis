@@ -28,17 +28,35 @@ function findLabeledDate(text, labels) {
     return match ? parseDateValue(match[1]) : '';
 }
 
+export function isValidYoksisId(code) {
+    if (!code || typeof code !== 'string') return false;
+    const clean = code.trim().toUpperCase();
+    if (clean.includes('SVG') || clean.includes('ICON') || clean.includes('BTN') || clean.includes('BADGE')) return false;
+    if (clean.startsWith('202') || clean.startsWith('19')) return false;
+    if (!/^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/.test(clean)) return false;
+    return /\d/.test(clean);
+}
+
 export function extractYoksisIdFromText(text) {
     const normalizedText = normalizeDocumentText(text);
     const labeledMatch = normalizedText.match(
-        /(?:YÖKS[İI]S|YOKSIS)\s*(?:ID|KODU|NO)?\s*[:#-]?\s*([A-Z0-9]{2,}\s*(?:-\s*[A-Z0-9]{2,}){1,4})/i
+        /(?:YÖKS[İI]S|YOKSIS)\s*(?:ID|KODU|NO)?\s*[:#-]?\s*([A-Z0-9]{2,4}\s*(?:-\s*[A-Z0-9]{2,4}){1,4})/i
     );
     if (labeledMatch) {
-        return labeledMatch[1].replace(/\s+/g, '').toUpperCase();
+        const id = labeledMatch[1].replace(/\s+/g, '').toUpperCase();
+        if (isValidYoksisId(id)) {
+            return id;
+        }
     }
 
-    const candidates = normalizedText.match(/\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,}){1,4}\b/gi) || [];
-    return candidates.find((candidate) => /[A-Z]/i.test(candidate) && /\d/.test(candidate))?.toUpperCase() || '';
+    const candidates = normalizedText.match(/\b[A-Z0-9]{2,4}(?:-[A-Z0-9]{2,4}){1,4}\b/gi) || [];
+    for (const candidate of candidates) {
+        const cleaned = candidate.replace(/\s+/g, '').toUpperCase();
+        if (isValidYoksisId(cleaned)) {
+            return cleaned;
+        }
+    }
+    return '';
 }
 
 export function extractPassportDatesFromText(text) {
