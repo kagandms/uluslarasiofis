@@ -284,6 +284,17 @@ export function initYknManager() {
                 }
 
                 if (!yoksisId) {
+                    const candidates = currentStudentData?.acceptanceCandidates || [];
+                    const currentIdx = currentStudentData?.currentCandidateIndex || 0;
+                    const nextIdx = currentIdx + 1;
+                    if (nextIdx < candidates.length) {
+                        currentStudentData.currentCandidateIndex = nextIdx;
+                        const nextUrl = candidates[nextIdx];
+                        addStatus(`Mevcut belgede YÖKSİS ID bulunamadı, diğer kabul belgesi taranıyor (${nextIdx + 1}/${candidates.length})...`, 'info');
+                        requestApplyDocument('acceptanceLetter', nextUrl);
+                        return;
+                    }
+
                     console.warn('[YKN] Kabul mektubu içeriğinde YÖKSİS ID bulunamadı. Metin örneği:', (text || '').slice(0, 300));
                     throw new Error('Kabul mektubu PDF belgesinde geçerli YÖKSİS ID bulunamadı.');
                 }
@@ -417,9 +428,11 @@ export function initYknManager() {
                 return;
             }
 
-            if (currentStudentData.acceptanceLetterUrl) {
+            const candidates = currentStudentData.acceptanceCandidates || (currentStudentData.acceptanceLetterUrl ? [currentStudentData.acceptanceLetterUrl] : []);
+            if (candidates.length > 0) {
+                currentStudentData.currentCandidateIndex = 0;
                 addStatus('Kabul mektubu PDF belgesi Apply oturumundan alınıyor...', 'info');
-                requestApplyDocument('acceptanceLetter', currentStudentData.acceptanceLetterUrl);
+                requestApplyDocument('acceptanceLetter', candidates[0]);
                 return;
             }
 
@@ -530,10 +543,18 @@ export function initYknManager() {
                         updateStudentActions(currentStudentData);
                         addStatus(`Kabul mektubu kodu bulundu ve panoya kopyalandı: ${validCode}`, 'success');
                         showToast(`Kabul Kodu: ${validCode}`, 'success');
-                    } else if (response.acceptanceLetterUrl) {
-                        currentStudentData = { ...currentStudentData, acceptanceLetterUrl: response.acceptanceLetterUrl };
+                    } else if (response.acceptanceLetterUrl || (response.acceptanceCandidates && response.acceptanceCandidates.length > 0)) {
+                        const candidates = response.acceptanceCandidates && response.acceptanceCandidates.length > 0
+                            ? response.acceptanceCandidates
+                            : [response.acceptanceLetterUrl];
+                        currentStudentData = {
+                            ...currentStudentData,
+                            acceptanceLetterUrl: candidates[0],
+                            acceptanceCandidates: candidates,
+                            currentCandidateIndex: 0
+                        };
                         addStatus('Kabul mektubu bağlantısı bulundu, PDF okunuyor...', 'info');
-                        requestApplyDocument('acceptanceLetter', response.acceptanceLetterUrl);
+                        requestApplyDocument('acceptanceLetter', candidates[0]);
                     } else {
                         addStatus('Kabul mektubu belgesi veya kodu bulunamadı.', 'error');
                         showToast('Kabul mektubu belgesi bulunamadı.', 'error');
@@ -579,9 +600,15 @@ export function initYknManager() {
             const incoming = event.data.data || {};
             const rawId = incoming.yoksisId || incoming.kabulId || '';
             const safeYoksisId = isValidYoksisId(rawId) ? rawId : (isValidYoksisId(currentStudentData?.yoksisId) ? currentStudentData.yoksisId : '');
+            const candidates = incoming.acceptanceCandidates && incoming.acceptanceCandidates.length > 0
+                ? incoming.acceptanceCandidates
+                : (incoming.acceptanceLetterUrl ? [incoming.acceptanceLetterUrl] : []);
             currentStudentData = {
                 ...currentStudentData,
                 ...incoming,
+                acceptanceLetterUrl: candidates[0] || incoming.acceptanceLetterUrl || '',
+                acceptanceCandidates: candidates,
+                currentCandidateIndex: 0,
                 yoksisId: safeYoksisId,
                 documentsReady: true
             };

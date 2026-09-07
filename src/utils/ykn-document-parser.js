@@ -62,7 +62,7 @@ export function extractYoksisIdFromText(text) {
         }
     }
 
-    const candidates = normalizedText.match(/\b[A-Z0-9]{2,4}(?:[-–—][A-Z0-9]{2,4}){2}\b/gi) || [];
+    const candidates = normalizedText.match(/\b[A-Z0-9]{2,4}(?:\s*[-–—]\s*[A-Z0-9]{2,4}){2}\b/gi) || [];
     for (const candidate of candidates) {
         const cleaned = candidate.replace(/\s+/g, '').replace(/[–—]/g, '-').toUpperCase();
         if (isValidYoksisId(cleaned)) {
