@@ -2,14 +2,23 @@ import { showToast } from '../ui/toastManager.js';
 import { extractPassportDatesFromText, extractYoksisIdFromText, isValidYoksisId } from '../utils/ykn-document-parser.js';
 
 function ensurePdfWorkerReady() {
-    if (window.pdfjsLib && !window.pdfjsLib.GlobalWorkerOptions?.workerSrc) {
-        try {
-            const workerBlob = new Blob([
-                "importScripts('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js');"
-            ], { type: 'application/javascript' });
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
-        } catch (_) {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    if (window.pdfjsLib) {
+        if (!window.pdfjsLib.GlobalWorkerOptions) {
+            window.pdfjsLib.GlobalWorkerOptions = {};
+        }
+        if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
+            try {
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+            } catch (_) {
+                try {
+                    const workerBlob = new Blob([
+                        "importScripts('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js');"
+                    ], { type: 'application/javascript' });
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
+                } catch (_) {
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+                }
+            }
         }
     }
 }
@@ -42,7 +51,11 @@ function fallbackCopyText(text) {
 async function extractPdfText(documentBytes) {
     if (!window.pdfjsLib) throw new Error('PDF okuyucu hazır değil.');
     ensurePdfWorkerReady();
-    const pdf = await window.pdfjsLib.getDocument({ data: documentBytes }).promise;
+    const pdf = await window.pdfjsLib.getDocument({
+        data: documentBytes,
+        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+        cMapPacked: true
+    }).promise;
     const pageTexts = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
         const page = await pdf.getPage(pageNumber);
@@ -62,7 +75,11 @@ function decodeBase64ToBytes(base64) {
 async function extractPdfTextWithOcr(documentBytes) {
     if (!window.pdfjsLib) throw new Error('PDF okuyucu hazır değil.');
     ensurePdfWorkerReady();
-    const pdf = await window.pdfjsLib.getDocument({ data: documentBytes }).promise;
+    const pdf = await window.pdfjsLib.getDocument({
+        data: documentBytes,
+        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+        cMapPacked: true
+    }).promise;
     const { runOCR } = await import('../services/ocrService.js');
     const pageTexts = [];
 

@@ -1,7 +1,10 @@
 const DATE_PATTERN = '(\\d{1,4}[./-]\\d{1,2}[./-]\\d{1,4})';
 
 function normalizeDocumentText(text) {
-    return (text || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+    return (text || '')
+        .replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function parseDateValue(value) {
@@ -30,7 +33,7 @@ function findLabeledDate(text, labels) {
 
 export function isValidYoksisId(code) {
     if (!code || typeof code !== 'string') return false;
-    const clean = code.trim().toUpperCase();
+    const clean = code.trim().toUpperCase().replace(/[–—]/g, '-');
     if (clean.includes('SVG') || clean.includes('ICON') || clean.includes('BTN') || clean.includes('BADGE')) return false;
     if (clean.startsWith('202') || clean.startsWith('19')) return false;
     if (!/^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/.test(clean)) return false;
@@ -40,18 +43,28 @@ export function isValidYoksisId(code) {
 export function extractYoksisIdFromText(text) {
     const normalizedText = normalizeDocumentText(text);
     const labeledMatch = normalizedText.match(
-        /(?:YÖKS[İI]S|YOKSIS|KABUL\s*MEKTUB[U]?|ACCEPTANCE\s*LETTER|VERIFICATION)\s*(?:ID|KODU|NO|CODE)?\s*[:#\.-]?\s*([A-Z0-9]{2,4}\s*(?:-\s*[A-Z0-9]{2,4}){1,4})/i
+        /(?:YÖKS[İI]S|YOKSIS|KABUL\s*MEKTUB[U]?|ACCEPTANCE\s*LETTER|VERIFICATION)\s*(?:ID|KODU|NO|CODE)?\s*[:#\.\-–—]?\s*([A-Z0-9]{2,4}\s*(?:[-–—]\s*[A-Z0-9]{2,4}){1,4})/i
     );
     if (labeledMatch) {
-        const id = labeledMatch[1].replace(/\s+/g, '').toUpperCase();
+        const id = labeledMatch[1].replace(/\s+/g, '').replace(/[–—]/g, '-').toUpperCase();
         if (isValidYoksisId(id)) {
             return id;
         }
     }
 
-    const candidates = normalizedText.match(/\b[A-Z0-9]{2,4}(?:-[A-Z0-9]{2,4}){1,4}\b/gi) || [];
+    const nearYoksisMatch = normalizedText.match(
+        /(?:YÖKS[İI]S|YOKSIS)[^A-Z0-9]{1,30}?([A-Z0-9]{2,4}\s*[-–—]\s*[A-Z0-9]{2,4}\s*[-–—]\s*[A-Z0-9]{2,4})/i
+    );
+    if (nearYoksisMatch) {
+        const id = nearYoksisMatch[1].replace(/\s+/g, '').replace(/[–—]/g, '-').toUpperCase();
+        if (isValidYoksisId(id)) {
+            return id;
+        }
+    }
+
+    const candidates = normalizedText.match(/\b[A-Z0-9]{2,4}(?:[-–—][A-Z0-9]{2,4}){2}\b/gi) || [];
     for (const candidate of candidates) {
-        const cleaned = candidate.replace(/\s+/g, '').toUpperCase();
+        const cleaned = candidate.replace(/\s+/g, '').replace(/[–—]/g, '-').toUpperCase();
         if (isValidYoksisId(cleaned)) {
             return cleaned;
         }
