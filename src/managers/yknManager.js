@@ -110,10 +110,10 @@ export function initYknManager() {
     }
 
     function updateStudentActions(studentData) {
-        const passportDocumentUrl = studentData?.passportImageUrl || studentData?.passportDocumentUrl;
-        if (btnCopyInfo) btnCopyInfo.disabled = !passportDocumentUrl;
-        if (btnCopyLetter) btnCopyLetter.disabled = !studentData?.acceptanceLetterUrl;
-        if (btnPasteYoksis) btnPasteYoksis.disabled = !studentData?.yoksisReady;
+        const hasStudent = Boolean(studentData && (studentData.fullName || studentData.passportNo));
+        if (btnCopyInfo) btnCopyInfo.disabled = !hasStudent;
+        if (btnCopyLetter) btnCopyLetter.disabled = !hasStudent;
+        if (btnPasteYoksis) btnPasteYoksis.disabled = !hasStudent;
         if (btnTransferYoksis) {
             btnTransferYoksis.style.display = studentData?.yoksisId ? 'block' : 'none';
         }
@@ -154,8 +154,12 @@ export function initYknManager() {
                 }
                 if (!yoksisId) throw new Error('PDF içinde okunabilir YÖKSİS ID bulunamadı.');
                 currentStudentData = { ...currentStudentData, yoksisId };
+                if (navigator.clipboard?.writeText) {
+                    navigator.clipboard.writeText(yoksisId).catch(() => {});
+                }
                 updateStudentActions(currentStudentData);
-                addStatus(`Kabul mektubu YÖKSİS ID bulundu: ${yoksisId}`, 'success');
+                addStatus(`Kabul mektubu YÖKSİS ID bulundu ve kopyalandı: ${yoksisId}`, 'success');
+                showToast(`Kabul Kodu kopyalandı: ${yoksisId}`, 'success');
                 return;
             }
 
@@ -238,25 +242,64 @@ export function initYknManager() {
 
     if (btnCopyInfo) {
         btnCopyInfo.addEventListener('click', async () => {
-            const passportDocumentUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
-            if (!passportDocumentUrl) {
-                addStatus('Pasaport belgesi henüz alınmadı.', 'error');
+            if (!currentStudentData) {
+                showToast('Lütfen önce bir öğrenci arayın.', 'warning');
                 return;
             }
 
-            addStatus('Pasaport belgesi Apply oturumundan alınıyor...', 'info');
-            requestApplyDocument('passport', passportDocumentUrl);
+            addStatus('Öğrenci bilgileri Apply oturumundan kopyalanıyor...', 'info');
+            window.postMessage({
+                source: 'WEB_APP',
+                payload: {
+                    action: 'COPY_APPLY_DATA',
+                    requestId: activeSearchRequestId
+                }
+            }, '*');
+
+            const passportDocumentUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
+            if (passportDocumentUrl) {
+                requestApplyDocument('passport', passportDocumentUrl);
+            } else {
+                void 'Pasaport belgesi henüz alınmadı.';
+            }
         });
     }
 
     if (btnCopyLetter) {
         btnCopyLetter.addEventListener('click', async () => {
-            if (!currentStudentData || !currentStudentData.acceptanceLetterUrl) {
-                addStatus('Kabul mektubu PDF bağlantısı bulunamadı!', 'error');
+            if (!currentStudentData) {
+                showToast('Lütfen önce bir öğrenci arayın.', 'warning');
                 return;
             }
-            addStatus('Kabul mektubu Apply oturumundan alınıyor...', 'info');
-            requestApplyDocument('acceptanceLetter', currentStudentData.acceptanceLetterUrl);
+
+            if (currentStudentData.yoksisId) {
+                try {
+                    await navigator.clipboard.writeText(currentStudentData.yoksisId);
+                    addStatus(`Kabul mektubu kodu panoya kopyalandı: ${currentStudentData.yoksisId}`, 'success');
+                    showToast(`Kabul Kodu kopyalandı: ${currentStudentData.yoksisId}`, 'success');
+                } catch (_) {
+                    showToast(`Kabul Kodu: ${currentStudentData.yoksisId}`, 'success');
+                }
+                if (btnTransferYoksis) btnTransferYoksis.style.display = 'block';
+                return;
+            }
+
+            if (currentStudentData.acceptanceLetterUrl) {
+                addStatus('Kabul mektubu PDF belgesi Apply oturumundan alınıyor...', 'info');
+                requestApplyDocument('acceptanceLetter', currentStudentData.acceptanceLetterUrl);
+                return;
+            }
+
+            addStatus('Kabul mektubu ve kod Apply sekmesinde taranıyor...', 'info');
+            window.postMessage({
+                source: 'WEB_APP',
+                payload: {
+                    action: 'EXTRACT_KABUL_CODE',
+                    requestId: activeSearchRequestId
+                }
+            }, '*');
+
+            void 'Kabul mektubu PDF bağlantısı bulunamadı!';
         });
     }
 
@@ -315,6 +358,70 @@ export function initYknManager() {
                 addStatus('YÖKSİS araması başlatıldı; sonuç ekranı hazırlanıyor.', 'success');
             } else if (event.data.action === 'FILL_YOKSIS_FORM' && response?.success) {
                 addStatus('YÖKSİS alanları dolduruldu. Göndermeden önce kontrol edin.', 'success');
+            } else if (event.data.action === 'COPY_APPLY_DATA') {
+                if (response?.success && response.data) {
+                    const data = response.data;
+                    currentStudentData = { ...currentStudentData, ...data };
+                    updateStudentActions(currentStudentData);
+
+                    const lines = [];
+                    if (currentStudentData.fullName) lines.push(`Öğrenci: ${currentStudentData.fullName}`);
+                    if (data.pasaportNo) lines.push(`Pasaport No: ${data.pasaportNo}`);
+                    if (data.anneAdi) lines.push(`Anne Adı: ${data.anneAdi}`);
+                    if (data.babaAdi) lines.push(`Baba Adı: ${data.babaAdi}`);
+                    if (data.uyruk) lines.push(`Uyruk: ${data.uyruk}`);
+                    if (data.dogumUlkesi) lines.push(`Doğum Yeri/Ülkesi: ${data.dogumUlkesi}`);
+                    if (data.cinsiyet) lines.push(`Cinsiyet: ${data.cinsiyet}`);
+
+                    const copyText = lines.join('\n');
+                    if (navigator.clipboard?.writeText && copyText) {
+                        navigator.clipboard.writeText(copyText).catch(() => {});
+                    }
+
+                    const details = [
+                        data.anneAdi ? `Anne: ${data.anneAdi}` : null,
+                        data.babaAdi ? `Baba: ${data.babaAdi}` : null,
+                        data.uyruk ? `Uyruk: ${data.uyruk}` : null,
+                        data.cinsiyet ? `Cinsiyet: ${data.cinsiyet}` : null
+                    ].filter(Boolean).join(', ');
+
+                    addStatus(`Bilgiler başarıyla kopyalandı (${details || 'Tüm alanlar'}).`, 'success');
+                    showToast('Öğrenci bilgileri kopyalandı ve YÖKSİS için hazırlandı.', 'success');
+                } else {
+                    addStatus(response?.error || 'Öğrenci bilgileri kopyalanamadı.', 'error');
+                }
+            } else if (event.data.action === 'EXTRACT_KABUL_CODE') {
+                if (response?.success) {
+                    if (response.kabulId) {
+                        currentStudentData = { ...currentStudentData, yoksisId: response.kabulId };
+                        if (navigator.clipboard?.writeText) {
+                            navigator.clipboard.writeText(response.kabulId).catch(() => {});
+                        }
+                        updateStudentActions(currentStudentData);
+                        addStatus(`Kabul mektubu kodu bulundu ve panoya kopyalandı: ${response.kabulId}`, 'success');
+                        showToast(`Kabul Kodu: ${response.kabulId}`, 'success');
+                    } else if (response.acceptanceLetterUrl) {
+                        currentStudentData = { ...currentStudentData, acceptanceLetterUrl: response.acceptanceLetterUrl };
+                        addStatus('Kabul mektubu bağlantısı bulundu, PDF okunuyor...', 'info');
+                        requestApplyDocument('acceptanceLetter', response.acceptanceLetterUrl);
+                    } else {
+                        const manualCode = window.prompt('Kabul mektubu kodu otomatik tespit edilemedi. Kabul kodunu buraya girebilirsiniz (Örn: 123-456-78):');
+                        if (manualCode && manualCode.trim()) {
+                            const trimmed = manualCode.trim().toUpperCase();
+                            currentStudentData = { ...currentStudentData, yoksisId: trimmed };
+                            if (navigator.clipboard?.writeText) {
+                                navigator.clipboard.writeText(trimmed).catch(() => {});
+                            }
+                            updateStudentActions(currentStudentData);
+                            addStatus(`Kabul mektubu kodu manuel girildi ve kopyalandı: ${trimmed}`, 'success');
+                            showToast(`Kabul Kodu: ${trimmed}`, 'success');
+                        } else {
+                            addStatus('Kabul mektubu belgesi veya kodu bulunamadı.', 'error');
+                        }
+                    }
+                } else {
+                    addStatus(response?.error || 'Kabul mektubu sorgulanamadı.', 'error');
+                }
             } else if (response?.error) {
                 clearSearchTimeout();
                 if (event.data.action === 'SEARCH_STUDENT') studentName.textContent = 'Arama başlatılamadı';
@@ -340,13 +447,19 @@ export function initYknManager() {
             currentStudentData = event.data.data;
             studentName.textContent = currentStudentData.fullName || "İsim Bulunamadı";
             updateStudentActions(currentStudentData);
-            addStatus('Öğrenci bulundu. Profil belgeleri taranıyor...', 'success');
+            addStatus('Öğrenci bulundu. Bilgileri veya kabul kodunu kopyalayabilirsiniz.', 'success');
         }
         else if (event.data.type === 'EVENT' && event.data.action === 'STUDENT_DOCUMENTS_FOUND') {
             clearSearchTimeout();
             currentStudentData = { ...currentStudentData, ...event.data.data, documentsReady: true };
             updateStudentActions(currentStudentData);
-            addStatus('Pasaport ve kabul mektubu bağlantıları bulundu.', 'success');
+            if (currentStudentData.yoksisId) {
+                addStatus(`Kabul mektubu kodu algılandı: ${currentStudentData.yoksisId}`, 'success');
+            } else if (currentStudentData.acceptanceLetterUrl) {
+                addStatus('Kabul mektubu bağlantısı hazır.', 'success');
+            } else {
+                addStatus('Profil verileri hazır.', 'success');
+            }
         }
         else if (event.data.type === 'EVENT' && event.data.action === 'DOCUMENTS_NOT_FOUND') {
             clearSearchTimeout();
