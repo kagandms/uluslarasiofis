@@ -183,11 +183,17 @@ export function initYknManager() {
                         const parser = new DOMParser();
                         const doc = parser.parseFromString(decodedText, 'text/html');
                         const embedEl = doc.querySelector('iframe[src], embed[src], object[data], a[href*=".pdf"]');
-                        const embedSrc = embedEl ? (embedEl.getAttribute('src') || embedEl.getAttribute('data') || embedEl.getAttribute('href')) : null;
-                        if (embedSrc && embedSrc.includes('.pdf') && !pendingDocumentReads.has(documentKind + '_retry')) {
+                        let embedSrc = embedEl ? (embedEl.getAttribute('src') || embedEl.getAttribute('data') || embedEl.getAttribute('href')) : null;
+                        if (!embedSrc) {
+                            const match = decodedText.match(/(https?:\/\/[^"'\s<>]+\/uploads\/acceptance-letters\/[^"'\s<>]+\.pdf[^"'\s<>]*)/i)
+                                || decodedText.match(/(https?:\/\/[^"'\s<>]+\.pdf[^"'\s<>]*)/i);
+                            if (match) embedSrc = match[1];
+                        }
+                        if (embedSrc && !pendingDocumentReads.has(documentKind + '_retry')) {
                             pendingDocumentReads.add(documentKind + '_retry');
+                            pendingDocumentReads.delete(documentKind);
                             addStatus('Kabul mektubu PDF bağlantısı HTML içinde bulundu, alınıyor...', 'info');
-                            requestApplyDocument(documentKind, embedSrc);
+                            requestApplyDocument(documentKind, embedSrc.replace(/&amp;/g, '&'));
                             return;
                         }
                         text = doc.body ? doc.body.innerText : decodedText;
@@ -210,12 +216,7 @@ export function initYknManager() {
                 }
 
                 if (!yoksisId) {
-                    const manualCode = window.prompt('Kabul mektubu açıldı ancak YÖKSİS ID metin olarak okunamadı.\nLütfen Kabul Kodunu buraya girin (Örn: ABC-123-XY):');
-                    if (manualCode && manualCode.trim()) {
-                        yoksisId = manualCode.trim().toUpperCase();
-                    } else {
-                        throw new Error('PDF içinde okunabilir YÖKSİS ID bulunamadı.');
-                    }
+                    throw new Error('Kabul mektubu PDF belgesinde geçerli YÖKSİS ID bulunamadı.');
                 }
 
                 currentStudentData = { ...currentStudentData, yoksisId };
@@ -475,19 +476,8 @@ export function initYknManager() {
                         addStatus('Kabul mektubu bağlantısı bulundu, PDF okunuyor...', 'info');
                         requestApplyDocument('acceptanceLetter', response.acceptanceLetterUrl);
                     } else {
-                        const manualCode = window.prompt('Kabul mektubu kodu otomatik tespit edilemedi. Kabul kodunu buraya girebilirsiniz (Örn: 123-456-78):');
-                        if (manualCode && manualCode.trim()) {
-                            const trimmed = manualCode.trim().toUpperCase();
-                            currentStudentData = { ...currentStudentData, yoksisId: trimmed };
-                            if (navigator.clipboard?.writeText) {
-                                navigator.clipboard.writeText(trimmed).catch(() => {});
-                            }
-                            updateStudentActions(currentStudentData);
-                            addStatus(`Kabul mektubu kodu manuel girildi ve kopyalandı: ${trimmed}`, 'success');
-                            showToast(`Kabul Kodu: ${trimmed}`, 'success');
-                        } else {
-                            addStatus('Kabul mektubu belgesi veya kodu bulunamadı.', 'error');
-                        }
+                        addStatus('Kabul mektubu belgesi veya kodu bulunamadı.', 'error');
+                        showToast('Kabul mektubu belgesi bulunamadı.', 'error');
                     }
                 } else {
                     addStatus(response?.error || 'Kabul mektubu sorgulanamadı.', 'error');
