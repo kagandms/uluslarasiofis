@@ -455,7 +455,7 @@ export function initYknManager() {
                 showToast('Önce kabul mektubundan kodu kopyalamalısınız.', 'warning');
                 return;
             }
-            addStatus('YÖKSİS sekmesine geçiliyor...', 'info');
+            addStatus('Arka planda YÖKSİS\'e aktarılıyor ve arama yapılıyor...', 'info');
             window.postMessage({
                 source: 'WEB_APP',
                 payload: {
@@ -501,7 +501,8 @@ export function initYknManager() {
             } else if (event.data.action === 'TRANSFER_TO_YOKSIS' && response?.success) {
                 currentStudentData = { ...currentStudentData, yoksisReady: Boolean(response.formReady) };
                 updateStudentActions(currentStudentData);
-                addStatus('YÖKSİS araması başlatıldı; sonuç ekranı hazırlanıyor.', 'success');
+                addStatus('YÖKSİS araması arka planda başlatıldı; "Kabul Mektup Id İle Ara" tıklandı.', 'success');
+                showToast('YÖKSİS araması arka planda başlatıldı.', 'success');
             } else if (event.data.action === 'FILL_YOKSIS_FORM' && response?.success) {
                 addStatus('YÖKSİS alanları dolduruldu. Göndermeden önce kontrol edin.', 'success');
             } else if (event.data.action === 'COPY_APPLY_DATA') {
