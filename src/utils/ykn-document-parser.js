@@ -31,9 +31,11 @@ function findLabeledDate(text, labels) {
 export function extractYoksisIdFromText(text) {
     const normalizedText = normalizeDocumentText(text);
     const labeledMatch = normalizedText.match(
-        /(?:YÖKS[İI]S|YOKSIS)\s*(?:ID|KODU|NO)?\s*[:#-]?\s*([A-Z0-9]{2,}(?:-[A-Z0-9]{2,}){1,4})/i
+        /(?:YÖKS[İI]S|YOKSIS)\s*(?:ID|KODU|NO)?\s*[:#-]?\s*([A-Z0-9]{2,}\s*(?:-\s*[A-Z0-9]{2,}){1,4})/i
     );
-    if (labeledMatch) return labeledMatch[1].toUpperCase();
+    if (labeledMatch) {
+        return labeledMatch[1].replace(/\s+/g, '').toUpperCase();
+    }
 
     const candidates = normalizedText.match(/\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,}){1,4}\b/gi) || [];
     return candidates.find((candidate) => /[A-Z]/i.test(candidate) && /\d/.test(candidate))?.toUpperCase() || '';
