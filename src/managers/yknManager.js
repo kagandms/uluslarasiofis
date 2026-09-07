@@ -133,6 +133,25 @@ export function initYknManager() {
         }, '*');
     }
 
+    function isPdfData(bytes) {
+        if (!bytes || bytes.length < 5) return -1;
+        const limit = Math.min(bytes.length, 1024);
+        for (let i = 0; i <= limit - 5; i++) {
+            if (bytes[i] === 0x25 && bytes[i+1] === 0x50 && bytes[i+2] === 0x44 && bytes[i+3] === 0x46 && bytes[i+4] === 0x2D) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    function isImageData(bytes, contentType) {
+        if (contentType && contentType.toLowerCase().startsWith('image/')) return true;
+        if (!bytes || bytes.length < 4) return false;
+        if (bytes[0] === 0xFF && bytes[1] === 0xD8) return true;
+        if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return true;
+        return false;
+    }
+
     async function handleDocumentBytesReady(documentData) {
         const documentKind = documentData?.documentKind;
         const documentBytes = documentData?.documentBase64
@@ -142,17 +161,63 @@ export function initYknManager() {
         if (!documentKind || !documentBytes) return;
 
         try {
-            const isImage = contentType.toLocaleLowerCase('en-US').startsWith('image/');
-            let text = isImage ? '' : await extractPdfText(documentBytes);
+            const pdfOffset = isPdfData(documentBytes);
+            const isImage = isImageData(documentBytes, contentType);
+            let text = '';
+
+            if (pdfOffset >= 0) {
+                const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
+                try {
+                    text = await extractPdfText(validPdfBytes);
+                } catch (pdfErr) {
+                    text = await extractPdfTextWithOcr(validPdfBytes);
+                }
+            } else if (isImage) {
+                text = await extractImageTextWithOcr(documentBytes, contentType || 'image/jpeg');
+            } else {
+                const textDecoder = new TextDecoder('utf-8');
+                const decodedText = textDecoder.decode(documentBytes);
+                
+                if (decodedText.includes('<') && decodedText.includes('>')) {
+                    try {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(decodedText, 'text/html');
+                        const embedEl = doc.querySelector('iframe[src], embed[src], object[data], a[href*=".pdf"]');
+                        const embedSrc = embedEl ? (embedEl.getAttribute('src') || embedEl.getAttribute('data') || embedEl.getAttribute('href')) : null;
+                        if (embedSrc && embedSrc.includes('.pdf') && !pendingDocumentReads.has(documentKind + '_retry')) {
+                            pendingDocumentReads.add(documentKind + '_retry');
+                            addStatus('Kabul mektubu PDF bağlantısı HTML içinde bulundu, alınıyor...', 'info');
+                            requestApplyDocument(documentKind, embedSrc);
+                            return;
+                        }
+                        text = doc.body ? doc.body.innerText : decodedText;
+                    } catch (_) {
+                        text = decodedText;
+                    }
+                } else {
+                    text = decodedText;
+                }
+            }
+
             if (documentKind === 'acceptanceLetter') {
                 let yoksisId = extractYoksisIdFromText(text);
-                if (!yoksisId) {
-                    text = isImage
-                        ? await extractImageTextWithOcr(documentBytes, contentType)
-                        : await extractPdfTextWithOcr(documentBytes);
-                    yoksisId = extractYoksisIdFromText(text);
+                if (!yoksisId && pdfOffset >= 0) {
+                    try {
+                        const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
+                        const ocrText = await extractPdfTextWithOcr(validPdfBytes);
+                        yoksisId = extractYoksisIdFromText(ocrText);
+                    } catch (_) {}
                 }
-                if (!yoksisId) throw new Error('PDF içinde okunabilir YÖKSİS ID bulunamadı.');
+
+                if (!yoksisId) {
+                    const manualCode = window.prompt('Kabul mektubu açıldı ancak YÖKSİS ID metin olarak okunamadı.\nLütfen Kabul Kodunu buraya girin (Örn: ABC-123-XY):');
+                    if (manualCode && manualCode.trim()) {
+                        yoksisId = manualCode.trim().toUpperCase();
+                    } else {
+                        throw new Error('PDF içinde okunabilir YÖKSİS ID bulunamadı.');
+                    }
+                }
+
                 currentStudentData = { ...currentStudentData, yoksisId };
                 if (navigator.clipboard?.writeText) {
                     navigator.clipboard.writeText(yoksisId).catch(() => {});
@@ -165,10 +230,14 @@ export function initYknManager() {
 
             let passportDates = extractPassportDatesFromText(text);
             if (!passportDates.issueDate || !passportDates.expiryDate) {
-                text = isImage
-                    ? await extractImageTextWithOcr(documentBytes, contentType)
-                    : await extractPdfTextWithOcr(documentBytes);
-                passportDates = extractPassportDatesFromText(text);
+                if (pdfOffset >= 0) {
+                    const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
+                    const ocrText = await extractPdfTextWithOcr(validPdfBytes);
+                    passportDates = extractPassportDatesFromText(ocrText);
+                } else if (isImage) {
+                    const ocrText = await extractImageTextWithOcr(documentBytes, contentType || 'image/jpeg');
+                    passportDates = extractPassportDatesFromText(ocrText);
+                }
             }
             if (!passportDates.issueDate || !passportDates.expiryDate) {
                 throw new Error('Pasaport PDF metninde geçerli düzenlenme/geçerlilik tarihleri bulunamadı.');
