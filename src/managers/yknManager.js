@@ -1,8 +1,47 @@
 import { showToast } from '../ui/toastManager.js';
 import { extractPassportDatesFromText, extractYoksisIdFromText, isValidYoksisId } from '../utils/ykn-document-parser.js';
 
+function ensurePdfWorkerReady() {
+    if (window.pdfjsLib && !window.pdfjsLib.GlobalWorkerOptions?.workerSrc) {
+        try {
+            const workerBlob = new Blob([
+                "importScripts('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js');"
+            ], { type: 'application/javascript' });
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
+        } catch (_) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+        }
+    }
+}
+
+function copyTextToClipboard(text) {
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {
+            fallbackCopyText(text);
+        });
+    } else {
+        fallbackCopyText(text);
+    }
+}
+
+function fallbackCopyText(text) {
+    try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+    } catch (_) {}
+}
+
 async function extractPdfText(documentBytes) {
     if (!window.pdfjsLib) throw new Error('PDF okuyucu hazır değil.');
+    ensurePdfWorkerReady();
     const pdf = await window.pdfjsLib.getDocument({ data: documentBytes }).promise;
     const pageTexts = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -22,6 +61,7 @@ function decodeBase64ToBytes(base64) {
 
 async function extractPdfTextWithOcr(documentBytes) {
     if (!window.pdfjsLib) throw new Error('PDF okuyucu hazır değil.');
+    ensurePdfWorkerReady();
     const pdf = await window.pdfjsLib.getDocument({ data: documentBytes }).promise;
     const { runOCR } = await import('../services/ocrService.js');
     const pageTexts = [];
@@ -220,9 +260,7 @@ export function initYknManager() {
                 }
 
                 currentStudentData = { ...currentStudentData, yoksisId };
-                if (navigator.clipboard?.writeText) {
-                    navigator.clipboard.writeText(yoksisId).catch(() => {});
-                }
+                copyTextToClipboard(yoksisId);
                 updateStudentActions(currentStudentData);
                 addStatus(`Kabul mektubu YÖKSİS ID bulundu ve kopyalandı: ${yoksisId}`, 'success');
                 showToast(`Kabul Kodu kopyalandı: ${yoksisId}`, 'success');
@@ -343,13 +381,9 @@ export function initYknManager() {
             }
 
             if (currentStudentData.yoksisId && isValidYoksisId(currentStudentData.yoksisId)) {
-                try {
-                    await navigator.clipboard.writeText(currentStudentData.yoksisId);
-                    addStatus(`Kabul mektubu kodu panoya kopyalandı: ${currentStudentData.yoksisId}`, 'success');
-                    showToast(`Kabul Kodu kopyalandı: ${currentStudentData.yoksisId}`, 'success');
-                } catch (_) {
-                    showToast(`Kabul Kodu: ${currentStudentData.yoksisId}`, 'success');
-                }
+                copyTextToClipboard(currentStudentData.yoksisId);
+                addStatus(`Kabul mektubu kodu panoya kopyalandı: ${currentStudentData.yoksisId}`, 'success');
+                showToast(`Kabul Kodu kopyalandı: ${currentStudentData.yoksisId}`, 'success');
                 if (btnTransferYoksis) btnTransferYoksis.style.display = 'block';
                 return;
             }
@@ -444,9 +478,7 @@ export function initYknManager() {
                     if (data.cinsiyet) lines.push(`Cinsiyet: ${data.cinsiyet}`);
 
                     const copyText = lines.join('\n');
-                    if (navigator.clipboard?.writeText && copyText) {
-                        navigator.clipboard.writeText(copyText).catch(() => {});
-                    }
+                    copyTextToClipboard(copyText);
 
                     const details = [
                         data.anneAdi ? `Anne: ${data.anneAdi}` : null,
@@ -465,9 +497,7 @@ export function initYknManager() {
                     const validCode = isValidYoksisId(response.kabulId) ? response.kabulId : '';
                     if (validCode) {
                         currentStudentData = { ...currentStudentData, yoksisId: validCode };
-                        if (navigator.clipboard?.writeText) {
-                            navigator.clipboard.writeText(validCode).catch(() => {});
-                        }
+                        copyTextToClipboard(validCode);
                         updateStudentActions(currentStudentData);
                         addStatus(`Kabul mektubu kodu bulundu ve panoya kopyalandı: ${validCode}`, 'success');
                         showToast(`Kabul Kodu: ${validCode}`, 'success');

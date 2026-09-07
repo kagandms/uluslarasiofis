@@ -44,3 +44,10 @@ test('rejects invalid passport date order instead of guessing', () => {
 
     assert.deepEqual(result, { issueDate: '', expiryDate: '' });
 });
+
+test('extracts YOKSIS ID from various acceptance letter formats', () => {
+    assert.equal(extractYoksisIdFromText('KABUL MEKTUBU KODU: 821-EC2-34'), '821-EC2-34');
+    assert.equal(extractYoksisIdFromText('VERIFICATION CODE: 0F0-881-60'), '0F0-881-60');
+    assert.equal(extractYoksisIdFromText('ACCEPTANCE LETTER NO: ABC-123-XY'), 'ABC-123-XY');
+});
+

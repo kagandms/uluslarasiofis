@@ -40,7 +40,7 @@ export function isValidYoksisId(code) {
 export function extractYoksisIdFromText(text) {
     const normalizedText = normalizeDocumentText(text);
     const labeledMatch = normalizedText.match(
-        /(?:YÖKS[İI]S|YOKSIS)\s*(?:ID|KODU|NO)?\s*[:#-]?\s*([A-Z0-9]{2,4}\s*(?:-\s*[A-Z0-9]{2,4}){1,4})/i
+        /(?:YÖKS[İI]S|YOKSIS|KABUL\s*MEKTUB[U]?|ACCEPTANCE\s*LETTER|VERIFICATION)\s*(?:ID|KODU|NO|CODE)?\s*[:#\.-]?\s*([A-Z0-9]{2,4}\s*(?:-\s*[A-Z0-9]{2,4}){1,4})/i
     );
     if (labeledMatch) {
         const id = labeledMatch[1].replace(/\s+/g, '').toUpperCase();

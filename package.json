@@ -23,6 +23,7 @@
   "homepage": "https://github.com/kagandms/ikamet#readme",
   "devDependencies": {
     "jsdom": "^29.1.1",
+    "pdfjs-dist": "^2.16.105",
     "vite": "^8.2.2"
   },
   "dependencies": {
