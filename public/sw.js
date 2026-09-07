@@ -1,8 +1,6 @@
-const CACHE_NAME = 'ikamet-cache-v3';
+const CACHE_NAME = 'ikamet-cache-v4';
 
 const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
   '/manifest.json',
   '/icon.png',
   '/header_logo.jpg'
@@ -35,8 +33,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // API veya POST isteklerini asla önbelleğe alma (Her zaman ağa git)
-  if (url.pathname.startsWith('/api') || event.request.method !== 'GET') {
+  // HTML, API veya POST isteklerini asla önbellekten verme (Her zaman doğrudan ağa git)
+  if (url.pathname === '/' || url.pathname.endsWith('.html') || url.pathname.startsWith('/api') || event.request.method !== 'GET') {
     return;
   }
 

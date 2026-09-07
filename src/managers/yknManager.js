@@ -273,6 +273,18 @@ export function initYknManager() {
                 }
 
                 if (!yoksisId) {
+                    const looseCandidates = (text || '').match(/\b[A-Z0-9]{2,4}\s*[-–—]\s*[A-Z0-9]{2,4}\s*[-–—]\s*[A-Z0-9]{2,4}\b/gi) || [];
+                    for (const candidate of looseCandidates) {
+                        const cleaned = candidate.replace(/\s+/g, '').replace(/[–—]/g, '-').toUpperCase();
+                        if (isValidYoksisId(cleaned)) {
+                            yoksisId = cleaned;
+                            break;
+                        }
+                    }
+                }
+
+                if (!yoksisId) {
+                    console.warn('[YKN] Kabul mektubu içeriğinde YÖKSİS ID bulunamadı. Metin örneği:', (text || '').slice(0, 300));
                     throw new Error('Kabul mektubu PDF belgesinde geçerli YÖKSİS ID bulunamadı.');
                 }
 
