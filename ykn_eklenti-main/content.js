@@ -1,0 +1,1299 @@
+// ZK Framework için Event Dispatcher (Input'lar için)
+function getPageKind() {
+    if (location.hostname === 'apply.topkapi.edu.tr') return 'apply';
+    if (location.hostname === 'yoksis.yok.gov.tr') return 'yoksis';
+    return 'unknown';
+}
+
+function sendApplyEvent(action, requestId, payload = {}) {
+    chrome.runtime.sendMessage({
+        source: 'APPLY_TOPKAPI',
+        action,
+        requestId,
+        ...payload
+    });
+}
+
+function simulateInput(element, value) {
+    if (!element || value === undefined || value === null) return false;
+    
+    // ZK odaklanmasını ve widget aktifleşmesini sağlamak için fare/focus simülasyonu
+    try {
+        element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+        element.focus();
+        element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    } catch (_) {}
+
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    if (nativeSetter) {
+        nativeSetter.call(element, value);
+    } else {
+        element.value = value;
+    }
+    
+    element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, composed: true, key: 'Enter', keyCode: 13 }));
+    element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, composed: true, key: 'Enter', keyCode: 13 }));
+    
+    // ZK Framework'ün değeri hafızaya alıp dirty/değişti olarak işaretlemesi için kritik olaylar
+    element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+    element.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
+    try { element.blur(); } catch (_) {}
+    return true;
+}
+
+// ZK Framework için Event Dispatcher (Select/Dropdown'lar için)
+function simulateSelect(element, textToMatch) {
+    if (!element || !textToMatch) return false;
+    let found = false;
+    const normalize = (str) => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+    const targetText = normalize(textToMatch);
+
+    for (const option of element.options) {
+        const optText = normalize(option.text);
+        if (optText.includes(targetText) || targetText.includes(optText)) {
+            element.value = option.value;
+            found = true;
+            break;
+        }
+    }
+    if (found) {
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new Event('blur', { bubbles: true }));
+        return true;
+    }
+    return false;
+}
+
+// ZK Framework için Event Dispatcher (Radio Button'lar için)
+function simulateRadioByLabelText(labelText) {
+    if (!labelText) return false;
+    const normalize = (str) => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+    const targetText = normalize(labelText);
+    
+    const labels = document.querySelectorAll('label');
+    for (const lbl of labels) {
+        if (normalize(lbl.innerText) === targetText) {
+            const forId = lbl.getAttribute('for');
+            if (forId) {
+                const radio = document.getElementById(forId);
+                if (radio) {
+                    radio.click();
+                    radio.dispatchEvent(new Event('change', { bubbles: true }));
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// Kaynak Sistem - Etiket metni ile açılır liste okuyucu
+function getSourceDropdownByLabel(substring) {
+    const labels = document.querySelectorAll('label');
+    for (const label of labels) {
+        if (label.innerText.toLocaleLowerCase('tr-TR').includes(substring.toLocaleLowerCase('tr-TR'))) {
+            const container = label.parentElement;
+            const select = container.querySelector('select');
+            if (select && select.options.length > 0 && select.selectedIndex >= 0) {
+                return select.options[select.selectedIndex].text;
+            }
+            const select2Span = container.querySelector('.select2-selection__rendered');
+            if (select2Span) {
+                return select2Span.innerText.trim();
+            }
+        }
+    }
+    return '';
+}
+
+// YÖKSİS: Kabul ID inputunu ve butonunu bul
+function normalizeYoksisText(str) {
+    return (str || '').toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+}
+
+function findKabulIdInput() {
+    const norm = normalizeYoksisText;
+    const inputs = document.querySelectorAll('input');
+
+    // 1. Placeholder ve title kontrolü
+    for (const input of inputs) {
+        const ph = norm(input.getAttribute('placeholder') || '');
+        const title = norm(input.getAttribute('title') || '');
+        if (ph.includes('kabulmektup') || ph.includes('kabulid') || title.includes('kabulmektup') || title.includes('kabulid')) {
+            return input;
+        }
+    }
+
+    // 2. Fuzzy etiket arama ("Kabul Mektup Id" veya "Kabul Mektup")
+    const byLabel = findTargetElementByFuzzyLabel('Kabul Mektup Id', 'input')
+                 || findTargetElementByFuzzyLabel('Kabul Mektup', 'input');
+    if (byLabel) return byLabel;
+
+    // 3. Grup kutusu / panel içinde "Kabul Mektup" içeren bölümün inputu
+    const allContainers = document.querySelectorAll('.z-groupbox, .z-panel, fieldset, table, div');
+    for (const cont of allContainers) {
+        const text = norm(cont.innerText || cont.textContent || '');
+        if (text.includes('kabulmektupid') || text.includes('kabulmektup')) {
+            const inp = cont.querySelector('input');
+            if (inp) return inp;
+        }
+    }
+
+    return null;
+}
+
+function findKabulIdButton(idInput) {
+    const norm = normalizeYoksisText;
+
+    // 1. Metin kontrolü: "Kabul Mektup Id İle Ara", "Kabul Mektup Ara", vb.
+    const allClickables = document.querySelectorAll('button, a, input[type="button"], input[type="submit"]');
+    for (const btn of allClickables) {
+        const text = norm(btn.innerText || btn.textContent || btn.value || '');
+        if (text.includes('kabul') && (text.includes('ara') || text.includes('sorgula'))) {
+            return btn;
+        }
+    }
+
+    // 2. Eğer idInput biliniyorsa, idInput'un bulunduğu panel/tablo/groupbox içindeki buton
+    if (idInput) {
+        let container = idInput.closest('table') || idInput.closest('.z-groupbox, .z-panel, fieldset, tr, div');
+        while (container && container !== document.body) {
+            const btn = container.querySelector('button.s-button-submit, button.z-button, button, a.z-button, input[type="button"]');
+            if (btn) {
+                const btnText = norm(btn.innerText || btn.textContent || btn.value || '');
+                if (btnText.includes('ara') || btnText.includes('kabul') || btnText.includes('sorgula') || btn.classList.contains('s-button-submit')) {
+                    return btn;
+                }
+            }
+            container = container.parentElement;
+        }
+    }
+
+    // 3. İçinde "Kabul Mektup" ve "Ara" geçen herhangi bir alt öğenin butonu
+    const textNodes = document.querySelectorAll('span, div, td, b, strong');
+    for (const node of textNodes) {
+        const t = norm(node.innerText || node.textContent || '');
+        if (t.includes('kabul') && t.includes('ara')) {
+            const parentBtn = node.closest('button, a, [role="button"]');
+            if (parentBtn) return parentBtn;
+        }
+    }
+
+    // 4. .s-button-submit veya .z-button sınıflı butonlar arasında arama
+    const zButtons = document.querySelectorAll('button.s-button-submit, button.z-button');
+    for (const btn of zButtons) {
+        const t = norm(btn.innerText || btn.textContent || '');
+        if (t.includes('ara') && !t.includes('belgesorgula')) {
+            return btn;
+        }
+    }
+
+    return null;
+}
+
+function simulateButtonClick(element) {
+    if (!element) return false;
+    try { element.focus(); } catch (_) {}
+
+    const rect = element.getBoundingClientRect();
+    const clientX = rect.left + (rect.width ? rect.width / 2 : 10);
+    const clientY = rect.top + (rect.height ? rect.height / 2 : 10);
+
+    const mouseOpts = {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX,
+        clientY,
+        button: 0,
+        buttons: 1
+    };
+
+    try {
+        element.dispatchEvent(new PointerEvent('pointerover', mouseOpts));
+        element.dispatchEvent(new PointerEvent('pointerenter', mouseOpts));
+        element.dispatchEvent(new PointerEvent('pointerdown', mouseOpts));
+    } catch (_) {}
+
+    element.dispatchEvent(new MouseEvent('mouseover', mouseOpts));
+    element.dispatchEvent(new MouseEvent('mouseenter', mouseOpts));
+    element.dispatchEvent(new MouseEvent('mousedown', mouseOpts));
+
+    const mouseUpOpts = { ...mouseOpts, buttons: 0 };
+    try {
+        element.dispatchEvent(new PointerEvent('pointerup', mouseUpOpts));
+    } catch (_) {}
+    element.dispatchEvent(new MouseEvent('mouseup', mouseUpOpts));
+    element.dispatchEvent(new MouseEvent('click', mouseUpOpts));
+
+    try {
+        element.click();
+    } catch (_) {}
+
+    return true;
+}
+
+function triggerZkClick(buttonElement, inputElement, kabulId) {
+    const btnId = buttonElement ? buttonElement.id : '';
+    const inpId = inputElement ? inputElement.id : '';
+
+    try {
+        // Doğrudan window.zk varsa (aynı bağlamda)
+        if (window.zk && window.zk.Widget) {
+            if (inputElement) {
+                const wi = window.zk.Widget.$(inputElement);
+                if (wi) {
+                    if (typeof wi.setValue === 'function') wi.setValue(kabulId);
+                    wi.fire('onChange', { value: kabulId }, { toServer: true });
+                }
+            }
+            if (buttonElement) {
+                const wb = window.zk.Widget.$(buttonElement);
+                if (wb) wb.fire('onClick', null, { toServer: true });
+            }
+        }
+        if (window.zAu && buttonElement && window.zk && window.zk.Widget) {
+            const wb = window.zk.Widget.$(buttonElement);
+            if (wb) window.zAu.send(new window.zk.Event(wb, 'onClick', null, { toServer: true }));
+        }
+    } catch (_) {}
+
+    try {
+        const script = document.createElement('script');
+        script.textContent = `
+            (function() {
+                try {
+                    function norm(s) { return (s || '').toLocaleLowerCase('tr-TR').replace(/\\s+/g, ''); }
+                    var btn = ${btnId ? `document.getElementById(${JSON.stringify(btnId)})` : 'null'};
+                    var inp = ${inpId ? `document.getElementById(${JSON.stringify(inpId)})` : 'null'};
+
+                    if (!btn) {
+                        var buttons = document.querySelectorAll('button, a, input[type="button"], input[type="submit"]');
+                        for (var i = 0; i < buttons.length; i++) {
+                            var t = norm(buttons[i].innerText || buttons[i].textContent || buttons[i].value || '');
+                            if (t.indexOf('kabul') !== -1 && (t.indexOf('ara') !== -1 || t.indexOf('sorgula') !== -1)) {
+                                btn = buttons[i];
+                                break;
+                            }
+                        }
+                    }
+
+                    if (inp && window.zk && window.zk.Widget) {
+                        var wi = window.zk.Widget.$(inp);
+                        if (wi) {
+                            if (typeof wi.setValue === 'function') wi.setValue(${JSON.stringify(kabulId)});
+                            wi.fire('onChange', { value: ${JSON.stringify(kabulId)} }, { toServer: true });
+                        }
+                    }
+
+                    if (btn) {
+                        if (window.zk && window.zk.Widget) {
+                            var wb = window.zk.Widget.$(btn);
+                            if (wb) {
+                                wb.fire('onClick', null, { toServer: true });
+                            }
+                        }
+                        if (window.zAu && window.zk && window.zk.Widget) {
+                            var wb2 = window.zk.Widget.$(btn);
+                            if (wb2) {
+                                window.zAu.send(new window.zk.Event(wb2, 'onClick', null, { toServer: true }));
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('[YKN Injected ZK Click Error]', e);
+                }
+            })();
+        `;
+        (document.head || document.documentElement).appendChild(script);
+        script.remove();
+    } catch (error) {
+        console.warn('[YKN] ZK click injection failed:', error);
+    }
+}
+
+function syncZkFormInputs() {
+    try {
+        const script = document.createElement('script');
+        script.textContent = `
+            (function() {
+                try {
+                    var inputs = document.querySelectorAll('input, select, textarea');
+                    for (var i = 0; i < inputs.length; i++) {
+                        var el = inputs[i];
+                        if (el.type === 'button' || el.type === 'submit' || el.type === 'reset' || el.type === 'hidden') continue;
+                        var val = el.value;
+                        if (val === undefined || val === null || val === '') continue;
+
+                        try {
+                            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                            el.focus();
+                            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                            el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                            el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                            el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+                            el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
+                            el.blur();
+                        } catch (_) {}
+
+                        if (window.zk && window.zk.Widget) {
+                            var w = window.zk.Widget.$(el);
+                            if (w) {
+                                if (typeof w.setValue === 'function') {
+                                    w.setValue(val);
+                                }
+                                w._value = val;
+                                if (typeof w.doBlur_ === 'function') {
+                                    try { w.doBlur_(new window.zk.Event(w, 'onBlur')); } catch (_) {}
+                                }
+                                if (typeof w.fire === 'function') {
+                                    w.fire('onChange', { value: val }, { toServer: true });
+                                }
+                                if (window.zAu && typeof window.zAu.send === 'function') {
+                                    window.zAu.send(new window.zk.Event(w, 'onChange', { value: val }, { toServer: true }));
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('[YKN Sync ZK Form Error]', e);
+                }
+            })();
+        `;
+        (document.head || document.documentElement).appendChild(script);
+        script.remove();
+    } catch (e) {
+        console.warn('syncZkFormInputs injection error:', e);
+    }
+}
+
+function waitForYoksisSearchControls() {
+    const deadline = Date.now() + 15_000;
+    return new Promise((resolve, reject) => {
+        const intervalId = setInterval(() => {
+            const idInput = findKabulIdInput();
+            const searchBtn = findKabulIdButton(idInput);
+            if (idInput && searchBtn) {
+                clearInterval(intervalId);
+                resolve({ idInput, searchBtn });
+                return;
+            }
+            if (Date.now() >= deadline) {
+                clearInterval(intervalId);
+                if (idInput) {
+                    resolve({ idInput, searchBtn: findKabulIdButton(idInput) });
+                    return;
+                }
+                reject(new Error('YÖKSİS Kabul Mektubu alanı hazır olmadı.'));
+            }
+        }, 400);
+    });
+}
+
+function waitForYoksisForm() {
+    const deadline = Date.now() + 15_000;
+    return new Promise((resolve, reject) => {
+        const intervalId = setInterval(() => {
+            const hasStudentForm = Boolean(
+                findTargetElementByFuzzyLabel('Anne Adı', 'input')
+                || findTargetElementByFuzzyLabel('Baba Adı', 'input')
+                || findBelgeNoInMainPanel()
+            );
+            if (hasStudentForm) {
+                clearInterval(intervalId);
+                resolve();
+                return;
+            }
+            if (Date.now() >= deadline) {
+                clearInterval(intervalId);
+                reject(new Error('YÖKSİS öğrenci bilgi formu açılmadı.'));
+            }
+        }, 400);
+    });
+}
+
+// YÖKSİS: "Belge No" alanını bul (Hata Düzeltildi - Kesin TD Araması)
+function findBelgeNoInMainPanel() {
+    const normalize = str => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+    const searchWord = normalize('Belge No');
+    
+    const allInputs = document.querySelectorAll('input');
+    
+    for (const target of allInputs) {
+        // Sol menüdeki arama kutucuğunu atlamak için placeholder kontrolü
+        const ph = target.getAttribute('placeholder') || '';
+        if (ph.toLocaleLowerCase('tr-TR').includes('pasaport') || ph.toLocaleLowerCase('tr-TR').includes('belge')) {
+            continue; 
+        }
+        
+        // Bu input'un solundaki hücrelerde 'Belge No' var mı bakıyoruz
+        const targetTd = target.closest('td');
+        let prevTd = targetTd ? targetTd.previousElementSibling : null;
+        let foundLabel = false;
+        
+        while(prevTd) {
+            const text = normalize(prevTd.innerText);
+            if(text.includes(searchWord)) {
+                foundLabel = true;
+                break;
+            }
+            if(text.includes(normalize('Uyruk Kimlik No'))) {
+                // Eğer sola doğru giderken Belge No'dan önce Uyruk Kimlik No'ya çarparsak, 
+                // bu kutu Uyruk Kimlik No'nun kutusudur, Belge No'nun değil! Aramayı kes.
+                break;
+            }
+            prevTd = prevTd.previousElementSibling;
+        }
+        
+        if (foundLabel) {
+            return target;
+        }
+    }
+    return null;
+}
+
+// YÖKSİS: Diğer alanlar için çok güçlü, boşluk duyarsız arayıcı
+function findTargetElementByFuzzyLabel(labelText, tagName) {
+    const normalize = str => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+    const searchWord = normalize(labelText);
+    
+    const allTargets = document.querySelectorAll(tagName);
+    for (const target of allTargets) {
+        const row = target.closest('tr');
+        if (row && normalize(row.innerText).includes(searchWord)) {
+            const targetTd = target.closest('td');
+            let prevTd = targetTd ? targetTd.previousElementSibling : null;
+            while(prevTd) {
+                if(normalize(prevTd.innerText).includes(searchWord)) {
+                    return target;
+                }
+                prevTd = prevTd.previousElementSibling;
+            }
+        }
+    }
+    
+    const elements = Array.from(document.querySelectorAll('span, div, label')).filter(el => {
+        return normalize(el.innerText).includes(searchWord) && el.children.length <= 2;
+    });
+
+    for (const el of elements) {
+        const parentTd = el.closest('td');
+        if (parentTd && parentTd.nextElementSibling) {
+            const target = parentTd.nextElementSibling.querySelector(tagName);
+            if (target) return target;
+        }
+    }
+    
+    for (const target of allTargets) {
+        const row = target.closest('tr');
+        if (row && normalize(row.innerText).includes(searchWord)) {
+             return target;
+        }
+    }
+    return null;
+}
+
+function normalizeApplyText(value) {
+    return (value || '').toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+}
+
+function toApplyUrl(value) {
+    if (!value || value === '#' || value.startsWith('javascript:')) return '';
+
+    try {
+        const url = new URL(value, location.href);
+        if (url.hostname !== 'apply.topkapi.edu.tr' && !url.hostname.endsWith('.topkapi.edu.tr')) return '';
+        return url.href;
+    } catch (error) {
+        return '';
+    }
+}
+
+function extractElementUrl(element) {
+    const directValue = element.href
+        || element.getAttribute('data-href')
+        || element.getAttribute('data-url')
+        || element.getAttribute('data-link');
+    const directUrl = toApplyUrl(directValue);
+    if (directUrl) return directUrl;
+
+    const onclick = element.getAttribute('onclick') || '';
+    const embeddedValue = onclick.match(/['"]((?:https?:\/\/|\/)[^'"]+)['"]/i);
+    return embeddedValue ? toApplyUrl(embeddedValue[1]) : '';
+}
+
+function findStudentProfileUrl(row) {
+    if (!row) return '';
+    const elements = row.querySelectorAll('a[href], [data-href], [data-url], [data-link], [onclick], button');
+    for (const element of elements) {
+        const url = extractElementUrl(element);
+        const text = normalizeApplyText(element.innerText || element.textContent);
+        if (url && url.includes('/applications') && !text.includes('sil')) return url;
+    }
+
+    for (const el of elements) {
+        const appId = el.getAttribute('data-id') || el.getAttribute('data-application-id') || el.dataset?.id;
+        const text = normalizeApplyText(el.innerText || el.textContent);
+        if (appId && !text.includes('sil')) {
+            return `https://apply.topkapi.edu.tr/panel/applications/${appId}`;
+        }
+    }
+
+    const refCell = row.querySelector('td:nth-child(1)');
+    if (refCell) {
+        const refMatch = refCell.innerText.match(/\d+$/);
+        if (refMatch) {
+            return `https://apply.topkapi.edu.tr/panel/applications/${refMatch[0]}`;
+        }
+    }
+
+    return '';
+}
+
+function isExcludedFromAcceptance(text) {
+    if (!text) return false;
+    const norm = normalizeApplyText(text);
+    return norm.includes('pasaport') || norm.includes('passport')
+        || norm.includes('diploma') || norm.includes('transkript') || norm.includes('transcript')
+        || norm.includes('dekont') || norm.includes('makbuz') || norm.includes('receipt')
+        || norm.includes('fotograf') || norm.includes('photo') || norm.includes('ikamet')
+        || norm.includes('denklik') || norm.includes('kimlik');
+}
+
+function isOfferText(text) {
+    if (!text) return false;
+    const norm = normalizeApplyText(text);
+    return norm.includes('teklif') || norm.includes('offer') || norm.includes('sartli') || norm.includes('conditional');
+}
+
+function isTrueAcceptanceText(text) {
+    if (!text || isOfferText(text) || isExcludedFromAcceptance(text)) return false;
+    const norm = normalizeApplyText(text);
+    return norm.includes('kabulmektub')
+        || norm.includes('resmikabul')
+        || norm.includes('kesinkabul')
+        || norm.includes('acceptanceletter')
+        || norm.includes('officialacceptance')
+        || norm.includes('finalacceptance')
+        || (norm.includes('kabul') && (norm.includes('mektup') || norm.includes('belge')));
+}
+
+function isPassportText(text) {
+    if (!text) return false;
+    if (isOfferText(text) || isTrueAcceptanceText(text)) return false;
+    const norm = normalizeApplyText(text);
+    return norm.includes('pasaport') || norm.includes('passport');
+}
+
+function isAcceptanceLetterUrl(url) {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    if (lower.includes('pasaport') || lower.includes('passport') || lower.includes('offer') || lower.includes('teklif') || lower.includes('sartli') || lower.includes('conditional')) return false;
+    return lower.includes('acceptance-letter')
+        || lower.includes('acceptance_letter')
+        || lower.includes('acceptanceletter')
+        || lower.includes('/verify-document/')
+        || lower.includes('kabul-mektubu')
+        || lower.includes('kabul_mektubu')
+        || lower.includes('kabulmektubu');
+}
+
+function isPassportUrl(url) {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return lower.includes('pasaport') || lower.includes('passport');
+}
+
+function isOfficialAcceptanceLetterText(rawText) {
+    return isTrueAcceptanceText(rawText);
+}
+
+function isOfficialAcceptanceLetterUrl(url) {
+    return isAcceptanceLetterUrl(url);
+}
+
+function isAcceptanceLetterText(rawText) {
+    return isTrueAcceptanceText(rawText);
+}
+
+function getDocumentType(text) {
+    if (isTrueAcceptanceText(text)) {
+        return 'acceptanceLetterUrl';
+    }
+    if (isPassportText(text)) {
+        return 'passportDocumentUrl';
+    }
+    return '';
+}
+
+function isNavigationOrInvalidUrl(url) {
+    if (!url || url === '#' || url.startsWith('javascript:')) return true;
+    try {
+        const parsed = new URL(url, location.href);
+        const path = parsed.pathname.replace(/\/$/, '');
+        if (path === '/panel/applications' || path.endsWith('/edit') || path.endsWith('/delete')) return true;
+        if (path === '/panel/dashboard' || path === '/panel') return true;
+        if (parsed.hash && !parsed.pathname) return true;
+        return false;
+    } catch (_) {
+        return true;
+    }
+}
+
+function isValidYoksisId(code) {
+    if (!code || typeof code !== 'string') return false;
+    const clean = code.trim().toUpperCase().replace(/[–—]/g, '-');
+    if (clean.includes('SVG') || clean.includes('ICON') || clean.includes('BTN') || clean.includes('BADGE')) return false;
+    if (clean.startsWith('202') || clean.startsWith('19')) return false;
+    if (!/^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/.test(clean)) return false;
+    return /\d/.test(clean);
+}
+
+function findDirectKabulCode() {
+    try {
+        const bodyText = document.body ? document.body.innerText : '';
+        const labeledMatch = bodyText.match(/(?:YÖKS[İI]S|YOKSIS)\s*(?:ID|KODU|NO|CODE)?\s*[:#\.\-–—]?\s*([A-Z0-9]{2,4}\s*[-–—]\s*[A-Z0-9]{2,4}\s*[-–—]\s*[A-Z0-9]{2,4})/i);
+        if (labeledMatch && labeledMatch[1]) {
+            const code = labeledMatch[1].replace(/\s+/g, '').replace(/[–—]/g, '-').toUpperCase();
+            if (isValidYoksisId(code)) {
+                return code;
+            }
+        }
+        const yoksisInputs = document.querySelectorAll('input[name*="yoksis" i], input[id*="yoksis" i], [data-yoksis-id]');
+        for (const inp of yoksisInputs) {
+            const val = inp.value || inp.getAttribute('data-yoksis-id');
+            const clean = (val || '').trim().replace(/[–—]/g, '-').toUpperCase();
+            if (isValidYoksisId(clean)) return clean;
+        }
+    } catch (_) {}
+    return '';
+}
+
+function parseDateTimestamp(text) {
+    if (!text) return 0;
+    const m = text.match(/(\d{2})[./-](\d{2})[./-](\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (!m) return 0;
+    const day = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10) - 1;
+    const year = parseInt(m[3], 10);
+    const hour = m[4] ? parseInt(m[4], 10) : 0;
+    const min = m[5] ? parseInt(m[5], 10) : 0;
+    const sec = m[6] ? parseInt(m[6], 10) : 0;
+    return new Date(year, month, day, hour, min, sec).getTime() || 0;
+}
+
+function findDocumentActionUrl(container) {
+    if (!container) return '';
+    const candidates = Array.from(container.querySelectorAll('a[href], [data-href], [data-url], [data-link], button, [onclick]'));
+    
+    // Priority 1: explicitly looks like an acceptance letter or document URL
+    for (const el of candidates) {
+        const url = extractElementUrl(el);
+        if (!url || isNavigationOrInvalidUrl(url)) continue;
+        if (isAcceptanceLetterUrl(url)) return url;
+    }
+
+    // Priority 2: document view/download URL
+    for (const el of candidates) {
+        const url = extractElementUrl(el);
+        if (!url || isNavigationOrInvalidUrl(url)) continue;
+        const normUrl = url.toLocaleLowerCase('tr-TR');
+        const text = (el.innerText || el.textContent || el.getAttribute('title') || '').toLocaleLowerCase('tr-TR');
+        if (normUrl.includes('.pdf') || normUrl.includes('/download') || normUrl.includes('/document') || normUrl.includes('/uploads') || normUrl.includes('/storage') || normUrl.includes('/view') || normUrl.includes('/verify-document')) {
+            return url;
+        }
+        if (text.includes('görüntüle') || text.includes('indir') || text.includes('view') || text.includes('download') || text.includes('pdf')) {
+            return url;
+        }
+    }
+
+    // Priority 3: any valid non-navigation URL
+    for (const el of candidates) {
+        const url = extractElementUrl(el);
+        if (url && !isNavigationOrInvalidUrl(url)) {
+            return url;
+        }
+    }
+    return '';
+}
+
+function findDocumentLinks() {
+    const links = {
+        acceptanceLetterUrl: '',
+        acceptanceCandidates: [],
+        passportDocumentUrl: '',
+        kabulId: ''
+    };
+    
+    // Direct code if available on page
+    const directCode = findDirectKabulCode();
+    if (directCode) links.kabulId = directCode;
+
+    // Detect section cards: "Oluşturulan Dosyalar" vs "Yüklenen Dosyalar"
+    const allContainers = Array.from(document.querySelectorAll('.card, .row, .col, div, section'));
+    let generatedSection = null;
+    let uploadedSection = null;
+
+    for (const container of allContainers) {
+        const h = container.querySelector('h1, h2, h3, h4, h5, h6, .card-title, .fs-4, .fs-5, .fw-bolder, strong, span');
+        const text = h ? normalizeApplyText(h.innerText) : '';
+        if (!generatedSection && (text.includes('olusturulandosya') || text.includes('olusturulanbelge') || text.includes('generatedfiles'))) {
+            generatedSection = container;
+        }
+        if (!uploadedSection && (text.includes('yuklenendosya') || text.includes('yuklenenbelge') || text.includes('uploadedfiles'))) {
+            uploadedSection = container;
+        }
+    }
+
+    const allClickables = Array.from(document.querySelectorAll('a[href], [data-url], [data-href], button, [onclick]'));
+    const acceptanceCandidates = [];
+    const passportCandidates = [];
+
+    for (const el of allClickables) {
+        const url = extractElementUrl(el);
+        if (!url || isNavigationOrInvalidUrl(url)) continue;
+
+        const selfText = el.innerText || el.textContent || '';
+        const titleEl = el.querySelector('.fw-bold, .title, strong, b, h6, span');
+        const titleText = titleEl ? titleEl.innerText : '';
+        const parentContainer = el.closest('.d-flex, .card, tr, li, .document-item, .row');
+        const parentText = parentContainer ? parentContainer.innerText : '';
+
+        const fullItemText = `${titleText} ${selfText} ${parentText}`;
+        const isOffer = isOfferText(fullItemText) || isOfferText(titleText) || isOfferText(selfText);
+        const timestamp = parseDateTimestamp(fullItemText) || parseDateTimestamp(selfText);
+        const inGenerated = generatedSection && generatedSection.contains(el);
+        const inUploaded = uploadedSection && uploadedSection.contains(el);
+
+        // ACCEPTANCE LETTER EVALUATION:
+        // STRICT RULE: Teklif Mektubu (Offer Letter) is NEVER an Acceptance Letter!
+        if (!isOffer && !isPassportUrl(url)) {
+            const isAcceptance = isTrueAcceptanceText(titleText)
+                || isTrueAcceptanceText(selfText)
+                || isTrueAcceptanceText(fullItemText);
+
+            if (isAcceptance) {
+                let score = 500;
+                if (inGenerated) score += 1000;
+                if (isAcceptanceLetterUrl(url)) score += 200;
+                if (timestamp > 0) score += Math.floor(timestamp / 1000);
+                acceptanceCandidates.push({ url, score, timestamp });
+            }
+        }
+
+        // PASSPORT EVALUATION:
+        if (!isOffer && !isTrueAcceptanceText(fullItemText)) {
+            const isPassport = isPassportText(titleText)
+                || isPassportText(selfText)
+                || isPassportText(fullItemText)
+                || isPassportUrl(url);
+
+            if (isPassport && !isTrueAcceptanceText(titleText) && !isTrueAcceptanceText(selfText)) {
+                let score = 500;
+                if (inUploaded) score += 1000;
+                if (isPassportUrl(url)) score += 300;
+                if (timestamp > 0) score += Math.floor(timestamp / 1000);
+                passportCandidates.push({ url, score });
+            }
+        }
+    }
+
+    // Sort acceptance candidates: newest and generated section first
+    acceptanceCandidates.sort((a, b) => b.score - a.score);
+    const uniqueAcceptanceUrls = Array.from(new Set(acceptanceCandidates.map(c => c.url)));
+    if (uniqueAcceptanceUrls.length > 0) {
+        links.acceptanceLetterUrl = uniqueAcceptanceUrls[0];
+        links.acceptanceCandidates = uniqueAcceptanceUrls;
+    }
+
+    // Sort passport candidates
+    passportCandidates.sort((a, b) => b.score - a.score);
+    const uniquePassportUrls = Array.from(new Set(passportCandidates.map(c => c.url)));
+    if (uniquePassportUrls.length > 0) {
+        links.passportDocumentUrl = uniquePassportUrls[0];
+    }
+
+    // Fallback ONLY if absolutely no true acceptance letter with "kabul" text was found
+    if (!links.acceptanceLetterUrl) {
+        for (const el of allClickables) {
+            const url = extractElementUrl(el);
+            if (!url || isNavigationOrInvalidUrl(url) || isPassportUrl(url)) continue;
+            const fullText = (el.innerText || '') + ' ' + (el.closest('.d-flex, tr, .card, li')?.innerText || '');
+            if (isOfferText(fullText)) continue; // STRICT REJECTION of Offer letters!
+            if (isAcceptanceLetterUrl(url)) {
+                links.acceptanceLetterUrl = url;
+                links.acceptanceCandidates = [url];
+                break;
+            }
+        }
+    }
+
+    // Fallback for passport if not found
+    if (!links.passportDocumentUrl) {
+        for (const el of allClickables) {
+            const url = extractElementUrl(el);
+            if (!url || isNavigationOrInvalidUrl(url)) continue;
+            if (isPassportUrl(url)) {
+                links.passportDocumentUrl = url;
+                break;
+            }
+        }
+    }
+
+    return links;
+}
+
+function readFieldValue(target) {
+    if (!target) return '';
+    if (target.tagName === 'SELECT') return target.options[target.selectedIndex]?.text?.trim() || '';
+    return (target.value || target.textContent || '').trim();
+}
+
+function findApplyFieldValue(labels) {
+    const normalizedLabels = labels.map(normalizeApplyText);
+    const targets = document.querySelectorAll('input, select, textarea');
+    for (const target of targets) {
+        const rowText = normalizeApplyText(target.closest('tr')?.innerText);
+        if (normalizedLabels.some((label) => rowText.includes(label))) {
+            const value = readFieldValue(target);
+            if (value) return value;
+        }
+    }
+
+    const rows = document.querySelectorAll('tr');
+    for (const row of rows) {
+        const cells = row.querySelectorAll('td, th');
+        if (cells.length < 2) continue;
+        const label = normalizeApplyText(cells[0].innerText);
+        if (normalizedLabels.some((value) => label.includes(value))) return cells[1].innerText.trim();
+    }
+    return '';
+}
+
+function findApplyStudentData() {
+    return {
+        anneAdi: findApplyFieldValue(['Anne Adı', "Mother's Name", 'Mother Name']),
+        babaAdi: findApplyFieldValue(['Baba Adı', "Father's Name", 'Father Name']),
+        uyruk: findApplyFieldValue(['Uyruğu', 'Nationality']),
+        dogumUlkesi: findApplyFieldValue(['Doğum Yeri Ülkesi', 'Born Country']),
+        cinsiyet: findApplyFieldValue(['Cinsiyeti', 'Gender', 'Sex']),
+        pasaportNo: findApplyFieldValue(['Pasaport No', 'Passport No', 'Number of Document'])
+    };
+}
+
+function extractApplyProfileData() {
+    const anneInput = document.querySelector('input[name="mothersName"]');
+    const babaInput = document.querySelector('input[name="fathersName"]');
+    
+    let pasaportInput = document.querySelector('input[name="passportNumber"]');
+    if (!pasaportInput) pasaportInput = document.querySelector('.inputPassportNumber');
+    if (!pasaportInput) {
+        const labels = document.querySelectorAll('label');
+        for (const label of labels) {
+            if (label.innerText.includes('Pasaport No')) {
+                pasaportInput = label.parentElement ? label.parentElement.querySelector('input') : null;
+                if (pasaportInput) break;
+            }
+        }
+    }
+
+    const fallbackData = findApplyStudentData();
+    
+    const anneAdi = (anneInput ? anneInput.value : '') || fallbackData.anneAdi || '';
+    const babaAdi = (babaInput ? babaInput.value : '') || fallbackData.babaAdi || '';
+    const pasaportNo = (pasaportInput ? pasaportInput.value : '') || fallbackData.pasaportNo || '';
+    const uyruk = getSourceDropdownByLabel('Uyruk') || fallbackData.uyruk || '';
+    const dogumUlkesi = getSourceDropdownByLabel('Doğduğunuz') || getSourceDropdownByLabel('Doğum') || fallbackData.dogumUlkesi || '';
+    const cinsiyet = getSourceDropdownByLabel('Cinsiyet') || fallbackData.cinsiyet || '';
+
+    return {
+        anneAdi: (anneAdi || '').trim(),
+        babaAdi: (babaAdi || '').trim(),
+        pasaportNo: (pasaportNo || '').trim(),
+        uyruk: (uyruk || '').trim(),
+        dogumUlkesi: (dogumUlkesi || '').trim(),
+        cinsiyet: (cinsiyet || '').trim()
+    };
+}
+
+function watchForDocumentLinks(requestId) {
+    const deadline = Date.now() + 15_000;
+    const intervalId = setInterval(() => {
+        const links = findDocumentLinks();
+        const safeKabulId = isValidYoksisId(links.kabulId) ? links.kabulId : '';
+        if (links.passportDocumentUrl || links.acceptanceLetterUrl || safeKabulId) {
+            clearInterval(intervalId);
+            sendApplyEvent('STUDENT_DOCUMENTS_FOUND', requestId, {
+                data: { ...extractApplyProfileData(), ...links, kabulId: safeKabulId }
+            });
+            return;
+        }
+
+        if (Date.now() >= deadline) {
+            clearInterval(intervalId);
+            sendApplyEvent('STUDENT_DOCUMENTS_FOUND', requestId, {
+                data: { ...extractApplyProfileData(), ...links, kabulId: safeKabulId }
+            });
+        }
+    }, 400);
+}
+
+async function fetchApplyDocument(documentUrl) {
+    let safeUrl = toApplyUrl(documentUrl);
+    if (!safeUrl) throw new Error('Apply belge bağlantısı güvenli değil.');
+
+    let response = await fetch(safeUrl, { credentials: 'include' });
+    if (!response.ok) throw new Error(`Belge alınamadı: ${response.status}`);
+
+    let contentType = response.headers.get('content-type') || '';
+    let arrayBuffer = await response.arrayBuffer();
+
+    const headBytes = new Uint8Array(arrayBuffer.slice(0, 500));
+    const headText = String.fromCharCode(...headBytes).toLowerCase();
+    const isHtml = contentType.includes('text/html') || headText.includes('<!doctype') || headText.includes('<html');
+
+    if (isHtml) {
+        const text = new TextDecoder('utf-8').decode(arrayBuffer);
+        const iframeMatch = text.match(/<(?:iframe|embed|object)[^>]+(?:src|data)=["']([^"']+)["']/i)
+            || text.match(/(?:src|href)=["']((?:https?:\/\/[^"']+|\/)[^"']*\/uploads\/acceptance-letters\/[^"']+)["']/i)
+            || text.match(/((?:https?:\/\/[^"'\s<>]+\/|\/)[^"'\s<>]*\/uploads\/acceptance-letters\/[^"'\s<>]+\.pdf[^"'\s<>]*)/i)
+            || text.match(/((?:https?:\/\/[^"'\s<>]+\/|\/)[^"'\s<>]+\.pdf(?:\?[^"'\s<>]*)?)/i);
+        if (iframeMatch && iframeMatch[1]) {
+            const rawPdfUrl = iframeMatch[1].replace(/&amp;/g, '&');
+            let resolvedPdfUrl = rawPdfUrl;
+            try {
+                resolvedPdfUrl = new URL(rawPdfUrl, safeUrl).href;
+            } catch (_) {}
+            const pdfUrl = toApplyUrl(resolvedPdfUrl);
+            if (pdfUrl) {
+                const pdfResponse = await fetch(pdfUrl, { credentials: 'include' });
+                if (pdfResponse.ok) {
+                    contentType = pdfResponse.headers.get('content-type') || 'application/pdf';
+                    arrayBuffer = await pdfResponse.arrayBuffer();
+                }
+            }
+        }
+    }
+
+    return {
+        contentType,
+        documentBase64: await encodeBase64(arrayBuffer)
+    };
+}
+
+async function encodeBase64(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let index = 0; index < bytes.length; index += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+    }
+    return btoa(binary);
+}
+
+// Mesaj Dinleyicisi
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'PING') {
+        sendResponse({
+            success: true,
+            ready: true,
+            pageKind: getPageKind(),
+            url: location.href
+        });
+        return true;
+    }
+    
+    if (request.action === "copyData") {
+        try {
+            const dataToSave = extractApplyProfileData();
+            chrome.storage.local.set({ studentData: dataToSave }, () => {
+                sendResponse({ success: true, data: dataToSave });
+            });
+        } catch (error) {
+            sendResponse({ success: false, message: error.message });
+        }
+        return true; 
+    }
+
+    else if (request.action === 'GET_KABUL_CODE_OR_DOCUMENT') {
+        try {
+            const links = findDocumentLinks();
+            const studentData = extractApplyProfileData();
+            const safeKabulId = isValidYoksisId(links.kabulId) ? links.kabulId : '';
+            sendResponse({
+                success: true,
+                requestId: request.requestId,
+                kabulId: safeKabulId,
+                acceptanceLetterUrl: links.acceptanceLetterUrl || '',
+                acceptanceCandidates: links.acceptanceCandidates || [],
+                passportDocumentUrl: links.passportDocumentUrl || '',
+                data: studentData
+            });
+        } catch (error) {
+            sendResponse({ success: false, requestId: request.requestId, message: error.message });
+        }
+        return true;
+    }
+
+    else if (request.action === 'DISCOVER_STUDENT_DOCUMENTS') {
+        watchForDocumentLinks(request.requestId);
+        sendResponse({ success: true, requestId: request.requestId });
+        return true;
+    }
+
+    else if (request.action === 'FETCH_APPLY_DOCUMENT') {
+        fetchApplyDocument(request.documentUrl)
+            .then((result) => sendResponse({ success: true, ...result }))
+            .catch((error) => sendResponse({ success: false, error: error.message }));
+        return true;
+    }
+    
+    else if (request.action === "searchWithId") {
+        const kabulId = request.kabulId;
+        
+        if (!kabulId) {
+            sendResponse({ success: false, requestId: request.requestId, message: "Kabul ID boş olamaz." });
+            return;
+        }
+
+        waitForYoksisSearchControls()
+            .then(async ({ idInput, searchBtn }) => {
+                if (idInput) {
+                    simulateInput(idInput, kabulId);
+                }
+                // ZK'nin blur/change olayını işlemesi için kısa bekleme
+                await new Promise(resolve => setTimeout(resolve, 250));
+
+                if (!searchBtn && idInput) {
+                    searchBtn = findKabulIdButton(idInput);
+                }
+
+                if (searchBtn) {
+                    simulateButtonClick(searchBtn);
+                    triggerZkClick(searchBtn, idInput, kabulId);
+                } else {
+                    console.warn('[YKN] Kabul mektup ID ara butonu bulunamadı, genel tetikleyici deneniyor.');
+                    triggerZkClick(null, idInput, kabulId);
+                }
+
+                return waitForYoksisForm();
+            })
+            .then(() => sendResponse({ success: true, formReady: true, requestId: request.requestId }))
+            .catch((error) => sendResponse({
+                success: false,
+                requestId: request.requestId,
+                message: error.message
+            }));
+        return true;
+    }
+    
+    else if (request.action === "fillRemainingData") {
+        chrome.storage.local.get(['studentData'], (result) => {
+            const data = result.studentData;
+            if (!data) {
+                sendResponse({ success: false, message: "Hafızada veri yok." });
+                return;
+            }
+
+            let successCount = 0;
+
+            const anneAdiInput = findTargetElementByFuzzyLabel('Anne Adı', 'input');
+            if (simulateInput(anneAdiInput, data.anneAdi)) successCount++;
+
+            const babaAdiInput = findTargetElementByFuzzyLabel('Baba Adı', 'input');
+            if (simulateInput(babaAdiInput, data.babaAdi)) successCount++;
+
+            const uyrukSelect = findTargetElementByFuzzyLabel('Uyruğu', 'select');
+            if (simulateSelect(uyrukSelect, data.uyruk)) successCount++;
+            
+            const dogumUyruguSelect = findTargetElementByFuzzyLabel('Doğum Uyruğu', 'select');
+            if (simulateSelect(dogumUyruguSelect, data.uyruk)) successCount++;
+            
+            const dogumYeriUlkesiSelect = findTargetElementByFuzzyLabel('Doğum Yeri Ülkesi', 'select');
+            const dogumYeriDegeri = data.dogumUlkesi ? data.dogumUlkesi : data.uyruk;
+            if (simulateSelect(dogumYeriUlkesiSelect, dogumYeriDegeri)) successCount++;
+            
+            const belgeyiVerenUlkeSelect = findTargetElementByFuzzyLabel('Belgeyi Veren Ülke', 'select');
+            if (simulateSelect(belgeyiVerenUlkeSelect, data.uyruk)) successCount++;
+
+            if (data.cinsiyet) {
+                if (simulateRadioByLabelText(data.cinsiyet)) successCount++;
+            }
+
+            // Özel Ülke Kuralları (Türkmenistan, Afganistan, Pakistan)
+            const normalizeCountry = (val) => val ? val.toLocaleLowerCase('tr-TR').replace(/\s+/g, '') : '';
+            const isMatch = (val, search) => normalizeCountry(val).includes(search);
+
+            const uyrukNorm = normalizeCountry(data.uyruk);
+            const dogumNorm = normalizeCountry(data.dogumUlkesi);
+
+            let verenMakam = findTargetElementByFuzzyLabel('Belgeyi Veren Makam', 'input');
+            if (!verenMakam) verenMakam = findTargetElementByFuzzyLabel('Veren Makam', 'input');
+
+            const dogumYeriAciklamasi = findTargetElementByFuzzyLabel('Doğum Yeri Açıklaması', 'input');
+
+            if (uyrukNorm.includes('türkmenistan') || uyrukNorm.includes('turkmenistan') || dogumNorm.includes('türkmenistan') || dogumNorm.includes('turkmenistan')) {
+                if (dogumYeriAciklamasi && simulateInput(dogumYeriAciklamasi, 'TKM')) successCount++;
+                if (verenMakam && simulateInput(verenMakam, 'SMST')) successCount++;
+            } 
+            else if (uyrukNorm.includes('afgan') || dogumNorm.includes('afgan')) {
+                if (dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
+                    if (simulateInput(dogumYeriAciklamasi, 'AFG')) successCount++;
+                }
+                if (verenMakam && simulateInput(verenMakam, 'AFGHAN')) successCount++;
+            } 
+            else if (uyrukNorm.includes('pakistan') || dogumNorm.includes('pakistan')) {
+                if (dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
+                    if (simulateInput(dogumYeriAciklamasi, 'PAK')) successCount++;
+                }
+                if (verenMakam && simulateInput(verenMakam, 'PAKISTAN')) successCount++;
+            } else {
+                if (dogumYeriAciklamasi && data.dogumYeriAciklamasi) {
+                    if (simulateInput(dogumYeriAciklamasi, data.dogumYeriAciklamasi)) successCount++;
+                }
+                if (verenMakam && data.verenMakam) {
+                    if (simulateInput(verenMakam, data.verenMakam)) successCount++;
+                }
+            }
+            
+            const telefonNoInput = findTargetElementByFuzzyLabel('Telefon No', 'input');
+            if (simulateInput(telefonNoInput, '5327892361')) successCount++;
+
+            const belgeNoInput = findBelgeNoInMainPanel();
+            if (simulateInput(belgeNoInput, data.pasaportNo)) successCount++;
+
+            // Kullanıcının manuel olarak tıklayıp tetiklediği odaklanma/blur zincirini otomatik çalıştır
+            const priorityElements = [
+                babaAdiInput,
+                dogumYeriAciklamasi,
+                anneAdiInput,
+                verenMakam,
+                telefonNoInput,
+                belgeNoInput
+            ].filter(Boolean);
+
+            for (const el of priorityElements) {
+                try {
+                    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                    el.focus();
+                    el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                    el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+                    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
+                    el.blur();
+                } catch (_) {}
+            }
+
+            // Sayfa bağlamındaki ZK Framework bileşenlerini ve sunucuyu güncelle
+            syncZkFormInputs();
+
+            if (successCount > 0) {
+                sendResponse({ success: true });
+            } else {
+                sendResponse({ success: false, message: "Hedef inputlar bulunamadı." });
+            }
+        });
+        return true;
+    }
+    
+    else if (request.action === 'SEARCH_IN_APPLY') {
+        const passportNo = (request.passportNo || '').trim();
+        const requestId = request.requestId;
+        const cleanPassport = passportNo.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+        
+        // Apply Topkapı'daki arama kutusunu bul (Daha spesifik seçiciler)
+        const searchInput = document.querySelector('.inputDatatableSearch') ||
+                            document.querySelector('input[placeholder*="Tabloda ara"]') ||
+                            document.querySelector('input[type="search"]') || 
+                            document.querySelector('.dataTables_filter input') || 
+                            document.querySelector('input.form-control');
+        
+        if (searchInput) {
+            simulateInput(searchInput, passportNo);
+            
+            // Sonuçların gelmesini bekle (Polling ile - Pasaport eşleşmesi kontrol edilir)
+            let attempts = 0;
+            const maxAttempts = 24; // 24 * 500ms = 12 saniye
+            
+            const intervalId = setInterval(() => {
+                attempts++;
+                const rows = document.querySelectorAll('table tbody tr');
+                let matchingRow = null;
+                let isEmptyMessage = false;
+                
+                for (let i = 0; i < rows.length; i++) {
+                    const rowText = rows[i].innerText.toLocaleLowerCase('tr-TR');
+                    if (rowText.includes('no matching') || rowText.includes('bulunamadı') || rowText.includes('no data') || rows[i].classList.contains('dataTables_empty')) {
+                        isEmptyMessage = true;
+                        continue;
+                    }
+                    
+                    // Pasaport numarası satırın içinde yer alıyor mu?
+                    const normalizedRow = rowText.replace(/\s+/g, '');
+                    if (cleanPassport && normalizedRow.includes(cleanPassport)) {
+                        matchingRow = rows[i];
+                        break;
+                    }
+                }
+                
+                if (matchingRow) {
+                    clearInterval(intervalId);
+                    const adCell = matchingRow.querySelector('td:nth-child(2)');
+                    const soyadCell = matchingRow.querySelector('td:nth-child(3)');
+                    
+                    let fullName = "Öğrenci";
+                    if (adCell && soyadCell) {
+                        fullName = (adCell.innerText.trim() + " " + soyadCell.innerText.trim()).trim();
+                    } else if (adCell) {
+                        fullName = adCell.innerText.trim();
+                    }
+
+                    const profileUrl = findStudentProfileUrl(matchingRow);
+                    
+                    const studentData = {
+                        fullName: fullName,
+                        passportNo: passportNo,
+                        profileUrl,
+                        profileReady: true,
+                        documentsReady: false
+                    };
+                    
+                    sendApplyEvent('STUDENT_FOUND', requestId, { data: studentData });
+                    if (profileUrl) {
+                        sendApplyEvent('OPEN_STUDENT_PROFILE', requestId, { profileUrl });
+                    } else {
+                        sendApplyEvent('DOCUMENTS_NOT_FOUND', requestId, {
+                            error: 'Öğrenci profiline geçiş bağlantısı bulunamadı.'
+                        });
+                    }
+                } else if (isEmptyMessage && attempts >= 6) {
+                    clearInterval(intervalId);
+                    sendApplyEvent(
+                        'STUDENT_NOT_FOUND',
+                        requestId,
+                        { error: 'Apply Topkapı üzerinde pasaport (' + passportNo + ') ile kayıt bulunamadı.' }
+                    );
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(intervalId);
+                    sendApplyEvent(
+                        'STUDENT_NOT_FOUND',
+                        requestId,
+                        { error: isEmptyMessage ? 'Tablo boş (Öğrenci bulunamadı).' : 'Arama zaman aşımına uğradı (' + passportNo + ' bulunamadı).' }
+                    );
+                }
+            }, 500);
+        } else {
+            sendApplyEvent(
+                'STUDENT_NOT_FOUND',
+                requestId,
+                { error: 'Arama kutusu (.inputDatatableSearch veya form-control) sayfada bulunamadı.' }
+            );
+        }
+        sendResponse({ success: true, requestId });
+        return true;
+    }
+});

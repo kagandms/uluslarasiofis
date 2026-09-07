@@ -336,6 +336,63 @@ h1 {
     padding: 2rem;
 }
 
+.ykn-extension-status {
+    margin: 1rem 0 1.25rem;
+    padding: 1rem;
+    border: 1px solid var(--danger, #dc3545);
+    border-radius: 10px;
+    background: rgba(220, 53, 69, 0.08);
+}
+
+.ykn-extension-status strong {
+    display: block;
+    color: var(--danger, #dc3545);
+    margin-bottom: 0.35rem;
+}
+
+.ykn-extension-status p {
+    margin-bottom: 0.8rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.ykn-extension-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.ykn-extension-actions .btn {
+    flex: 1 1 12rem;
+    text-decoration: none;
+    text-align: center;
+}
+
+.ykn-extension-install-help {
+    margin-top: 0.9rem;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.ykn-extension-install-help summary {
+    cursor: pointer;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.ykn-extension-install-help ol {
+    margin: 0.6rem 0 0 1.2rem;
+    padding: 0;
+}
+
+.ykn-extension-install-help li + li {
+    margin-top: 0.35rem;
+}
+
+.ykn-extension-install-help code {
+    overflow-wrap: anywhere;
+}
+
 @media (max-width: 768px) {
     .home-screen {
         padding: 1rem 0;
@@ -362,6 +419,18 @@ h1 {
     .workspace-toolbar .btn {
         font-size: 0.8rem;
         padding: 0.5rem 0.75rem;
+    }
+
+    .ykn-extension-status {
+        padding: 0.85rem;
+    }
+
+    .ykn-extension-actions {
+        flex-direction: column;
+    }
+
+    .ykn-extension-actions .btn {
+        width: 100%;
     }
 }
 
@@ -757,6 +826,36 @@ select.glass-input {
     font-size: 0.9rem;
 }
 
+.btn-add-to-sheet {
+    white-space: normal;
+}
+
+.sheet-button-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+}
+
+.sheet-button-content {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.25rem 0.55rem;
+    min-width: 0;
+    flex-wrap: wrap;
+    text-align: center;
+}
+
+.sheet-button-status {
+    font-weight: 600;
+}
+
+.sheet-button-details,
+.sheet-button-hint {
+    font-size: 0.78rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
 /* Footer */
 .app-footer {
     text-align: center;
@@ -877,6 +976,21 @@ select.glass-input {
         padding: 0.6rem 0.5rem;
         min-width: calc(33% - 0.5rem);
         flex: 1 1 auto;
+    }
+
+    .btn-add-to-sheet {
+        gap: 0.35rem;
+        line-height: 1.2;
+    }
+
+    .sheet-button-content {
+        flex-direction: column;
+        align-items: center;
+        gap: 0.15rem;
+    }
+
+    .sheet-button-hint {
+        font-size: 0.72rem;
     }
 }
 

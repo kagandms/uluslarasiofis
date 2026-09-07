@@ -107,6 +107,33 @@ import { initTebligatSearch } from './ui/tebligatSearch.js';
 import { initWorkspaceNavigation } from './ui/workspaceNavigation.js';
 import { initYknManager } from './managers/yknManager.js';
 
+function setAddedToSheetButtonState(button, sheetDate, assignedNo) {
+    button.replaceChildren();
+
+    const icon = document.createElement('span');
+    icon.className = 'sheet-button-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+
+    const content = document.createElement('span');
+    content.className = 'sheet-button-content';
+
+    const status = document.createElement('span');
+    status.className = 'sheet-button-status';
+    status.textContent = 'Eklendi';
+
+    const details = document.createElement('span');
+    details.className = 'sheet-button-details';
+    details.textContent = `${sheetDate} / No: ${assignedNo || '-'}`;
+
+    const hint = document.createElement('span');
+    hint.className = 'sheet-button-hint';
+    hint.textContent = 'Tekrar tıklayarak kaldır';
+
+    content.append(status, details, hint);
+    button.append(icon, content);
+}
+
 // --- Clear Old PWA Service Workers ---
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -789,7 +816,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const data = await response.json();
                 if (response.ok && data.success) {
-                    btnAdd.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> Eklendi (${sayfa} / No: ${data.assignedNo || '-'}) (Tablodan kaldırmak için tekrar tıklayınız.)`;
+                    setAddedToSheetButtonState(btnAdd, sayfa, data.assignedNo);
                     btnAdd.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
                     btnAdd.style.color = '#27ae60';
                     btnAdd.style.borderColor = '#27ae60';

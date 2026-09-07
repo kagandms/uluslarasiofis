@@ -143,6 +143,28 @@
                         <p class="home-eyebrow">YKN çalışma alanı</p>
                         <h3 id="ykn-title" tabindex="-1">Öğrenci Sorgulama</h3>
                         <p style="margin-bottom: 15px;">Apply Topkapı'da aramak için pasaport numarası girin.</p>
+
+                        <div id="ykn-extension-status" class="ykn-extension-status" hidden role="status" aria-live="polite">
+                            <strong id="ykn-extension-status-title">YKN eklentisi kurulu değil</strong>
+                            <p id="ykn-extension-status-message">YÖKSİS ve Apply Topkapı aktarımını kullanmak için güncel YKN eklentisini indirip kurun.</p>
+                            <div class="ykn-extension-actions">
+                                <a id="btn-ykn-extension-download" class="btn btn-primary" href="/downloads/ykn-eklentisi-latest.zip" download="ykn-eklentisi-latest.zip">
+                                    YKN Eklentisini İndir
+                                </a>
+                                <button type="button" id="btn-ykn-extension-recheck" class="btn btn-outline">
+                                    Tekrar Kontrol Et
+                                </button>
+                            </div>
+                            <details class="ykn-extension-install-help">
+                                <summary>Kurulum nasıl yapılır?</summary>
+                                <ol>
+                                    <li>İndirilen ZIP dosyasını bir klasöre çıkarın.</li>
+                                    <li><code>chrome://extensions</code> veya <code>yandex://extensions</code> sayfasını açın.</li>
+                                    <li>Geliştirici modunu açıp “Paketlenmemiş öğe yükle” seçeneğinden çıkardığınız klasörü seçin.</li>
+                                    <li>Bu portalı yenileyin ve “Tekrar Kontrol Et” düğmesine basın.</li>
+                                </ol>
+                            </details>
+                        </div>
                         
                         <div class="form-group" style="display: flex; gap: 10px; margin-bottom: 20px;">
                             <input type="text" id="ykn-passport-input" class="glass-input" placeholder="Pasaport Numarası" style="flex: 1; padding: 0.8rem;">
@@ -167,7 +189,7 @@
                                 </div>
                                 
                                 <button type="button" id="btn-ykn-transfer-yoksis" class="btn btn-secondary" style="display: none;">
-                                    YÖKSİS'e Aktar
+                                    Kabul Mektup Kodunu YÖKSİS'e Aktar
                                 </button>
                                 
                                 <button type="button" id="btn-ykn-paste-yoksis" class="btn btn-primary" style="margin-top: 10px;">

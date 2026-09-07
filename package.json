@@ -5,7 +5,10 @@
   "main": "app.js",
   "scripts": {
     "test": "node --test test/**/*.test.js",
+    "package:extension": "node scripts/package-extension.mjs",
+    "predev": "npm run package:extension",
     "dev": "vite",
+    "prebuild": "npm run package:extension",
     "build": "vite build",
     "preview": "vite preview"
   },

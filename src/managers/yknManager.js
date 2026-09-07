@@ -128,6 +128,11 @@ export function initYknManager() {
     const btnCopyLetter = document.getElementById('btn-ykn-copy-letter');
     const btnTransferYoksis = document.getElementById('btn-ykn-transfer-yoksis');
     const btnPasteYoksis = document.getElementById('btn-ykn-paste-yoksis');
+    const extensionStatus = document.getElementById('ykn-extension-status');
+    const extensionStatusTitle = document.getElementById('ykn-extension-status-title');
+    const extensionStatusMessage = document.getElementById('ykn-extension-status-message');
+    const btnExtensionDownload = document.getElementById('btn-ykn-extension-download');
+    const btnExtensionRecheck = document.getElementById('btn-ykn-extension-recheck');
 
     // UI Status Helper
     function addStatus(message, type = 'info') {
@@ -146,10 +151,71 @@ export function initYknManager() {
     let activeSearchRequestId = null;
     let searchTimeoutTimer = null;
     let extensionBridgeActive = false;
+    let extensionCheckRequestId = null;
+    let extensionCheckTimeoutTimer = null;
     const pendingDocumentReads = new Set();
 
     function createRequestId() {
         return 'ykn-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    }
+
+    function clearExtensionCheckTimeout() {
+        if (!extensionCheckTimeoutTimer) return;
+        clearTimeout(extensionCheckTimeoutTimer);
+        extensionCheckTimeoutTimer = null;
+    }
+
+    function showExtensionMissing() {
+        if (!extensionStatus) return;
+        extensionStatus.hidden = false;
+        extensionStatus.classList.add('is-missing');
+        extensionStatusTitle.textContent = 'YKN eklentisi kurulu değil';
+        extensionStatusMessage.textContent = 'YÖKSİS ve Apply Topkapı aktarımını kullanmak için güncel YKN eklentisini indirip kurun.';
+    }
+
+    function markExtensionReady() {
+        extensionBridgeActive = true;
+        clearExtensionCheckTimeout();
+        if (!extensionStatus) return;
+        extensionStatus.hidden = true;
+        extensionStatus.classList.remove('is-missing');
+    }
+
+    function requestExtensionCheck(requestId) {
+        clearExtensionCheckTimeout();
+        extensionBridgeActive = false;
+        extensionCheckRequestId = requestId || createRequestId();
+        window.postMessage({
+            source: 'WEB_APP',
+            payload: {
+                action: 'PING',
+                requestId: extensionCheckRequestId
+            }
+        }, '*');
+        extensionCheckTimeoutTimer = setTimeout(() => {
+            if (!extensionBridgeActive) showExtensionMissing();
+        }, 1800);
+    }
+
+    function loadExtensionDownloadMetadata() {
+        fetch('/downloads/ykn-eklentisi.json', { cache: 'no-store' })
+            .then((response) => {
+                if (!response.ok) throw new Error('Eklenti sürüm bilgisi alınamadı.');
+                return response.json();
+            })
+            .then((metadata) => {
+                if (!metadata || typeof metadata.downloadUrl !== 'string' || !metadata.downloadUrl.startsWith('/downloads/')) {
+                    throw new Error('Eklenti indirme bağlantısı geçersiz.');
+                }
+                const cacheValue = metadata.fingerprint || metadata.version;
+                const cacheKey = typeof cacheValue === 'string' ? `?v=${encodeURIComponent(cacheValue)}` : '';
+                btnExtensionDownload.href = `${metadata.downloadUrl}${cacheKey}`;
+                btnExtensionDownload.download = metadata.fileName || 'ykn-eklentisi.zip';
+            })
+            .catch(() => {
+                btnExtensionDownload.href = '/downloads/ykn-eklentisi-latest.zip';
+                btnExtensionDownload.download = 'ykn-eklentisi-latest.zip';
+            });
     }
 
     function clearSearchTimeout() {
@@ -349,14 +415,8 @@ export function initYknManager() {
             studentName.textContent = "Aranıyor... (" + passportNo + ")";
             addStatus('Apply Topkapı eklentisi üzerinden arama başlatıldı...', 'info');
             
-            // Eklenti varlık yoklaması
-            window.postMessage({
-                source: 'WEB_APP',
-                payload: {
-                    action: 'PING',
-                    requestId: activeSearchRequestId
-                }
-            }, '*');
+            // Arama başlamadan önce eklenti köprüsünün kullanılabilirliğini kontrol et.
+            requestExtensionCheck(activeSearchRequestId);
 
             // Asıl arama isteği
             window.postMessage({
@@ -371,6 +431,7 @@ export function initYknManager() {
             // 2.5 saniye sonra eklenti köprüsü hala ses vermediyse erken uyarı ver
             setTimeout(() => {
                 if (!extensionBridgeActive && studentName.textContent.startsWith('Aranıyor...')) {
+                    showExtensionMissing();
                     addStatus('Eklenti köprüsü henüz yanıt vermedi. Lütfen chrome://extensions sekmesinden eklentiyi Yenileyip (↻) bu sayfayı F5 ile tazeleyin.', 'error');
                 }
             }, 2500);
@@ -379,6 +440,7 @@ export function initYknManager() {
             searchTimeoutTimer = setTimeout(() => {
                 if (studentName.textContent.startsWith('Aranıyor...')) {
                     studentName.textContent = 'Bağlantı Zaman Aşımı';
+                    showExtensionMissing();
                     addStatus('Eklentiden veya Apply sekmesinden zamanında yanıt alınamadı.', 'error');
                     addStatus('1. Apply Topkapı sekmesinin açık olduğunu kontrol edin.', 'error');
                     addStatus('2. Apply Topkapı ve bu portal sekmesini yenileyin (F5).', 'error');
@@ -482,17 +544,26 @@ export function initYknManager() {
         });
     }
 
+    if (btnExtensionRecheck) {
+        btnExtensionRecheck.addEventListener('click', () => {
+            extensionStatus.hidden = true;
+            requestExtensionCheck(createRequestId());
+        });
+    }
+
     window.addEventListener('message', (event) => {
         if (event.source !== window || !event.data || event.data.source !== 'EXTENSION') return;
 
-        const requestId = event.data.requestId;
-        if (requestId !== activeSearchRequestId) return;
-
         if (event.data.type === 'PONG') {
-            extensionBridgeActive = true;
-            addStatus('Eklenti köprüsü hazır.', 'info');
+            const pongRequestId = event.data.requestId;
+            if (pongRequestId && pongRequestId !== activeSearchRequestId && pongRequestId !== extensionCheckRequestId) return;
+            markExtensionReady();
+            if (activeSearchRequestId) addStatus('Eklenti köprüsü hazır.', 'info');
             return;
         }
+
+        const requestId = event.data.requestId;
+        if (requestId !== activeSearchRequestId) return;
 
         if (event.data.type === 'RESPONSE') {
             const response = event.data.response;
@@ -636,4 +707,7 @@ export function initYknManager() {
             addStatus(errorMsg, 'error');
         }
     });
+
+    loadExtensionDownloadMetadata();
+    requestExtensionCheck(createRequestId());
 }
