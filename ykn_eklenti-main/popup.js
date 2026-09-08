@@ -104,6 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 if (response && response.success) {
+                    try {
+                        chrome.runtime.sendMessage({ action: 'SYNC_YOKSIS_MAIN_WORLD' });
+                    } catch (_) {}
                     showStatus("Bilgiler başarıyla dolduruldu!");
                     chrome.tabs.update(yoksisTab.id, { active: true });
                 } else {

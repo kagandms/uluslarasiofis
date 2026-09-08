@@ -77,6 +77,43 @@ test('extracts passport dates without separators in day-first and year-first for
     assert.deepEqual(result, { issueDate: '2025-03-11', expiryDate: '2030-03-11' });
 });
 
+test('extracts passport dates with bilingual slash month names', () => {
+    const result = extractPassportDatesFromText(
+        'Date of issue: 11 MAR / MARS 2025 Date of expiry: 11 SEP / SEPT 2030'
+    );
+
+    assert.deepEqual(result, { issueDate: '2025-03-11', expiryDate: '2030-09-11' });
+});
+
+test('extracts passport dates with French labels', () => {
+    const result = extractPassportDatesFromText(
+        "Date de délivrance: 15/05/2023 Date d'expiration: 15/05/2033"
+    );
+
+    assert.deepEqual(result, { issueDate: '2023-05-15', expiryDate: '2033-05-15' });
+});
+
+test('extracts passport dates with Russian labels', () => {
+    const result = extractPassportDatesFromText(
+        'Дата выдачи: 10.02.2024 Действителен до: 10.02.2034'
+    );
+
+    assert.deepEqual(result, { issueDate: '2024-02-10', expiryDate: '2034-02-10' });
+});
+
+test('extracts expiry date from passport MRZ line when visual label is missing', () => {
+    const textWithMrz = `
+    REPUBLIC OF TURKEY PASSPORT
+    SURNAME: DEMIR GIVEN NAMES: KAGAN
+    Date of issue: 15.05.2022
+    P<TURDEMIR<<KAGAN<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    U123456784TUR0205159M3205155<<<<<<<<<<<<<<02
+    `;
+    const result = extractPassportDatesFromText(textWithMrz);
+
+    assert.deepEqual(result, { issueDate: '2022-05-15', expiryDate: '2032-05-15' });
+});
+
 test('extracts YOKSIS ID from various acceptance letter formats', () => {
     assert.equal(extractYoksisIdFromText('KABUL MEKTUBU KODU: 821-EC2-34'), '821-EC2-34');
     assert.equal(extractYoksisIdFromText('VERIFICATION CODE: 0F0-881-60'), '0F0-881-60');

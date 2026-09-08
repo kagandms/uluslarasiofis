@@ -14,16 +14,26 @@ function sendApplyEvent(action, requestId, payload = {}) {
     });
 }
 
-function simulateInput(element, value) {
+async function simulateInput(element, value) {
     if (!element || value === undefined || value === null) return false;
     
+    try {
+        element.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    } catch (_) {}
+
     // ZK odaklanmasını ve widget aktifleşmesini sağlamak için fare/focus simülasyonu
     try {
+        element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, view: window }));
         element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
         element.focus();
+        element.dispatchEvent(new FocusEvent('focus', { bubbles: false }));
+        element.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+        element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, view: window }));
         element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
         element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
     } catch (_) {}
+
+    await new Promise((r) => setTimeout(r, 25));
 
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
     if (nativeSetter) {
@@ -37,6 +47,8 @@ function simulateInput(element, value) {
     element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, composed: true, key: 'Enter', keyCode: 13 }));
     element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, composed: true, key: 'Enter', keyCode: 13 }));
     
+    await new Promise((r) => setTimeout(r, 25));
+
     // ZK Framework'ün değeri hafızaya alıp dirty/değişti olarak işaretlemesi için kritik olaylar
     element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
     element.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
@@ -1038,8 +1050,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     
     else if (request.action === "fillRemainingData") {
-        chrome.storage.local.get(['studentData'], (result) => {
-            const data = result.studentData;
+        chrome.storage.local.get(['studentData'], async (result) => {
+            const data = request.data || result.studentData;
             if (!data) {
                 sendResponse({ success: false, message: "Hafızada veri yok." });
                 return;
@@ -1048,10 +1060,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             let successCount = 0;
 
             const anneAdiInput = findTargetElementByFuzzyLabel('Anne Adı', 'input');
-            if (simulateInput(anneAdiInput, data.anneAdi)) successCount++;
+            if (await simulateInput(anneAdiInput, data.anneAdi)) successCount++;
 
             const babaAdiInput = findTargetElementByFuzzyLabel('Baba Adı', 'input');
-            if (simulateInput(babaAdiInput, data.babaAdi)) successCount++;
+            if (await simulateInput(babaAdiInput, data.babaAdi)) successCount++;
 
             const uyrukSelect = findTargetElementByFuzzyLabel('Uyruğu', 'select');
             if (simulateSelect(uyrukSelect, data.uyruk)) successCount++;
@@ -1083,34 +1095,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const dogumYeriAciklamasi = findTargetElementByFuzzyLabel('Doğum Yeri Açıklaması', 'input');
 
             if (uyrukNorm.includes('türkmenistan') || uyrukNorm.includes('turkmenistan') || dogumNorm.includes('türkmenistan') || dogumNorm.includes('turkmenistan')) {
-                if (dogumYeriAciklamasi && simulateInput(dogumYeriAciklamasi, 'TKM')) successCount++;
-                if (verenMakam && simulateInput(verenMakam, 'SMST')) successCount++;
+                if (dogumYeriAciklamasi && (await simulateInput(dogumYeriAciklamasi, 'TKM'))) successCount++;
+                if (verenMakam && (await simulateInput(verenMakam, 'SMST'))) successCount++;
             } 
             else if (uyrukNorm.includes('afgan') || dogumNorm.includes('afgan')) {
                 if (dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
-                    if (simulateInput(dogumYeriAciklamasi, 'AFG')) successCount++;
+                    if (await simulateInput(dogumYeriAciklamasi, 'AFG')) successCount++;
                 }
-                if (verenMakam && simulateInput(verenMakam, 'AFGHAN')) successCount++;
+                if (verenMakam && (await simulateInput(verenMakam, 'AFGHAN'))) successCount++;
             } 
             else if (uyrukNorm.includes('pakistan') || dogumNorm.includes('pakistan')) {
                 if (dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
-                    if (simulateInput(dogumYeriAciklamasi, 'PAK')) successCount++;
+                    if (await simulateInput(dogumYeriAciklamasi, 'PAK')) successCount++;
                 }
-                if (verenMakam && simulateInput(verenMakam, 'PAKISTAN')) successCount++;
+                if (verenMakam && (await simulateInput(verenMakam, 'PAKISTAN'))) successCount++;
             } else {
                 if (dogumYeriAciklamasi && data.dogumYeriAciklamasi) {
-                    if (simulateInput(dogumYeriAciklamasi, data.dogumYeriAciklamasi)) successCount++;
+                    if (await simulateInput(dogumYeriAciklamasi, data.dogumYeriAciklamasi)) successCount++;
                 }
                 if (verenMakam && data.verenMakam) {
-                    if (simulateInput(verenMakam, data.verenMakam)) successCount++;
+                    if (await simulateInput(verenMakam, data.verenMakam)) successCount++;
                 }
             }
             
             const telefonNoInput = findTargetElementByFuzzyLabel('Telefon No', 'input');
-            if (simulateInput(telefonNoInput, '5327892361')) successCount++;
+            if (await simulateInput(telefonNoInput, '5327892361')) successCount++;
 
             const belgeNoInput = findBelgeNoInMainPanel();
-            if (simulateInput(belgeNoInput, data.pasaportNo)) successCount++;
+            if (await simulateInput(belgeNoInput, data.pasaportNo)) successCount++;
 
             const issueDateInput = findTargetElementByFuzzyLabels([
                 'Pasaport Veriliş Tarihi',
@@ -1133,19 +1145,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             ], 'input');
 
             if (issueDateInput && data.issueDate
-                && simulateInput(issueDateInput, formatDateForYoksisInput(issueDateInput, data.issueDate))) {
+                && (await simulateInput(issueDateInput, formatDateForYoksisInput(issueDateInput, data.issueDate)))) {
                 successCount++;
             }
             if (expiryDateInput && data.expiryDate
-                && simulateInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, data.expiryDate))) {
+                && (await simulateInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, data.expiryDate)))) {
                 successCount++;
             }
 
-            // Kullanıcının manuel olarak tıklayıp tetiklediği odaklanma/blur zincirini otomatik çalıştır
+            // Gerçek kullanıcı tıklaması ve odaklanma geçişi zinciri (Anne Adı ve Baba Adı öncelikli)
             const priorityElements = [
+                anneAdiInput,
                 babaAdiInput,
                 dogumYeriAciklamasi,
-                anneAdiInput,
                 verenMakam,
                 telefonNoInput,
                 belgeNoInput,
@@ -1155,18 +1167,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
             for (const el of priorityElements) {
                 try {
-                    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
                     el.focus();
+                    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
                     el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
                     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                    await new Promise(r => setTimeout(r, 40));
+                    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                    el.blur();
                     el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
                     el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
-                    el.blur();
+                    await new Promise(r => setTimeout(r, 20));
                 } catch (_) {}
             }
 
-            // Sayfa bağlamındaki ZK Framework bileşenlerini ve sunucuyu güncelle
-            syncZkFormInputs();
+            // Background script üzerinden Main World ZK Senkronizasyonunu tetikle
+            try {
+                chrome.runtime.sendMessage({ action: 'SYNC_YOKSIS_MAIN_WORLD' });
+            } catch (_) {}
 
             if (successCount > 0) {
                 sendResponse({ success: true });

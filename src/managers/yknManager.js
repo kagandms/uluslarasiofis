@@ -1,5 +1,5 @@
 import { showToast } from '../ui/toastManager.js';
-import { extractPassportDatesFromText, extractYoksisIdFromText, isValidYoksisId } from '../utils/ykn-document-parser.js';
+import { extractPassportDatesFromText, extractYoksisIdFromText, isValidYoksisId, parseDateValue } from '../utils/ykn-document-parser.js';
 import { initPassportCropperModal, openPassportCropper } from '../ui/passportCropperModal.js';
 
 function ensurePdfWorkerReady() {
@@ -135,8 +135,31 @@ export function initYknManager() {
     const extensionStatusMessage = document.getElementById('ykn-extension-status-message');
     const btnExtensionDownload = document.getElementById('btn-ykn-extension-download');
     const btnExtensionRecheck = document.getElementById('btn-ykn-extension-recheck');
+    const inputIssueDate = document.getElementById('ykn-issue-date');
+    const inputExpiryDate = document.getElementById('ykn-expiry-date');
 
     initPassportCropperModal();
+
+    function formatDateForDisplay(isoDate) {
+        if (!isoDate || typeof isoDate !== 'string') return '';
+        const parts = isoDate.split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+        return isoDate;
+    }
+
+    function syncUserEnteredPassportDates() {
+        if (!currentStudentData) return;
+        if (inputIssueDate && inputIssueDate.value.trim()) {
+            const parsed = parseDateValue(inputIssueDate.value.trim());
+            currentStudentData.issueDate = parsed || inputIssueDate.value.trim();
+        }
+        if (inputExpiryDate && inputExpiryDate.value.trim()) {
+            const parsed = parseDateValue(inputExpiryDate.value.trim());
+            currentStudentData.expiryDate = parsed || inputExpiryDate.value.trim();
+        }
+    }
 
     // UI Status Helper
     function addStatus(message, type = 'info') {
@@ -235,6 +258,8 @@ export function initYknManager() {
         if (btnPasteYoksis) btnPasteYoksis.disabled = true;
         if (btnTransferYoksis) btnTransferYoksis.style.display = 'none';
         if (btnCropPhoto) btnCropPhoto.style.display = 'none';
+        if (inputIssueDate) inputIssueDate.value = '';
+        if (inputExpiryDate) inputExpiryDate.value = '';
     }
 
     function updateStudentActions(studentData) {
@@ -418,22 +443,42 @@ export function initYknManager() {
                 addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
             }
 
-            let passportDates = extractPassportDatesFromText(text);
+            let passportDates = extractPassportDatesFromText(text, { birthDate: currentStudentData?.birthDate });
             if (!passportDates.issueDate || !passportDates.expiryDate) {
                 if (pdfOffset >= 0) {
                     const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
                     const ocrText = await extractPdfTextWithOcr(validPdfBytes);
-                    passportDates = extractPassportDatesFromText(ocrText);
+                    const ocrDates = extractPassportDatesFromText(ocrText, { birthDate: currentStudentData?.birthDate });
+                    passportDates = {
+                        issueDate: passportDates.issueDate || ocrDates.issueDate,
+                        expiryDate: passportDates.expiryDate || ocrDates.expiryDate
+                    };
                 } else if (isImage) {
                     const ocrText = await extractImageTextWithOcr(documentBytes, contentType || 'image/jpeg');
-                    passportDates = extractPassportDatesFromText(ocrText);
+                    const ocrDates = extractPassportDatesFromText(ocrText, { birthDate: currentStudentData?.birthDate });
+                    passportDates = {
+                        issueDate: passportDates.issueDate || ocrDates.issueDate,
+                        expiryDate: passportDates.expiryDate || ocrDates.expiryDate
+                    };
                 }
             }
-            if (!passportDates.issueDate || !passportDates.expiryDate) {
-                throw new Error('Pasaport PDF metninde geçerli düzenlenme/geçerlilik tarihleri bulunamadı.');
+
+            if (passportDates.issueDate) {
+                currentStudentData.issueDate = passportDates.issueDate;
+                if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(passportDates.issueDate);
             }
-            currentStudentData = { ...currentStudentData, ...passportDates };
-            addStatus('Pasaport düzenlenme ve geçerlilik tarihleri okundu.', 'success');
+            if (passportDates.expiryDate) {
+                currentStudentData.expiryDate = passportDates.expiryDate;
+                if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(passportDates.expiryDate);
+            }
+
+            if (passportDates.issueDate && passportDates.expiryDate) {
+                addStatus('Pasaport düzenlenme ve geçerlilik tarihleri başarıyla okundu.', 'success');
+            } else if (passportDates.issueDate || passportDates.expiryDate) {
+                addStatus('Pasaport tarihi kısmen okundu. Eksik alanı kontrol edip gerekirse yazabilirsiniz.', 'info');
+            } else {
+                addStatus('Pasaport tarihleri otomatik okunamadı. Gerekirse kutucuklara yazabilirsiniz.', 'info');
+            }
         } catch (error) {
             addStatus(`${documentKind === 'passport' ? 'Pasaport' : 'Kabul mektubu'} okunamadı: ${error.message}`, 'error');
         } finally {
@@ -598,12 +643,20 @@ export function initYknManager() {
         });
     }
 
+    if (inputIssueDate) {
+        inputIssueDate.addEventListener('input', syncUserEnteredPassportDates);
+    }
+    if (inputExpiryDate) {
+        inputExpiryDate.addEventListener('input', syncUserEnteredPassportDates);
+    }
+
     if (btnTransferYoksis) {
         btnTransferYoksis.addEventListener('click', () => {
             if (!currentStudentData || !currentStudentData.yoksisId) {
                 showToast('Önce kabul mektubundan kodu kopyalamalısınız.', 'warning');
                 return;
             }
+            syncUserEnteredPassportDates();
             addStatus('Arka planda YÖKSİS\'e aktarılıyor ve arama yapılıyor...', 'info');
             window.postMessage({
                 source: 'WEB_APP',
@@ -619,6 +672,7 @@ export function initYknManager() {
     if (btnPasteYoksis) {
         btnPasteYoksis.addEventListener('click', () => {
             if (!currentStudentData) return;
+            syncUserEnteredPassportDates();
             addStatus('Bilgiler YÖKSİS formuna yapıştırılıyor...', 'info');
             window.postMessage({
                 source: 'WEB_APP',

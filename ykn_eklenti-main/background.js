@@ -329,50 +329,88 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
 }
 
 async function syncYoksisFormInMainWorld(tabId) {
-    if (!chrome.scripting || !chrome.scripting.executeScript) return;
+    if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return;
     try {
         await chrome.scripting.executeScript({
             target: { tabId },
             world: 'MAIN',
             func: () => {
                 try {
-                    var inputs = document.querySelectorAll('input, select, textarea');
-                    for (var i = 0; i < inputs.length; i++) {
-                        var el = inputs[i];
-                        if (el.type === 'button' || el.type === 'submit' || el.type === 'reset' || el.type === 'hidden') continue;
+                    function norm(s) {
+                        return (s || '').toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+                    }
+
+                    function forceCommitWidget(el) {
+                        if (!el) return;
                         var val = el.value;
-                        if (val === undefined || val === null || val === '') continue;
+                        if (val === undefined || val === null || val === '') return;
 
                         try {
                             el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
                             el.focus();
                             el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
                             el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                            el.dispatchEvent(new Event('input', { bubbles: true }));
-                            el.dispatchEvent(new Event('change', { bubbles: true }));
-                            el.dispatchEvent(new Event('blur', { bubbles: true }));
-                            el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+                            el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                            el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                            el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+                            el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
                             el.blur();
                         } catch (_) {}
 
                         if (window.zk && window.zk.Widget) {
                             var w = window.zk.Widget.$(el);
                             if (w) {
-                                if (typeof w.setValue === 'function') {
-                                    w.setValue(val);
-                                }
+                                // ZK'nin _lastValue'sunu boşaltıp değişti (_shallSubmit) olarak işaretliyoruz
+                                w._lastValue = '';
+                                w._shallSubmit = true;
                                 w._value = val;
+                                if (typeof w.setValue === 'function') {
+                                    try { w.setValue(val); } catch (_) {}
+                                }
+                                w._shallSubmit = true;
+
+                                if (typeof w.clearErrorMessage === 'function') {
+                                    try { w.clearErrorMessage(true); } catch (_) {}
+                                }
+                                if (typeof w.doFocus_ === 'function') {
+                                    try { w.doFocus_(new window.zk.Event(w, 'onFocus')); } catch (_) {}
+                                }
                                 if (typeof w.doBlur_ === 'function') {
                                     try { w.doBlur_(new window.zk.Event(w, 'onBlur')); } catch (_) {}
                                 }
+                                if (typeof w.updateChange_ === 'function') {
+                                    try { w.updateChange_(); } catch (_) {}
+                                }
                                 if (typeof w.fire === 'function') {
-                                    w.fire('onChange', { value: val }, { toServer: true });
+                                    try { w.fire('onChange', { value: val, start: val.length }, { toServer: true }); } catch (_) {}
+                                    try { w.fire('onChanging', { value: val, start: val.length }, { toServer: true }); } catch (_) {}
                                 }
                                 if (window.zAu && typeof window.zAu.send === 'function') {
-                                    window.zAu.send(new window.zk.Event(w, 'onChange', { value: val }, { toServer: true }));
+                                    try {
+                                        window.zAu.send(new window.zk.Event(w, 'onChange', { value: val, start: val.length }, { toServer: true }));
+                                    } catch (_) {}
                                 }
                             }
                         }
+                    }
+
+                    // 1. Özellikle Anne Adı ve Baba Adı alanlarını tablo satırından bulup güvenceye al
+                    var allInputs = document.querySelectorAll('input');
+                    for (var j = 0; j < allInputs.length; j++) {
+                        var inp = allInputs[j];
+                        var row = inp.closest('tr');
+                        var rowText = row ? norm(row.innerText || row.textContent) : '';
+                        if (rowText.indexOf('anneadi') !== -1 || rowText.indexOf('babaadi') !== -1) {
+                            forceCommitWidget(inp);
+                        }
+                    }
+
+                    // 2. Sayfadaki diğer tüm doldurulmuş input ve alanları senkronize et
+                    var inputs = document.querySelectorAll('input, select, textarea');
+                    for (var i = 0; i < inputs.length; i++) {
+                        var el = inputs[i];
+                        if (el.type === 'button' || el.type === 'submit' || el.type === 'reset' || el.type === 'hidden') continue;
+                        forceCommitWidget(el);
                     }
                 } catch (e) {
                     console.error('[YKN MAIN World Form Sync Error]', e);
@@ -425,6 +463,25 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'SYNC_YOKSIS_MAIN_WORLD') {
+        (async () => {
+            try {
+                let targetId = (sender.tab ? sender.tab.id : null) || yoksisTabId;
+                if (!targetId) {
+                    const yoksisTab = await getActiveYoksisTab().catch(() => null);
+                    targetId = yoksisTab?.id;
+                }
+                if (targetId) {
+                    await syncYoksisFormInMainWorld(targetId);
+                }
+                sendResponse({ success: true });
+            } catch (err) {
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+
     // Mesaj İkamet Portalından geliyorsa
     if (request.source === 'IKAMET_PORTAL') {
         ikametTabId = sender.tab ? sender.tab.id : null;
