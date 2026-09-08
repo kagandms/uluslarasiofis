@@ -362,6 +362,10 @@ async function syncYoksisFormInMainWorld(tabId) {
                                 w._lastValue = '';
                                 w._shallSubmit = true;
                                 w._value = val;
+                                w.validate_ = function () { return null; };
+                                if (w._cst && typeof w._cst === 'object') {
+                                    try { w._cst.validate = function () { return null; }; } catch (_) {}
+                                }
                                 if (typeof w.setValue === 'function') {
                                     try { w.setValue(val); } catch (_) {}
                                 }
@@ -413,6 +417,7 @@ async function syncYoksisFormInMainWorld(tabId) {
                                         // 1. ZK'nin parse ve validation metodlarini guvenli hale getir
                                         w.coerceFromString_ = function (v) {
                                             if (!v) return null;
+                                            if (v instanceof Date) return v;
                                             var p = String(v).trim().split(/[./\-\s]+/);
                                             if (p.length === 3) {
                                                 var dy, dm, dd;
@@ -425,18 +430,33 @@ async function syncYoksisFormInMainWorld(tabId) {
                                                     dm = parseInt(p[1], 10);
                                                     dy = parseInt(p[2], 10);
                                                 }
-                                                return new Date(dy, dm - 1, dd, 0, 0, 0, 0);
+                                                if (!isNaN(dy) && !isNaN(dm) && !isNaN(dd)) {
+                                                    return new Date(dy, dm - 1, dd, 0, 0, 0, 0);
+                                                }
                                             }
                                             return dateObj;
                                         };
-                                        w.validate_ = function () { return true; };
+                                        w.coerceToString_ = function () { return formatted; };
+                                        // ZK'da validasyon hatasız ise null/undefined dönmelidir.
+                                        // true dönmesi "hata: true" popup'ına yol açar.
+                                        w.validate_ = function () { return null; };
+                                        if (w._cst) {
+                                            try {
+                                                if (typeof w._cst === 'object') {
+                                                    w._cst.validate = function () { return null; };
+                                                }
+                                            } catch (_) {}
+                                        }
 
                                         // 2. Widget hafizasini guncelle
                                         w._lastValue = formatted;
                                         w._value = dateObj;
+                                        w._shallSubmit = true;
                                         if (w.$n('real')) {
                                             w.$n('real').value = formatted;
                                         }
+                                        w.getValue = function () { return dateObj; };
+                                        w.getText = function () { return formatted; };
 
                                         // 3. Hata mesajlarini ve siniflarini temizle
                                         if (typeof w.clearErrorMessage === 'function') {
@@ -502,9 +522,20 @@ async function syncYoksisFormInMainWorld(tabId) {
                             for (var k = 0; k < errorBoxes.length; k++) {
                                 errorBoxes[k].remove();
                             }
-                            var invalids = document.querySelectorAll('.z-datebox-invalid');
+                            var invalids = document.querySelectorAll('.z-datebox-invalid, .z-textbox-invalid');
                             for (var m = 0; m < invalids.length; m++) {
                                 invalids[m].classList.remove('z-datebox-invalid');
+                                invalids[m].classList.remove('z-textbox-invalid');
+                            }
+                            var modals = document.querySelectorAll('.z-window-modal, .z-messagebox-window');
+                            for (var n = 0; n < modals.length; n++) {
+                                if (modals[n].innerText && (modals[n].innerText.indexOf('hata oluştu: true') !== -1 || modals[n].innerText.indexOf('hata olustu: true') !== -1)) {
+                                    modals[n].remove();
+                                    var masks = document.querySelectorAll('.z-modal-mask');
+                                    for (var p = 0; p < masks.length; p++) {
+                                        masks[p].remove();
+                                    }
+                                }
                             }
                         } catch (_) {}
                     }
