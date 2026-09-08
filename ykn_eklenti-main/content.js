@@ -56,6 +56,44 @@ async function simulateInput(element, value) {
     return true;
 }
 
+async function simulateDateboxInput(element, formattedDate) {
+    if (!element || !formattedDate) return false;
+    try {
+        element.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    } catch (_) {}
+
+    try {
+        element.focus();
+        element.dispatchEvent(new FocusEvent('focus', { bubbles: false }));
+        element.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    } catch (_) {}
+
+    await new Promise((r) => setTimeout(r, 20));
+
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    if (nativeSetter) {
+        nativeSetter.call(element, formattedDate);
+    } else {
+        element.value = formattedDate;
+    }
+
+    element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+    await new Promise((r) => setTimeout(r, 20));
+
+    element.classList.remove('z-datebox-invalid');
+    const parentBox = element.closest('.z-datebox');
+    if (parentBox) {
+        parentBox.classList.remove('z-datebox-invalid');
+    }
+
+    element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+    element.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
+    try { element.blur(); } catch (_) {}
+    return true;
+}
+
 // ZK Framework için Event Dispatcher (Select/Dropdown'lar için)
 function simulateSelect(element, textToMatch) {
     if (!element || !textToMatch) return false;
@@ -446,14 +484,37 @@ function findTargetElementByFuzzyLabels(labelTexts, tagName) {
     return null;
 }
 
-function formatDateForYoksisInput(element, isoDate) {
-    if (!element || !isoDate) return isoDate || '';
-    if ((element.getAttribute('type') || '').toLowerCase() === 'date') return isoDate;
+function formatDateForYoksisInput(element, rawDate) {
+    if (!rawDate) return '';
+    const clean = String(rawDate).trim();
+    if (element && (element.getAttribute('type') || '').toLowerCase() === 'date') {
+        const parts = clean.split(/[./\-\s]+/);
+        if (parts.length === 3) {
+            let y, m, d;
+            if (parts[0].length === 4) {
+                [y, m, d] = parts;
+            } else {
+                [d, m, y] = parts;
+            }
+            return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+        return clean;
+    }
 
-    const [year, month, day] = isoDate.split('-');
-    const placeholder = element.getAttribute('placeholder') || '';
-    const separator = placeholder.match(/[./-]/)?.[0] || '.';
-    return day + separator + month + separator + year;
+    const parts = clean.split(/[./\-\s]+/);
+    if (parts.length === 3) {
+        let d, m, y;
+        if (parts[0].length === 4) {
+            [y, m, d] = parts;
+        } else {
+            [d, m, y] = parts;
+        }
+        const dd = String(d).padStart(2, '0');
+        const mm = String(m).padStart(2, '0');
+        const yyyy = String(y).length === 2 ? (Number(y) <= 49 ? '20' + y : '19' + y) : String(y);
+        return `${dd}.${mm}.${yyyy}`;
+    }
+    return clean;
 }
 
 function normalizeApplyText(value) {
@@ -1185,11 +1246,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             ], 'input');
 
             if (issueDateInput && data.issueDate
-                && (await simulateInput(issueDateInput, formatDateForYoksisInput(issueDateInput, data.issueDate)))) {
+                && (await simulateDateboxInput(issueDateInput, formatDateForYoksisInput(issueDateInput, data.issueDate)))) {
                 successCount++;
             }
             if (expiryDateInput && data.expiryDate
-                && (await simulateInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, data.expiryDate)))) {
+                && (await simulateDateboxInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, data.expiryDate)))) {
                 successCount++;
             }
 

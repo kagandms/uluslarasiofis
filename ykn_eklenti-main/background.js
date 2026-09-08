@@ -337,7 +337,13 @@ async function syncYoksisFormInMainWorld(tabId) {
             func: () => {
                 try {
                     function norm(s) {
-                        return (s || '').toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+                        return (s || '')
+                            .toLocaleLowerCase('tr-TR')
+                            .replace(/ı/g, 'i')
+                            .normalize('NFD')
+                            .replace(/[\u0300-\u036f]/g, '')
+                            .replace(/duzenlenme/g, 'duzenleme')
+                            .replace(/\s+/g, '');
                     }
 
                     function commitTextbox(el) {
@@ -407,9 +413,30 @@ async function syncYoksisFormInMainWorld(tabId) {
                                         if (typeof w.clearErrorMessage === 'function') {
                                             try { w.clearErrorMessage(true); } catch (_) {}
                                         }
+                                        if (w._errmsg) {
+                                            try { w._errmsg.close(); } catch (_) {}
+                                            w._errmsg = null;
+                                        }
                                         el.classList.remove('z-datebox-invalid');
+                                        el.classList.remove('z-textbox-invalid');
                                         var parentBox = el.closest('.z-datebox');
-                                        if (parentBox) parentBox.classList.remove('z-datebox-invalid');
+                                        if (parentBox) {
+                                            parentBox.classList.remove('z-datebox-invalid');
+                                            parentBox.classList.remove('z-textbox-invalid');
+                                        }
+
+                                        w._lastValue = formatted;
+                                        w._value = dateObj;
+
+                                        if (typeof w.coerceToString_ === 'function') {
+                                            try {
+                                                var zFormatted = w.coerceToString_(dateObj);
+                                                if (zFormatted) {
+                                                    formatted = zFormatted;
+                                                    el.value = zFormatted;
+                                                }
+                                            } catch (_) {}
+                                        }
 
                                         if (typeof w.setText === 'function') {
                                             try { w.setText(formatted); } catch (_) {}
@@ -417,15 +444,29 @@ async function syncYoksisFormInMainWorld(tabId) {
                                         if (typeof w.setValue === 'function') {
                                             try { w.setValue(dateObj); } catch (_) {}
                                         }
+
+                                        el.classList.remove('z-datebox-invalid');
+                                        if (parentBox) parentBox.classList.remove('z-datebox-invalid');
+                                        if (typeof w.clearErrorMessage === 'function') {
+                                            try { w.clearErrorMessage(true); } catch (_) {}
+                                        }
+
                                         if (typeof w.fireOnChange === 'function') {
                                             try { w.fireOnChange(); } catch (_) {}
+                                        } else if (typeof w.fire === 'function') {
+                                            try { w.fire('onChange', { value: formatted }, { toServer: true }); } catch (_) {}
+                                        }
+
+                                        if (window.zAu && typeof window.zAu.send === 'function') {
+                                            try {
+                                                window.zAu.send(new window.zk.Event(w, 'onChange', { value: formatted }, { toServer: true }));
+                                            } catch (_) {}
                                         }
                                     }
                                 }
 
                                 try {
                                     el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                                    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
                                 } catch (_) {}
                             }
                         }
@@ -447,7 +488,7 @@ async function syncYoksisFormInMainWorld(tabId) {
                         }
 
                         // Tarih kutuları (Belge Düzenleme Tarihi, Belge Geçerlilik Tarihi)
-                        if (combined.indexOf('duzenle') !== -1 || combined.indexOf('gecerli') !== -1) {
+                        if (combined.indexOf('duzenle') !== -1 || combined.indexOf('gecerli') !== -1 || combined.indexOf('verilis') !== -1 || combined.indexOf('tanzim') !== -1 || combined.indexOf('bitis') !== -1) {
                             commitDatebox(inp);
                             continue;
                         }
@@ -462,6 +503,13 @@ async function syncYoksisFormInMainWorld(tabId) {
                             commitTextbox(inp);
                         }
                     }
+
+                    try {
+                        var errorBoxes = document.querySelectorAll('.z-errorbox');
+                        for (var k = 0; k < errorBoxes.length; k++) {
+                            errorBoxes[k].remove();
+                        }
+                    } catch (_) {}
                 } catch (e) {
                     console.error('[YKN MAIN World Form Sync Error]', e);
                 }
