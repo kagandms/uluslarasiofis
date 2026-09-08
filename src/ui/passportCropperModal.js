@@ -17,6 +17,7 @@ function getElements() {
         btnFinePlus: document.getElementById('btn-passport-fine-plus'),
         btnAspectRatio: document.getElementById('btn-passport-aspect-ratio'),
         btnDownload: document.getElementById('btn-passport-crop-download'),
+        btnTransfer: document.getElementById('btn-passport-crop-transfer'),
         btnCancel: document.getElementById('btn-passport-crop-cancel'),
         btnClose: document.getElementById('btn-passport-crop-close')
     };
@@ -116,7 +117,7 @@ function sanitizeFileName(name) {
         .toUpperCase();
 }
 
-function downloadCroppedImage() {
+function downloadCroppedImage(autoTransfer = false) {
     if (!passportCropperInstance) return;
 
     const canvas = passportCropperInstance.getCroppedCanvas({
@@ -131,38 +132,51 @@ function downloadCroppedImage() {
         return;
     }
 
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const baseName = currentStudentInfo.name
+        ? sanitizeFileName(currentStudentInfo.name)
+        : (currentStudentInfo.passport || 'ogrenci');
+    const fileName = `${baseName}_foto.jpg`;
+
+    // Dosyayı kullanıcı bilgisayarına da indir (güvenli yerel yedek)
     canvas.toBlob((blob) => {
-        if (!blob) {
-            showToast('Dosya oluşturulamadı.', 'error');
-            return;
+        if (blob) {
+            const downloadUrl = URL.createObjectURL(blob);
+            const downloadLink = document.createElement('a');
+            downloadLink.href = downloadUrl;
+            downloadLink.download = fileName;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
         }
-
-        const baseName = currentStudentInfo.name
-            ? sanitizeFileName(currentStudentInfo.name)
-            : (currentStudentInfo.passport || 'ogrenci');
-        const fileName = `${baseName}_foto.jpg`;
-
-        const downloadUrl = URL.createObjectURL(blob);
-        const downloadLink = document.createElement('a');
-        downloadLink.href = downloadUrl;
-        downloadLink.download = fileName;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-        setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
-
-        // Panoya da kopyalamayı dene (opsiyonel kolaylık)
-        try {
-            canvas.toBlob((pngBlob) => {
-                if (pngBlob && window.ClipboardItem && navigator.clipboard?.write) {
-                    navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]).catch(() => {});
-                }
-            }, 'image/png');
-        } catch (_) {}
-
-        showToast(`Fotoğraf indirildi: ${fileName}`, 'success');
-        closePassportCropper();
     }, 'image/jpeg', 0.92);
+
+    // Panoya da kopyalamayı dene (opsiyonel kolaylık)
+    try {
+        canvas.toBlob((pngBlob) => {
+            if (pngBlob && window.ClipboardItem && navigator.clipboard?.write) {
+                navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]).catch(() => {});
+            }
+        }, 'image/png');
+    } catch (_) {}
+
+    // Kırpılan fotoğrafı web uygulamasına ve YÖKSİS aktarım mekanizmasına ilet
+    window.dispatchEvent(new CustomEvent('ykn:photo-cropped', {
+        detail: {
+            dataUrl,
+            fileName,
+            studentInfo: currentStudentInfo,
+            autoTransfer
+        }
+    }));
+
+    if (autoTransfer) {
+        showToast(`Fotoğraf hazırlandı! YÖKSİS aktarımı başlatılıyor...`, 'success');
+    } else {
+        showToast(`Fotoğraf hazırlandı ve indirildi: ${fileName}`, 'success');
+    }
+    closePassportCropper();
 }
 
 export function initPassportCropperModal() {
@@ -246,7 +260,12 @@ export function initPassportCropperModal() {
 
     // İndir
     if (btnDownload) {
-        btnDownload.addEventListener('click', downloadCroppedImage);
+        btnDownload.addEventListener('click', () => downloadCroppedImage(false));
+    }
+
+    // Kırp ve YÖKSİS'e Aktar
+    if (btnTransfer) {
+        btnTransfer.addEventListener('click', () => downloadCroppedImage(true));
     }
 
     // Kapat butonları

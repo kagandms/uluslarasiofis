@@ -735,6 +735,39 @@ export function initYknManager() {
         inputExpiryDate.addEventListener('input', syncUserEnteredPassportDates);
     }
 
+    window.addEventListener('ykn:photo-cropped', (e) => {
+        const { dataUrl, fileName, autoTransfer } = e.detail || {};
+        if (!dataUrl) return;
+
+        if (currentStudentData) {
+            currentStudentData.croppedPhotoBase64 = dataUrl;
+            currentStudentData.photoFileName = fileName;
+        }
+
+        window.postMessage({
+            source: 'WEB_APP',
+            payload: {
+                action: 'SAVE_CROPPED_PHOTO',
+                photoBase64: dataUrl,
+                fileName: fileName,
+                requestId: activeSearchRequestId
+            }
+        }, '*');
+
+        addStatus(`Vesikalık fotoğraf hazırlandı (${fileName}). YÖKSİS'e otomatik yüklenecek.`, 'success');
+
+        if (autoTransfer) {
+            if (currentStudentData?.yoksisId && isValidYoksisId(currentStudentData.yoksisId)) {
+                if (btnTransferYoksis) {
+                    btnTransferYoksis.click();
+                }
+            } else {
+                showToast('Kabul kodu henüz hazır değil. Lütfen önce Kabul Kodunu kopyalayın.', 'warning');
+                addStatus('Fotoğraf hazırlandı ancak kabul mektubu kodu eksik. Lütfen önce Kabul Kodunu kopyalayın.', 'info');
+            }
+        }
+    });
+
     if (btnTransferYoksis) {
         btnTransferYoksis.addEventListener('click', () => {
             if (!currentStudentData || !currentStudentData.yoksisId) {
@@ -742,7 +775,11 @@ export function initYknManager() {
                 return;
             }
             syncUserEnteredPassportDates();
-            addStatus('Arka planda YÖKSİS\'e aktarılıyor ve arama yapılıyor...', 'info');
+            if (currentStudentData.croppedPhotoBase64) {
+                addStatus('Arka planda YÖKSİS\'e aktarılıyor, form ve vesikalık fotoğraf otomatik yükleniyor...', 'info');
+            } else {
+                addStatus('Arka planda YÖKSİS\'e aktarılıyor ve arama yapılıyor...', 'info');
+            }
             window.postMessage({
                 source: 'WEB_APP',
                 payload: {
@@ -758,7 +795,11 @@ export function initYknManager() {
         btnPasteYoksis.addEventListener('click', () => {
             if (!currentStudentData) return;
             syncUserEnteredPassportDates();
-            addStatus('Bilgiler YÖKSİS formuna yapıştırılıyor...', 'info');
+            if (currentStudentData.croppedPhotoBase64) {
+                addStatus('Bilgiler ve vesikalık fotoğraf YÖKSİS formuna yapıştırılıyor/yükleniyor...', 'info');
+            } else {
+                addStatus('Bilgiler YÖKSİS formuna yapıştırılıyor...', 'info');
+            }
             window.postMessage({
                 source: 'WEB_APP',
                 payload: {
@@ -798,10 +839,13 @@ export function initYknManager() {
             } else if (event.data.action === 'TRANSFER_TO_YOKSIS' && response?.success) {
                 currentStudentData = { ...currentStudentData, yoksisReady: Boolean(response.formReady) };
                 updateStudentActions(currentStudentData);
-                addStatus('YÖKSİS araması arka planda başlatıldı; "Kabul Mektup Id İle Ara" tıklandı.', 'success');
-                showToast('YÖKSİS araması arka planda başlatıldı.', 'success');
+                const hasPhoto = Boolean(currentStudentData?.croppedPhotoBase64);
+                addStatus(`YÖKSİS aktarımı tamamlandı: Form dolduruldu${hasPhoto ? ' ve vesikalık fotoğraf otomatik yüklendi' : ''}.`, 'success');
+                showToast(`YÖKSİS aktarımı tamamlandı!${hasPhoto ? ' Fotoğraf yüklendi.' : ''}`, 'success');
             } else if (event.data.action === 'FILL_YOKSIS_FORM' && response?.success) {
-                addStatus('YÖKSİS alanları dolduruldu. Göndermeden önce kontrol edin.', 'success');
+                const hasPhoto = Boolean(currentStudentData?.croppedPhotoBase64);
+                addStatus(`YÖKSİS alanları dolduruldu${hasPhoto ? ' ve fotoğraf yüklendi' : ''}. Göndermeden önce kontrol edin.`, 'success');
+                showToast(`YÖKSİS alanları dolduruldu${hasPhoto ? ' ve fotoğraf yüklendi' : ''}.`, 'success');
             } else if (event.data.action === 'COPY_APPLY_DATA') {
                 if (response?.success && response.data) {
                     const data = response.data;

@@ -469,6 +469,186 @@ function findTargetElementByFuzzyLabels(labelTexts, tagName) {
     return null;
 }
 
+function findPhotoUploadButton() {
+    const norm = (s) => (s || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '');
+
+    // 1. Text-based search across clickable elements
+    const clickables = document.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button');
+    for (const el of clickables) {
+        const t = norm(el.innerText || el.textContent || el.value || '');
+        if (t.includes('fotograf') && (t.includes('yukle') || t.includes('sec') || t.includes('ekle'))) {
+            return el;
+        }
+    }
+
+    // 2. Search in table row containing "Fotoğraf Adı"
+    const allLabels = document.querySelectorAll('span, td, div, label, b');
+    for (const lbl of allLabels) {
+        const t = norm(lbl.innerText || lbl.textContent || '');
+        if (t.includes('fotografadi') || t === 'fotograf') {
+            const row = lbl.closest('tr') || lbl.closest('div') || lbl.parentElement;
+            if (row) {
+                const btn = row.querySelector('button, a, input[type="button"], .z-button');
+                if (btn) return btn;
+            }
+        }
+    }
+
+    // 3. Fallback: Any element with upload attribute or upload class
+    const uploadEl = document.querySelector('[upload], .z-upload, .z-fileupload');
+    if (uploadEl) {
+        if (uploadEl.matches('button, a, input[type="button"], .z-button')) return uploadEl;
+        const inner = uploadEl.querySelector('button, a, input[type="button"], .z-button');
+        if (inner) return inner;
+    }
+
+    return null;
+}
+
+function findYoksisFileInput(photoBtn) {
+    if (!photoBtn) return document.querySelector('input[type="file"]');
+
+    // 1. Inside the button
+    let inp = photoBtn.querySelector('input[type="file"]');
+    if (inp) return inp;
+
+    // 2. Sibling or same parent
+    inp = photoBtn.parentElement?.querySelector('input[type="file"]');
+    if (inp) return inp;
+
+    // 3. In the same row or container
+    const row = photoBtn.closest('tr, td, table, .z-groupbox, .z-panel, fieldset, form');
+    if (row) {
+        inp = row.querySelector('input[type="file"]');
+        if (inp) return inp;
+    }
+
+    // 4. ZK Widget uploader reference
+    try {
+        if (window.zk && window.zk.Widget) {
+            const w = window.zk.Widget.$(photoBtn);
+            if (w) {
+                if (w._uplder) {
+                    const u = w._uplder;
+                    inp = (u.form && u.form.querySelector('input[type="file"]'))
+                       || (u._form && u._form.querySelector('input[type="file"]'))
+                       || u.input
+                       || u._input;
+                    if (inp) return inp;
+                }
+                if (w.uuid) {
+                    inp = document.querySelector(`form[id*="${w.uuid}"] input[type="file"], input[type="file"][id*="${w.uuid}"]`);
+                    if (inp) return inp;
+                }
+            }
+        }
+    } catch (_) {}
+
+    // 5. Check all file inputs on the page
+    const allInputs = Array.from(document.querySelectorAll('input[type="file"]'));
+    if (allInputs.length === 1) return allInputs[0];
+
+    if (allInputs.length > 1) {
+        const btnRect = photoBtn.getBoundingClientRect();
+        let closest = null;
+        let minDist = Infinity;
+        for (const fi of allInputs) {
+            const r = fi.getBoundingClientRect();
+            const targetRect = (r.width > 0 && r.height > 0) ? r : (fi.parentElement?.getBoundingClientRect() || r);
+            const dist = Math.hypot(targetRect.left - btnRect.left, targetRect.top - btnRect.top);
+            if (dist < minDist) {
+                minDist = dist;
+                closest = fi;
+            }
+        }
+        if (closest) return closest;
+    }
+
+    return allInputs[0] || null;
+}
+
+function base64ToFile(base64Data, filename) {
+    const cleanName = filename || 'ogrenci_foto.jpg';
+    let mime = 'image/jpeg';
+    let byteChars;
+
+    if (base64Data.includes(',')) {
+        const parts = base64Data.split(',');
+        const match = parts[0].match(/:(.*?);/);
+        if (match) mime = match[1];
+        byteChars = atob(parts[1]);
+    } else {
+        byteChars = atob(base64Data);
+    }
+
+    const byteNums = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) {
+        byteNums[i] = byteChars.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNums);
+    const blob = new Blob([byteArray], { type: mime });
+    return new File([blob], cleanName, { type: mime, lastModified: Date.now() });
+}
+
+async function uploadPhotoToYoksis(photoBase64, fileName) {
+    if (!photoBase64) return false;
+
+    const photoBtn = findPhotoUploadButton();
+    if (photoBtn) {
+        try {
+            photoBtn.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+            photoBtn.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true, view: window }));
+        } catch (_) {}
+    }
+
+    await new Promise(r => setTimeout(r, 60));
+
+    const fileInput = findYoksisFileInput(photoBtn);
+    if (!fileInput) {
+        console.warn('[YKN] YÖKSİS Fotoğraf file input bulunamadı.');
+        return false;
+    }
+
+    try {
+        const file = base64ToFile(photoBase64, fileName);
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+
+        fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+        if (window.jq) {
+            try { window.jq(fileInput).trigger('change'); } catch (_) {}
+        }
+
+        if (photoBtn && window.zk && window.zk.Widget) {
+            try {
+                const w = window.zk.Widget.$(photoBtn);
+                if (w && w._uplder) {
+                    const u = w._uplder;
+                    ['start', '_start', 'upload', '_upload', 'send', '_send', 'submit'].forEach(fn => {
+                        if (typeof u[fn] === 'function') {
+                            try { u[fn](); } catch (_) {}
+                        }
+                    });
+                }
+            } catch (_) {}
+        }
+
+        console.log('[YKN] Fotoğraf başarıyla yüklendi:', fileName);
+        return true;
+    } catch (err) {
+        console.error('[YKN] Fotoğraf yükleme hatası:', err);
+        return false;
+    }
+}
+
 function formatDateForYoksisInput(element, rawDate) {
     if (!rawDate) return '';
     const clean = String(rawDate).trim();
@@ -1275,17 +1455,37 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 } catch (_) {}
             }
 
-            // Background script üzerinden Main World ZK Senkronizasyonunu tetikle
+            // Fotoğraf otomatik yükleme (Kırpılmış vesikalık varsa YÖKSİS'e yükle)
+            if (data.croppedPhotoBase64) {
+                try {
+                    const photoUploaded = await uploadPhotoToYoksis(data.croppedPhotoBase64, data.photoFileName);
+                    if (photoUploaded) successCount++;
+                } catch (photoErr) {
+                    console.warn('[YKN] Fotoğraf yükleme hatası (content script):', photoErr);
+                }
+            }
+
+            // Background script üzerinden Main World ZK Senkronizasyonunu ve yükleme garantisini tetikle
             try {
-                chrome.runtime.sendMessage({ action: 'SYNC_YOKSIS_MAIN_WORLD' });
+                chrome.runtime.sendMessage({
+                    action: 'SYNC_YOKSIS_MAIN_WORLD',
+                    data: data
+                });
             } catch (_) {}
 
             if (successCount > 0) {
-                sendResponse({ success: true });
+                sendResponse({ success: true, photoUploaded: Boolean(data.croppedPhotoBase64) });
             } else {
                 sendResponse({ success: false, message: "Hedef inputlar bulunamadı." });
             }
         });
+        return true;
+    }
+
+    else if (request.action === "UPLOAD_PHOTO") {
+        uploadPhotoToYoksis(request.photoBase64, request.fileName)
+            .then(success => sendResponse({ success }))
+            .catch(err => sendResponse({ success: false, error: err.message }));
         return true;
     }
     

@@ -336,13 +336,14 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
     }
 }
 
-async function syncYoksisFormInMainWorld(tabId) {
+async function syncYoksisFormInMainWorld(tabId, studentData) {
     if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return;
     try {
         await chrome.scripting.executeScript({
             target: { tabId },
             world: 'MAIN',
-            func: () => {
+            args: [studentData || null],
+            func: (data) => {
                 try {
                     function norm(s) {
                         return (s || '')
@@ -555,6 +556,124 @@ async function syncYoksisFormInMainWorld(tabId) {
                     setTimeout(purgeErrorBoxes, 150);
                     setTimeout(purgeErrorBoxes, 350);
 
+                    // Fotoğraf Yükleme (MAIN World güvencesi)
+                    if (data && data.croppedPhotoBase64) {
+                        try {
+                            var buttons = document.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button');
+                            var photoBtn = null;
+                            for (var b = 0; b < buttons.length; b++) {
+                                var bt = norm(buttons[b].innerText || buttons[b].textContent || buttons[b].value || '');
+                                if (bt.indexOf('fotograf') !== -1 && (bt.indexOf('yukle') !== -1 || bt.indexOf('sec') !== -1 || bt.indexOf('ekle') !== -1)) {
+                                    photoBtn = buttons[b];
+                                    break;
+                                }
+                            }
+
+                            if (!photoBtn) {
+                                var allLabels = document.querySelectorAll('span, td, div, label, b');
+                                for (var l = 0; l < allLabels.length; l++) {
+                                    var lt = norm(allLabels[l].innerText || allLabels[l].textContent || '');
+                                    if (lt.indexOf('fotografadi') !== -1 || lt === 'fotograf') {
+                                        var rowEl = allLabels[l].closest('tr') || allLabels[l].closest('div') || allLabels[l].parentElement;
+                                        if (rowEl) {
+                                            var btnInRow = rowEl.querySelector('button, a, input[type="button"], .z-button');
+                                            if (btnInRow) { photoBtn = btnInRow; break; }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (photoBtn) {
+                                ['mouseover', 'mouseenter'].forEach(function(evt) {
+                                    photoBtn.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window }));
+                                });
+                            }
+
+                            var fileInput = null;
+                            if (photoBtn) {
+                                fileInput = photoBtn.querySelector('input[type="file"]') ||
+                                            (photoBtn.parentElement && photoBtn.parentElement.querySelector('input[type="file"]'));
+                            }
+
+                            if (!fileInput && window.zk && window.zk.Widget && photoBtn) {
+                                var wgt = window.zk.Widget.$(photoBtn);
+                                if (wgt) {
+                                    if (wgt._uplder) {
+                                        var u = wgt._uplder;
+                                        fileInput = (u.form && u.form.querySelector('input[type="file"]')) ||
+                                                    (u._form && u._form.querySelector('input[type="file"]')) ||
+                                                    u.input || u._input;
+                                    }
+                                    if (!fileInput && wgt.uuid) {
+                                        fileInput = document.querySelector('form[id*="' + wgt.uuid + '"] input[type="file"], input[type="file"][id*="' + wgt.uuid + '"]');
+                                    }
+                                }
+                            }
+
+                            if (!fileInput) {
+                                var allInputs = document.querySelectorAll('input[type="file"]');
+                                if (allInputs.length === 1) {
+                                    fileInput = allInputs[0];
+                                } else if (allInputs.length > 1 && photoBtn) {
+                                    var btnRect = photoBtn.getBoundingClientRect();
+                                    var closest = null;
+                                    var minDist = Infinity;
+                                    for (var k = 0; k < allInputs.length; k++) {
+                                        var r = allInputs[k].getBoundingClientRect();
+                                        var d = Math.hypot(r.left - btnRect.left, r.top - btnRect.top);
+                                        if (d < minDist) { minDist = d; closest = allInputs[k]; }
+                                    }
+                                    fileInput = closest || allInputs[0];
+                                }
+                            }
+
+                            if (fileInput) {
+                                var raw = data.croppedPhotoBase64;
+                                var mime = 'image/jpeg';
+                                var bstr;
+                                if (raw.indexOf(',') !== -1) {
+                                    var parts = raw.split(',');
+                                    var mm = parts[0].match(/:(.*?);/);
+                                    if (mm) mime = mm[1];
+                                    bstr = atob(parts[1]);
+                                } else {
+                                    bstr = atob(raw);
+                                }
+                                var len = bstr.length;
+                                var u8arr = new Uint8Array(len);
+                                while (len--) {
+                                    u8arr[len] = bstr.charCodeAt(len);
+                                }
+                                var photoFile = new File([u8arr], data.photoFileName || 'ogrenci_foto.jpg', { type: mime, lastModified: Date.now() });
+                                var dt = new DataTransfer();
+                                dt.items.add(photoFile);
+                                fileInput.files = dt.files;
+
+                                fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+                                if (window.jq) {
+                                    try { window.jq(fileInput).trigger('change'); } catch (_) {}
+                                }
+
+                                if (photoBtn && window.zk && window.zk.Widget) {
+                                    var btnW = window.zk.Widget.$(photoBtn);
+                                    if (btnW && btnW._uplder) {
+                                        var uplder = btnW._uplder;
+                                        ['start', '_start', 'upload', '_upload', 'send', 'submit'].forEach(function(fn) {
+                                            if (typeof uplder[fn] === 'function') {
+                                                try { uplder[fn](); } catch (_) {}
+                                            }
+                                        });
+                                    }
+                                }
+                                console.log('[YKN MAIN World] Fotoğraf başarıyla yüklendi:', data.photoFileName);
+                            }
+                        } catch (pErr) {
+                            console.warn('[YKN MAIN World Photo Upload Error]', pErr);
+                        }
+                    }
+
                     try {
                         if (!window.__ykn_save_hook_installed) {
                             window.__ykn_save_hook_installed = true;
@@ -582,6 +701,10 @@ async function syncYoksisFormInMainWorld(tabId) {
 
 async function transferToYoksis(request) {
     const yoksisTab = await getExistingYoksisTab();
+    await new Promise((resolve) => {
+        chrome.storage.local.set({ studentData: request.data }, resolve);
+    });
+
     const response = await sendTabMessage(yoksisTab.id, {
         action: 'searchWithId',
         kabulId: request.data.yoksisId,
@@ -590,6 +713,22 @@ async function transferToYoksis(request) {
     // ZK Framework main-world desteği için ek tetikleyici
     executeYoksisSearchInMainWorld(yoksisTab.id, request.data.yoksisId).catch(() => {});
     if (!response?.success) throw new Error(response?.message || 'YÖKSİS araması başlatılamadı.');
+
+    // Form açıldığında kalan bilgileri ve vesikalık fotoğrafı otomatik doldur ve yükle
+    if (response.formReady) {
+        try {
+            await new Promise((r) => setTimeout(r, 350));
+            await sendTabMessage(yoksisTab.id, {
+                action: 'fillRemainingData',
+                data: request.data
+            });
+            await syncYoksisFormInMainWorld(yoksisTab.id, request.data);
+            await updateTab(yoksisTab.id, { active: true });
+        } catch (fillErr) {
+            console.warn('[YKN] transferToYoksis auto-fill warning:', fillErr);
+        }
+    }
+
     return response;
 }
 
@@ -810,15 +949,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             sendResponse({ success: false, requestId: request.requestId, error: error.message });
                             return;
                         }
-                        syncYoksisFormInMainWorld(yoksisTab.id).catch(() => {});
+                        syncYoksisFormInMainWorld(yoksisTab.id, studentData).catch(() => {});
                         sendResponse({ ...response, requestId: request.requestId });
-                        chrome.storage.local.remove('studentData');
                     });
                 });
             })().catch((error) => {
                 sendResponse({ success: false, requestId: request.requestId, error: error.message });
             });
             return true;
+        }
+        else if (request.action === 'SAVE_CROPPED_PHOTO') {
+            chrome.storage.local.get(['studentData'], (res) => {
+                const current = res?.studentData || {};
+                current.croppedPhotoBase64 = request.photoBase64;
+                current.photoFileName = request.fileName;
+                chrome.storage.local.set({ studentData: current }, () => {
+                    sendResponse({ success: true, requestId: request.requestId });
+                });
+            });
+            return true;
+        }
+        else if (request.action === 'SYNC_YOKSIS_MAIN_WORLD') {
+            (async () => {
+                const yoksisTab = await getExistingYoksisTab();
+                if (yoksisTab) {
+                    const data = request.data || (await new Promise(r => chrome.storage.local.get(['studentData'], res => r(res?.studentData))));
+                    await syncYoksisFormInMainWorld(yoksisTab.id, data);
+                }
+            })().catch(() => {});
+            return false;
         }
     }
     
