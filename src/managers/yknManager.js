@@ -310,7 +310,7 @@ export function initYknManager() {
             btnTransferYoksis.style.display = (studentData?.yoksisId && isValidYoksisId(studentData.yoksisId)) ? 'block' : 'none';
         }
         if (btnCropPhoto) {
-            btnCropPhoto.style.display = studentData?.passportImageSrc ? 'block' : 'none';
+            btnCropPhoto.style.display = hasStudent ? 'block' : 'none';
         }
     }
 
@@ -358,8 +358,110 @@ export function initYknManager() {
         try {
             const pdfOffset = isPdfData(documentBytes);
             const isImage = isImageData(documentBytes, contentType);
-            let text = '';
 
+            if (documentKind === 'passport') {
+                // Pasaport görselini hemen oluştur ve kırpıcıyı hiç gecikmeden aç!
+                let passportImageSrc = null;
+                try {
+                    if (pdfOffset >= 0) {
+                        const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
+                        ensurePdfWorkerReady();
+                        const pdf = await window.pdfjsLib.getDocument({
+                            data: validPdfBytes,
+                            cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+                            cMapPacked: true
+                        }).promise;
+                        const page = await pdf.getPage(1);
+                        const viewport = page.getViewport({ scale: 2 });
+                        const canvas = document.createElement('canvas');
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+                        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                        passportImageSrc = canvas.toDataURL('image/jpeg', 0.95);
+                    } else if (isImage) {
+                        const blob = new Blob([documentBytes], { type: contentType || 'image/jpeg' });
+                        passportImageSrc = URL.createObjectURL(blob);
+                    }
+                } catch (imgErr) {
+                    console.warn('[YKN] Pasaport görseli oluşturulamadı:', imgErr);
+                }
+
+                if (passportImageSrc) {
+                    currentStudentData = { ...currentStudentData, passportImageSrc };
+                    updateStudentActions(currentStudentData);
+                    openPassportCropper({
+                        imageSrc: passportImageSrc,
+                        studentName: currentStudentData?.fullName || '',
+                        passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                    });
+                    addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
+                }
+
+                // Pasaport tarih çıkarma işlemi (hızlı metin çıkarma + gerekirse güvenli süreli OCR)
+                let text = '';
+                if (pdfOffset >= 0) {
+                    const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
+                    try {
+                        text = await extractPdfText(validPdfBytes);
+                    } catch (_) {}
+                }
+
+                let passportDates = extractPassportDatesFromText(text, { birthDate: currentStudentData?.birthDate });
+                if (passportDates.issueDate) {
+                    currentStudentData.issueDate = passportDates.issueDate;
+                    if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(passportDates.issueDate);
+                }
+                if (passportDates.expiryDate) {
+                    currentStudentData.expiryDate = passportDates.expiryDate;
+                    if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(passportDates.expiryDate);
+                }
+
+                if (!passportDates.issueDate || !passportDates.expiryDate) {
+                    try {
+                        let ocrText = '';
+                        if (pdfOffset >= 0) {
+                            const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
+                            ocrText = await Promise.race([
+                                extractPdfTextWithOcr(validPdfBytes),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('OCR zaman aşımı')), 10000))
+                            ]);
+                        } else if (isImage) {
+                            ocrText = await Promise.race([
+                                extractImageTextWithOcr(documentBytes, contentType || 'image/jpeg'),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('OCR zaman aşımı')), 10000))
+                            ]);
+                        }
+
+                        if (ocrText) {
+                            const ocrDates = extractPassportDatesFromText(ocrText, { birthDate: currentStudentData?.birthDate });
+                            if (ocrDates.issueDate && !currentStudentData.issueDate) {
+                                currentStudentData.issueDate = ocrDates.issueDate;
+                                if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(ocrDates.issueDate);
+                                passportDates.issueDate = ocrDates.issueDate;
+                            }
+                            if (ocrDates.expiryDate && !currentStudentData.expiryDate) {
+                                currentStudentData.expiryDate = ocrDates.expiryDate;
+                                if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(ocrDates.expiryDate);
+                                passportDates.expiryDate = ocrDates.expiryDate;
+                            }
+                        }
+                    } catch (ocrErr) {
+                        console.warn('[YKN] OCR ile pasaport tarihi taraması atlandı/hata:', ocrErr.message);
+                    }
+                }
+
+                if (passportDates.issueDate && passportDates.expiryDate) {
+                    addStatus('Pasaport düzenlenme ve geçerlilik tarihleri başarıyla okundu.', 'success');
+                } else if (passportDates.issueDate || passportDates.expiryDate) {
+                    addStatus('Pasaport tarihi kısmen okundu. Eksik alanı kontrol edip gerekirse yazabilirsiniz.', 'info');
+                } else {
+                    addStatus('Pasaport tarihleri otomatik okunamadı. Gerekirse kutucuklara yazabilirsiniz.', 'info');
+                }
+
+                return;
+            }
+
+            let text = '';
             if (pdfOffset >= 0) {
                 const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
                 try {
@@ -443,97 +545,6 @@ export function initYknManager() {
                 addStatus(`Kabul mektubu YÖKSİS ID bulundu ve kopyalandı: ${yoksisId}`, 'success');
                 showToast(`Kabul Kodu kopyalandı: ${yoksisId}`, 'success');
                 return;
-            }
-
-            // Pasaport belgesi görselini hazırla ve kırpıcı modalını aç
-            let passportImageSrc = null;
-            try {
-                if (pdfOffset >= 0) {
-                    const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
-                    ensurePdfWorkerReady();
-                    const pdf = await window.pdfjsLib.getDocument({
-                        data: validPdfBytes,
-                        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
-                        cMapPacked: true
-                    }).promise;
-                    const page = await pdf.getPage(1);
-                    const viewport = page.getViewport({ scale: 2 });
-                    const canvas = document.createElement('canvas');
-                    canvas.width = viewport.width;
-                    canvas.height = viewport.height;
-                    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-                    passportImageSrc = canvas.toDataURL('image/jpeg', 0.95);
-                } else if (isImage) {
-                    const blob = new Blob([documentBytes], { type: contentType || 'image/jpeg' });
-                    passportImageSrc = URL.createObjectURL(blob);
-                }
-            } catch (imgErr) {
-                console.warn('[YKN] Pasaport görseli oluşturulamadı:', imgErr);
-            }
-
-            if (passportImageSrc) {
-                currentStudentData = { ...currentStudentData, passportImageSrc };
-                updateStudentActions(currentStudentData);
-                openPassportCropper({
-                    imageSrc: passportImageSrc,
-                    studentName: currentStudentData?.fullName || '',
-                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
-                });
-                addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
-            }
-
-            // 1. Doğrudan metin üzerinden tarihleri hemen çıkar ve ekrana yansıt
-            let passportDates = extractPassportDatesFromText(text, { birthDate: currentStudentData?.birthDate });
-            if (passportDates.issueDate) {
-                currentStudentData.issueDate = passportDates.issueDate;
-                if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(passportDates.issueDate);
-            }
-            if (passportDates.expiryDate) {
-                currentStudentData.expiryDate = passportDates.expiryDate;
-                if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(passportDates.expiryDate);
-            }
-
-            // 2. Eksik tarih varsa ve belge PDF/görsel ise OCR ile ek tarama yap (UI'ı kilitlemeden, güvenli süreyle)
-            if (!passportDates.issueDate || !passportDates.expiryDate) {
-                try {
-                    let ocrText = '';
-                    if (pdfOffset >= 0) {
-                        const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
-                        ocrText = await Promise.race([
-                            extractPdfTextWithOcr(validPdfBytes),
-                            new Promise((_, reject) => setTimeout(() => reject(new Error('OCR zaman aşımı')), 10000))
-                        ]);
-                    } else if (isImage) {
-                        ocrText = await Promise.race([
-                            extractImageTextWithOcr(documentBytes, contentType || 'image/jpeg'),
-                            new Promise((_, reject) => setTimeout(() => reject(new Error('OCR zaman aşımı')), 10000))
-                        ]);
-                    }
-
-                    if (ocrText) {
-                        const ocrDates = extractPassportDatesFromText(ocrText, { birthDate: currentStudentData?.birthDate });
-                        if (ocrDates.issueDate && !currentStudentData.issueDate) {
-                            currentStudentData.issueDate = ocrDates.issueDate;
-                            if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(ocrDates.issueDate);
-                            passportDates.issueDate = ocrDates.issueDate;
-                        }
-                        if (ocrDates.expiryDate && !currentStudentData.expiryDate) {
-                            currentStudentData.expiryDate = ocrDates.expiryDate;
-                            if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(ocrDates.expiryDate);
-                            passportDates.expiryDate = ocrDates.expiryDate;
-                        }
-                    }
-                } catch (ocrErr) {
-                    console.warn('[YKN] OCR ile pasaport tarihi taraması atlandı/hata:', ocrErr.message);
-                }
-            }
-
-            if (passportDates.issueDate && passportDates.expiryDate) {
-                addStatus('Pasaport düzenlenme ve geçerlilik tarihleri başarıyla okundu.', 'success');
-            } else if (passportDates.issueDate || passportDates.expiryDate) {
-                addStatus('Pasaport tarihi kısmen okundu. Eksik alanı kontrol edip gerekirse yazabilirsiniz.', 'info');
-            } else {
-                addStatus('Pasaport tarihleri otomatik okunamadı. Gerekirse kutucuklara yazabilirsiniz.', 'info');
             }
         } catch (error) {
             addStatus(`${documentKind === 'passport' ? 'Pasaport' : 'Kabul mektubu'} okunamadı: ${error.message}`, 'error');
@@ -628,13 +639,14 @@ export function initYknManager() {
                     studentName: currentStudentData?.fullName || '',
                     passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
                 });
-            }
-
-            const passportDocumentUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
-            if (passportDocumentUrl) {
-                requestApplyDocument('passport', passportDocumentUrl);
             } else {
-                void 'Pasaport belgesi henüz alınmadı.';
+                const passportDocumentUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
+                if (passportDocumentUrl) {
+                    addStatus('Pasaport belgesi alınıyor ve fotoğraf kırpıcı hazırlanıyor...', 'info');
+                    requestApplyDocument('passport', passportDocumentUrl);
+                } else {
+                    void 'Pasaport belgesi henüz alınmadı.';
+                }
             }
         });
     }
@@ -657,7 +669,14 @@ export function initYknManager() {
                     addStatus('Pasaport belgesi indiriliyor...', 'info');
                     requestApplyDocument('passport', passportDocumentUrl);
                 } else {
-                    showToast('Pasaport belgesi bulunamadı.', 'warning');
+                    window.postMessage({
+                        source: 'WEB_APP',
+                        payload: {
+                            action: 'COPY_APPLY_DATA',
+                            requestId: activeSearchRequestId
+                        }
+                    }, '*');
+                    addStatus('Pasaport belgesi taranıyor...', 'info');
                 }
             }
         });
@@ -800,6 +819,21 @@ export function initYknManager() {
 
                     addStatus(`Bilgiler başarıyla kopyalandı (${details || 'Tüm alanlar'}).`, 'success');
                     showToast('Öğrenci bilgileri kopyalandı ve YÖKSİS için hazırlandı.', 'success');
+
+                    // Pasaport kırpıcıyı hemen aç veya belgeyi iste
+                    if (currentStudentData.passportImageSrc) {
+                        openPassportCropper({
+                            imageSrc: currentStudentData.passportImageSrc,
+                            studentName: currentStudentData?.fullName || '',
+                            passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                        });
+                    } else {
+                        const passUrl = currentStudentData.passportImageUrl || currentStudentData.passportDocumentUrl;
+                        if (passUrl) {
+                            addStatus('Pasaport belgesi alınıyor ve fotoğraf kırpıcı hazırlanıyor...', 'info');
+                            requestApplyDocument('passport', passUrl);
+                        }
+                    }
                 } else {
                     addStatus(response?.error || 'Öğrenci bilgileri kopyalanamadı.', 'error');
                 }
@@ -863,6 +897,11 @@ export function initYknManager() {
             studentName.textContent = currentStudentData.fullName || "İsim Bulunamadı";
             updateStudentActions(currentStudentData);
             addStatus('Öğrenci bulundu. Bilgileri veya kabul kodunu kopyalayabilirsiniz.', 'success');
+
+            const passUrl = currentStudentData.passportImageUrl || currentStudentData.passportDocumentUrl;
+            if (passUrl && !currentStudentData.passportImageSrc) {
+                requestApplyDocument('passport', passUrl);
+            }
         }
         else if (event.data.type === 'EVENT' && event.data.action === 'STUDENT_DOCUMENTS_FOUND') {
             clearSearchTimeout();
@@ -888,6 +927,11 @@ export function initYknManager() {
                 addStatus('Kabul mektubu bağlantısı hazır.', 'success');
             } else {
                 addStatus('Profil verileri hazır.', 'success');
+            }
+
+            const passUrl = currentStudentData.passportImageUrl || currentStudentData.passportDocumentUrl;
+            if (passUrl && !currentStudentData.passportImageSrc) {
+                requestApplyDocument('passport', passUrl);
             }
         }
         else if (event.data.type === 'EVENT' && event.data.action === 'DOCUMENTS_NOT_FOUND') {

@@ -199,9 +199,17 @@ async function discoverApplyDocuments(tabId, requestId) {
 }
 
 async function readApplyDocument(request) {
-    if (!applyTabId) throw new Error('Apply sekmesi bulunamadı.');
+    let targetTabId = applyTabId;
+    if (!targetTabId) {
+        const tabs = await queryTabs({ url: '*://apply.topkapi.edu.tr/*' });
+        if (tabs.length > 0) {
+            targetTabId = tabs[0].id;
+            applyTabId = targetTabId;
+        }
+    }
+    if (!targetTabId) throw new Error('Apply sekmesi bulunamadı.');
 
-    const result = await sendTabMessage(applyTabId, {
+    const result = await sendTabMessage(targetTabId, {
         action: 'FETCH_APPLY_DOCUMENT',
         documentUrl: request.documentUrl
     });

@@ -520,6 +520,8 @@ function toApplyUrl(value) {
 
 function extractElementUrl(element) {
     const directValue = element.href
+        || element.src
+        || element.getAttribute('src')
         || element.getAttribute('data-href')
         || element.getAttribute('data-url')
         || element.getAttribute('data-link');
@@ -754,7 +756,7 @@ function findDocumentLinks() {
         }
     }
 
-    const allClickables = Array.from(document.querySelectorAll('a[href], [data-url], [data-href], button, [onclick]'));
+    const allClickables = Array.from(document.querySelectorAll('a[href], [data-url], [data-href], [data-link], button, [onclick], img[src], iframe[src], embed[src]'));
     const acceptanceCandidates = [];
     const passportCandidates = [];
 
@@ -1044,7 +1046,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     
     if (request.action === "copyData") {
         try {
-            const dataToSave = extractApplyProfileData();
+            const links = findDocumentLinks();
+            const profileData = extractApplyProfileData();
+            const dataToSave = {
+                ...profileData,
+                passportDocumentUrl: links.passportDocumentUrl || '',
+                acceptanceLetterUrl: links.acceptanceLetterUrl || '',
+                acceptanceCandidates: links.acceptanceCandidates || [],
+                kabulId: links.kabulId || ''
+            };
             chrome.storage.local.set({ studentData: dataToSave }, () => {
                 sendResponse({ success: true, data: dataToSave });
             });
