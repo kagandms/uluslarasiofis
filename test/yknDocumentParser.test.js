@@ -175,3 +175,11 @@ test('falls back to candidate pair (earliest=issue, latest=expiry) when labels a
     assert.deepEqual(result, { issueDate: '2022-12-16', expiryDate: '2027-12-15' });
 });
 
+test('rejects student birthDate or dates before 2010 from being selected as issueDate', () => {
+    const text = 'Date of birth: 19.02.1988 Date of issue: 19.02.1988 10.10.2024 Date of expiry: 09.10.2029';
+    const result = extractPassportDatesFromText(text, { birthDate: '1988-02-19' });
+
+    assert.equal(result.issueDate, '2024-10-10');
+    assert.equal(result.expiryDate, '2029-10-09');
+});
+

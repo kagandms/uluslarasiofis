@@ -183,8 +183,12 @@ export function parseDateValue(value) {
     return '';
 }
 
-function findLabeledDate(text, labels) {
+function findLabeledDate(text, labels, options = {}) {
+    const minYear = options.minYear || 1920;
+    const maxYear = options.maxYear || 2045;
+    const birthDate = options.birthDate || '';
     const normalizedText = normalizeDateText(text);
+
     for (const label of labels) {
         const labelPattern = normalizeDateText(label)
             .split(/\s+/)
@@ -199,7 +203,11 @@ function findLabeledDate(text, labels) {
         const dateMatchesAfter = Array.from(dateWindowAfter.matchAll(new RegExp(DATE_PATTERN, 'ig')));
         for (const match of dateMatchesAfter) {
             const parsed = parseDateValue(match[0]);
-            if (parsed) return parsed;
+            if (parsed) {
+                if (birthDate && parsed === birthDate) continue;
+                if (parsed < `${minYear}-01-01` || parsed > `${maxYear}-12-31`) continue;
+                return parsed;
+            }
         }
 
         // 2. Search backward (before label, for table cells / RTL layouts)
@@ -208,7 +216,11 @@ function findLabeledDate(text, labels) {
         const dateMatchesBefore = Array.from(dateWindowBefore.matchAll(new RegExp(DATE_PATTERN, 'ig')));
         for (let i = dateMatchesBefore.length - 1; i >= 0; i--) {
             const parsed = parseDateValue(dateMatchesBefore[i][0]);
-            if (parsed) return parsed;
+            if (parsed) {
+                if (birthDate && parsed === birthDate) continue;
+                if (parsed < `${minYear}-01-01` || parsed > `${maxYear}-12-31`) continue;
+                return parsed;
+            }
         }
     }
     return '';
@@ -343,11 +355,21 @@ export function extractYoksisIdFromText(text) {
 
 export function extractPassportDatesFromText(text, options = {}) {
     const normalizedText = normalizeDocumentText(text);
-    let issueDate = findLabeledDate(normalizedText, ISSUE_DATE_LABELS);
-    let expiryDate = findLabeledDate(normalizedText, EXPIRY_DATE_LABELS);
-
-    // Attempt MRZ extraction with birthDate hint
+    // Attempt MRZ extraction first to get birthDate and expiry hints
     const mrz = extractDatesFromMrz(text, options);
+    const birthDate = options.birthDate || mrz.birthDate || '';
+
+    let issueDate = findLabeledDate(normalizedText, ISSUE_DATE_LABELS, {
+        minYear: 2010,
+        maxYear: 2045,
+        birthDate: birthDate
+    });
+    let expiryDate = findLabeledDate(normalizedText, EXPIRY_DATE_LABELS, {
+        minYear: 2020,
+        maxYear: 2045,
+        birthDate: birthDate
+    });
+
     if (!expiryDate && mrz.expiryDate) {
         expiryDate = mrz.expiryDate;
     }

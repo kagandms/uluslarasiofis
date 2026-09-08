@@ -840,7 +840,8 @@ function findApplyStudentData() {
         uyruk: findApplyFieldValue(['Uyruğu', 'Nationality']),
         dogumUlkesi: findApplyFieldValue(['Doğum Yeri Ülkesi', 'Born Country']),
         cinsiyet: findApplyFieldValue(['Cinsiyeti', 'Gender', 'Sex']),
-        pasaportNo: findApplyFieldValue(['Pasaport No', 'Passport No', 'Number of Document'])
+        pasaportNo: findApplyFieldValue(['Pasaport No', 'Passport No', 'Number of Document']),
+        birthDate: findApplyFieldValue(['Doğum Tarihi', 'Date of Birth', 'Birth Date', 'Doğum Günü'])
     };
 }
 
@@ -860,19 +861,48 @@ function extractApplyProfileData() {
         }
     }
 
+    let birthInput = document.querySelector('input[name="birthDate"]') ||
+                     document.querySelector('input[name="birthdate"]') ||
+                     document.querySelector('input[name="dateOfBirth"]') ||
+                     document.querySelector('.inputBirthDate');
+    if (!birthInput) {
+        const labels = document.querySelectorAll('label');
+        for (const label of labels) {
+            const lt = (label.innerText || '').toLowerCase();
+            if (lt.includes('doğum tarihi') || lt.includes('dogum tarihi') || lt.includes('date of birth') || lt.includes('birth date')) {
+                birthInput = label.parentElement ? label.parentElement.querySelector('input') : null;
+                if (birthInput) break;
+            }
+        }
+    }
+
     const fallbackData = findApplyStudentData();
     
     const anneAdi = (anneInput ? anneInput.value : '') || fallbackData.anneAdi || '';
     const babaAdi = (babaInput ? babaInput.value : '') || fallbackData.babaAdi || '';
     const pasaportNo = (pasaportInput ? pasaportInput.value : '') || fallbackData.pasaportNo || '';
+    const rawBirthDate = (birthInput ? birthInput.value : '') || fallbackData.birthDate || '';
     const uyruk = getSourceDropdownByLabel('Uyruk') || fallbackData.uyruk || '';
     const dogumUlkesi = getSourceDropdownByLabel('Doğduğunuz') || getSourceDropdownByLabel('Doğum') || fallbackData.dogumUlkesi || '';
     const cinsiyet = getSourceDropdownByLabel('Cinsiyet') || fallbackData.cinsiyet || '';
+
+    let normalizedBirthDate = '';
+    if (rawBirthDate) {
+        const parts = rawBirthDate.trim().split(/[./\-\s]+/);
+        if (parts.length === 3) {
+            if (parts[0].length === 4) {
+                normalizedBirthDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+            } else {
+                normalizedBirthDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            }
+        }
+    }
 
     return {
         anneAdi: (anneAdi || '').trim(),
         babaAdi: (babaAdi || '').trim(),
         pasaportNo: (pasaportNo || '').trim(),
+        birthDate: normalizedBirthDate,
         uyruk: (uyruk || '').trim(),
         dogumUlkesi: (dogumUlkesi || '').trim(),
         cinsiyet: (cinsiyet || '').trim()
@@ -1163,16 +1193,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 successCount++;
             }
 
-            // Gerçek kullanıcı tıklaması ve odaklanma geçişi zinciri (Anne Adı ve Baba Adı öncelikli)
+            // Gerçek kullanıcı tıklaması ve odaklanma geçişi zinciri (Anne Adı ve Baba Adı öncelikli metin kutuları)
             const priorityElements = [
                 anneAdiInput,
                 babaAdiInput,
                 dogumYeriAciklamasi,
                 verenMakam,
                 telefonNoInput,
-                belgeNoInput,
-                issueDateInput,
-                expiryDateInput
+                belgeNoInput
             ].filter(Boolean);
 
             for (const el of priorityElements) {

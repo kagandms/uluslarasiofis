@@ -340,50 +340,34 @@ async function syncYoksisFormInMainWorld(tabId) {
                         return (s || '').toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
                     }
 
-                    function forceCommitWidget(el) {
+                    function commitTextbox(el) {
                         if (!el) return;
                         var val = el.value;
                         if (val === undefined || val === null || val === '') return;
 
                         try {
-                            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                            el.focus();
-                            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
                             el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
                             el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                            el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
-                            el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
-                            el.blur();
                         } catch (_) {}
 
                         if (window.zk && window.zk.Widget) {
                             var w = window.zk.Widget.$(el);
                             if (w) {
-                                // ZK'nin _lastValue'sunu boşaltıp değişti (_shallSubmit) olarak işaretliyoruz
                                 w._lastValue = '';
                                 w._shallSubmit = true;
                                 w._value = val;
                                 if (typeof w.setValue === 'function') {
                                     try { w.setValue(val); } catch (_) {}
                                 }
-                                w._shallSubmit = true;
-
                                 if (typeof w.clearErrorMessage === 'function') {
                                     try { w.clearErrorMessage(true); } catch (_) {}
                                 }
-                                if (typeof w.doFocus_ === 'function') {
-                                    try { w.doFocus_(new window.zk.Event(w, 'onFocus')); } catch (_) {}
-                                }
-                                if (typeof w.doBlur_ === 'function') {
-                                    try { w.doBlur_(new window.zk.Event(w, 'onBlur')); } catch (_) {}
-                                }
+                                el.classList.remove('z-textbox-invalid');
                                 if (typeof w.updateChange_ === 'function') {
                                     try { w.updateChange_(); } catch (_) {}
                                 }
                                 if (typeof w.fire === 'function') {
                                     try { w.fire('onChange', { value: val, start: val.length }, { toServer: true }); } catch (_) {}
-                                    try { w.fire('onChanging', { value: val, start: val.length }, { toServer: true }); } catch (_) {}
                                 }
                                 if (window.zAu && typeof window.zAu.send === 'function') {
                                     try {
@@ -394,24 +378,89 @@ async function syncYoksisFormInMainWorld(tabId) {
                         }
                     }
 
-                    // 1. Özellikle Anne Adı ve Baba Adı alanlarını tablo satırından bulup güvenceye al
+                    function commitDatebox(el) {
+                        if (!el) return;
+                        var val = (el.value || '').trim();
+                        if (!val) return;
+
+                        var parts = val.split(/[./\-\s]+/);
+                        if (parts.length === 3) {
+                            var d, m, y;
+                            if (parts[0].length === 4) {
+                                y = parseInt(parts[0], 10);
+                                m = parseInt(parts[1], 10);
+                                d = parseInt(parts[2], 10);
+                            } else {
+                                d = parseInt(parts[0], 10);
+                                m = parseInt(parts[1], 10);
+                                y = parseInt(parts[2], 10);
+                            }
+
+                            if (y >= 2010 && y <= 2045 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+                                var formatted = ('0' + d).slice(-2) + '.' + ('0' + m).slice(-2) + '.' + y;
+                                el.value = formatted;
+                                var dateObj = new Date(y, m - 1, d, 12, 0, 0);
+
+                                if (window.zk && window.zk.Widget) {
+                                    var w = window.zk.Widget.$(el);
+                                    if (w) {
+                                        if (typeof w.clearErrorMessage === 'function') {
+                                            try { w.clearErrorMessage(true); } catch (_) {}
+                                        }
+                                        el.classList.remove('z-datebox-invalid');
+                                        var parentBox = el.closest('.z-datebox');
+                                        if (parentBox) parentBox.classList.remove('z-datebox-invalid');
+
+                                        if (typeof w.setText === 'function') {
+                                            try { w.setText(formatted); } catch (_) {}
+                                        }
+                                        if (typeof w.setValue === 'function') {
+                                            try { w.setValue(dateObj); } catch (_) {}
+                                        }
+                                        if (typeof w.fireOnChange === 'function') {
+                                            try { w.fireOnChange(); } catch (_) {}
+                                        }
+                                    }
+                                }
+
+                                try {
+                                    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                                } catch (_) {}
+                            }
+                        }
+                    }
+
+                    // SADECE eklentinin doldurduğu hedeflenmiş alanları senkronize et.
+                    // ASLA Doğum Tarihi (dogumtarihi) veya arama kutularına müdahale etme!
                     var allInputs = document.querySelectorAll('input');
                     for (var j = 0; j < allInputs.length; j++) {
                         var inp = allInputs[j];
                         var row = inp.closest('tr');
                         var rowText = row ? norm(row.innerText || row.textContent) : '';
-                        if (rowText.indexOf('anneadi') !== -1 || rowText.indexOf('babaadi') !== -1 ||
-                            rowText.indexOf('duzenle') !== -1 || rowText.indexOf('gecerli') !== -1) {
-                            forceCommitWidget(inp);
-                        }
-                    }
+                        var placeholder = norm(inp.placeholder || '');
+                        var combined = rowText + ' ' + placeholder;
 
-                    // 2. Sayfadaki diğer tüm doldurulmuş input ve alanları senkronize et
-                    var inputs = document.querySelectorAll('input, select, textarea');
-                    for (var i = 0; i < inputs.length; i++) {
-                        var el = inputs[i];
-                        if (el.type === 'button' || el.type === 'submit' || el.type === 'reset' || el.type === 'hidden') continue;
-                        forceCommitWidget(el);
+                        // Doğum Tarihi, Kabul Mektubu ID arama alanı veya sorgu alanlarını kesinlikle atla
+                        if (combined.indexOf('dogumtarih') !== -1 || combined.indexOf('kabulmektup') !== -1 || combined.indexOf('sorgula') !== -1) {
+                            continue;
+                        }
+
+                        // Tarih kutuları (Belge Düzenleme Tarihi, Belge Geçerlilik Tarihi)
+                        if (combined.indexOf('duzenle') !== -1 || combined.indexOf('gecerli') !== -1) {
+                            commitDatebox(inp);
+                            continue;
+                        }
+
+                        // Metin kutuları (Anne Adı, Baba Adı, Doğum Yeri Açıklaması, Veren Makam, Telefon, Belge No)
+                        if (combined.indexOf('anneadi') !== -1 ||
+                            combined.indexOf('babaadi') !== -1 ||
+                            combined.indexOf('dogumyeriaciklama') !== -1 ||
+                            combined.indexOf('verenmakam') !== -1 ||
+                            combined.indexOf('telefon') !== -1 ||
+                            (combined.indexOf('belgeno') !== -1 && combined.indexOf('uyruk') === -1)) {
+                            commitTextbox(inp);
+                        }
                     }
                 } catch (e) {
                     console.error('[YKN MAIN World Form Sync Error]', e);
@@ -422,6 +471,7 @@ async function syncYoksisFormInMainWorld(tabId) {
         console.warn('syncYoksisFormInMainWorld error:', err);
     }
 }
+
 
 async function transferToYoksis(request) {
     const yoksisTab = await getExistingYoksisTab();
