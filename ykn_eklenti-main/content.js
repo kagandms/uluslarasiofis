@@ -237,8 +237,7 @@ function simulateButtonClick(element) {
 }
 
 function triggerZkClick(buttonElement, inputElement, kabulId) {
-    const btnId = buttonElement ? buttonElement.id : '';
-    const inpId = inputElement ? inputElement.id : '';
+    if (!buttonElement && !inputElement) return;
 
     try {
         // Doğrudan window.zk varsa (aynı bağlamda)
@@ -260,114 +259,38 @@ function triggerZkClick(buttonElement, inputElement, kabulId) {
             if (wb) window.zAu.send(new window.zk.Event(wb, 'onClick', null, { toServer: true }));
         }
     } catch (_) {}
-
-    try {
-        const script = document.createElement('script');
-        script.textContent = `
-            (function() {
-                try {
-                    function norm(s) { return (s || '').toLocaleLowerCase('tr-TR').replace(/\\s+/g, ''); }
-                    var btn = ${btnId ? `document.getElementById(${JSON.stringify(btnId)})` : 'null'};
-                    var inp = ${inpId ? `document.getElementById(${JSON.stringify(inpId)})` : 'null'};
-
-                    if (!btn) {
-                        var buttons = document.querySelectorAll('button, a, input[type="button"], input[type="submit"]');
-                        for (var i = 0; i < buttons.length; i++) {
-                            var t = norm(buttons[i].innerText || buttons[i].textContent || buttons[i].value || '');
-                            if (t.indexOf('kabul') !== -1 && (t.indexOf('ara') !== -1 || t.indexOf('sorgula') !== -1)) {
-                                btn = buttons[i];
-                                break;
-                            }
-                        }
-                    }
-
-                    if (inp && window.zk && window.zk.Widget) {
-                        var wi = window.zk.Widget.$(inp);
-                        if (wi) {
-                            if (typeof wi.setValue === 'function') wi.setValue(${JSON.stringify(kabulId)});
-                            wi.fire('onChange', { value: ${JSON.stringify(kabulId)} }, { toServer: true });
-                        }
-                    }
-
-                    if (btn) {
-                        if (window.zk && window.zk.Widget) {
-                            var wb = window.zk.Widget.$(btn);
-                            if (wb) {
-                                wb.fire('onClick', null, { toServer: true });
-                            }
-                        }
-                        if (window.zAu && window.zk && window.zk.Widget) {
-                            var wb2 = window.zk.Widget.$(btn);
-                            if (wb2) {
-                                window.zAu.send(new window.zk.Event(wb2, 'onClick', null, { toServer: true }));
-                            }
-                        }
-                    }
-                } catch (e) {
-                    console.error('[YKN Injected ZK Click Error]', e);
-                }
-            })();
-        `;
-        (document.head || document.documentElement).appendChild(script);
-        script.remove();
-    } catch (error) {
-        console.warn('[YKN] ZK click injection failed:', error);
-    }
 }
 
 function syncZkFormInputs() {
     try {
-        const script = document.createElement('script');
-        script.textContent = `
-            (function() {
-                try {
-                    var inputs = document.querySelectorAll('input, select, textarea');
-                    for (var i = 0; i < inputs.length; i++) {
-                        var el = inputs[i];
-                        if (el.type === 'button' || el.type === 'submit' || el.type === 'reset' || el.type === 'hidden') continue;
-                        var val = el.value;
-                        if (val === undefined || val === null || val === '') continue;
+        if (window.zk && window.zk.Widget) {
+            var inputs = document.querySelectorAll('input, select, textarea');
+            for (var i = 0; i < inputs.length; i++) {
+                var el = inputs[i];
+                if (el.type === 'button' || el.type === 'submit' || el.type === 'reset' || el.type === 'hidden') continue;
+                var val = el.value;
+                if (val === undefined || val === null || val === '') continue;
 
-                        try {
-                            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                            el.focus();
-                            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                            el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                            el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                            el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
-                            el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
-                            el.blur();
-                        } catch (_) {}
-
-                        if (window.zk && window.zk.Widget) {
-                            var w = window.zk.Widget.$(el);
-                            if (w) {
-                                if (typeof w.setValue === 'function') {
-                                    w.setValue(val);
-                                }
-                                w._value = val;
-                                if (typeof w.doBlur_ === 'function') {
-                                    try { w.doBlur_(new window.zk.Event(w, 'onBlur')); } catch (_) {}
-                                }
-                                if (typeof w.fire === 'function') {
-                                    w.fire('onChange', { value: val }, { toServer: true });
-                                }
-                                if (window.zAu && typeof window.zAu.send === 'function') {
-                                    window.zAu.send(new window.zk.Event(w, 'onChange', { value: val }, { toServer: true }));
-                                }
-                            }
-                        }
+                var w = window.zk.Widget.$(el);
+                if (w) {
+                    if (typeof w.setValue === 'function') {
+                        w.setValue(val);
                     }
-                } catch (e) {
-                    console.error('[YKN Sync ZK Form Error]', e);
+                    w._value = val;
+                    if (typeof w.doBlur_ === 'function') {
+                        try { w.doBlur_(new window.zk.Event(w, 'onBlur')); } catch (_) {}
+                    }
+                    if (typeof w.fire === 'function') {
+                        w.fire('onChange', { value: val }, { toServer: true });
+                    }
+                    if (window.zAu && typeof window.zAu.send === 'function') {
+                        window.zAu.send(new window.zk.Event(w, 'onChange', { value: val }, { toServer: true }));
+                    }
                 }
-            })();
-        `;
-        (document.head || document.documentElement).appendChild(script);
-        script.remove();
+            }
+        }
     } catch (e) {
-        console.warn('syncZkFormInputs injection error:', e);
+        console.warn('[YKN] syncZkFormInputs error:', e);
     }
 }
 
