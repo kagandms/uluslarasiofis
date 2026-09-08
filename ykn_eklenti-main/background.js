@@ -409,54 +409,44 @@ async function syncYoksisFormInMainWorld(tabId) {
                             if (y >= 2010 && y <= 2045 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
                                 var formatted = ('0' + d).slice(-2) + '.' + ('0' + m).slice(-2) + '.' + y;
                                 el.value = formatted;
-                                var dateObj = new Date(y, m - 1, d, 0, 0, 0, 0);
+
+                                try {
+                                    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                } catch (_) {}
 
                                 if (window.zk && window.zk.Widget) {
                                     var w = window.zk.Widget.$(el);
                                     if (w) {
-                                        // 1. ZK'nin parse ve validation metodlarini guvenli hale getir
-                                        w.coerceFromString_ = function (v) {
-                                            if (!v) return null;
-                                            if (v instanceof Date) return v;
-                                            var p = String(v).trim().split(/[./\-\s]+/);
-                                            if (p.length === 3) {
-                                                var dy, dm, dd;
-                                                if (p[0].length === 4) {
-                                                    dy = parseInt(p[0], 10);
-                                                    dm = parseInt(p[1], 10);
-                                                    dd = parseInt(p[2], 10);
-                                                } else {
-                                                    dd = parseInt(p[0], 10);
-                                                    dm = parseInt(p[1], 10);
-                                                    dy = parseInt(p[2], 10);
-                                                }
-                                                if (!isNaN(dy) && !isNaN(dm) && !isNaN(dd)) {
-                                                    return new Date(dy, dm - 1, dd, 0, 0, 0, 0);
-                                                }
-                                            }
-                                            return dateObj;
-                                        };
+                                        // 1. ZK'nin parse ve validation metodlarini guvenli hale getir.
+                                        // KÖK NEDEN TESPİTİ:
+                                        // ZK'ya JavaScript Date objesi verildiğinde, zAu/JSON serileştirmesi
+                                        // bu objeyi ISO string'e ("2020-06-14T21:00:00.000Z") çevirir.
+                                        // YÖKSİS sunucusundaki SimpleDateFormat("dd.MM.yyyy") ise bunu parse edemez
+                                        // ve "2020-06-14T21:00:00.000Z tarihinden başka tarih girmelisiniz. Format: dd.MM.yyyy"
+                                        // hatasını (MZul.DATE_REQUIRED) fırlatır!
+                                        // Bu nedenle ZK widget'ına daima "dd.MM.yyyy" formatında STRING verilmelidir!
+                                        w.coerceFromString_ = function () { return formatted; };
                                         w.coerceToString_ = function () { return formatted; };
-                                        // ZK'da validasyon hatasız ise null/undefined dönmelidir.
-                                        // true dönmesi "hata: true" popup'ına yol açar.
+                                        w.getValue = function () { return formatted; };
+                                        w.getText = function () { return formatted; };
                                         w.validate_ = function () { return null; };
-                                        if (w._cst) {
-                                            try {
-                                                if (typeof w._cst === 'object') {
-                                                    w._cst.validate = function () { return null; };
-                                                }
-                                            } catch (_) {}
+                                        if (w._cst && typeof w._cst === 'object') {
+                                            try { w._cst.validate = function () { return null; }; } catch (_) {}
                                         }
 
                                         // 2. Widget hafizasini guncelle
-                                        w._lastValue = formatted;
-                                        w._value = dateObj;
+                                        w._lastValue = '';
+                                        w._value = formatted;
                                         w._shallSubmit = true;
                                         if (w.$n('real')) {
                                             w.$n('real').value = formatted;
                                         }
-                                        w.getValue = function () { return dateObj; };
-                                        w.getText = function () { return formatted; };
+                                        if (typeof w.setText === 'function') {
+                                            try { w.setText(formatted); } catch (_) {}
+                                        }
+                                        if (typeof w.setValue === 'function') {
+                                            try { w.setValue(formatted); } catch (_) {}
+                                        }
 
                                         // 3. Hata mesajlarini ve siniflarini temizle
                                         if (typeof w.clearErrorMessage === 'function') {
@@ -474,12 +464,21 @@ async function syncYoksisFormInMainWorld(tabId) {
                                             parentBox.classList.remove('z-datebox-invalid');
                                             parentBox.classList.remove('z-textbox-invalid');
                                         }
+
+                                        // 4. Sunucuya değişikliği bildir (ZK onChange)
+                                        if (typeof w.updateChange_ === 'function') {
+                                            try { w.updateChange_(); } catch (_) {}
+                                        }
+                                        if (typeof w.fire === 'function') {
+                                            try { w.fire('onChange', { value: formatted, start: formatted.length }, { toServer: true }); } catch (_) {}
+                                        }
+                                        if (window.zAu && typeof window.zAu.send === 'function') {
+                                            try {
+                                                window.zAu.send(new window.zk.Event(w, 'onChange', { value: formatted, start: formatted.length }, { toServer: true }));
+                                            } catch (_) {}
+                                        }
                                     }
                                 }
-
-                                try {
-                                    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                                } catch (_) {}
                             }
                         }
                     }
@@ -529,7 +528,8 @@ async function syncYoksisFormInMainWorld(tabId) {
                             }
                             var modals = document.querySelectorAll('.z-window-modal, .z-messagebox-window');
                             for (var n = 0; n < modals.length; n++) {
-                                if (modals[n].innerText && (modals[n].innerText.indexOf('hata oluştu: true') !== -1 || modals[n].innerText.indexOf('hata olustu: true') !== -1)) {
+                                var modalText = (modals[n].innerText || modals[n].textContent || '');
+                                if (modalText.indexOf('Form validasyonu') !== -1 || modalText.indexOf('hata oluştu') !== -1 || modalText.indexOf('tarihinden başka') !== -1) {
                                     modals[n].remove();
                                     var masks = document.querySelectorAll('.z-modal-mask');
                                     for (var p = 0; p < masks.length; p++) {
