@@ -1,5 +1,6 @@
 import { showToast } from '../ui/toastManager.js';
 import { extractPassportDatesFromText, extractYoksisIdFromText, isValidYoksisId } from '../utils/ykn-document-parser.js';
+import { initPassportCropperModal, openPassportCropper } from '../ui/passportCropperModal.js';
 
 function ensurePdfWorkerReady() {
     if (window.pdfjsLib) {
@@ -126,6 +127,7 @@ export function initYknManager() {
     
     const btnCopyInfo = document.getElementById('btn-ykn-copy-info');
     const btnCopyLetter = document.getElementById('btn-ykn-copy-letter');
+    const btnCropPhoto = document.getElementById('btn-ykn-crop-photo');
     const btnTransferYoksis = document.getElementById('btn-ykn-transfer-yoksis');
     const btnPasteYoksis = document.getElementById('btn-ykn-paste-yoksis');
     const extensionStatus = document.getElementById('ykn-extension-status');
@@ -133,6 +135,8 @@ export function initYknManager() {
     const extensionStatusMessage = document.getElementById('ykn-extension-status-message');
     const btnExtensionDownload = document.getElementById('btn-ykn-extension-download');
     const btnExtensionRecheck = document.getElementById('btn-ykn-extension-recheck');
+
+    initPassportCropperModal();
 
     // UI Status Helper
     function addStatus(message, type = 'info') {
@@ -230,6 +234,7 @@ export function initYknManager() {
         if (btnCopyLetter) btnCopyLetter.disabled = true;
         if (btnPasteYoksis) btnPasteYoksis.disabled = true;
         if (btnTransferYoksis) btnTransferYoksis.style.display = 'none';
+        if (btnCropPhoto) btnCropPhoto.style.display = 'none';
     }
 
     function updateStudentActions(studentData) {
@@ -239,6 +244,9 @@ export function initYknManager() {
         if (btnPasteYoksis) btnPasteYoksis.disabled = !hasStudent;
         if (btnTransferYoksis) {
             btnTransferYoksis.style.display = (studentData?.yoksisId && isValidYoksisId(studentData.yoksisId)) ? 'block' : 'none';
+        }
+        if (btnCropPhoto) {
+            btnCropPhoto.style.display = studentData?.passportImageSrc ? 'block' : 'none';
         }
     }
 
@@ -373,6 +381,43 @@ export function initYknManager() {
                 return;
             }
 
+            // Pasaport belgesi görselini hazırla ve kırpıcı modalını aç
+            let passportImageSrc = null;
+            try {
+                if (pdfOffset >= 0) {
+                    const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
+                    ensurePdfWorkerReady();
+                    const pdf = await window.pdfjsLib.getDocument({
+                        data: validPdfBytes,
+                        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+                        cMapPacked: true
+                    }).promise;
+                    const page = await pdf.getPage(1);
+                    const viewport = page.getViewport({ scale: 2 });
+                    const canvas = document.createElement('canvas');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                    passportImageSrc = canvas.toDataURL('image/jpeg', 0.95);
+                } else if (isImage) {
+                    const blob = new Blob([documentBytes], { type: contentType || 'image/jpeg' });
+                    passportImageSrc = URL.createObjectURL(blob);
+                }
+            } catch (imgErr) {
+                console.warn('[YKN] Pasaport görseli oluşturulamadı:', imgErr);
+            }
+
+            if (passportImageSrc) {
+                currentStudentData = { ...currentStudentData, passportImageSrc };
+                updateStudentActions(currentStudentData);
+                openPassportCropper({
+                    imageSrc: passportImageSrc,
+                    studentName: currentStudentData?.fullName || '',
+                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                });
+                addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
+            }
+
             let passportDates = extractPassportDatesFromText(text);
             if (!passportDates.issueDate || !passportDates.expiryDate) {
                 if (pdfOffset >= 0) {
@@ -475,11 +520,44 @@ export function initYknManager() {
                 }
             }, '*');
 
+            // Pasaport görseli zaten hazırsa doğrudan kırpıcıyı aç
+            if (currentStudentData?.passportImageSrc) {
+                openPassportCropper({
+                    imageSrc: currentStudentData.passportImageSrc,
+                    studentName: currentStudentData?.fullName || '',
+                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                });
+            }
+
             const passportDocumentUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
             if (passportDocumentUrl) {
                 requestApplyDocument('passport', passportDocumentUrl);
             } else {
                 void 'Pasaport belgesi henüz alınmadı.';
+            }
+        });
+    }
+
+    if (btnCropPhoto) {
+        btnCropPhoto.addEventListener('click', () => {
+            if (!currentStudentData) {
+                showToast('Lütfen önce bir öğrenci arayın.', 'warning');
+                return;
+            }
+            if (currentStudentData.passportImageSrc) {
+                openPassportCropper({
+                    imageSrc: currentStudentData.passportImageSrc,
+                    studentName: currentStudentData?.fullName || '',
+                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                });
+            } else {
+                const passportDocumentUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
+                if (passportDocumentUrl) {
+                    addStatus('Pasaport belgesi indiriliyor...', 'info');
+                    requestApplyDocument('passport', passportDocumentUrl);
+                } else {
+                    showToast('Pasaport belgesi bulunamadı.', 'warning');
+                }
             }
         });
     }

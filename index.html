@@ -188,6 +188,11 @@
                                     </button>
                                 </div>
                                 
+                                <button type="button" id="btn-ykn-crop-photo" class="btn btn-outline" style="display: none; border-color: var(--accent); color: var(--accent); width: 100%;">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                    Öğrenci Fotoğrafını Kırp / İndir
+                                </button>
+                                
                                 <button type="button" id="btn-ykn-transfer-yoksis" class="btn btn-secondary" style="display: none;">
                                     Kabul Mektup Kodunu YÖKSİS'e Aktar
                                 </button>
@@ -581,10 +586,63 @@
         </div>
     </div>
 
-    <!-- API Key Modal -->
+    <!-- Passport Photo Cropper Modal for YKN -->
+    <div id="passport-cropper-modal" class="modal-overlay">
+        <div class="modal-card" style="max-width: 750px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <h2 style="margin-bottom: 0;">Öğrenci Fotoğrafını Kırp</h2>
+                <button type="button" id="btn-passport-crop-close" class="btn-header icon-only" title="Kapat" style="border: none; background: transparent; cursor: pointer; color: var(--text-primary);">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <p style="margin-bottom: 1rem;">Vesikalık fotoğraf alanını seçin, yönünü ayarlayın ve YÖKSİS için indirin.</p>
+            
+            <div class="cropper-container-wrapper" style="min-height: 360px; max-height: 52vh;">
+                <img id="passport-cropper-image" src="" alt="Pasaport Belgesi">
+            </div>
+            
+            <!-- Döndürme ve Açı Kontrolleri -->
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 1.2rem; background: var(--bg-color); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <!-- 90 Derece Hızlı Döndürme Butonları -->
+                <div style="display: flex; justify-content: center; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button type="button" id="btn-passport-rotate-left" class="btn btn-outline" style="padding: 6px 14px; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                        90° Sola Döndür
+                    </button>
+                    <button type="button" id="btn-passport-rotate-right" class="btn btn-outline" style="padding: 6px 14px; font-size: 0.85rem; display: flex; align-items: center; gap: 6px;">
+                        90° Sağa Döndür
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                    </button>
+                    <button type="button" id="btn-passport-aspect-ratio" class="btn btn-outline" style="padding: 6px 12px; font-size: 0.85rem;" title="En/Boy Oranını Değiştir">
+                        Oran: 3:4 (Vesikalık)
+                    </button>
+                </div>
 
-
-
+                <!-- İnce Açı Ayarı (Düzleştir) -->
+                <div style="display: flex; flex-direction: column; align-items: center;">
+                    <div style="display: flex; justify-content: space-between; width: 100%; max-width: 420px; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 4px;">
+                        <span>İnce Eğim Ayarı</span>
+                        <span id="passport-rotation-angle-label" style="font-weight: 600; color: var(--accent);">0°</span>
+                    </div>
+                    <div style="display: flex; width: 100%; max-width: 420px; align-items: center; gap: 8px;">
+                        <button type="button" id="btn-passport-fine-minus" class="btn btn-outline" style="padding: 4px 10px; font-size: 1rem; line-height: 1; min-width: 32px;" title="-0.5°">-</button>
+                        <input type="range" id="passport-rotation-slider" min="-15" max="15" value="0" step="0.5" style="flex: 1;">
+                        <button type="button" id="btn-passport-fine-plus" class="btn btn-outline" style="padding: 4px 10px; font-size: 1rem; line-height: 1; min-width: 32px;" title="+0.5°">+</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-actions" style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px; width: 100%;">
+                <button type="button" id="btn-passport-crop-cancel" class="btn btn-outline" style="padding: 10px; font-size: 0.95rem;">
+                    Kapat
+                </button>
+                <button type="button" id="btn-passport-crop-download" class="btn btn-primary" style="padding: 10px; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    Fotoğrafı İndir (YÖKSİS İçin)
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast Notifications -->
     <div id="toast-container" class="toast-container"></div>
