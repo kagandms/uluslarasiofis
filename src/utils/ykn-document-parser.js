@@ -33,21 +33,25 @@ const MONTH_PATTERN = Object.keys(MONTH_ALIASES)
     .sort((left, right) => right.length - left.length)
     .join('|');
 
-const DATE_PATTERN = `(?:\\d{1,4}(?:[./-]\\d{1,4}){2}|\\d{1,2}\\s+(?:${MONTH_PATTERN})\\s+\\d{2,4}|(?:${MONTH_PATTERN})\\s+\\d{1,2},?\\s+\\d{2,4}|\\d{1,2}\\s*[-/]\\s*(?:${MONTH_PATTERN})\\s*[-/]\\s*\\d{2,4}|\\d{1,2}(?:${MONTH_PATTERN})\\d{2,4}|\\d{1,2}\\s+\\d{1,2}\\s+\\d{2,4}|\\d{6,8})`;
+const DATE_PATTERN = `(?:\\d{1,2}[./-]\\d{1,2}[./-](?:19\\d{2}|20[2-4]\\d|\\d{2})|(?:19\\d{2}|20[2-4]\\d)[./-]\\d{1,2}[./-]\\d{1,2}|\\d{1,2}\\s+(?:${MONTH_PATTERN})\\s+(?:19\\d{2}|20[2-4]\\d|\\d{2})|(?:${MONTH_PATTERN})\\s+\\d{1,2},?\\s+(?:19\\d{2}|20[2-4]\\d|\\d{2})|\\d{1,2}\\s*[-/]\\s*(?:${MONTH_PATTERN})\\s*[-/]\\s*(?:19\\d{2}|20[2-4]\\d|\\d{2})|\\d{1,2}(?:${MONTH_PATTERN})(?:19\\d{2}|20[2-4]\\d|\\d{2})|\\d{1,2}\\s+\\d{1,2}\\s+(?:19\\d{2}|20[2-4]\\d|\\d{2})|\\b(?:19\\d{2}|20[2-4]\\d)(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\b|\\b(?:0[1-9]|[12]\\d|3[01])(?:0[1-9]|1[0-2])(?:19\\d{2}|20[2-4]\\d)\\b)`;
 
 const ISSUE_DATE_LABELS = [
     // English
     'date of issue', 'date of issuance', 'issue date', 'date issued', 'dateofissue', 'passport issue date', 'issued on', 'date of delivery', 'issuing date', 'given on',
     // Turkish
-    'düzenlenme tarihi', 'düzenleme tarihi', 'pasaport veriliş tarihi', 'belge düzenlenme tarihi', 'belgenin düzenlenme tarihi', 'veriliş tarihi', 'tanzim tarihi', 'verildiği tarih',
+    'belge düzenleme tarihi', 'düzenleme tarihi', 'belge düzenlenme tarihi', 'düzenlenme tarihi', 'belgenin düzenlenme tarihi', 'belgenin düzenleme tarihi', 'pasaport düzenleme tarihi', 'pasaport düzenlenme tarihi', 'pasaport veriliş tarihi', 'belge veriliş tarihi', 'veriliş tarihi', 'tanzim tarihi', 'verildiği tarih',
+    // Uzbek
+    'berilgan sanasi', 'berilgan sana', 'berilgan joyi', 'berilgan vaqti', 'berilgan',
+    // Russian (Cyrillic / transliterated)
+    'дата выдачи', 'выдан', 'выдано', 'дата оформления', 'data vydachi',
+    // Kazakh, Turkmen, Azerbaijani
+    'берілген күні', 'berilgen kuni', 'berlen senesi', 'berlen wagty', 'verilme tarixi', 'verilmə tarixi',
     // French
     'date de delivrance', 'date de délivrance', 'date d emission', "date d'emission", "date d'émission", 'delivre le', 'délivré le', 'delivree le', 'emise le',
     // Spanish
     'fecha de expedicion', 'fecha de expedición', 'fecha de emision', 'fecha de emisión', 'expedido el',
     // German
     'ausstellungsdatum', 'ausgestellt am',
-    // Russian (transliterated / Cyrillic)
-    'дата выдачи', 'выдан', 'data vydachi',
     // Arabic transliterated / keywords
     'tarikh al isdar', 'tarikh al-isdar', 'تاريخ الإصدار', 'تاريخ الاصدار'
 ];
@@ -56,17 +60,21 @@ const EXPIRY_DATE_LABELS = [
     // English
     'date of expiry', 'expiry date', 'date of expiration', 'expiration date', 'passport expiry date', 'date valid until', 'valid until', 'expires on', 'valid to', 'valid thru', 'valid through', 'date of expiry / date',
     // Turkish
-    'geçerlilik tarihi', 'pasaport geçerlilik tarihi', 'belgenin geçerlilik tarihi', 'son kullanma tarihi', 'son geçerlilik tarihi', 'bitiş tarihi', 'gecerlilik suresi',
+    'belge geçerlilik tarihi', 'geçerlilik tarihi', 'pasaport geçerlilik tarihi', 'belgenin geçerlilik tarihi', 'son kullanma tarihi', 'son geçerlilik tarihi', 'bitiş tarihi', 'gecerlilik suresi',
+    // Uzbek
+    'amal qilish muddati', 'amal qilish muddat', 'amal qilish', 'amal qilishi', 'muddati',
+    // Russian (Cyrillic / transliterated)
+    'дата окончания', 'дата окончания срока', 'срок действия паспорта', 'срок действия', 'действителен до', 'действительно до', 'deystvitelen do', 'srok deystviya',
+    // Kazakh, Turkmen, Azerbaijani
+    'қолданылу мерзімі', 'қолданылу мерзими', 'qoldanylu merzimi', 'hereket edis mohleti', 'hereket ediş möhleti', 'etibarliliq muddeti', 'etibarlılıq müddəti', 'bitme tarixi', 'bitmə tarixi',
     // French
     'date d expiration', "date d'expiration", 'expire le', 'date de validite', 'date de validité', 'valable jusqu au', 'valable jusqu\'au',
     // Spanish
     'fecha de caducidad', 'fecha de expiracion', 'fecha de expiración', 'fecha de vencimiento', 'valido hasta', 'válido hasta',
     // German
     'gueltig bis', 'gültig bis', 'ablaufdatum',
-    // Russian (transliterated / Cyrillic)
-    'дата окончания', 'срок действия', 'действителен до', 'deystvitelen do', 'srok deystviya',
     // Arabic transliterated / keywords
-    'tarikh al intiha', 'tarikh al-intiha', 'تاريخ الانتهاء', 'تاريخ الصلاحية'
+    'tarikh al intiha', 'tarikh al-intiha', 'تاريخ الانتهاء', 'تاريخ الصلاحية', 'صالح حتى'
 ];
 
 function normalizeDocumentText(text) {
@@ -91,11 +99,12 @@ function normalizeYear(value) {
     const year = Number(value);
     if (!Number.isInteger(year)) return 0;
     if (String(value).length === 2) return year <= 49 ? 2000 + year : 1900 + year;
+    if (year < 1920 || year > 2045) return 0;
     return year;
 }
 
 function createDateValue(year, month, day) {
-    if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31) return '';
+    if (year < 1920 || year > 2045 || month < 1 || month > 12 || day < 1 || day > 31) return '';
     const date = new Date(Date.UTC(year, month - 1, day));
     if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
         return '';
@@ -176,55 +185,97 @@ function findLabeledDate(text, labels) {
         const labelPattern = normalizeDateText(label)
             .split(/\s+/)
             .map((part) => part.replace(/[.*+?^$()[\]{}|\\]/g, '\\$&'))
-            .join('\\s*[:#\\-\\.\\s]*');
+            .join('\\s*[:#\\-\\.\\s/]*');
         const labelMatch = normalizedText.match(new RegExp(labelPattern, 'i'));
         if (!labelMatch) continue;
 
         // 1. Search forward (after label)
         const start = (labelMatch.index || 0) + labelMatch[0].length;
-        const dateWindowAfter = normalizedText.slice(start, start + 120);
-        const dateMatchAfter = dateWindowAfter.match(new RegExp(DATE_PATTERN, 'i'));
-        const parsedAfter = dateMatchAfter ? parseDateValue(dateMatchAfter[0]) : '';
-        if (parsedAfter) return parsedAfter;
+        const dateWindowAfter = normalizedText.slice(start, start + 200);
+        const dateMatchesAfter = Array.from(dateWindowAfter.matchAll(new RegExp(DATE_PATTERN, 'ig')));
+        for (const match of dateMatchesAfter) {
+            const parsed = parseDateValue(match[0]);
+            if (parsed) return parsed;
+        }
 
         // 2. Search backward (before label, for table cells / RTL layouts)
-        const preStart = Math.max(0, (labelMatch.index || 0) - 70);
+        const preStart = Math.max(0, (labelMatch.index || 0) - 100);
         const dateWindowBefore = normalizedText.slice(preStart, labelMatch.index || 0);
         const dateMatchesBefore = Array.from(dateWindowBefore.matchAll(new RegExp(DATE_PATTERN, 'ig')));
-        if (dateMatchesBefore.length > 0) {
-            const lastMatch = dateMatchesBefore[dateMatchesBefore.length - 1];
-            const parsedBefore = parseDateValue(lastMatch[0]);
-            if (parsedBefore) return parsedBefore;
+        for (let i = dateMatchesBefore.length - 1; i >= 0; i--) {
+            const parsed = parseDateValue(dateMatchesBefore[i][0]);
+            if (parsed) return parsed;
         }
     }
     return '';
 }
 
-export function extractDatesFromMrz(text) {
+export function extractDatesFromMrz(text, options = {}) {
     if (!text) return { issueDate: '', expiryDate: '', birthDate: '' };
 
-    const lines = text.split(/[\r\n]+/)
-        .map((line) => line.replace(/[\s\t]/g, '').toUpperCase())
-        .filter((line) => line.length >= 28 && (line.includes('<') || line.startsWith('P')));
+    // Clean OCR artifacts: normalize brackets, guillemets, and noise to '<', uppercase
+    const cleanedText = text
+        .replace(/[\r\n\t\s]+/g, '')
+        .replace(/[«‹\(\{\[\}\]\)]/g, '<')
+        .toUpperCase();
 
-    for (const line of lines) {
-        // Standard TD3 Line 2: [A-Z0-9<]{9}[0-9<][A-Z<]{3}(\d{6})[0-9<][MF<](\d{6})
-        const m = line.match(/(?:[A-Z0-9<]{9})[0-9<][A-Z<]{3}(\d{6})[0-9<][MF<](\d{6})/i);
-        if (m) {
-            const birthRaw = m[1];
-            const expRaw = m[2];
+    // 1. If birthDate is known (e.g. '2008-10-16' -> '081016'), use it to pinpoint expiry in MRZ
+    if (options.birthDate) {
+        const parts = options.birthDate.split('-');
+        if (parts.length === 3) {
+            const birthYymmdd = parts[0].slice(2) + parts[1].padStart(2, '0') + parts[2].padStart(2, '0');
+            // In MRZ TD3: birthYYMMDD + [check_digit] + [sex] + expiryYYMMDD
+            const targeted = new RegExp(`${birthYymmdd}[0-9A-Z<]{2}(\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01]))`, 'i');
+            const targetMatch = cleanedText.match(targeted);
+            if (targetMatch) {
+                const ey = Number(targetMatch[1].slice(0, 2));
+                const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
+                const expiryDate = createDateValue(expYear, Number(targetMatch[1].slice(2, 4)), Number(targetMatch[1].slice(4, 6)));
+                if (expiryDate && expiryDate >= '2024-01-01' && expiryDate <= '2042-12-31') {
+                    return { issueDate: '', expiryDate, birthDate: options.birthDate };
+                }
+            }
+        }
+    }
 
-            const by = Number(birthRaw.slice(0, 2));
-            const birthYear = by <= 49 ? 2000 + by : 1900 + by;
-            const birthDate = createDateValue(birthYear, Number(birthRaw.slice(2, 4)), Number(birthRaw.slice(4, 6)));
+    // 2. Standard TD3 Line 2 search:
+    // [DocNumber: 9 chars][CheckDigit: 1][Nationality: 3 chars](\d{6})[CheckDigit: 1][Sex: 1](\d{6})
+    const td3Pattern = /(?:[A-Z0-9<]{9})[0-9A-Z<][A-Z0-9<]{3}(\d{6})[0-9A-Z<][A-Z0-9<](\d{6})/i;
+    const td3Match = cleanedText.match(td3Pattern);
+    if (td3Match) {
+        const birthRaw = td3Match[1];
+        const expRaw = td3Match[2];
 
-            const ey = Number(expRaw.slice(0, 2));
-            const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
-            const expiryDate = createDateValue(expYear, Number(expRaw.slice(2, 4)), Number(expRaw.slice(4, 6)));
+        const by = Number(birthRaw.slice(0, 2));
+        const birthYear = by <= 49 ? 2000 + by : 1900 + by;
+        const birthDate = createDateValue(birthYear, Number(birthRaw.slice(2, 4)), Number(birthRaw.slice(4, 6)));
 
+        const ey = Number(expRaw.slice(0, 2));
+        const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
+        const expiryDate = createDateValue(expYear, Number(expRaw.slice(2, 4)), Number(expRaw.slice(4, 6)));
+
+        if (expiryDate && expiryDate >= '2024-01-01' && expiryDate <= '2042-12-31') {
             return { issueDate: '', expiryDate, birthDate };
         }
     }
+
+    // 3. General MRZ sequence of two valid YYMMDD dates separated by 2 chars
+    const genPattern = /(\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))[0-9A-Z<]{2}(\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))/g;
+    const genMatches = Array.from(cleanedText.matchAll(genPattern));
+    for (const match of genMatches) {
+        const by = Number(match[1].slice(0, 2));
+        const birthYear = by <= 49 ? 2000 + by : 1900 + by;
+        const birthDate = createDateValue(birthYear, Number(match[1].slice(2, 4)), Number(match[1].slice(4, 6)));
+
+        const ey = Number(match[2].slice(0, 2));
+        const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
+        const expiryDate = createDateValue(expYear, Number(match[2].slice(2, 4)), Number(match[2].slice(4, 6)));
+
+        if (expiryDate && expiryDate >= '2024-01-01' && expiryDate <= '2042-12-31') {
+            return { issueDate: '', expiryDate, birthDate };
+        }
+    }
+
     return { issueDate: '', expiryDate: '', birthDate: '' };
 }
 
@@ -291,15 +342,19 @@ export function extractPassportDatesFromText(text, options = {}) {
     let issueDate = findLabeledDate(normalizedText, ISSUE_DATE_LABELS);
     let expiryDate = findLabeledDate(normalizedText, EXPIRY_DATE_LABELS);
 
-    // If dates are swapped by incorrect label matching:
-    if (issueDate && expiryDate && issueDate > expiryDate) {
-        return { issueDate: '', expiryDate: '' };
-    }
-
-    // If either date is missing, attempt MRZ extraction:
-    const mrz = extractDatesFromMrz(text);
+    // Attempt MRZ extraction with birthDate hint
+    const mrz = extractDatesFromMrz(text, options);
     if (!expiryDate && mrz.expiryDate) {
         expiryDate = mrz.expiryDate;
+    }
+
+    // If dates are swapped or identical:
+    if (issueDate && expiryDate && issueDate >= expiryDate) {
+        if (mrz.expiryDate && mrz.expiryDate > issueDate) {
+            expiryDate = mrz.expiryDate;
+        } else {
+            expiryDate = '';
+        }
     }
 
     // If still missing, check all candidate dates in document:
@@ -308,16 +363,15 @@ export function extractPassportDatesFromText(text, options = {}) {
         const today = new Date().toISOString().slice(0, 10);
         const birthDate = options.birthDate || mrz.birthDate || '';
 
-        // Filter out dates that are birth dates or too old (passports valid up to 10 years)
+        // Filter out dates that are birth dates or outside plausible passport ranges (2014-2042)
         const plausibleDates = candidates.filter((d) => {
             if (birthDate && d === birthDate) return false;
-            if (d < '2012-01-01') return false; // Not a valid issue/expiry date for current students
+            if (d < '2014-01-01' || d > '2042-12-31') return false; // Absolutely rejects 5552 or invalid years
             return true;
         });
 
         if (!expiryDate) {
-            // Expiry date is usually the latest date, often in future
-            const futureDates = plausibleDates.filter((d) => d >= today);
+            const futureDates = plausibleDates.filter((d) => d >= today && (!issueDate || d > issueDate));
             if (futureDates.length > 0) {
                 expiryDate = futureDates[futureDates.length - 1];
             } else if (plausibleDates.length > 0 && issueDate) {
@@ -327,7 +381,6 @@ export function extractPassportDatesFromText(text, options = {}) {
         }
 
         if (!issueDate) {
-            // Issue date is in the past and before expiry
             const pastDates = plausibleDates.filter((d) => d <= today && (!expiryDate || d < expiryDate));
             if (pastDates.length > 0) {
                 issueDate = pastDates[pastDates.length - 1];
@@ -337,7 +390,7 @@ export function extractPassportDatesFromText(text, options = {}) {
 
     // Final sanity check: issue date cannot be after expiry date
     if (issueDate && expiryDate && issueDate > expiryDate) {
-        return { issueDate: '', expiryDate: '' };
+        expiryDate = '';
     }
 
     return {

@@ -400,7 +400,8 @@ async function syncYoksisFormInMainWorld(tabId) {
                         var inp = allInputs[j];
                         var row = inp.closest('tr');
                         var rowText = row ? norm(row.innerText || row.textContent) : '';
-                        if (rowText.indexOf('anneadi') !== -1 || rowText.indexOf('babaadi') !== -1) {
+                        if (rowText.indexOf('anneadi') !== -1 || rowText.indexOf('babaadi') !== -1 ||
+                            rowText.indexOf('duzenle') !== -1 || rowText.indexOf('gecerli') !== -1) {
                             forceCommitWidget(inp);
                         }
                     }

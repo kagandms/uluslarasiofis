@@ -119,3 +119,33 @@ test('extracts YOKSIS ID from various acceptance letter formats', () => {
     assert.equal(extractYoksisIdFromText('VERIFICATION CODE: 0F0-881-60'), '0F0-881-60');
     assert.equal(extractYoksisIdFromText('ACCEPTANCE LETTER NO: ABC-123-XY'), 'ABC-123-XY');
 });
+
+test('extracts passport dates with Uzbek labels', () => {
+    const result = extractPassportDatesFromText(
+        'Berilgan sanasi / Date of issue: 14.06.2024 Amal qilish muddati / Date of expiry: 13.06.2034'
+    );
+
+    assert.deepEqual(result, { issueDate: '2024-06-14', expiryDate: '2034-06-13' });
+});
+
+test('strictly rejects year 5552 or random numbers like 03045552', () => {
+    const textWithRandomNumber = 'Passport Issue: 14.06.2024 PINFL: 31610085552012 Barcode: 03045552';
+    const result = extractPassportDatesFromText(textWithRandomNumber);
+
+    assert.notEqual(result.expiryDate, '5552-04-03');
+    assert.equal(result.issueDate, '2024-06-14');
+});
+
+test('extracts Uzbek passport MRZ expiry using birthDate hint', () => {
+    const textUzbek = `
+    O'ZBEKISTON RESPUBLIKASI PASSPORT
+    JUMABAEV UMIDJON
+    Berilgan sanasi: 14 06 2024
+    P<UZBJUMABAEV<<UMIDJON<<<<<<<<<<<<<<<<<<<<<
+    FB2517115<0UZB0810168M3405260<<<<<<<<<<<<<<02
+    `;
+    const result = extractPassportDatesFromText(textUzbek, { birthDate: '2008-10-16' });
+
+    assert.equal(result.issueDate, '2024-06-14');
+    assert.equal(result.expiryDate, '2034-05-26');
+});

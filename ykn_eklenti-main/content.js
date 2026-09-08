@@ -398,6 +398,7 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
         .replace(/ı/g, 'i')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
+        .replace(/duzenlenme/g, 'duzenleme')
         .replace(/\s+/g, '');
     const searchWord = normalize(labelText);
     
@@ -1125,20 +1126,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             if (await simulateInput(belgeNoInput, data.pasaportNo)) successCount++;
 
             const issueDateInput = findTargetElementByFuzzyLabels([
-                'Pasaport Veriliş Tarihi',
-                'Pasaport Düzenlenme Tarihi',
-                'Belgenin Düzenlenme Tarihi',
+                'Belge Düzenleme Tarihi',
+                'Düzenleme Tarihi',
+                'Belgenin Düzenleme Tarihi',
+                'Belge Düzenlenme Tarihi',
                 'Düzenlenme Tarihi',
+                'Belgenin Düzenlenme Tarihi',
+                'Pasaport Düzenleme Tarihi',
+                'Pasaport Düzenlenme Tarihi',
+                'Pasaport Veriliş Tarihi',
+                'Belge Veriliş Tarihi',
                 'Veriliş Tarihi',
+                'Tanzim Tarihi',
                 'Date of Issue',
                 'Issue Date'
             ], 'input');
             const expiryDateInput = findTargetElementByFuzzyLabels([
+                'Belge Geçerlilik Tarihi',
+                'Geçerlilik Tarihi',
+                'Belgenin Geçerlilik Tarihi',
                 'Pasaport Son Geçerlilik Tarihi',
                 'Pasaport Geçerlilik Tarihi',
-                'Belgenin Geçerlilik Tarihi',
                 'Son Geçerlilik Tarihi',
-                'Geçerlilik Tarihi',
+                'Bitiş Tarihi',
                 'Date of Expiry',
                 'Expiry Date',
                 'Expiration Date'
