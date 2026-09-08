@@ -1,6 +1,68 @@
 const CLOUD_SYNC_TIMEOUT_MS = 90_000;
 const CLOUD_SYNC_PROGRESS_INTERVAL_MS = 1_000;
 
+// In-Memory Normalized Cache for 0 ms Instant Search
+let inMemoryCache = [];
+let isCacheLoaded = false;
+
+function parseDateStr(sayfaStr) {
+    if (!sayfaStr) return 0;
+    const match = sayfaStr.match(/(\d{2})\.(\d{2})(?:\.(\d{4}))?/);
+    if (!match) return 0;
+    const d = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    const y = match[3] ? parseInt(match[3], 10) : new Date().getFullYear();
+    return y * 10000 + m * 100 + d;
+}
+
+function getSheetYear(sheetName) {
+    if (!sheetName) return String(new Date().getFullYear());
+    const match = sheetName.match(/(?:^|\.)(\d{4})(?:$|\.)/);
+    return match ? match[1] : String(new Date().getFullYear());
+}
+
+function normalizeRecord(r) {
+    const rawIsim = r.isim ? String(r.isim) : '';
+    const rawSayfa = r.sayfa ? String(r.sayfa) : '';
+    const rawNo = r.no !== undefined && r.no !== null ? String(r.no) : '';
+    const uniqueId = `${rawSayfa}-${rawIsim}-${rawNo}`;
+    const isMarkedLocally = localStorage.getItem('tebligat_marked_' + uniqueId) === 'true';
+    const isMarked = Boolean(r.isMarked || r.isaretli || isMarkedLocally);
+
+    return {
+        ...r,
+        sayfa: rawSayfa,
+        isim: rawIsim,
+        no: rawNo,
+        isaretli: isMarked,
+        isMarked: isMarked,
+        _uniqueId: uniqueId,
+        _upperName: rawIsim.toLocaleUpperCase('tr-TR'),
+        _dateVal: parseDateStr(rawSayfa),
+        _year: getSheetYear(rawSayfa),
+        _noNum: parseInt(rawNo, 10) || 0
+    };
+}
+
+function loadCacheIntoMemory() {
+    try {
+        const cachedStr = localStorage.getItem('tebligat_excel_cache');
+        if (cachedStr) {
+            const rawArr = JSON.parse(cachedStr);
+            if (Array.isArray(rawArr)) {
+                inMemoryCache = rawArr.map(normalizeRecord);
+                isCacheLoaded = true;
+                return inMemoryCache.length;
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load in-memory tebligat cache:', e);
+    }
+    inMemoryCache = [];
+    isCacheLoaded = false;
+    return 0;
+}
+
 export function initTebligatSearch() {
     const toggleBtn = document.getElementById('tebligat-search-toggle');
     const searchBody = document.getElementById('tebligat-search-body');
@@ -33,33 +95,20 @@ export function initTebligatSearch() {
         }
     });
 
-    if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-            searchInput.value = '';
-            clearBtn.style.display = 'none';
-            searchResults.innerHTML = '';
-            searchInput.focus();
-        });
-    }
-
-    let debounceTimeout;
-    let abortController;
-
     const selectedYear = () => yearSelect?.value || '2026';
-    const getSheetYear = (sheetName) => {
-        const match = sheetName.match(/(?:^|\.)(\d{4})(?:$|\.)/);
-        return match ? match[1] : String(new Date().getFullYear());
-    };
-    const belongsToSelectedYear = (row) => getSheetYear(row.sayfa) === selectedYear();
 
     // --- CLOUD SYNC CACHE MANTIĞI ---
     const btnSyncCloud = document.getElementById('btn-sync-cloud');
     const cacheStatusText = document.getElementById('cache-status-text');
 
-    // Eğer cache varsa durum metnini güncelle
-    if (cacheStatusText && localStorage.getItem('tebligat_excel_cache')) {
-        const cachedData = JSON.parse(localStorage.getItem('tebligat_excel_cache'));
-        cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--success); font-weight: bold;">Güncel (${cachedData.length} Kayıt)</span>`;
+    // Sayfa açıldığında önbelleği belleğe al ve durum metnini güncelle
+    const cachedCount = loadCacheIntoMemory();
+    if (cacheStatusText) {
+        if (cachedCount > 0) {
+            cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--success); font-weight: bold;">Güncel (${cachedCount} Kayıt)</span>`;
+        } else {
+            cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--text-secondary);">Henüz güncellenmedi.</span>`;
+        }
     }
 
     if (btnSyncCloud) {
@@ -98,11 +147,17 @@ export function initTebligatSearch() {
                 if (response.ok && data.results) {
                     const allCachedRows = data.results;
                     localStorage.setItem('tebligat_excel_cache', JSON.stringify(allCachedRows));
+                    const newCount = loadCacheIntoMemory();
                     
                     if (cacheStatusText) {
-                        cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--success); font-weight: bold;">Güncellendi (${allCachedRows.length} Kayıt)</span>`;
+                        cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--success); font-weight: bold;">Güncellendi (${newCount} Kayıt)</span>`;
                     }
                     if (window.showToast) window.showToast('Veritabanı başarıyla cihazınıza senkronize edildi!', 'success');
+
+                    // Eğer arama kutusunda yazı varsa anında yeni verilerle güncelle
+                    if (searchInput.value.trim().length >= 2) {
+                        runSearch();
+                    }
                 } else {
                     throw new Error(data.error || 'Bilinmeyen bir hata oluştu');
                 }
@@ -156,16 +211,134 @@ export function initTebligatSearch() {
         document.head.appendChild(style);
     }
 
-    const runSearch = (event) => {
-        const query = event.target.value.trim();
+    const skeletonHTML = `
+        <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
+            <div class="skeleton-box" style="height: 20px; width: 60%; border-radius: 4px;"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                <div class="skeleton-box" style="height: 16px; width: 30%; border-radius: 4px;"></div>
+                <div class="skeleton-box" style="height: 24px; width: 25%; border-radius: 12px;"></div>
+            </div>
+        </div>
+    `;
+
+    let networkDebounceTimeout;
+    let networkAbortController;
+
+    // Render fonksiyonu
+    const renderResults = (resultsArray, isFinal = false, errorMessage = null, currentQuery = '') => {
+        if (resultsArray.length === 0) {
+            if (isFinal) {
+                searchResults.innerHTML = errorMessage 
+                    ? `<div style="color: red; text-align: center;">Hata: ${errorMessage}</div>` 
+                    : '<div style="text-align: center; color: var(--text-secondary); padding: 10px;">Sonuç bulunamadı.</div>';
+            } else if (!errorMessage) {
+                searchResults.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 10px; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 6px;"><div class="spinner" style="width:12px; height:12px; border-width: 2px;"></div> Sunucuda aranıyor...</div>';
+            }
+            return;
+        }
+
+        const uniqueResults = [];
+        const seen = new Set();
+        for (const r of resultsArray) {
+            const key = r.sayfa + '_' + r.no;
+            if (!seen.has(key)) {
+                seen.add(key);
+                uniqueResults.push(r);
+            }
+        }
+
+        // Sıralama: En yeni tarih en üstte, aynı tarihte ise büyük numara en üstte
+        const reversedResults = uniqueResults.sort((a, b) => {
+            const dateA = a._dateVal !== undefined ? a._dateVal : parseDateStr(a.sayfa);
+            const dateB = b._dateVal !== undefined ? b._dateVal : parseDateStr(b.sayfa);
+            if (dateB !== dateA) {
+                return dateB - dateA;
+            }
+            const noA = a._noNum !== undefined ? a._noNum : (parseInt(a.no, 10) || 0);
+            const noB = b._noNum !== undefined ? b._noNum : (parseInt(b.no, 10) || 0);
+            return noB - noA;
+        });
+
+        const activeQuery = currentQuery || searchInput.value.trim();
+        const safeQuery = activeQuery.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const words = safeQuery.split(/\s+/).filter(w => w.length > 0);
+
+        let html = reversedResults.map(res => {
+            let highlightedIsim = res.isim;
+            words.forEach(word => {
+                let pattern = word.replace(/[iıiİI]/gi, '[iıiİI]');
+                try {
+                    const highlightRegex = new RegExp(`(${pattern})`, 'gi');
+                    highlightedIsim = highlightedIsim.replace(highlightRegex, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px; background-image: none;">$1</mark>');
+                } catch(e) {}
+            });
+            highlightedIsim = highlightedIsim.replace(/<mark[^>]*><mark[^>]*>/g, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px;">');
+            highlightedIsim = highlightedIsim.replace(/<\/mark><\/mark>/g, '</mark>');
+
+            const uniqueId = res._uniqueId || `${res.sayfa}-${res.isim}-${res.no || ''}`;
+            const isMarkedLocally = localStorage.getItem('tebligat_marked_' + uniqueId) === 'true';
+            const isMarked = Boolean(res.isMarked || res.isaretli || isMarkedLocally);
+
+            const markBtnStyle = isMarked
+                ? `border-color: #27ae60; color: #27ae60; background-color: rgba(39, 174, 96, 0.1); cursor: default;`
+                : `border-color: var(--card-border); color: var(--text-secondary); cursor: pointer;`;
+            
+            const markBtnContent = isMarked
+                ? `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi`
+                : `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> İşaretle`;
+
+            const buttonHtml = `
+                <div class="tebligat-actions" style="display: flex; gap: 6px;">
+                    <button class="btn btn-outline btn-mark-tebligat ${isMarked ? 'marked' : ''}" ${isMarked ? 'disabled' : ''} style="padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; display: flex; align-items: center; gap: 4px; transition: all 0.2s; ${markBtnStyle}" title="İşaretle">
+                        ${markBtnContent}
+                    </button>
+                    <button class="btn btn-outline btn-unmark-tebligat" style="display: ${isMarked ? 'flex' : 'none'}; padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; align-items: center; gap: 4px; border-color: #e74c3c; color: #e74c3c; background-color: rgba(231, 76, 60, 0.1); cursor: pointer; transition: all 0.2s;" title="İşareti Kaldır">
+                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        Kaldır
+                    </button>
+                </div>
+            `;
+
+            return `
+            <div class="tebligat-result-card" data-sayfa="${res.sayfa}" data-isim="${res.isim}" data-no="${res.no || ''}" style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary); flex: 1;">${highlightedIsim}</div>
+                    ${buttonHtml}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; color: var(--text-secondary);">
+                    <span style="display: flex; align-items: center; gap: 4px;">
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        Sayfa: ${res.sayfa}
+                    </span>
+                    <span style="font-weight: 600; color: var(--accent); background: rgba(33, 150, 243, 0.1); padding: 4px 8px; border-radius: 12px;">
+                        No: ${res.no || '-'}
+                    </span>
+                </div>
+            </div>
+            `;
+        }).join('');
+
+        if (errorMessage) {
+            html += `<div style="text-align: center; color: #e67e22; padding: 10px; font-size: 0.85rem; font-weight: bold;">Uyarı: Canlı sunucuya ulaşılamadı. Yerel önbellekteki kayıtlar listelendi.</div>`;
+        } else if (!isFinal) {
+            html += `<div style="text-align: center; color: var(--text-secondary); padding: 10px; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 6px;"><div class="spinner" style="width:12px; height:12px; border-width: 2px;"></div> Sunucuda yeni kayıtlar taranıyor...</div>`;
+        }
+
+        searchResults.innerHTML = html;
+    };
+
+    // 0 ms Anlık Arama ve Arka Plan Canlı Sorgusu
+    const runSearch = () => {
+        const query = searchInput.value.trim();
+        const queryUpper = query.toLocaleUpperCase('tr-TR');
 
         if (clearBtn) {
             clearBtn.style.display = query.length > 0 ? 'flex' : 'none';
         }
 
-        clearTimeout(debounceTimeout);
-        if (abortController) {
-            abortController.abort(); // Önceki isteği iptal et
+        clearTimeout(networkDebounceTimeout);
+        if (networkAbortController) {
+            networkAbortController.abort();
         }
 
         if (query.length < 2) {
@@ -173,177 +346,116 @@ export function initTebligatSearch() {
             return;
         }
 
-        abortController = new AbortController();
+        const currYear = selectedYear();
 
-        debounceTimeout = setTimeout(async () => {
-            const skeletonHTML = `
-                <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
-                    <div class="skeleton-box" style="height: 20px; width: 60%; border-radius: 4px;"></div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
-                        <div class="skeleton-box" style="height: 16px; width: 30%; border-radius: 4px;"></div>
-                        <div class="skeleton-box" style="height: 24px; width: 25%; border-radius: 12px;"></div>
-                    </div>
-                </div>
-            `;
-            searchResults.innerHTML = skeletonHTML.repeat(3);
-            
-            let allResults = [];
-            const qLower = query.toLowerCase();
-
-            // Render fonksiyonu
-            const renderResults = (resultsArray, isFinal = false, errorMessage = null) => {
-                if (resultsArray.length === 0) {
-                    if (isFinal) {
-                        searchResults.innerHTML = errorMessage 
-                            ? `<div style="color: red; text-align: center;">Hata: ${errorMessage}</div>` 
-                            : '<div style="text-align: center; color: var(--text-secondary); padding: 10px;">Sonuç bulunamadı.</div>';
-                    }
-                    return;
+        // 1. ADIM (0 ms - ANINDA): Bellek İçi RAM İndeksinden Tara
+        let localMatches = [];
+        if (inMemoryCache.length > 0) {
+            for (let i = 0; i < inMemoryCache.length; i++) {
+                const item = inMemoryCache[i];
+                if (item._year === currYear && item._upperName.includes(queryUpper)) {
+                    localMatches.push(item);
                 }
-
-                const uniqueResults = [];
-                const seen = new Set();
-                for (const r of resultsArray) {
-                    const key = r.sayfa + '_' + r.no;
-                    if (!seen.has(key)) {
-                        seen.add(key);
-                        uniqueResults.push(r);
-                    }
-                }
-
-                const parseDateStr = (sayfaStr) => {
-                    const match = sayfaStr.match(/(\d{2})\.(\d{2})(?:\.(\d{4}))?/);
-                    if (!match) return 0;
-                    const d = parseInt(match[1], 10);
-                    const m = parseInt(match[2], 10);
-                    const y = match[3] ? parseInt(match[3], 10) : new Date().getFullYear();
-                    return y * 10000 + m * 100 + d;
-                };
-
-                const reversedResults = uniqueResults.sort((a, b) => {
-                    const dateA = parseDateStr(a.sayfa);
-                    const dateB = parseDateStr(b.sayfa);
-                    if (dateB !== dateA) {
-                        return dateB - dateA; // Tarihe göre azalan (yeni en üstte)
-                    }
-                    // Tarihler aynıysa (veya tarih yoksa), numarasına göre sırala
-                    const noA = parseInt(a.no) || 0;
-                    const noB = parseInt(b.no) || 0;
-                    return noB - noA;
-                });
-                const safeQuery = query.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-                const words = safeQuery.split(/\s+/).filter(w => w.length > 0);
-
-                let html = reversedResults.map(res => {
-                    let highlightedIsim = res.isim;
-                    words.forEach(word => {
-                        let pattern = word.replace(/[iıiİI]/gi, '[iıiİI]');
-                        try {
-                            const highlightRegex = new RegExp(`(${pattern})`, 'gi');
-                            highlightedIsim = highlightedIsim.replace(highlightRegex, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px; background-image: none;">$1</mark>');
-                        } catch(e) {}
-                    });
-                    highlightedIsim = highlightedIsim.replace(/<mark[^>]*><mark[^>]*>/g, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px;">');
-                    highlightedIsim = highlightedIsim.replace(/<\/mark><\/mark>/g, '</mark>');
-
-                    const uniqueId = `${res.sayfa}-${res.isim}-${res.no || ''}`;
-                    const isMarkedLocally = localStorage.getItem('tebligat_marked_' + uniqueId) === 'true';
-                    const isMarked = res.isMarked || res.isaretli || isMarkedLocally;
-
-                    const markBtnStyle = isMarked
-                        ? `border-color: #27ae60; color: #27ae60; background-color: rgba(39, 174, 96, 0.1); cursor: default;`
-                        : `border-color: var(--card-border); color: var(--text-secondary); cursor: pointer;`;
-                    
-                    const markBtnContent = isMarked
-                        ? `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi`
-                        : `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> İşaretle`;
-
-                    const buttonHtml = `
-                        <div class="tebligat-actions" style="display: flex; gap: 6px;">
-                            <button class="btn btn-outline btn-mark-tebligat ${isMarked ? 'marked' : ''}" ${isMarked ? 'disabled' : ''} style="padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; display: flex; align-items: center; gap: 4px; transition: all 0.2s; ${markBtnStyle}" title="İşaretle">
-                                ${markBtnContent}
-                            </button>
-                            <button class="btn btn-outline btn-unmark-tebligat" style="display: ${isMarked ? 'flex' : 'none'}; padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; align-items: center; gap: 4px; border-color: #e74c3c; color: #e74c3c; background-color: rgba(231, 76, 60, 0.1); cursor: pointer; transition: all 0.2s;" title="İşareti Kaldır">
-                                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                Kaldır
-                            </button>
-                        </div>
-                    `;
-
-                    return `
-                    <div class="tebligat-result-card" data-sayfa="${res.sayfa}" data-isim="${res.isim}" data-no="${res.no || ''}" style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary); flex: 1;">${highlightedIsim}</div>
-                            ${buttonHtml}
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; color: var(--text-secondary);">
-                            <span style="display: flex; align-items: center; gap: 4px;">
-                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                                Sayfa: ${res.sayfa}
-                            </span>
-                            <span style="font-weight: 600; color: var(--accent); background: rgba(33, 150, 243, 0.1); padding: 4px 8px; border-radius: 12px;">
-                                No: ${res.no || '-'}
-                            </span>
-                        </div>
-                    </div>
-                    `;
-                }).join('');
-
-                if (errorMessage) {
-                    html += `<div style="text-align: center; color: #e67e22; padding: 10px; font-size: 0.85rem; font-weight: bold;">Uyarı: API yanıt vermedi. Yalnızca önbellekteki (Excel) veriler listelendi. Yeni kayıtlar için tekrar deneyin.</div>`;
-                } else if (!isFinal) {
-                    html += `<div style="text-align: center; color: var(--text-secondary); padding: 10px; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 6px;"><div class="spinner" style="width:12px; height:12px; border-width: 2px;"></div> Sunucuda yeni kayıtlar aranıyor...</div>`;
-                }
-
-                searchResults.innerHTML = html;
-            };
-
-            // 1. Önce Cache'den Ara (Anında Sonuç)
-            const cachedStr = localStorage.getItem('tebligat_excel_cache');
-            if (cachedStr) {
-                try {
-                    const cacheArr = JSON.parse(cachedStr);
-                    const cacheMatches = cacheArr.filter(r => belongsToSelectedYear(r) && r.isim.toLowerCase().includes(qLower));
-                    cacheMatches.forEach(match => allResults.push(match));
-                    
-                    if (allResults.length > 0) {
-                        renderResults(allResults, false);
-                    }
-                } catch (e) {}
             }
-            
-            // 2. Canlı Sunucudan Ara
+            localMatches.sort((a, b) => (b._dateVal - a._dateVal) || (b._noNum - a._noNum));
+        }
+
+        // Yerel sonuç varsa ANINDA ekrana bas (İskelet animasyonu gösterme!)
+        if (localMatches.length > 0) {
+            renderResults(localMatches, false, null, query);
+        } else if (inMemoryCache.length === 0) {
+            // Sadece yerel veri hiç indirilmemişse iskelet göster
+            searchResults.innerHTML = skeletonHTML.repeat(3);
+        } else {
+            // Önbellek var ama bu isimde kayıt yok; sunucu aranıyor bilgisi ver
+            renderResults([], false, null, query);
+        }
+
+        // 2. ADIM (500 ms Debounced): Arka Planda Canlı Sunucu Kontrolü
+        networkAbortController = new AbortController();
+        networkDebounceTimeout = setTimeout(async () => {
             try {
-                const response = await fetch(`/api/search-tebligat?q=${encodeURIComponent(query)}&year=${encodeURIComponent(selectedYear())}`, {
-                    signal: abortController.signal
+                const response = await fetch(`/api/search-tebligat?q=${encodeURIComponent(query)}&year=${encodeURIComponent(currYear)}`, {
+                    signal: networkAbortController.signal
                 });
                 const data = await response.json();
-                
+
                 if (data.error) {
-                    renderResults(allResults, true, data.error);
+                    renderResults(localMatches, true, data.error, query);
                     return;
                 }
 
                 if (data.results && data.results.length > 0) {
-                    data.results.filter(belongsToSelectedYear).forEach(apiRes => allResults.push(apiRes));
+                    const combined = [...localMatches];
+                    const seenKeys = new Set(localMatches.map(m => m.sayfa + '_' + m.no));
+
+                    for (const apiRes of data.results) {
+                        if (getSheetYear(apiRes.sayfa) === currYear) {
+                            const key = apiRes.sayfa + '_' + apiRes.no;
+                            if (!seenKeys.has(key)) {
+                                seenKeys.add(key);
+                                const norm = normalizeRecord(apiRes);
+                                combined.push(norm);
+                                inMemoryCache.push(norm); // Gelecek aramalar için belleğe ekle
+                            }
+                        }
+                    }
+
+                    combined.sort((a, b) => {
+                        const dateA = a._dateVal !== undefined ? a._dateVal : parseDateStr(a.sayfa);
+                        const dateB = b._dateVal !== undefined ? b._dateVal : parseDateStr(b.sayfa);
+                        if (dateB !== dateA) return dateB - dateA;
+                        const noA = a._noNum !== undefined ? a._noNum : (parseInt(a.no, 10) || 0);
+                        const noB = b._noNum !== undefined ? b._noNum : (parseInt(b.no, 10) || 0);
+                        return noB - noA;
+                    });
+
+                    renderResults(combined, true, null, query);
+                } else {
+                    renderResults(localMatches, true, null, query);
                 }
-                
-                renderResults(allResults, true);
-                
             } catch (err) {
                 if (err.name === 'AbortError') return;
-                console.error(err);
-                // Sunucu hata verse bile cache ekranda kalır
-                renderResults(allResults, true, "Zaman aşımı");
+                console.error('Arka plan canlı arama hatası:', err);
+                renderResults(localMatches, true, localMatches.length === 0 ? "Zaman aşımı" : null, query);
             }
-        }, 400); // 400ms debounce
+        }, 500);
     };
 
-    searchInput.addEventListener('input', runSearch);
+    // Otomatik Büyük Harf Dönüşümü (Türkçe uyumlu: i -> İ, ı -> I) + İmleç Pozisyonunu Koruma
+    searchInput.addEventListener('input', () => {
+        const rawVal = searchInput.value;
+        const upperVal = rawVal.toLocaleUpperCase('tr-TR');
+        
+        if (rawVal !== upperVal) {
+            const start = searchInput.selectionStart;
+            const end = searchInput.selectionEnd;
+            searchInput.value = upperVal;
+            if (start !== null && end !== null) {
+                searchInput.setSelectionRange(start, end);
+            }
+        }
+        
+        runSearch();
+    });
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            clearBtn.style.display = 'none';
+            searchResults.innerHTML = '';
+            clearTimeout(networkDebounceTimeout);
+            if (networkAbortController) {
+                networkAbortController.abort();
+            }
+            searchInput.focus();
+        });
+    }
+
     if (yearSelect) {
         yearSelect.addEventListener('change', () => {
             if (searchInput.value.trim().length >= 2) {
-                runSearch({ target: searchInput });
+                runSearch();
             }
         });
     }
@@ -393,11 +505,17 @@ export function initTebligatSearch() {
                     unmarkBtn.style.display = 'flex';
                 }
                 
-                // LocalStorage'a kaydet ki sayfayı yenileyince de yeşil kalsın
+                // LocalStorage'a kaydet
                 const uniqueId = `${sayfa}-${isim}-${no || ''}`;
                 localStorage.setItem('tebligat_marked_' + uniqueId, 'true');
                 
-                // İsteğe bağlı olarak toast mesajı gösterebiliriz
+                // Bellek içi RAM kaydını da güncelle
+                const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
+                if (memItem) {
+                    memItem.isaretli = true;
+                    memItem.isMarked = true;
+                }
+
                 if (window.showToast) {
                     window.showToast('E-Tablo güncellendi (İsim yeşil oldu, C kolonuna tarih yazıldı).', 'success');
                 }
@@ -466,6 +584,13 @@ export function initTebligatSearch() {
                 // LocalStorage'dan sil
                 const uniqueId = `${sayfa}-${isim}-${no || ''}`;
                 localStorage.removeItem('tebligat_marked_' + uniqueId);
+                
+                // Bellek içi RAM kaydını da güncelle
+                const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
+                if (memItem) {
+                    memItem.isaretli = false;
+                    memItem.isMarked = false;
+                }
                 
                 if (window.showToast) {
                     window.showToast('İşaret başarıyla kaldırıldı.', 'success');
