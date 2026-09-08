@@ -163,15 +163,54 @@ export function initYknManager() {
 
     // UI Status Helper
     function addStatus(message, type = 'info') {
-        const color = type === 'error' ? 'var(--error, #e74c3c)' : (type === 'success' ? 'var(--success, #27ae60)' : 'var(--text-secondary)');
-        const el = document.createElement('div');
-        el.style.color = color;
-        el.textContent = `• ${message}`;
-        statusContainer.appendChild(el);
+        if (!statusContainer) return;
+        const emptyEl = document.getElementById('ykn-status-empty');
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        const item = document.createElement('div');
+        item.className = `ykn-status-item is-${type}`;
+
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+        const iconSvg = type === 'success'
+            ? `<svg viewBox="0 0 24 24" width="14" height="14" stroke="var(--success)" stroke-width="2.5" fill="none" style="flex-shrink:0;margin-top:2px;"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+            : (type === 'error'
+                ? `<svg viewBox="0 0 24 24" width="14" height="14" stroke="var(--danger)" stroke-width="2.5" fill="none" style="flex-shrink:0;margin-top:2px;"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`
+                : `<svg viewBox="0 0 24 24" width="14" height="14" stroke="var(--accent)" stroke-width="2.5" fill="none" style="flex-shrink:0;margin-top:2px;"><circle cx="12" cy="12" r="3"></circle></svg>`);
+
+        const contentDiv = document.createElement('div');
+        contentDiv.style.cssText = 'flex: 1; display: flex; flex-direction: column; gap: 2px;';
+
+        const textSpan = document.createElement('span');
+        textSpan.className = 'ykn-status-text';
+        textSpan.textContent = message;
+
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'ykn-status-time';
+        timeSpan.style.cssText = 'font-size: 0.7rem; opacity: 0.6;';
+        timeSpan.textContent = timeStr;
+
+        contentDiv.appendChild(textSpan);
+        contentDiv.appendChild(timeSpan);
+
+        item.innerHTML = iconSvg;
+        item.appendChild(contentDiv);
+        statusContainer.appendChild(item);
+        statusContainer.scrollTop = statusContainer.scrollHeight;
+
+        const countBadge = document.getElementById('ykn-status-count');
+        if (countBadge) {
+            const total = statusContainer.querySelectorAll('.ykn-status-item').length;
+            countBadge.textContent = `${total} Adım`;
+        }
     }
 
     function clearStatus() {
+        if (!statusContainer) return;
         statusContainer.innerHTML = '';
+        const countBadge = document.getElementById('ykn-status-count');
+        if (countBadge) countBadge.textContent = 'İşlemde';
     }
 
     let currentStudentData = null;
