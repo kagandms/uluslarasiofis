@@ -33,7 +33,7 @@ const MONTH_PATTERN = Object.keys(MONTH_ALIASES)
     .sort((left, right) => right.length - left.length)
     .join('|');
 
-const DATE_PATTERN = `(?:\\d{1,2}[./-]\\d{1,2}[./-](?:19\\d{2}|20[2-4]\\d|\\d{2})|(?:19\\d{2}|20[2-4]\\d)[./-]\\d{1,2}[./-]\\d{1,2}|\\d{1,2}\\s+(?:${MONTH_PATTERN})\\s+(?:19\\d{2}|20[2-4]\\d|\\d{2})|(?:${MONTH_PATTERN})\\s+\\d{1,2},?\\s+(?:19\\d{2}|20[2-4]\\d|\\d{2})|\\d{1,2}\\s*[-/]\\s*(?:${MONTH_PATTERN})\\s*[-/]\\s*(?:19\\d{2}|20[2-4]\\d|\\d{2})|\\d{1,2}(?:${MONTH_PATTERN})(?:19\\d{2}|20[2-4]\\d|\\d{2})|\\d{1,2}\\s+\\d{1,2}\\s+(?:19\\d{2}|20[2-4]\\d|\\d{2})|\\b(?:19\\d{2}|20[2-4]\\d)(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\b|\\b(?:0[1-9]|[12]\\d|3[01])(?:0[1-9]|1[0-2])(?:19\\d{2}|20[2-4]\\d)\\b)`;
+const DATE_PATTERN = `(?:(?:19\\d{2}|20\\d{2})\\s*[./\\-]\\s*\\d{1,2}\\s*[./\\-]\\s*\\d{1,2}|\\d{1,2}\\s*[./\\-]\\s*\\d{1,2}\\s*[./\\-]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}\\s*[./\\-\\s]\\s*(?:${MONTH_PATTERN})\\.?\\s*[./\\-\\s]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|(?:${MONTH_PATTERN})\\.?\\s*[./\\-\\s]\\s*\\d{1,2}\\s*,?\\s*[./\\-\\s]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}(?:${MONTH_PATTERN})(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}\\s+\\d{1,2}\\s+(?:19\\d{2}|20\\d{2}|\\d{2})|\\b(?:19\\d{2}|20\\d{2})(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\b|\\b(?:0[1-9]|[12]\\d|3[01])(?:0[1-9]|1[0-2])(?:19\\d{2}|20\\d{2})\\b)`;
 
 const ISSUE_DATE_LABELS = [
     // English
@@ -53,7 +53,9 @@ const ISSUE_DATE_LABELS = [
     // German
     'ausstellungsdatum', 'ausgestellt am',
     // Arabic transliterated / keywords
-    'tarikh al isdar', 'tarikh al-isdar', 'تاريخ الإصدار', 'تاريخ الاصدار'
+    'tarikh al isdar', 'tarikh al-isdar', 'تاريخ الإصدار', 'تاريخ الاصدار',
+    // Ethiopian (Amharic)
+    'የተሰጠበት ቀን', 'የተሰጠበት'
 ];
 
 const EXPIRY_DATE_LABELS = [
@@ -74,7 +76,9 @@ const EXPIRY_DATE_LABELS = [
     // German
     'gueltig bis', 'gültig bis', 'ablaufdatum',
     // Arabic transliterated / keywords
-    'tarikh al intiha', 'tarikh al-intiha', 'تاريخ الانتهاء', 'تاريخ الصلاحية', 'صالح حتى'
+    'tarikh al intiha', 'tarikh al-intiha', 'تاريخ الانتهاء', 'تاريخ الصلاحية', 'صالح حتى',
+    // Ethiopian (Amharic)
+    'የሚያበቃበት ቀን', 'የሚያበቃበት'
 ];
 
 function normalizeDocumentText(text) {
@@ -116,8 +120,8 @@ export function parseDateValue(value) {
     if (!value) return '';
     const normalized = normalizeDateText(value).replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
 
-    // 1. Month name with space, dash, or slash (e.g. "11 MAR 2025", "11-MAR-2025", "11/MAR/25")
-    const monthClean = normalized.replace(/[-/]/g, ' ');
+    // 1. Month name with space, dash, slash, or dot (e.g. "11 MAR 2025", "11-MAR-2025", "11/MAR/25", "16 / DEC / 2022", "16 DEC. 2022")
+    const monthClean = normalized.replace(/[-/.]/g, ' ').replace(/\s+/g, ' ').trim();
     const monthDate = monthClean.match(/^(\d{1,2})\s+([a-z]+)\s+(\d{2,4})$/)
         || monthClean.match(/^([a-z]+)\s+(\d{1,2})\s+(\d{2,4})$/);
     if (monthDate) {
@@ -191,7 +195,7 @@ function findLabeledDate(text, labels) {
 
         // 1. Search forward (after label)
         const start = (labelMatch.index || 0) + labelMatch[0].length;
-        const dateWindowAfter = normalizedText.slice(start, start + 200);
+        const dateWindowAfter = normalizedText.slice(start, start + 350);
         const dateMatchesAfter = Array.from(dateWindowAfter.matchAll(new RegExp(DATE_PATTERN, 'ig')));
         for (const match of dateMatchesAfter) {
             const parsed = parseDateValue(match[0]);
@@ -199,7 +203,7 @@ function findLabeledDate(text, labels) {
         }
 
         // 2. Search backward (before label, for table cells / RTL layouts)
-        const preStart = Math.max(0, (labelMatch.index || 0) - 100);
+        const preStart = Math.max(0, (labelMatch.index || 0) - 150);
         const dateWindowBefore = normalizedText.slice(preStart, labelMatch.index || 0);
         const dateMatchesBefore = Array.from(dateWindowBefore.matchAll(new RegExp(DATE_PATTERN, 'ig')));
         for (let i = dateMatchesBefore.length - 1; i >= 0; i--) {
@@ -231,7 +235,7 @@ export function extractDatesFromMrz(text, options = {}) {
                 const ey = Number(targetMatch[1].slice(0, 2));
                 const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
                 const expiryDate = createDateValue(expYear, Number(targetMatch[1].slice(2, 4)), Number(targetMatch[1].slice(4, 6)));
-                if (expiryDate && expiryDate >= '2024-01-01' && expiryDate <= '2042-12-31') {
+                if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
                     return { issueDate: '', expiryDate, birthDate: options.birthDate };
                 }
             }
@@ -254,7 +258,7 @@ export function extractDatesFromMrz(text, options = {}) {
         const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
         const expiryDate = createDateValue(expYear, Number(expRaw.slice(2, 4)), Number(expRaw.slice(4, 6)));
 
-        if (expiryDate && expiryDate >= '2024-01-01' && expiryDate <= '2042-12-31') {
+        if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
             return { issueDate: '', expiryDate, birthDate };
         }
     }
@@ -271,7 +275,7 @@ export function extractDatesFromMrz(text, options = {}) {
         const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
         const expiryDate = createDateValue(expYear, Number(match[2].slice(2, 4)), Number(match[2].slice(4, 6)));
 
-        if (expiryDate && expiryDate >= '2024-01-01' && expiryDate <= '2042-12-31') {
+        if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
             return { issueDate: '', expiryDate, birthDate };
         }
     }
@@ -353,7 +357,7 @@ export function extractPassportDatesFromText(text, options = {}) {
         if (mrz.expiryDate && mrz.expiryDate > issueDate) {
             expiryDate = mrz.expiryDate;
         } else {
-            expiryDate = '';
+            return { issueDate: '', expiryDate: '' };
         }
     }
 
@@ -363,27 +367,36 @@ export function extractPassportDatesFromText(text, options = {}) {
         const today = new Date().toISOString().slice(0, 10);
         const birthDate = options.birthDate || mrz.birthDate || '';
 
-        // Filter out dates that are birth dates or outside plausible passport ranges (2014-2042)
+        // Filter out dates that are birth dates or outside plausible passport ranges (2010-2045)
         const plausibleDates = candidates.filter((d) => {
             if (birthDate && d === birthDate) return false;
-            if (d < '2014-01-01' || d > '2042-12-31') return false; // Absolutely rejects 5552 or invalid years
+            if (d < '2010-01-01' || d > '2045-12-31') return false; // Absolutely rejects 5552 or invalid years
             return true;
         });
 
-        if (!expiryDate) {
-            const futureDates = plausibleDates.filter((d) => d >= today && (!issueDate || d > issueDate));
-            if (futureDates.length > 0) {
-                expiryDate = futureDates[futureDates.length - 1];
-            } else if (plausibleDates.length > 0 && issueDate) {
-                const afterIssue = plausibleDates.filter((d) => d > issueDate);
-                if (afterIssue.length > 0) expiryDate = afterIssue[afterIssue.length - 1];
+        if (!issueDate && !expiryDate && plausibleDates.length >= 2) {
+            // If neither date was found by label/MRZ, earliest is issue date and latest is expiry date
+            issueDate = plausibleDates[0];
+            expiryDate = plausibleDates[plausibleDates.length - 1];
+        } else {
+            if (!expiryDate) {
+                const futureDates = plausibleDates.filter((d) => d >= today && (!issueDate || d > issueDate));
+                if (futureDates.length > 0) {
+                    expiryDate = futureDates[futureDates.length - 1];
+                } else if (plausibleDates.length > 0 && issueDate) {
+                    const afterIssue = plausibleDates.filter((d) => d > issueDate);
+                    if (afterIssue.length > 0) expiryDate = afterIssue[afterIssue.length - 1];
+                }
             }
-        }
 
-        if (!issueDate) {
-            const pastDates = plausibleDates.filter((d) => d <= today && (!expiryDate || d < expiryDate));
-            if (pastDates.length > 0) {
-                issueDate = pastDates[pastDates.length - 1];
+            if (!issueDate) {
+                const pastDates = plausibleDates.filter((d) => d <= today && (!expiryDate || d < expiryDate));
+                if (pastDates.length > 0) {
+                    issueDate = pastDates[pastDates.length - 1];
+                } else if (plausibleDates.length > 0 && expiryDate) {
+                    const beforeExpiry = plausibleDates.filter((d) => d < expiryDate);
+                    if (beforeExpiry.length > 0) issueDate = beforeExpiry[0];
+                }
             }
         }
     }

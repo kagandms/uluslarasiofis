@@ -149,3 +149,29 @@ test('extracts Uzbek passport MRZ expiry using birthDate hint', () => {
     assert.equal(result.issueDate, '2024-06-14');
     assert.equal(result.expiryDate, '2034-05-26');
 });
+
+test('extracts Ethiopian passport dates with English and Amharic labels', () => {
+    const textEthiopian = `
+    FEDERAL DEMOCRATIC REPUBLIC OF ETHIOPIA PASSPORT
+    Date of issue / የተሰጠበት ቀን: 16 DEC 2022
+    Date of expiry / የሚያበቃበት ቀን: 15 DEC 2027
+    `;
+    const result = extractPassportDatesFromText(textEthiopian);
+
+    assert.deepEqual(result, { issueDate: '2022-12-16', expiryDate: '2027-12-15' });
+});
+
+test('extracts passport dates with spaces around slashes and two-digit year', () => {
+    const textSpaced = 'Date of issue : 16 / DEC / 22 Date of expiry : 15 / DEC / 27';
+    const result = extractPassportDatesFromText(textSpaced);
+
+    assert.deepEqual(result, { issueDate: '2022-12-16', expiryDate: '2027-12-15' });
+});
+
+test('falls back to candidate pair (earliest=issue, latest=expiry) when labels are missing or degraded', () => {
+    const degradedText = 'PASSPORT DOCUMENT 123456\n16 DEC 2022\n15 DEC 2027';
+    const result = extractPassportDatesFromText(degradedText);
+
+    assert.deepEqual(result, { issueDate: '2022-12-16', expiryDate: '2027-12-15' });
+});
+

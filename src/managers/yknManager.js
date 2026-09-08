@@ -443,26 +443,8 @@ export function initYknManager() {
                 addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
             }
 
+            // 1. Doğrudan metin üzerinden tarihleri hemen çıkar ve ekrana yansıt
             let passportDates = extractPassportDatesFromText(text, { birthDate: currentStudentData?.birthDate });
-            if (!passportDates.issueDate || !passportDates.expiryDate) {
-                if (pdfOffset >= 0) {
-                    const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
-                    const ocrText = await extractPdfTextWithOcr(validPdfBytes);
-                    const ocrDates = extractPassportDatesFromText(ocrText, { birthDate: currentStudentData?.birthDate });
-                    passportDates = {
-                        issueDate: passportDates.issueDate || ocrDates.issueDate,
-                        expiryDate: passportDates.expiryDate || ocrDates.expiryDate
-                    };
-                } else if (isImage) {
-                    const ocrText = await extractImageTextWithOcr(documentBytes, contentType || 'image/jpeg');
-                    const ocrDates = extractPassportDatesFromText(ocrText, { birthDate: currentStudentData?.birthDate });
-                    passportDates = {
-                        issueDate: passportDates.issueDate || ocrDates.issueDate,
-                        expiryDate: passportDates.expiryDate || ocrDates.expiryDate
-                    };
-                }
-            }
-
             if (passportDates.issueDate) {
                 currentStudentData.issueDate = passportDates.issueDate;
                 if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(passportDates.issueDate);
@@ -470,6 +452,41 @@ export function initYknManager() {
             if (passportDates.expiryDate) {
                 currentStudentData.expiryDate = passportDates.expiryDate;
                 if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(passportDates.expiryDate);
+            }
+
+            // 2. Eksik tarih varsa ve belge PDF/görsel ise OCR ile ek tarama yap (UI'ı kilitlemeden, güvenli süreyle)
+            if (!passportDates.issueDate || !passportDates.expiryDate) {
+                try {
+                    let ocrText = '';
+                    if (pdfOffset >= 0) {
+                        const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
+                        ocrText = await Promise.race([
+                            extractPdfTextWithOcr(validPdfBytes),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('OCR zaman aşımı')), 10000))
+                        ]);
+                    } else if (isImage) {
+                        ocrText = await Promise.race([
+                            extractImageTextWithOcr(documentBytes, contentType || 'image/jpeg'),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('OCR zaman aşımı')), 10000))
+                        ]);
+                    }
+
+                    if (ocrText) {
+                        const ocrDates = extractPassportDatesFromText(ocrText, { birthDate: currentStudentData?.birthDate });
+                        if (ocrDates.issueDate && !currentStudentData.issueDate) {
+                            currentStudentData.issueDate = ocrDates.issueDate;
+                            if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(ocrDates.issueDate);
+                            passportDates.issueDate = ocrDates.issueDate;
+                        }
+                        if (ocrDates.expiryDate && !currentStudentData.expiryDate) {
+                            currentStudentData.expiryDate = ocrDates.expiryDate;
+                            if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(ocrDates.expiryDate);
+                            passportDates.expiryDate = ocrDates.expiryDate;
+                        }
+                    }
+                } catch (ocrErr) {
+                    console.warn('[YKN] OCR ile pasaport tarihi taraması atlandı/hata:', ocrErr.message);
+                }
             }
 
             if (passportDates.issueDate && passportDates.expiryDate) {
