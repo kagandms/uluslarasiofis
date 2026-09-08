@@ -398,6 +398,15 @@ export function initYknManager() {
 
     resetStudentActions();
 
+    if (inputPassport && btnSearch) {
+        inputPassport.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                btnSearch.click();
+            }
+        });
+    }
+
     if (btnSearch) {
         btnSearch.addEventListener('click', () => {
             const passportNo = inputPassport.value.trim();
