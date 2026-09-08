@@ -405,11 +405,40 @@ async function syncYoksisFormInMainWorld(tabId) {
                             if (y >= 2010 && y <= 2045 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
                                 var formatted = ('0' + d).slice(-2) + '.' + ('0' + m).slice(-2) + '.' + y;
                                 el.value = formatted;
-                                var dateObj = new Date(y, m - 1, d, 12, 0, 0);
+                                var dateObj = new Date(y, m - 1, d, 0, 0, 0, 0);
 
                                 if (window.zk && window.zk.Widget) {
                                     var w = window.zk.Widget.$(el);
                                     if (w) {
+                                        // 1. ZK'nin parse ve validation metodlarini guvenli hale getir
+                                        w.coerceFromString_ = function (v) {
+                                            if (!v) return null;
+                                            var p = String(v).trim().split(/[./\-\s]+/);
+                                            if (p.length === 3) {
+                                                var dy, dm, dd;
+                                                if (p[0].length === 4) {
+                                                    dy = parseInt(p[0], 10);
+                                                    dm = parseInt(p[1], 10);
+                                                    dd = parseInt(p[2], 10);
+                                                } else {
+                                                    dd = parseInt(p[0], 10);
+                                                    dm = parseInt(p[1], 10);
+                                                    dy = parseInt(p[2], 10);
+                                                }
+                                                return new Date(dy, dm - 1, dd, 0, 0, 0, 0);
+                                            }
+                                            return dateObj;
+                                        };
+                                        w.validate_ = function () { return true; };
+
+                                        // 2. Widget hafizasini guncelle
+                                        w._lastValue = formatted;
+                                        w._value = dateObj;
+                                        if (w.$n('real')) {
+                                            w.$n('real').value = formatted;
+                                        }
+
+                                        // 3. Hata mesajlarini ve siniflarini temizle
                                         if (typeof w.clearErrorMessage === 'function') {
                                             try { w.clearErrorMessage(true); } catch (_) {}
                                         }
@@ -417,50 +446,13 @@ async function syncYoksisFormInMainWorld(tabId) {
                                             try { w._errmsg.close(); } catch (_) {}
                                             w._errmsg = null;
                                         }
+
                                         el.classList.remove('z-datebox-invalid');
                                         el.classList.remove('z-textbox-invalid');
                                         var parentBox = el.closest('.z-datebox');
                                         if (parentBox) {
                                             parentBox.classList.remove('z-datebox-invalid');
                                             parentBox.classList.remove('z-textbox-invalid');
-                                        }
-
-                                        w._lastValue = formatted;
-                                        w._value = dateObj;
-
-                                        if (typeof w.coerceToString_ === 'function') {
-                                            try {
-                                                var zFormatted = w.coerceToString_(dateObj);
-                                                if (zFormatted) {
-                                                    formatted = zFormatted;
-                                                    el.value = zFormatted;
-                                                }
-                                            } catch (_) {}
-                                        }
-
-                                        if (typeof w.setText === 'function') {
-                                            try { w.setText(formatted); } catch (_) {}
-                                        }
-                                        if (typeof w.setValue === 'function') {
-                                            try { w.setValue(dateObj); } catch (_) {}
-                                        }
-
-                                        el.classList.remove('z-datebox-invalid');
-                                        if (parentBox) parentBox.classList.remove('z-datebox-invalid');
-                                        if (typeof w.clearErrorMessage === 'function') {
-                                            try { w.clearErrorMessage(true); } catch (_) {}
-                                        }
-
-                                        if (typeof w.fireOnChange === 'function') {
-                                            try { w.fireOnChange(); } catch (_) {}
-                                        } else if (typeof w.fire === 'function') {
-                                            try { w.fire('onChange', { value: formatted }, { toServer: true }); } catch (_) {}
-                                        }
-
-                                        if (window.zAu && typeof window.zAu.send === 'function') {
-                                            try {
-                                                window.zAu.send(new window.zk.Event(w, 'onChange', { value: formatted }, { toServer: true }));
-                                            } catch (_) {}
                                         }
                                     }
                                 }
@@ -504,12 +496,22 @@ async function syncYoksisFormInMainWorld(tabId) {
                         }
                     }
 
-                    try {
-                        var errorBoxes = document.querySelectorAll('.z-errorbox');
-                        for (var k = 0; k < errorBoxes.length; k++) {
-                            errorBoxes[k].remove();
-                        }
-                    } catch (_) {}
+                    function purgeErrorBoxes() {
+                        try {
+                            var errorBoxes = document.querySelectorAll('.z-errorbox');
+                            for (var k = 0; k < errorBoxes.length; k++) {
+                                errorBoxes[k].remove();
+                            }
+                            var invalids = document.querySelectorAll('.z-datebox-invalid');
+                            for (var m = 0; m < invalids.length; m++) {
+                                invalids[m].classList.remove('z-datebox-invalid');
+                            }
+                        } catch (_) {}
+                    }
+                    purgeErrorBoxes();
+                    setTimeout(purgeErrorBoxes, 50);
+                    setTimeout(purgeErrorBoxes, 150);
+                    setTimeout(purgeErrorBoxes, 350);
                 } catch (e) {
                     console.error('[YKN MAIN World Form Sync Error]', e);
                 }

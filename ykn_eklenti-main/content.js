@@ -62,14 +62,6 @@ async function simulateDateboxInput(element, formattedDate) {
         element.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     } catch (_) {}
 
-    try {
-        element.focus();
-        element.dispatchEvent(new FocusEvent('focus', { bubbles: false }));
-        element.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-    } catch (_) {}
-
-    await new Promise((r) => setTimeout(r, 20));
-
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
     if (nativeSetter) {
         nativeSetter.call(element, formattedDate);
@@ -78,19 +70,12 @@ async function simulateDateboxInput(element, formattedDate) {
     }
 
     element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-
-    await new Promise((r) => setTimeout(r, 20));
 
     element.classList.remove('z-datebox-invalid');
     const parentBox = element.closest('.z-datebox');
     if (parentBox) {
         parentBox.classList.remove('z-datebox-invalid');
     }
-
-    element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
-    element.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
-    try { element.blur(); } catch (_) {}
     return true;
 }
 
