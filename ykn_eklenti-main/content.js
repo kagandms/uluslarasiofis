@@ -458,7 +458,12 @@ function findBelgeNoInMainPanel() {
 
 // YÖKSİS: Diğer alanlar için çok güçlü, boşluk duyarsız arayıcı
 function findTargetElementByFuzzyLabel(labelText, tagName) {
-    const normalize = str => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+    const normalize = (str) => (str || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '');
     const searchWord = normalize(labelText);
     
     const allTargets = document.querySelectorAll(tagName);
@@ -495,6 +500,24 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
         }
     }
     return null;
+}
+
+function findTargetElementByFuzzyLabels(labelTexts, tagName) {
+    for (const labelText of labelTexts) {
+        const target = findTargetElementByFuzzyLabel(labelText, tagName);
+        if (target) return target;
+    }
+    return null;
+}
+
+function formatDateForYoksisInput(element, isoDate) {
+    if (!element || !isoDate) return isoDate || '';
+    if ((element.getAttribute('type') || '').toLowerCase() === 'date') return isoDate;
+
+    const [year, month, day] = isoDate.split('-');
+    const placeholder = element.getAttribute('placeholder') || '';
+    const separator = placeholder.match(/[./-]/)?.[0] || '.';
+    return day + separator + month + separator + year;
 }
 
 function normalizeApplyText(value) {
@@ -1166,6 +1189,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const belgeNoInput = findBelgeNoInMainPanel();
             if (simulateInput(belgeNoInput, data.pasaportNo)) successCount++;
 
+            const issueDateInput = findTargetElementByFuzzyLabels([
+                'Pasaport Veriliş Tarihi',
+                'Pasaport Düzenlenme Tarihi',
+                'Belgenin Düzenlenme Tarihi',
+                'Düzenlenme Tarihi',
+                'Veriliş Tarihi',
+                'Date of Issue',
+                'Issue Date'
+            ], 'input');
+            const expiryDateInput = findTargetElementByFuzzyLabels([
+                'Pasaport Son Geçerlilik Tarihi',
+                'Pasaport Geçerlilik Tarihi',
+                'Belgenin Geçerlilik Tarihi',
+                'Son Geçerlilik Tarihi',
+                'Geçerlilik Tarihi',
+                'Date of Expiry',
+                'Expiry Date',
+                'Expiration Date'
+            ], 'input');
+
+            if (issueDateInput && data.issueDate
+                && simulateInput(issueDateInput, formatDateForYoksisInput(issueDateInput, data.issueDate))) {
+                successCount++;
+            }
+            if (expiryDateInput && data.expiryDate
+                && simulateInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, data.expiryDate))) {
+                successCount++;
+            }
+
             // Kullanıcının manuel olarak tıklayıp tetiklediği odaklanma/blur zincirini otomatik çalıştır
             const priorityElements = [
                 babaAdiInput,
@@ -1173,7 +1225,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 anneAdiInput,
                 verenMakam,
                 telefonNoInput,
-                belgeNoInput
+                belgeNoInput,
+                issueDateInput,
+                expiryDateInput
             ].filter(Boolean);
 
             for (const el of priorityElements) {

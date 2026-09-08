@@ -45,9 +45,40 @@ test('rejects invalid passport date order instead of guessing', () => {
     assert.deepEqual(result, { issueDate: '', expiryDate: '' });
 });
 
+test('extracts passport dates written with English month names', () => {
+    const result = extractPassportDatesFromText(
+        'Date of issue: 11 MAR 2025 Date of expiry: 11 SEPTEMBER 2030'
+    );
+
+    assert.deepEqual(result, { issueDate: '2025-03-11', expiryDate: '2030-09-11' });
+});
+
+test('extracts passport dates separated by spaces after OCR', () => {
+    const result = extractPassportDatesFromText(
+        'Düzenlenme tarihi: 11 03 2025 Geçerlilik tarihi: 11 03 2030'
+    );
+
+    assert.deepEqual(result, { issueDate: '2025-03-11', expiryDate: '2030-03-11' });
+});
+
+test('extracts passport dates with two-digit years', () => {
+    const result = extractPassportDatesFromText(
+        'Date of issue: 11/03/25 Date of expiry: 11/03/30'
+    );
+
+    assert.deepEqual(result, { issueDate: '2025-03-11', expiryDate: '2030-03-11' });
+});
+
+test('extracts passport dates without separators in day-first and year-first formats', () => {
+    const result = extractPassportDatesFromText(
+        'Date of issue: 11032025 Date of expiry: 20300311'
+    );
+
+    assert.deepEqual(result, { issueDate: '2025-03-11', expiryDate: '2030-03-11' });
+});
+
 test('extracts YOKSIS ID from various acceptance letter formats', () => {
     assert.equal(extractYoksisIdFromText('KABUL MEKTUBU KODU: 821-EC2-34'), '821-EC2-34');
     assert.equal(extractYoksisIdFromText('VERIFICATION CODE: 0F0-881-60'), '0F0-881-60');
     assert.equal(extractYoksisIdFromText('ACCEPTANCE LETTER NO: ABC-123-XY'), 'ABC-123-XY');
 });
-
