@@ -1,6 +1,6 @@
 import { showToast } from '../ui/toastManager.js';
 import { extractPassportDatesFromText, extractYoksisIdFromText, isValidYoksisId, parseDateValue } from '../utils/ykn-document-parser.js';
-import { initPassportCropperModal, openPassportCropper } from '../ui/passportCropperModal.js';
+import { initPassportCropperModal, openPassportCropper, isPassportCropperOpen } from '../ui/passportCropperModal.js';
 
 function ensurePdfWorkerReady() {
     if (window.pdfjsLib) {
@@ -219,6 +219,7 @@ export function initYknManager() {
     let extensionBridgeActive = false;
     let extensionCheckRequestId = null;
     let extensionCheckTimeoutTimer = null;
+    let shouldOpenCropperWhenReady = false;
     const pendingDocumentReads = new Set();
 
     function createRequestId() {
@@ -292,6 +293,7 @@ export function initYknManager() {
     }
 
     function resetStudentActions() {
+        shouldOpenCropperWhenReady = false;
         if (btnCopyInfo) btnCopyInfo.disabled = true;
         if (btnCopyLetter) btnCopyLetter.disabled = true;
         if (btnPasteYoksis) btnPasteYoksis.disabled = true;
@@ -389,12 +391,15 @@ export function initYknManager() {
                 if (passportImageSrc) {
                     currentStudentData = { ...currentStudentData, passportImageSrc };
                     updateStudentActions(currentStudentData);
-                    openPassportCropper({
-                        imageSrc: passportImageSrc,
-                        studentName: currentStudentData?.fullName || '',
-                        passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
-                    });
-                    addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
+                    if (shouldOpenCropperWhenReady) {
+                        openPassportCropper({
+                            imageSrc: passportImageSrc,
+                            studentName: currentStudentData?.fullName || '',
+                            passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                        });
+                        addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
+                        shouldOpenCropperWhenReady = false;
+                    }
                 }
 
                 // Pasaport tarih çıkarma işlemi (hızlı metin çıkarma + gerekirse güvenli süreli OCR)
@@ -623,6 +628,8 @@ export function initYknManager() {
                 return;
             }
 
+            shouldOpenCropperWhenReady = true;
+
             addStatus('Öğrenci bilgileri Apply oturumundan kopyalanıyor...', 'info');
             window.postMessage({
                 source: 'WEB_APP',
@@ -639,6 +646,7 @@ export function initYknManager() {
                     studentName: currentStudentData?.fullName || '',
                     passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
                 });
+                shouldOpenCropperWhenReady = false;
             } else {
                 const passportDocumentUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
                 if (passportDocumentUrl) {
@@ -657,12 +665,14 @@ export function initYknManager() {
                 showToast('Lütfen önce bir öğrenci arayın.', 'warning');
                 return;
             }
+            shouldOpenCropperWhenReady = true;
             if (currentStudentData.passportImageSrc) {
                 openPassportCropper({
                     imageSrc: currentStudentData.passportImageSrc,
                     studentName: currentStudentData?.fullName || '',
                     passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
                 });
+                shouldOpenCropperWhenReady = false;
             } else {
                 const passportDocumentUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
                 if (passportDocumentUrl) {
@@ -820,18 +830,21 @@ export function initYknManager() {
                     addStatus(`Bilgiler başarıyla kopyalandı (${details || 'Tüm alanlar'}).`, 'success');
                     showToast('Öğrenci bilgileri kopyalandı ve YÖKSİS için hazırlandı.', 'success');
 
-                    // Pasaport kırpıcıyı hemen aç veya belgeyi iste
-                    if (currentStudentData.passportImageSrc) {
-                        openPassportCropper({
-                            imageSrc: currentStudentData.passportImageSrc,
-                            studentName: currentStudentData?.fullName || '',
-                            passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
-                        });
-                    } else {
-                        const passUrl = currentStudentData.passportImageUrl || currentStudentData.passportDocumentUrl;
-                        if (passUrl) {
-                            addStatus('Pasaport belgesi alınıyor ve fotoğraf kırpıcı hazırlanıyor...', 'info');
-                            requestApplyDocument('passport', passUrl);
+                    // Pasaport kırpıcıyı aç veya belgeyi iste (kullanıcı Bilgileri Kopyala'ya bastığı için)
+                    if (!isPassportCropperOpen()) {
+                        if (currentStudentData.passportImageSrc) {
+                            openPassportCropper({
+                                imageSrc: currentStudentData.passportImageSrc,
+                                studentName: currentStudentData?.fullName || '',
+                                passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                            });
+                            shouldOpenCropperWhenReady = false;
+                        } else {
+                            const passUrl = currentStudentData.passportImageUrl || currentStudentData.passportDocumentUrl;
+                            if (passUrl) {
+                                addStatus('Pasaport belgesi alınıyor ve fotoğraf kırpıcı hazırlanıyor...', 'info');
+                                requestApplyDocument('passport', passUrl);
+                            }
                         }
                     }
                 } else {
