@@ -409,35 +409,30 @@ async function syncYoksisFormInMainWorld(tabId) {
                             if (y >= 2010 && y <= 2045 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
                                 var formatted = ('0' + d).slice(-2) + '.' + ('0' + m).slice(-2) + '.' + y;
                                 el.value = formatted;
-
-                                try {
-                                    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                                } catch (_) {}
+                                var dateObj = new Date(y, m - 1, d, 0, 0, 0, 0);
 
                                 if (window.zk && window.zk.Widget) {
                                     var w = window.zk.Widget.$(el);
                                     if (w) {
-                                        // 1. ZK'nin parse ve validation metodlarini guvenli hale getir.
-                                        // KÖK NEDEN TESPİTİ:
-                                        // ZK'ya JavaScript Date objesi verildiğinde, zAu/JSON serileştirmesi
-                                        // bu objeyi ISO string'e ("2020-06-14T21:00:00.000Z") çevirir.
-                                        // YÖKSİS sunucusundaki SimpleDateFormat("dd.MM.yyyy") ise bunu parse edemez
-                                        // ve "2020-06-14T21:00:00.000Z tarihinden başka tarih girmelisiniz. Format: dd.MM.yyyy"
-                                        // hatasını (MZul.DATE_REQUIRED) fırlatır!
-                                        // Bu nedenle ZK widget'ına daima "dd.MM.yyyy" formatında STRING verilmelidir!
-                                        w.coerceFromString_ = function () { return formatted; };
+                                        // 1. ZK client-side validation ve parse mekanizmasını güvenceye al:
+                                        // coerceFromString_ Date nesnesi döndürmelidir ki client-side validate_
+                                        // veya ZK dahili kontrolleri !(val instanceof Date) hatası fırlatmasın.
+                                        w.coerceFromString_ = function () { return dateObj; };
                                         w.coerceToString_ = function () { return formatted; };
-                                        w.getValue = function () { return formatted; };
+                                        w.getValue = function () { return dateObj; };
                                         w.getText = function () { return formatted; };
                                         w.validate_ = function () { return null; };
                                         if (w._cst && typeof w._cst === 'object') {
                                             try { w._cst.validate = function () { return null; }; } catch (_) {}
                                         }
 
-                                        // 2. Widget hafizasini guncelle
-                                        w._lastValue = '';
-                                        w._value = formatted;
+                                        // 2. Widget hafızasını güncelle
+                                        w._lastValue = formatted;
+                                        w._value = dateObj;
                                         w._shallSubmit = true;
+                                        w._defRawVal = formatted;
+                                        w._lastChg = formatted;
+
                                         if (w.$n('real')) {
                                             w.$n('real').value = formatted;
                                         }
@@ -445,10 +440,10 @@ async function syncYoksisFormInMainWorld(tabId) {
                                             try { w.setText(formatted); } catch (_) {}
                                         }
                                         if (typeof w.setValue === 'function') {
-                                            try { w.setValue(formatted); } catch (_) {}
+                                            try { w.setValue(dateObj); } catch (_) {}
                                         }
 
-                                        // 3. Hata mesajlarini ve siniflarini temizle
+                                        // 3. Hata mesajlarını ve invalid CSS sınıflarını temizle
                                         if (typeof w.clearErrorMessage === 'function') {
                                             try { w.clearErrorMessage(true); } catch (_) {}
                                         }
@@ -457,28 +452,36 @@ async function syncYoksisFormInMainWorld(tabId) {
                                             w._errmsg = null;
                                         }
 
-                                        el.classList.remove('z-datebox-invalid');
-                                        el.classList.remove('z-textbox-invalid');
+                                        el.classList.remove('z-datebox-invalid', 'z-textbox-invalid');
                                         var parentBox = el.closest('.z-datebox');
                                         if (parentBox) {
-                                            parentBox.classList.remove('z-datebox-invalid');
-                                            parentBox.classList.remove('z-textbox-invalid');
+                                            parentBox.classList.remove('z-datebox-invalid', 'z-textbox-invalid');
                                         }
 
-                                        // 4. Sunucuya değişikliği bildir (ZK onChange)
-                                        if (typeof w.updateChange_ === 'function') {
-                                            try { w.updateChange_(); } catch (_) {}
-                                        }
-                                        if (typeof w.fire === 'function') {
-                                            try { w.fire('onChange', { value: formatted, start: formatted.length }, { toServer: true }); } catch (_) {}
-                                        }
+                                        // 4. Sunucuya değişikliği rawValue ile bildir!
+                                        // Java ZK InputElement.java:
+                                        //   final String rawValue = (String) data.get("rawValue");
+                                        //   if (rawValue != null) {
+                                        //       value = coerceFromString(rawValue);
+                                        //   }
+                                        // rawValue verildiğinde, sunucu Datebox.coerceFromString("dd.MM.yyyy")
+                                        // çağırarak string'i java.util.Date nesnesine kusursuz dönüştürür.
                                         if (window.zAu && typeof window.zAu.send === 'function') {
                                             try {
-                                                window.zAu.send(new window.zk.Event(w, 'onChange', { value: formatted, start: formatted.length }, { toServer: true }));
+                                                window.zAu.send(new window.zk.Event(w, 'onChange', {
+                                                    rawValue: formatted,
+                                                    value: formatted,
+                                                    start: formatted.length
+                                                }, { toServer: true }));
                                             } catch (_) {}
                                         }
                                     }
                                 }
+
+                                try {
+                                    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                                } catch (_) {}
                             }
                         }
                     }
@@ -543,6 +546,21 @@ async function syncYoksisFormInMainWorld(tabId) {
                     setTimeout(purgeErrorBoxes, 50);
                     setTimeout(purgeErrorBoxes, 150);
                     setTimeout(purgeErrorBoxes, 350);
+
+                    try {
+                        if (!window.__ykn_save_hook_installed) {
+                            window.__ykn_save_hook_installed = true;
+                            document.addEventListener('click', function (e) {
+                                var btn = e.target ? e.target.closest('button, .z-button, a, input[type="button"], input[type="submit"]') : null;
+                                if (btn) {
+                                    var txt = norm(btn.innerText || btn.textContent || btn.value || '');
+                                    if (txt.indexOf('kaydet') !== -1 || txt.indexOf('guncelle') !== -1) {
+                                        purgeErrorBoxes();
+                                    }
+                                }
+                            }, true);
+                        }
+                    } catch (_) {}
                 } catch (e) {
                     console.error('[YKN MAIN World Form Sync Error]', e);
                 }
