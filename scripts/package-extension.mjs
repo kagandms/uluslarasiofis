@@ -69,11 +69,46 @@ function createZipArchive(archivePath) {
     const localParts = [];
     const centralParts = [];
     let localOffset = 0;
+    const folderPrefix = 'ykn_eklenti/';
+
+    const dirEntryBytes = Buffer.from(folderPrefix, 'utf8');
+    const dirLocalHeader = Buffer.alloc(30);
+    dirLocalHeader.writeUInt32LE(0x04034b50, 0);
+    dirLocalHeader.writeUInt16LE(20, 4);
+    dirLocalHeader.writeUInt16LE(0, 6);
+    dirLocalHeader.writeUInt16LE(0, 8);
+    dirLocalHeader.writeUInt32LE(0, 14);
+    dirLocalHeader.writeUInt32LE(0, 18);
+    dirLocalHeader.writeUInt32LE(0, 22);
+    dirLocalHeader.writeUInt16LE(dirEntryBytes.length, 26);
+    dirLocalHeader.writeUInt16LE(0, 28);
+
+    const dirCentralHeader = Buffer.alloc(46);
+    dirCentralHeader.writeUInt32LE(0x02014b50, 0);
+    dirCentralHeader.writeUInt16LE(20, 4);
+    dirCentralHeader.writeUInt16LE(20, 6);
+    dirCentralHeader.writeUInt16LE(0, 8);
+    dirCentralHeader.writeUInt16LE(0, 10);
+    dirCentralHeader.writeUInt32LE(0, 16);
+    dirCentralHeader.writeUInt32LE(0, 20);
+    dirCentralHeader.writeUInt32LE(0, 24);
+    dirCentralHeader.writeUInt16LE(dirEntryBytes.length, 28);
+    dirCentralHeader.writeUInt16LE(0, 30);
+    dirCentralHeader.writeUInt16LE(0, 32);
+    dirCentralHeader.writeUInt16LE(0, 34);
+    dirCentralHeader.writeUInt16LE(0, 36);
+    dirCentralHeader.writeUInt32LE(0x10, 38);
+    dirCentralHeader.writeUInt32LE(localOffset, 42);
+
+    localParts.push(dirLocalHeader, dirEntryBytes);
+    centralParts.push(dirCentralHeader, dirEntryBytes);
+    localOffset += dirLocalHeader.length + dirEntryBytes.length;
 
     for (const fileName of extensionFiles) {
         const fileData = readFileSync(join(extensionRoot, fileName));
         const compressedData = deflateRawSync(fileData, { level: 9 });
-        const fileNameBytes = Buffer.from(fileName, 'utf8');
+        const entryName = `${folderPrefix}${fileName}`;
+        const fileNameBytes = Buffer.from(entryName, 'utf8');
         const checksum = calculateCrc32(fileData);
         const localHeader = Buffer.alloc(30);
         localHeader.writeUInt32LE(0x04034b50, 0);
@@ -100,12 +135,13 @@ function createZipArchive(archivePath) {
         localOffset += localHeader.length + fileNameBytes.length + compressedData.length;
     }
 
+    const totalEntries = extensionFiles.length + 1;
     const centralDirectory = Buffer.concat(centralParts);
     const localDirectory = Buffer.concat(localParts);
     const endOfDirectory = Buffer.alloc(22);
     endOfDirectory.writeUInt32LE(0x06054b50, 0);
-    endOfDirectory.writeUInt16LE(extensionFiles.length, 8);
-    endOfDirectory.writeUInt16LE(extensionFiles.length, 10);
+    endOfDirectory.writeUInt16LE(totalEntries, 8);
+    endOfDirectory.writeUInt16LE(totalEntries, 10);
     endOfDirectory.writeUInt32LE(centralDirectory.length, 12);
     endOfDirectory.writeUInt32LE(localDirectory.length, 16);
     writeFileSync(archivePath, Buffer.concat([localDirectory, centralDirectory, endOfDirectory]));
