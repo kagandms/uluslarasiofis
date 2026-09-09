@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ikamet-cache-v5';
+const CACHE_NAME = 'ikamet-cache-v6';
 
 const PRECACHE_ASSETS = [
   '/manifest.json',
@@ -38,12 +38,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Geri kalan her şey için: Stale-While-Revalidate Stratejisi
-  // (Önce hızlıca önbellekten ver, arka planda ağdan en yenisini indirip önbelleği güncelle)
+  // /src/ modülleri ve uygulama kodları için: Ağ Öncelikli (Network First) Stratejisi
+  // Böylece kod güncellemeleri anında kullanıcının ekranına yansır, internet kesilirse önbelleğe döner.
+  if (url.pathname.startsWith('/src/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Statik varlıklar için: Stale-While-Revalidate Stratejisi
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request).then((networkResponse) => {
-        // Geçerli bir cevap geldiyse önbelleği güncelle
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -55,7 +70,6 @@ self.addEventListener('fetch', (event) => {
         // İnternet yoksa sessiz kal, cachedResponse dönecektir.
       });
 
-      // Önbellekte varsa hemen onu dön, yoksa ağ isteğini bekle
       return cachedResponse || fetchPromise;
     })
   );

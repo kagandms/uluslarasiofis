@@ -171,15 +171,10 @@ document.addEventListener('DOMContentLoaded', () => {
     try { initWorkspaceNavigation(); } catch (e) { console.error('initWorkspaceNavigation error:', e); }
     try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
     
-    initDraftAutoSave();
-    
-    // Set active step to Upload
-    setActiveStep(STEP_IDS.UPLOAD);
-    
-    renderStudentForms([{}]);
-    
+    try { initDraftAutoSave(); } catch (e) { console.error('initDraftAutoSave error:', e); }
+    try { setActiveStep(STEP_IDS.UPLOAD); } catch (e) { console.error('setActiveStep error:', e); }
+    try { renderStudentForms([{}]); } catch (e) { console.error('renderStudentForms error:', e); }
 
-    
     const dailyCounterWidget = document.getElementById('daily-counter-widget');
     if (dailyCounterWidget) {
         dailyCounterWidget.style.cursor = 'pointer';
@@ -197,9 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- Manual Entry & Form Clear ---
-    const btnManualEntry = document.getElementById('btn-manual-entry');
-    if (btnManualEntry) {
-        btnManualEntry.addEventListener('click', () => {
+    function handleManualEntry() {
+        try {
             croppedImages = [];
             page1ImageObj = null;
             
@@ -216,6 +210,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             setActiveStep(STEP_IDS.FORM_RESULT);
             restoreDraft();
+
+            setTimeout(() => {
+                const firstField = document.querySelector('#step-3 [data-field="basvuru-no"], #step-3 input:not([type="hidden"])');
+                if (firstField) firstField.focus();
+                const step3 = document.getElementById('step-3');
+                if (step3) step3.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 50);
+        } catch (err) {
+            console.error('[Manuel Form] Hata:', err);
+            showToast('Manuel form açılırken hata: ' + err.message, 'error');
+        }
+    }
+
+    const btnManualEntry = document.getElementById('btn-manual-entry');
+    if (btnManualEntry) {
+        btnManualEntry.addEventListener('click', (e) => {
+            e.preventDefault();
+            handleManualEntry();
         });
     }
 
