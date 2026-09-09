@@ -1382,27 +1382,43 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
             const dogumYeriAciklamasi = findTargetElementByFuzzyLabel('Doğum Yeri Açıklaması', 'input');
 
-            if (uyrukNorm.includes('türkmenistan') || uyrukNorm.includes('turkmenistan') || dogumNorm.includes('türkmenistan') || dogumNorm.includes('turkmenistan')) {
-                if (dogumYeriAciklamasi && (await simulateInput(dogumYeriAciklamasi, 'TKM'))) successCount++;
-                if (verenMakam && (await simulateInput(verenMakam, 'SMST'))) successCount++;
-            } 
-            else if (uyrukNorm.includes('afgan') || dogumNorm.includes('afgan')) {
-                if (dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
-                    if (await simulateInput(dogumYeriAciklamasi, 'AFG')) successCount++;
+            const customDogumYeri = (data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || '').trim();
+            const customVerenMakam = (data.verenMakam || data.issuingAuthority || '').trim();
+
+            let filledDogumYeri = false;
+            let filledVerenMakam = false;
+
+            if (customDogumYeri && dogumYeriAciklamasi) {
+                if (await simulateInput(dogumYeriAciklamasi, customDogumYeri)) {
+                    successCount++;
+                    filledDogumYeri = true;
                 }
-                if (verenMakam && (await simulateInput(verenMakam, 'AFGHAN'))) successCount++;
-            } 
-            else if (uyrukNorm.includes('pakistan') || dogumNorm.includes('pakistan')) {
-                if (dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
-                    if (await simulateInput(dogumYeriAciklamasi, 'PAK')) successCount++;
+            }
+
+            if (customVerenMakam && verenMakam) {
+                if (await simulateInput(verenMakam, customVerenMakam)) {
+                    successCount++;
+                    filledVerenMakam = true;
                 }
-                if (verenMakam && (await simulateInput(verenMakam, 'PAKISTAN'))) successCount++;
-            } else {
-                if (dogumYeriAciklamasi && data.dogumYeriAciklamasi) {
-                    if (await simulateInput(dogumYeriAciklamasi, data.dogumYeriAciklamasi)) successCount++;
-                }
-                if (verenMakam && data.verenMakam) {
-                    if (await simulateInput(verenMakam, data.verenMakam)) successCount++;
+            }
+
+            // Değerler portaldan gelmediyse ülke bazlı akıllı şablonları uygula
+            if (!filledDogumYeri || !filledVerenMakam) {
+                if (uyrukNorm.includes('türkmenistan') || uyrukNorm.includes('turkmenistan') || dogumNorm.includes('türkmenistan') || dogumNorm.includes('turkmenistan')) {
+                    if (!filledDogumYeri && dogumYeriAciklamasi && (await simulateInput(dogumYeriAciklamasi, 'TKM'))) successCount++;
+                    if (!filledVerenMakam && verenMakam && (await simulateInput(verenMakam, 'SMST'))) successCount++;
+                } 
+                else if (uyrukNorm.includes('afgan') || dogumNorm.includes('afgan')) {
+                    if (!filledDogumYeri && dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
+                        if (await simulateInput(dogumYeriAciklamasi, 'AFG')) successCount++;
+                    }
+                    if (!filledVerenMakam && verenMakam && (await simulateInput(verenMakam, 'AFGHAN'))) successCount++;
+                } 
+                else if (uyrukNorm.includes('pakistan') || dogumNorm.includes('pakistan')) {
+                    if (!filledDogumYeri && dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
+                        if (await simulateInput(dogumYeriAciklamasi, 'PAK')) successCount++;
+                    }
+                    if (!filledVerenMakam && verenMakam && (await simulateInput(verenMakam, 'PAKISTAN'))) successCount++;
                 }
             }
             

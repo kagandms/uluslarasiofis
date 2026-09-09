@@ -1,5 +1,12 @@
 import { showToast } from '../ui/toastManager.js';
-import { extractPassportDatesFromText, extractYoksisIdFromText, isValidYoksisId, parseDateValue } from '../utils/ykn-document-parser.js';
+import {
+    extractPassportDatesFromText,
+    extractYoksisIdFromText,
+    isValidYoksisId,
+    parseDateValue,
+    extractPassportPlaceOfBirth,
+    extractPassportIssuingAuthority
+} from '../utils/ykn-document-parser.js';
 import { initPassportCropperModal, openPassportCropper, isPassportCropperOpen } from '../ui/passportCropperModal.js';
 
 function ensurePdfWorkerReady() {
@@ -137,6 +144,8 @@ export function initYknManager() {
     const btnExtensionRecheck = document.getElementById('btn-ykn-extension-recheck');
     const inputIssueDate = document.getElementById('ykn-issue-date');
     const inputExpiryDate = document.getElementById('ykn-expiry-date');
+    const inputBirthPlace = document.getElementById('ykn-birth-place');
+    const inputIssuingAuthority = document.getElementById('ykn-issuing-authority');
 
     initPassportCropperModal();
 
@@ -158,6 +167,17 @@ export function initYknManager() {
         if (inputExpiryDate && inputExpiryDate.value.trim()) {
             const parsed = parseDateValue(inputExpiryDate.value.trim());
             currentStudentData.expiryDate = parsed || inputExpiryDate.value.trim();
+        }
+        if (inputBirthPlace && inputBirthPlace.value.trim()) {
+            const bp = inputBirthPlace.value.trim().toUpperCase();
+            currentStudentData.birthPlace = bp;
+            currentStudentData.dogumYeri = bp;
+            currentStudentData.dogumYeriAciklamasi = bp;
+        }
+        if (inputIssuingAuthority && inputIssuingAuthority.value.trim()) {
+            const auth = inputIssuingAuthority.value.trim().toUpperCase();
+            currentStudentData.issuingAuthority = auth;
+            currentStudentData.verenMakam = auth;
         }
     }
 
@@ -301,6 +321,8 @@ export function initYknManager() {
         if (btnCropPhoto) btnCropPhoto.style.display = 'none';
         if (inputIssueDate) inputIssueDate.value = '';
         if (inputExpiryDate) inputExpiryDate.value = '';
+        if (inputBirthPlace) inputBirthPlace.value = '';
+        if (inputIssuingAuthority) inputIssuingAuthority.value = '';
     }
 
     function updateStudentActions(studentData) {
@@ -455,12 +477,37 @@ export function initYknManager() {
                     }
                 }
 
-                if (passportDates.issueDate && passportDates.expiryDate) {
-                    addStatus('Pasaport düzenlenme ve geçerlilik tarihleri başarıyla okundu.', 'success');
-                } else if (passportDates.issueDate || passportDates.expiryDate) {
-                    addStatus('Pasaport tarihi kısmen okundu. Eksik alanı kontrol edip gerekirse yazabilirsiniz.', 'info');
+                // Pasaport doğum yeri ve veren makam analizi
+                const detectedBirthPlace = extractPassportPlaceOfBirth(text) || (ocrText ? extractPassportPlaceOfBirth(ocrText) : '');
+                const detectedAuthority = extractPassportIssuingAuthority(text) || (ocrText ? extractPassportIssuingAuthority(ocrText) : '');
+
+                if (detectedBirthPlace) {
+                    currentStudentData.birthPlace = detectedBirthPlace;
+                    currentStudentData.dogumYeri = detectedBirthPlace;
+                    currentStudentData.dogumYeriAciklamasi = detectedBirthPlace;
+                    if (inputBirthPlace) inputBirthPlace.value = detectedBirthPlace;
+                } else if (currentStudentData?.dogumUlkesi && inputBirthPlace && !inputBirthPlace.value) {
+                    const fallbackCountry = currentStudentData.dogumUlkesi.toUpperCase();
+                    currentStudentData.dogumYeriAciklamasi = fallbackCountry;
+                    inputBirthPlace.value = fallbackCountry;
+                }
+
+                if (detectedAuthority) {
+                    currentStudentData.issuingAuthority = detectedAuthority;
+                    currentStudentData.verenMakam = detectedAuthority;
+                    if (inputIssuingAuthority) inputIssuingAuthority.value = detectedAuthority;
+                }
+
+                const foundItems = [];
+                if (passportDates.issueDate && passportDates.expiryDate) foundItems.push('tarihler');
+                else if (passportDates.issueDate || passportDates.expiryDate) foundItems.push('kısmi tarihler');
+                if (detectedBirthPlace || inputBirthPlace?.value) foundItems.push('doğum yeri');
+                if (detectedAuthority || inputIssuingAuthority?.value) foundItems.push('veren makam');
+
+                if (foundItems.length > 0) {
+                    addStatus(`Pasaport bilgileri okundu (${foundItems.join(', ')}).`, 'success');
                 } else {
-                    addStatus('Pasaport tarihleri otomatik okunamadı. Gerekirse kutucuklara yazabilirsiniz.', 'info');
+                    addStatus('Pasaport bilgileri otomatik okunamadı. Gerekirse kutucuklara yazabilirsiniz.', 'info');
                 }
 
                 return;
@@ -734,6 +781,12 @@ export function initYknManager() {
     if (inputExpiryDate) {
         inputExpiryDate.addEventListener('input', syncUserEnteredPassportDates);
     }
+    if (inputBirthPlace) {
+        inputBirthPlace.addEventListener('input', syncUserEnteredPassportDates);
+    }
+    if (inputIssuingAuthority) {
+        inputIssuingAuthority.addEventListener('input', syncUserEnteredPassportDates);
+    }
 
     window.addEventListener('ykn:photo-cropped', (e) => {
         const { dataUrl, fileName, autoTransfer } = e.detail || {};
@@ -852,6 +905,15 @@ export function initYknManager() {
                     currentStudentData = { ...currentStudentData, ...data };
                     updateStudentActions(currentStudentData);
 
+                    if (inputBirthPlace && !inputBirthPlace.value && data.dogumUlkesi) {
+                        inputBirthPlace.value = data.dogumUlkesi.toUpperCase();
+                        currentStudentData.dogumYeriAciklamasi = data.dogumUlkesi.toUpperCase();
+                    }
+                    if (inputIssuingAuthority && !inputIssuingAuthority.value && data.verenMakam) {
+                        inputIssuingAuthority.value = data.verenMakam.toUpperCase();
+                        currentStudentData.verenMakam = data.verenMakam.toUpperCase();
+                    }
+
                     const lines = [];
                     if (currentStudentData.fullName) lines.push(`Öğrenci: ${currentStudentData.fullName}`);
                     if (data.pasaportNo) lines.push(`Pasaport No: ${data.pasaportNo}`);
@@ -859,6 +921,7 @@ export function initYknManager() {
                     if (data.babaAdi) lines.push(`Baba Adı: ${data.babaAdi}`);
                     if (data.uyruk) lines.push(`Uyruk: ${data.uyruk}`);
                     if (data.dogumUlkesi) lines.push(`Doğum Yeri/Ülkesi: ${data.dogumUlkesi}`);
+                    if (data.verenMakam) lines.push(`Veren Makam: ${data.verenMakam}`);
                     if (data.cinsiyet) lines.push(`Cinsiyet: ${data.cinsiyet}`);
 
                     const copyText = lines.join('\n');

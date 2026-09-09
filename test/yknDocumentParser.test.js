@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { extractPassportDatesFromText, extractYoksisIdFromText, isValidYoksisId } from '../src/utils/ykn-document-parser.js';
+import {
+    extractPassportDatesFromText,
+    extractYoksisIdFromText,
+    isValidYoksisId,
+    extractPassportPlaceOfBirth,
+    extractPassportIssuingAuthority,
+    extractPassportMetadata
+} from '../src/utils/ykn-document-parser.js';
 
 test('extracts a labeled YÖKSİS ID from acceptance letter text', () => {
     const result = extractYoksisIdFromText('Acceptance information - YÖKSİS ID: ABC-123-XY');
@@ -181,5 +188,48 @@ test('rejects student birthDate or dates before 2010 from being selected as issu
 
     assert.equal(result.issueDate, '2024-10-10');
     assert.equal(result.expiryDate, '2029-10-09');
+});
+
+test('extracts place of birth from English, Turkish, Russian and Uzbek passport text', () => {
+    const textEn = 'PASSPORT REPUBLIC Place of birth: ASHGABAT Date of issue: 10.02.2024';
+    assert.equal(extractPassportPlaceOfBirth(textEn), 'ASHGABAT');
+
+    const textTr = 'TÜRKİYE CUMHURİYETİ PASAPORT Doğum Yeri: İSTANBUL Verildiği Tarih: 15.05.2023';
+    assert.equal(extractPassportPlaceOfBirth(textTr), 'İSTANBUL');
+
+    const textRu = 'ПАСПОРТ Место рождения: САМАРКАНД Дата выдачи: 12.01.2022';
+    assert.equal(extractPassportPlaceOfBirth(textRu), 'САМАРКАНД');
+
+    const textUz = "O'ZBEKISTON RESPUBLIKASI Tug'ilgan joyi: TOSHKENT Berilgan sanasi: 01.06.2023";
+    assert.equal(extractPassportPlaceOfBirth(textUz), 'TOSHKENT');
+});
+
+test('extracts issuing authority from English, Turkish, French and Russian passport text', () => {
+    const textEn = 'PASSPORT Authority: STATE MIGRATION SERVICE OF TURKMENISTAN Date of issue: 10.02.2024';
+    assert.equal(extractPassportIssuingAuthority(textEn), 'STATE MIGRATION SERVICE OF TURKMENISTAN');
+
+    const textTr = 'PASAPORT Belgeyi Veren Makam: İSTANBUL EMNİYET MÜDÜRLÜĞÜ Düzenlenme: 15.05.2023';
+    assert.equal(extractPassportIssuingAuthority(textTr), 'İSTANBUL EMNİYET MÜDÜRLÜĞÜ');
+
+    const textShort = 'PASSPORT Authority: SMST 1002 Date of expiry: 10.02.2029';
+    assert.equal(extractPassportIssuingAuthority(textShort), 'SMST 1002');
+
+    const textRu = 'ПАСПОРТ Орган выдачи: МВД 77001 Дата выдачи: 01.05.2021';
+    assert.equal(extractPassportIssuingAuthority(textRu), 'МВД 77001');
+});
+
+test('extractPassportMetadata returns comprehensive object with dates, place of birth, and authority', () => {
+    const fullText = `
+    PASSPORT
+    Place of birth: ASHGABAT
+    Authority: SMST
+    Date of issue: 11.03.2025
+    Date of expiry: 11.03.2030
+    `;
+    const metadata = extractPassportMetadata(fullText);
+    assert.equal(metadata.issueDate, '2025-03-11');
+    assert.equal(metadata.expiryDate, '2030-03-11');
+    assert.equal(metadata.placeOfBirth, 'ASHGABAT');
+    assert.equal(metadata.issuingAuthority, 'SMST');
 });
 

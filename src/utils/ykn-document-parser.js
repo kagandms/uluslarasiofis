@@ -433,3 +433,96 @@ export function extractPassportDatesFromText(text, options = {}) {
         expiryDate: expiryDate || ''
     };
 }
+
+export function extractPassportPlaceOfBirth(text) {
+    if (!text || typeof text !== 'string') return '';
+    const normalized = text.replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
+
+    const labels = [
+        'place of birth\\s*[/\\\\]\\s*lieu de naissance',
+        'place of birth',
+        'lieu de naissance',
+        'birth place',
+        'place of origin',
+        'pob',
+        'doğum yeri',
+        'dogum yeri',
+        'doğduğu yer',
+        'dogdugu yer',
+        'место рождения',
+        'место рожд',
+        'mesto rozhdeniya',
+        "tug['`’]ilgan joyi",
+        'tugilgan joyi',
+        'tuulgan zheri'
+    ];
+
+    const labelPattern = labels.join('|');
+    const stopWords = '(?:\\s+(?:date|дата|tarih|tarihi|veril|verilis|verildigi|verildiği|veriliş|tanzim|duzen|düzen|gecerlilik|geçerlilik|expiry|valid|sex|пол|cinsiyet|authority|орган|makam|signature|подпись|imza|uyruk|nation|гражданство)|[:;\\n\\r]|$)';
+    const regex = new RegExp(`(?:${labelPattern})\\s*[:/\\-]?\\s*([^:\\n\\r]{2,45}?)(?=${stopWords})`, 'i');
+
+    const match = normalized.match(regex);
+    if (match && match[1]) {
+        let val = match[1].replace(/^[:/\\-\\s]+|[:/\\-\\s]+$/g, '').trim();
+        if (/^\d{2,}/.test(val) || val.length < 2) return '';
+        val = val.replace(/\s+/g, ' ');
+        return val.toUpperCase();
+    }
+    return '';
+}
+
+export function extractPassportIssuingAuthority(text) {
+    if (!text || typeof text !== 'string') return '';
+    const normalized = text.replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
+
+    const labels = [
+        'issuing authority',
+        'authority\\s*[/\\\\]\\s*autorité',
+        'authority\\s*[/\\\\]\\s*autorite',
+        'authority',
+        'issued by',
+        'issuing office',
+        'belgeyi veren makam',
+        'veren makam',
+        'verildiği yer',
+        'verildigi yer',
+        'tanzim eden makam',
+        'düzenleyen makam',
+        'duzenleyen makam',
+        'autorité',
+        'autorite',
+        'délivré par',
+        'delivre par',
+        'орган,\\s*выдавший документ',
+        'орган выдачи',
+        'кем выдан',
+        'kim tomonidan berilgan',
+        'bergan organ'
+    ];
+
+    const labelPattern = labels.join('|');
+    const stopWords = '(?:\\s+(?:date|дата|tarih|tarihi|holder|imza|подпись|signature|place|doğum|место|valid|expiry|geçerlilik|düzen|выдан)|[:;\\n\\r]|$)';
+    const regex = new RegExp(`(?:${labelPattern})\\s*[:/\\-]?\\s*([^:\\n\\r]{2,50}?)(?=${stopWords})`, 'i');
+
+    const match = normalized.match(regex);
+    if (match && match[1]) {
+        let val = match[1].replace(/^[:/\\-\\s]+|[:/\\-\\s]+$/g, '').trim();
+        if (/^\d{1,2}[./\-]/.test(val) || val.length < 2) return '';
+        val = val.replace(/\s+/g, ' ');
+        return val.toUpperCase();
+    }
+    return '';
+}
+
+export function extractPassportMetadata(text, options = {}) {
+    const dates = extractPassportDatesFromText(text, options);
+    const placeOfBirth = extractPassportPlaceOfBirth(text);
+    const issuingAuthority = extractPassportIssuingAuthority(text);
+
+    return {
+        issueDate: dates.issueDate || '',
+        expiryDate: dates.expiryDate || '',
+        placeOfBirth: placeOfBirth || '',
+        issuingAuthority: issuingAuthority || ''
+    };
+}
