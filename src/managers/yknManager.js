@@ -280,6 +280,46 @@ export function initYknManager() {
         }
     }
 
+    function copyStudentInfoToClipboard(student) {
+        const data = student || currentStudentData;
+        if (!data) return false;
+
+        applyCountryDefaultsToStudent(data);
+
+        const lines = [];
+        if (data.fullName) lines.push(`Öğrenci: ${data.fullName}`);
+        const passVal = data.pasaportNo || data.passportNo;
+        if (passVal) lines.push(`Pasaport No: ${passVal}`);
+        if (data.anneAdi) lines.push(`Anne Adı: ${data.anneAdi}`);
+        if (data.babaAdi) lines.push(`Baba Adı: ${data.babaAdi}`);
+        if (data.uyruk) lines.push(`Uyruk: ${data.uyruk}`);
+        const birthPlace = data.dogumYeriAciklamasi || data.birthPlace || data.dogumYeri || data.dogumUlkesi;
+        if (birthPlace) lines.push(`Doğum Yeri/Açıklaması: ${birthPlace}`);
+        const authority = data.verenMakam || data.issuingAuthority;
+        if (authority) lines.push(`Veren Makam: ${authority}`);
+        if (data.issueDate) lines.push(`Düzenleme Tarihi: ${formatDateForDisplay(data.issueDate)}`);
+        if (data.expiryDate) lines.push(`Geçerlilik Tarihi: ${formatDateForDisplay(data.expiryDate)}`);
+        if (data.birthDate) lines.push(`Doğum Tarihi: ${formatDateForDisplay(data.birthDate)}`);
+        if (data.cinsiyet) lines.push(`Cinsiyet: ${data.cinsiyet}`);
+
+        const copyText = lines.join('\n');
+        copyTextToClipboard(copyText);
+
+        const details = [
+            data.anneAdi ? `Anne: ${data.anneAdi}` : null,
+            data.babaAdi ? `Baba: ${data.babaAdi}` : null,
+            data.uyruk ? `Uyruk: ${data.uyruk}` : null,
+            birthPlace ? `D.Yeri: ${birthPlace}` : null,
+            authority ? `Makam: ${authority}` : null,
+            data.issueDate ? `Düz.T: ${formatDateForDisplay(data.issueDate)}` : null,
+            data.expiryDate ? `Geç.T: ${formatDateForDisplay(data.expiryDate)}` : null
+        ].filter(Boolean).join(', ');
+
+        addStatus(`Bilgiler başarıyla panoya kopyalandı (${details || 'Tüm alanlar'}).`, 'success');
+        showToast('Öğrenci bilgileri panoya kopyalandı ve YÖKSİS için hazırlandı.', 'success');
+        return true;
+    }
+
     // UI Status Helper
     function addStatus(message, type = 'info') {
         if (!statusContainer) return;
@@ -456,7 +496,7 @@ export function initYknManager() {
                 el.disabled = false; // Tamamlanan butonlara tekrar basılabilir
             } else {
                 el.classList.add('is-locked');
-                el.disabled = true;
+                el.disabled = false; // Kullanıcı istediği adımı doğrudan tetikleyebilsin
             }
         });
 
@@ -990,11 +1030,16 @@ export function initYknManager() {
                 return;
             }
 
-            shouldOpenCropperWhenReady = true;
+            // 1. Bilgileri hemen panoya kopyala (arka plan sekmelerini beklemeden!)
+            copyStudentInfoToClipboard(currentStudentData);
+
+            // 2. 3. Adımı tamamla ve 4. Adımı ("Bilgileri YÖKSİS'e Aktar") anında aktif et
             completedWorkflowSteps.add(3);
             updateWorkflowUI(4);
 
-            addStatus('Öğrenci bilgileri Apply oturumundan kopyalanıyor...', 'info');
+            // 3. Apply oturumu ile senkronize etmek için eklentiye istek gönder
+            shouldOpenCropperWhenReady = true;
+            addStatus('Öğrenci bilgileri panoya kopyalandı. YÖKSİS formuna aktarabilirsiniz.', 'success');
             window.postMessage({
                 source: 'WEB_APP',
                 payload: {
@@ -1003,7 +1048,7 @@ export function initYknManager() {
                 }
             }, '*');
 
-            // Pasaport görseli zaten hazırsa doğrudan kırpıcıyı aç
+            // 4. Pasaport görseli zaten hazırsa doğrudan kırpıcıyı aç
             if (currentStudentData?.passportImageSrc) {
                 openPassportCropper({
                     imageSrc: currentStudentData.passportImageSrc,
@@ -1235,51 +1280,8 @@ export function initYknManager() {
                 if (response?.success && response.data) {
                     const data = response.data;
                     currentStudentData = { ...currentStudentData, ...data };
-                    updateStudentActions(currentStudentData);
-
                     applyCountryDefaultsToStudent(currentStudentData);
-
-                    if (inputBirthPlace && !inputBirthPlace.value && data.dogumUlkesi) {
-                        inputBirthPlace.value = data.dogumUlkesi.toUpperCase();
-                        currentStudentData.dogumYeriAciklamasi = data.dogumUlkesi.toUpperCase();
-                    }
-                    if (inputIssuingAuthority && !inputIssuingAuthority.value && data.verenMakam) {
-                        inputIssuingAuthority.value = data.verenMakam.toUpperCase();
-                        currentStudentData.verenMakam = data.verenMakam.toUpperCase();
-                    }
-
-                    const lines = [];
-                    if (currentStudentData.fullName) lines.push(`Öğrenci: ${currentStudentData.fullName}`);
-                    if (data.pasaportNo) lines.push(`Pasaport No: ${data.pasaportNo}`);
-                    if (data.anneAdi) lines.push(`Anne Adı: ${data.anneAdi}`);
-                    if (data.babaAdi) lines.push(`Baba Adı: ${data.babaAdi}`);
-                    if (data.uyruk) lines.push(`Uyruk: ${data.uyruk}`);
-                    if (currentStudentData.dogumYeriAciklamasi || currentStudentData.birthPlace || data.dogumUlkesi) {
-                        lines.push(`Doğum Yeri/Açıklaması: ${currentStudentData.dogumYeriAciklamasi || currentStudentData.birthPlace || data.dogumUlkesi}`);
-                    }
-                    if (currentStudentData.verenMakam || currentStudentData.issuingAuthority || data.verenMakam) {
-                        lines.push(`Veren Makam: ${currentStudentData.verenMakam || currentStudentData.issuingAuthority || data.verenMakam}`);
-                    }
-                    if (currentStudentData.issueDate) {
-                        lines.push(`Düzenleme Tarihi: ${formatDateForDisplay(currentStudentData.issueDate)}`);
-                    }
-                    if (currentStudentData.expiryDate) {
-                        lines.push(`Geçerlilik Tarihi: ${formatDateForDisplay(currentStudentData.expiryDate)}`);
-                    }
-                    if (data.cinsiyet) lines.push(`Cinsiyet: ${data.cinsiyet}`);
-
-                    const copyText = lines.join('\n');
-                    copyTextToClipboard(copyText);
-
-                    const details = [
-                        data.anneAdi ? `Anne: ${data.anneAdi}` : null,
-                        data.babaAdi ? `Baba: ${data.babaAdi}` : null,
-                        data.uyruk ? `Uyruk: ${data.uyruk}` : null,
-                        data.cinsiyet ? `Cinsiyet: ${data.cinsiyet}` : null
-                    ].filter(Boolean).join(', ');
-
-                    addStatus(`Bilgiler başarıyla kopyalandı (${details || 'Tüm alanlar'}).`, 'success');
-                    showToast('Öğrenci bilgileri kopyalandı ve YÖKSİS için hazırlandı.', 'success');
+                    copyStudentInfoToClipboard(currentStudentData);
                     completedWorkflowSteps.add(3);
                     if (currentWorkflowStep <= 3) updateWorkflowUI(4);
 
@@ -1303,7 +1305,10 @@ export function initYknManager() {
                         }
                     }
                 } else {
-                    addStatus(response?.error || 'Öğrenci bilgileri kopyalanamadı.', 'error');
+                    // Arka plan sekmesinden yanıt gelmese bile mevcut veriler kopyalanmış durumda ve 4. Adım hazır
+                    completedWorkflowSteps.add(3);
+                    if (currentWorkflowStep <= 3) updateWorkflowUI(4);
+                    addStatus('Bilgiler profil verilerinden panoya kopyalandı. 4. Adım (YÖKSİS Aktarımı) hazır.', 'info');
                 }
             } else if (event.data.action === 'EXTRACT_KABUL_CODE') {
                 if (response?.success) {
