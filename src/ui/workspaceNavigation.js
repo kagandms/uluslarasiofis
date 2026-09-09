@@ -22,7 +22,9 @@ function getViewPanel(viewName) {
 }
 
 function focusView(viewName) {
-    const targetId = viewName === 'teblig' ? 'tebligat-search-input' : `${viewName}-title`;
+    const targetId = viewName === 'teblig'
+        ? 'tebligat-search-input'
+        : (viewName === 'ykn' ? 'ykn-passport-input' : `${viewName}-title`);
     document.getElementById(targetId)?.focus();
 }
 

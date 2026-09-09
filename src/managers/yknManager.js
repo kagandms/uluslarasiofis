@@ -147,7 +147,11 @@ export function initYknManager() {
     const inputBirthPlace = document.getElementById('ykn-birth-place');
     const inputIssuingAuthority = document.getElementById('ykn-issuing-authority');
 
-    initPassportCropperModal();
+    try {
+        initPassportCropperModal();
+    } catch (err) {
+        console.error('[YKN] initPassportCropperModal hatası:', err);
+    }
 
     function formatDateForDisplay(isoDate) {
         if (!isoDate || typeof isoDate !== 'string') return '';
@@ -305,11 +309,29 @@ export function initYknManager() {
             });
     }
 
+    function setSearchButtonLoading(loading) {
+        if (!btnSearch) return;
+        btnSearch.disabled = loading;
+        if (loading) {
+            if (!btnSearch.hasAttribute('data-original-html')) {
+                btnSearch.setAttribute('data-original-html', btnSearch.innerHTML);
+            }
+            btnSearch.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="9" stroke-dasharray="28" stroke-dashoffset="10"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></circle></svg> Ara`;
+        } else {
+            const original = btnSearch.getAttribute('data-original-html');
+            if (original) {
+                btnSearch.innerHTML = original;
+                btnSearch.removeAttribute('data-original-html');
+            }
+        }
+    }
+
     function clearSearchTimeout() {
         if (searchTimeoutTimer) {
             clearTimeout(searchTimeoutTimer);
             searchTimeoutTimer = null;
         }
+        setSearchButtonLoading(false);
     }
 
     function resetStudentActions() {
@@ -424,8 +446,9 @@ export function initYknManager() {
                     }
                 }
 
-                // Pasaport tarih çıkarma işlemi (hızlı metin çıkarma + gerekirse güvenli süreli OCR)
+                // Pasaport tarih ve bilgi çıkarma işlemi (hızlı metin çıkarma + gerekirse güvenli süreli OCR)
                 let text = '';
+                let ocrText = '';
                 if (pdfOffset >= 0) {
                     const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
                     try {
@@ -443,9 +466,11 @@ export function initYknManager() {
                     if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(passportDates.expiryDate);
                 }
 
-                if (!passportDates.issueDate || !passportDates.expiryDate) {
+                let detectedBirthPlace = extractPassportPlaceOfBirth(text);
+                let detectedAuthority = extractPassportIssuingAuthority(text);
+
+                if (!passportDates.issueDate || !passportDates.expiryDate || !detectedBirthPlace || !detectedAuthority) {
                     try {
-                        let ocrText = '';
                         if (pdfOffset >= 0) {
                             const validPdfBytes = pdfOffset > 0 ? documentBytes.subarray(pdfOffset) : documentBytes;
                             ocrText = await Promise.race([
@@ -460,27 +485,32 @@ export function initYknManager() {
                         }
 
                         if (ocrText) {
-                            const ocrDates = extractPassportDatesFromText(ocrText, { birthDate: currentStudentData?.birthDate });
-                            if (ocrDates.issueDate && !currentStudentData.issueDate) {
-                                currentStudentData.issueDate = ocrDates.issueDate;
-                                if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(ocrDates.issueDate);
-                                passportDates.issueDate = ocrDates.issueDate;
+                            if (!passportDates.issueDate || !passportDates.expiryDate) {
+                                const ocrDates = extractPassportDatesFromText(ocrText, { birthDate: currentStudentData?.birthDate });
+                                if (ocrDates.issueDate && !currentStudentData.issueDate) {
+                                    currentStudentData.issueDate = ocrDates.issueDate;
+                                    if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(ocrDates.issueDate);
+                                    passportDates.issueDate = ocrDates.issueDate;
+                                }
+                                if (ocrDates.expiryDate && !currentStudentData.expiryDate) {
+                                    currentStudentData.expiryDate = ocrDates.expiryDate;
+                                    if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(ocrDates.expiryDate);
+                                    passportDates.expiryDate = ocrDates.expiryDate;
+                                }
                             }
-                            if (ocrDates.expiryDate && !currentStudentData.expiryDate) {
-                                currentStudentData.expiryDate = ocrDates.expiryDate;
-                                if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(ocrDates.expiryDate);
-                                passportDates.expiryDate = ocrDates.expiryDate;
+                            if (!detectedBirthPlace) {
+                                detectedBirthPlace = extractPassportPlaceOfBirth(ocrText);
+                            }
+                            if (!detectedAuthority) {
+                                detectedAuthority = extractPassportIssuingAuthority(ocrText);
                             }
                         }
                     } catch (ocrErr) {
-                        console.warn('[YKN] OCR ile pasaport tarihi taraması atlandı/hata:', ocrErr.message);
+                        console.warn('[YKN] OCR ile pasaport tarihi/bilgisi taraması atlandı/hata:', ocrErr.message);
                     }
                 }
 
                 // Pasaport doğum yeri ve veren makam analizi
-                const detectedBirthPlace = extractPassportPlaceOfBirth(text) || (ocrText ? extractPassportPlaceOfBirth(ocrText) : '');
-                const detectedAuthority = extractPassportIssuingAuthority(text) || (ocrText ? extractPassportIssuingAuthority(ocrText) : '');
-
                 if (detectedBirthPlace) {
                     currentStudentData.birthPlace = detectedBirthPlace;
                     currentStudentData.dogumYeri = detectedBirthPlace;
@@ -618,14 +648,17 @@ export function initYknManager() {
 
     if (btnSearch) {
         btnSearch.addEventListener('click', () => {
-            const passportNo = inputPassport.value.trim();
+            const passportNo = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
+            if (inputPassport) inputPassport.value = passportNo;
             if (!passportNo) {
                 showToast('Lütfen pasaport numarası girin.', 'warning');
+                if (inputPassport) inputPassport.focus();
                 return;
             }
             
             clearStatus();
             clearSearchTimeout();
+            setSearchButtonLoading(true);
             currentStudentData = null;
             activeSearchRequestId = createRequestId();
             resetStudentActions();
@@ -657,6 +690,7 @@ export function initYknManager() {
             // 14 saniyelik güvenlik zaman aşımı
             searchTimeoutTimer = setTimeout(() => {
                 if (studentName.textContent.startsWith('Aranıyor...')) {
+                    setSearchButtonLoading(false);
                     studentName.textContent = 'Bağlantı Zaman Aşımı';
                     showExtensionMissing();
                     addStatus('Eklentiden veya Apply sekmesinden zamanında yanıt alınamadı.', 'error');
@@ -1069,6 +1103,14 @@ export function initYknManager() {
         }
     });
 
-    loadExtensionDownloadMetadata();
-    requestExtensionCheck(createRequestId());
+    try {
+        loadExtensionDownloadMetadata();
+    } catch (err) {
+        console.warn('[YKN] loadExtensionDownloadMetadata hatası:', err);
+    }
+    try {
+        requestExtensionCheck(createRequestId());
+    } catch (err) {
+        console.warn('[YKN] requestExtensionCheck hatası:', err);
+    }
 }

@@ -162,14 +162,14 @@ let updateState = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- Initializations ---
-    initTheme();
-    initHistoryPanel();
-    initTebligatSearch();
+    try { initTheme(); } catch (e) { console.error('initTheme error:', e); }
+    try { initHistoryPanel(); } catch (e) { console.error('initHistoryPanel error:', e); }
+    try { initTebligatSearch(); } catch (e) { console.error('initTebligatSearch error:', e); }
     document.addEventListener('workspace:view-changed', (event) => {
         if (event.detail?.viewName === 'cover') setActiveStep(STEP_IDS.UPLOAD);
     });
-    initWorkspaceNavigation();
-    initYknManager();
+    try { initWorkspaceNavigation(); } catch (e) { console.error('initWorkspaceNavigation error:', e); }
+    try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
     
     initDraftAutoSave();
     

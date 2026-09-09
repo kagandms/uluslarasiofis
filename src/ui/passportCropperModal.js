@@ -189,6 +189,7 @@ export function initPassportCropperModal() {
         btnFinePlus,
         btnAspectRatio,
         btnDownload,
+        btnTransfer,
         btnCancel,
         btnClose
     } = getElements();
