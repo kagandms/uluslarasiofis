@@ -99,7 +99,6 @@ export function populateFormNode(node, data) {
                         fields.uyruguOther.style.display = 'block';
                         fields.uyruguOther.value = data['uyruguOther'] || data[key];
                     }
-                    if (fields.basvuruNo) fields.basvuruNo.value = "UYRUK BULUNAMADI: " + data[key];
                 }
             } else {
                 fields[key].value = data[key];

@@ -1097,6 +1097,63 @@ function findApplyStudentData() {
     };
 }
 
+function normalizeApplyBirthDate(rawDate) {
+    if (!rawDate || typeof rawDate !== 'string') return '';
+    const clean = rawDate.trim();
+    if (!clean) return '';
+
+    const monthMap = {
+        'ocak': '01', 'jan': '01', 'january': '01', 'oca': '01',
+        'şubat': '02', 'subat': '02', 'feb': '02', 'february': '02', 'şub': '02', 'sub': '02',
+        'mart': '03', 'mar': '03', 'march': '03',
+        'nisan': '04', 'apr': '04', 'april': '04', 'nis': '04',
+        'mayıs': '05', 'mayis': '05', 'may': '05',
+        'haziran': '06', 'jun': '06', 'june': '06', 'haz': '06',
+        'temmuz': '07', 'jul': '07', 'july': '07', 'tem': '07',
+        'ağustos': '08', 'agustos': '08', 'aug': '08', 'august': '08', 'ağu': '08', 'agu': '08',
+        'eylül': '09', 'eylul': '09', 'sep': '09', 'september': '09', 'eyl': '09',
+        'ekim': '10', 'oct': '10', 'october': '10', 'eki': '10',
+        'kasım': '11', 'kasim': '11', 'nov': '11', 'november': '11', 'kas': '11',
+        'aralık': '12', 'aralik': '12', 'dec': '12', 'december': '12', 'ara': '12'
+    };
+
+    const parts = clean.split(/[./\-\s]+/).filter(Boolean);
+    if (parts.length !== 3) {
+        const isoMatch = clean.match(/^(\d{4})[./\-](\d{1,2})[./\-](\d{1,2})/);
+        if (isoMatch) {
+            return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+        }
+        return '';
+    }
+
+    let [p1, p2, p3] = parts;
+    const parseMonth = (val) => {
+        if (/^\d{1,2}$/.test(val)) return val.padStart(2, '0');
+        const key = val.toLowerCase().replace(/[^a-zıüğşöç]/g, '');
+        return monthMap[key] || '';
+    };
+
+    // Case 1: YYYY-MM-DD
+    if (/^\d{4}$/.test(p1) && /^\d{1,2}$/.test(p3)) {
+        const mm = parseMonth(p2);
+        if (mm) return `${p1}-${mm}-${p3.padStart(2, '0')}`;
+    }
+
+    // Case 2: DD-MM-YYYY
+    if (/^\d{1,2}$/.test(p1) && /^\d{4}$/.test(p3)) {
+        const mm = parseMonth(p2);
+        if (mm) return `${p3}-${mm}-${p1.padStart(2, '0')}`;
+    }
+
+    // Case 3: MM-DD-YYYY
+    if (/^\d{4}$/.test(p3)) {
+        const mm = parseMonth(p1);
+        if (mm && /^\d{1,2}$/.test(p2)) return `${p3}-${mm}-${p2.padStart(2, '0')}`;
+    }
+
+    return '';
+}
+
 function extractApplyProfileData() {
     const anneInput = document.querySelector('input[name="mothersName"]');
     const babaInput = document.querySelector('input[name="fathersName"]');
@@ -1120,7 +1177,7 @@ function extractApplyProfileData() {
     if (!birthInput) {
         const labels = document.querySelectorAll('label');
         for (const label of labels) {
-            const lt = (label.innerText || '').toLowerCase();
+            const lt = label.innerText.toLowerCase();
             if (lt.includes('doğum tarihi') || lt.includes('dogum tarihi') || lt.includes('date of birth') || lt.includes('birth date')) {
                 birthInput = label.parentElement ? label.parentElement.querySelector('input') : null;
                 if (birthInput) break;
@@ -1138,17 +1195,7 @@ function extractApplyProfileData() {
     const dogumUlkesi = getSourceDropdownByLabel('Doğduğunuz') || getSourceDropdownByLabel('Doğum') || fallbackData.dogumUlkesi || '';
     const cinsiyet = getSourceDropdownByLabel('Cinsiyet') || fallbackData.cinsiyet || '';
 
-    let normalizedBirthDate = '';
-    if (rawBirthDate) {
-        const parts = rawBirthDate.trim().split(/[./\-\s]+/);
-        if (parts.length === 3) {
-            if (parts[0].length === 4) {
-                normalizedBirthDate = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-            } else {
-                normalizedBirthDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-            }
-        }
-    }
+    const normalizedBirthDate = normalizeApplyBirthDate(rawBirthDate);
 
     return {
         anneAdi: (anneAdi || '').trim(),
@@ -1381,14 +1428,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
             const uyrukNorm = normalizeCountry(data.uyruk);
             const dogumNorm = normalizeCountry(data.dogumUlkesi);
+            const isTurkmen = uyrukNorm.includes('türkmen') || uyrukNorm.includes('turkmen') || uyrukNorm === 'tkm' ||
+                              dogumNorm.includes('türkmen') || dogumNorm.includes('turkmen') || dogumNorm === 'tkm';
 
             let verenMakam = findTargetElementByFuzzyLabel('Belgeyi Veren Makam', 'input');
             if (!verenMakam) verenMakam = findTargetElementByFuzzyLabel('Veren Makam', 'input');
 
             const dogumYeriAciklamasi = findTargetElementByFuzzyLabel('Doğum Yeri Açıklaması', 'input');
 
-            const customDogumYeri = (data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || '').trim();
-            const customVerenMakam = (data.verenMakam || data.issuingAuthority || '').trim();
+            // Türkmenistan için doğum yeri açıklaması her zaman TKM sabittir
+            const customDogumYeri = isTurkmen ? 'TKM' : (data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || '').trim();
+            const customVerenMakam = (data.verenMakam || data.issuingAuthority || (isTurkmen ? 'SMST' : '')).trim();
 
             let filledDogumYeri = false;
             let filledVerenMakam = false;
@@ -1409,7 +1459,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
             // Değerler portaldan gelmediyse ülke bazlı akıllı şablonları uygula
             if (!filledDogumYeri || !filledVerenMakam) {
-                if (uyrukNorm.includes('türkmenistan') || uyrukNorm.includes('turkmenistan') || dogumNorm.includes('türkmenistan') || dogumNorm.includes('turkmenistan')) {
+                if (isTurkmen) {
                     if (!filledDogumYeri && dogumYeriAciklamasi && (await simulateInput(dogumYeriAciklamasi, 'TKM'))) successCount++;
                     if (!filledVerenMakam && verenMakam && (await simulateInput(verenMakam, 'SMST'))) successCount++;
                 } 

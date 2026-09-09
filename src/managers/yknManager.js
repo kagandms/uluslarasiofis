@@ -261,6 +261,25 @@ export function initYknManager() {
         }
     }
 
+    function applyCountryDefaultsToStudent(student) {
+        if (!student) return;
+        const str = `${student.uyruk || ''} ${student.dogumUlkesi || ''}`.toUpperCase();
+        const isTurkmen = str.includes('TÜRKMEN') || str.includes('TURKMEN') || str.includes('TKM');
+        if (isTurkmen) {
+            student.dogumYeriAciklamasi = 'TKM';
+            student.birthPlace = 'TKM';
+            student.dogumYeri = 'TKM';
+            if (inputBirthPlace) inputBirthPlace.value = 'TKM';
+            if (!student.verenMakam && !student.issuingAuthority) {
+                student.verenMakam = 'SMST';
+                student.issuingAuthority = 'SMST';
+                if (inputIssuingAuthority && !inputIssuingAuthority.value) {
+                    inputIssuingAuthority.value = 'SMST';
+                }
+            }
+        }
+    }
+
     // UI Status Helper
     function addStatus(message, type = 'info') {
         if (!statusContainer) return;
@@ -604,7 +623,10 @@ export function initYknManager() {
                     if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(passportDates.expiryDate);
                 }
 
-                let detectedBirthPlace = extractPassportPlaceOfBirth(fullDigitalText);
+                let detectedBirthPlace = extractPassportPlaceOfBirth(fullDigitalText, {
+                    uyruk: currentStudentData?.uyruk,
+                    dogumUlkesi: currentStudentData?.dogumUlkesi
+                });
                 let detectedAuthority = extractPassportIssuingAuthority(fullDigitalText);
 
                 // Gerekirse sayfa sayfa hedefli OCR (4 zorunlu alan dolana kadar)
@@ -633,9 +655,11 @@ export function initYknManager() {
 
                             const pageItem = renderedPages[pIdx];
                             let pageCanvas = pageItem.canvas;
+                            let temporaryCanvas = false;
                             if (!pageCanvas && pageItem.dataUrl) {
                                 try {
                                     pageCanvas = await imageToCanvas(pageItem.dataUrl);
+                                    temporaryCanvas = true;
                                 } catch (_) {}
                             }
                             if (!pageCanvas) continue;
@@ -663,7 +687,10 @@ export function initYknManager() {
                                     }
 
                                     if (!detectedBirthPlace && !currentStudentData.birthPlace) {
-                                        const bp = extractPassportPlaceOfBirth(pageOcrText);
+                                        const bp = extractPassportPlaceOfBirth(pageOcrText, {
+                                            uyruk: currentStudentData?.uyruk,
+                                            dogumUlkesi: currentStudentData?.dogumUlkesi
+                                        });
                                         if (bp) detectedBirthPlace = bp;
                                     }
 
@@ -674,10 +701,23 @@ export function initYknManager() {
                                 }
                             } catch (pageOcrErr) {
                                 console.warn(`[YKN] Sayfa ${pIdx + 1} OCR atlandı:`, pageOcrErr.message);
+                            } finally {
+                                if (temporaryCanvas && pageCanvas) {
+                                    pageCanvas.width = 0;
+                                    pageCanvas.height = 0;
+                                }
                             }
                         }
                     } catch (ocrModuleErr) {
                         console.warn('[YKN] OCR servisi başlatılamadı:', ocrModuleErr);
+                    } finally {
+                        renderedPages.forEach(p => {
+                            if (p.canvas) {
+                                p.canvas.width = 0;
+                                p.canvas.height = 0;
+                                p.canvas = null;
+                            }
+                        });
                     }
                 }
 
@@ -698,6 +738,9 @@ export function initYknManager() {
                     currentStudentData.verenMakam = detectedAuthority;
                     if (inputIssuingAuthority) inputIssuingAuthority.value = detectedAuthority;
                 }
+
+                // Ülke bazlı özel varsayılanları uygula (örn. Türkmenistan için sabit TKM / SMST)
+                applyCountryDefaultsToStudent(currentStudentData);
 
                 // Eksik alan varsa ve incelenebilecek ek pasaport aday belgeleri varsa diğer belgeyi iste
                 const fieldsComplete = Boolean(
@@ -1134,6 +1177,8 @@ export function initYknManager() {
                     currentStudentData = { ...currentStudentData, ...data };
                     updateStudentActions(currentStudentData);
 
+                    applyCountryDefaultsToStudent(currentStudentData);
+
                     if (inputBirthPlace && !inputBirthPlace.value && data.dogumUlkesi) {
                         inputBirthPlace.value = data.dogumUlkesi.toUpperCase();
                         currentStudentData.dogumYeriAciklamasi = data.dogumUlkesi.toUpperCase();
@@ -1149,8 +1194,18 @@ export function initYknManager() {
                     if (data.anneAdi) lines.push(`Anne Adı: ${data.anneAdi}`);
                     if (data.babaAdi) lines.push(`Baba Adı: ${data.babaAdi}`);
                     if (data.uyruk) lines.push(`Uyruk: ${data.uyruk}`);
-                    if (data.dogumUlkesi) lines.push(`Doğum Yeri/Ülkesi: ${data.dogumUlkesi}`);
-                    if (data.verenMakam) lines.push(`Veren Makam: ${data.verenMakam}`);
+                    if (currentStudentData.dogumYeriAciklamasi || currentStudentData.birthPlace || data.dogumUlkesi) {
+                        lines.push(`Doğum Yeri/Açıklaması: ${currentStudentData.dogumYeriAciklamasi || currentStudentData.birthPlace || data.dogumUlkesi}`);
+                    }
+                    if (currentStudentData.verenMakam || currentStudentData.issuingAuthority || data.verenMakam) {
+                        lines.push(`Veren Makam: ${currentStudentData.verenMakam || currentStudentData.issuingAuthority || data.verenMakam}`);
+                    }
+                    if (currentStudentData.issueDate) {
+                        lines.push(`Düzenleme Tarihi: ${formatDateForDisplay(currentStudentData.issueDate)}`);
+                    }
+                    if (currentStudentData.expiryDate) {
+                        lines.push(`Geçerlilik Tarihi: ${formatDateForDisplay(currentStudentData.expiryDate)}`);
+                    }
                     if (data.cinsiyet) lines.push(`Cinsiyet: ${data.cinsiyet}`);
 
                     const copyText = lines.join('\n');
@@ -1252,6 +1307,7 @@ export function initYknManager() {
             };
             studentName.textContent = currentStudentData.fullName || "İsim Bulunamadı";
             updateStudentActions(currentStudentData);
+            applyCountryDefaultsToStudent(currentStudentData);
             addStatus('Öğrenci bulundu. Bilgileri veya kabul kodunu kopyalayabilirsiniz.', 'success');
 
             const passUrl = passCandidates[0] || currentStudentData.passportImageUrl || currentStudentData.passportDocumentUrl;
@@ -1283,6 +1339,7 @@ export function initYknManager() {
                 documentsReady: true
             };
             updateStudentActions(currentStudentData);
+            applyCountryDefaultsToStudent(currentStudentData);
             if (currentStudentData.yoksisId) {
                 addStatus(`Kabul mektubu kodu algılandı: ${currentStudentData.yoksisId}`, 'success');
             } else if (currentStudentData.acceptanceLetterUrl) {

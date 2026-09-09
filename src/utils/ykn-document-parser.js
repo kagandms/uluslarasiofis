@@ -434,9 +434,22 @@ export function extractPassportDatesFromText(text, options = {}) {
     };
 }
 
-export function extractPassportPlaceOfBirth(text) {
+export function extractPassportPlaceOfBirth(text, options = {}) {
     if (!text || typeof text !== 'string') return '';
     const normalized = text.replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
+    const upperText = normalized.toUpperCase();
+
+    // Türkmenistan kontrolü: Türkmen pasaportlarında doğum yeri açıklaması YÖKSİS için TKM sabittir
+    const nationalityCheck = String(options.nationality || options.country || options.uyruk || options.dogumUlkesi || '').toUpperCase();
+    const isTurkmen = nationalityCheck.includes('TÜRKMEN') ||
+        nationalityCheck.includes('TURKMEN') ||
+        nationalityCheck === 'TKM' ||
+        upperText.includes('P<TKM') ||
+        (upperText.includes('TURKMENISTAN') && !upperText.includes('EMBASSY OF TURKMENISTAN'));
+
+    if (isTurkmen) {
+        return 'TKM';
+    }
 
     const labels = [
         'place of birth\\s*[/\\\\]\\s*lieu de naissance',
@@ -444,7 +457,7 @@ export function extractPassportPlaceOfBirth(text) {
         'lieu de naissance',
         'birth place',
         'place of origin',
-        'pob',
+        '\\bpob\\b',
         'doğum yeri',
         'dogum yeri',
         'doğduğu yer',
@@ -463,7 +476,7 @@ export function extractPassportPlaceOfBirth(text) {
 
     const match = normalized.match(regex);
     if (match && match[1]) {
-        let val = match[1].replace(/^[:/\\-\\s]+|[:/\\-\\s]+$/g, '').trim();
+        let val = match[1].replace(/^[:/\\-\\s,._]+|[:/\\-\\s,._]+$/g, '').trim();
         if (/^\d{2,}/.test(val) || val.length < 2) return '';
         val = val.replace(/\s+/g, ' ');
         return val.toUpperCase();
@@ -516,7 +529,7 @@ export function extractPassportIssuingAuthority(text) {
 
 export function extractPassportMetadata(text, options = {}) {
     const dates = extractPassportDatesFromText(text, options);
-    const placeOfBirth = extractPassportPlaceOfBirth(text);
+    const placeOfBirth = extractPassportPlaceOfBirth(text, options);
     const issuingAuthority = extractPassportIssuingAuthority(text);
 
     return {
