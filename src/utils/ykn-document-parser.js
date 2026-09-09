@@ -226,6 +226,16 @@ function findLabeledDate(text, labels, options = {}) {
     return '';
 }
 
+function sanitizeMrzDigits(raw) {
+    if (!raw) return '';
+    return raw
+        .replace(/O/g, '0')
+        .replace(/[ILl]/g, '1')
+        .replace(/Z/g, '2')
+        .replace(/S/g, '5')
+        .replace(/B/g, '8');
+}
+
 export function extractDatesFromMrz(text, options = {}) {
     if (!text) return { issueDate: '', expiryDate: '', birthDate: '' };
 
@@ -241,12 +251,13 @@ export function extractDatesFromMrz(text, options = {}) {
         if (parts.length === 3) {
             const birthYymmdd = parts[0].slice(2) + parts[1].padStart(2, '0') + parts[2].padStart(2, '0');
             // In MRZ TD3: birthYYMMDD + [check_digit] + [sex] + expiryYYMMDD
-            const targeted = new RegExp(`${birthYymmdd}[0-9A-Z<]{2}(\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01]))`, 'i');
+            const targeted = new RegExp(`${birthYymmdd}[0-9A-Z<]{2}([0-9OIZSB]{6})`, 'i');
             const targetMatch = cleanedText.match(targeted);
             if (targetMatch) {
-                const ey = Number(targetMatch[1].slice(0, 2));
+                const cleanTarget = sanitizeMrzDigits(targetMatch[1]);
+                const ey = Number(cleanTarget.slice(0, 2));
                 const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
-                const expiryDate = createDateValue(expYear, Number(targetMatch[1].slice(2, 4)), Number(targetMatch[1].slice(4, 6)));
+                const expiryDate = createDateValue(expYear, Number(cleanTarget.slice(2, 4)), Number(cleanTarget.slice(4, 6)));
                 if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
                     return { issueDate: '', expiryDate, birthDate: options.birthDate };
                 }
@@ -256,11 +267,11 @@ export function extractDatesFromMrz(text, options = {}) {
 
     // 2. Standard TD3 Line 2 search:
     // [DocNumber: 9 chars][CheckDigit: 1][Nationality: 3 chars](\d{6})[CheckDigit: 1][Sex: 1](\d{6})
-    const td3Pattern = /(?:[A-Z0-9<]{9})[0-9A-Z<][A-Z0-9<]{3}(\d{6})[0-9A-Z<][A-Z0-9<](\d{6})/i;
+    const td3Pattern = /(?:[A-Z0-9<]{9})[0-9A-Z<][A-Z<]{3}([0-9OIZSB]{6})[0-9A-Z<][MF<X0-9]([0-9OIZSB]{6})/i;
     const td3Match = cleanedText.match(td3Pattern);
     if (td3Match) {
-        const birthRaw = td3Match[1];
-        const expRaw = td3Match[2];
+        const birthRaw = sanitizeMrzDigits(td3Match[1]);
+        const expRaw = sanitizeMrzDigits(td3Match[2]);
 
         const by = Number(birthRaw.slice(0, 2));
         const birthYear = by <= 49 ? 2000 + by : 1900 + by;
@@ -270,25 +281,34 @@ export function extractDatesFromMrz(text, options = {}) {
         const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
         const expiryDate = createDateValue(expYear, Number(expRaw.slice(2, 4)), Number(expRaw.slice(4, 6)));
 
-        if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
+        if (birthDate && expiryDate) {
             return { issueDate: '', expiryDate, birthDate };
+        }
+        if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
+            return { issueDate: '', expiryDate, birthDate: birthDate || '' };
         }
     }
 
     // 3. General MRZ sequence of two valid YYMMDD dates separated by 2 chars
-    const genPattern = /(\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))[0-9A-Z<]{2}(\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))/g;
+    const genPattern = /([0-9OIZSB]{6})[0-9A-Z<][MF<X0-9]([0-9OIZSB]{6})/gi;
     const genMatches = Array.from(cleanedText.matchAll(genPattern));
     for (const match of genMatches) {
-        const by = Number(match[1].slice(0, 2));
+        const birthRaw = sanitizeMrzDigits(match[1]);
+        const expRaw = sanitizeMrzDigits(match[2]);
+
+        const by = Number(birthRaw.slice(0, 2));
         const birthYear = by <= 49 ? 2000 + by : 1900 + by;
-        const birthDate = createDateValue(birthYear, Number(match[1].slice(2, 4)), Number(match[1].slice(4, 6)));
+        const birthDate = createDateValue(birthYear, Number(birthRaw.slice(2, 4)), Number(birthRaw.slice(4, 6)));
 
-        const ey = Number(match[2].slice(0, 2));
+        const ey = Number(expRaw.slice(0, 2));
         const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
-        const expiryDate = createDateValue(expYear, Number(match[2].slice(2, 4)), Number(match[2].slice(4, 6)));
+        const expiryDate = createDateValue(expYear, Number(expRaw.slice(2, 4)), Number(expRaw.slice(4, 6)));
 
-        if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
+        if (birthDate && expiryDate) {
             return { issueDate: '', expiryDate, birthDate };
+        }
+        if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
+            return { issueDate: '', expiryDate, birthDate: birthDate || '' };
         }
     }
 
@@ -471,7 +491,7 @@ export function extractPassportPlaceOfBirth(text, options = {}) {
     ];
 
     const labelPattern = labels.join('|');
-    const stopWords = '(?:\\s+(?:date|дата|tarih|tarihi|veril|verilis|verildigi|verildiği|veriliş|tanzim|duzen|düzen|gecerlilik|geçerlilik|expiry|valid|sex|пол|cinsiyet|authority|орган|makam|signature|подпись|imza|uyruk|nation|гражданство)|[:;\\n\\r]|$)';
+    const stopWords = '(?:\\s+(?:date|дата|tarih|tarihi|veril|verilis|verildigi|verildiği|veriliş|tanzim|duzen|düzen|gecerlilik|geçerlilik|expiry|valid|sex|пол|cinsiyet|authority|орган|makam|signature|подпись|imza|uyruk|nation|гражданство|beril|berilgan|amal|sana|sanasi|qoldanylu|mohleti|möhleti|etibarliliq|bitme)|[:;\\n\\r]|$)';
     const regex = new RegExp(`(?:${labelPattern})\\s*[:/\\-]?\\s*([^:\\n\\r]{2,45}?)(?=${stopWords})`, 'i');
 
     const match = normalized.match(regex);
@@ -514,7 +534,7 @@ export function extractPassportIssuingAuthority(text) {
     ];
 
     const labelPattern = labels.join('|');
-    const stopWords = '(?:\\s+(?:date|дата|tarih|tarihi|holder|imza|подпись|signature|place|doğum|место|valid|expiry|geçerlilik|düzen|выдан)|[:;\\n\\r]|$)';
+    const stopWords = '(?:\\s+(?:date|дата|tarih|tarihi|holder|imza|подпись|signature|place|doğum|место|valid|expiry|geçerlilik|düzen|выдан|beril|berilgan|amal|sana|sanasi|qoldanylu|mohleti|möhleti|etibarliliq)|[:;\\n\\r]|$)';
     const regex = new RegExp(`(?:${labelPattern})\\s*[:/\\-]?\\s*([^:\\n\\r]{2,50}?)(?=${stopWords})`, 'i');
 
     const match = normalized.match(regex);

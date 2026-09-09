@@ -6,7 +6,8 @@ import {
     isValidYoksisId,
     extractPassportPlaceOfBirth,
     extractPassportIssuingAuthority,
-    extractPassportMetadata
+    extractPassportMetadata,
+    extractDatesFromMrz
 } from '../src/utils/ykn-document-parser.js';
 
 test('extracts a labeled YÖKSİS ID from acceptance letter text', () => {
@@ -232,4 +233,45 @@ test('extractPassportMetadata returns comprehensive object with dates, place of 
     assert.equal(metadata.placeOfBirth, 'ASHGABAT');
     assert.equal(metadata.issuingAuthority, 'SMST');
 });
+
+test('MRZ with OCR noise, brackets, spaces and sanitization', () => {
+    const mrzText = "P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<\nL898902C36UTO7408122F1204159ZE184226B<<<<<10";
+    const res = extractDatesFromMrz(mrzText);
+    assert.equal(res.birthDate, '1974-08-12');
+    assert.equal(res.expiryDate, '2012-04-15');
+});
+
+test('extracts German passport (Reisepass) dates', () => {
+    const text = "BUNDESREPUBLIK DEUTSCHLAND REISEPASS\nAusstellungsdatum: 24.03.2021\nGültig bis: 23.03.2031";
+    const res = extractPassportDatesFromText(text);
+    assert.equal(res.issueDate, '2021-03-24');
+    assert.equal(res.expiryDate, '2031-03-23');
+});
+
+test('extracts Arabic passport dates', () => {
+    const text = "PASSPORT\nتاريخ الإصدار: 15.01.2023\nتاريخ الانتهاء: 14.01.2033";
+    const res = extractPassportDatesFromText(text);
+    assert.equal(res.issueDate, '2023-01-15');
+    assert.equal(res.expiryDate, '2033-01-14');
+});
+
+test('extracts Kazakh / Kyrgyz passport dates', () => {
+    const text = "ҚАЗАҚСТАН РЕСПУБЛИКАСЫ ПАСПОРТ\nБерілген күні: 05.09.2022\nҚолданылу мерзімі: 04.09.2032";
+    const res = extractPassportDatesFromText(text);
+    assert.equal(res.issueDate, '2022-09-05');
+    assert.equal(res.expiryDate, '2032-09-04');
+});
+
+test('extracts Azerbaijani passport dates', () => {
+    const text = "AZƏRBAYCAN RESPUBLİKASI PASPORT\nVerilmə tarixi: 18.06.2020\nEtibarlılıq müddəti: 17.06.2030";
+    const res = extractPassportDatesFromText(text);
+    assert.equal(res.issueDate, '2020-06-18');
+    assert.equal(res.expiryDate, '2030-06-17');
+});
+
+test('extracts place of birth with Central Asian and stopWords cleanly', () => {
+    const textUz = "O'ZBEKISTON RESPUBLIKASI Tug'ilgan joyi: TOSHKENT Berilgan sanasi: 01.06.2023";
+    assert.equal(extractPassportPlaceOfBirth(textUz), 'TOSHKENT');
+});
+
 
