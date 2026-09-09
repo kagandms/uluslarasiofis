@@ -254,7 +254,7 @@ async function getActiveYoksisTab() {
 }
 
 async function executeYoksisSearchInMainWorld(tabId, kabulId) {
-    if (!chrome.scripting || !chrome.scripting.executeScript) return;
+    if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return;
     try {
         await chrome.scripting.executeScript({
             target: { tabId },
@@ -262,71 +262,111 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
             func: (code) => {
                 try {
                     function norm(s) {
-                        return (s || '').toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
+                        return (s || '').toLocaleLowerCase('tr-TR').replace(/ı/g, 'i').replace(/\s+/g, '');
                     }
-                    var inputs = document.querySelectorAll('input');
-                    var inp = null;
-                    for (var i = 0; i < inputs.length; i++) {
-                        var ph = norm(inputs[i].getAttribute('placeholder') || '');
-                        var title = norm(inputs[i].getAttribute('title') || '');
-                        if (ph.indexOf('kabul') !== -1 || title.indexOf('kabul') !== -1) {
-                            inp = inputs[i];
+
+                    // 1. Önce "Kabul Mektup ID İle Ara" butonunu bul
+                    var clickables = document.querySelectorAll('button, .z-button, a, input[type="button"], input[type="submit"], [role="button"], span.z-button, span.z-button-cm, span, td, div');
+                    var btn = null;
+                    for (var k = 0; k < clickables.length; k++) {
+                        var el = clickables[k];
+                        var bt = norm(el.innerText || el.textContent || el.value || '');
+                        if (bt.indexOf('kabul') !== -1 && (bt.indexOf('ara') !== -1 || bt.indexOf('sorgula') !== -1)) {
+                            btn = el.closest('button, .z-button, a, input[type="button"], table.z-button') || el;
                             break;
                         }
                     }
+
+                    // 2. Input'u bul (Önce butonun bulunduğu satır/kapsayıcıdan, sonra etiketlerden)
+                    var inp = null;
+                    if (btn) {
+                        var container = btn.closest('tr, .z-row, table, td, div');
+                        if (container) {
+                            var inputsInContainer = container.querySelectorAll('input');
+                            for (var c = 0; c < inputsInContainer.length; c++) {
+                                var it = inputsInContainer[c].type;
+                                if (it !== 'button' && it !== 'submit' && it !== 'hidden') {
+                                    inp = inputsInContainer[c];
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!inp) {
+                        var allInputs = document.querySelectorAll('input');
+                        for (var i = 0; i < allInputs.length; i++) {
+                            var targetInp = allInputs[i];
+                            if (targetInp.type === 'button' || targetInp.type === 'submit' || targetInp.type === 'hidden') continue;
+                            var ph = norm(targetInp.getAttribute('placeholder') || '');
+                            var title = norm(targetInp.getAttribute('title') || '');
+                            if (ph.indexOf('kabul') !== -1 || title.indexOf('kabul') !== -1) {
+                                inp = targetInp;
+                                break;
+                            }
+                        }
+                    }
+
                     if (!inp) {
                         var labels = document.querySelectorAll('span, td, div, label');
                         for (var j = 0; j < labels.length; j++) {
-                            if (norm(labels[j].innerText || labels[j].textContent).indexOf('kabulmektupid') !== -1) {
-                                var row = labels[j].closest('tr');
+                            var lt = norm(labels[j].innerText || labels[j].textContent || '');
+                            if (lt.indexOf('kabulmektup') !== -1 || lt.indexOf('kabulid') !== -1 || lt.indexOf('kabulno') !== -1) {
+                                var row = labels[j].closest('tr, .z-row, div');
                                 if (row) {
-                                    var rInp = row.querySelector('input');
+                                    var rInp = row.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"])');
                                     if (rInp) { inp = rInp; break; }
                                 }
                             }
                         }
                     }
+
+                    // 3. Input'a değeri yaz ve ZK'ye bildir
                     if (inp) {
                         inp.focus();
                         inp.value = code;
+                        inp.setAttribute('value', code);
                         inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
                         inp.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
                         inp.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
-                        inp.blur();
+
                         if (window.zk && window.zk.Widget) {
                             var wi = window.zk.Widget.$(inp);
                             if (wi) {
                                 if (typeof wi.setValue === 'function') wi.setValue(code);
-                                wi.fire('onChange', { value: code }, { toServer: true });
+                                wi._value = code;
+                                if (typeof wi.fire === 'function') {
+                                    wi.fire('onChange', { value: code }, { toServer: true });
+                                }
+                                if (window.zAu && typeof window.zAu.send === 'function') {
+                                    window.zAu.send(new window.zk.Event(wi, 'onChange', { value: code }, { toServer: true }));
+                                }
                             }
                         }
                     }
 
-                    var buttons = document.querySelectorAll('button, a, input[type="button"], input[type="submit"]');
-                    var btn = null;
-                    for (var k = 0; k < buttons.length; k++) {
-                        var bt = norm(buttons[k].innerText || buttons[k].textContent || buttons[k].value || '');
-                        if (bt.indexOf('kabul') !== -1 && (bt.indexOf('ara') !== -1 || bt.indexOf('sorgula') !== -1)) {
-                            btn = buttons[k];
-                            break;
-                        }
-                    }
+                    // 4. Butonu tıkla ve ZK'ye onClick gönder
                     if (btn) {
                         ['mouseover', 'mouseenter', 'mousedown', 'mouseup', 'click'].forEach(function(evt) {
                             btn.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window }));
                         });
-                        btn.click();
+                        try { btn.click(); } catch (_) {}
+
                         if (window.zk && window.zk.Widget) {
                             var wb = window.zk.Widget.$(btn);
-                            if (wb) wb.fire('onClick', null, { toServer: true });
-                        }
-                        if (window.zAu && window.zk && window.zk.Widget) {
-                            var wb2 = window.zk.Widget.$(btn);
-                            if (wb2) window.zAu.send(new window.zk.Event(wb2, 'onClick', null, { toServer: true }));
+                            if (wb) {
+                                if (typeof wb.fire === 'function') wb.fire('onClick', null, { toServer: true });
+                                if (window.zAu && typeof window.zAu.send === 'function') {
+                                    window.zAu.send(new window.zk.Event(wb, 'onClick', null, { toServer: true }));
+                                }
+                            }
                         }
                     }
+
+                    return { success: true, inputFound: Boolean(inp), buttonFound: Boolean(btn) };
                 } catch (e) {
                     console.error('[YKN MAIN World Search Error]', e);
+                    return { error: e.message };
                 }
             },
             args: [kabulId]
@@ -707,21 +747,43 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
 
 async function transferToYoksis(request) {
     const yoksisTab = await getExistingYoksisTab();
+    const kabulId = (request.data?.yoksisId || request.data?.kabulId || request.kabulId || '').trim();
+    if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
+
     await new Promise((resolve) => {
         chrome.storage.local.set({ studentData: request.data }, resolve);
     });
 
-    const response = await sendTabMessage(yoksisTab.id, {
-        action: 'searchWithId',
-        kabulId: request.data.yoksisId,
-        requestId: request.requestId
-    });
-    // ZK Framework main-world desteği için ek tetikleyici
-    executeYoksisSearchInMainWorld(yoksisTab.id, request.data.yoksisId).catch(() => {});
-    if (!response?.success) throw new Error(response?.message || 'YÖKSİS araması başlatılamadı.');
+    // 1. Önce YÖKSİS sekmesini aktif yap ve pencereyi öne getir
+    await updateTab(yoksisTab.id, { active: true });
+    if (yoksisTab.windowId) {
+        try {
+            await chrome.windows.update(yoksisTab.windowId, { focused: true });
+        } catch (_) {}
+    }
+
+    // 2. MAIN WORLD ZK aramasını DERHAL tetikle (sendTabMessage beklenmeden!)
+    await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
+
+    // 3. Content script üzerinden de aramayı başlat (izole dünya ve DOM desteği)
+    let response = null;
+    try {
+        response = await sendTabMessage(yoksisTab.id, {
+            action: 'searchWithId',
+            kabulId: kabulId,
+            requestId: request.requestId
+        });
+    } catch (msgErr) {
+        console.warn('[YKN] sendTabMessage searchWithId warning:', msgErr);
+    }
+
+    // 4. Teyit için kısa bir süre sonra MAIN WORLD aramasını bir kez daha tetikle
+    setTimeout(() => {
+        executeYoksisSearchInMainWorld(yoksisTab.id, kabulId).catch(() => {});
+    }, 400);
 
     // Form açıldığında kalan bilgileri ve vesikalık fotoğrafı otomatik doldur ve yükle
-    if (response.formReady) {
+    if (response?.formReady) {
         try {
             await new Promise((r) => setTimeout(r, 350));
             await sendTabMessage(yoksisTab.id, {
@@ -729,18 +791,12 @@ async function transferToYoksis(request) {
                 data: request.data
             });
             await syncYoksisFormInMainWorld(yoksisTab.id, request.data);
-            await updateTab(yoksisTab.id, { active: true });
-            if (yoksisTab.windowId) {
-                try {
-                    await chrome.windows.update(yoksisTab.windowId, { focused: true });
-                } catch (_) {}
-            }
         } catch (fillErr) {
             console.warn('[YKN] transferToYoksis auto-fill warning:', fillErr);
         }
     }
 
-    return response;
+    return response || { success: true, formReady: Boolean(response?.formReady) };
 }
 
 function isAllowedApplyUrl(url) {

@@ -149,12 +149,78 @@ function normalizeYoksisText(str) {
     return (str || '').toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
 }
 
+function findKabulIdButton(idInput) {
+    const norm = normalizeYoksisText;
+
+    // 1. Metin kontrolü: Tüm tıklanabilir ve ZK buton öğeleri (span, table, div, button vb.)
+    const candidates = document.querySelectorAll('button, .z-button, a, input[type="button"], input[type="submit"], [role="button"], span.z-button, table.z-button, span.z-button-cm, span, td, div');
+    for (const el of candidates) {
+        const text = norm(el.innerText || el.textContent || el.value || '');
+        if (text.includes('kabul') && (text.includes('ara') || text.includes('sorgula'))) {
+            const btn = el.closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || el;
+            return btn;
+        }
+    }
+
+    // 2. Eğer idInput biliniyorsa, idInput'un bulunduğu panel/tablo/groupbox içindeki buton
+    if (idInput) {
+        let container = idInput.closest('tr, .z-row, table, .z-groupbox, .z-panel, fieldset, div');
+        while (container && container !== document.body) {
+            const btn = container.querySelector('button.s-button-submit, button.z-button, .z-button, button, a.z-button, input[type="button"], span.z-button');
+            if (btn) {
+                const btnText = norm(btn.innerText || btn.textContent || btn.value || '');
+                if (btnText.includes('ara') || btnText.includes('kabul') || btnText.includes('sorgula') || btn.classList.contains('s-button-submit')) {
+                    return btn;
+                }
+            }
+            container = container.parentElement;
+        }
+    }
+
+    // 3. İçinde "Kabul Mektup" ve "Ara" geçen herhangi bir alt öğenin butonu
+    const textNodes = document.querySelectorAll('span, div, td, b, strong');
+    for (const node of textNodes) {
+        const t = norm(node.innerText || node.textContent || '');
+        if (t.includes('kabul') && t.includes('ara')) {
+            const parentBtn = node.closest('button, .z-button, a, table.z-button, [role="button"]');
+            if (parentBtn) return parentBtn;
+        }
+    }
+
+    // 4. .s-button-submit veya .z-button sınıflı butonlar arasında arama
+    const zButtons = document.querySelectorAll('button.s-button-submit, button.z-button, .z-button');
+    for (const btn of zButtons) {
+        const t = norm(btn.innerText || btn.textContent || '');
+        if (t.includes('ara') && !t.includes('belgesorgula')) {
+            return btn;
+        }
+    }
+
+    return null;
+}
+
 function findKabulIdInput() {
     const norm = normalizeYoksisText;
+
+    // 0. Kabul butonu varsa, butonun yanındaki / aynı satırdaki / kapsayıcıdaki inputu öncelikli al
+    const searchBtn = findKabulIdButton();
+    if (searchBtn) {
+        const rowOrCont = searchBtn.closest('tr, .z-row, table, .z-groupbox, .z-panel, div');
+        if (rowOrCont) {
+            const rowInps = rowOrCont.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"])');
+            for (const inp of rowInps) {
+                if (inp.offsetWidth > 0 || inp.offsetHeight > 0 || inp.type === 'text' || !inp.type) {
+                    return inp;
+                }
+            }
+        }
+    }
+
     const inputs = document.querySelectorAll('input');
 
     // 1. Placeholder ve title kontrolü
     for (const input of inputs) {
+        if (input.type === 'button' || input.type === 'submit' || input.type === 'hidden') continue;
         const ph = norm(input.getAttribute('placeholder') || '');
         const title = norm(input.getAttribute('title') || '');
         if (ph.includes('kabulmektup') || ph.includes('kabulid') || title.includes('kabulmektup') || title.includes('kabulid')) {
@@ -172,57 +238,8 @@ function findKabulIdInput() {
     for (const cont of allContainers) {
         const text = norm(cont.innerText || cont.textContent || '');
         if (text.includes('kabulmektupid') || text.includes('kabulmektup')) {
-            const inp = cont.querySelector('input');
+            const inp = cont.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"])');
             if (inp) return inp;
-        }
-    }
-
-    return null;
-}
-
-function findKabulIdButton(idInput) {
-    const norm = normalizeYoksisText;
-
-    // 1. Metin kontrolü: "Kabul Mektup Id İle Ara", "Kabul Mektup Ara", vb.
-    const allClickables = document.querySelectorAll('button, a, input[type="button"], input[type="submit"]');
-    for (const btn of allClickables) {
-        const text = norm(btn.innerText || btn.textContent || btn.value || '');
-        if (text.includes('kabul') && (text.includes('ara') || text.includes('sorgula'))) {
-            return btn;
-        }
-    }
-
-    // 2. Eğer idInput biliniyorsa, idInput'un bulunduğu panel/tablo/groupbox içindeki buton
-    if (idInput) {
-        let container = idInput.closest('table') || idInput.closest('.z-groupbox, .z-panel, fieldset, tr, div');
-        while (container && container !== document.body) {
-            const btn = container.querySelector('button.s-button-submit, button.z-button, button, a.z-button, input[type="button"]');
-            if (btn) {
-                const btnText = norm(btn.innerText || btn.textContent || btn.value || '');
-                if (btnText.includes('ara') || btnText.includes('kabul') || btnText.includes('sorgula') || btn.classList.contains('s-button-submit')) {
-                    return btn;
-                }
-            }
-            container = container.parentElement;
-        }
-    }
-
-    // 3. İçinde "Kabul Mektup" ve "Ara" geçen herhangi bir alt öğenin butonu
-    const textNodes = document.querySelectorAll('span, div, td, b, strong');
-    for (const node of textNodes) {
-        const t = norm(node.innerText || node.textContent || '');
-        if (t.includes('kabul') && t.includes('ara')) {
-            const parentBtn = node.closest('button, a, [role="button"]');
-            if (parentBtn) return parentBtn;
-        }
-    }
-
-    // 4. .s-button-submit veya .z-button sınıflı butonlar arasında arama
-    const zButtons = document.querySelectorAll('button.s-button-submit, button.z-button');
-    for (const btn of zButtons) {
-        const t = norm(btn.innerText || btn.textContent || '');
-        if (t.includes('ara') && !t.includes('belgesorgula')) {
-            return btn;
         }
     }
 
@@ -352,8 +369,8 @@ function waitForYoksisSearchControls() {
     });
 }
 
-function waitForYoksisForm() {
-    const deadline = Date.now() + 15_000;
+function waitForYoksisForm(timeoutMs = 6000) {
+    const deadline = Date.now() + timeoutMs;
     return new Promise((resolve, reject) => {
         const intervalId = setInterval(() => {
             const hasStudentForm = Boolean(
@@ -1378,9 +1395,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     triggerZkClick(null, idInput, kabulId);
                 }
 
-                return waitForYoksisForm();
+                let formReady = false;
+                try {
+                    await waitForYoksisForm(6000);
+                    formReady = true;
+                } catch (_) {
+                    formReady = false;
+                }
+                return { formReady };
             })
-            .then(() => sendResponse({ success: true, formReady: true, requestId: request.requestId }))
+            .then(({ formReady }) => sendResponse({ success: true, formReady, requestId: request.requestId }))
             .catch((error) => sendResponse({
                 success: false,
                 requestId: request.requestId,
