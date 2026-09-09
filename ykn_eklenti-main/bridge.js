@@ -1,8 +1,9 @@
 // bridge.js
 // İkamet Portalı (Web Sayfası) ile Eklenti (Background) arasında köprü görevi görür.
-if (window !== window.top) return;
-if (window.__YKN_BRIDGE_LOADED__) return;
-window.__YKN_BRIDGE_LOADED__ = true;
+(() => {
+    if (window !== window.top) return;
+    if (window.__YKN_BRIDGE_LOADED__) return;
+    window.__YKN_BRIDGE_LOADED__ = true;
 
 console.log('[YKN Bridge] Aktif ve dinlemede.');
 
@@ -78,3 +79,5 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }, '*');
     }
 });
+})();
+

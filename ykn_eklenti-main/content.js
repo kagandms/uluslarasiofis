@@ -1,4 +1,5 @@
 // content.js
+(() => {
 if (window.__YKN_CONTENT_LOADED__) return;
 window.__YKN_CONTENT_LOADED__ = true;
 
@@ -1838,3 +1839,5 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 });
+})();
+
