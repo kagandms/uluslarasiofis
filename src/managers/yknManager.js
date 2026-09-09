@@ -321,8 +321,17 @@ export function initYknManager() {
     }
 
     // UI Status Helper
+    let lastStatusMsg = '';
+    let lastStatusTime = 0;
     function addStatus(message, type = 'info') {
         if (!statusContainer) return;
+        const nowMs = Date.now();
+        if (message === lastStatusMsg && (nowMs - lastStatusTime) < 1500) {
+            return;
+        }
+        lastStatusMsg = message;
+        lastStatusTime = nowMs;
+
         const emptyEl = document.getElementById('ykn-status-empty');
         if (emptyEl) emptyEl.style.display = 'none';
 
@@ -1254,7 +1263,11 @@ export function initYknManager() {
         });
     }
 
-    window.addEventListener('message', (event) => {
+    if (window.__YKN_PORTAL_MSG_HANDLER__) {
+        window.removeEventListener('message', window.__YKN_PORTAL_MSG_HANDLER__);
+    }
+
+    const messageHandler = (event) => {
         if (event.source !== window || !event.data || event.data.source !== 'EXTENSION') return;
 
         if (event.data.type === 'PONG') {
@@ -1449,7 +1462,9 @@ export function initYknManager() {
             const errorMsg = event.data.error ? 'Hata: ' + event.data.error : 'Apply Topkapı üzerinde öğrenci bulunamadı.';
             addStatus(errorMsg, 'error');
         }
-    });
+    };
+    window.__YKN_PORTAL_MSG_HANDLER__ = messageHandler;
+    window.addEventListener('message', messageHandler);
 
     try {
         loadExtensionDownloadMetadata();

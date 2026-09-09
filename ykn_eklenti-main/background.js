@@ -327,127 +327,185 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
             world: 'MAIN',
             func: async (code) => {
                 try {
-                    console.log('[YKN MAIN WORLD] Searching for Kabul Mektup ID controls with code:', code);
+                    function getAllDocs(rootDoc) {
+                        const docs = [];
+                        function scan(d) {
+                            if (!d || docs.includes(d)) return;
+                            docs.push(d);
+                            try {
+                                const iframes = d.querySelectorAll('iframe, frame');
+                                for (let i = 0; i < iframes.length; i++) {
+                                    try {
+                                        const cDoc = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
+                                        if (cDoc) scan(cDoc);
+                                    } catch (_) {}
+                                }
+                            } catch (_) {}
+                        }
+                        scan(rootDoc || document);
+                        return docs;
+                    }
+
+                    function norm(s) {
+                        return (s || '')
+                            .toLocaleLowerCase('tr-TR')
+                            .replace(/ı/g, 'i')
+                            .replace(/ğ/g, 'g')
+                            .replace(/ü/g, 'u')
+                            .replace(/ş/g, 's')
+                            .replace(/ö/g, 'o')
+                            .replace(/ç/g, 'c')
+                            .normalize('NFD')
+                            .replace(/[\u0300-\u036f]/g, '')
+                            .replace(/\s+/g, ' ')
+                            .trim();
+                    }
+
+                    const allDocs = getAllDocs(document);
+                    console.log('[YKN MAIN WORLD] Scanning docs count:', allDocs.length, 'with code:', code);
 
                     let inp = null;
                     let btn = null;
+                    let targetWin = window;
 
-                    // 1. ÖNCELİK: Placeholder / Title / Value üzerinden doğrudan Input bulma
-                    const allInputs = document.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                    for (let i = 0; i < allInputs.length; i++) {
-                        const it = allInputs[i];
-                        const ph = ((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.value || '')).toLowerCase();
-                        if (ph.includes('kabul') && !ph.includes('pasaport')) {
-                            inp = it;
-                            break;
-                        }
-                    }
+                    for (const doc of allDocs) {
+                        const win = doc.defaultView || window;
+                        let dInp = null;
+                        let dBtn = null;
 
-                    // 2. ÖNCELİK: Buton bulma ("Kabul Mektup Id İle Ara" veya içinde "kabul" geçen buton)
-                    const allClickables = document.querySelectorAll('button, .z-button, a, input[type="button"], input[type="submit"], [role="button"], span.z-button, table.z-button, span.z-button-cm');
-                    for (let i = 0; i < allClickables.length; i++) {
-                        const c = allClickables[i];
-                        const cTxt = (c.innerText || c.textContent || c.value || '').toLowerCase();
-                        if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
-                            btn = c.closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || c;
-                            break;
-                        }
-                    }
-
-                    // 3. ÖNCELİK: Etiket ("Kabul Mektup Id" veya "Kabul Mektup ID ile Sorgula") üzerinden bulma
-                    if (!inp || !btn) {
-                        const textNodes = document.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption');
-                        for (let i = 0; i < textNodes.length; i++) {
-                            const node = textNodes[i];
-                            if (node.children.length > 3) continue;
-                            const txt = (node.innerText || node.textContent || '').toLowerCase();
-                            if (txt.includes('kabul') && !txt.includes('kabultarih')) {
-                                // Komşu hücreye bak
-                                const td = node.closest('td');
-                                if (td && td.nextElementSibling && !inp) {
-                                    inp = td.nextElementSibling.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                                }
-
-                                // En yakın kapsayıcıyı (groupbox, panel, table, form) bul
-                                let box = node.closest('.z-groupbox, .z-panel, fieldset, table, form');
-                                if (!box) {
-                                    let p = node.parentElement;
-                                    while (p && p !== document.body) {
-                                        if (p.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"])')) {
-                                            box = p;
-                                            break;
-                                        }
-                                        p = p.parentElement;
-                                    }
-                                }
-
-                                if (box) {
-                                    if (!inp) {
-                                        const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                                        for (let j = 0; j < bInps.length; j++) {
-                                            const bPh = ((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '')).toLowerCase();
-                                            if (!bPh.includes('pasaport')) {
-                                                inp = bInps[j];
-                                                break;
-                                            }
-                                        }
-                                        if (!inp && bInps.length > 0) inp = bInps[0];
-                                    }
-                                    if (!btn) {
-                                        const bBtns = box.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
-                                        if (bBtns.length > 0) {
-                                            btn = bBtns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || bBtns[0];
-                                        }
-                                    }
-                                }
-                                if (inp && btn) break;
-                            }
-                        }
-                    }
-
-                    // 4. Biri bulunup diğeri bulunamadıysa ebeveyn ağacında yukarı yürüyerek tamamla
-                    if (btn && !inp) {
-                        let parent = btn.parentElement;
-                        while (parent && parent !== document.body) {
-                            const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                            for (let k = 0; k < inps.length; k++) {
-                                const itPh = (inps[k].placeholder || inps[k].getAttribute('placeholder') || inps[k].value || '').toLowerCase();
-                                if (!itPh.includes('pasaport')) {
-                                    inp = inps[k];
-                                    break;
-                                }
-                            }
-                            if (inp) break;
-                            parent = parent.parentElement;
-                        }
-                    }
-
-                    if (inp && !btn) {
-                        let parent = inp.parentElement;
-                        while (parent && parent !== document.body) {
-                            const btns = parent.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
-                            for (let k = 0; k < btns.length; k++) {
-                                const bTxt = (btns[k].innerText || btns[k].textContent || btns[k].value || '').toLowerCase();
-                                if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                                    btn = btns[k].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[k];
-                                    break;
-                                }
-                            }
-                            if (btn) break;
-                            if (btns.length > 0) {
-                                btn = btns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[0];
+                        // 1. ÖNCELİK: Placeholder / Title / Name / Id / Value üzerinden doğrudan Input bulma
+                        const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                        for (let i = 0; i < allInputs.length; i++) {
+                            const it = allInputs[i];
+                            const ph = norm((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.id || ''));
+                            if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum')) {
+                                dInp = it;
                                 break;
                             }
-                            parent = parent.parentElement;
+                        }
+
+                        // 2. ÖNCELİK: Buton bulma ("Kabul Mektup Id İle Ara" veya içinde "kabul" geçen buton)
+                        const allClickables = doc.querySelectorAll('button, .z-button, a, input[type="button"], input[type="submit"], [role="button"], span.z-button, table.z-button, span.z-button-cm');
+                        for (let i = 0; i < allClickables.length; i++) {
+                            const c = allClickables[i];
+                            const cTxt = norm(c.innerText || c.textContent || c.value || '');
+                            if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
+                                dBtn = c.closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || c;
+                                break;
+                            }
+                        }
+
+                        // 3. ÖNCELİK: Etiket ("Kabul Mektup ID ile Sorgula" veya "Kabul Mektup Id") üzerinden bulma
+                        if (!dInp || !dBtn) {
+                            const textNodes = doc.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption, .z-caption, .z-groupbox-header');
+                            for (let i = 0; i < textNodes.length; i++) {
+                                const node = textNodes[i];
+                                if (node.children.length > 3) continue;
+                                const txt = norm(node.innerText || node.textContent || '');
+                                if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup')) && !txt.includes('kabultarih')) {
+                                    // Komşu hücreye bak
+                                    const td = node.closest('td');
+                                    if (td && td.nextElementSibling && !dInp) {
+                                        dInp = td.nextElementSibling.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                    }
+
+                                    // En yakın kapsayıcıyı (groupbox, panel, table, form, window) bul
+                                    let box = node.closest('.z-groupbox, .z-panel, fieldset, table, form, div.z-window');
+                                    if (!box) {
+                                        let p = node.parentElement;
+                                        while (p && p !== doc.body) {
+                                            if (p.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"])')) {
+                                                box = p;
+                                                break;
+                                            }
+                                            p = p.parentElement;
+                                        }
+                                    }
+
+                                    if (box) {
+                                        if (!dInp) {
+                                            const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                            for (let j = 0; j < bInps.length; j++) {
+                                                const bPh = norm((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
+                                                if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum')) {
+                                                    dInp = bInps[j];
+                                                    break;
+                                                }
+                                            }
+                                            if (!dInp && bInps.length > 0) dInp = bInps[0];
+                                        }
+                                        if (!dBtn) {
+                                            const bBtns = box.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
+                                            if (bBtns.length > 0) {
+                                                for (let j = 0; j < bBtns.length; j++) {
+                                                    const bTxt = norm(bBtns[j].innerText || bBtns[j].textContent || bBtns[j].value || '');
+                                                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
+                                                        dBtn = bBtns[j].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || bBtns[j];
+                                                        break;
+                                                    }
+                                                }
+                                                if (!dBtn) dBtn = bBtns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || bBtns[0];
+                                            }
+                                        }
+                                    }
+                                    if (dInp && dBtn) break;
+                                }
+                            }
+                        }
+
+                        // 4. Biri bulunup diğeri bulunamadıysa ebeveyn ağacında yukarı yürüyerek tamamla
+                        if (dBtn && !dInp) {
+                            let parent = dBtn.parentElement;
+                            while (parent && parent !== doc.body) {
+                                const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                for (let k = 0; k < inps.length; k++) {
+                                    const itPh = norm(inps[k].placeholder || inps[k].getAttribute('placeholder') || inps[k].value || inps[k].id || '');
+                                    if (!itPh.includes('pasaport') && !itPh.includes('tc') && !itPh.includes('dogum')) {
+                                        dInp = inps[k];
+                                        break;
+                                    }
+                                }
+                                if (dInp) break;
+                                parent = parent.parentElement;
+                            }
+                        }
+
+                        if (dInp && !dBtn) {
+                            let parent = dInp.parentElement;
+                            while (parent && parent !== doc.body) {
+                                const btns = parent.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
+                                for (let k = 0; k < btns.length; k++) {
+                                    const bTxt = norm(btns[k].innerText || btns[k].textContent || btns[k].value || '');
+                                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
+                                        dBtn = btns[k].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[k];
+                                        break;
+                                    }
+                                }
+                                if (dBtn) break;
+                                if (btns.length > 0) {
+                                    dBtn = btns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[0];
+                                    break;
+                                }
+                                parent = parent.parentElement;
+                            }
+                        }
+
+                        if (dInp) {
+                            inp = dInp;
+                            btn = dBtn;
+                            targetWin = win;
+                            console.log('[YKN MAIN WORLD] Found in doc:', { inp: Boolean(inp), btn: Boolean(btn) });
+                            break;
                         }
                     }
 
-                    console.log('[YKN MAIN WORLD] Found elements:', { inp: Boolean(inp), btn: Boolean(btn) });
+                    console.log('[YKN MAIN WORLD] Search summary:', { inp: Boolean(inp), btn: Boolean(btn) });
 
                     // 5. Input'a değeri yaz ve tüm olayları tetikle
                     if (inp) {
                         inp.focus();
-                        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+                        const nativeSetter = Object.getOwnPropertyDescriptor(targetWin.HTMLInputElement.prototype, 'value')?.set
+                            || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
                         if (nativeSetter) {
                             nativeSetter.call(inp, code);
                         } else {
@@ -458,8 +516,8 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
                         inp.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
-                        if (window.zk && window.zk.Widget) {
-                            const wi = window.zk.Widget.$(inp);
+                        if (targetWin.zk && targetWin.zk.Widget) {
+                            const wi = targetWin.zk.Widget.$(inp);
                             if (wi) {
                                 if (typeof wi.setValue === 'function') wi.setValue(code);
                                 wi._value = code;
@@ -467,6 +525,12 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                 if (typeof wi.fire === 'function') {
                                     wi.fire('onChange', { value: code }, { toServer: true });
                                 }
+                            }
+                        }
+                        if (targetWin.zAu && typeof targetWin.zAu.send === 'function' && targetWin.zk?.Widget) {
+                            const wi = targetWin.zk.Widget.$(inp);
+                            if (wi) {
+                                try { targetWin.zAu.send(new targetWin.zk.Event(wi, 'onChange', { value: code }, { toServer: true })); } catch (_) {}
                             }
                         }
 
@@ -481,16 +545,16 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     if (btn) {
                         btn.focus();
                         ['mouseover', 'mouseenter', 'mousedown', 'mouseup', 'click'].forEach(function(evt) {
-                            btn.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window }));
+                            btn.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: targetWin }));
                         });
                         try { btn.click(); } catch (_) {}
 
-                        if (window.zk && window.zk.Widget) {
-                            let wb = window.zk.Widget.$(btn);
+                        if (targetWin.zk && targetWin.zk.Widget) {
+                            let wb = targetWin.zk.Widget.$(btn);
                             if (!wb) {
                                 let parentEl = btn.parentElement;
-                                while (parentEl && parentEl !== document.body && !wb) {
-                                    wb = window.zk.Widget.$(parentEl);
+                                while (parentEl && parentEl !== doc?.body && !wb) {
+                                    wb = targetWin.zk.Widget.$(parentEl);
                                     parentEl = parentEl.parentElement;
                                 }
                             }
@@ -498,19 +562,27 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                 wb.fire('onClick', null, { toServer: true });
                             }
                         }
-                    } else if (inp) {
-                        // Buton bulunamadıysa Enter ve onOK
-                        inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
-                        inp.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true }));
-                        if (window.zk && window.zk.Widget) {
-                            const wi = window.zk.Widget.$(inp);
+                        if (targetWin.zAu && typeof targetWin.zAu.send === 'function' && targetWin.zk?.Widget) {
+                            let wb = targetWin.zk.Widget.$(btn);
+                            if (wb) {
+                                try { targetWin.zAu.send(new targetWin.zk.Event(wb, 'onClick', null, { toServer: true })); } catch (_) {}
+                            }
+                        }
+                    }
+
+                    if (inp) {
+                        // Buton bulunsa da bulunmasa da ek güvence: Enter ve onOK
+                        inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: targetWin }));
+                        inp.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: targetWin }));
+                        if (targetWin.zk && targetWin.zk.Widget) {
+                            const wi = targetWin.zk.Widget.$(inp);
                             if (wi && typeof wi.fire === 'function') {
                                 try { wi.fire('onOK', null, { toServer: true }); } catch (_) {}
                             }
                         }
                     }
 
-                    return { success: true, inputFound: Boolean(inp), buttonFound: Boolean(btn) };
+                    return { success: Boolean(inp), inputFound: Boolean(inp), buttonFound: Boolean(btn) };
                 } catch (e) {
                     console.error('[YKN MAIN World Search Error]', e);
                     return { error: e.message };
@@ -529,11 +601,30 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
     if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return;
     try {
         await chrome.scripting.executeScript({
-            target: { tabId },
+            target: { tabId, allFrames: true },
             world: 'MAIN',
             args: [studentData || null],
             func: (data) => {
                 try {
+                    function getAllDocs(rootDoc) {
+                        var docs = [];
+                        function scan(d) {
+                            if (!d || docs.indexOf(d) !== -1) return;
+                            docs.push(d);
+                            try {
+                                var iframes = d.querySelectorAll('iframe, frame');
+                                for (var i = 0; i < iframes.length; i++) {
+                                    try {
+                                        var cDoc = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
+                                        if (cDoc) scan(cDoc);
+                                    } catch (_) {}
+                                }
+                            } catch (_) {}
+                        }
+                        scan(rootDoc || document);
+                        return docs;
+                    }
+
                     function norm(s) {
                         return (s || '')
                             .toLocaleLowerCase('tr-TR')
@@ -549,8 +640,9 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             .replace(/\s+/g, '');
                     }
 
-                    function commitTextbox(el) {
+                    function commitTextbox(el, win) {
                         if (!el) return;
+                        var wWin = win || window;
                         var val = el.value;
                         if (val === undefined || val === null || val === '') return;
 
@@ -559,8 +651,8 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
                         } catch (_) {}
 
-                        if (window.zk && window.zk.Widget) {
-                            var w = window.zk.Widget.$(el);
+                        if (wWin.zk && wWin.zk.Widget) {
+                            var w = wWin.zk.Widget.$(el);
                             if (w) {
                                 w._lastValue = '';
                                 w._shallSubmit = true;
@@ -582,17 +674,18 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 if (typeof w.fire === 'function') {
                                     try { w.fire('onChange', { value: val, start: val.length }, { toServer: true }); } catch (_) {}
                                 }
-                                if (window.zAu && typeof window.zAu.send === 'function') {
+                                if (wWin.zAu && typeof wWin.zAu.send === 'function') {
                                     try {
-                                        window.zAu.send(new window.zk.Event(w, 'onChange', { value: val, start: val.length }, { toServer: true }));
+                                        wWin.zAu.send(new wWin.zk.Event(w, 'onChange', { value: val, start: val.length }, { toServer: true }));
                                     } catch (_) {}
                                 }
                             }
                         }
                     }
 
-                    function commitDatebox(el) {
+                    function commitDatebox(el, win) {
                         if (!el) return;
+                        var wWin = win || window;
                         var val = (el.value || '').trim();
                         if (!val) return;
 
@@ -614,12 +707,9 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 el.value = formatted;
                                 var dateObj = new Date(y, m - 1, d, 0, 0, 0, 0);
 
-                                if (window.zk && window.zk.Widget) {
-                                    var w = window.zk.Widget.$(el);
+                                if (wWin.zk && wWin.zk.Widget) {
+                                    var w = wWin.zk.Widget.$(el);
                                     if (w) {
-                                        // 1. ZK client-side validation ve parse mekanizmasını güvenceye al:
-                                        // coerceFromString_ Date nesnesi döndürmelidir ki client-side validate_
-                                        // veya ZK dahili kontrolleri !(val instanceof Date) hatası fırlatmasın.
                                         w.coerceFromString_ = function () { return dateObj; };
                                         w.coerceToString_ = function () { return formatted; };
                                         w.getValue = function () { return dateObj; };
@@ -629,7 +719,6 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                             try { w._cst.validate = function () { return null; }; } catch (_) {}
                                         }
 
-                                        // 2. Widget hafızasını güncelle
                                         w._lastValue = formatted;
                                         w._value = dateObj;
                                         w._shallSubmit = true;
@@ -646,7 +735,6 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                             try { w.setValue(dateObj); } catch (_) {}
                                         }
 
-                                        // 3. Hata mesajlarını ve invalid CSS sınıflarını temizle
                                         if (typeof w.clearErrorMessage === 'function') {
                                             try { w.clearErrorMessage(true); } catch (_) {}
                                         }
@@ -661,17 +749,9 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                             parentBox.classList.remove('z-datebox-invalid', 'z-textbox-invalid');
                                         }
 
-                                        // 4. Sunucuya değişikliği rawValue ile bildir!
-                                        // Java ZK InputElement.java:
-                                        //   final String rawValue = (String) data.get("rawValue");
-                                        //   if (rawValue != null) {
-                                        //       value = coerceFromString(rawValue);
-                                        //   }
-                                        // rawValue verildiğinde, sunucu Datebox.coerceFromString("dd.MM.yyyy")
-                                        // çağırarak string'i java.util.Date nesnesine kusursuz dönüştürür.
-                                        if (window.zAu && typeof window.zAu.send === 'function') {
+                                        if (wWin.zAu && typeof wWin.zAu.send === 'function') {
                                             try {
-                                                window.zAu.send(new window.zk.Event(w, 'onChange', {
+                                                wWin.zAu.send(new wWin.zk.Event(w, 'onChange', {
                                                     rawValue: formatted,
                                                     value: formatted,
                                                     start: formatted.length
@@ -689,56 +769,24 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         }
                     }
 
-                    // SADECE eklentinin doldurduğu hedeflenmiş alanları senkronize et.
-                    // ASLA Doğum Tarihi (dogumtarihi) veya arama kutularına müdahale etme!
-                    var allInputs = document.querySelectorAll('input');
-                    for (var j = 0; j < allInputs.length; j++) {
-                        var inp = allInputs[j];
-                        var row = inp.closest('tr');
-                        var rowText = row ? norm(row.innerText || row.textContent) : '';
-                        var placeholder = norm(inp.placeholder || '');
-                        var combined = rowText + ' ' + placeholder;
-
-                        // Doğum Tarihi, Kabul Mektubu ID arama alanı veya sorgu alanlarını kesinlikle atla
-                        if (combined.indexOf('dogumtarih') !== -1 || combined.indexOf('kabulmektup') !== -1 || combined.indexOf('sorgula') !== -1) {
-                            continue;
-                        }
-
-                        // Tarih kutuları (Belge Düzenleme Tarihi, Belge Geçerlilik Tarihi)
-                        if (combined.indexOf('duzenle') !== -1 || combined.indexOf('gecerli') !== -1 || combined.indexOf('verilis') !== -1 || combined.indexOf('tanzim') !== -1 || combined.indexOf('bitis') !== -1) {
-                            commitDatebox(inp);
-                            continue;
-                        }
-
-                        // Metin kutuları (Anne Adı, Baba Adı, Doğum Yeri Açıklaması, Veren Makam, Telefon, Belge No, Fotoğraf Adı)
-                        if (combined.indexOf('anneadi') !== -1 ||
-                            combined.indexOf('babaadi') !== -1 ||
-                            combined.indexOf('dogumyeriaciklama') !== -1 ||
-                            combined.indexOf('verenmakam') !== -1 ||
-                            combined.indexOf('telefon') !== -1 ||
-                            combined.indexOf('fotograf') !== -1 ||
-                            (combined.indexOf('belgeno') !== -1 && combined.indexOf('uyruk') === -1)) {
-                            commitTextbox(inp);
-                        }
-                    }
-
-                    function purgeErrorBoxes() {
+                    function purgeErrorBoxes(targetDoc) {
                         try {
-                            var errorBoxes = document.querySelectorAll('.z-errorbox');
+                            var d = targetDoc || document;
+                            var errorBoxes = d.querySelectorAll('.z-errorbox');
                             for (var k = 0; k < errorBoxes.length; k++) {
                                 errorBoxes[k].remove();
                             }
-                            var invalids = document.querySelectorAll('.z-datebox-invalid, .z-textbox-invalid');
+                            var invalids = d.querySelectorAll('.z-datebox-invalid, .z-textbox-invalid');
                             for (var m = 0; m < invalids.length; m++) {
                                 invalids[m].classList.remove('z-datebox-invalid');
                                 invalids[m].classList.remove('z-textbox-invalid');
                             }
-                            var modals = document.querySelectorAll('.z-window-modal, .z-messagebox-window');
+                            var modals = d.querySelectorAll('.z-window-modal, .z-messagebox-window');
                             for (var n = 0; n < modals.length; n++) {
                                 var modalText = (modals[n].innerText || modals[n].textContent || '');
                                 if (modalText.indexOf('Form validasyonu') !== -1 || modalText.indexOf('hata oluştu') !== -1 || modalText.indexOf('tarihinden başka') !== -1) {
                                     modals[n].remove();
-                                    var masks = document.querySelectorAll('.z-modal-mask');
+                                    var masks = d.querySelectorAll('.z-modal-mask');
                                     for (var p = 0; p < masks.length; p++) {
                                         masks[p].remove();
                                     }
@@ -746,143 +794,176 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             }
                         } catch (_) {}
                     }
-                    purgeErrorBoxes();
-                    setTimeout(purgeErrorBoxes, 50);
-                    setTimeout(purgeErrorBoxes, 150);
-                    setTimeout(purgeErrorBoxes, 350);
 
-                    // Fotoğraf Yükleme (MAIN World güvencesi)
-                    if (data && data.croppedPhotoBase64) {
-                        try {
-                            var buttons = document.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button');
-                            var photoBtn = null;
-                            for (var b = 0; b < buttons.length; b++) {
-                                var bt = norm(buttons[b].innerText || buttons[b].textContent || buttons[b].value || '');
-                                if (bt.indexOf('fotograf') !== -1 && (bt.indexOf('yukle') !== -1 || bt.indexOf('sec') !== -1 || bt.indexOf('ekle') !== -1)) {
-                                    photoBtn = buttons[b];
-                                    break;
-                                }
+                    var allDocs = getAllDocs(document);
+                    for (var di = 0; di < allDocs.length; di++) {
+                        var doc = allDocs[di];
+                        var win = doc.defaultView || window;
+
+                        // SADECE eklentinin doldurduğu hedeflenmiş alanları senkronize et.
+                        var allInputs = doc.querySelectorAll('input');
+                        for (var j = 0; j < allInputs.length; j++) {
+                            var inp = allInputs[j];
+                            var row = inp.closest('tr');
+                            var rowText = row ? norm(row.innerText || row.textContent) : '';
+                            var placeholder = norm(inp.placeholder || '');
+                            var combined = rowText + ' ' + placeholder;
+
+                            if (combined.indexOf('dogumtarih') !== -1 || combined.indexOf('kabulmektup') !== -1 || combined.indexOf('sorgula') !== -1) {
+                                continue;
                             }
 
-                            if (!photoBtn) {
-                                var allLabels = document.querySelectorAll('span, td, div, label, b');
-                                for (var l = 0; l < allLabels.length; l++) {
-                                    var lt = norm(allLabels[l].innerText || allLabels[l].textContent || '');
-                                    if (lt.indexOf('fotografadi') !== -1 || lt === 'fotograf') {
-                                        var rowEl = allLabels[l].closest('tr') || allLabels[l].closest('div') || allLabels[l].parentElement;
-                                        if (rowEl) {
-                                            var btnInRow = rowEl.querySelector('button, a, input[type="button"], .z-button');
-                                            if (btnInRow) { photoBtn = btnInRow; break; }
+                            if (combined.indexOf('duzenle') !== -1 || combined.indexOf('gecerli') !== -1 || combined.indexOf('verilis') !== -1 || combined.indexOf('tanzim') !== -1 || combined.indexOf('bitis') !== -1) {
+                                commitDatebox(inp, win);
+                                continue;
+                            }
+
+                            if (combined.indexOf('anneadi') !== -1 ||
+                                combined.indexOf('babaadi') !== -1 ||
+                                combined.indexOf('dogumyeriaciklama') !== -1 ||
+                                combined.indexOf('verenmakam') !== -1 ||
+                                combined.indexOf('telefon') !== -1 ||
+                                combined.indexOf('fotograf') !== -1 ||
+                                (combined.indexOf('belgeno') !== -1 && combined.indexOf('uyruk') === -1)) {
+                                commitTextbox(inp, win);
+                            }
+                        }
+
+                        purgeErrorBoxes(doc);
+
+                        // Fotoğraf Yükleme (MAIN World güvencesi)
+                        if (data && data.croppedPhotoBase64) {
+                            try {
+                                var buttons = doc.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button');
+                                var photoBtn = null;
+                                for (var b = 0; b < buttons.length; b++) {
+                                    var bt = norm(buttons[b].innerText || buttons[b].textContent || buttons[b].value || '');
+                                    if (bt.indexOf('fotograf') !== -1 && (bt.indexOf('yukle') !== -1 || bt.indexOf('sec') !== -1 || bt.indexOf('ekle') !== -1)) {
+                                        photoBtn = buttons[b];
+                                        break;
+                                    }
+                                }
+
+                                if (!photoBtn) {
+                                    var allLabels = doc.querySelectorAll('span, td, div, label, b');
+                                    for (var l = 0; l < allLabels.length; l++) {
+                                        var lt = norm(allLabels[l].innerText || allLabels[l].textContent || '');
+                                        if (lt.indexOf('fotografadi') !== -1 || lt === 'fotograf') {
+                                            var rowEl = allLabels[l].closest('tr') || allLabels[l].closest('div') || allLabels[l].parentElement;
+                                            if (rowEl) {
+                                                var btnInRow = rowEl.querySelector('button, a, input[type="button"], .z-button');
+                                                if (btnInRow) { photoBtn = btnInRow; break; }
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            if (photoBtn) {
-                                ['mouseover', 'mouseenter'].forEach(function(evt) {
-                                    photoBtn.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window }));
-                                });
-                            }
-
-                            var fileInput = null;
-                            if (photoBtn) {
-                                fileInput = photoBtn.querySelector('input[type="file"]') ||
-                                            (photoBtn.parentElement && photoBtn.parentElement.querySelector('input[type="file"]'));
-                            }
-
-                            if (!fileInput && window.zk && window.zk.Widget && photoBtn) {
-                                var wgt = window.zk.Widget.$(photoBtn);
-                                if (wgt) {
-                                    if (wgt._uplder) {
-                                        var u = wgt._uplder;
-                                        fileInput = (u.form && u.form.querySelector('input[type="file"]')) ||
-                                                    (u._form && u._form.querySelector('input[type="file"]')) ||
-                                                    u.input || u._input;
-                                    }
-                                    if (!fileInput && wgt.uuid) {
-                                        fileInput = document.querySelector('form[id*="' + wgt.uuid + '"] input[type="file"], input[type="file"][id*="' + wgt.uuid + '"]');
-                                    }
-                                }
-                            }
-
-                            if (!fileInput) {
-                                var allInputs = document.querySelectorAll('input[type="file"]');
-                                if (allInputs.length === 1) {
-                                    fileInput = allInputs[0];
-                                } else if (allInputs.length > 1 && photoBtn) {
-                                    var btnRect = photoBtn.getBoundingClientRect();
-                                    var closest = null;
-                                    var minDist = Infinity;
-                                    for (var k = 0; k < allInputs.length; k++) {
-                                        var r = allInputs[k].getBoundingClientRect();
-                                        var d = Math.hypot(r.left - btnRect.left, r.top - btnRect.top);
-                                        if (d < minDist) { minDist = d; closest = allInputs[k]; }
-                                    }
-                                    fileInput = closest || allInputs[0];
-                                }
-                            }
-
-                            if (fileInput) {
-                                var raw = data.croppedPhotoBase64;
-                                var mime = 'image/jpeg';
-                                var bstr;
-                                if (raw.indexOf(',') !== -1) {
-                                    var parts = raw.split(',');
-                                    var mm = parts[0].match(/:(.*?);/);
-                                    if (mm) mime = mm[1];
-                                    bstr = atob(parts[1]);
-                                } else {
-                                    bstr = atob(raw);
-                                }
-                                var len = bstr.length;
-                                var u8arr = new Uint8Array(len);
-                                while (len--) {
-                                    u8arr[len] = bstr.charCodeAt(len);
-                                }
-                                var photoFile = new File([u8arr], data.photoFileName || 'ogrenci_foto.jpg', { type: mime, lastModified: Date.now() });
-                                var dt = new DataTransfer();
-                                dt.items.add(photoFile);
-                                fileInput.files = dt.files;
-
-                                fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                                fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-
-                                if (window.jq) {
-                                    try { window.jq(fileInput).trigger('change'); } catch (_) {}
+                                if (photoBtn) {
+                                    ['mouseover', 'mouseenter'].forEach(function(evt) {
+                                        photoBtn.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: win }));
+                                    });
                                 }
 
-                                if (photoBtn && window.zk && window.zk.Widget) {
-                                    var btnW = window.zk.Widget.$(photoBtn);
-                                    if (btnW && btnW._uplder) {
-                                        var uplder = btnW._uplder;
-                                        ['start', '_start', 'upload', '_upload', 'send', 'submit'].forEach(function(fn) {
-                                            if (typeof uplder[fn] === 'function') {
-                                                try { uplder[fn](); } catch (_) {}
-                                            }
-                                        });
+                                var fileInput = null;
+                                if (photoBtn) {
+                                    fileInput = photoBtn.querySelector('input[type="file"]') ||
+                                                (photoBtn.parentElement && photoBtn.parentElement.querySelector('input[type="file"]'));
+                                }
+
+                                if (!fileInput && win.zk && win.zk.Widget && photoBtn) {
+                                    var wgt = win.zk.Widget.$(photoBtn);
+                                    if (wgt) {
+                                        if (wgt._uplder) {
+                                            var u = wgt._uplder;
+                                            fileInput = (u.form && u.form.querySelector('input[type="file"]')) ||
+                                                        (u._form && u._form.querySelector('input[type="file"]')) ||
+                                                        u.input || u._input;
+                                        }
+                                        if (!fileInput && wgt.uuid) {
+                                            fileInput = doc.querySelector('form[id*="' + wgt.uuid + '"] input[type="file"], input[type="file"][id*="' + wgt.uuid + '"]');
+                                        }
                                     }
                                 }
-                                console.log('[YKN MAIN World] Fotoğraf başarıyla yüklendi:', data.photoFileName);
+
+                                if (!fileInput) {
+                                    var allFileInputs = doc.querySelectorAll('input[type="file"]');
+                                    if (allFileInputs.length === 1) {
+                                        fileInput = allFileInputs[0];
+                                    } else if (allFileInputs.length > 1 && photoBtn) {
+                                        var btnRect = photoBtn.getBoundingClientRect();
+                                        var closest = null;
+                                        var minDist = Infinity;
+                                        for (var k = 0; k < allFileInputs.length; k++) {
+                                            var r = allFileInputs[k].getBoundingClientRect();
+                                            var d = Math.hypot(r.left - btnRect.left, r.top - btnRect.top);
+                                            if (d < minDist) { minDist = d; closest = allFileInputs[k]; }
+                                        }
+                                        fileInput = closest || allFileInputs[0];
+                                    }
+                                }
+
+                                if (fileInput) {
+                                    var raw = data.croppedPhotoBase64;
+                                    var mime = 'image/jpeg';
+                                    var bstr;
+                                    if (raw.indexOf(',') !== -1) {
+                                        var parts = raw.split(',');
+                                        var mm = parts[0].match(/:(.*?);/);
+                                        if (mm) mime = mm[1];
+                                        bstr = atob(parts[1]);
+                                    } else {
+                                        bstr = atob(raw);
+                                    }
+                                    var len = bstr.length;
+                                    var u8arr = new Uint8Array(len);
+                                    while (len--) {
+                                        u8arr[len] = bstr.charCodeAt(len);
+                                    }
+                                    var photoFile = new File([u8arr], data.photoFileName || 'ogrenci_foto.jpg', { type: mime, lastModified: Date.now() });
+                                    var dt = new DataTransfer();
+                                    dt.items.add(photoFile);
+                                    fileInput.files = dt.files;
+
+                                    fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                    fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+                                    if (win.jq) {
+                                        try { win.jq(fileInput).trigger('change'); } catch (_) {}
+                                    }
+
+                                    if (photoBtn && win.zk && win.zk.Widget) {
+                                        var btnW = win.zk.Widget.$(photoBtn);
+                                        if (btnW && btnW._uplder) {
+                                            var uplder = btnW._uplder;
+                                            ['start', '_start', 'upload', '_upload', 'send', 'submit'].forEach(function(fn) {
+                                                if (typeof uplder[fn] === 'function') {
+                                                    try { uplder[fn](); } catch (_) {}
+                                                }
+                                            });
+                                        }
+                                    }
+                                    console.log('[YKN MAIN World] Fotoğraf başarıyla yüklendi:', data.photoFileName);
+                                }
+                            } catch (pErr) {
+                                console.warn('[YKN MAIN World Photo Upload Error]', pErr);
                             }
-                        } catch (pErr) {
-                            console.warn('[YKN MAIN World Photo Upload Error]', pErr);
                         }
+
+                        try {
+                            if (!doc.__ykn_save_hook_installed) {
+                                doc.__ykn_save_hook_installed = true;
+                                doc.addEventListener('click', function (e) {
+                                    var btn = e.target ? e.target.closest('button, .z-button, a, input[type="button"], input[type="submit"]') : null;
+                                    if (btn) {
+                                        var txt = norm(btn.innerText || btn.textContent || btn.value || '');
+                                        if (txt.indexOf('kaydet') !== -1 || txt.indexOf('guncelle') !== -1) {
+                                            purgeErrorBoxes(doc);
+                                        }
+                                    }
+                                }, true);
+                            }
+                        } catch (_) {}
                     }
-
-                    try {
-                        if (!window.__ykn_save_hook_installed) {
-                            window.__ykn_save_hook_installed = true;
-                            document.addEventListener('click', function (e) {
-                                var btn = e.target ? e.target.closest('button, .z-button, a, input[type="button"], input[type="submit"]') : null;
-                                if (btn) {
-                                    var txt = norm(btn.innerText || btn.textContent || btn.value || '');
-                                    if (txt.indexOf('kaydet') !== -1 || txt.indexOf('guncelle') !== -1) {
-                                        purgeErrorBoxes();
-                                    }
-                                }
-                            }, true);
-                        }
-                    } catch (_) {}
                 } catch (e) {
                     console.error('[YKN MAIN World Form Sync Error]', e);
                 }

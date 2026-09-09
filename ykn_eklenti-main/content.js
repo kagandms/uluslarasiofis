@@ -1,3 +1,26 @@
+// content.js
+if (window.__YKN_CONTENT_LOADED__) return;
+window.__YKN_CONTENT_LOADED__ = true;
+
+function getAllDocs(rootDoc = document) {
+    const docs = [];
+    function scan(d) {
+        if (!d || docs.includes(d)) return;
+        docs.push(d);
+        try {
+            const iframes = d.querySelectorAll('iframe, frame');
+            for (let i = 0; i < iframes.length; i++) {
+                try {
+                    const cDoc = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
+                    if (cDoc) scan(cDoc);
+                } catch (_) {}
+            }
+        } catch (_) {}
+    }
+    scan(rootDoc || document);
+    return docs;
+}
+
 // ZK Framework için Event Dispatcher (Input'lar için)
 function getPageKind() {
     if (location.hostname === 'apply.topkapi.edu.tr') return 'apply';
@@ -16,6 +39,7 @@ function sendApplyEvent(action, requestId, payload = {}) {
 
 async function simulateInput(element, value) {
     if (!element || value === undefined || value === null) return false;
+    const win = element.ownerDocument?.defaultView || window;
     
     try {
         element.scrollIntoView({ block: 'nearest', behavior: 'instant' });
@@ -23,19 +47,19 @@ async function simulateInput(element, value) {
 
     // ZK odaklanmasını ve widget aktifleşmesini sağlamak için fare/focus simülasyonu
     try {
-        element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, view: window }));
-        element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+        element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, view: win }));
+        element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
         element.focus();
         element.dispatchEvent(new FocusEvent('focus', { bubbles: false }));
         element.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-        element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, view: window }));
-        element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-        element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, view: win }));
+        element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
     } catch (_) {}
 
     await new Promise((r) => setTimeout(r, 25));
 
-    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    const nativeSetter = Object.getOwnPropertyDescriptor(win.HTMLInputElement?.prototype || window.HTMLInputElement.prototype, 'value')?.set;
     if (nativeSetter) {
         nativeSetter.call(element, value);
     } else {
@@ -44,9 +68,31 @@ async function simulateInput(element, value) {
     
     element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
     element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, composed: true, key: 'Enter', keyCode: 13 }));
-    element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, composed: true, key: 'Enter', keyCode: 13 }));
+    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, composed: true, key: 'Enter', keyCode: 13, view: win }));
+    element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, composed: true, key: 'Enter', keyCode: 13, view: win }));
     
+    if (win.zk && win.zk.Widget) {
+        try {
+            const w = win.zk.Widget.$(element);
+            if (w) {
+                if (typeof w.setValue === 'function') w.setValue(value);
+                w._value = value;
+                w._lastValue = value;
+                if (typeof w.fire === 'function') {
+                    w.fire('onChange', { value }, { toServer: true });
+                }
+            }
+        } catch (_) {}
+    }
+    if (win.zAu && typeof win.zAu.send === 'function' && win.zk?.Widget) {
+        try {
+            const w = win.zk.Widget.$(element);
+            if (w) {
+                win.zAu.send(new win.zk.Event(w, 'onChange', { value }, { toServer: true }));
+            }
+        } catch (_) {}
+    }
+
     await new Promise((r) => setTimeout(r, 25));
 
     // ZK Framework'ün değeri hafızaya alıp dirty/değişti olarak işaretlemesi için kritik olaylar
@@ -160,120 +206,132 @@ function normalizeYoksisText(str) {
 }
 
 function findYoksisKabulPair() {
-    let inp = null;
-    let btn = null;
+    const allDocs = getAllDocs(document);
+    for (const doc of allDocs) {
+        let inp = null;
+        let btn = null;
 
-    // 1. ÖNCELİK: Placeholder / Title / Value üzerinden doğrudan Input bulma
-    const allInputs = document.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-    for (let i = 0; i < allInputs.length; i++) {
-        const it = allInputs[i];
-        const ph = ((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.value || '')).toLowerCase();
-        if (ph.includes('kabul') && !ph.includes('pasaport')) {
-            inp = it;
-            break;
-        }
-    }
-
-    // 2. ÖNCELİK: Buton bulma ("Kabul Mektup Id İle Ara" veya içinde "kabul" geçen buton)
-    const allClickables = document.querySelectorAll('button, .z-button, a, input[type="button"], input[type="submit"], [role="button"], span.z-button, table.z-button, span.z-button-cm');
-    for (let i = 0; i < allClickables.length; i++) {
-        const c = allClickables[i];
-        const cTxt = (c.innerText || c.textContent || c.value || '').toLowerCase();
-        if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
-            btn = c.closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || c;
-            break;
-        }
-    }
-
-    // 3. ÖNCELİK: Etiket ("Kabul Mektup Id" veya "Kabul Mektup ID ile Sorgula") üzerinden bulma
-    if (!inp || !btn) {
-        const textNodes = document.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption');
-        for (let i = 0; i < textNodes.length; i++) {
-            const node = textNodes[i];
-            if (node.children.length > 3) continue;
-            const txt = (node.innerText || node.textContent || '').toLowerCase();
-            if (txt.includes('kabul') && !txt.includes('kabultarih')) {
-                // Komşu hücreye bak
-                const td = node.closest('td');
-                if (td && td.nextElementSibling && !inp) {
-                    inp = td.nextElementSibling.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                }
-
-                // En yakın kapsayıcıyı (groupbox, panel, table, form) bul
-                let box = node.closest('.z-groupbox, .z-panel, fieldset, table, form');
-                if (!box) {
-                    let p = node.parentElement;
-                    while (p && p !== document.body) {
-                        if (p.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"])')) {
-                            box = p;
-                            break;
-                        }
-                        p = p.parentElement;
-                    }
-                }
-
-                if (box) {
-                    if (!inp) {
-                        const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                        for (let j = 0; j < bInps.length; j++) {
-                            const bPh = ((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '')).toLowerCase();
-                            if (!bPh.includes('pasaport')) {
-                                inp = bInps[j];
-                                break;
-                            }
-                        }
-                        if (!inp && bInps.length > 0) inp = bInps[0];
-                    }
-                    if (!btn) {
-                        const bBtns = box.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
-                        if (bBtns.length > 0) {
-                            btn = bBtns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || bBtns[0];
-                        }
-                    }
-                }
-                if (inp && btn) break;
-            }
-        }
-    }
-
-    // 4. Biri bulunup diğeri bulunamadıysa ebeveyn ağacında yukarı yürüyerek tamamla
-    if (btn && !inp) {
-        let parent = btn.parentElement;
-        while (parent && parent !== document.body) {
-            const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-            for (let k = 0; k < inps.length; k++) {
-                const itPh = (inps[k].placeholder || inps[k].getAttribute('placeholder') || '').toLowerCase();
-                if (!itPh.includes('pasaport')) {
-                    inp = inps[k];
-                    break;
-                }
-            }
-            if (inp) break;
-            parent = parent.parentElement;
-        }
-    }
-
-    if (inp && !btn) {
-        let parent = inp.parentElement;
-        while (parent && parent !== document.body) {
-            const btns = parent.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
-            for (let k = 0; k < btns.length; k++) {
-                const bTxt = (btns[k].innerText || btns[k].textContent || btns[k].value || '').toLowerCase();
-                if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                    btn = btns[k].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[k];
-                    break;
-                }
-            }
-            if (btn) break;
-            if (btns.length > 0) {
-                btn = btns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[0];
+        // 1. ÖNCELİK: Placeholder / Title / Name / Id / Value üzerinden doğrudan Input bulma
+        const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+        for (let i = 0; i < allInputs.length; i++) {
+            const it = allInputs[i];
+            const ph = normalizeYoksisText((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.id || ''));
+            if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum')) {
+                inp = it;
                 break;
             }
-            parent = parent.parentElement;
+        }
+
+        // 2. ÖNCELİK: Buton bulma ("Kabul Mektup Id İle Ara" veya içinde "kabul" geçen buton)
+        const allClickables = doc.querySelectorAll('button, .z-button, a, input[type="button"], input[type="submit"], [role="button"], span.z-button, table.z-button, span.z-button-cm');
+        for (let i = 0; i < allClickables.length; i++) {
+            const c = allClickables[i];
+            const cTxt = normalizeYoksisText(c.innerText || c.textContent || c.value || '');
+            if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
+                btn = c.closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || c;
+                break;
+            }
+        }
+
+        // 3. ÖNCELİK: Etiket ("Kabul Mektup Id" veya "Kabul Mektup ID ile Sorgula") üzerinden bulma
+        if (!inp || !btn) {
+            const textNodes = doc.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption, .z-caption, .z-groupbox-header');
+            for (let i = 0; i < textNodes.length; i++) {
+                const node = textNodes[i];
+                if (node.children.length > 3) continue;
+                const txt = normalizeYoksisText(node.innerText || node.textContent || '');
+                if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup')) && !txt.includes('kabultarih')) {
+                    const td = node.closest('td');
+                    if (td && td.nextElementSibling && !inp) {
+                        inp = td.nextElementSibling.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                    }
+
+                    let box = node.closest('.z-groupbox, .z-panel, fieldset, table, form, div.z-window');
+                    if (!box) {
+                        let p = node.parentElement;
+                        while (p && p !== doc.body) {
+                            if (p.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"])')) {
+                                box = p;
+                                break;
+                            }
+                            p = p.parentElement;
+                        }
+                    }
+
+                    if (box) {
+                        if (!inp) {
+                            const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                            for (let j = 0; j < bInps.length; j++) {
+                                const bPh = normalizeYoksisText((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
+                                if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum')) {
+                                    inp = bInps[j];
+                                    break;
+                                }
+                            }
+                            if (!inp && bInps.length > 0) inp = bInps[0];
+                        }
+                        if (!btn) {
+                            const bBtns = box.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
+                            if (bBtns.length > 0) {
+                                for (let j = 0; j < bBtns.length; j++) {
+                                    const bTxt = normalizeYoksisText(bBtns[j].innerText || bBtns[j].textContent || bBtns[j].value || '');
+                                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
+                                        btn = bBtns[j].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || bBtns[j];
+                                        break;
+                                    }
+                                }
+                                if (!btn) btn = bBtns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || bBtns[0];
+                            }
+                        }
+                    }
+                    if (inp && btn) break;
+                }
+            }
+        }
+
+        // 4. Biri bulunup diğeri bulunamadıysa ebeveyn ağacında yukarı yürüyerek tamamla
+        if (btn && !inp) {
+            let parent = btn.parentElement;
+            while (parent && parent !== doc.body) {
+                const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                for (let k = 0; k < inps.length; k++) {
+                    const itPh = normalizeYoksisText(inps[k].placeholder || inps[k].getAttribute('placeholder') || inps[k].value || inps[k].id || '');
+                    if (!itPh.includes('pasaport') && !itPh.includes('tc') && !itPh.includes('dogum')) {
+                        inp = inps[k];
+                        break;
+                    }
+                }
+                if (inp) break;
+                parent = parent.parentElement;
+            }
+        }
+
+        if (inp && !btn) {
+            let parent = inp.parentElement;
+            while (parent && parent !== doc.body) {
+                const btns = parent.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
+                for (let k = 0; k < btns.length; k++) {
+                    const bTxt = normalizeYoksisText(btns[k].innerText || btns[k].textContent || btns[k].value || '');
+                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
+                        btn = btns[k].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[k];
+                        break;
+                    }
+                }
+                if (btn) break;
+                if (btns.length > 0) {
+                    btn = btns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[0];
+                    break;
+                }
+                parent = parent.parentElement;
+            }
+        }
+
+        if (inp) {
+            return { idInput: inp, searchBtn: btn, doc };
         }
     }
 
-    return { idInput: inp, searchBtn: btn };
+    return { idInput: null, searchBtn: null, doc: document };
 }
 
 function findKabulIdButton(idInput) {
@@ -295,6 +353,7 @@ function findKabulIdInput() {
 
 function simulateButtonClick(element) {
     if (!element) return false;
+    const win = element.ownerDocument?.defaultView || window;
     try { element.focus(); } catch (_) {}
 
     const rect = element.getBoundingClientRect();
@@ -304,7 +363,7 @@ function simulateButtonClick(element) {
     const mouseOpts = {
         bubbles: true,
         cancelable: true,
-        view: window,
+        view: win,
         clientX,
         clientY,
         button: 0,
@@ -337,53 +396,73 @@ function simulateButtonClick(element) {
 
 function triggerZkClick(buttonElement, inputElement, kabulId) {
     if (!buttonElement && !inputElement) return;
+    const targetEl = buttonElement || inputElement;
+    const win = targetEl.ownerDocument?.defaultView || window;
 
     try {
-        // Doğrudan window.zk varsa (aynı bağlamda)
-        if (window.zk && window.zk.Widget) {
+        if (win.zk && win.zk.Widget) {
             if (inputElement) {
-                const wi = window.zk.Widget.$(inputElement);
+                const wi = win.zk.Widget.$(inputElement);
                 if (wi) {
                     if (typeof wi.setValue === 'function') wi.setValue(kabulId);
                     wi.fire('onChange', { value: kabulId }, { toServer: true });
                 }
             }
             if (buttonElement) {
-                const wb = window.zk.Widget.$(buttonElement);
-                if (wb) wb.fire('onClick', null, { toServer: true });
+                let wb = win.zk.Widget.$(buttonElement);
+                if (!wb && buttonElement.parentElement) {
+                    wb = win.zk.Widget.$(buttonElement.parentElement);
+                }
+                if (wb && typeof wb.fire === 'function') {
+                    wb.fire('onClick', null, { toServer: true });
+                }
             }
         }
-        if (window.zAu && buttonElement && window.zk && window.zk.Widget) {
-            const wb = window.zk.Widget.$(buttonElement);
-            if (wb) window.zAu.send(new window.zk.Event(wb, 'onClick', null, { toServer: true }));
+        if (win.zAu && buttonElement && win.zk && win.zk.Widget) {
+            const wb = win.zk.Widget.$(buttonElement) || (buttonElement.parentElement && win.zk.Widget.$(buttonElement.parentElement));
+            if (wb) win.zAu.send(new win.zk.Event(wb, 'onClick', null, { toServer: true }));
+        }
+        if (inputElement) {
+            inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: win }));
+            inputElement.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: win }));
+            if (win.zk && win.zk.Widget) {
+                const wi = win.zk.Widget.$(inputElement);
+                if (wi && typeof wi.fire === 'function') {
+                    try { wi.fire('onOK', null, { toServer: true }); } catch (_) {}
+                }
+            }
         }
     } catch (_) {}
 }
 
 function syncZkFormInputs() {
     try {
-        if (window.zk && window.zk.Widget) {
-            var inputs = document.querySelectorAll('input, select, textarea');
-            for (var i = 0; i < inputs.length; i++) {
-                var el = inputs[i];
-                if (el.type === 'button' || el.type === 'submit' || el.type === 'reset' || el.type === 'hidden') continue;
-                var val = el.value;
-                if (val === undefined || val === null || val === '') continue;
+        const allDocs = getAllDocs(document);
+        for (const doc of allDocs) {
+            const win = doc.defaultView || window;
+            if (win.zk && win.zk.Widget) {
+                var inputs = doc.querySelectorAll('input, select, textarea');
+                for (var i = 0; i < inputs.length; i++) {
+                    var el = inputs[i];
+                    if (el.type === 'button' || el.type === 'submit' || el.type === 'reset' || el.type === 'hidden') continue;
+                    var val = el.value;
+                    if (val === undefined || val === null || val === '') continue;
 
-                var w = window.zk.Widget.$(el);
-                if (w) {
-                    if (typeof w.setValue === 'function') {
-                        w.setValue(val);
-                    }
-                    w._value = val;
-                    if (typeof w.doBlur_ === 'function') {
-                        try { w.doBlur_(new window.zk.Event(w, 'onBlur')); } catch (_) {}
-                    }
-                    if (typeof w.fire === 'function') {
-                        w.fire('onChange', { value: val }, { toServer: true });
-                    }
-                    if (window.zAu && typeof window.zAu.send === 'function') {
-                        window.zAu.send(new window.zk.Event(w, 'onChange', { value: val }, { toServer: true }));
+                    var w = win.zk.Widget.$(el);
+                    if (w) {
+                        if (typeof w.setValue === 'function') {
+                            w.setValue(val);
+                        }
+                        w._value = val;
+                        if (typeof w.doBlur_ === 'function') {
+                            try { w.doBlur_(new win.zk.Event(w, 'onBlur')); } catch (_) {}
+                        }
+                        if (typeof w.fire === 'function') {
+                            w.fire('onChange', { value: val }, { toServer: true });
+                        }
+                        if (win.zAu && typeof win.zAu.send === 'function') {
+                            win.zAu.send(new win.zk.Event(w, 'onChange', { value: val }, { toServer: true }));
+                        }
                     }
                 }
             }
@@ -443,37 +522,39 @@ function waitForYoksisForm(timeoutMs = 6000) {
 function findBelgeNoInMainPanel() {
     const normalize = str => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
     const searchWord = normalize('Belge No');
-    
-    const allInputs = document.querySelectorAll('input');
-    
-    for (const target of allInputs) {
-        // Sol menüdeki arama kutucuğunu atlamak için placeholder kontrolü
-        const ph = target.getAttribute('placeholder') || '';
-        if (ph.toLocaleLowerCase('tr-TR').includes('pasaport') || ph.toLocaleLowerCase('tr-TR').includes('belge')) {
-            continue; 
-        }
-        
-        // Bu input'un solundaki hücrelerde 'Belge No' var mı bakıyoruz
-        const targetTd = target.closest('td');
-        let prevTd = targetTd ? targetTd.previousElementSibling : null;
-        let foundLabel = false;
-        
-        while(prevTd) {
-            const text = normalize(prevTd.innerText);
-            if(text.includes(searchWord)) {
-                foundLabel = true;
-                break;
+    const allDocs = getAllDocs(document);
+
+    for (const doc of allDocs) {
+        const allInputs = doc.querySelectorAll('input');
+        for (const target of allInputs) {
+            // Sol menüdeki arama kutucuğunu atlamak için placeholder kontrolü
+            const ph = target.getAttribute('placeholder') || '';
+            if (ph.toLocaleLowerCase('tr-TR').includes('pasaport') || ph.toLocaleLowerCase('tr-TR').includes('belge')) {
+                continue; 
             }
-            if(text.includes(normalize('Uyruk Kimlik No'))) {
-                // Eğer sola doğru giderken Belge No'dan önce Uyruk Kimlik No'ya çarparsak, 
-                // bu kutu Uyruk Kimlik No'nun kutusudur, Belge No'nun değil! Aramayı kes.
-                break;
+            
+            // Bu input'un solundaki hücrelerde 'Belge No' var mı bakıyoruz
+            const targetTd = target.closest('td');
+            let prevTd = targetTd ? targetTd.previousElementSibling : null;
+            let foundLabel = false;
+            
+            while (prevTd) {
+                const text = normalize(prevTd.innerText);
+                if (text.includes(searchWord)) {
+                    foundLabel = true;
+                    break;
+                }
+                if (text.includes(normalize('Uyruk Kimlik No'))) {
+                    // Eğer sola doğru giderken Belge No'dan önce Uyruk Kimlik No'ya çarparsak, 
+                    // bu kutu Uyruk Kimlik No'nun kutusudur, Belge No'nun değil! Aramayı kes.
+                    break;
+                }
+                prevTd = prevTd.previousElementSibling;
             }
-            prevTd = prevTd.previousElementSibling;
-        }
-        
-        if (foundLabel) {
-            return target;
+            
+            if (foundLabel) {
+                return target;
+            }
         }
     }
     return null;
@@ -489,38 +570,41 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
         .replace(/duzenlenme/g, 'duzenleme')
         .replace(/\s+/g, '');
     const searchWord = normalize(labelText);
-    
-    const allTargets = document.querySelectorAll(tagName);
-    for (const target of allTargets) {
-        const row = target.closest('tr');
-        if (row && normalize(row.innerText).includes(searchWord)) {
-            const targetTd = target.closest('td');
-            let prevTd = targetTd ? targetTd.previousElementSibling : null;
-            while(prevTd) {
-                if(normalize(prevTd.innerText).includes(searchWord)) {
-                    return target;
+    const allDocs = getAllDocs(document);
+
+    for (const doc of allDocs) {
+        const allTargets = doc.querySelectorAll(tagName);
+        for (const target of allTargets) {
+            const row = target.closest('tr');
+            if (row && normalize(row.innerText).includes(searchWord)) {
+                const targetTd = target.closest('td');
+                let prevTd = targetTd ? targetTd.previousElementSibling : null;
+                while (prevTd) {
+                    if (normalize(prevTd.innerText).includes(searchWord)) {
+                        return target;
+                    }
+                    prevTd = prevTd.previousElementSibling;
                 }
-                prevTd = prevTd.previousElementSibling;
             }
         }
-    }
-    
-    const elements = Array.from(document.querySelectorAll('span, div, label')).filter(el => {
-        return normalize(el.innerText).includes(searchWord) && el.children.length <= 2;
-    });
+        
+        const elements = Array.from(doc.querySelectorAll('span, div, label')).filter(el => {
+            return normalize(el.innerText).includes(searchWord) && el.children.length <= 2;
+        });
 
-    for (const el of elements) {
-        const parentTd = el.closest('td');
-        if (parentTd && parentTd.nextElementSibling) {
-            const target = parentTd.nextElementSibling.querySelector(tagName);
-            if (target) return target;
+        for (const el of elements) {
+            const parentTd = el.closest('td');
+            if (parentTd && parentTd.nextElementSibling) {
+                const target = parentTd.nextElementSibling.querySelector(tagName);
+                if (target) return target;
+            }
         }
-    }
-    
-    for (const target of allTargets) {
-        const row = target.closest('tr');
-        if (row && normalize(row.innerText).includes(searchWord)) {
-             return target;
+        
+        for (const target of allTargets) {
+            const row = target.closest('tr');
+            if (row && normalize(row.innerText).includes(searchWord)) {
+                return target;
+            }
         }
     }
     return null;
@@ -547,41 +631,51 @@ function findPhotoUploadButton() {
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/\s+/g, '');
 
-    // 1. Text-based search across clickable elements
-    const clickables = document.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button, [role="button"]');
-    for (const el of clickables) {
-        const t = norm(el.innerText || el.textContent || el.value || '');
-        if (t.includes('fotograf') && (t.includes('yukle') || t.includes('sec') || t.includes('ekle'))) {
-            return el;
-        }
-    }
-
-    // 2. Search in table row containing "Fotoğraf Adı"
-    const allLabels = document.querySelectorAll('span, td, div, label, b');
-    for (const lbl of allLabels) {
-        const t = norm(lbl.innerText || lbl.textContent || '');
-        if (t.includes('fotografadi') || t === 'fotograf') {
-            const row = lbl.closest('tr') || lbl.closest('div') || lbl.parentElement;
-            if (row) {
-                const btn = row.querySelector('button, a, input[type="button"], .z-button, [role="button"]');
-                if (btn) return btn;
+    const allDocs = getAllDocs(document);
+    for (const doc of allDocs) {
+        // 1. Text-based search across clickable elements
+        const clickables = doc.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button, [role="button"]');
+        for (const el of clickables) {
+            const t = norm(el.innerText || el.textContent || el.value || '');
+            if (t.includes('fotograf') && (t.includes('yukle') || t.includes('sec') || t.includes('ekle'))) {
+                return el;
             }
         }
-    }
 
-    // 3. Fallback: Any element with upload attribute or upload class
-    const uploadEl = document.querySelector('[upload], .z-upload, .z-fileupload');
-    if (uploadEl) {
-        if (uploadEl.matches('button, a, input[type="button"], .z-button, [role="button"]')) return uploadEl;
-        const inner = uploadEl.querySelector('button, a, input[type="button"], .z-button, [role="button"]');
-        if (inner) return inner;
+        // 2. Search in table row containing "Fotoğraf Adı"
+        const allLabels = doc.querySelectorAll('span, td, div, label, b');
+        for (const lbl of allLabels) {
+            const t = norm(lbl.innerText || lbl.textContent || '');
+            if (t.includes('fotografadi') || t === 'fotograf') {
+                const row = lbl.closest('tr') || lbl.closest('div') || lbl.parentElement;
+                if (row) {
+                    const btn = row.querySelector('button, a, input[type="button"], .z-button, [role="button"]');
+                    if (btn) return btn;
+                }
+            }
+        }
+
+        // 3. Fallback: Any element with upload attribute or upload class
+        const uploadEl = doc.querySelector('[upload], .z-upload, .z-fileupload');
+        if (uploadEl) {
+            if (uploadEl.matches('button, a, input[type="button"], .z-button, [role="button"]')) return uploadEl;
+            const inner = uploadEl.querySelector('button, a, input[type="button"], .z-button, [role="button"]');
+            if (inner) return inner;
+        }
     }
 
     return null;
 }
 
 function findYoksisFileInput(photoBtn) {
-    if (!photoBtn) return document.querySelector('input[type="file"]');
+    if (!photoBtn) {
+        const allDocs = getAllDocs(document);
+        for (const d of allDocs) {
+            const fi = d.querySelector('input[type="file"]');
+            if (fi) return fi;
+        }
+        return null;
+    }
 
     // 1. Inside the button
     let inp = photoBtn.querySelector('input[type="file"]');
@@ -599,47 +693,41 @@ function findYoksisFileInput(photoBtn) {
     }
 
     // 4. ZK Widget uploader reference
+    const win = photoBtn.ownerDocument?.defaultView || window;
     try {
-        if (window.zk && window.zk.Widget) {
-            const w = window.zk.Widget.$(photoBtn);
+        if (win.zk && win.zk.Widget) {
+            const w = win.zk.Widget.$(photoBtn);
             if (w) {
                 if (w._uplder) {
                     const u = w._uplder;
-                    inp = (u.form && u.form.querySelector('input[type="file"]'))
-                       || (u._form && u._form.querySelector('input[type="file"]'))
-                       || u.input
-                       || u._input;
-                    if (inp) return inp;
+                    inp = (u.form && u.form.querySelector('input[type="file"]')) ||
+                          (u._form && u._form.querySelector('input[type="file"]')) ||
+                          u.input || u._input;
                 }
-                if (w.uuid) {
-                    inp = document.querySelector(`form[id*="${w.uuid}"] input[type="file"], input[type="file"][id*="${w.uuid}"]`);
-                    if (inp) return inp;
+                if (!inp && w.uuid) {
+                    inp = photoBtn.ownerDocument.querySelector('form[id*="' + w.uuid + '"] input[type="file"], input[type="file"][id*="' + w.uuid + '"]');
                 }
             }
         }
     } catch (_) {}
+    if (inp) return inp;
 
-    // 5. Check all file inputs on the page
-    const allInputs = Array.from(document.querySelectorAll('input[type="file"]'));
-    if (allInputs.length === 1) return allInputs[0];
-
-    if (allInputs.length > 1) {
+    // 5. Check all file inputs in ownerDocument
+    const allDocInputs = (photoBtn.ownerDocument || document).querySelectorAll('input[type="file"]');
+    if (allDocInputs.length === 1) return allDocInputs[0];
+    if (allDocInputs.length > 1) {
         const btnRect = photoBtn.getBoundingClientRect();
         let closest = null;
         let minDist = Infinity;
-        for (const fi of allInputs) {
-            const r = fi.getBoundingClientRect();
-            const targetRect = (r.width > 0 && r.height > 0) ? r : (fi.parentElement?.getBoundingClientRect() || r);
-            const dist = Math.hypot(targetRect.left - btnRect.left, targetRect.top - btnRect.top);
-            if (dist < minDist) {
-                minDist = dist;
-                closest = fi;
-            }
+        for (let i = 0; i < allDocInputs.length; i++) {
+            const r = allDocInputs[i].getBoundingClientRect();
+            const d = Math.hypot(r.left - btnRect.left, r.top - btnRect.top);
+            if (d < minDist) { minDist = d; closest = allDocInputs[i]; }
         }
-        if (closest) return closest;
+        return closest || allDocInputs[0];
     }
 
-    return allInputs[0] || null;
+    return null;
 }
 
 function base64ToFile(base64Data, filename) {
@@ -1426,7 +1514,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         waitForYoksisSearchControls()
             .then(async ({ idInput, searchBtn }) => {
                 if (idInput) {
-                    simulateInput(idInput, kabulId);
+                    await simulateInput(idInput, kabulId);
                 }
                 // ZK'nin blur/change olayını işlemesi için kısa bekleme
                 await new Promise(resolve => setTimeout(resolve, 150));
