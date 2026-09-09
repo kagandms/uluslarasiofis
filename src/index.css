@@ -511,6 +511,215 @@ body.dark-mode .ykn-status-item {
     overflow-wrap: anywhere;
 }
 
+/* ==========================================
+   YKN ÖĞRETİCİ ADIM AKIŞI (1 -> 2 -> 3 -> 4)
+   ========================================== */
+.ykn-steps-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.ykn-step-button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1.5px solid transparent;
+    text-align: left;
+    background: var(--card-bg);
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    user-select: none;
+    font-family: inherit;
+}
+
+/* 1. AKTİF / BASILACAK SIRADAKİ TUŞ (Renkli, canlı, dikkat çekici) */
+.ykn-step-button.is-active {
+    background: linear-gradient(135deg, var(--accent) 0%, #a71d2a 100%);
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 14px rgba(139, 0, 0, 0.28), 0 0 0 2px rgba(139, 0, 0, 0.15);
+    transform: translateY(-1px);
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    opacity: 1 !important;
+}
+
+body.dark-mode .ykn-step-button.is-active {
+    background: linear-gradient(135deg, #c4182b 0%, #8b0000 100%);
+    box-shadow: 0 4px 16px rgba(255, 77, 77, 0.25), 0 0 0 2px rgba(255, 77, 77, 0.2);
+}
+
+.ykn-step-button.is-active .ykn-step-badge {
+    background: #ffffff;
+    color: var(--accent);
+    font-weight: 800;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.ykn-step-button.is-active .ykn-step-title {
+    color: #ffffff !important;
+    font-weight: 700;
+}
+
+.ykn-step-button.is-active .ykn-step-subtitle {
+    color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.ykn-step-button.is-active .ykn-step-icon {
+    color: #ffffff;
+}
+
+.ykn-step-button.is-active .ykn-step-icon .icon-arrow {
+    display: block !important;
+    animation: pulseStepArrow 1.2s infinite alternate ease-in-out;
+}
+
+.ykn-step-button.is-active .ykn-step-icon .icon-check {
+    display: none !important;
+}
+
+@keyframes pulseStepArrow {
+    from { transform: translateX(0); }
+    to { transform: translateX(4px); }
+}
+
+/* 2. KAPALI / SIRASI GELMEMİŞ TUŞLAR (Soluk, tıklanamaz, gri tonlu) */
+.ykn-step-button.is-locked {
+    background: rgba(0, 0, 0, 0.02) !important;
+    border: 1.5px dashed var(--card-border) !important;
+    color: var(--text-secondary) !important;
+    opacity: 0.42 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+body.dark-mode .ykn-step-button.is-locked {
+    background: rgba(255, 255, 255, 0.02) !important;
+    border-color: #333333 !important;
+}
+
+.ykn-step-button.is-locked .ykn-step-badge {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text-secondary);
+    border: 1px solid var(--card-border);
+}
+
+body.dark-mode .ykn-step-button.is-locked .ykn-step-badge {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.ykn-step-button.is-locked .ykn-step-title {
+    color: var(--text-secondary) !important;
+    font-weight: 600;
+}
+
+.ykn-step-button.is-locked .ykn-step-subtitle {
+    color: var(--text-secondary) !important;
+    opacity: 0.7;
+}
+
+.ykn-step-button.is-locked .ykn-step-icon .icon-arrow {
+    display: block !important;
+    opacity: 0.3;
+}
+
+.ykn-step-button.is-locked .ykn-step-icon .icon-check {
+    display: none !important;
+}
+
+/* 3. TAMAMLANMIŞ TUŞLAR (Yeşil, başarılı, tekrar basılabilir) */
+.ykn-step-button.is-completed {
+    background: rgba(40, 167, 69, 0.06) !important;
+    border: 1.5px solid rgba(40, 167, 69, 0.4) !important;
+    color: var(--text-primary) !important;
+    opacity: 0.95 !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    box-shadow: none !important;
+}
+
+body.dark-mode .ykn-step-button.is-completed {
+    background: rgba(40, 167, 69, 0.12) !important;
+    border-color: rgba(40, 167, 69, 0.5) !important;
+}
+
+.ykn-step-button.is-completed:hover {
+    background: rgba(40, 167, 69, 0.12) !important;
+    border-color: var(--success) !important;
+    transform: translateY(-1px);
+}
+
+.ykn-step-button.is-completed .ykn-step-badge {
+    background: var(--success);
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.ykn-step-button.is-completed .ykn-step-title {
+    color: var(--text-primary) !important;
+    font-weight: 600;
+}
+
+.ykn-step-button.is-completed .ykn-step-subtitle {
+    color: var(--text-secondary) !important;
+}
+
+.ykn-step-button.is-completed .ykn-step-icon .icon-arrow {
+    display: none !important;
+}
+
+.ykn-step-button.is-completed .ykn-step-icon .icon-check {
+    display: block !important;
+    color: var(--success);
+}
+
+/* Rozet ve Metin Yapısı */
+.ykn-step-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.ykn-step-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ykn-step-title {
+    font-size: 0.86rem;
+    line-height: 1.25;
+}
+
+.ykn-step-subtitle {
+    font-size: 0.72rem;
+    line-height: 1.2;
+}
+
+.ykn-step-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+}
+
 @media (max-width: 768px) {
     .home-screen {
         padding: 1rem 0;

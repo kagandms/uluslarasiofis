@@ -216,27 +216,75 @@
                                     </div>
                                 </div>
 
-                                <div style="display: flex; flex-direction: column; gap: 10px;">
-                                    <div style="display: flex; gap: 10px;">
-                                        <button type="button" id="btn-ykn-copy-info" class="btn btn-outline" style="flex: 1;">
-                                            Bilgileri Kopyala
-                                        </button>
-                                        <button type="button" id="btn-ykn-copy-letter" class="btn btn-outline" style="flex: 1;">
-                                            Kabul Mektubu Kodunu Kopyala
-                                        </button>
-                                    </div>
-                                    
-                                    <button type="button" id="btn-ykn-crop-photo" class="btn btn-outline" style="display: none; border-color: var(--accent); color: var(--accent); width: 100%;">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 6px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                                        Öğrenci Fotoğrafını Kırp / İndir
+                                <!-- Öğretici Adım Sırası Başlığı -->
+                                <div class="ykn-workflow-header" style="display: flex; align-items: center; justify-content: space-between; margin-top: 14px; margin-bottom: 8px;">
+                                    <span style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); display: flex; align-items: center; gap: 6px;">
+                                        <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                        İşlem Sırası (1 → 2 → 3 → 4)
+                                    </span>
+                                    <span id="ykn-step-indicator" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; background: rgba(139, 0, 0, 0.08); color: var(--accent); font-weight: 700;">Adım 1 / 4</span>
+                                </div>
+
+                                <!-- Sıralı Adım Tuşları -->
+                                <div class="ykn-steps-container" id="ykn-steps-container">
+                                    <!-- 1. Tuş: Kabul Mektup Kodunu Kopyala -->
+                                    <button type="button" id="btn-ykn-copy-letter" class="ykn-step-button is-active" data-step="1">
+                                        <div class="ykn-step-badge">1</div>
+                                        <div class="ykn-step-text">
+                                            <span class="ykn-step-title">Kabul Mektup Kodunu Kopyala</span>
+                                            <span class="ykn-step-subtitle">Apply profilindeki kabul mektubunu okur ve kodu alır</span>
+                                        </div>
+                                        <div class="ykn-step-icon">
+                                            <svg class="icon-arrow" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                            <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        </div>
                                     </button>
-                                    
-                                    <button type="button" id="btn-ykn-transfer-yoksis" class="btn btn-secondary" style="display: none;">
-                                        Kabul Mektup Kodunu YÖKSİS'e Aktar
+
+                                    <!-- 2. Tuş: Kabul Mektup Kodunu YÖKSİS'e Aktar -->
+                                    <button type="button" id="btn-ykn-transfer-yoksis" class="ykn-step-button is-locked" data-step="2">
+                                        <div class="ykn-step-badge">2</div>
+                                        <div class="ykn-step-text">
+                                            <span class="ykn-step-title">Kabul Mektup Kodunu YÖKSİS'e Aktar</span>
+                                            <span class="ykn-step-subtitle">YÖKSİS sekmesine geçer ve öğrenciyi aratır</span>
+                                        </div>
+                                        <div class="ykn-step-icon">
+                                            <svg class="icon-arrow" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                            <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        </div>
                                     </button>
-                                    
-                                    <button type="button" id="btn-ykn-paste-yoksis" class="btn btn-primary" style="margin-top: 10px;">
-                                        Bilgileri YÖKSİS'e Yapıştır
+
+                                    <!-- 3. Tuş: Bilgileri Kopyala -->
+                                    <button type="button" id="btn-ykn-copy-info" class="ykn-step-button is-locked" data-step="3">
+                                        <div class="ykn-step-badge">3</div>
+                                        <div class="ykn-step-text">
+                                            <span class="ykn-step-title">Bilgileri Kopyala</span>
+                                            <span class="ykn-step-subtitle">Pasaport, doğum ve kimlik verilerini hazırlar</span>
+                                        </div>
+                                        <div class="ykn-step-icon">
+                                            <svg class="icon-arrow" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                            <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        </div>
+                                    </button>
+
+                                    <!-- 4. Tuş: Bilgileri YÖKSİS'e Aktar -->
+                                    <button type="button" id="btn-ykn-paste-yoksis" class="ykn-step-button is-locked" data-step="4">
+                                        <div class="ykn-step-badge">4</div>
+                                        <div class="ykn-step-text">
+                                            <span class="ykn-step-title">Bilgileri YÖKSİS'e Aktar</span>
+                                            <span class="ykn-step-subtitle">Açılan YÖKSİS formundaki alanları otomatik doldurur</span>
+                                        </div>
+                                        <div class="ykn-step-icon">
+                                            <svg class="icon-arrow" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                            <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        </div>
+                                    </button>
+                                </div>
+
+                                <!-- İsteğe Bağlı Fotoğraf Kırpma Butonu -->
+                                <div style="margin-top: 10px; border-top: 1px dashed var(--card-border); padding-top: 10px;">
+                                    <button type="button" id="btn-ykn-crop-photo" class="btn btn-outline" style="display: none; border-color: var(--accent); color: var(--accent); width: 100%; font-size: 0.85rem; padding: 0.55rem; justify-content: center; gap: 8px;">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                        Öğrenci Fotoğrafını Kırp / İndir (İsteğe Bağlı)
                                     </button>
                                 </div>
                             </div>
