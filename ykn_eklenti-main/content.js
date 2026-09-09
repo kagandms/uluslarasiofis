@@ -934,6 +934,7 @@ function findDocumentLinks() {
         acceptanceLetterUrl: '',
         acceptanceCandidates: [],
         passportDocumentUrl: '',
+        passportCandidates: [],
         kabulId: ''
     };
     
@@ -1023,6 +1024,7 @@ function findDocumentLinks() {
     const uniquePassportUrls = Array.from(new Set(passportCandidates.map(c => c.url)));
     if (uniquePassportUrls.length > 0) {
         links.passportDocumentUrl = uniquePassportUrls[0];
+        links.passportCandidates = uniquePassportUrls;
     }
 
     // Fallback ONLY if absolutely no true acceptance letter with "kabul" text was found
@@ -1047,6 +1049,7 @@ function findDocumentLinks() {
             if (!url || isNavigationOrInvalidUrl(url)) continue;
             if (isPassportUrl(url)) {
                 links.passportDocumentUrl = url;
+                links.passportCandidates = [url];
                 break;
             }
         }
@@ -1252,6 +1255,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const dataToSave = {
                 ...profileData,
                 passportDocumentUrl: links.passportDocumentUrl || '',
+                passportCandidates: links.passportCandidates || [],
                 acceptanceLetterUrl: links.acceptanceLetterUrl || '',
                 acceptanceCandidates: links.acceptanceCandidates || [],
                 kabulId: links.kabulId || ''
@@ -1277,6 +1281,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 acceptanceLetterUrl: links.acceptanceLetterUrl || '',
                 acceptanceCandidates: links.acceptanceCandidates || [],
                 passportDocumentUrl: links.passportDocumentUrl || '',
+                passportCandidates: links.passportCandidates || [],
                 data: studentData
             });
         } catch (error) {

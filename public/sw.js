@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ikamet-cache-v6';
+const CACHE_NAME = 'ikamet-cache-v7';
 
 const PRECACHE_ASSETS = [
   '/manifest.json',
