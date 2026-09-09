@@ -348,6 +348,11 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                     function norm(s) {
                         return (s || '')
                             .toLocaleLowerCase('tr-TR')
+                            .replace(/ğ/g, 'g')
+                            .replace(/ü/g, 'u')
+                            .replace(/ş/g, 's')
+                            .replace(/ö/g, 'o')
+                            .replace(/ç/g, 'c')
                             .replace(/ı/g, 'i')
                             .normalize('NFD')
                             .replace(/[\u0300-\u036f]/g, '')
@@ -516,12 +521,13 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             continue;
                         }
 
-                        // Metin kutuları (Anne Adı, Baba Adı, Doğum Yeri Açıklaması, Veren Makam, Telefon, Belge No)
+                        // Metin kutuları (Anne Adı, Baba Adı, Doğum Yeri Açıklaması, Veren Makam, Telefon, Belge No, Fotoğraf Adı)
                         if (combined.indexOf('anneadi') !== -1 ||
                             combined.indexOf('babaadi') !== -1 ||
                             combined.indexOf('dogumyeriaciklama') !== -1 ||
                             combined.indexOf('verenmakam') !== -1 ||
                             combined.indexOf('telefon') !== -1 ||
+                            combined.indexOf('fotograf') !== -1 ||
                             (combined.indexOf('belgeno') !== -1 && combined.indexOf('uyruk') === -1)) {
                             commitTextbox(inp);
                         }
@@ -724,6 +730,11 @@ async function transferToYoksis(request) {
             });
             await syncYoksisFormInMainWorld(yoksisTab.id, request.data);
             await updateTab(yoksisTab.id, { active: true });
+            if (yoksisTab.windowId) {
+                try {
+                    await chrome.windows.update(yoksisTab.windowId, { focused: true });
+                } catch (_) {}
+            }
         } catch (fillErr) {
             console.warn('[YKN] transferToYoksis auto-fill warning:', fillErr);
         }

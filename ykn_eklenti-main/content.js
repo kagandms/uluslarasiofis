@@ -472,13 +472,18 @@ function findTargetElementByFuzzyLabels(labelTexts, tagName) {
 function findPhotoUploadButton() {
     const norm = (s) => (s || '')
         .toLocaleLowerCase('tr-TR')
+        .replace(/ğ/g, 'g')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ö/g, 'o')
+        .replace(/ç/g, 'c')
         .replace(/ı/g, 'i')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/\s+/g, '');
 
     // 1. Text-based search across clickable elements
-    const clickables = document.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button');
+    const clickables = document.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button, [role="button"]');
     for (const el of clickables) {
         const t = norm(el.innerText || el.textContent || el.value || '');
         if (t.includes('fotograf') && (t.includes('yukle') || t.includes('sec') || t.includes('ekle'))) {
@@ -493,7 +498,7 @@ function findPhotoUploadButton() {
         if (t.includes('fotografadi') || t === 'fotograf') {
             const row = lbl.closest('tr') || lbl.closest('div') || lbl.parentElement;
             if (row) {
-                const btn = row.querySelector('button, a, input[type="button"], .z-button');
+                const btn = row.querySelector('button, a, input[type="button"], .z-button, [role="button"]');
                 if (btn) return btn;
             }
         }
@@ -502,8 +507,8 @@ function findPhotoUploadButton() {
     // 3. Fallback: Any element with upload attribute or upload class
     const uploadEl = document.querySelector('[upload], .z-upload, .z-fileupload');
     if (uploadEl) {
-        if (uploadEl.matches('button, a, input[type="button"], .z-button')) return uploadEl;
-        const inner = uploadEl.querySelector('button, a, input[type="button"], .z-button');
+        if (uploadEl.matches('button, a, input[type="button"], .z-button, [role="button"]')) return uploadEl;
+        const inner = uploadEl.querySelector('button, a, input[type="button"], .z-button, [role="button"]');
         if (inner) return inner;
     }
 
@@ -598,17 +603,25 @@ function base64ToFile(base64Data, filename) {
 async function uploadPhotoToYoksis(photoBase64, fileName) {
     if (!photoBase64) return false;
 
-    const photoBtn = findPhotoUploadButton();
-    if (photoBtn) {
-        try {
-            photoBtn.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
-            photoBtn.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true, view: window }));
-        } catch (_) {}
+    let photoBtn = null;
+    let fileInput = null;
+
+    // Fotoğraf butonunu ve ZK dosya inputunu yakalamak için 2.5 saniyeye kadar bekle (25 x 100ms)
+    for (let attempt = 0; attempt < 25; attempt++) {
+        photoBtn = findPhotoUploadButton();
+        if (photoBtn) {
+            try {
+                photoBtn.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+                photoBtn.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true, view: window }));
+            } catch (_) {}
+        }
+
+        fileInput = findYoksisFileInput(photoBtn);
+        if (fileInput) break;
+
+        await new Promise(r => setTimeout(r, 100));
     }
 
-    await new Promise(r => setTimeout(r, 60));
-
-    const fileInput = findYoksisFileInput(photoBtn);
     if (!fileInput) {
         console.warn('[YKN] YÖKSİS Fotoğraf file input bulunamadı.');
         return false;
@@ -640,6 +653,14 @@ async function uploadPhotoToYoksis(photoBase64, fileName) {
                 }
             } catch (_) {}
         }
+
+        // Fotoğraf Adı kutucuğuna da anında dosya adını yazdır (varsa)
+        try {
+            const fotoAdiInput = findTargetElementByFuzzyLabel('Fotoğraf Adı', 'input');
+            if (fotoAdiInput && !fotoAdiInput.value) {
+                simulateInput(fotoAdiInput, fileName);
+            }
+        } catch (_) {}
 
         console.log('[YKN] Fotoğraf başarıyla yüklendi:', fileName);
         return true;
