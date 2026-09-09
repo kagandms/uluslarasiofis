@@ -879,7 +879,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const step3 = document.getElementById('step-3');
             if (step3 && step3.classList.contains('active')) {
                 e.preventDefault();
-                const btnPrint = document.getElementById('btn-print');
+                const btnPrint = document.getElementById('btn-print') || document.querySelector('.btn-print-student');
                 if (btnPrint) btnPrint.click();
             }
         }

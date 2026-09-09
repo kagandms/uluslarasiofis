@@ -1,5 +1,6 @@
 // content.js
 (() => {
+if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
 if (window.__YKN_CONTENT_LOADED__) return;
 window.__YKN_CONTENT_LOADED__ = true;
 
@@ -30,12 +31,24 @@ function getPageKind() {
 }
 
 function sendApplyEvent(action, requestId, payload = {}) {
-    chrome.runtime.sendMessage({
-        source: 'APPLY_TOPKAPI',
-        action,
-        requestId,
-        ...payload
-    });
+    try {
+        if (typeof chrome === 'undefined' || !chrome?.runtime?.sendMessage) {
+            console.warn('[YKN Content] chrome.runtime.sendMessage mevcut değil (Eklenti yeniden yüklenmiş veya bağlam geçersiz olabilir).');
+            return;
+        }
+        chrome.runtime.sendMessage({
+            source: 'APPLY_TOPKAPI',
+            action,
+            requestId,
+            ...payload
+        }, () => {
+            if (typeof chrome !== 'undefined' && chrome.runtime?.lastError) {
+                // Eklenti arka planı kapalıysa veya yanıt beklenmiyorsa sessizce geç
+            }
+        });
+    } catch (err) {
+        console.warn('[YKN Content] sendApplyEvent hatası:', err);
+    }
 }
 
 async function simulateInput(element, value) {
@@ -474,7 +487,7 @@ function syncZkFormInputs() {
 }
 
 function waitForYoksisSearchControls() {
-    const deadline = Date.now() + 15_000;
+    const deadline = Date.now() + 3500;
     return new Promise((resolve, reject) => {
         const initialPair = findYoksisKabulPair();
         if (initialPair.idInput) {
@@ -483,6 +496,11 @@ function waitForYoksisSearchControls() {
         }
 
         const intervalId = setInterval(() => {
+            if (typeof chrome === 'undefined' || !chrome?.runtime?.id) {
+                clearInterval(intervalId);
+                reject(new Error('Eklenti bağlantısı kesildi.'));
+                return;
+            }
             const pair = findYoksisKabulPair();
             if (pair.idInput) {
                 clearInterval(intervalId);
@@ -493,7 +511,7 @@ function waitForYoksisSearchControls() {
                 clearInterval(intervalId);
                 reject(new Error('YÖKSİS Kabul Mektubu alanı hazır olmadı.'));
             }
-        }, 300);
+        }, 200);
     });
 }
 
@@ -781,11 +799,22 @@ async function uploadPhotoToYoksis(photoBase64, fileName) {
         return false;
     }
 
+    const photoToken = `${fileName || 'foto'}_${photoBase64.length}_${photoBase64.slice(-15)}`;
+    const currentToken = fileInput.getAttribute('data-ykn-photo-token');
+    const currentStatus = fileInput.getAttribute('data-ykn-photo-status');
+
+    if (currentToken === photoToken && (currentStatus === 'submitted' || currentStatus === 'file_assigned')) {
+        console.log('[YKN] Bu fotoğraf zaten atanmış, mükerrer yükleme engellendi:', fileName);
+        return true;
+    }
+
     try {
         const file = base64ToFile(photoBase64, fileName);
         const dt = new DataTransfer();
         dt.items.add(file);
         fileInput.files = dt.files;
+        fileInput.setAttribute('data-ykn-photo-token', photoToken);
+        fileInput.setAttribute('data-ykn-photo-status', 'file_assigned');
 
         fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
@@ -799,11 +828,18 @@ async function uploadPhotoToYoksis(photoBase64, fileName) {
                 const w = window.zk.Widget.$(photoBtn);
                 if (w && w._uplder) {
                     const u = w._uplder;
-                    ['start', '_start', 'upload', '_upload', 'send', '_send', 'submit'].forEach(fn => {
-                        if (typeof u[fn] === 'function') {
-                            try { u[fn](); } catch (_) {}
+                    if (!u._uploading) {
+                        if (typeof u.start === 'function') {
+                            u.start();
+                        } else if (typeof u._send === 'function') {
+                            u._send();
+                        } else if (typeof u.send === 'function') {
+                            u.send();
+                        } else if (u.form && typeof u.form.submit === 'function') {
+                            u.form.submit();
                         }
-                    });
+                    }
+                    fileInput.setAttribute('data-ykn-photo-status', 'submitted');
                 }
             } catch (_) {}
         }
@@ -816,7 +852,7 @@ async function uploadPhotoToYoksis(photoBase64, fileName) {
             }
         } catch (_) {}
 
-        console.log('[YKN] Fotoğraf başarıyla yüklendi:', fileName);
+        console.log('[YKN] Fotoğraf başarıyla hazırlandı/yüklendi:', fileName);
         return true;
     } catch (err) {
         console.error('[YKN] Fotoğraf yükleme hatası:', err);
@@ -1365,6 +1401,10 @@ function extractApplyProfileData() {
 function watchForDocumentLinks(requestId) {
     const deadline = Date.now() + 15_000;
     const intervalId = setInterval(() => {
+        if (typeof chrome === 'undefined' || !chrome?.runtime?.id) {
+            clearInterval(intervalId);
+            return;
+        }
         const links = findDocumentLinks();
         const safeKabulId = isValidYoksisId(links.kabulId) ? links.kabulId : '';
         if (links.passportDocumentUrl || links.acceptanceLetterUrl || safeKabulId) {
@@ -1438,7 +1478,8 @@ async function encodeBase64(arrayBuffer) {
 }
 
 // Mesaj Dinleyicisi
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'PING') {
         sendResponse({
             success: true,
@@ -1556,6 +1597,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             if (!data) {
                 sendResponse({ success: false, message: "Hafızada veri yok." });
                 return;
+            }
+
+            // Formun açılmasını ve alanların DOM'a yüklenmesini bekle (3.5 saniyeye kadar)
+            try {
+                await waitForYoksisForm(3500);
+            } catch (_) {
+                // Form zaten açık veya süre aşıldıysa mevcut elemanlarla devam et
             }
 
             let successCount = 0;
@@ -1718,14 +1766,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 }
             }
 
-            // Background script üzerinden Main World ZK Senkronizasyonunu ve yükleme garantisini tetikle
-            try {
-                chrome.runtime.sendMessage({
-                    action: 'SYNC_YOKSIS_MAIN_WORLD',
-                    data: data
-                });
-            } catch (_) {}
-
             if (successCount > 0) {
                 sendResponse({ success: true, photoUploaded: Boolean(data.croppedPhotoBase64) });
             } else {
@@ -1742,7 +1782,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
     
-    else if (request.action === 'SEARCH_IN_APPLY') {
+    else if (request.action === 'SEARCH_IN_APPLY' || request.action === 'searchStudent') {
         const passportNo = (request.passportNo || '').trim();
         const requestId = request.requestId;
         const cleanPassport = passportNo.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
@@ -1762,6 +1802,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const maxAttempts = 24; // 24 * 500ms = 12 saniye
             
             const intervalId = setInterval(() => {
+                if (typeof chrome === 'undefined' || !chrome?.runtime?.id) {
+                    clearInterval(intervalId);
+                    return;
+                }
                 attempts++;
                 const rows = document.querySelectorAll('table tbody tr');
                 let matchingRow = null;
@@ -1838,6 +1882,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true, requestId });
         return true;
     }
-});
+    });
+}
 })();
 

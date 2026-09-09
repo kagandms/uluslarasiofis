@@ -316,6 +316,9 @@ async function getActiveYoksisTab() {
     yoksisTabId = yoksisTab.id;
     ensureContentScriptInjected(yoksisTabId, 'yoksis').catch(() => {});
     await updateTab(yoksisTabId, { active: true });
+    if (yoksisTab.windowId) {
+        await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch(() => {});
+    }
     return yoksisTab;
 }
 
@@ -903,46 +906,65 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 }
 
                                 if (fileInput) {
-                                    var raw = data.croppedPhotoBase64;
-                                    var mime = 'image/jpeg';
-                                    var bstr;
-                                    if (raw.indexOf(',') !== -1) {
-                                        var parts = raw.split(',');
-                                        var mm = parts[0].match(/:(.*?);/);
-                                        if (mm) mime = mm[1];
-                                        bstr = atob(parts[1]);
+                                    var photoName = data.photoFileName || 'ogrenci_foto.jpg';
+                                    var photoToken = photoName + '_' + data.croppedPhotoBase64.length + '_' + data.croppedPhotoBase64.slice(-15);
+                                    var currentToken = fileInput.getAttribute('data-ykn-photo-token');
+                                    var currentStatus = fileInput.getAttribute('data-ykn-photo-status');
+
+                                    if (currentToken === photoToken && currentStatus === 'submitted') {
+                                        console.log('[YKN MAIN World] Fotoğraf zaten gönderilmiş, mükerrer istek engellendi:', photoName);
                                     } else {
-                                        bstr = atob(raw);
-                                    }
-                                    var len = bstr.length;
-                                    var u8arr = new Uint8Array(len);
-                                    while (len--) {
-                                        u8arr[len] = bstr.charCodeAt(len);
-                                    }
-                                    var photoFile = new File([u8arr], data.photoFileName || 'ogrenci_foto.jpg', { type: mime, lastModified: Date.now() });
-                                    var dt = new DataTransfer();
-                                    dt.items.add(photoFile);
-                                    fileInput.files = dt.files;
+                                        if (currentToken !== photoToken || !fileInput.files || fileInput.files.length === 0) {
+                                            var raw = data.croppedPhotoBase64;
+                                            var mime = 'image/jpeg';
+                                            var bstr;
+                                            if (raw.indexOf(',') !== -1) {
+                                                var parts = raw.split(',');
+                                                var mm = parts[0].match(/:(.*?);/);
+                                                if (mm) mime = mm[1];
+                                                bstr = atob(parts[1]);
+                                            } else {
+                                                bstr = atob(raw);
+                                            }
+                                            var len = bstr.length;
+                                            var u8arr = new Uint8Array(len);
+                                            while (len--) {
+                                                u8arr[len] = bstr.charCodeAt(len);
+                                            }
+                                            var photoFile = new File([u8arr], photoName, { type: mime, lastModified: Date.now() });
+                                            var dt = new DataTransfer();
+                                            dt.items.add(photoFile);
+                                            fileInput.files = dt.files;
+                                            fileInput.setAttribute('data-ykn-photo-token', photoToken);
 
-                                    fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                                    fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                                            fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                            fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
-                                    if (win.jq) {
-                                        try { win.jq(fileInput).trigger('change'); } catch (_) {}
-                                    }
-
-                                    if (photoBtn && win.zk && win.zk.Widget) {
-                                        var btnW = win.zk.Widget.$(photoBtn);
-                                        if (btnW && btnW._uplder) {
-                                            var uplder = btnW._uplder;
-                                            ['start', '_start', 'upload', '_upload', 'send', 'submit'].forEach(function(fn) {
-                                                if (typeof uplder[fn] === 'function') {
-                                                    try { uplder[fn](); } catch (_) {}
-                                                }
-                                            });
+                                            if (win.jq) {
+                                                try { win.jq(fileInput).trigger('change'); } catch (_) {}
+                                            }
                                         }
+
+                                        if (photoBtn && win.zk && win.zk.Widget) {
+                                            var btnW = win.zk.Widget.$(photoBtn);
+                                            if (btnW && btnW._uplder) {
+                                                var uplder = btnW._uplder;
+                                                if (!uplder._uploading) {
+                                                    if (typeof uplder.start === 'function') {
+                                                        uplder.start();
+                                                    } else if (typeof uplder._send === 'function') {
+                                                        uplder._send();
+                                                    } else if (typeof uplder.send === 'function') {
+                                                        uplder.send();
+                                                    } else if (uplder.form && typeof uplder.form.submit === 'function') {
+                                                        uplder.form.submit();
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        fileInput.setAttribute('data-ykn-photo-status', 'submitted');
+                                        console.log('[YKN MAIN World] Fotoğraf başarıyla yüklendi:', photoName);
                                     }
-                                    console.log('[YKN MAIN World] Fotoğraf başarıyla yüklendi:', data.photoFileName);
                                 }
                             } catch (pErr) {
                                 console.warn('[YKN MAIN World Photo Upload Error]', pErr);
@@ -984,52 +1006,37 @@ async function transferToYoksis(request) {
         chrome.storage.local.set({ studentData: request.data }, resolve);
     });
 
-    // 1. Önce YÖKSİS sekmesini aktif yap ve pencereyi öne getir
-    await updateTab(yoksisTab.id, { active: true });
-    if (yoksisTab.windowId) {
-        try {
-            await chrome.windows.update(yoksisTab.windowId, { focused: true });
-        } catch (_) {}
-    }
+    // 1. Arka planda çalış: YÖKSİS sekmesine geçme, odağı portalda bırak.
 
     // 2. MAIN WORLD ZK aramasını tüm framelerde çalıştır
     const mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
     const mainSuccess = mainResults && mainResults.some(r => r.result?.inputFound);
 
-    // 3. Content script üzerinden de aramayı başlat (izole dünya ve DOM desteği)
+    // 3. MAIN WORLD bulamadıysa Content script üzerinden dene (kısa zaman aşımıyla)
     let response = null;
-    try {
-        response = await sendTabMessage(yoksisTab.id, {
-            action: 'searchWithId',
-            kabulId: kabulId,
-            requestId: request.requestId
-        });
-    } catch (msgErr) {
-        console.warn('[YKN] sendTabMessage searchWithId warning:', msgErr);
+    if (!mainSuccess) {
+        try {
+            response = await Promise.race([
+                sendTabMessage(yoksisTab.id, {
+                    action: 'searchWithId',
+                    kabulId: kabulId,
+                    requestId: request.requestId
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('YÖKSİS arama zaman aşımı')), 3500))
+            ]);
+        } catch (msgErr) {
+            console.warn('[YKN] sendTabMessage searchWithId fallback warning:', msgErr);
+        }
+    } else {
+        // MAIN WORLD aramasını teyit amaçlı kısa süre sonra bir kez daha tetikle
+        setTimeout(() => {
+            executeYoksisSearchInMainWorld(yoksisTab.id, kabulId).catch(() => {});
+        }, 300);
     }
-
-    // 4. Teyit için kısa bir süre sonra MAIN WORLD aramasını bir kez daha tetikle
-    setTimeout(() => {
-        executeYoksisSearchInMainWorld(yoksisTab.id, kabulId).catch(() => {});
-    }, 450);
 
     const isSuccess = Boolean(mainSuccess || response?.success);
     if (!isSuccess) {
-        throw new Error('YÖKSİS sayfasında Kabul Mektup ID arama alanı bulunamadı. Lütfen YÖKSİS sekmesinde öğrenci başvuru/kayıt ekranının açık olduğundan emin olun.');
-    }
-
-    // Form açıldığında kalan bilgileri ve vesikalık fotoğrafı otomatik doldur ve yükle
-    if (response?.formReady) {
-        try {
-            await new Promise((r) => setTimeout(r, 350));
-            await sendTabMessage(yoksisTab.id, {
-                action: 'fillRemainingData',
-                data: request.data
-            });
-            await syncYoksisFormInMainWorld(yoksisTab.id, request.data);
-        } catch (fillErr) {
-            console.warn('[YKN] transferToYoksis auto-fill warning:', fillErr);
-        }
+        throw new Error('YÖKSİS sayfasında Kabul Mektup ID arama alanı bulunamadı. Lütfen YÖKSİS sekmesinde öğrenci başvuru/kayıt ekranının açık olduğunu kontrol edin.');
     }
 
     return {
@@ -1258,7 +1265,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             return;
                         }
                         syncYoksisFormInMainWorld(yoksisTab.id, studentData).catch(() => {});
-                        sendResponse({ ...response, requestId: request.requestId });
+                        sendResponse({ success: true, ...response, requestId: request.requestId });
                     });
                 });
             })().catch((error) => {

@@ -589,6 +589,15 @@ body.dark-mode .ykn-step-button.is-active {
     to { transform: translateX(4px); }
 }
 
+.ykn-step-button.is-loading {
+    opacity: 0.8 !important;
+    pointer-events: none !important;
+}
+
+.ykn-step-button.is-loading .ykn-step-icon {
+    animation: spin 0.8s linear infinite !important;
+}
+
 /* 2. SIRASI BEKLEYEN TUŞLAR (Kilitli, önceki adım tamamlanmadan basılamaz) */
 .ykn-step-button.is-locked {
     background: rgba(0, 0, 0, 0.02) !important;

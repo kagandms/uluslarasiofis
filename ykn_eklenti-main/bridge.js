@@ -38,13 +38,8 @@ window.addEventListener('message', (event) => {
     }
     
     // Mesajı eklenti arka planına gönder
-    chrome.runtime.sendMessage({
-        source: 'IKAMET_PORTAL',
-        action: payload.action,
-        ...payload
-    }, (response) => {
-        if (chrome.runtime.lastError) {
-            console.error('Bridge -> Background Error:', chrome.runtime.lastError.message);
+    try {
+        if (typeof chrome === 'undefined' || !chrome?.runtime?.sendMessage) {
             window.postMessage({
                 source: 'EXTENSION',
                 type: 'EVENT',
@@ -55,29 +50,51 @@ window.addEventListener('message', (event) => {
             return;
         }
 
-        // Arka plandan gelen yanıtı web sayfasına geri gönder (opsiyonel)
-        window.postMessage({
-            source: 'EXTENSION',
-            type: 'RESPONSE',
+        chrome.runtime.sendMessage({
+            source: 'IKAMET_PORTAL',
             action: payload.action,
-            requestId: payload.requestId,
-            response: response
-        }, '*');
-    });
+            ...payload
+        }, (response) => {
+            if (typeof chrome !== 'undefined' && chrome.runtime?.lastError) {
+                console.error('Bridge -> Background Error:', chrome.runtime.lastError.message);
+                window.postMessage({
+                    source: 'EXTENSION',
+                    type: 'EVENT',
+                    action: 'REQUEST_FAILED',
+                    requestId: payload.requestId,
+                    error: 'Eklenti arka planına ulaşılamadı. Eklentinin açık ve güncel olduğundan emin olun.'
+                }, '*');
+                return;
+            }
+
+            // Arka plandan gelen yanıtı web sayfasına geri gönder (opsiyonel)
+            window.postMessage({
+                source: 'EXTENSION',
+                type: 'RESPONSE',
+                action: payload.action,
+                requestId: payload.requestId,
+                response: response
+            }, '*');
+        });
+    } catch (err) {
+        console.error('Bridge sendMessage hatası:', err);
+    }
 });
 
 // Arka plandan gelen olayları (örn. arama sonuçları) dinle ve web sayfasına ilet
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.source === 'APPLY_TOPKAPI') {
-        window.postMessage({
-            source: 'EXTENSION',
-            type: 'EVENT',
-            action: request.action,
-            requestId: request.requestId,
-            data: request.data,
-            error: request.error
-        }, '*');
-    }
-});
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        if (request.source === 'APPLY_TOPKAPI') {
+            window.postMessage({
+                source: 'EXTENSION',
+                type: 'EVENT',
+                action: request.action,
+                requestId: request.requestId,
+                data: request.data,
+                error: request.error
+            }, '*');
+        }
+    });
+}
 })();
 

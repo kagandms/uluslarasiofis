@@ -142,6 +142,7 @@ export function closePassportCropper() {
     baseRotation = 0;
     cropperPages = [];
     currentCropperPageIndex = 0;
+    window.dispatchEvent(new CustomEvent('ykn:cropper-closed'));
 }
 
 export function isPassportCropperOpen() {
@@ -269,7 +270,7 @@ function downloadCroppedImage(autoTransfer = false) {
     }));
 
     if (autoTransfer) {
-        showToast(`Fotoğraf hazırlandı! YÖKSİS aktarımı başlatılıyor...`, 'success');
+        showToast('Fotoğraf kırpıldı ve kaydedildi! 4. Adım açıldı.', 'success');
     } else {
         showToast(`Fotoğraf hazırlandı ve indirildi: ${fileName}`, 'success');
     }

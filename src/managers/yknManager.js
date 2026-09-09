@@ -387,6 +387,8 @@ export function initYknManager() {
     let extensionBridgeActive = false;
     let extensionCheckRequestId = null;
     let extensionCheckTimeoutTimer = null;
+    let transferTimeoutTimer = null;
+    let pasteTimeoutTimer = null;
     let shouldOpenCropperWhenReady = false;
     const pendingDocumentReads = new Set();
 
@@ -486,6 +488,17 @@ export function initYknManager() {
             currentWorkflowStep = targetStep;
         }
 
+        // Adım tutarlılık güvencesi:
+        // 3. adım (Bilgileri Kopyala) tamamlandıysa ve 4. adım henüz tamamlanmadıysa, aktif adım MUTLAKA 4 olmalıdır.
+        // Bu sayede 4. buton asla kilitli (is-locked) görünmez.
+        if (completedWorkflowSteps.has(3) && !completedWorkflowSteps.has(4)) {
+            currentWorkflowStep = 4;
+        } else if (completedWorkflowSteps.has(2) && !completedWorkflowSteps.has(3) && currentWorkflowStep < 3) {
+            currentWorkflowStep = 3;
+        } else if (completedWorkflowSteps.has(1) && !completedWorkflowSteps.has(2) && currentWorkflowStep < 2) {
+            currentWorkflowStep = 2;
+        }
+
         const stepButtons = [
             { el: btnCopyLetter, num: 1 },
             { el: btnTransferYoksis, num: 2 },
@@ -524,6 +537,16 @@ export function initYknManager() {
     }
 
     function resetStudentActions() {
+        if (pasteTimeoutTimer) {
+            clearTimeout(pasteTimeoutTimer);
+            pasteTimeoutTimer = null;
+        }
+        if (transferTimeoutTimer) {
+            clearTimeout(transferTimeoutTimer);
+            transferTimeoutTimer = null;
+        }
+        if (btnTransferYoksis) btnTransferYoksis.classList.remove('is-loading');
+        if (btnPasteYoksis) btnPasteYoksis.classList.remove('is-loading');
         shouldOpenCropperWhenReady = false;
         pendingDocumentReads.clear();
         completedWorkflowSteps.clear();
@@ -1038,22 +1061,26 @@ export function initYknManager() {
                 showToast('Lütfen önce bir öğrenci arayın.', 'warning');
                 return;
             }
+
+            if (!activeSearchRequestId) activeSearchRequestId = createRequestId();
+
             if (!completedWorkflowSteps.has(2)) {
-                showToast('Lütfen önce 2. Adımı (Kabul Kodunu YÖKSİS\'e Aktar) başarıyla tamamlayın.', 'warning');
-                addStatus('3. Adıma geçmeden önce 2. Adımın başarıyla tamamlanması gerekmektedir.', 'warning');
-                return;
+                addStatus('Öğrenci bilgileri kopyalandı. Kabul mektubu kodunu YÖKSİS\'e aktarmayı (2. Adım) da unutmayın.', 'info');
             }
 
             // 1. Bilgileri hemen panoya kopyala (arka plan sekmelerini beklemeden!)
             copyStudentInfoToClipboard(currentStudentData);
 
-            // 2. 3. Adımı tamamla ve 4. Adımı ("Bilgileri YÖKSİS'e Aktar") anında aktif et
+            // 2. 3. Adımı tamamla, 4. adımı hemen aktif et
             completedWorkflowSteps.add(3);
             updateWorkflowUI(4);
 
-            // 3. Apply oturumu ile senkronize etmek için eklentiye istek gönder
+            // 3. Pasaport kırpıcıyı aç veya hazır olduğunda açılması için bayrağı ayarla
             shouldOpenCropperWhenReady = true;
-            addStatus('Öğrenci bilgileri panoya kopyalandı. YÖKSİS formuna aktarabilirsiniz.', 'success');
+            addStatus('Öğrenci bilgileri panoya kopyalandı. Pasaport fotoğrafı açılıyor...', 'success');
+            showToast('Öğrenci bilgileri kopyalandı.', 'success');
+
+            // 4. Apply oturumu ile senkronize etmek için eklentiye istek gönder
             window.postMessage({
                 source: 'WEB_APP',
                 payload: {
@@ -1062,23 +1089,27 @@ export function initYknManager() {
                 }
             }, '*');
 
-            // 4. Pasaport görseli zaten hazırsa doğrudan kırpıcıyı aç
+            // 5. Pasaport görseli zaten hazırsa doğrudan kırpıcıyı aç
             if (currentStudentData?.passportImageSrc) {
                 openPassportCropper({
                     imageSrc: currentStudentData.passportImageSrc,
                     pages: currentStudentData.passportPages || [],
                     initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
                     studentName: currentStudentData?.fullName || '',
-                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                    passportNo: currentStudentData?.passportNo || (inputPassport ? inputPassport.value.trim() : '')
                 });
                 shouldOpenCropperWhenReady = false;
+                addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'success');
             } else {
-                const passportDocumentUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
+                const passportDocumentUrl = currentStudentData?.passportImageUrl
+                    || currentStudentData?.passportDocumentUrl
+                    || (currentStudentData?.passportCandidates && currentStudentData.passportCandidates[0]);
                 if (passportDocumentUrl) {
                     addStatus('Pasaport belgesi alınıyor ve fotoğraf kırpıcı hazırlanıyor...', 'info');
+                    showToast('Pasaport belgesi açılıyor, lütfen bekleyin...', 'info');
                     requestApplyDocument('passport', passportDocumentUrl);
                 } else {
-                    void 'Pasaport belgesi henüz alınmadı.';
+                    addStatus('Pasaport belgesi Apply profilinden aranıyor...', 'info');
                 }
             }
         });
@@ -1170,7 +1201,7 @@ export function initYknManager() {
     }
 
     window.addEventListener('ykn:photo-cropped', (e) => {
-        const { dataUrl, fileName, autoTransfer } = e.detail || {};
+        const { dataUrl, fileName } = e.detail || {};
         if (!dataUrl) return;
 
         if (currentStudentData) {
@@ -1188,16 +1219,19 @@ export function initYknManager() {
             }
         }, '*');
 
-        addStatus(`Vesikalık fotoğraf hazırlandı (${fileName}). YÖKSİS'e otomatik yüklenecek.`, 'success');
+        // 3. Adım tamamlandı, 4. Adımı ("Bilgileri YÖKSİS'e Aktar") doğrudan aktif et
+        completedWorkflowSteps.add(3);
+        updateWorkflowUI(4);
 
-        if (autoTransfer) {
-            if (currentStudentData?.yoksisId && isValidYoksisId(currentStudentData.yoksisId)) {
-                if (btnTransferYoksis) {
-                    btnTransferYoksis.click();
-                }
-            } else {
-                showToast('Kabul kodu henüz hazır değil. Lütfen önce Kabul Kodunu kopyalayın.', 'warning');
-                addStatus('Fotoğraf hazırlandı ancak kabul mektubu kodu eksik. Lütfen önce Kabul Kodunu kopyalayın.', 'info');
+        addStatus(`Vesikalık fotoğraf başarıyla kırpıldı ve kaydedildi (${fileName}). 4. Adım ("Bilgileri YÖKSİS'e Aktar") açıldı. YÖKSİS sayfasına geçmek ve formu doldurmak için 4. Adım tuşuna basınız.`, 'success');
+        showToast('Fotoğraf hazırlandı! 4. Adım açıldı.', 'success');
+    });
+
+    window.addEventListener('ykn:cropper-closed', () => {
+        if (currentStudentData) {
+            completedWorkflowSteps.add(3);
+            if (currentWorkflowStep <= 3) {
+                updateWorkflowUI(4);
             }
         }
     });
@@ -1208,8 +1242,12 @@ export function initYknManager() {
                 showToast('Önce 1. Adımdan Kabul Kodunu kopyalamalısınız.', 'warning');
                 return;
             }
+            if (btnTransferYoksis.classList.contains('is-loading')) return;
+
+            if (!activeSearchRequestId) activeSearchRequestId = createRequestId();
             syncUserEnteredPassportDates();
-            // DİKKAT: 3. Adım burada AÇILMAZ! Sadece YÖKSİS'ten başarılı aktarım teyidi geldiğinde açılır.
+
+            btnTransferYoksis.classList.add('is-loading');
             showToast('Kabul kodu YÖKSİS\'e aktarılıyor, lütfen bekleyin...', 'info');
 
             if (currentStudentData.croppedPhotoBase64) {
@@ -1217,6 +1255,15 @@ export function initYknManager() {
             } else {
                 addStatus('Arka planda YÖKSİS\'e aktarılıyor ve arama yapılıyor...', 'info');
             }
+
+            // Güvenlik zaman aşımı (8 saniye) - Takılı kalmayı kesinlikle önler
+            if (transferTimeoutTimer) clearTimeout(transferTimeoutTimer);
+            transferTimeoutTimer = setTimeout(() => {
+                if (btnTransferYoksis) btnTransferYoksis.classList.remove('is-loading');
+                addStatus('YÖKSİS aktarımı beklenenden uzun sürdü. YÖKSİS sekmesini kontrol edip tekrar deneyebilirsiniz.', 'warning');
+                showToast('YÖKSİS yanıt vermedi (Zaman aşımı). Lütfen tekrar deneyin.', 'warning');
+            }, 8000);
+
             window.postMessage({
                 source: 'WEB_APP',
                 payload: {
@@ -1230,21 +1277,38 @@ export function initYknManager() {
 
     if (btnPasteYoksis) {
         btnPasteYoksis.addEventListener('click', () => {
-            if (!currentStudentData) return;
+            if (!currentStudentData) {
+                showToast('Lütfen önce bir öğrenci arayın.', 'warning');
+                return;
+            }
             if (!completedWorkflowSteps.has(3)) {
                 showToast('Lütfen önce 3. Adımı (Bilgileri Kopyala) tamamlayın.', 'warning');
                 addStatus('4. Adıma geçmeden önce 3. Adımın (Bilgileri Kopyala) tamamlanması gerekmektedir.', 'warning');
                 return;
             }
-            syncUserEnteredPassportDates();
-            completedWorkflowSteps.add(4);
-            updateWorkflowUI(5);
+            if (btnPasteYoksis.classList.contains('is-loading')) return;
 
-            if (currentStudentData.croppedPhotoBase64) {
-                addStatus('Bilgiler ve vesikalık fotoğraf YÖKSİS formuna yapıştırılıyor/yükleniyor...', 'info');
-            } else {
-                addStatus('Bilgiler YÖKSİS formuna yapıştırılıyor...', 'info');
-            }
+            if (!activeSearchRequestId) activeSearchRequestId = createRequestId();
+            syncUserEnteredPassportDates();
+
+            btnPasteYoksis.classList.add('is-loading');
+            completedWorkflowSteps.add(4);
+            updateWorkflowUI(4);
+
+            const hasPhoto = Boolean(currentStudentData.croppedPhotoBase64);
+            addStatus(`YÖKSİS sayfasına geçiliyor, bilgiler${hasPhoto ? ' ve vesikalık fotoğraf' : ''} form alanlarına aktarılıyor...`, 'info');
+            showToast('YÖKSİS sayfasına geçiliyor...', 'info');
+
+            // Güvenlik zaman aşımı (10 saniye) - Butonun takılı kalmasını kesinlikle önler
+            if (pasteTimeoutTimer) clearTimeout(pasteTimeoutTimer);
+            pasteTimeoutTimer = setTimeout(() => {
+                if (btnPasteYoksis) btnPasteYoksis.classList.remove('is-loading');
+                completedWorkflowSteps.delete(4);
+                updateWorkflowUI(4);
+                addStatus('YÖKSİS aktarımı beklenenden uzun sürdü. YÖKSİS sekmesini kontrol edip tekrar deneyebilirsiniz.', 'warning');
+                showToast('YÖKSİS yanıt vermedi (Zaman aşımı). YÖKSİS sekmesini kontrol edin.', 'warning');
+            }, 10000);
+
             window.postMessage({
                 source: 'WEB_APP',
                 payload: {
@@ -1279,17 +1343,27 @@ export function initYknManager() {
         }
 
         const requestId = event.data.requestId;
-        if (requestId !== activeSearchRequestId) return;
+        if (requestId && activeSearchRequestId && requestId !== activeSearchRequestId) return;
 
         if (event.data.type === 'RESPONSE') {
             const response = event.data.response;
             if (event.data.action === 'SEARCH_STUDENT' && response?.success) {
                 addStatus('Apply sekmesine bağlantı kuruldu, sonuç bekleniyor.', 'info');
             } else if (event.data.action === 'TRANSFER_TO_YOKSIS') {
+                if (transferTimeoutTimer) {
+                    clearTimeout(transferTimeoutTimer);
+                    transferTimeoutTimer = null;
+                }
+                if (btnTransferYoksis) btnTransferYoksis.classList.remove('is-loading');
+
                 if (response?.success) {
                     currentStudentData = { ...currentStudentData, yoksisReady: Boolean(response.formReady) };
                     completedWorkflowSteps.add(2);
-                    updateWorkflowUI(3);
+                    if (currentWorkflowStep <= 2 && !completedWorkflowSteps.has(3)) {
+                        updateWorkflowUI(3);
+                    } else {
+                        updateWorkflowUI();
+                    }
                     updateStudentActions(currentStudentData);
                     const hasPhoto = Boolean(currentStudentData?.croppedPhotoBase64);
                     addStatus(`Kabul kodu YÖKSİS'e başarıyla aktarıldı ve arama başlatıldı${hasPhoto ? ' (fotoğraf yüklendi)' : ''}. 3. Adım ("Bilgileri Kopyala") açıldı.`, 'success');
@@ -1299,12 +1373,26 @@ export function initYknManager() {
                     addStatus(errMsg, 'error');
                     showToast(errMsg, 'error');
                 }
-            } else if (event.data.action === 'FILL_YOKSIS_FORM' && response?.success) {
-                completedWorkflowSteps.add(4);
-                updateWorkflowUI(5);
-                const hasPhoto = Boolean(currentStudentData?.croppedPhotoBase64);
-                addStatus(`YÖKSİS alanları dolduruldu${hasPhoto ? ' ve fotoğraf yüklendi' : ''}. Göndermeden önce kontrol edin.`, 'success');
-                showToast(`YÖKSİS alanları dolduruldu${hasPhoto ? ' ve fotoğraf yüklendi' : ''}.`, 'success');
+            } else if (event.data.action === 'FILL_YOKSIS_FORM') {
+                if (pasteTimeoutTimer) {
+                    clearTimeout(pasteTimeoutTimer);
+                    pasteTimeoutTimer = null;
+                }
+                if (btnPasteYoksis) btnPasteYoksis.classList.remove('is-loading');
+
+                if (response?.success) {
+                    completedWorkflowSteps.add(4);
+                    updateWorkflowUI(5);
+                    const hasPhoto = Boolean(currentStudentData?.croppedPhotoBase64);
+                    addStatus(`YÖKSİS sekmesine geçildi, alanlar dolduruldu${hasPhoto ? ' ve vesikalık fotoğraf yüklendi' : ''}. Göndermeden önce kontrol edin.`, 'success');
+                    showToast(`YÖKSİS formu dolduruldu${hasPhoto ? ' ve vesikalık fotoğraf yüklendi' : ''}.`, 'success');
+                } else {
+                    completedWorkflowSteps.delete(4);
+                    updateWorkflowUI(4);
+                    const errMsg = response?.error || response?.message || 'YÖKSİS formu doldurulamadı. Lütfen YÖKSİS sekmesinin açık olduğunu kontrol edin.';
+                    addStatus(errMsg, 'error');
+                    showToast(errMsg, 'error');
+                }
             } else if (event.data.action === 'COPY_APPLY_DATA') {
                 if (response?.success && response.data) {
                     const data = response.data;
@@ -1322,12 +1410,16 @@ export function initYknManager() {
                                 pages: currentStudentData.passportPages || [],
                                 initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
                                 studentName: currentStudentData?.fullName || '',
-                                passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                                passportNo: currentStudentData?.passportNo || (inputPassport ? inputPassport.value.trim() : '')
                             });
                             shouldOpenCropperWhenReady = false;
+                            addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'success');
                         } else {
-                            const passUrl = currentStudentData.passportImageUrl || currentStudentData.passportDocumentUrl;
+                            const passUrl = currentStudentData.passportImageUrl
+                                || currentStudentData.passportDocumentUrl
+                                || (currentStudentData.passportCandidates && currentStudentData.passportCandidates[0]);
                             if (passUrl) {
+                                shouldOpenCropperWhenReady = true;
                                 addStatus('Pasaport belgesi alınıyor ve fotoğraf kırpıcı hazırlanıyor...', 'info');
                                 requestApplyDocument('passport', passUrl);
                             }
@@ -1458,8 +1550,15 @@ export function initYknManager() {
             event.data.action === 'REQUEST_FAILED'
         )) {
             clearSearchTimeout();
-            studentName.textContent = "Bulunamadı";
-            const errorMsg = event.data.error ? 'Hata: ' + event.data.error : 'Apply Topkapı üzerinde öğrenci bulunamadı.';
+            if (transferTimeoutTimer) {
+                clearTimeout(transferTimeoutTimer);
+                transferTimeoutTimer = null;
+            }
+            if (btnTransferYoksis) btnTransferYoksis.classList.remove('is-loading');
+            if (event.data.action === 'STUDENT_NOT_FOUND') {
+                studentName.textContent = "Bulunamadı";
+            }
+            const errorMsg = event.data.error ? 'Hata: ' + event.data.error : 'İşlem başarısız oldu.';
             addStatus(errorMsg, 'error');
         }
     };
