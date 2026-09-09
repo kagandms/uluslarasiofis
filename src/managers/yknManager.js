@@ -1029,6 +1029,11 @@ export function initYknManager() {
                 showToast('Lütfen önce bir öğrenci arayın.', 'warning');
                 return;
             }
+            if (!completedWorkflowSteps.has(2)) {
+                showToast('Lütfen önce 2. Adımı (Kabul Kodunu YÖKSİS\'e Aktar) başarıyla tamamlayın.', 'warning');
+                addStatus('3. Adıma geçmeden önce 2. Adımın başarıyla tamamlanması gerekmektedir.', 'warning');
+                return;
+            }
 
             // 1. Bilgileri hemen panoya kopyala (arka plan sekmelerini beklemeden!)
             copyStudentInfoToClipboard(currentStudentData);
@@ -1191,12 +1196,12 @@ export function initYknManager() {
     if (btnTransferYoksis) {
         btnTransferYoksis.addEventListener('click', () => {
             if (!currentStudentData || !currentStudentData.yoksisId) {
-                showToast('Önce kabul mektubundan kodu kopyalamalısınız.', 'warning');
+                showToast('Önce 1. Adımdan Kabul Kodunu kopyalamalısınız.', 'warning');
                 return;
             }
             syncUserEnteredPassportDates();
-            completedWorkflowSteps.add(2);
-            updateWorkflowUI(3);
+            // DİKKAT: 3. Adım burada AÇILMAZ! Sadece YÖKSİS'ten başarılı aktarım teyidi geldiğinde açılır.
+            showToast('Kabul kodu YÖKSİS\'e aktarılıyor, lütfen bekleyin...', 'info');
 
             if (currentStudentData.croppedPhotoBase64) {
                 addStatus('Arka planda YÖKSİS\'e aktarılıyor, form ve vesikalık fotoğraf otomatik yükleniyor...', 'info');
@@ -1217,6 +1222,11 @@ export function initYknManager() {
     if (btnPasteYoksis) {
         btnPasteYoksis.addEventListener('click', () => {
             if (!currentStudentData) return;
+            if (!completedWorkflowSteps.has(3)) {
+                showToast('Lütfen önce 3. Adımı (Bilgileri Kopyala) tamamlayın.', 'warning');
+                addStatus('4. Adıma geçmeden önce 3. Adımın (Bilgileri Kopyala) tamamlanması gerekmektedir.', 'warning');
+                return;
+            }
             syncUserEnteredPassportDates();
             completedWorkflowSteps.add(4);
             updateWorkflowUI(5);
@@ -1262,14 +1272,20 @@ export function initYknManager() {
             const response = event.data.response;
             if (event.data.action === 'SEARCH_STUDENT' && response?.success) {
                 addStatus('Apply sekmesine bağlantı kuruldu, sonuç bekleniyor.', 'info');
-            } else if (event.data.action === 'TRANSFER_TO_YOKSIS' && response?.success) {
-                currentStudentData = { ...currentStudentData, yoksisReady: Boolean(response.formReady) };
-                completedWorkflowSteps.add(2);
-                if (currentWorkflowStep <= 2) updateWorkflowUI(3);
-                updateStudentActions(currentStudentData);
-                const hasPhoto = Boolean(currentStudentData?.croppedPhotoBase64);
-                addStatus(`YÖKSİS aktarımı tamamlandı: Form dolduruldu${hasPhoto ? ' ve vesikalık fotoğraf otomatik yüklendi' : ''}.`, 'success');
-                showToast(`YÖKSİS aktarımı tamamlandı!${hasPhoto ? ' Fotoğraf yüklendi.' : ''}`, 'success');
+            } else if (event.data.action === 'TRANSFER_TO_YOKSIS') {
+                if (response?.success) {
+                    currentStudentData = { ...currentStudentData, yoksisReady: Boolean(response.formReady) };
+                    completedWorkflowSteps.add(2);
+                    updateWorkflowUI(3);
+                    updateStudentActions(currentStudentData);
+                    const hasPhoto = Boolean(currentStudentData?.croppedPhotoBase64);
+                    addStatus(`Kabul kodu YÖKSİS'e başarıyla aktarıldı ve arama başlatıldı${hasPhoto ? ' (fotoğraf yüklendi)' : ''}. 3. Adım ("Bilgileri Kopyala") açıldı.`, 'success');
+                    showToast(`Kabul mektup kodu başarıyla aktarıldı! (3. Adım açıldı)`, 'success');
+                } else {
+                    const errMsg = response?.error || response?.message || 'Kabul kodu YÖKSİS\'e aktarılamadı. Lütfen YÖKSİS sekmesinde öğrenci başvuru/kayıt ekranının açık olduğunu kontrol edin.';
+                    addStatus(errMsg, 'error');
+                    showToast(errMsg, 'error');
+                }
             } else if (event.data.action === 'FILL_YOKSIS_FORM' && response?.success) {
                 completedWorkflowSteps.add(4);
                 updateWorkflowUI(5);

@@ -589,22 +589,23 @@ body.dark-mode .ykn-step-button.is-active {
     to { transform: translateX(4px); }
 }
 
-/* 2. SIRASI BEKLEYEN TUŞLAR (Sade, kılavuz odaklı, tıklanabilir) */
+/* 2. SIRASI BEKLEYEN TUŞLAR (Kilitli, önceki adım tamamlanmadan basılamaz) */
 .ykn-step-button.is-locked {
     background: rgba(0, 0, 0, 0.02) !important;
     border: 1.5px dashed var(--card-border) !important;
     color: var(--text-secondary) !important;
-    opacity: 0.65 !important;
-    cursor: pointer !important;
+    opacity: 0.45 !important;
+    cursor: not-allowed !important;
     pointer-events: auto !important;
     box-shadow: none !important;
     transform: none !important;
+    filter: grayscale(40%);
 }
 
 .ykn-step-button.is-locked:hover {
-    opacity: 0.9 !important;
-    border-color: var(--accent) !important;
-    background: rgba(139, 0, 0, 0.03) !important;
+    opacity: 0.55 !important;
+    border-color: var(--card-border) !important;
+    background: rgba(0, 0, 0, 0.03) !important;
 }
 
 body.dark-mode .ykn-step-button.is-locked {
