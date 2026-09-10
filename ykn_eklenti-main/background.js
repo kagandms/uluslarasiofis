@@ -306,6 +306,7 @@ async function readApplyDocument(request) {
         requestId: request.requestId,
         data: {
             documentKind: request.documentKind,
+            documentUrl: request.documentUrl,
             contentType: result.contentType,
             documentBase64: result.documentBase64
         }
@@ -321,7 +322,9 @@ async function getExistingYoksisTab() {
     // Aktif / odaklı olan YÖKSİS sekmesini öncelikle tercih et
     const yoksisTab = tabs.find(t => t.active) || tabs[0];
     yoksisTabId = yoksisTab.id;
-    ensureContentScriptInjected(yoksisTabId, 'yoksis').catch(() => {});
+    // Eklenti güncellendikten sonra açık sekmede eski content-script kalabilir.
+    // Önce yeni bağlamı doğrula; gerekirse waitForContentScript yeniden enjekte eder.
+    await waitForContentScript(yoksisTabId, 'yoksis');
     return yoksisTab;
 }
 
@@ -521,7 +524,10 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
 
                     console.log('[YKN MAIN WORLD] Search summary:', { inp: Boolean(inp), btn: Boolean(btn) });
 
-                    // 5. Input'a değeri yaz ve tüm olayları tetikle
+                    // 5. Input'a değeri yaz. ZK varsa tek bir onChange gönder;
+                    // aynı isteği DOM, zAu ve widget üzerinden çoğaltma.
+                    let inputWidget = null;
+                    let zkChangeSent = false;
                     if (inp) {
                         inp.focus();
                         const nativeSetter = Object.getOwnPropertyDescriptor(targetWin.HTMLInputElement.prototype, 'value')?.set
@@ -534,25 +540,21 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         inp.setAttribute('value', code);
                         inp.dispatchEvent(new Event('focus', { bubbles: true }));
                         inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                        inp.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-
                         if (targetWin.zk && targetWin.zk.Widget) {
-                            const wi = targetWin.zk.Widget.$(inp);
-                            if (wi) {
-                                if (typeof wi.setValue === 'function') wi.setValue(code);
-                                wi._value = code;
-                                wi._lastValue = code;
-                                if (typeof wi.fire === 'function') {
-                                    wi.fire('onChange', { value: code }, { toServer: true });
+                            try {
+                                inputWidget = targetWin.zk.Widget.$(inp);
+                                if (inputWidget) {
+                                    if (typeof inputWidget.setValue === 'function') inputWidget.setValue(code);
+                                    inputWidget._value = code;
+                                    inputWidget._lastValue = code;
+                                    if (typeof inputWidget.fire === 'function') {
+                                        inputWidget.fire('onChange', { value: code }, { toServer: true });
+                                        zkChangeSent = true;
+                                    }
                                 }
-                            }
+                            } catch (_) {}
                         }
-                        if (targetWin.zAu && typeof targetWin.zAu.send === 'function' && targetWin.zk?.Widget) {
-                            const wi = targetWin.zk.Widget.$(inp);
-                            if (wi) {
-                                try { targetWin.zAu.send(new targetWin.zk.Event(wi, 'onChange', { value: code }, { toServer: true })); } catch (_) {}
-                            }
-                        }
+                        if (!zkChangeSent) inp.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
                         inp.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
                         try { inp.blur(); } catch (_) {}
@@ -561,41 +563,32 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     // ZK'nin onChange'i işlemesi için kısa bekleme
                     await new Promise(r => setTimeout(r, 150));
 
-                    // 6. Butonu tıkla ve ZK onClick olayını gönder
+                    // 6. Butonu tek kez çalıştır. ZK widget bulunduysa doğrudan onu
+                    // çalıştırmak, DOM click + zAu + onClick üçlemesini engeller.
                     if (btn) {
-                        btn.focus();
-                        ['mouseover', 'mouseenter', 'mousedown', 'mouseup', 'click'].forEach(function(evt) {
-                            btn.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: targetWin }));
-                        });
-                        try { btn.click(); } catch (_) {}
-
+                        let buttonWidget = null;
                         if (targetWin.zk && targetWin.zk.Widget) {
-                            let wb = targetWin.zk.Widget.$(btn);
-                            if (!wb) {
-                                let parentEl = btn.parentElement;
-                                while (parentEl && parentEl !== doc?.body && !wb) {
-                                    wb = targetWin.zk.Widget.$(parentEl);
-                                    parentEl = parentEl.parentElement;
+                            try {
+                                buttonWidget = targetWin.zk.Widget.$(btn);
+                                if (!buttonWidget && btn.parentElement) {
+                                    buttonWidget = targetWin.zk.Widget.$(btn.parentElement);
                                 }
-                            }
-                            if (wb && typeof wb.fire === 'function') {
-                                wb.fire('onClick', null, { toServer: true });
-                            }
+                            } catch (_) {}
                         }
-                        if (targetWin.zAu && typeof targetWin.zAu.send === 'function' && targetWin.zk?.Widget) {
-                            let wb = targetWin.zk.Widget.$(btn);
-                            if (wb) {
-                                try { targetWin.zAu.send(new targetWin.zk.Event(wb, 'onClick', null, { toServer: true })); } catch (_) {}
-                            }
+                        if (buttonWidget && typeof buttonWidget.fire === 'function') {
+                            buttonWidget.fire('onClick', null, { toServer: true });
+                        } else {
+                            btn.focus();
+                            try { btn.click(); } catch (_) {}
                         }
                     }
 
-                    if (inp) {
-                        // Buton bulunsa da bulunmasa da ek güvence: Enter ve onOK
+                    if (inp && !btn) {
+                        // Buton yoksa yalnızca Enter/onOK fallback'i kullan.
                         inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: targetWin }));
                         inp.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: targetWin }));
                         if (targetWin.zk && targetWin.zk.Widget) {
-                            const wi = targetWin.zk.Widget.$(inp);
+                            const wi = inputWidget || targetWin.zk.Widget.$(inp);
                             if (wi && typeof wi.fire === 'function') {
                                 try { wi.fire('onOK', null, { toServer: true }); } catch (_) {}
                             }
@@ -1037,10 +1030,10 @@ async function waitForYoksisFormReady(tabId, requestId) {
         const readiness = await withTimeout(
             sendTabMessage(tabId, {
                 action: 'WAIT_YOKSIS_FORM',
-                timeoutMs: 6000,
+                timeoutMs: 10000,
                 requestId
             }),
-            7000,
+            11_000,
             'YÖKSİS formu hazır olma zaman aşımı'
         );
         return Boolean(readiness?.formReady);
@@ -1053,7 +1046,11 @@ async function waitForYoksisFormReady(tabId, requestId) {
 
 async function transferToYoksis(request) {
     const yoksisTab = await getExistingYoksisTab();
-    const kabulId = (request.data?.yoksisId || request.data?.kabulId || request.kabulId || '').trim();
+    const kabulId = String(request.data?.yoksisId || request.data?.kabulId || request.kabulId || '')
+        .replace(/[–—]/g, '-')
+        .replace(/\s+/g, '')
+        .trim()
+        .toUpperCase();
     if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
 
     await new Promise((resolve) => {
@@ -1103,6 +1100,7 @@ async function transferToYoksis(request) {
     return {
         success: true,
         transferred: true,
+        searchTriggered: true,
         formReady,
         message: 'Kabul mektup kodu YÖKSİS\'e başarıyla aktarıldı ve arama başlatıldı.'
     };

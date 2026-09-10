@@ -1,8 +1,11 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-if (window.__YKN_CONTENT_LOADED__) return;
+const CONTENT_SCRIPT_VERSION = '1.2.25';
+if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
+window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
+const FIXED_YOKSIS_PHONE = '5322431261';
 
 function getAllDocs(rootDoc = document) {
     const docs = [];
@@ -85,6 +88,7 @@ async function simulateInput(element, value) {
     element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, composed: true, key: 'Enter', keyCode: 13, view: win }));
     element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, composed: true, key: 'Enter', keyCode: 13, view: win }));
     
+    let zkChangeSent = false;
     if (win.zk && win.zk.Widget) {
         try {
             const w = win.zk.Widget.$(element);
@@ -94,11 +98,12 @@ async function simulateInput(element, value) {
                 w._lastValue = value;
                 if (typeof w.fire === 'function') {
                     w.fire('onChange', { value }, { toServer: true });
+                    zkChangeSent = true;
                 }
             }
         } catch (_) {}
     }
-    if (win.zAu && typeof win.zAu.send === 'function' && win.zk?.Widget) {
+    if (!zkChangeSent && win.zAu && typeof win.zAu.send === 'function' && win.zk?.Widget) {
         try {
             const w = win.zk.Widget.$(element);
             if (w) {
@@ -417,13 +422,6 @@ function triggerZkClick(buttonElement, inputElement, kabulId) {
 
     try {
         if (win.zk && win.zk.Widget) {
-            if (inputElement) {
-                const wi = win.zk.Widget.$(inputElement);
-                if (wi) {
-                    if (typeof wi.setValue === 'function') wi.setValue(kabulId);
-                    wi.fire('onChange', { value: kabulId }, { toServer: true });
-                }
-            }
             if (buttonElement) {
                 let wb = win.zk.Widget.$(buttonElement);
                 if (!wb && buttonElement.parentElement) {
@@ -431,12 +429,13 @@ function triggerZkClick(buttonElement, inputElement, kabulId) {
                 }
                 if (wb && typeof wb.fire === 'function') {
                     wb.fire('onClick', null, { toServer: true });
+                    return;
                 }
             }
         }
-        if (win.zAu && buttonElement && win.zk && win.zk.Widget) {
-            const wb = win.zk.Widget.$(buttonElement) || (buttonElement.parentElement && win.zk.Widget.$(buttonElement.parentElement));
-            if (wb) win.zAu.send(new win.zk.Event(wb, 'onClick', null, { toServer: true }));
+        if (buttonElement) {
+            simulateButtonClick(buttonElement);
+            return;
         }
         if (inputElement) {
             inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: win }));
@@ -1584,7 +1583,6 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 }
 
                 if (searchBtn) {
-                    simulateButtonClick(searchBtn);
                     triggerZkClick(searchBtn, idInput, kabulId);
                 } else {
                     console.warn('[YKN] Kabul mektup ID ara butonu bulunamadı, genel tetikleyici deneniyor.');
@@ -1642,28 +1640,41 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 
             let successCount = 0;
             let photoUploaded = false;
+            const filledFields = new Set();
+            const missingFields = new Set();
+            const recordField = (label, expectedValue, filled) => {
+                const expected = String(expectedValue ?? '').trim();
+                if (!expected) return Boolean(filled);
+                if (filled) {
+                    filledFields.add(label);
+                    missingFields.delete(label);
+                } else if (!filledFields.has(label)) {
+                    missingFields.add(label);
+                }
+                return Boolean(filled);
+            };
 
             const anneAdiInput = findTargetElementByFuzzyLabel('Anne Adı', 'input');
-            if (await simulateInput(anneAdiInput, data.anneAdi)) successCount++;
+            if (recordField('Anne Adı', data.anneAdi, await simulateInput(anneAdiInput, data.anneAdi))) successCount++;
 
             const babaAdiInput = findTargetElementByFuzzyLabel('Baba Adı', 'input');
-            if (await simulateInput(babaAdiInput, data.babaAdi)) successCount++;
+            if (recordField('Baba Adı', data.babaAdi, await simulateInput(babaAdiInput, data.babaAdi))) successCount++;
 
             const uyrukSelect = findTargetElementByFuzzyLabel('Uyruğu', 'select');
-            if (simulateSelect(uyrukSelect, data.uyruk)) successCount++;
+            if (recordField('Uyruğu', data.uyruk, simulateSelect(uyrukSelect, data.uyruk))) successCount++;
             
             const dogumUyruguSelect = findTargetElementByFuzzyLabel('Doğum Uyruğu', 'select');
-            if (simulateSelect(dogumUyruguSelect, data.uyruk)) successCount++;
+            if (recordField('Doğum Uyruğu', data.uyruk, simulateSelect(dogumUyruguSelect, data.uyruk))) successCount++;
             
             const dogumYeriUlkesiSelect = findTargetElementByFuzzyLabel('Doğum Yeri Ülkesi', 'select');
             const dogumYeriDegeri = data.dogumUlkesi ? data.dogumUlkesi : data.uyruk;
-            if (simulateSelect(dogumYeriUlkesiSelect, dogumYeriDegeri)) successCount++;
+            if (recordField('Doğum Yeri Ülkesi', dogumYeriDegeri, simulateSelect(dogumYeriUlkesiSelect, dogumYeriDegeri))) successCount++;
             
             const belgeyiVerenUlkeSelect = findTargetElementByFuzzyLabel('Belgeyi Veren Ülke', 'select');
-            if (simulateSelect(belgeyiVerenUlkeSelect, data.uyruk)) successCount++;
+            if (recordField('Belgeyi Veren Ülke', data.uyruk, simulateSelect(belgeyiVerenUlkeSelect, data.uyruk))) successCount++;
 
             if (data.cinsiyet) {
-                if (simulateRadioByLabelText(data.cinsiyet)) successCount++;
+                if (recordField('Cinsiyet', data.cinsiyet, simulateRadioByLabelText(data.cinsiyet))) successCount++;
             }
 
             // Özel Ülke Kuralları (Türkmenistan, Afganistan, Pakistan)
@@ -1688,14 +1699,16 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             let filledVerenMakam = false;
 
             if (customDogumYeri && dogumYeriAciklamasi) {
-                if (await simulateInput(dogumYeriAciklamasi, customDogumYeri)) {
+                const filled = await simulateInput(dogumYeriAciklamasi, customDogumYeri);
+                if (recordField('Doğum Yeri Açıklaması', customDogumYeri, filled)) {
                     successCount++;
                     filledDogumYeri = true;
                 }
             }
 
             if (customVerenMakam && verenMakam) {
-                if (await simulateInput(verenMakam, customVerenMakam)) {
+                const filled = await simulateInput(verenMakam, customVerenMakam);
+                if (recordField('Belgeyi Veren Makam', customVerenMakam, filled)) {
                     successCount++;
                     filledVerenMakam = true;
                 }
@@ -1704,28 +1717,50 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             // Değerler portaldan gelmediyse ülke bazlı akıllı şablonları uygula
             if (!filledDogumYeri || !filledVerenMakam) {
                 if (isTurkmen) {
-                    if (!filledDogumYeri && dogumYeriAciklamasi && (await simulateInput(dogumYeriAciklamasi, 'TKM'))) successCount++;
-                    if (!filledVerenMakam && verenMakam && (await simulateInput(verenMakam, 'SMST'))) successCount++;
+                    if (!filledDogumYeri && dogumYeriAciklamasi) {
+                        const filled = await simulateInput(dogumYeriAciklamasi, 'TKM');
+                        if (recordField('Doğum Yeri Açıklaması', 'TKM', filled)) successCount++;
+                    }
+                    if (!filledVerenMakam && verenMakam) {
+                        const filled = await simulateInput(verenMakam, 'SMST');
+                        if (recordField('Belgeyi Veren Makam', 'SMST', filled)) successCount++;
+                    }
                 } 
                 else if (uyrukNorm.includes('afgan') || dogumNorm.includes('afgan')) {
                     if (!filledDogumYeri && dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
-                        if (await simulateInput(dogumYeriAciklamasi, 'AFG')) successCount++;
+                        const filled = await simulateInput(dogumYeriAciklamasi, 'AFG');
+                        if (recordField('Doğum Yeri Açıklaması', 'AFG', filled)) successCount++;
                     }
-                    if (!filledVerenMakam && verenMakam && (await simulateInput(verenMakam, 'AFGHAN'))) successCount++;
+                    if (!filledVerenMakam && verenMakam) {
+                        const filled = await simulateInput(verenMakam, 'AFGHAN');
+                        if (recordField('Belgeyi Veren Makam', 'AFGHAN', filled)) successCount++;
+                    }
                 } 
                 else if (uyrukNorm.includes('pakistan') || dogumNorm.includes('pakistan')) {
                     if (!filledDogumYeri && dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
-                        if (await simulateInput(dogumYeriAciklamasi, 'PAK')) successCount++;
+                        const filled = await simulateInput(dogumYeriAciklamasi, 'PAK');
+                        if (recordField('Doğum Yeri Açıklaması', 'PAK', filled)) successCount++;
                     }
-                    if (!filledVerenMakam && verenMakam && (await simulateInput(verenMakam, 'PAKISTAN'))) successCount++;
+                    if (!filledVerenMakam && verenMakam) {
+                        const filled = await simulateInput(verenMakam, 'PAKISTAN');
+                        if (recordField('Belgeyi Veren Makam', 'PAKISTAN', filled)) successCount++;
+                    }
                 }
             }
             
-            const telefonNoInput = findTargetElementByFuzzyLabel('Telefon No', 'input');
-            if (await simulateInput(telefonNoInput, '5327892361')) successCount++;
+            const telefonNoInput = findTargetElementByFuzzyLabels([
+                'Telefon No',
+                'Telefon Numarası',
+                'Cep Telefonu No',
+                'Cep Telefonu',
+                'GSM',
+                'Telefon'
+            ], 'input');
+            if (recordField('Telefon No', FIXED_YOKSIS_PHONE, await simulateInput(telefonNoInput, FIXED_YOKSIS_PHONE))) successCount++;
 
             const belgeNoInput = findBelgeNoInMainPanel();
-            if (await simulateInput(belgeNoInput, data.pasaportNo)) successCount++;
+            const passportValue = data.pasaportNo || data.passportNo;
+            if (recordField('Belge No', passportValue, await simulateInput(belgeNoInput, passportValue))) successCount++;
 
             const issueDateInput = findTargetElementByFuzzyLabels([
                 'Belge Düzenleme Tarihi',
@@ -1756,12 +1791,16 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 'Expiration Date'
             ], 'input');
 
-            if (issueDateInput && data.issueDate
-                && (await simulateDateboxInput(issueDateInput, formatDateForYoksisInput(issueDateInput, data.issueDate)))) {
+            const issueDateFilled = issueDateInput && data.issueDate
+                ? await simulateDateboxInput(issueDateInput, formatDateForYoksisInput(issueDateInput, data.issueDate))
+                : false;
+            if (recordField('Düzenleme Tarihi', data.issueDate, issueDateFilled)) {
                 successCount++;
             }
-            if (expiryDateInput && data.expiryDate
-                && (await simulateDateboxInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, data.expiryDate)))) {
+            const expiryDateFilled = expiryDateInput && data.expiryDate
+                ? await simulateDateboxInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, data.expiryDate))
+                : false;
+            if (recordField('Geçerlilik Tarihi', data.expiryDate, expiryDateFilled)) {
                 successCount++;
             }
 
@@ -1795,16 +1834,29 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             if (data.croppedPhotoBase64) {
                 try {
                     photoUploaded = await uploadPhotoToYoksis(data.croppedPhotoBase64, data.photoFileName);
-                    if (photoUploaded) successCount++;
+                    if (recordField('Fotoğraf', true, photoUploaded)) successCount++;
                 } catch (photoErr) {
+                    missingFields.add('Fotoğraf');
                     console.warn('[YKN] Fotoğraf yükleme hatası (content script):', photoErr);
                 }
             }
 
             if (successCount > 0) {
-                sendResponse({ success: true, photoUploaded });
+                const missing = Array.from(missingFields);
+                sendResponse({
+                    success: true,
+                    partial: missing.length > 0,
+                    photoUploaded,
+                    filledFields: Array.from(filledFields),
+                    missingFields: missing
+                });
             } else {
-                sendResponse({ success: false, message: "Hedef inputlar bulunamadı." });
+                sendResponse({
+                    success: false,
+                    message: "Hedef inputlar bulunamadı.",
+                    filledFields: [],
+                    missingFields: Array.from(missingFields)
+                });
             }
         });
         return true;

@@ -187,12 +187,12 @@
                                 <div class="ykn-workflow-header" style="display: flex; align-items: center; justify-content: space-between; margin-top: 14px; margin-bottom: 8px;">
                                     <span style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); display: flex; align-items: center; gap: 6px;">
                                         <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                                        İşlem Sırası (1 → 2 → 3 → 4)
+                                        Önerilen İşlem Sırası (1 → 2 → 3 → 4)
                                     </span>
                                     <span id="ykn-step-indicator" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; background: rgba(139, 0, 0, 0.08); color: var(--accent); font-weight: 700;">Adım 1 / 4</span>
                                 </div>
 
-                                <!-- Sıralı Adım Tuşları -->
+                                <!-- Önerilen sırayı gösteren, bağımsız çalışabilen adım tuşları -->
                                 <div class="ykn-steps-container" id="ykn-steps-container">
                                     <!-- 1. Tuş: Kabul Mektup Kodunu Kopyala -->
                                     <button type="button" id="btn-ykn-copy-letter" class="ykn-step-button is-active" data-step="1">
@@ -208,11 +208,11 @@
                                     </button>
 
                                     <!-- 2. Tuş: Kabul Mektup Kodunu YÖKSİS'e Aktar -->
-                                    <button type="button" id="btn-ykn-transfer-yoksis" class="ykn-step-button is-locked" data-step="2">
+                                    <button type="button" id="btn-ykn-transfer-yoksis" class="ykn-step-button is-available" data-step="2">
                                         <div class="ykn-step-badge">2</div>
                                         <div class="ykn-step-text">
-                                            <span class="ykn-step-title">Kabul Mektup Kodunu YÖKSİS'e Aktar</span>
-                                            <span class="ykn-step-subtitle">YÖKSİS sekmesine geçer ve öğrenciyi aratır</span>
+                                            <span class="ykn-step-title">Kabul Kodunu YÖKSİS’te Ara</span>
+                                            <span class="ykn-step-subtitle">Açık YÖKSİS sekmesinde kodu yazar ve aratır</span>
                                         </div>
                                         <div class="ykn-step-icon">
                                             <svg class="icon-arrow" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -221,11 +221,11 @@
                                     </button>
 
                                     <!-- 3. Tuş: Bilgileri Kopyala -->
-                                    <button type="button" id="btn-ykn-copy-info" class="ykn-step-button is-locked" data-step="3">
+                                    <button type="button" id="btn-ykn-copy-info" class="ykn-step-button is-available" data-step="3">
                                         <div class="ykn-step-badge">3</div>
                                         <div class="ykn-step-text">
-                                            <span class="ykn-step-title">Bilgileri Kopyala</span>
-                                            <span class="ykn-step-subtitle">Pasaport, doğum ve kimlik verilerini hazırlar</span>
+                                            <span class="ykn-step-title">Apply Bilgilerini Al ve Kopyala</span>
+                                            <span class="ykn-step-subtitle">Öğrenci bilgilerini alır ve pasaport verilerini hazırlar</span>
                                         </div>
                                         <div class="ykn-step-icon">
                                             <svg class="icon-arrow" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -234,11 +234,11 @@
                                     </button>
 
                                     <!-- 4. Tuş: Bilgileri YÖKSİS'e Aktar -->
-                                    <button type="button" id="btn-ykn-paste-yoksis" class="ykn-step-button is-locked" data-step="4">
+                                    <button type="button" id="btn-ykn-paste-yoksis" class="ykn-step-button is-available" data-step="4">
                                         <div class="ykn-step-badge">4</div>
                                         <div class="ykn-step-text">
-                                            <span class="ykn-step-title">Bilgileri YÖKSİS'e Aktar</span>
-                                            <span class="ykn-step-subtitle">Açılan YÖKSİS formundaki alanları otomatik doldurur</span>
+                                            <span class="ykn-step-title">Hazırlanan Bilgileri YÖKSİS’e Doldur</span>
+                                            <span class="ykn-step-subtitle">YÖKSİS formunu açar ve mevcut verileri alanlara yazar</span>
                                         </div>
                                         <div class="ykn-step-icon">
                                             <svg class="icon-arrow" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>

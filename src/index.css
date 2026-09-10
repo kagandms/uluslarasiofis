@@ -598,60 +598,97 @@ body.dark-mode .ykn-step-button.is-active {
     animation: spin 0.8s linear infinite !important;
 }
 
-/* 2. SIRASI BEKLEYEN TUŞLAR (Kilitli, önceki adım tamamlanmadan basılamaz) */
-.ykn-step-button.is-locked {
+/* 2. HENÜZ ÇALIŞTIRILMAMIŞ TUŞLAR (Sıra önerisi; tıklama serbesttir) */
+.ykn-step-button.is-available {
     background: rgba(0, 0, 0, 0.02) !important;
-    border: 1.5px dashed var(--card-border) !important;
+    border: 1.5px solid var(--card-border) !important;
     color: var(--text-secondary) !important;
-    opacity: 0.45 !important;
-    cursor: not-allowed !important;
+    opacity: 0.72 !important;
+    cursor: pointer !important;
     pointer-events: auto !important;
     box-shadow: none !important;
     transform: none !important;
-    filter: grayscale(40%);
+    filter: grayscale(15%);
 }
 
-.ykn-step-button.is-locked:hover {
-    opacity: 0.55 !important;
+.ykn-step-button.is-available:hover {
+    opacity: 0.95 !important;
     border-color: var(--card-border) !important;
     background: rgba(0, 0, 0, 0.03) !important;
 }
 
-body.dark-mode .ykn-step-button.is-locked {
+body.dark-mode .ykn-step-button.is-available {
     background: rgba(255, 255, 255, 0.02) !important;
     border-color: #333333 !important;
 }
 
-.ykn-step-button.is-locked .ykn-step-badge {
+.ykn-step-button.is-available .ykn-step-badge {
     background: rgba(0, 0, 0, 0.06);
     color: var(--text-secondary);
     border: 1px solid var(--card-border);
 }
 
-body.dark-mode .ykn-step-button.is-locked .ykn-step-badge {
+body.dark-mode .ykn-step-button.is-available .ykn-step-badge {
     background: rgba(255, 255, 255, 0.06);
 }
 
-.ykn-step-button.is-locked .ykn-step-title {
+.ykn-step-button.is-available .ykn-step-title {
     color: var(--text-secondary) !important;
     font-weight: 600;
 }
 
-.ykn-step-button.is-locked .ykn-step-subtitle {
+.ykn-step-button.is-available .ykn-step-subtitle {
     color: var(--text-secondary) !important;
     opacity: 0.7;
 }
 
-.ykn-step-button.is-locked .ykn-step-icon .icon-arrow {
+.ykn-step-button.is-available .ykn-step-icon .icon-arrow {
     display: block !important;
     opacity: 0.3;
 }
 
-.ykn-step-button.is-locked .ykn-step-icon .icon-check {
+.ykn-step-button.is-available .ykn-step-icon .icon-check {
     display: none !important;
 }
 
-/* 3. TAMAMLANMIŞ TUŞLAR (Yeşil, başarılı, tekrar basılabilir) */
+/* 3. KISMİ / UYARI DURUMU */
+.ykn-step-button.is-partial {
+    background: rgba(243, 156, 18, 0.08) !important;
+    border: 1.5px solid rgba(243, 156, 18, 0.55) !important;
+    color: var(--text-primary) !important;
+    opacity: 0.95 !important;
+}
+
+.ykn-step-button.is-partial .ykn-step-badge {
+    background: #f39c12;
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.ykn-step-button.is-partial .ykn-step-icon .icon-arrow {
+    display: block !important;
+    color: #d68910;
+}
+
+.ykn-step-button.is-partial .ykn-step-icon .icon-check {
+    display: none !important;
+}
+
+/* 4. HATA DURUMU */
+.ykn-step-button.is-error {
+    background: rgba(231, 76, 60, 0.07) !important;
+    border: 1.5px solid rgba(231, 76, 60, 0.5) !important;
+    color: var(--text-primary) !important;
+    opacity: 0.95 !important;
+}
+
+.ykn-step-button.is-error .ykn-step-badge {
+    background: #e74c3c;
+    color: #ffffff;
+    font-weight: 700;
+}
+
+/* 5. TAMAMLANMIŞ TUŞLAR (Yeşil, başarılı, tekrar basılabilir) */
 .ykn-step-button.is-completed {
     background: rgba(40, 167, 69, 0.06) !important;
     border: 1.5px solid rgba(40, 167, 69, 0.4) !important;
