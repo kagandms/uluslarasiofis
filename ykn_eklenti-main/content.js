@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.27';
+const CONTENT_SCRIPT_VERSION = '1.2.28';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -406,17 +406,16 @@ function simulateButtonClick(element) {
         element.dispatchEvent(new PointerEvent('pointerup', mouseUpOpts));
     } catch (_) {}
     element.dispatchEvent(new MouseEvent('mouseup', mouseUpOpts));
-    element.dispatchEvent(new MouseEvent('click', mouseUpOpts));
 
-    try {
-        element.click();
-    } catch (_) {}
+    // dispatchEvent('click') ve element.click() birlikte kullanıldığında aynı
+    // ZK komutu iki kez gönderiliyordu. Native click tek gerçek tıklama olsun.
+    try { element.click(); } catch (_) { return false; }
 
     return true;
 }
 
 function triggerZkClick(buttonElement, inputElement, kabulId) {
-    if (!buttonElement && !inputElement) return;
+    if (!buttonElement && !inputElement) return false;
     const targetEl = buttonElement || inputElement;
     const win = targetEl.ownerDocument?.defaultView || window;
 
@@ -429,13 +428,13 @@ function triggerZkClick(buttonElement, inputElement, kabulId) {
                 }
                 if (wb && typeof wb.fire === 'function') {
                     wb.fire('onClick', null, { toServer: true });
-                    return;
+                    return true;
                 }
             }
         }
         if (buttonElement) {
             simulateButtonClick(buttonElement);
-            return;
+            return true;
         }
         if (inputElement) {
             inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: win }));
@@ -446,8 +445,12 @@ function triggerZkClick(buttonElement, inputElement, kabulId) {
                     try { wi.fire('onOK', null, { toServer: true }); } catch (_) {}
                 }
             }
+            return true;
         }
-    } catch (_) {}
+    } catch (_) {
+        return false;
+    }
+    return false;
 }
 
 function syncZkFormInputs() {
@@ -516,8 +519,36 @@ function waitForYoksisSearchControls() {
     });
 }
 
-function waitForYoksisForm(timeoutMs = 6000) {
+function getYoksisFormFingerprint() {
+    const parts = [];
+    for (const doc of getAllDocs(document)) {
+        const controls = doc.querySelectorAll('input, select, textarea');
+        for (const control of controls) {
+            const type = (control.type || '').toLowerCase();
+            if (type === 'hidden' || type === 'button' || type === 'submit') continue;
+            const row = control.closest('tr');
+            const label = row ? (row.innerText || row.textContent || '') : '';
+            const metadata = `${control.id || ''} ${control.name || ''} ${control.placeholder || ''} ${label}`
+                .toLocaleLowerCase('tr-TR');
+            // Arama kutusuna kabul kodunu yazmak formun değiştiği anlamına
+            // gelmez; bu alan imzaya girerse eski öğrenci formu yanlışlıkla
+            // yeni sonuç olarak doğrulanır.
+            if (metadata.includes('kabul') || metadata.includes('mektup') || metadata.includes('sorgula')) continue;
+            parts.push([
+                control.id || control.name || control.placeholder || control.type || control.tagName,
+                String(control.value || ''),
+                String(label).replace(/\s+/g, ' ').trim()
+            ].join('|'));
+        }
+    }
+    return parts.join('||');
+}
+
+function waitForYoksisForm(timeoutMs = 6000, options = {}) {
     const deadline = Date.now() + timeoutMs;
+    const afterFingerprint = options.afterFingerprint || '';
+    let stableChecks = 0;
+    let previousFingerprint = '';
     return new Promise((resolve, reject) => {
         let intervalId;
         const checkForm = () => {
@@ -529,10 +560,18 @@ function waitForYoksisForm(timeoutMs = 6000) {
                 findTargetElementByFuzzyLabel('Cinsiyet', 'input')
             ].filter(Boolean).length;
             const hasPhotoInput = Boolean(findYoksisFileInput(findPhotoUploadButton()));
+            const fingerprint = getYoksisFormFingerprint();
+            const formChangedAfterSearch = !afterFingerprint || fingerprint !== afterFingerprint;
+            stableChecks = fingerprint && fingerprint === previousFingerprint ? stableChecks + 1 : 0;
+            previousFingerprint = fingerprint;
 
             // YÖKSİS alanları parça parça oluşturulabildiği için tek bir inputun
-            // görünmesi formun gerçekten hazır olduğu anlamına gelmez.
-            if (formSignals >= 2 || (formSignals >= 1 && hasPhotoInput)) {
+            // görünmesi formun gerçekten hazır olduğu anlamına gelmez. Arama
+            // sonrasında önceki öğrenci formu hâlâ ekrandaysa onu "hazır"
+            // saymamak için formun değişmesini ve iki ardışık kontrolde sabit
+            // kalmasını da bekle.
+            if ((formSignals >= 2 || (formSignals >= 1 && hasPhotoInput)) &&
+                formChangedAfterSearch && stableChecks >= 2) {
                 clearInterval(intervalId);
                 resolve();
                 return;
@@ -1585,6 +1624,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             return;
         }
 
+        const formFingerprintBeforeSearch = getYoksisFormFingerprint();
         waitForYoksisSearchControls()
             .then(async ({ idInput, searchBtn }) => {
                 if (idInput) {
@@ -1597,23 +1637,25 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                     searchBtn = findKabulIdButton(idInput);
                 }
 
+                let searchTriggered = false;
                 if (searchBtn) {
-                    triggerZkClick(searchBtn, idInput, kabulId);
+                    searchTriggered = triggerZkClick(searchBtn, idInput, kabulId);
                 } else {
                     console.warn('[YKN] Kabul mektup ID ara butonu bulunamadı, genel tetikleyici deneniyor.');
-                    triggerZkClick(null, idInput, kabulId);
+                    searchTriggered = triggerZkClick(null, idInput, kabulId);
                 }
+                if (!searchTriggered) throw new Error('YÖKSİS arama komutu tetiklenemedi.');
 
                 let formReady = false;
                 try {
-                    await waitForYoksisForm(2500);
+                    await waitForYoksisForm(10_000, { afterFingerprint: formFingerprintBeforeSearch });
                     formReady = true;
                 } catch (_) {
                     formReady = false;
                 }
-                return { formReady };
+                return { formReady, searchTriggered };
             })
-            .then(({ formReady }) => sendResponse({ success: true, formReady, requestId: request.requestId }))
+            .then(({ formReady, searchTriggered }) => sendResponse({ success: true, formReady, searchTriggered, requestId: request.requestId }))
             .catch((error) => sendResponse({
                 success: false,
                 requestId: request.requestId,

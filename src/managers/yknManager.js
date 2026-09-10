@@ -663,11 +663,18 @@ export function initYknManager() {
 
     function updateStudentActions(studentData) {
         const hasStudent = Boolean(studentData && (studentData.fullName || studentData.passportNo));
+        const documentsReady = Boolean(
+            studentData?.documentsReady ||
+            (studentData?.yoksisId && isValidYoksisId(studentData.yoksisId))
+        );
         if (btnCropPhoto) {
             btnCropPhoto.style.display = hasStudent ? 'flex' : 'none';
         }
         if (btnOneClick && !oneClickWorkflow) {
-            btnOneClick.style.display = hasStudent ? 'flex' : 'none';
+            // Öğrenci satırı bulunduğu anda belge paneli henüz yüklenmemiş
+            // olabiliyor. Tek Tıkı o aralıkta başlatmak kabul mektubu için
+            // rastlantısal "bulunamadı" hatası üretiyordu.
+            btnOneClick.style.display = hasStudent && documentsReady ? 'flex' : 'none';
         }
 
         // Kabul kodu önceden tespit edildiyse 1. adım tamamlandı kabul edilir ve 2. adıma geçilir
@@ -820,6 +827,11 @@ export function initYknManager() {
     function startOneClickWorkflow() {
         if (!currentStudentData) {
             showToast('Lütfen önce bir öğrenci arayın.', 'warning');
+            return;
+        }
+        if (!currentStudentData.documentsReady && !isValidYoksisId(currentStudentData.yoksisId)) {
+            showToast('Apply belge paneli henüz hazırlanıyor. Kabul mektubu bağlantısı göründüğünde Tek Tık kullanılabilir.', 'info');
+            addStatus('Tek Tık başlatılmadı: Apply belge paneli henüz hazır değil.', 'info');
             return;
         }
         if (isOneClickActive()) return;
@@ -1507,6 +1519,12 @@ export function initYknManager() {
                 return;
             }
 
+            if (!currentStudentData.documentsReady && !isValidYoksisId(currentStudentData.yoksisId)) {
+                showToast('Apply belge paneli henüz yükleniyor. Kabul mektubu bağlantısı hazır olduğunda tekrar deneyin.', 'info');
+                addStatus('Kabul mektubu okunması bekletildi: belge paneli hazır değil.', 'info');
+                return;
+            }
+
             if (currentStudentData.yoksisId && isValidYoksisId(currentStudentData.yoksisId)) {
                 copyTextToClipboard(currentStudentData.yoksisId);
                 addStatus(`Kabul mektubu kodu panoya kopyalandı: ${currentStudentData.yoksisId}`, 'success');
@@ -1607,7 +1625,9 @@ export function initYknManager() {
                 showToast('YÖKSİS yanıt vermedi.', 'error');
             })) return;
 
-            if (!activeSearchRequestId) activeSearchRequestId = createRequestId();
+            // Manuel her deneme kendi istek kimliğini alır. Böylece önceki
+            // yanıt, yeni tıklamanın sonucu gibi işlenemez.
+            activeSearchRequestId = createRequestId();
             syncUserEnteredPassportDates();
 
             showToast('Kabul kodu YÖKSİS\'e aktarılıyor, lütfen bekleyin...', 'info');
@@ -1636,7 +1656,7 @@ export function initYknManager() {
                 showToast('YÖKSİS formu yanıt vermedi.', 'error');
             })) return;
 
-            if (!activeSearchRequestId) activeSearchRequestId = createRequestId();
+            activeSearchRequestId = createRequestId();
             syncUserEnteredPassportDates();
 
             const hasPhoto = Boolean(currentStudentData.croppedPhotoBase64);

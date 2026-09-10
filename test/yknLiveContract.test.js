@@ -189,11 +189,18 @@ test('YÖKSİS search handles ZK-labelled controls and confirms delayed form rea
         <table>
             <tr><td>Kabul Mektup ID</td><td><input id="acceptance-id"></td><td><button id="search">Kabul Mektup ID ile Ara</button></td></tr>
         </table>
-        <table id="student-form"><tr><td>Anne Adı</td><td><input id="mother-name"></td></tr></table>
     `, 'https://yoksis.yok.gov.tr/student');
     let clickCount = 0;
     harness.dom.window.document.getElementById('search').addEventListener('click', () => {
         clickCount += 1;
+        setTimeout(() => {
+            harness.dom.window.document.body.insertAdjacentHTML('beforeend', `
+                <table id="student-form">
+                    <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+                    <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+                </table>
+            `);
+        }, 25);
     });
 
     try {
@@ -215,7 +222,12 @@ test('YÖKSİS search handles ZK-labelled controls and confirms delayed form rea
 test('YÖKSİS form readiness waits for a form that appears after the search response', async () => {
     const harness = createContentHarness('<div id="loading">Yükleniyor</div>', 'https://yoksis.yok.gov.tr/student');
     const formTimer = setTimeout(() => {
-        harness.dom.window.document.body.innerHTML = '<table><tr><td>Belge No</td><td><input id="document-number"></td></tr></table>';
+        harness.dom.window.document.body.innerHTML = `
+            <table>
+                <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+                <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+            </table>
+        `;
     }, 50);
 
     try {

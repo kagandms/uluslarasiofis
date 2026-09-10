@@ -77,6 +77,28 @@ test('YKN one-click waits for crop confirmation before final YÖKSİS fill', { s
     assert.match(manager, /shouldOpenCropperWhenReady = true/);
 });
 
+test('YÖKSİS search and fill are single-flight operations, not all-frame retries', { skip: !hasLocalExtensionCheckout }, async () => {
+    const background = await readExtensionFile('background.js');
+    const content = await readExtensionFile('content.js');
+
+    assert.match(background, /function runYoksisOperation/);
+    assert.match(background, /runYoksisOperation\(yoksisTab\.id, 'search'/);
+    assert.match(background, /runYoksisOperation\(yoksisTab\.id, 'fill'/);
+    assert.match(background, /target: \{ tabId \}/);
+    assert.doesNotMatch(background, /setTimeout\(\(\) => \{\s*executeYoksisSearchInMainWorld/s);
+    assert.match(content, /formFingerprintBeforeSearch/);
+    assert.match(content, /stableChecks >= 2/);
+    assert.match(content, /Native click tek gerçek tıklama olsun/);
+});
+
+test('YKN waits for Apply document discovery before acceptance-code automation', async () => {
+    const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+
+    assert.match(manager, /documentsReady/);
+    assert.match(manager, /Tek Tık başlatılmadı: Apply belge paneli henüz hazır değil/);
+    assert.match(manager, /Kabul mektubu okunması bekletildi: belge paneli hazır değil/);
+});
+
 test('portal accepts document discovery results without treating profile discovery as complete', async () => {
     const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
 

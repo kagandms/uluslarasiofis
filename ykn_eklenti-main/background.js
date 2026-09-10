@@ -4,12 +4,40 @@ let ikametTabId = null;
 let applyTabId = null;
 let yoksisTabId = null;
 let pendingApplyNavigation = null;
+// YÖKSİS/ZK aynı anda gelen iki AU isteğinde formu yeniden oluşturabiliyor.
+// Aynı sekmedeki otomasyon komutlarını sıraya koyup, aynı istek kimliğini de
+// tekilleştiriyoruz. Böylece köprüden gelen yinelenmiş mesaj ikinci kez tıklama
+// veya alan doldurma başlatamaz.
+const yoksisOperationQueues = new Map();
+const yoksisOperationResults = new Map();
 
 const APPLY_APPLICATIONS_URL = 'https://apply.topkapi.edu.tr/panel/applications';
 const YOKSIS_URL = 'https://yoksis.yok.gov.tr/';
 const CONTENT_READY_TIMEOUT_MS = 15_000;
 const CONTENT_READY_INITIAL_DELAY_MS = 250;
 const CONTENT_READY_MAX_DELAY_MS = 1_000;
+
+function runYoksisOperation(tabId, operation, requestId, task) {
+    const key = `${tabId}:${operation}:${requestId || 'anonymous'}`;
+    if (yoksisOperationResults.has(key)) return yoksisOperationResults.get(key);
+
+    const queueKey = String(tabId);
+    const previous = yoksisOperationQueues.get(queueKey) || Promise.resolve();
+    const current = previous.catch(() => {}).then(task);
+    yoksisOperationQueues.set(queueKey, current);
+    yoksisOperationResults.set(key, current);
+
+    current.finally(() => {
+        if (yoksisOperationQueues.get(queueKey) === current) {
+            yoksisOperationQueues.delete(queueKey);
+        }
+        // Aynı mesajın kısa süre içinde yeniden teslim edilmesini önle; ancak
+        // kullanıcı sonraki denemede yeni requestId ile tekrar çalıştırabilsin.
+        setTimeout(() => yoksisOperationResults.delete(key), 60_000);
+    }).catch(() => {});
+
+    return current;
+}
 
 function sendTabMessage(tabId, message) {
     return new Promise((resolve, reject) => {
@@ -346,7 +374,10 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
     if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return null;
     try {
         const results = await chrome.scripting.executeScript({
-            target: { tabId, allFrames: true },
+            // getAllDocs zaten aynı-origin YÖKSİS iframe'lerini tek geçişte
+            // tarıyor. allFrames burada her üst/alt frame için aynı aramayı
+            // yeniden çalıştırıp aynı ZK butonuna birden çok tıklama gönderirdi.
+            target: { tabId },
             world: 'MAIN',
             func: async (code) => {
                 try {
@@ -595,7 +626,12 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         }
                     }
 
-                    return { success: Boolean(inp), inputFound: Boolean(inp), buttonFound: Boolean(btn) };
+                    return {
+                        success: Boolean(inp),
+                        inputFound: Boolean(inp),
+                        buttonFound: Boolean(btn),
+                        searchTriggered: Boolean(inp)
+                    };
                 } catch (e) {
                     console.error('[YKN MAIN World Search Error]', e);
                     return { error: e.message };
@@ -614,7 +650,9 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
     if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return null;
     try {
         const results = await chrome.scripting.executeScript({
-            target: { tabId, allFrames: true },
+            // Form ve alt frameler getAllDocs ile bu tek MAIN-world çalışması
+            // içinde ele alınıyor; allFrames ikinci/üçüncü commit üretmesin.
+            target: { tabId },
             world: 'MAIN',
             args: [studentData || null],
             func: (data) => {
@@ -658,11 +696,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         var wWin = win || window;
                         var val = el.value;
                         if (val === undefined || val === null || val === '') return;
-
-                        try {
-                            el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                            el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                        } catch (_) {}
+                        var widgetCommitted = false;
 
                         if (wWin.zk && wWin.zk.Widget) {
                             var w = wWin.zk.Widget.$(el);
@@ -684,15 +718,27 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 if (typeof w.updateChange_ === 'function') {
                                     try { w.updateChange_(); } catch (_) {}
                                 }
+                                var changeSent = false;
                                 if (typeof w.fire === 'function') {
-                                    try { w.fire('onChange', { value: val, start: val.length }, { toServer: true }); } catch (_) {}
+                                    try {
+                                        w.fire('onChange', { value: val, start: val.length }, { toServer: true });
+                                        changeSent = true;
+                                        widgetCommitted = true;
+                                    } catch (_) {}
                                 }
-                                if (wWin.zAu && typeof wWin.zAu.send === 'function') {
+                                if (!changeSent && wWin.zAu && typeof wWin.zAu.send === 'function') {
                                     try {
                                         wWin.zAu.send(new wWin.zk.Event(w, 'onChange', { value: val, start: val.length }, { toServer: true }));
+                                        widgetCommitted = true;
                                     } catch (_) {}
                                 }
                             }
+                        }
+                        if (!widgetCommitted) {
+                            try {
+                                el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                            } catch (_) {}
                         }
                     }
 
@@ -719,6 +765,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 var formatted = ('0' + d).slice(-2) + '.' + ('0' + m).slice(-2) + '.' + y;
                                 el.value = formatted;
                                 var dateObj = new Date(y, m - 1, d, 0, 0, 0, 0);
+                                var widgetCommitted = false;
 
                                 if (wWin.zk && wWin.zk.Widget) {
                                     var w = wWin.zk.Widget.$(el);
@@ -769,15 +816,18 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                                     value: formatted,
                                                     start: formatted.length
                                                 }, { toServer: true }));
+                                                widgetCommitted = true;
                                             } catch (_) {}
                                         }
                                     }
                                 }
 
-                                try {
-                                    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                                    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                                } catch (_) {}
+                                if (!widgetCommitted) {
+                                    try {
+                                        el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                        el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                                    } catch (_) {}
+                                }
                             }
                         }
                     }
@@ -785,11 +835,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                     function commitSelect(el, win) {
                         if (!el || !el.value) return;
                         var wWin = win || window;
-                        try {
-                            el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                            el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                            el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
-                        } catch (_) {}
+                        var widgetCommitted = false;
 
                         // Native change olayı bazı YÖKSİS selectlerinde yeterli
                         // olmuyor; ZK widget değerini de sunucuya gönder.
@@ -804,25 +850,36 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                     if (typeof w.updateChange_ === 'function') {
                                         try { w.updateChange_(); } catch (_) {}
                                     }
+                                    var changeSent = false;
                                     if (typeof w.fire === 'function') {
-                                        try { w.fire('onChange', { value: el.value }, { toServer: true }); } catch (_) {}
+                                        try {
+                                            w.fire('onChange', { value: el.value }, { toServer: true });
+                                            changeSent = true;
+                                            widgetCommitted = true;
+                                        } catch (_) {}
                                     }
-                                    if (wWin.zAu && typeof wWin.zAu.send === 'function') {
+                                    if (!changeSent && wWin.zAu && typeof wWin.zAu.send === 'function') {
                                         try {
                                             wWin.zAu.send(new wWin.zk.Event(w, 'onChange', { value: el.value }, { toServer: true }));
+                                            widgetCommitted = true;
                                         } catch (_) {}
                                     }
                                 }
                             }
                         } catch (_) {}
+                        if (!widgetCommitted) {
+                            try {
+                                el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                                el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                                el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+                            } catch (_) {}
+                        }
                     }
 
                     function commitRadio(el, win) {
                         if (!el || !el.checked) return;
                         var wWin = win || window;
-                        try {
-                            el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                        } catch (_) {}
+                        var widgetCommitted = false;
                         try {
                             if (wWin.zk && wWin.zk.Widget) {
                                 var w = wWin.zk.Widget.$(el);
@@ -830,17 +887,26 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                     if (typeof w.setChecked === 'function') {
                                         try { w.setChecked(true); } catch (_) {}
                                     }
+                                    var checkSent = false;
                                     if (typeof w.fire === 'function') {
-                                        try { w.fire('onCheck', { checked: true }, { toServer: true }); } catch (_) {}
+                                        try {
+                                            w.fire('onCheck', { checked: true }, { toServer: true });
+                                            checkSent = true;
+                                            widgetCommitted = true;
+                                        } catch (_) {}
                                     }
-                                    if (wWin.zAu && typeof wWin.zAu.send === 'function') {
+                                    if (!checkSent && wWin.zAu && typeof wWin.zAu.send === 'function') {
                                         try {
                                             wWin.zAu.send(new wWin.zk.Event(w, 'onCheck', { checked: true }, { toServer: true }));
+                                            widgetCommitted = true;
                                         } catch (_) {}
                                     }
                                 }
                             }
                         } catch (_) {}
+                        if (!widgetCommitted) {
+                            try { el.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } catch (_) {}
+                        }
                     }
 
                     function isUsableControl(el, kind) {
@@ -1443,7 +1509,7 @@ async function searchYoksisFromContent(tabId, kabulId, requestId) {
                 kabulId,
                 requestId
             }),
-            3500,
+            12_000,
             'YÖKSİS arama zaman aşımı'
         );
     } catch (error) {
@@ -1481,57 +1547,40 @@ async function transferToYoksis(request) {
         .toUpperCase();
     if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
 
-    await new Promise((resolve) => {
-        chrome.storage.local.set({ studentData: request.data }, resolve);
-    });
+    return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
+        await new Promise((resolve) => {
+            chrome.storage.local.set({ studentData: request.data }, resolve);
+        });
 
-    // 1. Arka planda çalış: YÖKSİS sekmesine geçme, odağı portalda bırak.
-
-    // 2. MAIN WORLD ZK aramasını tüm framelerde çalıştır
-    const mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
-    const mainSuccess = mainResults && mainResults.some(r => r.result?.inputFound);
-    const mainControlsIncomplete = Boolean(
-        mainSuccess
-        && mainResults.some(r => r.result?.inputFound && r.result?.buttonFound === false)
-    );
-
-    // 3. MAIN WORLD bulamadıysa Content script üzerinden dene (kısa zaman aşımıyla)
-    let response = null;
-    if (!mainSuccess || mainControlsIncomplete) {
-        response = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId);
-    } else {
-        // MAIN WORLD aramasını teyit amaçlı kısa süre sonra bir kez daha tetikle
-        setTimeout(() => {
-            executeYoksisSearchInMainWorld(yoksisTab.id, kabulId).catch(() => {});
-        }, 300);
-    }
-
-    const isSuccess = Boolean(mainSuccess || response?.success);
-    if (!isSuccess) {
-        throw new Error('YÖKSİS sayfasında Kabul Mektup ID arama alanı bulunamadı. Lütfen YÖKSİS sekmesinde öğrenci başvuru/kayıt ekranının açık olduğunu kontrol edin.');
-    }
-
-    let formReady = Boolean(response?.formReady);
-    if (!formReady) {
-        formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId);
-    }
-
-    if (!formReady && mainSuccess && !mainControlsIncomplete) {
-        const fallbackResponse = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId);
-        if (fallbackResponse?.success) {
-            response = fallbackResponse;
-            formReady = Boolean(fallbackResponse.formReady)
-                || await waitForYoksisFormReady(yoksisTab.id, request.requestId);
+        // Öncelik content-script yolunda: arama öncesi/sonrası form imzasını
+        // karşılaştırabildiği için eski öğrenci formunu yeni sonuç sanmaz.
+        // MAIN world yalnızca bu yol arama kontrolünü hiç bulamazsa fallback'tir.
+        let response = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId);
+        let mainTriggered = false;
+        if (response?.searchTriggered !== true && response?.success !== true) {
+            const mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
+            mainTriggered = Boolean(mainResults?.some(r => r.result?.searchTriggered === true));
         }
-    }
 
-    return {
-        success: true,
-        transferred: true,
-        searchTriggered: true,
-        formReady,
-        message: 'Kabul mektup kodu YÖKSİS\'e başarıyla aktarıldı ve arama başlatıldı.'
-    };
+        const searchTriggered = response?.searchTriggered === true || response?.success === true || mainTriggered;
+        if (!searchTriggered) {
+            throw new Error('YÖKSİS kabul mektubu araması başlatılamadı. Öğrenci başvuru/kayıt ekranını açık tutup tekrar deneyin.');
+        }
+
+        const formReady = Boolean(response?.formReady)
+            || await waitForYoksisFormReady(yoksisTab.id, request.requestId);
+        if (!formReady) {
+            throw new Error('Kabul kodu gönderildi ancak YÖKSİS öğrenci formu zamanında açılmadı. Aynı aramayı otomatik olarak tekrar göndermeden işlem durduruldu.');
+        }
+
+        return {
+            success: true,
+            transferred: true,
+            searchTriggered: true,
+            formReady: true,
+            message: 'Kabul mektup kodu YÖKSİS\'e aktarıldı ve öğrenci formu doğrulandı.'
+        };
+    });
 }
 
 function isAllowedApplyUrl(url) {
@@ -1563,21 +1612,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'SYNC_YOKSIS_MAIN_WORLD') {
-        (async () => {
-            try {
-                let targetId = (sender.tab ? sender.tab.id : null) || yoksisTabId;
-                if (!targetId) {
-                    const yoksisTab = await getActiveYoksisTab().catch(() => null);
-                    targetId = yoksisTab?.id;
-                }
-                if (targetId) {
-                    await syncYoksisFormInMainWorld(targetId);
-                }
-                sendResponse({ success: true });
-            } catch (err) {
-                sendResponse({ success: false, error: err.message });
-            }
-        })();
+        // Eski popup sürümleri content-script doldurmasından sonra aynı veriyi
+        // MAIN world'de yeniden yazıyordu. Bu işlem artık FILL_YOKSIS_FORM
+        // kuyruğunun parçasıdır; bağımsız çağrıyı güvenle no-op yapıyoruz.
+        sendResponse({ success: true, skipped: true, message: 'YÖKSİS formu zaten kontrollü aktarım akışında işlenir.' });
         return true;
     }
 
@@ -1736,66 +1774,57 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             const studentData = request.data;
             (async () => {
                 const yoksisTab = await getActiveYoksisTab();
-                chrome.storage.local.set({ studentData }, () => {
-                    const storageError = chrome.runtime.lastError;
-                    if (storageError) {
-                        sendResponse({ success: false, requestId: request.requestId, error: storageError.message });
-                        return;
-                    }
-                    (async () => {
-                        // Öncelikli yol: alanları doğrudan YÖKSİS'in MAIN/ZK
-                        // dünyasında bulup doldur. Böylece izole dünyaya yazılan
-                        // değerlerin sayfa tarafından yok sayılması engellenir.
-                        let mainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData);
-                        const needsContentFallback = !mainResponse?.success
-                            || (studentData?.croppedPhotoBase64 && mainResponse.photoUploaded !== true)
-                            || (mainResponse.missingFields || []).length > 0;
-
-                        let contentResponse = null;
-                        let retryMainResponse = null;
-                        if (needsContentFallback) {
-                            try {
-                                contentResponse = await sendTabMessage(yoksisTab.id, {
-                                    action: 'fillRemainingData',
-                                    data: studentData
-                                });
-                            } catch (contentError) {
-                                console.warn('[YKN] YÖKSİS content-script fallback başarısız:', contentError);
-                            }
-                            // Fallback DOM'a yazdıysa, son kez MAIN world ile
-                            // ZK widgetlarına commit et ve fotoğraf uploader'ını
-                            // tekrar çalıştır.
-                            retryMainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData);
-                        }
-
-                        const responses = [mainResponse, contentResponse, retryMainResponse].filter(Boolean);
-                        const finalResponse = {
-                            success: responses.some(item => item.success === true),
-                            filledFields: [],
-                            missingFields: [],
-                            photoUploaded: responses.some(item => item.photoUploaded === true),
-                            mainWorldSynced: Boolean(mainResponse?.success || retryMainResponse?.success)
-                        };
-                        for (const item of responses) {
-                            for (const label of item.filledFields || []) {
-                                if (!finalResponse.filledFields.includes(label)) finalResponse.filledFields.push(label);
-                            }
-                            for (const label of item.missingFields || []) {
-                                if (!finalResponse.missingFields.includes(label)) finalResponse.missingFields.push(label);
-                            }
-                        }
-                        finalResponse.missingFields = finalResponse.missingFields.filter(
-                            label => !finalResponse.filledFields.includes(label)
-                        );
-                        finalResponse.partial = finalResponse.missingFields.length > 0;
-                        if (!finalResponse.success && responses.some(item => item.error)) {
-                            finalResponse.error = responses.find(item => item.error)?.error;
-                        }
-                        sendResponse({ ...finalResponse, requestId: request.requestId });
-                    })().catch((fillError) => {
-                        sendResponse({ success: false, requestId: request.requestId, error: fillError.message });
+                const response = await runYoksisOperation(yoksisTab.id, 'fill', request.requestId, async () => {
+                    await new Promise((resolve, reject) => {
+                        chrome.storage.local.set({ studentData }, () => {
+                            const storageError = chrome.runtime.lastError;
+                            if (storageError) reject(new Error(storageError.message));
+                            else resolve();
+                        });
                     });
+
+                    // Doldurma, arama postback'i tamamen bitmeden başlayamaz.
+                    // Önce formun kararlı olduğunu doğrula; aksi halde eksik
+                    // alanları ikinci/üçüncü yazımla telafi etmeye çalışma.
+                    const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId);
+                    if (!formReady) {
+                        throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
+                    }
+
+                    const mainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData);
+                    const needsFallback = !mainResponse?.success
+                        || (studentData?.croppedPhotoBase64 && mainResponse.photoUploaded !== true)
+                        || (mainResponse.missingFields || []).length > 0;
+
+                    if (!needsFallback) {
+                        return { ...mainResponse, mainWorldSynced: true, partial: false };
+                    }
+
+                    // Fallback yalnızca ilk denemenin eksik bıraktığı durumda
+                    // bir kez çalışır. Sonrasında MAIN world'e yeniden yazmak
+                    // eski kodda alanları ve fotoğraf yüklemesini çoğaltıyordu.
+                    let contentResponse;
+                    try {
+                        contentResponse = await sendTabMessage(yoksisTab.id, {
+                            action: 'fillRemainingData',
+                            data: studentData,
+                            requestId: request.requestId
+                        });
+                    } catch (contentError) {
+                        return {
+                            ...mainResponse,
+                            partial: true,
+                            error: contentError.message || mainResponse?.error
+                        };
+                    }
+
+                    return {
+                        ...contentResponse,
+                        mainWorldSynced: Boolean(mainResponse?.success),
+                        partial: Boolean(contentResponse?.partial || (contentResponse?.missingFields || []).length > 0)
+                    };
                 });
+                sendResponse({ ...response, requestId: request.requestId });
             })().catch((error) => {
                 sendResponse({ success: false, requestId: request.requestId, error: error.message });
             });
@@ -1813,14 +1842,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return true;
         }
         else if (request.action === 'SYNC_YOKSIS_MAIN_WORLD') {
-            (async () => {
-                const yoksisTab = await getExistingYoksisTab();
-                if (yoksisTab) {
-                    const data = request.data || (await new Promise(r => chrome.storage.local.get(['studentData'], res => r(res?.studentData))));
-                    await syncYoksisFormInMainWorld(yoksisTab.id, data);
-                }
-            })().catch(() => {});
-            return false;
+            sendResponse({ success: true, skipped: true, requestId: request.requestId });
+            return true;
         }
     }
     
