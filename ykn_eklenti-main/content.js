@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.25';
+const CONTENT_SCRIPT_VERSION = '1.2.26';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -521,12 +521,18 @@ function waitForYoksisForm(timeoutMs = 6000) {
     return new Promise((resolve, reject) => {
         let intervalId;
         const checkForm = () => {
-            const hasStudentForm = Boolean(
-                findTargetElementByFuzzyLabel('Anne Adı', 'input')
-                || findTargetElementByFuzzyLabel('Baba Adı', 'input')
-                || findBelgeNoInMainPanel()
-            );
-            if (hasStudentForm) {
+            const formSignals = [
+                findTargetElementByFuzzyLabel('Anne Adı', 'input'),
+                findTargetElementByFuzzyLabel('Baba Adı', 'input'),
+                findBelgeNoInMainPanel(),
+                findTargetElementByFuzzyLabel('Uyruğu', 'select'),
+                findTargetElementByFuzzyLabel('Cinsiyet', 'input')
+            ].filter(Boolean).length;
+            const hasPhotoInput = Boolean(findYoksisFileInput(findPhotoUploadButton()));
+
+            // YÖKSİS alanları parça parça oluşturulabildiği için tek bir inputun
+            // görünmesi formun gerçekten hazır olduğu anlamına gelmez.
+            if (formSignals >= 2 || (formSignals >= 1 && hasPhotoInput)) {
                 clearInterval(intervalId);
                 resolve();
                 return;
@@ -791,8 +797,9 @@ async function uploadPhotoToYoksis(photoBase64, fileName) {
     let photoBtn = null;
     let fileInput = null;
 
-    // Fotoğraf butonunu ve ZK dosya inputunu yakalamak için 2.5 saniyeye kadar bekle (25 x 100ms)
-    for (let attempt = 0; attempt < 25; attempt++) {
+    // YÖKSİS fotoğraf bileşeni gecikmeli ve bazen iframe içinde oluşturuluyor.
+    // Form alanları hazır olsa bile file input birkaç saniye sonra gelebilir.
+    for (let attempt = 0; attempt < 100; attempt++) {
         photoBtn = findPhotoUploadButton();
         if (photoBtn) {
             try {
@@ -842,7 +849,15 @@ async function uploadPhotoToYoksis(photoBase64, fileName) {
 
         if (photoBtn && window.zk && window.zk.Widget) {
             try {
-                const w = window.zk.Widget.$(photoBtn);
+                let widgetElement = photoBtn;
+                let w = null;
+                // ZK widget çoğu sayfada görünen span/button üzerinde değil,
+                // onun ebeveynindeki table/div üzerinde tutuluyor.
+                for (let level = 0; level < 6 && widgetElement; level++) {
+                    w = window.zk.Widget.$(widgetElement);
+                    if (w) break;
+                    widgetElement = widgetElement.parentElement;
+                }
                 if (w && w._uplder) {
                     const u = w._uplder;
                     if (!u._uploading) {
@@ -1631,11 +1646,29 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 return;
             }
 
-            // Formun açılmasını ve alanların DOM'a yüklenmesini bekle (3.5 saniyeye kadar)
+            // Arama sonrası YÖKSİS öğrenci paneli ve fotoğraf bileşeni gecikmeli
+            // gelebilir. Tek input görünür görünmez devam etmek eksik aktarım
+            // ürettiği için formun kararlı hale gelmesini daha uzun bekle.
             try {
-                await waitForYoksisForm(3500);
+                await waitForYoksisForm(10000);
             } catch (_) {
                 // Form zaten açık veya süre aşıldıysa mevcut elemanlarla devam et
+            }
+
+            const hasFormControl = Boolean(
+                findTargetElementByFuzzyLabel('Anne Adı', 'input')
+                || findTargetElementByFuzzyLabel('Baba Adı', 'input')
+                || findBelgeNoInMainPanel()
+                || findTargetElementByFuzzyLabel('Uyruğu', 'select')
+            );
+            if (!hasFormControl) {
+                sendResponse({
+                    success: false,
+                    message: 'YÖKSİS öğrenci bilgi formu henüz hazır değil. Form açıldıktan sonra tekrar deneyin.',
+                    filledFields: [],
+                    missingFields: ['Öğrenci bilgi formu']
+                });
+                return;
             }
 
             let successCount = 0;

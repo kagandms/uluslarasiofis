@@ -782,6 +782,67 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         }
                     }
 
+                    function commitSelect(el, win) {
+                        if (!el || !el.value) return;
+                        var wWin = win || window;
+                        try {
+                            el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                            el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                            el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+                        } catch (_) {}
+
+                        // Native change olayı bazı YÖKSİS selectlerinde yeterli
+                        // olmuyor; ZK widget değerini de sunucuya gönder.
+                        try {
+                            if (wWin.zk && wWin.zk.Widget) {
+                                var w = wWin.zk.Widget.$(el);
+                                if (w) {
+                                    w._value = el.value;
+                                    if (typeof w.setValue === 'function') {
+                                        try { w.setValue(el.value); } catch (_) {}
+                                    }
+                                    if (typeof w.updateChange_ === 'function') {
+                                        try { w.updateChange_(); } catch (_) {}
+                                    }
+                                    if (typeof w.fire === 'function') {
+                                        try { w.fire('onChange', { value: el.value }, { toServer: true }); } catch (_) {}
+                                    }
+                                    if (wWin.zAu && typeof wWin.zAu.send === 'function') {
+                                        try {
+                                            wWin.zAu.send(new wWin.zk.Event(w, 'onChange', { value: el.value }, { toServer: true }));
+                                        } catch (_) {}
+                                    }
+                                }
+                            }
+                        } catch (_) {}
+                    }
+
+                    function commitRadio(el, win) {
+                        if (!el || !el.checked) return;
+                        var wWin = win || window;
+                        try {
+                            el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                        } catch (_) {}
+                        try {
+                            if (wWin.zk && wWin.zk.Widget) {
+                                var w = wWin.zk.Widget.$(el);
+                                if (w) {
+                                    if (typeof w.setChecked === 'function') {
+                                        try { w.setChecked(true); } catch (_) {}
+                                    }
+                                    if (typeof w.fire === 'function') {
+                                        try { w.fire('onCheck', { checked: true }, { toServer: true }); } catch (_) {}
+                                    }
+                                    if (wWin.zAu && typeof wWin.zAu.send === 'function') {
+                                        try {
+                                            wWin.zAu.send(new wWin.zk.Event(w, 'onCheck', { checked: true }, { toServer: true }));
+                                        } catch (_) {}
+                                    }
+                                }
+                            }
+                        } catch (_) {}
+                    }
+
                     function purgeErrorBoxes(targetDoc) {
                         try {
                             var d = targetDoc || document;
@@ -822,6 +883,13 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             var placeholder = norm(inp.placeholder || '');
                             var combined = rowText + ' ' + placeholder;
 
+                            if ((inp.type || '').toLowerCase() === 'radio') {
+                                if (inp.checked && combined.indexOf('cinsiyet') !== -1) {
+                                    commitRadio(inp, win);
+                                }
+                                continue;
+                            }
+
                             if (combined.indexOf('dogumtarih') !== -1 || combined.indexOf('kabulmektup') !== -1 || combined.indexOf('sorgula') !== -1) {
                                 continue;
                             }
@@ -839,6 +907,21 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 combined.indexOf('fotograf') !== -1 ||
                                 (combined.indexOf('belgeno') !== -1 && combined.indexOf('uyruk') === -1)) {
                                 commitTextbox(inp, win);
+                            }
+                        }
+
+                        // Select alanları input döngüsünde yer almadığı için
+                        // özellikle uyruk ve ülke seçimlerini ayrıca commit et.
+                        var allSelects = doc.querySelectorAll('select');
+                        for (var si = 0; si < allSelects.length; si++) {
+                            var selectEl = allSelects[si];
+                            var selectRow = selectEl.closest('tr');
+                            var selectText = selectRow ? norm(selectRow.innerText || selectRow.textContent) : '';
+                            if (selectText.indexOf('uyruk') !== -1 ||
+                                selectText.indexOf('dogumyeriulkesi') !== -1 ||
+                                selectText.indexOf('belgeyiverenulke') !== -1 ||
+                                selectText.indexOf('belgeverenulke') !== -1) {
+                                commitSelect(selectEl, win);
                             }
                         }
 
@@ -878,13 +961,21 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 }
 
                                 var fileInput = null;
+                                var photoWidget = null;
                                 if (photoBtn) {
                                     fileInput = photoBtn.querySelector('input[type="file"]') ||
                                                 (photoBtn.parentElement && photoBtn.parentElement.querySelector('input[type="file"]'));
                                 }
 
                                 if (!fileInput && win.zk && win.zk.Widget && photoBtn) {
-                                    var wgt = win.zk.Widget.$(photoBtn);
+                                    var widgetElement = photoBtn;
+                                    var wgt = null;
+                                    for (var wl = 0; wl < 6 && widgetElement; wl++) {
+                                        wgt = win.zk.Widget.$(widgetElement);
+                                        if (wgt) break;
+                                        widgetElement = widgetElement.parentElement;
+                                    }
+                                    photoWidget = wgt;
                                     if (wgt) {
                                         if (wgt._uplder) {
                                             var u = wgt._uplder;
@@ -956,7 +1047,15 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                         }
 
                                         if (photoBtn && win.zk && win.zk.Widget) {
-                                            var btnW = win.zk.Widget.$(photoBtn);
+                                            var btnW = photoWidget;
+                                            if (!btnW) {
+                                                var btnWidgetElement = photoBtn;
+                                                for (var bl = 0; bl < 6 && btnWidgetElement; bl++) {
+                                                    btnW = win.zk.Widget.$(btnWidgetElement);
+                                                    if (btnW) break;
+                                                    btnWidgetElement = btnWidgetElement.parentElement;
+                                                }
+                                            }
                                             if (btnW && btnW._uplder) {
                                                 var uplder = btnW._uplder;
                                                 if (!uplder._uploading) {
@@ -1323,8 +1422,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             sendResponse({ success: false, requestId: request.requestId, error: error.message });
                             return;
                         }
-                        syncYoksisFormInMainWorld(yoksisTab.id, studentData).catch(() => {});
-                        sendResponse({ success: true, ...response, requestId: request.requestId });
+                        // Content script DOM'a değerleri yazar; ZK'nin gerçek
+                        // widget durumunu ve sunucu olaylarını MAIN world'de
+                        // senkronize etmeden portal'a tamamlandı dönme.
+                        syncYoksisFormInMainWorld(yoksisTab.id, studentData)
+                            .then(() => {
+                                sendResponse({ success: true, ...response, mainWorldSynced: true, requestId: request.requestId });
+                            })
+                            .catch((syncError) => {
+                                console.warn('[YKN] YÖKSİS MAIN world senkronizasyonu başarısız:', syncError);
+                                sendResponse({ success: true, ...response, mainWorldSynced: false, requestId: request.requestId });
+                            });
                     });
                 });
             })().catch((error) => {

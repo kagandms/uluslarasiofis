@@ -1713,7 +1713,10 @@ export function initYknManager() {
                 && isOneClickActive(ONE_CLICK_STAGE.YOKSIS_FILLING)) {
                 clearOneClickTimeout();
                 const photoRequired = Boolean(currentStudentData?.croppedPhotoBase64);
-                if (response?.success && (!photoRequired || response.photoUploaded === true)) {
+                const missingFields = Array.isArray(response?.missingFields) ? response.missingFields : [];
+                const photoUploadFailed = photoRequired && response?.photoUploaded !== true;
+                const isPartial = response?.partial === true || missingFields.length > 0 || photoUploadFailed;
+                if (response?.success && !isPartial) {
                     completedWorkflowSteps.add(4);
                     updateWorkflowUI(5);
                     oneClickWorkflow = {
@@ -1725,8 +1728,10 @@ export function initYknManager() {
                     const filledFields = response.filledFields?.length || 'alanlar';
                     addStatus(`Tek Tık tamamlandı: ${filledFields}${photoRequired ? ' ve fotoğraf' : ''} YÖKSİS’e aktarıldı. Son kontrol ve kaydetme size aittir.`, 'success');
                     showToast('Tek Tık tamamlandı. YÖKSİS formunu kontrol edin.', 'success');
-                } else if (response?.success && photoRequired) {
-                    failOneClick('PHOTO_UPLOAD_FAILED', 'Form alanları aktarıldı ancak öğrenci fotoğrafı YÖKSİS’e yüklenemedi.');
+                } else if (response?.success) {
+                    const missingText = missingFields.length > 0 ? ` Eksik alanlar: ${missingFields.join(', ')}.` : '';
+                    const photoText = photoUploadFailed ? ' Fotoğraf yüklenemedi.' : '';
+                    failOneClick('YOKSIS_FORM_PARTIAL', `YÖKSİS formu tamamen doldurulamadı.${missingText}${photoText} Formu kontrol edip Tek Tıkı tekrar deneyin.`);
                 } else {
                     failOneClick('YOKSIS_FORM_FILL_FAILED', response?.error || response?.message || 'YÖKSİS formu doldurulamadı.');
                 }

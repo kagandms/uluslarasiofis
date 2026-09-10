@@ -61,6 +61,20 @@ test('YKN one-click workflow keeps the required ordered transport stages', { ski
     assert.match(content, /uploadPhotoToYoksis\(data\.croppedPhotoBase64/);
 });
 
+test('YKN one-click waits for crop confirmation before final YÖKSİS fill', { skip: !hasLocalExtensionCheckout }, async () => {
+    const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+    const startIndex = manager.indexOf('function startOneClickPassportRead()');
+    const cropperIndex = manager.indexOf('if (currentStudentData?.passportImageSrc)', startIndex);
+    const nextFunctionIndex = manager.indexOf('\n    function ', cropperIndex + 1);
+    const cropperBranch = manager.slice(cropperIndex, nextFunctionIndex === -1 ? manager.length : nextFunctionIndex);
+
+    assert.ok(startIndex >= 0, 'one-click passport read should exist');
+    assert.match(cropperBranch, /openOneClickCropper\(\)/);
+    assert.doesNotMatch(cropperBranch, /postOneClickMessage\(['"]FILL_YOKSIS_FORM/);
+    assert.match(manager, /isOneClickActive\(ONE_CLICK_STAGE\.CROPPER_WAITING\)/);
+    assert.match(manager, /postOneClickMessage\(['"]FILL_YOKSIS_FORM['"], \{ data: currentStudentData \}\)/);
+});
+
 test('portal accepts document discovery results without treating profile discovery as complete', async () => {
     const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
 
