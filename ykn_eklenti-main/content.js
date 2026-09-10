@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.29';
+const CONTENT_SCRIPT_VERSION = '1.2.30';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -89,8 +89,22 @@ async function simulateInput(element, value, options = {}) {
     // istenmeyen onOK/postback üretir. Arama gibi Enter gerektiren çağrılar
     // bunu açıkça options.pressEnter ile istemelidir.
     if (options.pressEnter === true) {
-        element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, composed: true, key: 'Enter', keyCode: 13, view: win }));
-        element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, composed: true, key: 'Enter', keyCode: 13, view: win }));
+        const enterEventOptions = {
+            bubbles: true,
+            composed: true,
+            cancelable: true,
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            view: win
+        };
+        // Apply listesindeki arama bileşeni keypress/keyup dinleyebildiği
+        // için tam Enter zincirini gönder. Sadece keydown + keyup gönderimi
+        // bazı sürümlerde tabloyu filtrelemiyordu.
+        element.dispatchEvent(new KeyboardEvent('keydown', enterEventOptions));
+        element.dispatchEvent(new KeyboardEvent('keypress', enterEventOptions));
+        element.dispatchEvent(new KeyboardEvent('keyup', enterEventOptions));
     }
     
     let zkChangeSent = false;
@@ -2019,8 +2033,10 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                             document.querySelector('input.form-control');
         
         if (searchInput) {
-            simulateInput(searchInput, passportNo);
-            
+            // Apply arama alanı bazı sürümlerde yalnızca Enter ile sunucu
+            // tarafındaki tablo sorgusunu çalıştırıyor. Yazma işlemi ve Enter
+            // zinciri tamamlanmadan sonuçları kontrol etmeye başlama.
+            simulateInput(searchInput, passportNo, { pressEnter: true }).then(() => {
             // Sonuçların gelmesini bekle (Polling ile - Pasaport eşleşmesi kontrol edilir)
             let attempts = 0;
             const maxAttempts = 24; // 24 * 500ms = 12 saniye
@@ -2096,6 +2112,13 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                     );
                 }
             }, 500);
+            }).catch(() => {
+                sendApplyEvent(
+                    'STUDENT_NOT_FOUND',
+                    requestId,
+                    { error: 'Apply arama alanına pasaport numarası yazılamadı.' }
+                );
+            });
         } else {
             sendApplyEvent(
                 'STUDENT_NOT_FOUND',

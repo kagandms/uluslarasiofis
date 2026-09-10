@@ -250,6 +250,37 @@ test('YÖKSİS search uses the ZK button cell beside the acceptance input once',
     }
 });
 
+test('Apply pasaport araması, yan sekmedeki arama alanına tam Enter zincirini gönderir', async () => {
+    const harness = createContentHarness(`
+        <input class="inputDatatableSearch" type="search" placeholder="Tabloda ara">
+        <table><tbody></tbody></table>
+    `, 'https://apply.topkapi.edu.tr/panel/applications');
+    const searchInput = harness.dom.window.document.querySelector('.inputDatatableSearch');
+    const receivedEvents = [];
+    for (const type of ['keydown', 'keypress', 'keyup']) {
+        searchInput.addEventListener(type, (event) => receivedEvents.push([type, event.key]));
+    }
+
+    try {
+        const response = await harness.send({
+            action: 'SEARCH_IN_APPLY',
+            passportNo: 'P123456',
+            requestId: 'apply-enter-search'
+        });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        assert.equal(response.success, true);
+        assert.equal(searchInput.value, 'P123456');
+        assert.deepEqual(receivedEvents, [
+            ['keydown', 'Enter'],
+            ['keypress', 'Enter'],
+            ['keyup', 'Enter']
+        ]);
+    } finally {
+        harness.close();
+    }
+});
+
 test('YÖKSİS form readiness waits for a form that appears after the search response', async () => {
     const harness = createContentHarness('<div id="loading">Yükleniyor</div>', 'https://yoksis.yok.gov.tr/student');
     const formTimer = setTimeout(() => {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ikamet-cache-v8';
+const CACHE_NAME = 'ikamet-cache-v9';
 
 const PRECACHE_ASSETS = [
   '/manifest.json',
@@ -35,6 +35,16 @@ self.addEventListener('fetch', (event) => {
 
   // HTML, API veya POST isteklerini asla önbellekten verme (Her zaman doğrudan ağa git)
   if (url.pathname === '/' || url.pathname.endsWith('.html') || url.pathname.startsWith('/api') || event.request.method !== 'GET') {
+    return;
+  }
+
+  // Eklenti paketleri sürüm güncellendiğinde eski ZIP'in tekrar indirilmemesi
+  // gerekir. Bu dosyaları her zaman ağdan al; yalnızca çevrimdışıyken son
+  // başarılı indirmeyi geri ver.
+  if (url.pathname.startsWith('/downloads/')) {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
     return;
   }
 
