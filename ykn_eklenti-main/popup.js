@@ -75,22 +75,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            let yoksisTab = await findTab("yoksis.yok.gov.tr");
-            if (!yoksisTab) {
-                showStatus("Hata: Açık bir YÖKSİS sekmesi bulunamadı!");
-                return;
-            }
-            
-            chrome.tabs.sendMessage(yoksisTab.id, { action: "searchWithId", kabulId: kabulId }, (response) => {
+            // Portalın Tek Tık akışıyla aynı güvenli yol: YÖKSİS sekmesi
+            // yoksa açılır, ZK arama alanı hazır olana kadar beklenir ve
+            // öğrencinin yeni formu açılmadan başarılı sayılmaz.
+            chrome.runtime.sendMessage({
+                action: 'SEARCH_YOKSIS_FROM_POPUP',
+                kabulId,
+                data: { yoksisId: kabulId },
+                requestId: `popup-${Date.now()}-${Math.random().toString(36).slice(2)}`
+            }, (response) => {
                 if (chrome.runtime.lastError) {
-                    showStatus("Hata: YÖKSİS sayfasını yenileyin (F5).");
+                    showStatus("Hata: Eklentiyi yeniden yükleyip tekrar deneyin.");
                     return;
                 }
                 if (response && response.success) {
-                    showStatus("Sorgulama başlatıldı!");
-                    chrome.tabs.update(yoksisTab.id, { active: true });
+                    showStatus("Kabul kodu aratıldı; öğrenci formu hazır.");
                 } else {
-                    showStatus("Hata: " + (response ? response.message : "Bilinmeyen hata"));
+                    showStatus("Hata: " + (response?.error || response?.message || "Bilinmeyen hata"));
                 }
             });
         } catch (error) {

@@ -93,9 +93,10 @@ function makeFileInputWritable(input) {
     });
 }
 
-function createBackgroundHarness(mainResult, searchResult) {
+function createBackgroundHarness(mainResult, searchResult, options = {}) {
     const calls = [];
     let messageHandler = null;
+    let hasYoksisTab = options.hasYoksisTab !== false;
     const yoksisTab = {
         id: 42,
         url: 'https://yoksis.yok.gov.tr/student',
@@ -132,11 +133,20 @@ function createBackgroundHarness(mainResult, searchResult) {
         tabs: {
             onUpdated: { addListener() {} },
             query(queryInfo, callback) {
-                if (Array.isArray(queryInfo.url)) {
-                    callback([yoksisTab]);
+                if (Array.isArray(queryInfo.url) || queryInfo.url === '*://yoksis.yok.gov.tr/*') {
+                    callback(hasYoksisTab ? [yoksisTab] : []);
                     return;
                 }
                 callback([]);
+            },
+            create(createProperties, callback) {
+                calls.push({ type: 'create-tab', createProperties });
+                hasYoksisTab = true;
+                callback({ ...yoksisTab, ...createProperties });
+            },
+            update(_tabId, updateProperties, callback) {
+                calls.push({ type: 'update-tab', updateProperties });
+                callback({ ...yoksisTab, ...updateProperties });
             },
             sendMessage(_tabId, message, callback) {
                 calls.push({ type: 'message', message });
@@ -301,6 +311,54 @@ test('YÖKSİS search ignores hidden controls left by the previous student', asy
         assert.equal(oldSearchClicks, 0);
         assert.ok(currentSearchClicks > 0);
         assert.equal(harness.dom.window.document.getElementById('current-acceptance-id').value, 'ZX-987-KL');
+    } finally {
+        harness.close();
+    }
+});
+
+test('YÖKSİS araması, onChange sonrası yeniden oluşturulan kabul alanına kodu tekrar yazar', async () => {
+    const harness = createContentHarness(`
+        <div id="search-host">
+            <table><tr><td>Kabul Mektup ID</td><td><input id="acceptance-id"></td><td><button id="search">Kabul Mektup ID ile Ara</button></td></tr></table>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const host = harness.dom.window.document.getElementById('search-host');
+    let rerendered = false;
+    let clickCount = 0;
+
+    const bindSearchControls = () => {
+        const input = harness.dom.window.document.getElementById('acceptance-id');
+        const button = harness.dom.window.document.getElementById('search');
+        input.addEventListener('change', () => {
+            if (rerendered) return;
+            rerendered = true;
+            host.innerHTML = '<table><tr><td>Kabul Mektup ID</td><td><input id="acceptance-id"></td><td><button id="search">Kabul Mektup ID ile Ara</button></td></tr></table>';
+            bindSearchControls();
+        });
+        button.addEventListener('click', () => {
+            clickCount += 1;
+            setTimeout(() => {
+                harness.dom.window.document.body.insertAdjacentHTML('beforeend', `
+                    <table id="student-form">
+                        <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+                        <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+                    </table>
+                `);
+            }, 25);
+        });
+    };
+    bindSearchControls();
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: 'AB-123-CD',
+            requestId: 'workflow-zk-rerender'
+        });
+
+        assert.equal(response.success, true);
+        assert.equal(harness.dom.window.document.getElementById('acceptance-id').value, 'AB-123-CD');
+        assert.equal(clickCount, 1);
     } finally {
         harness.close();
     }
@@ -538,4 +596,44 @@ test('background transfer accepts only a fresh content-search result or a fresh 
     const readinessCall = mainHarness.calls.find((call) => call.type === 'message' && call.message.action === 'WAIT_YOKSIS_FORM');
     assert.equal(readinessCall.message.requireFreshResult, true);
     assert.equal(readinessCall.message.afterFingerprint, 'previous-student');
+});
+
+test('Tek Tık aktarımı açık YÖKSİS sekmesi yoksa güvenli biçimde yeni sekme açar', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: false, buttonFound: false },
+        { success: true, searchTriggered: true, formReady: true },
+        { hasYoksisTab: false }
+    );
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'workflow-open-yoksis',
+        data: { yoksisId: 'AB-123-CD' }
+    });
+
+    assert.equal(response.success, true);
+    assert.ok(harness.calls.some((call) => call.type === 'create-tab'
+        && call.createProperties.url === 'https://yoksis.yok.gov.tr/'));
+    assert.ok(harness.calls.some((call) => call.type === 'update-tab'
+        && call.updateProperties.active === true));
+});
+
+test('eklenti popup araması da Tek Tık ile aynı YÖKSİS aktarım yolunu kullanır', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: false, buttonFound: false },
+        { success: true, searchTriggered: true, formReady: true },
+        { hasYoksisTab: false }
+    );
+
+    const response = await harness.send({
+        action: 'SEARCH_YOKSIS_FROM_POPUP',
+        requestId: 'popup-search',
+        data: { yoksisId: 'AB-123-CD' }
+    });
+
+    assert.equal(response.success, true);
+    assert.ok(harness.calls.some((call) => call.type === 'create-tab'));
+    assert.ok(harness.calls.some((call) => call.type === 'message'
+        && call.message.action === 'searchWithId'));
 });

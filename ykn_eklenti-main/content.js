@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.32';
+const CONTENT_SCRIPT_VERSION = '1.2.33';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -599,8 +599,11 @@ function syncZkFormInputs() {
     }
 }
 
-function waitForYoksisSearchControls() {
-    const deadline = Date.now() + 3500;
+function waitForYoksisSearchControls(timeoutMs = 12_000) {
+    // Yeni açılan YÖKSİS sekmesinde ZK uygulaması oturum ve ekran bileşenlerini
+    // birkaç saniye sonra oluşturabiliyor. Kısa sabit süre, Tek Tık akışının
+    // kodu yazmadan "alan bulunamadı" hatasıyla bitmesine neden oluyordu.
+    const deadline = Date.now() + timeoutMs;
     return new Promise((resolve, reject) => {
         const initialPair = findYoksisKabulPair();
         if (initialPair.idInput) {
@@ -1790,26 +1793,44 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
         }
 
         waitForYoksisSearchControls()
-            .then(async ({ idInput, searchBtn }) => {
-                if (idInput) {
+            .then(async (initialPair) => {
+                let idInput = initialPair.idInput;
+                let searchBtn = initialPair.searchBtn;
+
+                // ZK, onChange sonrasında input düğümünü yeniden oluşturabilir.
+                // Eski uygulama ilk düğüme değeri yazıp yeni (boş) düğümü
+                // görünce aramayı kesiyordu. En fazla bir kez, güncel düğüme
+                // yeniden yazıp doğruluyoruz; bu sınır aynı kabul kodu için
+                // birden fazla arama/postback oluşmasını engeller.
+                let valueConfirmed = false;
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                    if (!idInput || !isYoksisControlUsable(idInput)) {
+                        const currentPair = await waitForYoksisSearchControls();
+                        idInput = currentPair.idInput;
+                        searchBtn = currentPair.searchBtn || searchBtn;
+                    }
+
                     const inputFilled = await simulateInput(idInput, kabulId, { pressEnter: false });
-                    if (!inputFilled || normalizeYoksisIdValue(idInput.value) !== kabulId) {
+                    if (!inputFilled) {
                         throw new Error('Kabul Mektup ID alanına değer yazılamadı.');
                     }
+
+                    // Değerin ZK tarafındaki onChange güncellemesi bitmeden
+                    // arama butonuna basılırsa ikinci öğrencide tıklama eski
+                    // bileşene gidebilir. Yeniden bulma da bu yüzden şarttır.
+                    await waitForYoksisSearchControlsToSettle();
+                    const refreshedPair = findYoksisKabulPair();
+                    idInput = refreshedPair.idInput || idInput;
+                    searchBtn = refreshedPair.searchBtn || searchBtn;
+                    if (idInput && isYoksisControlUsable(idInput)
+                        && normalizeYoksisIdValue(idInput.value) === kabulId) {
+                        valueConfirmed = true;
+                        break;
+                    }
                 }
-                // Değerin ZK tarafındaki onChange güncellemesi bitmeden arama
-                // butonuna basılırsa, ikinci öğrenci için tıklama eski bileşene
-                // gidebiliyor. Kontrolleri yeniden bulmak bu ZK yeniden
-                // çiziminde oluşan yeni DOM düğümünü kullanmamızı sağlar.
-                await waitForYoksisSearchControlsToSettle();
-                const refreshedPair = findYoksisKabulPair();
-                if (refreshedPair.idInput) idInput = refreshedPair.idInput;
-                if (refreshedPair.searchBtn) searchBtn = refreshedPair.searchBtn;
-                if (!idInput || !isYoksisControlUsable(idInput)) {
-                    throw new Error('YÖKSİS Kabul Mektup ID alanı arama öncesinde yenilendi ancak tekrar bulunamadı.');
-                }
-                if (normalizeYoksisIdValue(idInput.value) !== kabulId) {
-                    throw new Error('YÖKSİS Kabul Mektup ID değeri arama öncesinde korunamadı.');
+
+                if (!valueConfirmed) {
+                    throw new Error('YÖKSİS Kabul Mektup ID değeri güncelleme sonrasında korunamadı. Sayfayı yenileyip tekrar deneyin.');
                 }
 
                 // Baseline, kod ZK widget'ına işlendi *sonra* ve arama tıklaması

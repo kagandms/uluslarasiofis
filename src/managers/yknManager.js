@@ -812,7 +812,10 @@ export function initYknManager() {
             return;
         }
         setOneClickStage(ONE_CLICK_STAGE.YOKSIS_SEARCHING, 'Kabul kodu hazır. YÖKSİS’te öğrenci aranıyor...');
-        armOneClickTimeout(ONE_CLICK_STAGE.YOKSIS_SEARCHING, 20_000);
+        // YÖKSİS sekmesi gerekirse Tek Tık tarafından açılır; ZK arama ekranı
+        // ilk yüklemede geç geldiği için arka planın doğrulama süresinden önce
+        // portalın akışı zaman aşımına uğramamalıdır.
+        armOneClickTimeout(ONE_CLICK_STAGE.YOKSIS_SEARCHING, 45_000);
         postOneClickMessage('TRANSFER_TO_YOKSIS', { data: currentStudentData });
     }
 
@@ -1631,7 +1634,7 @@ export function initYknManager() {
                 showToast('Önce 1. Adımdan Kabul Kodunu kopyalamalısınız.', 'warning');
                 return;
             }
-            if (!beginButtonAction('transfer-yoksis', btnTransferYoksis, 30_000, () => {
+            if (!beginButtonAction('transfer-yoksis', btnTransferYoksis, 45_000, () => {
                 setWorkflowStepStatus(2, 'error');
                 addStatus('YÖKSİS araması yanıt vermedi. Tekrar deneyebilirsiniz.', 'error');
                 showToast('YÖKSİS yanıt vermedi.', 'error');

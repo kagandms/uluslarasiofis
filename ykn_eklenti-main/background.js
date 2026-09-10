@@ -19,7 +19,10 @@ const CONTENT_READY_MAX_DELAY_MS = 1_000;
 // Content script, kabul kodunun ZK onChange güncellemesinin bitmesini ve yeni
 // öğrenci formunun iki kez kararlı görünmesini bekler. 12 saniye bu zinciri
 // kesip ikinci bir MAIN-world araması başlatabiliyordu.
-const YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS = 18_000;
+// YÖKSİS sekmesi Tek Tık ile yeni açılmışsa ZK ekranı ve kabul alanı geç
+// yüklenebilir. Content tarafının 12 sn kontrol beklemesi + form doğrulaması
+// için bu sınırın daha uzun olması gerekir.
+const YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS = 32_000;
 
 function runYoksisOperation(tabId, operation, requestId, task) {
     const key = `${tabId}:${operation}:${requestId || 'anonymous'}`;
@@ -346,7 +349,7 @@ async function readApplyDocument(request) {
 }
 
 async function resolveYoksisTab() {
-    const tabs = await queryTabs({ url: ['*://yoksis.yok.gov.tr/*', '*://*.yok.gov.tr/*'] });
+    const tabs = await queryTabs({ url: '*://yoksis.yok.gov.tr/*' });
     if (!tabs || tabs.length === 0) {
         throw new Error('YÖKSİS sekmesi açık değil. Lütfen önce YÖKSİS sekmesini açın.');
     }
@@ -1574,7 +1577,10 @@ async function waitForYoksisFormReady(tabId, requestId, options = {}) {
 
 
 async function transferToYoksis(request) {
-    const yoksisTab = await getExistingYoksisTab();
+    // Tek Tık'ın çalışması için kullanıcının YÖKSİS sekmesini önceden açmış
+    // olması gerekmez. Oturum varsa mevcut sekme öne alınır; yoksa YÖKSİS
+    // güvenli şekilde yeni sekmede açılır ve arama ekranı beklenir.
+    const yoksisTab = await getActiveYoksisTab();
     const kabulId = String(request.data?.yoksisId || request.data?.kabulId || request.kabulId || '')
         .replace(/[–—−]/g, '-')
         .replace(/\s*-\s*/g, '-')
@@ -1682,6 +1688,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // MAIN world'de yeniden yazıyordu. Bu işlem artık FILL_YOKSIS_FORM
         // kuyruğunun parçasıdır; bağımsız çağrıyı güvenle no-op yapıyoruz.
         sendResponse({ success: true, skipped: true, message: 'YÖKSİS formu zaten kontrollü aktarım akışında işlenir.' });
+        return true;
+    }
+
+    // Eklentinin açılır penceresi de portal ile aynı, tekilleştirilmiş arama
+    // yolunu kullanır. Böylece YÖKSİS sekmesi kapalıysa popup eski davranıştaki
+    // gibi hemen hata vermek yerine sekmeyi açıp arama ekranını bekler.
+    if (request.action === 'SEARCH_YOKSIS_FROM_POPUP') {
+        transferToYoksis(request)
+            .then((response) => sendResponse({ ...response, requestId: request.requestId }))
+            .catch((error) => sendResponse({ success: false, requestId: request.requestId, error: error.message }));
         return true;
     }
 
