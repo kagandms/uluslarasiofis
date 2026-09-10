@@ -119,6 +119,13 @@ test('final YÖKSİS işlemi fotoğraf kırpma onayından önce başlatılamaz',
     assert.match(manager, /Önce pasaport fotoğrafını kırpıp onaylayın/);
 });
 
+test('Türkmenistan için veren makam fallback değeri SMST olarak korunur', { skip: !hasLocalExtensionCheckout }, async () => {
+    const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+
+    assert.match(manager, /student\.verenMakam = 'SMST'/);
+    assert.match(manager, /student\.issuingAuthority = 'SMST'/);
+});
+
 test('YKN waits for Apply document discovery before acceptance-code automation', async () => {
     const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
 

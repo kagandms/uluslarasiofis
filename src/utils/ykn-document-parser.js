@@ -37,6 +37,103 @@ const DATE_PATTERN = `(?:(?:19\\d{2}|20\\d{2})\\s*[./\\-]\\s*\\d{1,2}\\s*[./\\-]
 
 const OCR_DATE_CHAR = '[0-9OoОоIiİıLl|ZzSsBbGg]';
 
+const COUNTRY_CODE_ALIASES = Object.freeze({
+    AFG: ['AFGANISTAN', 'AFGHANISTAN', 'AFGHANISTAN'],
+    ALB: ['ARNAVUTLUK', 'ALBANIA', 'ALBANIE'],
+    DZA: ['CEZAYIR', 'ALGERIA', 'ALGERIE'],
+    ARG: ['ARJANTIN', 'ARGENTINA'],
+    ARM: ['ERMENISTAN', 'ARMENIA'],
+    AUS: ['AVUSTRALYA', 'AUSTRALIA'],
+    AUT: ['AVUSTURYA', 'AUSTRIA'],
+    AZE: ['AZERBAYCAN', 'AZERBAIJAN'],
+    BGD: ['BANGLADES', 'BANGLADESH'],
+    BEL: ['BELCIKA', 'BELGIUM', 'BELGIQUE'],
+    BGR: ['BULGARISTAN', 'BULGARIA'],
+    BRA: ['BREZILYA', 'BRAZIL'],
+    CAN: ['KANADA', 'CANADA'],
+    CHE: ['ISVICRE', 'SWITZERLAND', 'SUISSE'],
+    CHN: ['CIN', 'CHINA'],
+    COL: ['KOLOMBIYA', 'COLOMBIA'],
+    CZE: ['CEKYA', 'CZECHIA', 'CZECH REPUBLIC'],
+    DEU: ['ALMANYA', 'GERMANY', 'DEUTSCHLAND'],
+    DNK: ['DANIMARKA', 'DENMARK'],
+    ECU: ['EKVADOR', 'ECUADOR'],
+    EGY: ['MISIR', 'EGYPT'],
+    ESP: ['ISPANYA', 'SPAIN', 'ESPANA'],
+    ETH: ['ETIYOPYA', 'ETHIOPIA'],
+    FRA: ['FRANSA', 'FRANCE'],
+    GEO: ['GURCISTAN', 'GEORGIA'],
+    GBR: ['BIRLESIK KRALLIK', 'UNITED KINGDOM', 'INGILTERE'],
+    GHA: ['GANA', 'GHANA'],
+    GRC: ['YUNANISTAN', 'GREECE'],
+    IDN: ['ENDONEZYA', 'INDONESIA'],
+    IND: ['HINDISTAN', 'INDIA'],
+    IRN: ['IRAN'],
+    IRQ: ['IRAK', 'IRAQ'],
+    ITA: ['ITALYA', 'ITALY'],
+    JOR: ['URDUN', 'JORDAN'],
+    JPN: ['JAPONYA', 'JAPAN'],
+    KAZ: ['KAZAKISTAN', 'KAZAKHSTAN'],
+    KEN: ['KENYA'],
+    KGZ: ['KIRGIZISTAN', 'KYRGYZSTAN'],
+    KOR: ['GUNEY KORE', 'SOUTH KOREA', 'KOREA'],
+    LBN: ['LUBNAN', 'LEBANON'],
+    LBY: ['LIBYA'],
+    MAR: ['FAS', 'MOROCCO'],
+    MEX: ['MEKSIKA', 'MEXICO'],
+    MNG: ['MOGOLISTAN', 'MONGOLIA'],
+    MYS: ['MALEZYA', 'MALAYSIA'],
+    NLD: ['HOLLANDA', 'NETHERLANDS'],
+    NGA: ['NİJERYA', 'Nijerya', 'NIGERIA'],
+    NPL: ['NEPAL'],
+    PAK: ['PAKISTAN'],
+    PER: ['PERU'],
+    PHL: ['FILIPINLER', 'PHILIPPINES'],
+    PLE: ['FILISTIN', 'PALESTINE'],
+    POL: ['POLONYA', 'POLAND'],
+    PRT: ['PORTEKIZ', 'PORTUGAL'],
+    QAT: ['KATAR', 'QATAR'],
+    ROU: ['ROMANYA', 'ROMANIA'],
+    RUS: ['RUSYA', 'RUSSIA'],
+    SAU: ['SUUDI ARABISTAN', 'SAUDI ARABIA'],
+    SDN: ['SUDAN'],
+    SEN: ['SENEGAL'],
+    SOM: ['SOMALI', 'SOMALIA'],
+    SRB: ['SIRBISTAN', 'SERBIA'],
+    SYR: ['SURIYE', 'SYRIA'],
+    SWE: ['ISVEC', 'SWEDEN'],
+    TJK: ['TACIKISTAN', 'TAJIKISTAN'],
+    TKM: ['TURKMENISTAN', 'TURKMEN'],
+    TUN: ['TUNUS', 'TUNISIA'],
+    TUR: ['TURKIYE', 'TURKEY'],
+    UKR: ['UKRAYNA', 'UKRAINE'],
+    UZB: ['OZBEKISTAN', 'UZBEKISTAN'],
+    USA: ['AMERIKA BIRLESIK DEVLETLERI', 'UNITED STATES', 'USA'],
+    UGA: ['UGANDA'],
+    ARE: ['BIRLESIK ARAP EMIRLIKLERI', 'UNITED ARAB EMIRATES'],
+    VEN: ['VENEZUELA'],
+    VNM: ['VIETNAM', 'VIET NAM'],
+    YEM: ['YEMEN']
+});
+
+function normalizeCountryValue(value) {
+    return String(value || '')
+        .toLocaleUpperCase('tr-TR')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Z0-9\u0400-\u04FF]+/g, ' ')
+        .trim();
+}
+
+export function getCountryIso3Code(value) {
+    const normalized = normalizeCountryValue(value);
+    if (/^[A-Z]{3}$/.test(normalized)) return normalized;
+    for (const [code, aliases] of Object.entries(COUNTRY_CODE_ALIASES)) {
+        if (aliases.some((alias) => normalized.includes(normalizeCountryValue(alias)))) return code;
+    }
+    return '';
+}
+
 function extractDateCandidatesFromText(text) {
     const source = normalizeDateText(text);
     const candidates = Array.from(source.matchAll(new RegExp(DATE_PATTERN, 'ig')))
@@ -560,8 +657,12 @@ export function extractPassportPlaceOfBirth(text, options = {}) {
     return '';
 }
 
-export function extractPassportIssuingAuthority(text) {
-    if (!text || typeof text !== 'string') return '';
+export function extractPassportIssuingAuthority(text, options = {}) {
+    if (!text || typeof text !== 'string') {
+        return getCountryIso3Code(
+            options.uyruk || options.nationality || options.country || options.dogumUlkesi
+        );
+    }
     const normalized = text.replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
 
     const labels = [
@@ -600,13 +701,19 @@ export function extractPassportIssuingAuthority(text) {
         val = val.replace(/\s+/g, ' ');
         return val.toUpperCase();
     }
-    return '';
+
+    const mrzMatch = normalized.toUpperCase().match(/P\s*<\s*([A-Z]{3})/);
+    if (mrzMatch) return mrzMatch[1];
+
+    return getCountryIso3Code(
+        options.uyruk || options.nationality || options.country || options.dogumUlkesi
+    );
 }
 
 export function extractPassportMetadata(text, options = {}) {
     const dates = extractPassportDatesFromText(text, options);
     const placeOfBirth = extractPassportPlaceOfBirth(text, options);
-    const issuingAuthority = extractPassportIssuingAuthority(text);
+    const issuingAuthority = extractPassportIssuingAuthority(text, options);
 
     return {
         issueDate: dates.issueDate || '',

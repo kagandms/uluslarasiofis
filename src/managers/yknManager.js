@@ -5,8 +5,10 @@ import {
     isValidYoksisId,
     parseDateValue,
     extractPassportPlaceOfBirth,
-    extractPassportIssuingAuthority
+    extractPassportIssuingAuthority,
+    getCountryIso3Code
 } from '../utils/ykn-document-parser.js';
+import { selectBestPassportOrientation } from '../utils/passport-orientation.js';
 import {
     initPassportCropperModal,
     openPassportCropper,
@@ -16,6 +18,9 @@ import {
 
 const PASSPORT_MAX_PAGES = 5;
 const PASSPORT_MAX_OCR_PAGES = 2;
+const PASSPORT_ORIENTATION_ANGLES = [0, 90, 180, 270];
+const PASSPORT_ORIENTATION_SCORE_THRESHOLD = 45;
+const PASSPORT_ORIENTATION_OCR_TIMEOUT_MS = 5_000;
 const DOCUMENT_CACHE_MAX_ENTRIES = 8;
 const documentBytesCache = new Map();
 const documentRequestKeys = new Map();
@@ -87,6 +92,58 @@ function scorePassportPageText(text, studentName = '', passportNo = '') {
     }
 
     return score;
+}
+
+function rotatePassportCanvas(sourceCanvas, rotation) {
+    const isQuarterTurn = rotation === 90 || rotation === 270;
+    const rotatedCanvas = document.createElement('canvas');
+    rotatedCanvas.width = isQuarterTurn ? sourceCanvas.height : sourceCanvas.width;
+    rotatedCanvas.height = isQuarterTurn ? sourceCanvas.width : sourceCanvas.height;
+    const context = rotatedCanvas.getContext('2d');
+    context.translate(rotatedCanvas.width / 2, rotatedCanvas.height / 2);
+    context.rotate((rotation * Math.PI) / 180);
+    context.drawImage(sourceCanvas, -sourceCanvas.width / 2, -sourceCanvas.height / 2);
+    return rotatedCanvas;
+}
+
+async function readPassportPageWithOrientation(sourceCanvas, options, runOCR) {
+    const candidates = [];
+    const canvases = new Map([[0, sourceCanvas]]);
+
+    for (const rotation of PASSPORT_ORIENTATION_ANGLES) {
+        const canvas = rotation === 0 ? sourceCanvas : rotatePassportCanvas(sourceCanvas, rotation);
+        canvases.set(rotation, canvas);
+        try {
+            const ocrResult = await Promise.race([
+                runOCR(canvas, true, false, true),
+                new Promise((_, reject) => setTimeout(
+                    () => reject(new Error('Yön OCR zaman aşımı')),
+                    PASSPORT_ORIENTATION_OCR_TIMEOUT_MS
+                ))
+            ]);
+            const text = ocrResult?._rawText || '';
+            candidates.push({
+                rotation,
+                score: scorePassportPageText(text, options.studentName, options.passportNo),
+                text
+            });
+        } catch (error) {
+            console.warn(`[YKN] Pasaport ${rotation}° OCR atlandı:`, error.message);
+            candidates.push({ rotation, score: 0, text: '' });
+        }
+
+        const upright = candidates.find((candidate) => candidate.rotation === 0);
+        if (rotation === 0 && upright?.score >= PASSPORT_ORIENTATION_SCORE_THRESHOLD) break;
+    }
+
+    const best = selectBestPassportOrientation(candidates);
+    for (const [rotation, canvas] of canvases) {
+        if (rotation !== 0 && rotation !== best.rotation) {
+            canvas.width = 0;
+            canvas.height = 0;
+        }
+    }
+    return { ...best, canvas: canvases.get(best.rotation) || sourceCanvas };
 }
 
 async function imageToCanvas(imgSrc) {
@@ -288,22 +345,49 @@ export function initYknManager() {
         }
     }
 
+    function isTurkmenStudent(student) {
+        const nationalityText = `${student?.uyruk || ''} ${student?.dogumUlkesi || ''}`.toUpperCase();
+        return nationalityText.includes('TÜRKMEN') || nationalityText.includes('TURKMEN') || nationalityText.includes('TKM');
+    }
+
+    function getCountryAuthorityFallback(student) {
+        if (isTurkmenStudent(student)) return 'SMST';
+        return getCountryIso3Code(student?.uyruk || student?.dogumUlkesi);
+    }
+
+    function hasCountryAuthorityFallback(student) {
+        const countryCode = getCountryAuthorityFallback(student);
+        return Boolean(
+            countryCode &&
+            student?.issuingAuthority === countryCode &&
+            student?.verenMakam === countryCode
+        );
+    }
+
     function applyCountryDefaultsToStudent(student) {
         if (!student) return;
-        const str = `${student.uyruk || ''} ${student.dogumUlkesi || ''}`.toUpperCase();
-        const isTurkmen = str.includes('TÜRKMEN') || str.includes('TURKMEN') || str.includes('TKM');
+        const isTurkmen = isTurkmenStudent(student);
         if (isTurkmen) {
             student.dogumYeriAciklamasi = 'TKM';
             student.birthPlace = 'TKM';
             student.dogumYeri = 'TKM';
             if (inputBirthPlace) inputBirthPlace.value = 'TKM';
-            if (!student.verenMakam && !student.issuingAuthority) {
-                student.verenMakam = 'SMST';
-                student.issuingAuthority = 'SMST';
-                if (inputIssuingAuthority && !inputIssuingAuthority.value) {
-                    inputIssuingAuthority.value = 'SMST';
-                }
-            }
+
+            // Türkmenistan pasaportlarında YÖKSİS için veren makam sabit olarak SMST'dir.
+            student.verenMakam = 'SMST';
+            student.issuingAuthority = 'SMST';
+            if (inputIssuingAuthority) inputIssuingAuthority.value = 'SMST';
+            return;
+        }
+
+        if (!student.verenMakam && !student.issuingAuthority) {
+            const countryCode = getCountryIso3Code(student.uyruk || student.dogumUlkesi);
+            if (!countryCode) return;
+            student.verenMakam = countryCode;
+            student.issuingAuthority = countryCode;
+        }
+        if (inputIssuingAuthority && !inputIssuingAuthority.value && student.issuingAuthority) {
+            inputIssuingAuthority.value = student.issuingAuthority;
         }
     }
 
@@ -1146,13 +1230,17 @@ export function initYknManager() {
                             }
                             if (!pageCanvas) continue;
 
+                            let orientedCanvas = null;
                             try {
-                                const ocrResult = await Promise.race([
-                                    runOCR(pageCanvas, true, false, true),
-                                    new Promise((_, reject) => setTimeout(() => reject(new Error('Sayfa OCR zaman aşımı')), 8000))
-                                ]);
-
-                                const pageOcrText = ocrResult?._rawText || '';
+                                const orientation = await readPassportPageWithOrientation(pageCanvas, {
+                                    studentName: currentStudentData?.fullName,
+                                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim()
+                                }, runOCR);
+                                const pageOcrText = orientation.text || '';
+                                if (orientation.rotation !== 0 && orientation.canvas) {
+                                    pageItem.dataUrl = orientation.canvas.toDataURL('image/jpeg', 0.9);
+                                    orientedCanvas = orientation.canvas;
+                                }
                                 if (pageOcrText) {
                                     if (!currentStudentData.issueDate || !currentStudentData.expiryDate) {
                                         const ocrDates = extractPassportDatesFromText(pageOcrText, { birthDate: currentStudentData?.birthDate });
@@ -1176,7 +1264,7 @@ export function initYknManager() {
                                         if (bp) detectedBirthPlace = bp;
                                     }
 
-                                    if (!detectedAuthority && !currentStudentData.issuingAuthority) {
+                                    if (!detectedAuthority && (!currentStudentData.issuingAuthority || hasCountryAuthorityFallback(currentStudentData))) {
                                         const auth = extractPassportIssuingAuthority(pageOcrText);
                                         if (auth) detectedAuthority = auth;
                                     }
@@ -1184,6 +1272,10 @@ export function initYknManager() {
                             } catch (pageOcrErr) {
                                 console.warn(`[YKN] Sayfa ${pIdx + 1} OCR atlandı:`, pageOcrErr.message);
                             } finally {
+                                if (orientedCanvas && orientedCanvas !== pageCanvas) {
+                                    orientedCanvas.width = 0;
+                                    orientedCanvas.height = 0;
+                                }
                                 if (temporaryCanvas && pageCanvas) {
                                     pageCanvas.width = 0;
                                     pageCanvas.height = 0;
@@ -1221,7 +1313,7 @@ export function initYknManager() {
                     if (inputIssuingAuthority) inputIssuingAuthority.value = detectedAuthority;
                 }
 
-                // Ülke bazlı özel varsayılanları uygula (örn. Türkmenistan için sabit TKM / SMST)
+                // Pasaportta veren makam etiketi yoksa ülkenin ISO-3 kodunu kullan.
                 applyCountryDefaultsToStudent(currentStudentData);
 
                 // Eksik alan varsa ve incelenebilecek ek pasaport aday belgeleri varsa diğer belgeyi iste

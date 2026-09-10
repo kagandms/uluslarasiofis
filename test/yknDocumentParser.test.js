@@ -240,6 +240,14 @@ test('extracts issuing authority from English, Turkish, French and Russian passp
     assert.equal(extractPassportIssuingAuthority(textRu), 'МВД 77001');
 });
 
+test('uses issuing-country ISO code when passport authority is missing', () => {
+    const mrzText = 'PASSPORT P<SYRABCDOE<<STUDENT<<<<<<<<<<<<<<<<<<<<';
+
+    assert.equal(extractPassportIssuingAuthority(mrzText), 'SYR');
+    assert.equal(extractPassportIssuingAuthority('PASSPORT', { uyruk: 'Suriye' }), 'SYR');
+    assert.equal(extractPassportIssuingAuthority('Authority: NVI', { uyruk: 'Suriye' }), 'NVI');
+});
+
 test('extractPassportMetadata returns comprehensive object with dates, place of birth, and authority', () => {
     const fullText = `
     PASSPORT
