@@ -61,6 +61,15 @@ test('YKN one-click workflow keeps the required ordered transport stages', { ski
     assert.match(content, /uploadPhotoToYoksis\(data\.croppedPhotoBase64/);
 });
 
+test('YKN one-click excludes cropper canvases from extension messages', { skip: !hasLocalExtensionCheckout }, async () => {
+    const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+
+    assert.match(manager, /function getYoksisTransportData\(studentData\)/);
+    assert.match(manager, /const \{ passportPages, \.\.\.transportData \} = studentData/);
+    assert.match(manager, /data: getYoksisTransportData\(currentStudentData\)/);
+    assert.match(manager, /data: getYoksisTransportData\(data\.data\)/);
+});
+
 test('YKN one-click waits for crop confirmation before final YÖKSİS fill', { skip: !hasLocalExtensionCheckout }, async () => {
     const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
     const startIndex = manager.indexOf('function startOneClickPassportRead()');

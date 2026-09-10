@@ -191,11 +191,11 @@ function createBackgroundHarness(mainResult, searchResult) {
 test('YÖKSİS search handles ZK-labelled controls and confirms delayed form readiness', async () => {
     const harness = createContentHarness(`
         <table>
-            <tr><td>Kabul Mektup ID</td><td><input id="acceptance-id"></td><td><button id="search">Kabul Mektup ID ile Ara</button></td></tr>
+            <tr><td>Kabul Mektup ID</td><td><input id="tGDP49-chdextr" class="z-textbox" title="Kabul Mektup Id veya YÖKSİS Id"></td><td><button id="tGDPa9" class="s-button s-button-submit z-button">Kabul Mektup ID ile Ara</button></td></tr>
         </table>
     `, 'https://yoksis.yok.gov.tr/student');
     let clickCount = 0;
-    harness.dom.window.document.getElementById('search').addEventListener('click', () => {
+    harness.dom.window.document.getElementById('tGDPa9').addEventListener('click', () => {
         clickCount += 1;
         setTimeout(() => {
             harness.dom.window.document.body.insertAdjacentHTML('beforeend', `
@@ -216,7 +216,7 @@ test('YÖKSİS search handles ZK-labelled controls and confirms delayed form rea
 
         assert.equal(response.success, true);
         assert.equal(response.formReady, true);
-        assert.equal(harness.dom.window.document.getElementById('acceptance-id').value, 'AB-123-CD');
+        assert.equal(harness.dom.window.document.getElementById('tGDP49-chdextr').value, 'AB-123-CD');
         assert.ok(clickCount > 0);
     } finally {
         harness.close();

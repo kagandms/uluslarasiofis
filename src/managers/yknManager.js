@@ -733,12 +733,24 @@ export function initYknManager() {
         }, timeoutMs);
     }
 
+    // passportPages yalnızca portalın cropper önizlemesi içindir. İçindeki
+    // canvas nesnesi structured-clone edilemez; bunu köprüye taşımak Tek Tık
+    // akışını kabul kodu bulunduğu anda durduruyordu.
+    function getYoksisTransportData(studentData) {
+        if (!studentData) return studentData;
+        const { passportPages, ...transportData } = studentData;
+        return transportData;
+    }
+
     function postOneClickMessage(action, data = {}) {
         const workflowId = oneClickWorkflow?.workflowId;
         if (!workflowId) return;
+        const safeData = data.data
+            ? { ...data, data: getYoksisTransportData(data.data) }
+            : data;
         window.postMessage({
             source: 'WEB_APP',
-            payload: { action, ...data, workflowId, requestId: workflowId }
+            payload: { action, ...safeData, workflowId, requestId: workflowId }
         }, '*');
     }
 
@@ -1637,7 +1649,7 @@ export function initYknManager() {
                 source: 'WEB_APP',
                 payload: {
                     action: 'TRANSFER_TO_YOKSIS',
-                    data: currentStudentData,
+                    data: getYoksisTransportData(currentStudentData),
                     requestId: activeSearchRequestId
                 }
             }, '*');
@@ -1672,7 +1684,7 @@ export function initYknManager() {
                 source: 'WEB_APP',
                 payload: {
                     action: 'FILL_YOKSIS_FORM',
-                    data: currentStudentData,
+                    data: getYoksisTransportData(currentStudentData),
                     requestId: activeSearchRequestId
                 }
             }, '*');

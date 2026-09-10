@@ -396,8 +396,15 @@ function findYoksisKabulPair() {
                     input.name,
                     input.id
                 ].join(' '));
-                if (!metadata.includes('kabul') || metadata.includes('pasaport') || metadata.includes('tc') || metadata.includes('dogum')) return null;
+                // Canlı YÖKSİS ekranındaki kabul kutusu, örneğin
+                // tGDP49-chdextr kimliğiyle üretiliyor. Başlıktaki metin
+                // yeniden çizim sırasında kısa süreliğine boşalsa bile bu
+                // imzayı, pasaport sorgu alanlarına göre önceliklendir.
+                const isAcceptanceEditor = /(?:-|_)chdextr$/i.test(input.id || '');
+                if ((!metadata.includes('kabul') && !isAcceptanceEditor)
+                    || metadata.includes('pasaport') || metadata.includes('tc') || metadata.includes('dogum')) return null;
                 let score = 10;
+                if (isAcceptanceEditor) score += 100;
                 if (metadata.includes('mektup')) score += 30;
                 if (metadata.includes('id')) score += 20;
                 return { input, score };
