@@ -1039,10 +1039,28 @@ async function transferToYoksis(request) {
         throw new Error('YÖKSİS sayfasında Kabul Mektup ID arama alanı bulunamadı. Lütfen YÖKSİS sekmesinde öğrenci başvuru/kayıt ekranının açık olduğunu kontrol edin.');
     }
 
+    let formReady = Boolean(response?.formReady);
+    if (!formReady) {
+        try {
+            await waitForContentScript(yoksisTab.id, 'yoksis');
+            const readiness = await Promise.race([
+                sendTabMessage(yoksisTab.id, {
+                    action: 'WAIT_YOKSIS_FORM',
+                    timeoutMs: 6000,
+                    requestId: request.requestId
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('YÖKSİS formu hazır olma zaman aşımı')), 7000))
+            ]);
+            formReady = Boolean(readiness?.formReady);
+        } catch (error) {
+            console.warn('[YKN] YÖKSİS form hazır olma kontrolü başarısız:', error);
+        }
+    }
+
     return {
         success: true,
         transferred: true,
-        formReady: Boolean(response?.formReady),
+        formReady,
         message: 'Kabul mektup kodu YÖKSİS\'e başarıyla aktarıldı ve arama başlatıldı.'
     };
 }

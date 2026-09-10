@@ -1590,6 +1590,22 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             }));
         return true;
     }
+
+    else if (request.action === 'WAIT_YOKSIS_FORM') {
+        waitForYoksisForm(Math.min(Number(request.timeoutMs) || 6000, 10000))
+            .then(() => sendResponse({
+                success: true,
+                formReady: true,
+                requestId: request.requestId
+            }))
+            .catch((error) => sendResponse({
+                success: false,
+                formReady: false,
+                requestId: request.requestId,
+                message: error.message
+            }));
+        return true;
+    }
     
     else if (request.action === "fillRemainingData") {
         chrome.storage.local.get(['studentData'], async (result) => {
@@ -1607,6 +1623,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             }
 
             let successCount = 0;
+            let photoUploaded = false;
 
             const anneAdiInput = findTargetElementByFuzzyLabel('Anne Adı', 'input');
             if (await simulateInput(anneAdiInput, data.anneAdi)) successCount++;
@@ -1759,7 +1776,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             // Fotoğraf otomatik yükleme (Kırpılmış vesikalık varsa YÖKSİS'e yükle)
             if (data.croppedPhotoBase64) {
                 try {
-                    const photoUploaded = await uploadPhotoToYoksis(data.croppedPhotoBase64, data.photoFileName);
+                    photoUploaded = await uploadPhotoToYoksis(data.croppedPhotoBase64, data.photoFileName);
                     if (photoUploaded) successCount++;
                 } catch (photoErr) {
                     console.warn('[YKN] Fotoğraf yükleme hatası (content script):', photoErr);
@@ -1767,7 +1784,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             }
 
             if (successCount > 0) {
-                sendResponse({ success: true, photoUploaded: Boolean(data.croppedPhotoBase64) });
+                sendResponse({ success: true, photoUploaded });
             } else {
                 sendResponse({ success: false, message: "Hedef inputlar bulunamadı." });
             }
@@ -1885,4 +1902,3 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
     });
 }
 })();
-

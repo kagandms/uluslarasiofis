@@ -13,6 +13,6 @@ test('fastLevenshtein calculates exact edit distance within maxDist', () => {
     assert.equal(fastLevenshtein('MOHAMED', 'MOHAMMED', 2), 1);
     assert.equal(fastLevenshtein('DMITRY', 'DMITRIY', 2), 1);
     assert.equal(fastLevenshtein('DMITRY', 'DMITRII', 2), 2);
-    assert.equal(fastLevenshtein('ALEXANDER', 'ALEKSANDR', 2), 2);
+    assert.equal(fastLevenshtein('ALEXANDER', 'ALEKSANDR', 3), 3);
     assert.equal(fastLevenshtein('AHMET', 'MEHMET', 1), 2);
 });
