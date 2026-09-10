@@ -149,6 +149,10 @@ function createBackgroundHarness(mainResult, searchResult) {
                     callback(searchResult);
                     return;
                 }
+                if (message.action === 'GET_YOKSIS_FORM_STATE') {
+                    callback({ success: true, fingerprint: 'previous-student', domRevision: 7 });
+                    return;
+                }
                 if (message.action === 'WAIT_YOKSIS_FORM') {
                     callback({ success: true, formReady: true });
                     return;
@@ -231,7 +235,17 @@ test('YÖKSİS search uses the ZK button cell beside the acceptance input once',
     `, 'https://yoksis.yok.gov.tr/student');
     let clickCount = 0;
     const button = harness.dom.window.document.querySelector('table.z-button');
-    button.addEventListener('click', () => { clickCount += 1; });
+    button.addEventListener('click', () => {
+        clickCount += 1;
+        setTimeout(() => {
+            harness.dom.window.document.body.insertAdjacentHTML('beforeend', `
+                <table id="student-form">
+                    <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+                    <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+                </table>
+            `);
+        }, 25);
+    });
 
     try {
         const response = await harness.send({
@@ -245,6 +259,69 @@ test('YÖKSİS search uses the ZK button cell beside the acceptance input once',
         assert.equal(response.buttonFound, true);
         assert.equal(harness.dom.window.document.querySelector('input.z-textbox').value, '821-EC2-34');
         assert.equal(clickCount, 1);
+    } finally {
+        harness.close();
+    }
+});
+
+test('YÖKSİS ikinci aramada aynı parmak izli formun gerçekten yenilendiğini doğrular', async () => {
+    const studentForm = `
+        <table id="student-form">
+            <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+            <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+        </table>
+    `;
+    const harness = createContentHarness(`
+        <table>
+            <tr><td>Kabul Mektup ID</td><td><input id="acceptance-id"></td><td><button id="search">Kabul Mektup ID ile Ara</button></td></tr>
+        </table>
+        ${studentForm}
+    `, 'https://yoksis.yok.gov.tr/student');
+    const search = harness.dom.window.document.getElementById('search');
+    search.addEventListener('click', () => {
+        setTimeout(() => {
+            // Yeni öğrencinin formu aynı id/etiketler ve boş değerlerle gelebilir.
+            // Sadece fingerprint kullanan eski yaklaşım bunu önceki form sanıyordu.
+            harness.dom.window.document.getElementById('student-form').outerHTML = studentForm;
+        }, 25);
+    });
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: 'ZX-456-YW',
+            requestId: 'workflow-second-student'
+        });
+
+        assert.equal(response.success, true);
+        assert.equal(response.formReady, true);
+        assert.equal(harness.dom.window.document.getElementById('acceptance-id').value, 'ZX-456-YW');
+    } finally {
+        harness.close();
+    }
+});
+
+test('YÖKSİS hazır kontrolü önceki formu yeni aramanın sonucu saymaz', async () => {
+    const harness = createContentHarness(`
+        <table id="student-form">
+            <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+            <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+
+    try {
+        const state = await harness.send({ action: 'GET_YOKSIS_FORM_STATE', requestId: 'old-form-state' });
+        const response = await harness.send({
+            action: 'WAIT_YOKSIS_FORM',
+            timeoutMs: 250,
+            afterFingerprint: state.fingerprint,
+            afterDomRevision: state.domRevision,
+            requireFreshResult: true,
+            requestId: 'must-not-accept-old-form'
+        });
+
+        assert.equal(response.success, false);
+        assert.equal(response.formReady, false);
     } finally {
         harness.close();
     }
@@ -385,10 +462,25 @@ test('Apply document discovery returns real acceptance and passport candidates',
     }
 });
 
-test('background transfer confirms form readiness after MAIN-world or content fallback search', async () => {
+test('background transfer accepts only a fresh content-search result or a fresh MAIN-world fallback', async () => {
+    const contentHarness = createBackgroundHarness(
+        { inputFound: false, buttonFound: false },
+        { success: true, searchTriggered: true, formReady: true }
+    );
+    const contentResponse = await contentHarness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'workflow-content',
+        data: { yoksisId: 'AB-123-CD' }
+    });
+
+    assert.equal(contentResponse.success, true);
+    assert.equal(contentResponse.formReady, true);
+    assert.ok(!contentHarness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
+
     const mainHarness = createBackgroundHarness(
-        { inputFound: true, buttonFound: false },
-        { success: true, formReady: false }
+        { inputFound: true, buttonFound: true, searchTriggered: true },
+        { success: false, searchTriggered: false, formReady: false }
     );
     const mainResponse = await mainHarness.send({
         source: 'IKAMET_PORTAL',
@@ -400,22 +492,8 @@ test('background transfer confirms form readiness after MAIN-world or content fa
     assert.equal(mainResponse.success, true);
     assert.equal(mainResponse.formReady, true);
     assert.ok(mainHarness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
-    assert.ok(mainHarness.calls.some((call) => call.type === 'message' && call.message.action === 'searchWithId'));
-    assert.ok(mainHarness.calls.some((call) => call.type === 'message' && call.message.action === 'WAIT_YOKSIS_FORM'));
-
-    const fallbackHarness = createBackgroundHarness(
-        { inputFound: false, buttonFound: false },
-        { success: true, formReady: false }
-    );
-    const fallbackResponse = await fallbackHarness.send({
-        source: 'IKAMET_PORTAL',
-        action: 'TRANSFER_TO_YOKSIS',
-        requestId: 'workflow-fallback',
-        data: { yoksisId: 'AB-123-CD' }
-    });
-
-    assert.equal(fallbackResponse.success, true);
-    assert.equal(fallbackResponse.formReady, true);
-    assert.ok(fallbackHarness.calls.some((call) => call.type === 'message' && call.message.action === 'searchWithId'));
-    assert.ok(fallbackHarness.calls.some((call) => call.type === 'message' && call.message.action === 'WAIT_YOKSIS_FORM'));
+    assert.ok(mainHarness.calls.some((call) => call.type === 'message' && call.message.action === 'GET_YOKSIS_FORM_STATE'));
+    const readinessCall = mainHarness.calls.find((call) => call.type === 'message' && call.message.action === 'WAIT_YOKSIS_FORM');
+    assert.equal(readinessCall.message.requireFreshResult, true);
+    assert.equal(readinessCall.message.afterFingerprint, 'previous-student');
 });

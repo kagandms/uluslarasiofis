@@ -1,11 +1,32 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.30';
+const CONTENT_SCRIPT_VERSION = '1.2.31';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
 const FIXED_YOKSIS_PHONE = '5322431261';
+
+// YÖKSİS aynı öğrenci formunu aynı id ve boş değerlerle yeniden üretebiliyor.
+// Bu nedenle yalnızca alan parmak izine bakmak, önceki öğrencinin formunu yeni
+// aramanın sonucu sanmaya yol açar. ZK postback'inin gerçekten DOM'u güncellediğini
+// de izliyoruz. Sayaç content-script yaşamı boyunca korunur.
+let yoksisDomRevision = 0;
+const observedYoksisDocuments = new WeakSet();
+
+function observeYoksisDomChanges() {
+    if (getPageKind() !== 'yoksis' || typeof MutationObserver === 'undefined') return;
+    for (const doc of getAllDocs(document)) {
+        if (!doc || observedYoksisDocuments.has(doc)) continue;
+        const root = doc.documentElement || doc.body;
+        if (!root) continue;
+        const observer = new MutationObserver(() => {
+            yoksisDomRevision += 1;
+        });
+        observer.observe(root, { childList: true, subtree: true });
+        observedYoksisDocuments.add(doc);
+    }
+}
 
 function getAllDocs(rootDoc = document) {
     const docs = [];
@@ -78,8 +99,13 @@ async function simulateInput(element, value, options = {}) {
 
     const nativeSetter = Object.getOwnPropertyDescriptor(win.HTMLInputElement?.prototype || window.HTMLInputElement.prototype, 'value')?.set;
     if (nativeSetter) {
+        // Önceki aramanın değeri ZK'nin istemci tarafı tamponunda kalabiliyor.
+        // Değeri tek onChange ile göndermeden önce native alanda temizleyip yeni
+        // değeri koymak, birleşmiş "eski+yeni" kod ihtimalini ortadan kaldırır.
+        nativeSetter.call(element, '');
         nativeSetter.call(element, value);
     } else {
+        element.value = '';
         element.value = value;
     }
     
@@ -595,9 +621,21 @@ function getYoksisFormFingerprint() {
     return parts.join('||');
 }
 
+function getYoksisFormState() {
+    observeYoksisDomChanges();
+    return {
+        fingerprint: getYoksisFormFingerprint(),
+        domRevision: yoksisDomRevision
+    };
+}
+
 function waitForYoksisForm(timeoutMs = 6000, options = {}) {
     const deadline = Date.now() + timeoutMs;
     const afterFingerprint = options.afterFingerprint || '';
+    const afterDomRevision = Number.isFinite(options.afterDomRevision)
+        ? options.afterDomRevision
+        : null;
+    const requireFreshResult = options.requireFreshResult === true;
     let stableChecks = 0;
     let previousFingerprint = '';
     return new Promise((resolve, reject) => {
@@ -613,6 +651,13 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
             const hasPhotoInput = Boolean(findYoksisFileInput(findPhotoUploadButton()));
             const fingerprint = getYoksisFormFingerprint();
             const formChangedAfterSearch = !afterFingerprint || fingerprint !== afterFingerprint;
+            const domChangedAfterSearch = afterDomRevision === null || yoksisDomRevision > afterDomRevision;
+            // Sonuç formu, önceki formdan alan değeri bakımından ayırt edilemeyebilir.
+            // Bu durumda ancak arama tıklamasından sonra gelen ZK DOM güncellemesi
+            // yeni bir sonuç olduğuna dair kanıttır.
+            const hasFreshSearchResult = requireFreshResult
+                ? (formChangedAfterSearch || domChangedAfterSearch)
+                : formChangedAfterSearch;
             stableChecks = fingerprint && fingerprint === previousFingerprint ? stableChecks + 1 : 0;
             previousFingerprint = fingerprint;
 
@@ -622,7 +667,7 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
             // saymamak için formun değişmesini ve iki ardışık kontrolde sabit
             // kalmasını da bekle.
             if ((formSignals >= 2 || (formSignals >= 1 && hasPhotoInput)) &&
-                formChangedAfterSearch && stableChecks >= 2) {
+                hasFreshSearchResult && stableChecks >= 2) {
                 clearInterval(intervalId);
                 resolve();
                 return;
@@ -1687,7 +1732,6 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             return;
         }
 
-        const formFingerprintBeforeSearch = getYoksisFormFingerprint();
         waitForYoksisSearchControls()
             .then(async ({ idInput, searchBtn }) => {
                 if (idInput) {
@@ -1698,6 +1742,11 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 }
                 // ZK'nin blur/change olayını işlemesi için kısa bekleme
                 await new Promise(resolve => setTimeout(resolve, 150));
+
+                // Baseline, kod ZK widget'ına işlendi *sonra* ve arama tıklaması
+                // yapılmadan hemen önce alınmalıdır. Böylece kodun onChange AU
+                // güncellemesini sonuç postback'i sanmayız.
+                const stateBeforeSearch = getYoksisFormState();
 
                 if (!searchBtn && idInput) {
                     searchBtn = findKabulIdButton(idInput);
@@ -1718,7 +1767,11 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 
                 let formReady = false;
                 try {
-                    await waitForYoksisForm(10_000, { afterFingerprint: formFingerprintBeforeSearch });
+                    await waitForYoksisForm(10_000, {
+                        afterFingerprint: stateBeforeSearch.fingerprint,
+                        afterDomRevision: stateBeforeSearch.domRevision,
+                        requireFreshResult: true
+                    });
                     formReady = true;
                 } catch (_) {
                     formReady = false;
@@ -1726,7 +1779,9 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 return { formReady, searchTriggered };
             })
             .then(({ formReady, searchTriggered }) => sendResponse({
-                success: true,
+                // Tıklamayı göndermiş olmak başarı değildir: yeni öğrenci formu
+                // doğrulanmadıkça portal sonraki "bilgileri aktar" adımını açmamalı.
+                success: formReady,
                 formReady,
                 searchTriggered,
                 buttonFound: Boolean(findYoksisKabulPair().searchBtn),
@@ -1741,7 +1796,13 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
     }
 
     else if (request.action === 'WAIT_YOKSIS_FORM') {
-        waitForYoksisForm(Math.min(Number(request.timeoutMs) || 6000, 10000))
+        waitForYoksisForm(Math.min(Number(request.timeoutMs) || 6000, 10000), {
+            afterFingerprint: request.afterFingerprint || '',
+            afterDomRevision: Number.isFinite(request.afterDomRevision)
+                ? request.afterDomRevision
+                : null,
+            requireFreshResult: request.requireFreshResult === true
+        })
             .then(() => sendResponse({
                 success: true,
                 formReady: true,
@@ -1753,6 +1814,15 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 requestId: request.requestId,
                 message: error.message
             }));
+        return true;
+    }
+
+    else if (request.action === 'GET_YOKSIS_FORM_STATE') {
+        sendResponse({
+            success: true,
+            requestId: request.requestId,
+            ...getYoksisFormState()
+        });
         return true;
     }
     

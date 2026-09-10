@@ -564,7 +564,7 @@ export function initYknManager() {
 
     function setWorkflowStepStatus(step, status) {
         workflowStepStatuses.set(step, status);
-        if (status === 'success') {
+        if (status === 'success' || status === 'success_with_warnings') {
             completedWorkflowSteps.add(step);
         } else if (status === 'idle' || status === 'error' || status === 'partial') {
             completedWorkflowSteps.delete(step);
@@ -603,7 +603,7 @@ export function initYknManager() {
 
             if (status === 'error') {
                 el.classList.add('is-error');
-            } else if (status === 'partial') {
+            } else if (status === 'partial' || status === 'success_with_warnings') {
                 el.classList.add('is-partial');
             } else if (completedWorkflowSteps.has(num)) {
                 el.classList.add('is-completed');
@@ -1650,6 +1650,11 @@ export function initYknManager() {
                 showToast('Lütfen önce bir öğrenci arayın.', 'warning');
                 return;
             }
+            if (currentStudentData.yoksisReady !== true) {
+                showToast('Önce kabul kodunu YÖKSİS’te aratıp yeni öğrenci formunun açılmasını bekleyin.', 'warning');
+                addStatus('Bilgi aktarımı başlatılmadı: YÖKSİS için doğrulanmış yeni öğrenci formu yok.', 'warning');
+                return;
+            }
             if (!beginButtonAction('paste-yoksis', btnPasteYoksis, 30_000, () => {
                 setWorkflowStepStatus(4, 'error');
                 addStatus('YÖKSİS formu doldurma yanıt vermedi. Tekrar deneyebilirsiniz.', 'error');
@@ -1745,7 +1750,7 @@ export function initYknManager() {
                 const photoUploadFailed = photoRequired && response?.photoUploaded !== true;
                 const isPartial = response?.partial === true || missingFields.length > 0 || photoUploadFailed;
                 if (response?.success && !isPartial) {
-                    completedWorkflowSteps.add(4);
+                    setWorkflowStepStatus(4, 'success');
                     updateWorkflowUI(5);
                     oneClickWorkflow = {
                         ...oneClickWorkflow,
@@ -1759,7 +1764,19 @@ export function initYknManager() {
                 } else if (response?.success) {
                     const missingText = missingFields.length > 0 ? ` Eksik alanlar: ${missingFields.join(', ')}.` : '';
                     const photoText = photoUploadFailed ? ' Fotoğraf yüklenemedi.' : '';
-                    failOneClick('YOKSIS_FORM_PARTIAL', `YÖKSİS formu tamamen doldurulamadı.${missingText}${photoText} Formu kontrol edip Tek Tıkı tekrar deneyin.`);
+                    // En az bir alan gerçekten yazıldıysa aktarım başarısız değildir.
+                    // Eksikleri görünür uyarı olarak korurken akışı tamamla; önceki
+                    // davranış form dolu olduğu halde kullanıcıyı 4. adımda bırakıyordu.
+                    setWorkflowStepStatus(4, 'success_with_warnings');
+                    updateWorkflowUI(5);
+                    oneClickWorkflow = {
+                        ...oneClickWorkflow,
+                        stage: ONE_CLICK_STAGE.COMPLETED,
+                        status: 'completed_with_warnings'
+                    };
+                    setOneClickButtonMode('ready');
+                    addStatus(`Tek Tık tamamlandı, ancak kontrol gereken alanlar var.${missingText}${photoText}`, 'warning');
+                    showToast('YÖKSİS aktarımı tamamlandı; uyarılı alanları kontrol edin.', 'warning');
                 } else {
                     failOneClick('YOKSIS_FORM_FILL_FAILED', response?.error || response?.message || 'YÖKSİS formu doldurulamadı.');
                 }
@@ -1798,11 +1815,15 @@ export function initYknManager() {
                     const photoUploadFailed = hasPhoto && response.photoUploaded !== true;
                     const isPartial = response.partial === true || missingFields.length > 0 || photoUploadFailed;
                     if (isPartial) {
-                        setWorkflowStepStatus(4, 'partial');
+                        // Formda gerçek veri yazıldıysa akışı tamamla, ancak bu
+                        // adımı sarı/uyarılı göster. Böylece "başarılı" yanıt
+                        // geldiği halde kullanıcı 4. adımda takılı kalmaz.
+                        setWorkflowStepStatus(4, 'success_with_warnings');
+                        updateWorkflowUI(5);
                         const missingText = missingFields.length > 0 ? ` Eksik alanlar: ${missingFields.join(', ')}.` : '';
                         const photoText = photoUploadFailed ? ' Fotoğraf yüklenemedi.' : '';
-                        addStatus(`YÖKSİS formu kısmen dolduruldu.${missingText}${photoText} Kontrol edip tekrar deneyebilirsiniz.`, 'warning');
-                        showToast('YÖKSİS formu kısmen dolduruldu.', 'warning');
+                        addStatus(`YÖKSİS formu aktarıldı; kontrol gereken alanlar var.${missingText}${photoText}`, 'warning');
+                        showToast('YÖKSİS aktarımı tamamlandı; uyarılı alanları kontrol edin.', 'warning');
                     } else {
                         setWorkflowStepStatus(4, 'success');
                         updateWorkflowUI(5);

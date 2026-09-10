@@ -341,15 +341,24 @@ async function readApplyDocument(request) {
     });
 }
 
-async function getExistingYoksisTab() {
+async function resolveYoksisTab() {
     const tabs = await queryTabs({ url: ['*://yoksis.yok.gov.tr/*', '*://*.yok.gov.tr/*'] });
     if (!tabs || tabs.length === 0) {
         throw new Error('YÖKSİS sekmesi açık değil. Lütfen önce YÖKSİS sekmesini açın.');
     }
 
-    // Aktif / odaklı olan YÖKSİS sekmesini öncelikle tercih et
-    const yoksisTab = tabs.find(t => t.active) || tabs[0];
+    // Arama hangi YÖKSİS sekmesinde yapıldıysa doldurma da mutlaka o sekmede
+    // sürmelidir. Birden çok YÖKSİS sekmesi açıkken sadece "aktif" ya da
+    // query sonucundaki ilk sekmeyi kullanmak arama ve doldurmayı ayırıyordu.
+    const yoksisTab = tabs.find(t => t.id === yoksisTabId)
+        || tabs.find(t => t.active)
+        || tabs[0];
     yoksisTabId = yoksisTab.id;
+    return yoksisTab;
+}
+
+async function getExistingYoksisTab() {
+    const yoksisTab = await resolveYoksisTab();
     // Eklenti güncellendikten sonra açık sekmede eski content-script kalabilir.
     // Önce yeni bağlamı doğrula; gerekirse waitForContentScript yeniden enjekte eder.
     await waitForContentScript(yoksisTabId, 'yoksis');
@@ -357,9 +366,13 @@ async function getExistingYoksisTab() {
 }
 
 async function getActiveYoksisTab() {
-    const tabs = await queryTabs({ url: ['*://yoksis.yok.gov.tr/*', '*://*.yok.gov.tr/*'] });
-    let yoksisTab = tabs.find(t => t.active) || tabs[0];
-    if (!yoksisTab) yoksisTab = await createTab({ url: YOKSIS_URL, active: true });
+    let yoksisTab;
+    try {
+        yoksisTab = await resolveYoksisTab();
+    } catch (_) {
+        yoksisTab = await createTab({ url: YOKSIS_URL, active: true });
+        yoksisTabId = yoksisTab.id;
+    }
 
     yoksisTabId = yoksisTab.id;
     await updateTab(yoksisTabId, { active: true });
@@ -1518,14 +1531,32 @@ async function searchYoksisFromContent(tabId, kabulId, requestId) {
     }
 }
 
-async function waitForYoksisFormReady(tabId, requestId) {
+async function getYoksisFormState(tabId, requestId) {
+    try {
+        await waitForContentScript(tabId, 'yoksis');
+        const state = await withTimeout(
+            sendTabMessage(tabId, { action: 'GET_YOKSIS_FORM_STATE', requestId }),
+            3_000,
+            'YÖKSİS form durumu okunamadı'
+        );
+        return state?.success ? state : null;
+    } catch (error) {
+        console.warn('[YKN] YÖKSİS form durumu okunamadı:', error);
+        return null;
+    }
+}
+
+async function waitForYoksisFormReady(tabId, requestId, options = {}) {
     try {
         await waitForContentScript(tabId, 'yoksis');
         const readiness = await withTimeout(
             sendTabMessage(tabId, {
                 action: 'WAIT_YOKSIS_FORM',
                 timeoutMs: 10000,
-                requestId
+                requestId,
+                afterFingerprint: options.afterFingerprint || '',
+                afterDomRevision: options.afterDomRevision,
+                requireFreshResult: options.requireFreshResult === true
             }),
             11_000,
             'YÖKSİS formu hazır olma zaman aşımı'
@@ -1562,20 +1593,46 @@ async function transferToYoksis(request) {
         // Content-script eski sürümde yalnızca inputu bulup Enter'a basabiliyor
         // veya butonun ZK görsel parçasını kaçırabiliyor. Buton doğrulanmadıysa
         // MAIN-world taramasını kontrollü tek bir fallback olarak kullan.
-        if (response?.searchTriggered !== true || response?.buttonFound !== true) {
+        if (response?.searchTriggered !== true) {
+            // Content script arama butonunu bulamadıysa MAIN-world fallback'inden
+            // hemen önce güncel form durumunu al. Bu baseline, eski öğrenci
+            // formunun fallback sonunda "hazır" sayılmasını engeller.
+            const stateBeforeMainSearch = await getYoksisFormState(yoksisTab.id, request.requestId);
+            if (!stateBeforeMainSearch) {
+                throw new Error('YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin.');
+            }
             const mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
             mainTriggered = Boolean(mainResults?.some(r => r.result?.searchTriggered === true));
+            if (mainTriggered) {
+                const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, {
+                    afterFingerprint: stateBeforeMainSearch.fingerprint,
+                    afterDomRevision: stateBeforeMainSearch.domRevision,
+                    requireFreshResult: true
+                });
+                if (!formReady) {
+                    throw new Error('YÖKSİS arama komutu gönderildi ancak yeni öğrenci formu doğrulanmadı. Önceki form korunarak işlem durduruldu.');
+                }
+                return {
+                    success: true,
+                    transferred: true,
+                    searchTriggered: true,
+                    formReady: true,
+                    message: 'Kabul mektup kodu YÖKSİS’e aktarıldı ve yeni öğrenci formu doğrulandı.'
+                };
+            }
         }
 
-        const searchTriggered = response?.searchTriggered === true || response?.success === true || mainTriggered;
+        const searchTriggered = response?.searchTriggered === true || mainTriggered;
         if (!searchTriggered) {
             throw new Error('YÖKSİS kabul mektubu araması başlatılamadı. Öğrenci başvuru/kayıt ekranını açık tutup tekrar deneyin.');
         }
 
-        const formReady = Boolean(response?.formReady)
-            || await waitForYoksisFormReady(yoksisTab.id, request.requestId);
+        // Content script bu noktada formun arama tıklamasından sonra yenilendiğini
+        // doğrulamış olmalıdır. "Tıklandı" yanıtını başarıya çevirmek, eski formu
+        // yeni kayıt sanan asıl hataydı.
+        const formReady = response?.formReady === true;
         if (!formReady) {
-            throw new Error('Kabul kodu gönderildi ancak YÖKSİS öğrenci formu zamanında açılmadı. Aynı aramayı otomatik olarak tekrar göndermeden işlem durduruldu.');
+            throw new Error('Kabul kodu gönderildi ancak yeni YÖKSİS öğrenci formu doğrulanmadı. Aynı arama otomatik tekrar gönderilmedi.');
         }
 
         return {
@@ -1778,6 +1835,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         else if (request.action === 'FILL_YOKSIS_FORM') {
             const studentData = request.data;
             (async () => {
+                if (studentData?.yoksisReady !== true) {
+                    throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
+                }
                 const yoksisTab = await getActiveYoksisTab();
                 const response = await runYoksisOperation(yoksisTab.id, 'fill', request.requestId, async () => {
                     await new Promise((resolve, reject) => {

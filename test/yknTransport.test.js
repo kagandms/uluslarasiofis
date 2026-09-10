@@ -91,6 +91,18 @@ test('YÖKSİS search and fill are single-flight operations, not all-frame retri
     assert.match(content, /Native click tek gerçek tıklama olsun/);
 });
 
+test('YÖKSİS fill is blocked until a fresh acceptance-code search has opened its form', { skip: !hasLocalExtensionCheckout }, async () => {
+    const background = await readExtensionFile('background.js');
+    const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+    const content = await readExtensionFile('content.js');
+
+    assert.match(manager, /currentStudentData\.yoksisReady !== true/);
+    assert.match(background, /studentData\?\.yoksisReady !== true/);
+    assert.match(content, /requireFreshResult: true/);
+    assert.match(content, /domChangedAfterSearch/);
+    assert.match(background, /function resolveYoksisTab/);
+});
+
 test('YKN waits for Apply document discovery before acceptance-code automation', async () => {
     const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
 
