@@ -176,6 +176,27 @@ test('extracts passport dates with spaces around slashes and two-digit year', ()
     assert.deepEqual(result, { issueDate: '2022-12-16', expiryDate: '2027-12-15' });
 });
 
+test('recovers passport dates when OCR confuses letters with digits', () => {
+    const result = extractPassportDatesFromText(
+        'Date of lssue: 14.0G.2O24 Date of exp1ry: 13.0G.2O34'
+    );
+
+    assert.deepEqual(result, { issueDate: '2024-06-14', expiryDate: '2034-06-13' });
+});
+
+test('recovers passport dates when OCR separates every digit', () => {
+    const result = extractPassportDatesFromText(
+        'Date of issue: 1 4 . 0 6 . 2 0 2 4 Date of expiry: 1 3 . 0 6 . 2 0 3 4'
+    );
+
+    assert.deepEqual(result, { issueDate: '2024-06-14', expiryDate: '2034-06-13' });
+});
+
+test('recovers YÖKSİS ID when OCR drops the hyphens', () => {
+    assert.equal(extractYoksisIdFromText('YOKSIS ID: 821 EC2 34'), '821-EC2-34');
+    assert.equal(isValidYoksisId('821 EC2 34'), true);
+});
+
 test('falls back to candidate pair (earliest=issue, latest=expiry) when labels are missing or degraded', () => {
     const degradedText = 'PASSPORT DOCUMENT 123456\n16 DEC 2022\n15 DEC 2027';
     const result = extractPassportDatesFromText(degradedText);
@@ -273,5 +294,3 @@ test('extracts place of birth with Central Asian and stopWords cleanly', () => {
     const textUz = "O'ZBEKISTON RESPUBLIKASI Tug'ilgan joyi: TOSHKENT Berilgan sanasi: 01.06.2023";
     assert.equal(extractPassportPlaceOfBirth(textUz), 'TOSHKENT');
 });
-
-

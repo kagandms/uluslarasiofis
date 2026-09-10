@@ -5,17 +5,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusMessage = document.getElementById('status-message');
     const kabulIdInput = document.getElementById('kabul-id-input');
 
-    // Kabul ID Otomatik Formatlama (XXX-XXX-XX)
+    // Kabul ID'yi mevcut grup yapısını koruyarak biçimlendir.
+    // Önceki sabit XXX-XXX-XX maskesi AB-123-CD gibi geçerli kodları bozuyordu.
     kabulIdInput.addEventListener('input', function (e) {
-        // Sadece harf ve rakamları tut, büyük harfe çevir
-        let val = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-        
-        let formatted = '';
-        if (val.length > 0) formatted += val.substring(0, 3);
-        if (val.length > 3) formatted += '-' + val.substring(3, 6);
-        if (val.length > 6) formatted += '-' + val.substring(6, 8);
-        
-        e.target.value = formatted;
+        const raw = e.target.value.toUpperCase().replace(/[–—−]/g, '-');
+        const sanitized = raw.replace(/[^A-Z0-9\-\s]/g, '');
+        if (sanitized.includes('-')) {
+            const endsWithSeparator = /-\s*$/.test(sanitized);
+            const groups = sanitized.split(/\s*-\s*/).slice(0, 3)
+                .map((part) => part.replace(/\s+/g, '').replace(/[^A-Z0-9]/g, ''));
+            e.target.value = groups.join('-') + (endsWithSeparator ? '-' : '');
+            return;
+        }
+
+        // Tired without separators: the common YÖKSİS 3-3-2 form is
+        // inferred only when its length is unambiguous; other valid group
+        // lengths are left intact instead of being corrupted.
+        const compact = sanitized.replace(/\s+/g, '');
+        e.target.value = compact.length === 8
+            ? `${compact.slice(0, 3)}-${compact.slice(3, 6)}-${compact.slice(6)}`
+            : compact;
     });
 
     function showStatus(message, duration = 3000) {

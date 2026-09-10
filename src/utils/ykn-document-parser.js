@@ -35,9 +35,40 @@ const MONTH_PATTERN = Object.keys(MONTH_ALIASES)
 
 const DATE_PATTERN = `(?:(?:19\\d{2}|20\\d{2})\\s*[./\\-]\\s*\\d{1,2}\\s*[./\\-]\\s*\\d{1,2}|\\d{1,2}\\s*[./\\-]\\s*\\d{1,2}\\s*[./\\-]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}\\s*[./\\-\\s]\\s*(?:${MONTH_PATTERN})\\.?\\s*[./\\-\\s]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|(?:${MONTH_PATTERN})\\.?\\s*[./\\-\\s]\\s*\\d{1,2}\\s*,?\\s*[./\\-\\s]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}(?:${MONTH_PATTERN})(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}\\s+\\d{1,2}\\s+(?:19\\d{2}|20\\d{2}|\\d{2})|\\b(?:19\\d{2}|20\\d{2})(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\b|\\b(?:0[1-9]|[12]\\d|3[01])(?:0[1-9]|1[0-2])(?:19\\d{2}|20\\d{2})\\b)`;
 
+const OCR_DATE_CHAR = '[0-9OoОоIiİıLl|ZzSsBbGg]';
+
+function extractDateCandidatesFromText(text) {
+    const source = normalizeDateText(text);
+    const candidates = Array.from(source.matchAll(new RegExp(DATE_PATTERN, 'ig')))
+        .map((match) => match[0]);
+
+    // OCR bazen nokta/slash/tire çevresindeki her rakamı ayrı kelime yapar:
+    // "1 4 . 0 6 . 2 0 2 4". Ayırıcıları koruyarak bu biçimi birleştir.
+    const spacedDatePattern = new RegExp(
+        `\\b(${OCR_DATE_CHAR}(?:\\s*${OCR_DATE_CHAR}){0,1})\\s*[./\\-]\\s*` +
+        `(${OCR_DATE_CHAR}(?:\\s*${OCR_DATE_CHAR}){0,1})\\s*[./\\-]\\s*` +
+        `(${OCR_DATE_CHAR}(?:\\s*${OCR_DATE_CHAR}){1,3})\\b`,
+        'ig'
+    );
+    for (const match of source.matchAll(spacedDatePattern)) {
+        candidates.push([match[1], match[2], match[3]].map((part) => part.replace(/\\s+/g, '')).join('.'));
+    }
+
+    // Ayırıcılar da kaybolduğunda YYYYMMDD/DDMMYYYY biçiminin boşluklu hali.
+    const spacedCompactPattern = new RegExp(
+        `\\b((?:${OCR_DATE_CHAR}\\s*){8})\\b`,
+        'ig'
+    );
+    for (const match of source.matchAll(spacedCompactPattern)) {
+        candidates.push(match[1].replace(/\\s+/g, ''));
+    }
+
+    return candidates;
+}
+
 const ISSUE_DATE_LABELS = [
     // English
-    'date of issue', 'date of issuance', 'issue date', 'date issued', 'dateofissue', 'passport issue date', 'issued on', 'date of delivery', 'issuing date', 'given on',
+    'date of issue', 'date of lssue', 'date 0f issue', 'date of issuance', 'issue date', 'date issued', 'dateofissue', 'passport issue date', 'issued on', 'date of delivery', 'issuing date', 'given on',
     // Turkish
     'belge düzenleme tarihi', 'düzenleme tarihi', 'belge düzenlenme tarihi', 'düzenlenme tarihi', 'belgenin düzenlenme tarihi', 'belgenin düzenleme tarihi', 'pasaport düzenleme tarihi', 'pasaport düzenlenme tarihi', 'pasaport veriliş tarihi', 'belge veriliş tarihi', 'veriliş tarihi', 'tanzim tarihi', 'verildiği tarih',
     // Uzbek
@@ -60,7 +91,7 @@ const ISSUE_DATE_LABELS = [
 
 const EXPIRY_DATE_LABELS = [
     // English
-    'date of expiry', 'expiry date', 'date of expiration', 'expiration date', 'passport expiry date', 'date valid until', 'valid until', 'expires on', 'valid to', 'valid thru', 'valid through', 'date of expiry / date',
+    'date of expiry', 'date of exp1ry', 'date of expirv', 'date of expir y', 'expiry date', 'date of expiration', 'expiration date', 'passport expiry date', 'date valid until', 'valid until', 'valid untill', 'valid unt1l', 'expires on', 'valid to', 'valid thru', 'valid through', 'date of expiry / date',
     // Turkish
     'belge geçerlilik tarihi', 'geçerlilik tarihi', 'pasaport geçerlilik tarihi', 'belgenin geçerlilik tarihi', 'son kullanma tarihi', 'son geçerlilik tarihi', 'bitiş tarihi', 'gecerlilik suresi',
     // Uzbek
@@ -107,6 +138,18 @@ function normalizeYear(value) {
     return year;
 }
 
+// Görsel pasaport OCR'ında sık görülen rakam/harf karışıklıklarını yalnızca
+// sayısal tarih adaylarında uygula. Böylece "MAR" gibi ay adları bozulmaz.
+function normalizeOcrNumericText(text) {
+    return String(text || '')
+        .replace(/[oо]/gi, '0')
+        .replace(/[iıl|]/gi, '1')
+        .replace(/[z]/gi, '2')
+        .replace(/[s]/gi, '5')
+        .replace(/[b]/gi, '8')
+        .replace(/[g]/gi, '6');
+}
+
 function createDateValue(year, month, day) {
     if (year < 1920 || year > 2045 || month < 1 || month > 12 || day < 1 || day > 31) return '';
     const date = new Date(Date.UTC(year, month - 1, day));
@@ -150,8 +193,10 @@ export function parseDateValue(value) {
         if (month) return createDateValue(year, month, day);
     }
 
-    // 4. Three numeric parts separated by ., /, -, or space
-    const parts = normalized.split(/[./\-\s]+/).filter(Boolean);
+    // 4. Three numeric parts separated by ., /, -, or space. OCR'da O/0,
+    // I/1, Z/2, S/5 ve B/8 karışıklıkları burada düzeltilir.
+    const numericNormalized = normalizeOcrNumericText(normalized);
+    const parts = numericNormalized.split(/[./\-\s]+/).filter(Boolean);
     if (parts.length === 3 && parts.every((part) => /^\d+$/.test(part))) {
         const [first, second, third] = parts;
         const isYearFirst = first.length === 4 || Number(first) > 31;
@@ -162,7 +207,7 @@ export function parseDateValue(value) {
     }
 
     // 5. Compact 8-digit (YYYYMMDD or DDMMYYYY)
-    const compact = normalized.replace(/[^0-9]/g, '');
+    const compact = numericNormalized.replace(/[^0-9]/g, '');
     if (compact.length === 8) {
         const firstFour = Number(compact.slice(0, 4));
         const isYearFirst = firstFour >= 1900 && firstFour <= 2100;
@@ -188,6 +233,7 @@ function findLabeledDate(text, labels, options = {}) {
     const maxYear = options.maxYear || 2045;
     const birthDate = options.birthDate || '';
     const normalizedText = normalizeDateText(text);
+    const ocrNormalizedText = normalizeOcrNumericText(normalizedText);
 
     for (const label of labels) {
         const labelPattern = normalizeDateText(label)
@@ -199,27 +245,31 @@ function findLabeledDate(text, labels, options = {}) {
 
         // 1. Search forward (after label)
         const start = (labelMatch.index || 0) + labelMatch[0].length;
-        const dateWindowAfter = normalizedText.slice(start, start + 350);
-        const dateMatchesAfter = Array.from(dateWindowAfter.matchAll(new RegExp(DATE_PATTERN, 'ig')));
-        for (const match of dateMatchesAfter) {
-            const parsed = parseDateValue(match[0]);
-            if (parsed) {
-                if (birthDate && parsed === birthDate) continue;
-                if (parsed < `${minYear}-01-01` || parsed > `${maxYear}-12-31`) continue;
-                return parsed;
+        for (const sourceText of [normalizedText, ocrNormalizedText]) {
+            const dateWindowAfter = sourceText.slice(start, start + 350);
+            const dateMatchesAfter = extractDateCandidatesFromText(dateWindowAfter);
+            for (const candidate of dateMatchesAfter) {
+                const parsed = parseDateValue(candidate);
+                if (parsed) {
+                    if (birthDate && parsed === birthDate) continue;
+                    if (parsed < `${minYear}-01-01` || parsed > `${maxYear}-12-31`) continue;
+                    return parsed;
+                }
             }
         }
 
         // 2. Search backward (before label, for table cells / RTL layouts)
         const preStart = Math.max(0, (labelMatch.index || 0) - 150);
-        const dateWindowBefore = normalizedText.slice(preStart, labelMatch.index || 0);
-        const dateMatchesBefore = Array.from(dateWindowBefore.matchAll(new RegExp(DATE_PATTERN, 'ig')));
-        for (let i = dateMatchesBefore.length - 1; i >= 0; i--) {
-            const parsed = parseDateValue(dateMatchesBefore[i][0]);
-            if (parsed) {
-                if (birthDate && parsed === birthDate) continue;
-                if (parsed < `${minYear}-01-01` || parsed > `${maxYear}-12-31`) continue;
-                return parsed;
+        for (const sourceText of [normalizedText, ocrNormalizedText]) {
+            const dateWindowBefore = sourceText.slice(preStart, labelMatch.index || 0);
+            const dateMatchesBefore = extractDateCandidatesFromText(dateWindowBefore);
+            for (let i = dateMatchesBefore.length - 1; i >= 0; i--) {
+                const parsed = parseDateValue(dateMatchesBefore[i]);
+                if (parsed) {
+                    if (birthDate && parsed === birthDate) continue;
+                    if (parsed < `${minYear}-01-01` || parsed > `${maxYear}-12-31`) continue;
+                    return parsed;
+                }
             }
         }
     }
@@ -317,16 +367,18 @@ export function extractDatesFromMrz(text, options = {}) {
 
 function extractAllCandidateDates(text) {
     const normalizedText = normalizeDateText(text);
-    const dateRegex = new RegExp(DATE_PATTERN, 'ig');
-    const matches = Array.from(normalizedText.matchAll(dateRegex));
+    const sources = [normalizedText, normalizeOcrNumericText(normalizedText)];
     const dates = [];
     const seen = new Set();
 
-    for (const match of matches) {
-        const parsed = parseDateValue(match[0]);
-        if (parsed && !seen.has(parsed)) {
-            seen.add(parsed);
-            dates.push(parsed);
+    for (const sourceText of sources) {
+        const matches = extractDateCandidatesFromText(sourceText);
+        for (const candidate of matches) {
+            const parsed = parseDateValue(candidate);
+            if (parsed && !seen.has(parsed)) {
+                seen.add(parsed);
+                dates.push(parsed);
+            }
         }
     }
     return dates.sort();
@@ -334,7 +386,10 @@ function extractAllCandidateDates(text) {
 
 export function isValidYoksisId(code) {
     if (!code || typeof code !== 'string') return false;
-    const clean = code.trim().toUpperCase().replace(/[–—]/g, '-');
+    const clean = code.trim().toUpperCase()
+        .replace(/[–—−]/g, '-')
+        .replace(/\s*-\s*/g, '-')
+        .replace(/\s+/g, '-');
     if (clean.includes('SVG') || clean.includes('ICON') || clean.includes('BTN') || clean.includes('BADGE')) return false;
     if (clean.startsWith('202') || clean.startsWith('19')) return false;
     if (!/^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/.test(clean)) return false;
@@ -347,7 +402,7 @@ export function extractYoksisIdFromText(text) {
         /(?:YÖKS[İI]S|YOKSIS|KABUL\s*MEKTUB[U]?|ACCEPTANCE\s*LETTER|VERIFICATION)\s*(?:ID|KODU|NO|CODE)?\s*[:#\.\-–—]?\s*([A-Z0-9]{2,4}\s*(?:[-–—]\s*[A-Z0-9]{2,4}){1,4})/i
     );
     if (labeledMatch) {
-        const id = labeledMatch[1].replace(/\s+/g, '').replace(/[–—]/g, '-').toUpperCase();
+        const id = labeledMatch[1].replace(/\s*[-–—−]\s*/g, '-').replace(/\s+/g, '-').toUpperCase();
         if (isValidYoksisId(id)) {
             return id;
         }
@@ -357,15 +412,16 @@ export function extractYoksisIdFromText(text) {
         /(?:YÖKS[İI]S|YOKSIS)[^A-Z0-9]{1,30}?([A-Z0-9]{2,4}\s*[-–—]\s*[A-Z0-9]{2,4}\s*[-–—]\s*[A-Z0-9]{2,4})/i
     );
     if (nearYoksisMatch) {
-        const id = nearYoksisMatch[1].replace(/\s+/g, '').replace(/[–—]/g, '-').toUpperCase();
+        const id = nearYoksisMatch[1].replace(/\s*[-–—−]\s*/g, '-').replace(/\s+/g, '-').toUpperCase();
         if (isValidYoksisId(id)) {
             return id;
         }
     }
 
-    const candidates = normalizedText.match(/\b[A-Z0-9]{2,4}(?:\s*[-–—]\s*[A-Z0-9]{2,4}){2}\b/gi) || [];
+    // PDF/OCR bazen tireleri tamamen kaybeder: "821 EC2 34".
+    const candidates = normalizedText.match(/\b[A-Z0-9]{2,4}(?:(?:\s*[-–—−]\s*|\s+)[A-Z0-9]{2,4}){2}\b/gi) || [];
     for (const candidate of candidates) {
-        const cleaned = candidate.replace(/\s+/g, '').replace(/[–—]/g, '-').toUpperCase();
+        const cleaned = candidate.replace(/\s*[-–—−]\s*/g, '-').replace(/\s+/g, '-').toUpperCase();
         if (isValidYoksisId(cleaned)) {
             return cleaned;
         }

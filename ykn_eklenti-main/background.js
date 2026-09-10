@@ -439,12 +439,12 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         }
 
                         // 2. ÖNCELİK: Buton bulma ("Kabul Mektup Id İle Ara" veya içinde "kabul" geçen buton)
-                        const allClickables = doc.querySelectorAll('button, .z-button, a, input[type="button"], input[type="submit"], [role="button"], span.z-button, table.z-button, span.z-button-cm');
+                        const allClickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"]');
                         for (let i = 0; i < allClickables.length; i++) {
                             const c = allClickables[i];
                             const cTxt = norm(c.innerText || c.textContent || c.value || '');
                             if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
-                                dBtn = c.closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || c;
+                                dBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || c;
                                 break;
                             }
                         }
@@ -489,16 +489,16 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                             if (!dInp && bInps.length > 0) dInp = bInps[0];
                                         }
                                         if (!dBtn) {
-                                            const bBtns = box.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
+                                            const bBtns = box.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
                                             if (bBtns.length > 0) {
                                                 for (let j = 0; j < bBtns.length; j++) {
                                                     const bTxt = norm(bBtns[j].innerText || bBtns[j].textContent || bBtns[j].value || '');
                                                     if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                                                        dBtn = bBtns[j].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || bBtns[j];
+                                                        dBtn = bBtns[j].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[j];
                                                         break;
                                                     }
                                                 }
-                                                if (!dBtn) dBtn = bBtns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || bBtns[0];
+                                                if (!dBtn) dBtn = bBtns[0].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[0];
                                             }
                                         }
                                     }
@@ -527,17 +527,17 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         if (dInp && !dBtn) {
                             let parent = dInp.parentElement;
                             while (parent && parent !== doc.body) {
-                                const btns = parent.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
+                                const btns = parent.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
                                 for (let k = 0; k < btns.length; k++) {
                                     const bTxt = norm(btns[k].innerText || btns[k].textContent || btns[k].value || '');
                                     if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                                        dBtn = btns[k].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[k];
+                                        dBtn = btns[k].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[k];
                                         break;
                                     }
                                 }
                                 if (dBtn) break;
                                 if (btns.length > 0) {
-                                    dBtn = btns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[0];
+                                    dBtn = btns[0].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[0];
                                     break;
                                 }
                                 parent = parent.parentElement;
@@ -1541,8 +1541,10 @@ async function waitForYoksisFormReady(tabId, requestId) {
 async function transferToYoksis(request) {
     const yoksisTab = await getExistingYoksisTab();
     const kabulId = String(request.data?.yoksisId || request.data?.kabulId || request.kabulId || '')
-        .replace(/[–—]/g, '-')
-        .replace(/\s+/g, '')
+        .replace(/[–—−]/g, '-')
+        .replace(/\s*-\s*/g, '-')
+        // OCR tireyi kaybettiyse "821 EC2 34" biçimini kanonik hale getir.
+        .replace(/\s+/g, '-')
         .trim()
         .toUpperCase();
     if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
@@ -1557,7 +1559,10 @@ async function transferToYoksis(request) {
         // MAIN world yalnızca bu yol arama kontrolünü hiç bulamazsa fallback'tir.
         let response = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId);
         let mainTriggered = false;
-        if (response?.searchTriggered !== true && response?.success !== true) {
+        // Content-script eski sürümde yalnızca inputu bulup Enter'a basabiliyor
+        // veya butonun ZK görsel parçasını kaçırabiliyor. Buton doğrulanmadıysa
+        // MAIN-world taramasını kontrollü tek bir fallback olarak kullan.
+        if (response?.searchTriggered !== true || response?.buttonFound !== true) {
             const mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
             mainTriggered = Boolean(mainResults?.some(r => r.result?.searchTriggered === true));
         }

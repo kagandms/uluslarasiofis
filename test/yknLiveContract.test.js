@@ -219,6 +219,37 @@ test('YÖKSİS search handles ZK-labelled controls and confirms delayed form rea
     }
 });
 
+test('YÖKSİS search uses the ZK button cell beside the acceptance input once', async () => {
+    const harness = createContentHarness(`
+        <table>
+            <tr>
+                <td>Kabul Mektup Id</td>
+                <td><input class="z-textbox" title="Kabul Mektup Id veya YÖKSİS ID"></td>
+                <td class="z-button-cm"><table class="z-button"><tbody><tr><td><span>Kabul Mektup Id ile Ara</span></td></tr></tbody></table></td>
+            </tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    let clickCount = 0;
+    const button = harness.dom.window.document.querySelector('table.z-button');
+    button.addEventListener('click', () => { clickCount += 1; });
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: '821 EC2 34',
+            requestId: 'workflow-zk-button'
+        });
+
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+        assert.equal(response.buttonFound, true);
+        assert.equal(harness.dom.window.document.querySelector('input.z-textbox').value, '821-EC2-34');
+        assert.equal(clickCount, 1);
+    } finally {
+        harness.close();
+    }
+});
+
 test('YÖKSİS form readiness waits for a form that appears after the search response', async () => {
     const harness = createContentHarness('<div id="loading">Yükleniyor</div>', 'https://yoksis.yok.gov.tr/student');
     const formTimer = setTimeout(() => {

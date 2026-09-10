@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.28';
+const CONTENT_SCRIPT_VERSION = '1.2.29';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -54,7 +54,7 @@ function sendApplyEvent(action, requestId, payload = {}) {
     }
 }
 
-async function simulateInput(element, value) {
+async function simulateInput(element, value, options = {}) {
     if (!element || value === undefined || value === null) return false;
     const win = element.ownerDocument?.defaultView || window;
     
@@ -85,8 +85,13 @@ async function simulateInput(element, value) {
     
     element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
     element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-    element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, composed: true, key: 'Enter', keyCode: 13, view: win }));
-    element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, composed: true, key: 'Enter', keyCode: 13, view: win }));
+    // Metin alanlarının tamamında Enter göndermek özellikle ZK formlarında
+    // istenmeyen onOK/postback üretir. Arama gibi Enter gerektiren çağrılar
+    // bunu açıkça options.pressEnter ile istemelidir.
+    if (options.pressEnter === true) {
+        element.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, composed: true, key: 'Enter', keyCode: 13, view: win }));
+        element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, composed: true, key: 'Enter', keyCode: 13, view: win }));
+    }
     
     let zkChangeSent = false;
     if (win.zk && win.zk.Widget) {
@@ -123,25 +128,56 @@ async function simulateInput(element, value) {
 
 async function simulateDateboxInput(element, formattedDate) {
     if (!element || !formattedDate) return false;
+    const win = element.ownerDocument?.defaultView || window;
     try {
         element.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     } catch (_) {}
 
-    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    try { element.focus(); } catch (_) {}
+
+    const nativeSetter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, 'value')?.set
+        || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
     if (nativeSetter) {
         nativeSetter.call(element, formattedDate);
     } else {
         element.value = formattedDate;
     }
 
+    element.setAttribute('value', formattedDate);
     element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+    // YÖKSİS tarih kutuları ZK widget'ıdır; yalnızca DOM value yazmak
+    // sunucu tarafındaki değeri güncellemez.
+    try {
+        if (win.zk && win.zk.Widget) {
+            const widget = win.zk.Widget.$(element);
+            if (widget) {
+                widget._lastValue = formattedDate;
+                widget._defRawVal = formattedDate;
+                widget._value = formattedDate;
+                widget._shallSubmit = true;
+                if (typeof widget.setText === 'function') widget.setText(formattedDate);
+                if (typeof widget.fire === 'function') {
+                    widget.fire('onChange', {
+                        rawValue: formattedDate,
+                        value: formattedDate,
+                        start: formattedDate.length
+                    }, { toServer: true });
+                }
+            }
+        }
+    } catch (_) {}
 
     element.classList.remove('z-datebox-invalid');
     const parentBox = element.closest('.z-datebox');
     if (parentBox) {
         parentBox.classList.remove('z-datebox-invalid');
     }
-    return true;
+    element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+    element.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
+    try { element.blur(); } catch (_) {}
+    return String(element.value || '') === String(formattedDate);
 }
 
 // ZK Framework için Event Dispatcher (Select/Dropdown'lar için)
@@ -226,130 +262,131 @@ function normalizeYoksisText(str) {
         .replace(/\s+/g, '');
 }
 
+function getYoksisClickableSelector() {
+    // ZK sürümleri butonu bazen table, bazen td/span olarak üretir.
+    return 'button, a, input[type="button"], input[type="submit"], [role="button"], .z-button, [class*="z-button"]';
+}
+
+function getYoksisClickableText(element) {
+    return normalizeYoksisText(
+        element?.innerText
+        || element?.textContent
+        || element?.value
+        || element?.getAttribute?.('aria-label')
+        || element?.getAttribute?.('title')
+        || ''
+    );
+}
+
+function getYoksisClickableRoot(element) {
+    if (!element) return null;
+    // ZK'nin görsel parçası td.z-button-cm/td.z-button-cl olsa da gerçek
+    // click listener çoğunlukla üst table.z-button üzerindedir.
+    const nestedTableRoot = element.querySelector?.('table.z-button');
+    if (nestedTableRoot) return nestedTableRoot;
+    const tableRoot = element.closest('table.z-button');
+    if (tableRoot) return tableRoot;
+    return element.closest(`button, a, [role="button"], .z-button, [class*="z-button"]`) || element;
+}
+
+function findYoksisButtonIn(container) {
+    if (!container) return null;
+    const clickables = container.querySelectorAll(getYoksisClickableSelector());
+    let best = null;
+    let bestScore = -1;
+    for (const candidate of clickables) {
+        const text = getYoksisClickableText(candidate);
+        let score = 0;
+        if (text.includes('kabul')) score += 100;
+        if (text.includes('ara')) score += 80;
+        if (text.includes('sorgula')) score += 70;
+        if (text.includes('getir') || text.includes('bul')) score += 20;
+        if (score > bestScore) {
+            best = getYoksisClickableRoot(candidate);
+            bestScore = score;
+        }
+    }
+    return bestScore > 0 ? best : null;
+}
+
+function isYoksisTextInput(element) {
+    if (!element) return false;
+    const type = (element.getAttribute('type') || '').toLowerCase();
+    return type !== 'button' && type !== 'submit' && type !== 'hidden'
+        && type !== 'checkbox' && type !== 'radio' && type !== 'file';
+}
+
 function findYoksisKabulPair() {
     const allDocs = getAllDocs(document);
+    const inputSelector = 'input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])';
+
     for (const doc of allDocs) {
-        let inp = null;
-        let btn = null;
+        let idInput = null;
 
-        // 1. ÖNCELİK: Placeholder / Title / Name / Id / Value üzerinden doğrudan Input bulma
-        const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-        for (let i = 0; i < allInputs.length; i++) {
-            const it = allInputs[i];
-            const ph = normalizeYoksisText((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.id || ''));
-            if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum')) {
-                inp = it;
-                break;
-            }
-        }
+        // Önce gerçek input metadata'sına bak. Ekran görüntüsündeki ZK alanı
+        // dinamik bir id taşısa da title/placeholder içinde "Kabul Mektup Id"
+        // sabit kalıyor.
+        const inputCandidates = Array.from(doc.querySelectorAll(inputSelector))
+            .map((input) => {
+                const metadata = normalizeYoksisText([
+                    input.placeholder,
+                    input.getAttribute('placeholder'),
+                    input.title,
+                    input.name,
+                    input.id
+                ].join(' '));
+                if (!metadata.includes('kabul') || metadata.includes('pasaport') || metadata.includes('tc') || metadata.includes('dogum')) return null;
+                let score = 10;
+                if (metadata.includes('mektup')) score += 30;
+                if (metadata.includes('id')) score += 20;
+                return { input, score };
+            })
+            .filter(Boolean)
+            .sort((left, right) => right.score - left.score);
+        idInput = inputCandidates[0]?.input || null;
 
-        // 2. ÖNCELİK: Buton bulma ("Kabul Mektup Id İle Ara" veya içinde "kabul" geçen buton)
-        const allClickables = doc.querySelectorAll('button, .z-button, a, input[type="button"], input[type="submit"], [role="button"], span.z-button, table.z-button, span.z-button-cm');
-        for (let i = 0; i < allClickables.length; i++) {
-            const c = allClickables[i];
-            const cTxt = normalizeYoksisText(c.innerText || c.textContent || c.value || '');
-            if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
-                btn = c.closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || c;
-                break;
-            }
-        }
-
-        // 3. ÖNCELİK: Etiket ("Kabul Mektup Id" veya "Kabul Mektup ID ile Sorgula") üzerinden bulma
-        if (!inp || !btn) {
-            const textNodes = doc.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption, .z-caption, .z-groupbox-header');
-            for (let i = 0; i < textNodes.length; i++) {
-                const node = textNodes[i];
-                if (node.children.length > 3) continue;
-                const txt = normalizeYoksisText(node.innerText || node.textContent || '');
-                if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup')) && !txt.includes('kabultarih')) {
-                    const td = node.closest('td');
-                    if (td && td.nextElementSibling && !inp) {
-                        inp = td.nextElementSibling.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                    }
-
-                    let box = node.closest('.z-groupbox, .z-panel, fieldset, table, form, div.z-window');
-                    if (!box) {
-                        let p = node.parentElement;
-                        while (p && p !== doc.body) {
-                            if (p.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"])')) {
-                                box = p;
-                                break;
-                            }
-                            p = p.parentElement;
-                        }
-                    }
-
-                    if (box) {
-                        if (!inp) {
-                            const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                            for (let j = 0; j < bInps.length; j++) {
-                                const bPh = normalizeYoksisText((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
-                                if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum')) {
-                                    inp = bInps[j];
-                                    break;
-                                }
-                            }
-                            if (!inp && bInps.length > 0) inp = bInps[0];
-                        }
-                        if (!btn) {
-                            const bBtns = box.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
-                            if (bBtns.length > 0) {
-                                for (let j = 0; j < bBtns.length; j++) {
-                                    const bTxt = normalizeYoksisText(bBtns[j].innerText || bBtns[j].textContent || bBtns[j].value || '');
-                                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                                        btn = bBtns[j].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || bBtns[j];
-                                        break;
-                                    }
-                                }
-                                if (!btn) btn = bBtns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || bBtns[0];
-                            }
-                        }
-                    }
-                    if (inp && btn) break;
-                }
-            }
-        }
-
-        // 4. Biri bulunup diğeri bulunamadıysa ebeveyn ağacında yukarı yürüyerek tamamla
-        if (btn && !inp) {
-            let parent = btn.parentElement;
-            while (parent && parent !== doc.body) {
-                const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                for (let k = 0; k < inps.length; k++) {
-                    const itPh = normalizeYoksisText(inps[k].placeholder || inps[k].getAttribute('placeholder') || inps[k].value || inps[k].id || '');
-                    if (!itPh.includes('pasaport') && !itPh.includes('tc') && !itPh.includes('dogum')) {
-                        inp = inps[k];
-                        break;
-                    }
-                }
-                if (inp) break;
-                parent = parent.parentElement;
-            }
-        }
-
-        if (inp && !btn) {
-            let parent = inp.parentElement;
-            while (parent && parent !== doc.body) {
-                const btns = parent.querySelectorAll('button, .z-button, a, input[type="button"], table.z-button, span.z-button');
-                for (let k = 0; k < btns.length; k++) {
-                    const bTxt = normalizeYoksisText(btns[k].innerText || btns[k].textContent || btns[k].value || '');
-                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                        btn = btns[k].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[k];
-                        break;
-                    }
-                }
-                if (btn) break;
-                if (btns.length > 0) {
-                    btn = btns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || btns[0];
+        // Bazı YÖKSİS sürümlerinde placeholder metadata'sı eksik kalıyor;
+        // bu durumda etiket ve aynı satırdaki input birlikte kullanılır.
+        if (!idInput) {
+            for (const row of doc.querySelectorAll('tr')) {
+                const rowText = normalizeYoksisText(row.innerText || row.textContent || '');
+                if (!rowText.includes('kabul') || !rowText.includes('id')) continue;
+                const candidate = Array.from(row.querySelectorAll(inputSelector)).find(isYoksisTextInput);
+                if (candidate) {
+                    idInput = candidate;
                     break;
                 }
-                parent = parent.parentElement;
             }
         }
 
-        if (inp) {
-            return { idInput: inp, searchBtn: btn, doc };
+        if (!idInput) continue;
+
+        // En güvenilir eşleştirme: input ile Kabul Mektup butonunun aynı tr
+        // içinde olması. ZK'nin td.z-button-cm gibi sınıfları da kapsanır.
+        let searchBtn = findYoksisButtonIn(idInput.closest('tr'));
+        if (!searchBtn) {
+            let parent = idInput.parentElement;
+            let depth = 0;
+            while (parent && parent !== doc.body && depth < 7 && !searchBtn) {
+                searchBtn = findYoksisButtonIn(parent);
+                parent = parent.parentElement;
+                depth += 1;
+            }
         }
+
+        // Son fallback: sayfadaki kabul arama butonu.
+        if (!searchBtn) {
+            const allClickables = doc.querySelectorAll(getYoksisClickableSelector());
+            for (const candidate of allClickables) {
+                const text = getYoksisClickableText(candidate);
+                if (text.includes('kabul') && (text.includes('ara') || text.includes('sorgula') || text.includes('getir') || text.includes('bul'))) {
+                    searchBtn = getYoksisClickableRoot(candidate);
+                    break;
+                }
+            }
+        }
+
+        return { idInput, searchBtn, doc };
     }
 
     return { idInput: null, searchBtn: null, doc: document };
@@ -1115,19 +1152,31 @@ function isNavigationOrInvalidUrl(url) {
 
 function isValidYoksisId(code) {
     if (!code || typeof code !== 'string') return false;
-    const clean = code.trim().toUpperCase().replace(/[–—]/g, '-');
+    const clean = code.trim().toUpperCase()
+        .replace(/[–—−]/g, '-')
+        .replace(/\s*-\s*/g, '-')
+        .replace(/\s+/g, '-');
     if (clean.includes('SVG') || clean.includes('ICON') || clean.includes('BTN') || clean.includes('BADGE')) return false;
     if (clean.startsWith('202') || clean.startsWith('19')) return false;
     if (!/^[A-Z0-9]{2,4}-[A-Z0-9]{2,4}-[A-Z0-9]{2,4}$/.test(clean)) return false;
     return /\d/.test(clean);
 }
 
+function normalizeYoksisIdValue(value) {
+    return String(value || '')
+        .trim()
+        .replace(/[–—−]/g, '-')
+        .replace(/\s*-\s*/g, '-')
+        .replace(/\s+/g, '-')
+        .toUpperCase();
+}
+
 function findDirectKabulCode() {
     try {
         const bodyText = document.body ? document.body.innerText : '';
-        const labeledMatch = bodyText.match(/(?:YÖKS[İI]S|YOKSIS)\s*(?:ID|KODU|NO|CODE)?\s*[:#\.\-–—]?\s*([A-Z0-9]{2,4}\s*[-–—]\s*[A-Z0-9]{2,4}\s*[-–—]\s*[A-Z0-9]{2,4})/i);
+        const labeledMatch = bodyText.match(/(?:YÖKS[İI]S|YOKSIS)\s*(?:ID|KODU|NO|CODE)?\s*[:#\.\-–—]?\s*([A-Z0-9]{2,4}(?:\s*[-–—−]\s*|\s+)[A-Z0-9]{2,4}(?:\s*[-–—−]\s*|\s+)[A-Z0-9]{2,4})/i);
         if (labeledMatch && labeledMatch[1]) {
-            const code = labeledMatch[1].replace(/\s+/g, '').replace(/[–—]/g, '-').toUpperCase();
+            const code = normalizeYoksisIdValue(labeledMatch[1]);
             if (isValidYoksisId(code)) {
                 return code;
             }
@@ -1135,7 +1184,7 @@ function findDirectKabulCode() {
         const yoksisInputs = document.querySelectorAll('input[name*="yoksis" i], input[id*="yoksis" i], [data-yoksis-id]');
         for (const inp of yoksisInputs) {
             const val = inp.value || inp.getAttribute('data-yoksis-id');
-            const clean = (val || '').trim().replace(/[–—]/g, '-').toUpperCase();
+            const clean = normalizeYoksisIdValue(val);
             if (isValidYoksisId(clean)) return clean;
         }
     } catch (_) {}
@@ -1617,7 +1666,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
     }
     
     else if (request.action === "searchWithId") {
-        const kabulId = request.kabulId;
+        const kabulId = normalizeYoksisIdValue(request.kabulId);
         
         if (!kabulId) {
             sendResponse({ success: false, requestId: request.requestId, message: "Kabul ID boş olamaz." });
@@ -1628,7 +1677,10 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
         waitForYoksisSearchControls()
             .then(async ({ idInput, searchBtn }) => {
                 if (idInput) {
-                    await simulateInput(idInput, kabulId);
+                    const inputFilled = await simulateInput(idInput, kabulId, { pressEnter: false });
+                    if (!inputFilled || normalizeYoksisIdValue(idInput.value) !== kabulId) {
+                        throw new Error('Kabul Mektup ID alanına değer yazılamadı.');
+                    }
                 }
                 // ZK'nin blur/change olayını işlemesi için kısa bekleme
                 await new Promise(resolve => setTimeout(resolve, 150));
@@ -1641,8 +1693,12 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 if (searchBtn) {
                     searchTriggered = triggerZkClick(searchBtn, idInput, kabulId);
                 } else {
-                    console.warn('[YKN] Kabul mektup ID ara butonu bulunamadı, genel tetikleyici deneniyor.');
-                    searchTriggered = triggerZkClick(null, idInput, kabulId);
+                    // Enter fallback'i burada kullanma: ZK onOK tanımlı değilse
+                    // hiçbir şey yapmaz, tanımlıysa da MAIN-world fallback'iyle
+                    // çift postback üretir. Gerçek arama butonu bulunamazsa
+                    // background kontrollü fallback yoluna geçsin.
+                    console.warn('[YKN] Kabul mektup ID ara butonu bulunamadı. MAIN-world fallback deneniyor.');
+                    searchTriggered = false;
                 }
                 if (!searchTriggered) throw new Error('YÖKSİS arama komutu tetiklenemedi.');
 
@@ -1655,7 +1711,13 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 }
                 return { formReady, searchTriggered };
             })
-            .then(({ formReady, searchTriggered }) => sendResponse({ success: true, formReady, searchTriggered, requestId: request.requestId }))
+            .then(({ formReady, searchTriggered }) => sendResponse({
+                success: true,
+                formReady,
+                searchTriggered,
+                buttonFound: Boolean(findYoksisKabulPair().searchBtn),
+                requestId: request.requestId
+            }))
             .catch((error) => sendResponse({
                 success: false,
                 requestId: request.requestId,
