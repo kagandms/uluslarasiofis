@@ -264,6 +264,48 @@ test('YÖKSİS search uses the ZK button cell beside the acceptance input once',
     }
 });
 
+test('YÖKSİS search ignores hidden controls left by the previous student', async () => {
+    const harness = createContentHarness(`
+        <table id="old-search" style="display: none">
+            <tr><td>Kabul Mektup ID</td><td><input id="old-acceptance-id"></td><td><button id="old-search-button">Kabul Mektup ID ile Ara</button></td></tr>
+        </table>
+        <table id="current-search">
+            <tr><td>Kabul Mektup ID</td><td><input id="current-acceptance-id"></td><td><button id="current-search-button">Kabul Mektup ID ile Ara</button></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    let oldSearchClicks = 0;
+    let currentSearchClicks = 0;
+    harness.dom.window.document.getElementById('old-search-button').addEventListener('click', () => {
+        oldSearchClicks += 1;
+    });
+    harness.dom.window.document.getElementById('current-search-button').addEventListener('click', () => {
+        currentSearchClicks += 1;
+        setTimeout(() => {
+            harness.dom.window.document.body.insertAdjacentHTML('beforeend', `
+                <table id="new-student-form">
+                    <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+                    <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+                </table>
+            `);
+        }, 25);
+    });
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: 'ZX-987-KL',
+            requestId: 'workflow-hidden-previous-student'
+        });
+
+        assert.equal(response.success, true);
+        assert.equal(oldSearchClicks, 0);
+        assert.ok(currentSearchClicks > 0);
+        assert.equal(harness.dom.window.document.getElementById('current-acceptance-id').value, 'ZX-987-KL');
+    } finally {
+        harness.close();
+    }
+});
+
 test('YÖKSİS ikinci aramada aynı parmak izli formun gerçekten yenilendiğini doğrular', async () => {
     const studentForm = `
         <table id="student-form">

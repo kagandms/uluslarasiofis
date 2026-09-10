@@ -16,6 +16,10 @@ const YOKSIS_URL = 'https://yoksis.yok.gov.tr/';
 const CONTENT_READY_TIMEOUT_MS = 15_000;
 const CONTENT_READY_INITIAL_DELAY_MS = 250;
 const CONTENT_READY_MAX_DELAY_MS = 1_000;
+// Content script, kabul kodunun ZK onChange güncellemesinin bitmesini ve yeni
+// öğrenci formunun iki kez kararlı görünmesini bekler. 12 saniye bu zinciri
+// kesip ikinci bir MAIN-world araması başlatabiliyordu.
+const YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS = 18_000;
 
 function runYoksisOperation(tabId, operation, requestId, task) {
     const key = `${tabId}:${operation}:${requestId || 'anonymous'}`;
@@ -1522,7 +1526,7 @@ async function searchYoksisFromContent(tabId, kabulId, requestId) {
                 kabulId,
                 requestId
             }),
-            12_000,
+            YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS,
             'YÖKSİS arama zaman aşımı'
         );
     } catch (error) {
