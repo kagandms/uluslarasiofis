@@ -171,7 +171,9 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
             }
         },
         windows: {
-            async update() {}
+            async update(windowId, updateProperties) {
+                calls.push({ type: 'focus-window', windowId, updateProperties });
+            }
         }
     };
 
@@ -644,7 +646,70 @@ test('Tek Tık aktarımı açık YÖKSİS sekmesi yoksa güvenli biçimde yeni s
     assert.equal(response.success, true);
     assert.ok(harness.calls.some((call) => call.type === 'create-tab'
         && call.createProperties.url === 'https://yoksis.yok.gov.tr/'));
+    assert.ok(harness.calls.some((call) => call.type === 'create-tab'
+        && call.createProperties.active === false));
+    assert.ok(!harness.calls.some((call) => call.type === 'update-tab'
+        && call.updateProperties.active === true));
+    assert.ok(!harness.calls.some((call) => call.type === 'focus-window'));
+});
+
+test('son YÖKSİS doldurma adımı sekmeyi öne alır', async () => {
+    const harness = createBackgroundHarness(
+        { success: true, filledFields: ['Ad'], missingFields: [], photoUploaded: false },
+        { success: true, searchTriggered: true, formReady: true }
+    );
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'FILL_YOKSIS_FORM',
+        requestId: 'workflow-final-fill',
+        data: { yoksisReady: true, fullName: 'Test Student' }
+    });
+
+    assert.equal(response.success, true);
     assert.ok(harness.calls.some((call) => call.type === 'update-tab'
+        && call.updateProperties.active === true));
+    assert.ok(harness.calls.some((call) => call.type === 'focus-window'));
+});
+
+test('ardışık YÖKSİS aramaları requestId ile birbirine karışmaz', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: false, buttonFound: false },
+        { success: true, searchTriggered: true, formReady: true }
+    );
+
+    const requests = Array.from({ length: 15 }, (_, index) => ({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: `workflow-student-${index + 1}`,
+        data: { yoksisId: `AB-${String(index + 123)}-${String.fromCharCode(67 + index)}D` }
+    }));
+    const responses = await Promise.all(requests.map((request) => harness.send(request)));
+
+    assert.deepEqual(responses.map((response) => response.success), Array(15).fill(true));
+    const searchMessages = harness.calls
+        .filter((call) => call.type === 'message' && call.message.action === 'searchWithId')
+        .map((call) => ({ requestId: call.message.requestId, kabulId: call.message.kabulId }));
+    assert.deepEqual(searchMessages, requests.map((request) => ({
+        requestId: request.requestId,
+        kabulId: request.data.yoksisId
+    })));
+});
+
+test('YÖKSİS popup araması da arka planda çalışır', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: false, buttonFound: false },
+        { success: true, searchTriggered: true, formReady: true }
+    );
+
+    const response = await harness.send({
+        action: 'SEARCH_YOKSIS_FROM_POPUP',
+        requestId: 'popup-search-background',
+        data: { yoksisId: 'EF-456-GH' }
+    });
+
+    assert.equal(response.success, true);
+    assert.ok(!harness.calls.some((call) => call.type === 'update-tab'
         && call.updateProperties.active === true));
 });
 

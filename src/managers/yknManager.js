@@ -1675,6 +1675,11 @@ export function initYknManager() {
                 addStatus('Bilgi aktarımı başlatılmadı: YÖKSİS için doğrulanmış yeni öğrenci formu yok.', 'warning');
                 return;
             }
+            if (!currentStudentData.croppedPhotoBase64) {
+                showToast('Önce pasaport fotoğrafını kırpıp onaylayın.', 'warning');
+                addStatus('YÖKSİS’e aktarım bekletildi: pasaport fotoğrafı henüz onaylanmadı.', 'warning');
+                return;
+            }
             if (!beginButtonAction('paste-yoksis', btnPasteYoksis, 30_000, () => {
                 setWorkflowStepStatus(4, 'error');
                 addStatus('YÖKSİS formu doldurma yanıt vermedi. Tekrar deneyebilirsiniz.', 'error');

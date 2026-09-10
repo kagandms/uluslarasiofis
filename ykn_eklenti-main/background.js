@@ -365,29 +365,26 @@ async function resolveYoksisTab() {
     return yoksisTab;
 }
 
-async function getExistingYoksisTab() {
-    const yoksisTab = await resolveYoksisTab();
-    // Eklenti güncellendikten sonra açık sekmede eski content-script kalabilir.
-    // Önce yeni bağlamı doğrula; gerekirse waitForContentScript yeniden enjekte eder.
-    await waitForContentScript(yoksisTabId, 'yoksis');
-    return yoksisTab;
-}
-
-async function getActiveYoksisTab() {
+async function getBackgroundYoksisTab() {
     let yoksisTab;
     try {
         yoksisTab = await resolveYoksisTab();
     } catch (_) {
-        yoksisTab = await createTab({ url: YOKSIS_URL, active: true });
+        yoksisTab = await createTab({ url: YOKSIS_URL, active: false });
         yoksisTabId = yoksisTab.id;
     }
 
     yoksisTabId = yoksisTab.id;
-    await updateTab(yoksisTabId, { active: true });
+    await waitForContentScript(yoksisTabId, 'yoksis');
+    return yoksisTab;
+}
+
+async function getForegroundYoksisTab() {
+    const yoksisTab = await getBackgroundYoksisTab();
+    await updateTab(yoksisTab.id, { active: true });
     if (yoksisTab.windowId) {
         await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch(() => {});
     }
-    await waitForContentScript(yoksisTabId, 'yoksis');
     return yoksisTab;
 }
 
@@ -1578,10 +1575,9 @@ async function waitForYoksisFormReady(tabId, requestId, options = {}) {
 
 
 async function transferToYoksis(request) {
-    // Tek Tık'ın çalışması için kullanıcının YÖKSİS sekmesini önceden açmış
-    // olması gerekmez. Oturum varsa mevcut sekme öne alınır; yoksa YÖKSİS
-    // güvenli şekilde yeni sekmede açılır ve arama ekranı beklenir.
-    const yoksisTab = await getActiveYoksisTab();
+    // Kabul kodu araması arka planda yürür. Kullanıcı fotoğrafı kırpana kadar
+    // portal ekranında kalmalı; YÖKSİS yalnızca son doldurma adımında öne alınır.
+    const yoksisTab = await getBackgroundYoksisTab();
     const kabulId = String(request.data?.yoksisId || request.data?.kabulId || request.kabulId || '')
         .replace(/[–—−]/g, '-')
         .replace(/\s*-\s*/g, '-')
@@ -1880,7 +1876,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 if (studentData?.yoksisReady !== true) {
                     throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
                 }
-                const yoksisTab = await getActiveYoksisTab();
+                const yoksisTab = await getForegroundYoksisTab();
                 const response = await runYoksisOperation(yoksisTab.id, 'fill', request.requestId, async () => {
                     await new Promise((resolve, reject) => {
                         chrome.storage.local.set({ studentData }, () => {

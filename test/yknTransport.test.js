@@ -112,6 +112,13 @@ test('YÖKSİS fill is blocked until a fresh acceptance-code search has opened i
     assert.match(background, /function resolveYoksisTab/);
 });
 
+test('final YÖKSİS işlemi fotoğraf kırpma onayından önce başlatılamaz', { skip: !hasLocalExtensionCheckout }, async () => {
+    const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+
+    assert.match(manager, /currentStudentData\.croppedPhotoBase64/);
+    assert.match(manager, /Önce pasaport fotoğrafını kırpıp onaylayın/);
+});
+
 test('YKN waits for Apply document discovery before acceptance-code automation', async () => {
     const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
 
