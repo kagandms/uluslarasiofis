@@ -40,7 +40,8 @@ function runYoksisOperation(tabId, operation, requestId, task) {
         }
         // Aynı mesajın kısa süre içinde yeniden teslim edilmesini önle; ancak
         // kullanıcı sonraki denemede yeni requestId ile tekrar çalıştırabilsin.
-        setTimeout(() => yoksisOperationResults.delete(key), 60_000);
+        const cleanupTimer = setTimeout(() => yoksisOperationResults.delete(key), 60_000);
+        if (typeof cleanupTimer?.unref === 'function') cleanupTimer.unref();
     }).catch(() => {});
 
     return current;
@@ -1635,6 +1636,27 @@ async function transferToYoksis(request) {
         const searchTriggered = response?.searchTriggered === true || mainTriggered;
         if (!searchTriggered) {
             throw new Error('YÖKSİS kabul mektubu araması başlatılamadı. Öğrenci başvuru/kayıt ekranını açık tutup tekrar deneyin.');
+        }
+
+        if (response?.searchTriggered === true && response.formReady !== true) {
+            const hasFreshBaseline = typeof response.formFingerprintBeforeSearch === 'string'
+                && Number.isFinite(response.domRevisionBeforeSearch);
+            if (hasFreshBaseline) {
+                const delayedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, {
+                    afterFingerprint: response.formFingerprintBeforeSearch,
+                    afterDomRevision: response.domRevisionBeforeSearch,
+                    requireFreshResult: true
+                });
+                if (delayedFormReady) {
+                    return {
+                        success: true,
+                        transferred: true,
+                        searchTriggered: true,
+                        formReady: true,
+                        message: 'Kabul mektup kodu YÖKSİS’e aktarıldı ve gecikmeli öğrenci formu doğrulandı.'
+                    };
+                }
+            }
         }
 
         // Content script bu noktada formun arama tıklamasından sonra yenilendiğini

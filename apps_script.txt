@@ -5,12 +5,9 @@ var API_KEY = "GIZLI_SIFRE_123";
 var TARIH_DESENI = new RegExp("\\d{2}\\.\\d{2}");
 var YIL_DESENI = new RegExp("(?:^|\\.)(\\d{4})(?:$|\\.)");
 
-// Arama yapilirken once en yeni (son olusturulan) bu kadar sekme
-// taranir - "hizli yol". Cogu ogrenci yakin haftalarda kayitli
-// oldugu icin sonuc genelde burada bulunur ve arama hemen biter.
-// Sonuc bulunamazsa geri kalan (daha eski) sekmeler de taranir,
-// boylece tam kapsam yine de garanti edilir.
-var HIZLI_TARAMA_SAYFA_SAYISI = 6;
+// Arama, en yeniden eskiye doğru en fazla 16 tarih sayfasında yapılır.
+// İlk eşleşmede durulmaz; bu pencere içindeki tüm eşleşmeler toplanır.
+var ARAMA_SAYFA_LIMITI = 16;
 var GET_ALL_CACHE_PREFIX = "tebligat_get_all_v1_";
 var GET_ALL_CACHE_TTL_SECONDS = 300;
 var GET_ALL_CACHE_CHUNK_SIZE = 45000;
@@ -347,8 +344,10 @@ function islemArama_(q, year) {
     }).reverse();
 
     // Tum dosyadaki TextFinder taramasi buyuk tablolarda web uygulamasini zaman asimina sokuyordu.
-    // Once en yeni sekmelerde yalnizca gerekli uc sutun okunur; sonuc bulunmazsa eski sekmeler taranir.
-    for (var s = 0; s < tarihliSayfalar.length; s++) {
+    // En yeni 16 sayfada yalnizca gerekli uc sutun okunur ve pencere icindeki
+    // tum eslesmeler toplanir.
+    var taranacakSayfaSayisi = Math.min(tarihliSayfalar.length, ARAMA_SAYFA_LIMITI);
+    for (var s = 0; s < taranacakSayfaSayisi; s++) {
       var sheet = tarihliSayfalar[s];
       var sayfaAdi = sheet.getName();
       
@@ -378,7 +377,6 @@ function islemArama_(q, year) {
         }
       }
 
-      if (sonuclar.length > 0 && s >= HIZLI_TARAMA_SAYFA_SAYISI - 1) break;
     }
     
     return json_({ results: sonuclar });

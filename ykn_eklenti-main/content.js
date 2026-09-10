@@ -1867,14 +1867,21 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 } catch (_) {
                     formReady = false;
                 }
-                return { formReady, searchTriggered };
+                return {
+                    formReady,
+                    searchTriggered,
+                    formFingerprintBeforeSearch,
+                    domRevisionBeforeSearch: stateBeforeSearch.domRevision
+                };
             })
-            .then(({ formReady, searchTriggered }) => sendResponse({
+            .then(({ formReady, searchTriggered, formFingerprintBeforeSearch, domRevisionBeforeSearch }) => sendResponse({
                 // Tıklamayı göndermiş olmak başarı değildir: yeni öğrenci formu
                 // doğrulanmadıkça portal sonraki "bilgileri aktar" adımını açmamalı.
                 success: formReady,
                 formReady,
                 searchTriggered,
+                formFingerprintBeforeSearch,
+                domRevisionBeforeSearch,
                 buttonFound: Boolean(findYoksisKabulPair().searchBtn),
                 requestId: request.requestId
             }))

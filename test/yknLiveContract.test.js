@@ -598,6 +598,35 @@ test('background transfer accepts only a fresh content-search result or a fresh 
     assert.equal(readinessCall.message.afterFingerprint, 'previous-student');
 });
 
+test('background transfer waits for a delayed fresh form after the search click', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: false, buttonFound: false },
+        {
+            success: false,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'previous-student',
+            domRevisionBeforeSearch: 6
+        }
+    );
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'workflow-delayed-form',
+        data: { yoksisId: 'AB-123-CD' }
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, true);
+    assert.ok(harness.calls.some((call) => call.type === 'message'
+        && call.message.action === 'WAIT_YOKSIS_FORM'
+        && call.message.requireFreshResult === true
+        && call.message.afterFingerprint === 'previous-student'
+        && call.message.afterDomRevision === 6));
+    assert.ok(!harness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
+});
+
 test('Tek Tık aktarımı açık YÖKSİS sekmesi yoksa güvenli biçimde yeni sekme açar', async () => {
     const harness = createBackgroundHarness(
         { inputFound: false, buttonFound: false },

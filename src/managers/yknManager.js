@@ -1472,6 +1472,11 @@ export function initYknManager() {
                 showToast('Lütfen önce bir öğrenci arayın.', 'warning');
                 return;
             }
+            if (currentStudentData.yoksisReady !== true) {
+                showToast('Önce kabul mektubu ID’sini YÖKSİS’te aratıp öğrenci formunu açın.', 'warning');
+                addStatus('Apply bilgileri için önce kabul mektubu ID araması tamamlanmalı.', 'warning');
+                return;
+            }
 
             if (!beginButtonAction('copy-info', btnCopyInfo, 20_000, () => {
                 setWorkflowStepStatus(3, 'error');

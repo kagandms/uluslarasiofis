@@ -1,9 +1,9 @@
 const CLOUD_SYNC_TIMEOUT_MS = 90_000;
 const CLOUD_SYNC_PROGRESS_INTERVAL_MS = 1_000;
+const SEARCH_SHEET_LIMIT = 16;
 
 // In-Memory Normalized Cache for 0 ms Instant Search
 let inMemoryCache = [];
-let isCacheLoaded = false;
 
 function parseDateStr(sayfaStr) {
     if (!sayfaStr) return 0;
@@ -26,7 +26,6 @@ export function foldText(str) {
     return String(str)
         .toLocaleUpperCase('tr-TR')
         .replace(/İ/g, 'I')
-        .replace(/I/g, 'I')
         .replace(/Ç/g, 'C')
         .replace(/Ş/g, 'S')
         .replace(/Ğ/g, 'G')
@@ -35,6 +34,23 @@ export function foldText(str) {
         .replace(/[^A-Z0-9]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+export function getNewestSheetNames(records, year, limit = SEARCH_SHEET_LIMIT) {
+    const sheetDates = new Map();
+    for (const record of records || []) {
+        const sheetName = String(record?.sayfa || '').trim();
+        if (!sheetName || getSheetYear(sheetName) !== String(year)) continue;
+        const dateValue = parseDateStr(sheetName);
+        if (dateValue > 0) sheetDates.set(sheetName, dateValue);
+    }
+
+    return new Set(
+        [...sheetDates.entries()]
+            .sort((left, right) => right[1] - left[1])
+            .slice(0, Math.max(0, limit))
+            .map(([sheetName]) => sheetName)
+    );
 }
 
 export function fastLevenshtein(a, b, maxDist = 2) {
@@ -171,7 +187,6 @@ function loadCacheIntoMemory() {
             const rawArr = JSON.parse(cachedStr);
             if (Array.isArray(rawArr)) {
                 inMemoryCache = rawArr.map(normalizeRecord);
-                isCacheLoaded = true;
                 return inMemoryCache.length;
             }
         }
@@ -179,7 +194,6 @@ function loadCacheIntoMemory() {
         console.error('Failed to load in-memory tebligat cache:', e);
     }
     inMemoryCache = [];
-    isCacheLoaded = false;
     return 0;
 }
 
@@ -485,9 +499,10 @@ export function initTebligatSearch() {
         let fuzzyMatches = [];
 
         if (inMemoryCache.length > 0) {
+            const searchableSheetNames = getNewestSheetNames(inMemoryCache, currYear);
             for (let i = 0; i < inMemoryCache.length; i++) {
                 const item = inMemoryCache[i];
-                if (item._year !== currYear) continue;
+                if (item._year !== currYear || !searchableSheetNames.has(item.sayfa)) continue;
 
                 const matchResult = evaluateNameMatch(item, queryUpper, queryFolded, queryTokens);
                 if (matchResult.isMatch) {
