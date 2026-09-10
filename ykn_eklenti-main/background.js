@@ -611,9 +611,9 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
 }
 
 async function syncYoksisFormInMainWorld(tabId, studentData) {
-    if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return;
+    if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return null;
     try {
-        await chrome.scripting.executeScript({
+        const results = await chrome.scripting.executeScript({
             target: { tabId, allFrames: true },
             world: 'MAIN',
             args: [studentData || null],
@@ -715,7 +715,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 y = parseInt(parts[2], 10);
                             }
 
-                            if (y >= 2010 && y <= 2045 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+                            if (y >= 1900 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
                                 var formatted = ('0' + d).slice(-2) + '.' + ('0' + m).slice(-2) + '.' + y;
                                 el.value = formatted;
                                 var dateObj = new Date(y, m - 1, d, 0, 0, 0, 0);
@@ -843,6 +843,245 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         } catch (_) {}
                     }
 
+                    function isUsableControl(el, kind) {
+                        if (!el) return false;
+                        var tag = (el.tagName || '').toLowerCase();
+                        var type = (el.type || '').toLowerCase();
+                        if (kind === 'radio') return tag === 'input' && type === 'radio';
+                        if (kind === 'select') return tag === 'select';
+                        if (tag !== 'input' && tag !== 'textarea') return false;
+                        return type !== 'hidden' && type !== 'button' && type !== 'submit' &&
+                            type !== 'reset' && type !== 'file' && type !== 'checkbox' && type !== 'radio';
+                    }
+
+                    function findControlByLabels(targetDoc, labels, kind) {
+                        var wanted = (labels || []).map(norm).filter(Boolean);
+                        if (!targetDoc || wanted.length === 0) return null;
+                        var selector = kind === 'select' ? 'select' : kind === 'radio' ? 'input[type="radio"]' : 'input, textarea';
+
+                        function matches(text) {
+                            var value = norm(text || '');
+                            return wanted.some(function (label) {
+                                return value === label || value.indexOf(label) !== -1;
+                            });
+                        }
+
+                        // Önce for/aria ilişkisini kullan; tablo düzeninden
+                        // bağımsız olan en güvenilir eşleştirme budur.
+                        var labelNodes = targetDoc.querySelectorAll('label, td, th, span, div, b, strong');
+                        for (var li = 0; li < labelNodes.length; li++) {
+                            var labelNode = labelNodes[li];
+                            var labelText = labelNode.innerText || labelNode.textContent || '';
+                            if (!matches(labelText)) continue;
+
+                            var forId = labelNode.getAttribute && labelNode.getAttribute('for');
+                            if (forId) {
+                                var associated = targetDoc.getElementById(forId);
+                                if (isUsableControl(associated, kind)) return associated;
+                            }
+
+                            var labelledById = labelNode.getAttribute && labelNode.getAttribute('id');
+                            if (labelledById) {
+                                var byAria = targetDoc.querySelector(selector + '[aria-labelledby~="' + labelledById + '"]');
+                                if (isUsableControl(byAria, kind)) return byAria;
+                            }
+
+                            var parentTd = labelNode.closest ? labelNode.closest('td, th') : null;
+                            if (parentTd) {
+                                var nextCell = parentTd.nextElementSibling;
+                                var nextControl = nextCell && nextCell.querySelector(selector);
+                                if (isUsableControl(nextControl, kind)) return nextControl;
+                                var sameCellControl = parentTd.querySelector(selector);
+                                if (isUsableControl(sameCellControl, kind)) return sameCellControl;
+                            }
+                        }
+
+                        // Sonra satır bazlı eşleştirme: YÖKSİS öğrenci paneli
+                        // klasik iki sütunlu tablo olarak oluşturuluyor.
+                        var rows = targetDoc.querySelectorAll('tr');
+                        for (var ri = 0; ri < rows.length; ri++) {
+                            var row = rows[ri];
+                            var rowText = row.innerText || row.textContent || '';
+                            if (!matches(rowText)) continue;
+                            var controls = row.querySelectorAll(selector);
+                            for (var ci = 0; ci < controls.length; ci++) {
+                                if (isUsableControl(controls[ci], kind)) return controls[ci];
+                            }
+                        }
+
+                        // Son güvenli fallback: placeholder/name/id üzerinden.
+                        var allControls = targetDoc.querySelectorAll(selector);
+                        for (var ai = 0; ai < allControls.length; ai++) {
+                            var control = allControls[ai];
+                            if (!isUsableControl(control, kind)) continue;
+                            var metadata = [control.placeholder, control.name, control.id, control.title].join(' ');
+                            if (matches(metadata)) return control;
+                        }
+                        return null;
+                    }
+
+                    function findControl(labels, kind, docs) {
+                        for (var fi = 0; fi < docs.length; fi++) {
+                            var found = findControlByLabels(docs[fi], labels, kind);
+                            if (found) return found;
+                        }
+                        return null;
+                    }
+
+                    function findStudentDocumentNumber(docs) {
+                        var compact = function (value) { return norm(value || ''); };
+                        for (var di = 0; di < docs.length; di++) {
+                            var doc = docs[di];
+                            var inputs = doc.querySelectorAll('input');
+                            for (var ii = 0; ii < inputs.length; ii++) {
+                                var input = inputs[ii];
+                                if (!isUsableControl(input, 'text')) continue;
+                                var metadata = compact([input.placeholder, input.name, input.id].join(' '));
+                                // Soldaki “Pasaport/Belge No” arama kutusu
+                                // öğrenci panelindeki aynı etiketle karışmasın.
+                                if (metadata.indexOf('pasaport') !== -1) continue;
+
+                                var row = input.closest('tr');
+                                var targetCell = input.closest('td, th');
+                                var previousCell = targetCell && targetCell.previousElementSibling;
+                                while (previousCell) {
+                                    var previousText = compact(previousCell.innerText || previousCell.textContent || '');
+                                    if (previousText.indexOf('uyrukkitlikno') !== -1) break;
+                                    if (previousText === 'belgeno' || previousText.indexOf('belgeno') !== -1) return input;
+                                    previousCell = previousCell.previousElementSibling;
+                                }
+
+                                var rowText = compact(row && (row.innerText || row.textContent) || '');
+                                if (rowText.indexOf('belgeno') !== -1 && rowText.indexOf('pasaport') === -1) return input;
+                            }
+                        }
+                        return null;
+                    }
+
+                    function setNativeValue(el, value) {
+                        if (!el || value === undefined || value === null) return false;
+                        var textValue = String(value);
+                        try {
+                            var ownerWin = el.ownerDocument && el.ownerDocument.defaultView || window;
+                            var proto = el.tagName && el.tagName.toLowerCase() === 'textarea'
+                                ? ownerWin.HTMLTextAreaElement.prototype
+                                : ownerWin.HTMLInputElement.prototype;
+                            var setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                            if (setter) setter.call(el, textValue);
+                            else el.value = textValue;
+                        } catch (_) {
+                            try { el.value = textValue; } catch (_) { return false; }
+                        }
+                        return String(el.value || '') === textValue;
+                    }
+
+                    function formatDateValue(rawValue) {
+                        var value = String(rawValue || '').trim();
+                        if (!value) return '';
+                        var parts = value.split(/[.\/\-\s]+/).filter(Boolean);
+                        if (parts.length !== 3) return value;
+                        var d, m, y;
+                        if (parts[0].length === 4) {
+                            y = parts[0]; m = parts[1]; d = parts[2];
+                        } else {
+                            d = parts[0]; m = parts[1]; y = parts[2];
+                        }
+                        if (String(y).length === 2) y = Number(y) <= 49 ? '20' + y : '19' + y;
+                        return ('0' + d).slice(-2) + '.' + ('0' + m).slice(-2) + '.' + y;
+                    }
+
+                    function findRadioByText(docs, value) {
+                        var wanted = norm(value);
+                        if (!wanted) return null;
+                        for (var di = 0; di < docs.length; di++) {
+                            var doc = docs[di];
+                            var labels = doc.querySelectorAll('label, span, b, strong');
+                            for (var li = 0; li < labels.length; li++) {
+                                var node = labels[li];
+                                var text = norm(node.innerText || node.textContent || '');
+                                if (text !== wanted && text.indexOf(wanted) === -1) continue;
+                                var forId = node.getAttribute && node.getAttribute('for');
+                                var nodeRadios = node.querySelectorAll('input[type="radio"]');
+                                var radio = forId
+                                    ? doc.getElementById(forId)
+                                    : nodeRadios.length === 1 ? nodeRadios[0] : null;
+                                if (isUsableControl(radio, 'radio')) return radio;
+                            }
+                            var radios = doc.querySelectorAll('input[type="radio"]');
+                            for (var ri = 0; ri < radios.length; ri++) {
+                                var radioText = norm([radios[ri].value, radios[ri].id, radios[ri].name].join(' '));
+                                if (radioText === wanted || radioText.indexOf(wanted) !== -1) return radios[ri];
+                            }
+                        }
+                        return null;
+                    }
+
+                    function selectMatchingOption(select, value) {
+                        if (!select || value === undefined || value === null || String(value).trim() === '') return false;
+                        var wanted = norm(value);
+                        var options = select.options || [];
+                        for (var oi = 0; oi < options.length; oi++) {
+                            var optionText = norm(options[oi].text || options[oi].value || '');
+                            if (optionText === wanted || optionText.indexOf(wanted) !== -1 || wanted.indexOf(optionText) !== -1) {
+                                select.value = options[oi].value;
+                                try { options[oi].selected = true; } catch (_) {}
+                                return Boolean(select.value);
+                            }
+                        }
+                        return false;
+                    }
+
+                    function addResultField(result, label, filled) {
+                        var filledIndex = result.filledFields.indexOf(label);
+                        var missingIndex = result.missingFields.indexOf(label);
+                        if (filled) {
+                            if (filledIndex === -1) result.filledFields.push(label);
+                            if (missingIndex !== -1) result.missingFields.splice(missingIndex, 1);
+                        } else if (missingIndex === -1) {
+                            result.missingFields.push(label);
+                        }
+                    }
+
+                    function fillTextByLabels(docs, labels, value, result, resultLabel, dateMode) {
+                        if (value === undefined || value === null || String(value).trim() === '') return;
+                        var control = findControl(labels, 'text', docs);
+                        fillTextByControl(control, value, result, resultLabel, dateMode);
+                    }
+
+                    function fillTextByControl(control, value, result, resultLabel, dateMode) {
+                        if (value === undefined || value === null || String(value).trim() === '') return;
+                        if (!control) {
+                            addResultField(result, resultLabel, false);
+                            return;
+                        }
+                        var targetValue = dateMode ? formatDateValue(value) : String(value).trim();
+                        var set = setNativeValue(control, targetValue);
+                        if (set) {
+                            if (dateMode) commitDatebox(control, control.ownerDocument && control.ownerDocument.defaultView || window);
+                            else commitTextbox(control, control.ownerDocument && control.ownerDocument.defaultView || window);
+                        }
+                        addResultField(result, resultLabel, set && String(control.value || '').trim() === targetValue);
+                    }
+
+                    function fillSelectByLabels(docs, labels, value, result, resultLabel) {
+                        if (value === undefined || value === null || String(value).trim() === '') return;
+                        var control = findControl(labels, 'select', docs);
+                        var set = Boolean(control && selectMatchingOption(control, value));
+                        if (set) commitSelect(control, control.ownerDocument && control.ownerDocument.defaultView || window);
+                        addResultField(result, resultLabel, set);
+                    }
+
+                    function fillRadioByValue(docs, value, result, resultLabel) {
+                        if (value === undefined || value === null || String(value).trim() === '') return;
+                        var radio = findRadioByText(docs, value);
+                        if (radio) {
+                            try { radio.click(); } catch (_) { radio.checked = true; }
+                            try { radio.checked = true; } catch (_) {}
+                            commitRadio(radio, radio.ownerDocument && radio.ownerDocument.defaultView || window);
+                        }
+                        addResultField(result, resultLabel, Boolean(radio && radio.checked));
+                    }
+
                     function purgeErrorBoxes(targetDoc) {
                         try {
                             var d = targetDoc || document;
@@ -870,6 +1109,47 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                     }
 
                     var allDocs = getAllDocs(document);
+                    var fillResult = {
+                        success: false,
+                        filledFields: [],
+                        missingFields: [],
+                        photoUploaded: false
+                    };
+
+                    // Content script izole dünyada DOM'a değer yazabilir ancak
+                    // YÖKSİS/ZK bunu sunucu durumuna almayabilir. Bu prepass,
+                    // değerleri doğrudan sayfanın gerçek JS dünyasında yazar.
+                    if (data) {
+                        var passportNo = data.pasaportNo || data.passportNo || '';
+                        var birthPlace = data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || '';
+                        var issuingAuthority = data.verenMakam || data.issuingAuthority || '';
+                        var birthCountry = data.dogumUlkesi || data.uyruk || '';
+
+                        fillTextByLabels(allDocs, ['Anne Adı', 'Mother Name', "Mother's Name"], data.anneAdi, fillResult, 'Anne Adı', false);
+                        fillTextByLabels(allDocs, ['Baba Adı', 'Father Name', "Father's Name"], data.babaAdi, fillResult, 'Baba Adı', false);
+                        fillSelectByLabels(allDocs, ['Uyruğu', 'Nationality'], data.uyruk, fillResult, 'Uyruğu');
+                        fillSelectByLabels(allDocs, ['Doğum Uyruğu', 'Birth Nationality'], data.uyruk, fillResult, 'Doğum Uyruğu');
+                        fillSelectByLabels(allDocs, ['Doğum Yeri Ülkesi', 'Birth Country', 'Born Country'], birthCountry, fillResult, 'Doğum Yeri Ülkesi');
+                        fillSelectByLabels(allDocs, ['Belgeyi Veren Ülke', 'Document Issuing Country'], data.uyruk, fillResult, 'Belgeyi Veren Ülke');
+                        fillRadioByValue(allDocs, data.cinsiyet, fillResult, 'Cinsiyet');
+                        fillTextByLabels(allDocs, ['Doğum Yeri Açıklaması', 'Place of Birth Description'], birthPlace, fillResult, 'Doğum Yeri Açıklaması', false);
+                        fillTextByLabels(allDocs, ['Belgeyi Veren Makam', 'Veren Makam', 'Issuing Authority'], issuingAuthority, fillResult, 'Belgeyi Veren Makam', false);
+                        fillTextByLabels(allDocs, ['Telefon No', 'Telefon Numarası', 'Cep Telefonu No', 'Cep Telefonu', 'GSM', 'Telefon'], '5322431261', fillResult, 'Telefon No', false);
+                        fillTextByControl(findStudentDocumentNumber(allDocs), passportNo, fillResult, 'Belge No', false);
+                        fillTextByLabels(allDocs, ['Doğum Tarihi', 'Date of Birth', 'Birth Date'], data.birthDate, fillResult, 'Doğum Tarihi', true);
+                        fillTextByLabels(allDocs, [
+                            'Belge Düzenleme Tarihi', 'Düzenleme Tarihi', 'Belgenin Düzenleme Tarihi',
+                            'Belge Düzenlenme Tarihi', 'Düzenlenme Tarihi', 'Pasaport Düzenleme Tarihi',
+                            'Pasaport Düzenlenme Tarihi', 'Pasaport Veriliş Tarihi', 'Belge Veriliş Tarihi',
+                            'Veriliş Tarihi', 'Tanzim Tarihi', 'Date of Issue', 'Issue Date'
+                        ], data.issueDate, fillResult, 'Düzenleme Tarihi', true);
+                        fillTextByLabels(allDocs, [
+                            'Belge Geçerlilik Tarihi', 'Geçerlilik Tarihi', 'Belgenin Geçerlilik Tarihi',
+                            'Pasaport Son Geçerlilik Tarihi', 'Pasaport Geçerlilik Tarihi', 'Son Geçerlilik Tarihi',
+                            'Bitiş Tarihi', 'Date of Expiry', 'Expiry Date', 'Expiration Date'
+                        ], data.expiryDate, fillResult, 'Geçerlilik Tarihi', true);
+                    }
+
                     for (var di = 0; di < allDocs.length; di++) {
                         var doc = allDocs[di];
                         var win = doc.defaultView || window;
@@ -989,6 +1269,18 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                     }
                                 }
 
+                                // Bazı ZK sürümlerinde uploader widget butonda
+                                // değil doğrudan gizli file inputunun ebeveyninde
+                                // tutulur. Her iki DOM ağacını da tara.
+                                if (!photoWidget && fileInput && win.zk && win.zk.Widget) {
+                                    var inputWidgetElement = fileInput;
+                                    for (var il = 0; il < 6 && inputWidgetElement; il++) {
+                                        photoWidget = win.zk.Widget.$(inputWidgetElement);
+                                        if (photoWidget) break;
+                                        inputWidgetElement = inputWidgetElement.parentElement;
+                                    }
+                                }
+
                                 if (!fileInput) {
                                     var allFileInputs = doc.querySelectorAll('input[type="file"]');
                                     if (allFileInputs.length === 1) {
@@ -1014,6 +1306,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
 
                                     if (currentToken === photoToken && currentStatus === 'submitted') {
                                         console.log('[YKN MAIN World] Fotoğraf zaten gönderilmiş, mükerrer istek engellendi:', photoName);
+                                        fillResult.photoUploaded = true;
                                     } else {
                                         if (currentToken !== photoToken || !fileInput.files || fileInput.files.length === 0) {
                                             var raw = data.croppedPhotoBase64;
@@ -1072,8 +1365,11 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                             }
                                         }
                                         fileInput.setAttribute('data-ykn-photo-status', 'submitted');
+                                        fillResult.photoUploaded = Boolean(fileInput.files && fileInput.files.length > 0);
                                         console.log('[YKN MAIN World] Fotoğraf başarıyla yüklendi:', photoName);
                                     }
+                                } else {
+                                    addResultField(fillResult, 'Fotoğraf', false);
                                 }
                             } catch (pErr) {
                                 console.warn('[YKN MAIN World Photo Upload Error]', pErr);
@@ -1095,13 +1391,46 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             }
                         } catch (_) {}
                     }
+
+                    fillResult.success = Boolean(
+                        !data ||
+                        fillResult.filledFields.length > 0 ||
+                        (fillResult.missingFields.length === 0 && fillResult.photoUploaded)
+                    );
+                    return fillResult;
                 } catch (e) {
                     console.error('[YKN MAIN World Form Sync Error]', e);
+                    return { success: false, filledFields: [], missingFields: [], photoUploaded: false, error: e.message };
                 }
             }
         });
+        const aggregate = {
+            success: false,
+            filledFields: [],
+            missingFields: [],
+            photoUploaded: false
+        };
+        for (const entry of results || []) {
+            const result = entry?.result;
+            if (!result) continue;
+            aggregate.success = aggregate.success || result.success === true;
+            aggregate.photoUploaded = aggregate.photoUploaded || result.photoUploaded === true;
+            for (const label of result.filledFields || []) {
+                if (!aggregate.filledFields.includes(label)) aggregate.filledFields.push(label);
+            }
+            for (const label of result.missingFields || []) {
+                if (!aggregate.missingFields.includes(label)) aggregate.missingFields.push(label);
+            }
+        }
+        for (const label of aggregate.filledFields) {
+            const missingIndex = aggregate.missingFields.indexOf(label);
+            if (missingIndex !== -1) aggregate.missingFields.splice(missingIndex, 1);
+        }
+        aggregate.partial = aggregate.missingFields.length > 0;
+        return aggregate;
     } catch (err) {
         console.warn('syncYoksisFormInMainWorld error:', err);
+        return { success: false, filledFields: [], missingFields: [], photoUploaded: false, error: err.message };
     }
 }
 
@@ -1413,26 +1742,58 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         sendResponse({ success: false, requestId: request.requestId, error: storageError.message });
                         return;
                     }
-                    chrome.tabs.sendMessage(yoksisTab.id, {
-                        action: 'fillRemainingData',
-                        data: studentData
-                    }, (response) => {
-                        const error = chrome.runtime.lastError;
-                        if (error) {
-                            sendResponse({ success: false, requestId: request.requestId, error: error.message });
-                            return;
+                    (async () => {
+                        // Öncelikli yol: alanları doğrudan YÖKSİS'in MAIN/ZK
+                        // dünyasında bulup doldur. Böylece izole dünyaya yazılan
+                        // değerlerin sayfa tarafından yok sayılması engellenir.
+                        let mainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData);
+                        const needsContentFallback = !mainResponse?.success
+                            || (studentData?.croppedPhotoBase64 && mainResponse.photoUploaded !== true)
+                            || (mainResponse.missingFields || []).length > 0;
+
+                        let contentResponse = null;
+                        let retryMainResponse = null;
+                        if (needsContentFallback) {
+                            try {
+                                contentResponse = await sendTabMessage(yoksisTab.id, {
+                                    action: 'fillRemainingData',
+                                    data: studentData
+                                });
+                            } catch (contentError) {
+                                console.warn('[YKN] YÖKSİS content-script fallback başarısız:', contentError);
+                            }
+                            // Fallback DOM'a yazdıysa, son kez MAIN world ile
+                            // ZK widgetlarına commit et ve fotoğraf uploader'ını
+                            // tekrar çalıştır.
+                            retryMainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData);
                         }
-                        // Content script DOM'a değerleri yazar; ZK'nin gerçek
-                        // widget durumunu ve sunucu olaylarını MAIN world'de
-                        // senkronize etmeden portal'a tamamlandı dönme.
-                        syncYoksisFormInMainWorld(yoksisTab.id, studentData)
-                            .then(() => {
-                                sendResponse({ success: true, ...response, mainWorldSynced: true, requestId: request.requestId });
-                            })
-                            .catch((syncError) => {
-                                console.warn('[YKN] YÖKSİS MAIN world senkronizasyonu başarısız:', syncError);
-                                sendResponse({ success: true, ...response, mainWorldSynced: false, requestId: request.requestId });
-                            });
+
+                        const responses = [mainResponse, contentResponse, retryMainResponse].filter(Boolean);
+                        const finalResponse = {
+                            success: responses.some(item => item.success === true),
+                            filledFields: [],
+                            missingFields: [],
+                            photoUploaded: responses.some(item => item.photoUploaded === true),
+                            mainWorldSynced: Boolean(mainResponse?.success || retryMainResponse?.success)
+                        };
+                        for (const item of responses) {
+                            for (const label of item.filledFields || []) {
+                                if (!finalResponse.filledFields.includes(label)) finalResponse.filledFields.push(label);
+                            }
+                            for (const label of item.missingFields || []) {
+                                if (!finalResponse.missingFields.includes(label)) finalResponse.missingFields.push(label);
+                            }
+                        }
+                        finalResponse.missingFields = finalResponse.missingFields.filter(
+                            label => !finalResponse.filledFields.includes(label)
+                        );
+                        finalResponse.partial = finalResponse.missingFields.length > 0;
+                        if (!finalResponse.success && responses.some(item => item.error)) {
+                            finalResponse.error = responses.find(item => item.error)?.error;
+                        }
+                        sendResponse({ ...finalResponse, requestId: request.requestId });
+                    })().catch((fillError) => {
+                        sendResponse({ success: false, requestId: request.requestId, error: fillError.message });
                     });
                 });
             })().catch((error) => {

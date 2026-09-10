@@ -1045,13 +1045,21 @@ export function initYknManager() {
                     if (isPassportCropperOpen()) {
                         appendPassportPages(adjustedPages);
                     } else if (shouldOpenCropperWhenReady) {
-                        openPassportCropper({
-                            imageSrc: selectedPage.dataUrl,
-                            pages: allPages,
-                            initialPageIndex: initialTotal + bestPageIndex,
-                            studentName: currentStudentData?.fullName || '',
-                            passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
-                        });
+                        if (isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)) {
+                            // Belge arka planda okunurken gelen cropper da
+                            // Tek Tık akışının bekleme aşamasına geçmeli.
+                            // Aksi halde crop tamamlanınca yalnızca kaydedilip
+                            // FILL_YOKSIS_FORM hiç gönderilmiyordu.
+                            openOneClickCropper();
+                        } else {
+                            openPassportCropper({
+                                imageSrc: selectedPage.dataUrl,
+                                pages: allPages,
+                                initialPageIndex: initialTotal + bestPageIndex,
+                                studentName: currentStudentData?.fullName || '',
+                                passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                            });
+                        }
                         addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
                         shouldOpenCropperWhenReady = false;
                     }
@@ -1801,8 +1809,19 @@ export function initYknManager() {
                         || currentStudentData.passportDocumentUrl
                         || (currentStudentData.passportCandidates && currentStudentData.passportCandidates[0]);
                     if (passUrl && !currentStudentData.passportImageSrc) {
-                        addStatus('Öğrenci bilgileri kopyalandı. Pasaport belgesi arka planda hazırlanıyor; fotoğraf için kırpma tuşunu kullanabilirsiniz.', 'success');
+                        shouldOpenCropperWhenReady = true;
+                        addStatus('Öğrenci bilgileri kopyalandı. Pasaport hazırlanıyor; fotoğraf kırpma ekranı açılacak.', 'success');
                         requestApplyDocument('passport', passUrl);
+                    } else if (currentStudentData.passportImageSrc) {
+                        shouldOpenCropperWhenReady = false;
+                        openPassportCropper({
+                            imageSrc: currentStudentData.passportImageSrc,
+                            pages: currentStudentData.passportPages || [],
+                            initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
+                            studentName: currentStudentData.fullName || '',
+                            passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || ''
+                        });
+                        addStatus('Öğrenci bilgileri kopyalandı. Fotoğraf kırpma ekranı açıldı.', 'success');
                     } else {
                         addStatus('Öğrenci bilgileri kopyalandı. Sonraki adımlar bağımsız olarak kullanılabilir.', 'success');
                     }

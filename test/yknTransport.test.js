@@ -73,6 +73,8 @@ test('YKN one-click waits for crop confirmation before final YÖKSİS fill', { s
     assert.doesNotMatch(cropperBranch, /postOneClickMessage\(['"]FILL_YOKSIS_FORM/);
     assert.match(manager, /isOneClickActive\(ONE_CLICK_STAGE\.CROPPER_WAITING\)/);
     assert.match(manager, /postOneClickMessage\(['"]FILL_YOKSIS_FORM['"], \{ data: currentStudentData \}\)/);
+    assert.match(manager, /isOneClickActive\(ONE_CLICK_STAGE\.PASSPORT_READING\)/);
+    assert.match(manager, /shouldOpenCropperWhenReady = true/);
 });
 
 test('portal accepts document discovery results without treating profile discovery as complete', async () => {
