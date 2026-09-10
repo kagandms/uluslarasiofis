@@ -67,6 +67,22 @@ function wait(milliseconds) {
     return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function withTimeout(promise, timeoutMs, errorMessage) {
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+        Promise.resolve(promise).then(
+            (value) => {
+                clearTimeout(timeoutId);
+                resolve(value);
+            },
+            (error) => {
+                clearTimeout(timeoutId);
+                reject(error);
+            }
+        );
+    });
+}
+
 async function ensureContentScriptInjected(tabId, pageKind) {
     try {
         if (chrome.scripting && chrome.scripting.executeScript) {
@@ -274,6 +290,7 @@ async function readApplyDocument(request) {
     }
     if (!targetTabId) throw new Error('Apply sekmesi bulunamadı.');
 
+    await waitForContentScript(targetTabId, 'apply');
     const result = await sendTabMessage(targetTabId, {
         action: 'FETCH_APPLY_DOCUMENT',
         documentUrl: request.documentUrl
@@ -314,11 +331,11 @@ async function getActiveYoksisTab() {
     if (!yoksisTab) yoksisTab = await createTab({ url: YOKSIS_URL, active: true });
 
     yoksisTabId = yoksisTab.id;
-    ensureContentScriptInjected(yoksisTabId, 'yoksis').catch(() => {});
     await updateTab(yoksisTabId, { active: true });
     if (yoksisTab.windowId) {
         await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch(() => {});
     }
+    await waitForContentScript(yoksisTabId, 'yoksis');
     return yoksisTab;
 }
 
@@ -840,7 +857,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 var buttons = doc.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button');
                                 var photoBtn = null;
                                 for (var b = 0; b < buttons.length; b++) {
-                                    var bt = norm(buttons[b].innerText || buttons[b].textContent || buttons[b].value || '');
+                                    var bt = norm(buttons[b].innerText || buttons[b].textContent || buttons[b].value || buttons[b].getAttribute('aria-label') || buttons[b].getAttribute('title') || buttons[b].id || '');
                                     if (bt.indexOf('fotograf') !== -1 && (bt.indexOf('yukle') !== -1 || bt.indexOf('sec') !== -1 || bt.indexOf('ekle') !== -1)) {
                                         photoBtn = buttons[b];
                                         break;
@@ -996,6 +1013,43 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
     }
 }
 
+async function searchYoksisFromContent(tabId, kabulId, requestId) {
+    try {
+        await waitForContentScript(tabId, 'yoksis');
+        return await withTimeout(
+            sendTabMessage(tabId, {
+                action: 'searchWithId',
+                kabulId,
+                requestId
+            }),
+            3500,
+            'YÖKSİS arama zaman aşımı'
+        );
+    } catch (error) {
+        console.warn('[YKN] Content-script YÖKSİS araması başarısız:', error);
+        return null;
+    }
+}
+
+async function waitForYoksisFormReady(tabId, requestId) {
+    try {
+        await waitForContentScript(tabId, 'yoksis');
+        const readiness = await withTimeout(
+            sendTabMessage(tabId, {
+                action: 'WAIT_YOKSIS_FORM',
+                timeoutMs: 6000,
+                requestId
+            }),
+            7000,
+            'YÖKSİS formu hazır olma zaman aşımı'
+        );
+        return Boolean(readiness?.formReady);
+    } catch (error) {
+        console.warn('[YKN] YÖKSİS form hazır olma kontrolü başarısız:', error);
+        return false;
+    }
+}
+
 
 async function transferToYoksis(request) {
     const yoksisTab = await getExistingYoksisTab();
@@ -1011,22 +1065,15 @@ async function transferToYoksis(request) {
     // 2. MAIN WORLD ZK aramasını tüm framelerde çalıştır
     const mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
     const mainSuccess = mainResults && mainResults.some(r => r.result?.inputFound);
+    const mainControlsIncomplete = Boolean(
+        mainSuccess
+        && mainResults.some(r => r.result?.inputFound && r.result?.buttonFound === false)
+    );
 
     // 3. MAIN WORLD bulamadıysa Content script üzerinden dene (kısa zaman aşımıyla)
     let response = null;
-    if (!mainSuccess) {
-        try {
-            response = await Promise.race([
-                sendTabMessage(yoksisTab.id, {
-                    action: 'searchWithId',
-                    kabulId: kabulId,
-                    requestId: request.requestId
-                }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('YÖKSİS arama zaman aşımı')), 3500))
-            ]);
-        } catch (msgErr) {
-            console.warn('[YKN] sendTabMessage searchWithId fallback warning:', msgErr);
-        }
+    if (!mainSuccess || mainControlsIncomplete) {
+        response = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId);
     } else {
         // MAIN WORLD aramasını teyit amaçlı kısa süre sonra bir kez daha tetikle
         setTimeout(() => {
@@ -1041,19 +1088,15 @@ async function transferToYoksis(request) {
 
     let formReady = Boolean(response?.formReady);
     if (!formReady) {
-        try {
-            await waitForContentScript(yoksisTab.id, 'yoksis');
-            const readiness = await Promise.race([
-                sendTabMessage(yoksisTab.id, {
-                    action: 'WAIT_YOKSIS_FORM',
-                    timeoutMs: 6000,
-                    requestId: request.requestId
-                }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('YÖKSİS formu hazır olma zaman aşımı')), 7000))
-            ]);
-            formReady = Boolean(readiness?.formReady);
-        } catch (error) {
-            console.warn('[YKN] YÖKSİS form hazır olma kontrolü başarısız:', error);
+        formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId);
+    }
+
+    if (!formReady && mainSuccess && !mainControlsIncomplete) {
+        const fallbackResponse = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId);
+        if (fallbackResponse?.success) {
+            response = fallbackResponse;
+            formReady = Boolean(fallbackResponse.formReady)
+                || await waitForYoksisFormReady(yoksisTab.id, request.requestId);
         }
     }
 

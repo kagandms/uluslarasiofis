@@ -168,16 +168,18 @@ function simulateRadioByLabelText(labelText) {
     const normalize = (str) => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
     const targetText = normalize(labelText);
     
-    const labels = document.querySelectorAll('label');
-    for (const lbl of labels) {
-        if (normalize(lbl.innerText) === targetText) {
-            const forId = lbl.getAttribute('for');
-            if (forId) {
-                const radio = document.getElementById(forId);
-                if (radio) {
-                    radio.click();
-                    radio.dispatchEvent(new Event('change', { bubbles: true }));
-                    return true;
+    for (const doc of getAllDocs(document)) {
+        const labels = doc.querySelectorAll('label');
+        for (const lbl of labels) {
+            if (normalize(lbl.innerText) === targetText) {
+                const forId = lbl.getAttribute('for');
+                if (forId) {
+                    const radio = doc.getElementById(forId);
+                    if (radio) {
+                        radio.click();
+                        radio.dispatchEvent(new Event('change', { bubbles: true }));
+                        return true;
+                    }
                 }
             }
         }
@@ -518,7 +520,8 @@ function waitForYoksisSearchControls() {
 function waitForYoksisForm(timeoutMs = 6000) {
     const deadline = Date.now() + timeoutMs;
     return new Promise((resolve, reject) => {
-        const intervalId = setInterval(() => {
+        let intervalId;
+        const checkForm = () => {
             const hasStudentForm = Boolean(
                 findTargetElementByFuzzyLabel('Anne Adı', 'input')
                 || findTargetElementByFuzzyLabel('Baba Adı', 'input')
@@ -533,7 +536,9 @@ function waitForYoksisForm(timeoutMs = 6000) {
                 clearInterval(intervalId);
                 reject(new Error('YÖKSİS öğrenci bilgi formu açılmadı.'));
             }
-        }, 400);
+        };
+        intervalId = setInterval(checkForm, 400);
+        checkForm();
     });
 }
 
@@ -548,7 +553,7 @@ function findBelgeNoInMainPanel() {
         for (const target of allInputs) {
             // Sol menüdeki arama kutucuğunu atlamak için placeholder kontrolü
             const ph = target.getAttribute('placeholder') || '';
-            if (ph.toLocaleLowerCase('tr-TR').includes('pasaport') || ph.toLocaleLowerCase('tr-TR').includes('belge')) {
+            if (ph.toLocaleLowerCase('tr-TR').includes('pasaport')) {
                 continue; 
             }
             
@@ -594,6 +599,9 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
     for (const doc of allDocs) {
         const allTargets = doc.querySelectorAll(tagName);
         for (const target of allTargets) {
+            if (tagName === 'input' && (target.getAttribute('type') || '').toLowerCase() === 'file') {
+                continue;
+            }
             const row = target.closest('tr');
             if (row && normalize(row.innerText).includes(searchWord)) {
                 const targetTd = target.closest('td');
@@ -655,7 +663,7 @@ function findPhotoUploadButton() {
         // 1. Text-based search across clickable elements
         const clickables = doc.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button, [role="button"]');
         for (const el of clickables) {
-            const t = norm(el.innerText || el.textContent || el.value || '');
+            const t = norm(el.innerText || el.textContent || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || el.id || '');
             if (t.includes('fotograf') && (t.includes('yukle') || t.includes('sec') || t.includes('ekle'))) {
                 return el;
             }
@@ -746,6 +754,12 @@ function findYoksisFileInput(photoBtn) {
         return closest || allDocInputs[0];
     }
 
+    for (const doc of getAllDocs(document)) {
+        if (doc === photoBtn.ownerDocument) continue;
+        const frameInput = doc.querySelector('input[type="file"]');
+        if (frameInput) return frameInput;
+    }
+
     return null;
 }
 
@@ -813,6 +827,10 @@ async function uploadPhotoToYoksis(photoBase64, fileName) {
         const dt = new DataTransfer();
         dt.items.add(file);
         fileInput.files = dt.files;
+        if (!fileInput.files || fileInput.files.length === 0) {
+            console.warn('[YKN] Fotoğraf dosyası inputa atanamadı.');
+            return false;
+        }
         fileInput.setAttribute('data-ykn-photo-token', photoToken);
         fileInput.setAttribute('data-ykn-photo-status', 'file_assigned');
 
@@ -848,7 +866,7 @@ async function uploadPhotoToYoksis(photoBase64, fileName) {
         try {
             const fotoAdiInput = findTargetElementByFuzzyLabel('Fotoğraf Adı', 'input');
             if (fotoAdiInput && !fotoAdiInput.value) {
-                simulateInput(fotoAdiInput, fileName);
+                await simulateInput(fotoAdiInput, fileName);
             }
         } catch (_) {}
 
