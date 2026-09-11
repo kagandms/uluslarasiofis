@@ -239,6 +239,71 @@ test('YÖKSİS search handles ZK-labelled controls and confirms delayed form rea
     }
 });
 
+test('YÖKSİS ikinci aramada kök DOM yeniden oluşsa bile yeni formu algılar', async () => {
+    const harness = createContentHarness(`
+        <table id="search-panel">
+            <tr><td>Kabul Mektup ID</td><td><input id="acceptance-id" title="Kabul Mektup ID"></td><td><button id="search-button">Kabul Mektup ID ile Ara</button></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const formMarkup = `
+        <table id="student-form">
+            <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+            <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+        </table>
+    `;
+    const replaceDocumentRoot = (includeStudentForm) => {
+        const nextRoot = harness.dom.window.document.createElement('html');
+        nextRoot.innerHTML = `<head></head><body>
+            <table id="search-panel">
+                <tr><td>Kabul Mektup ID</td><td><input id="acceptance-id" title="Kabul Mektup ID"></td><td><button id="search-button">Kabul Mektup ID ile Ara</button></td></tr>
+            </table>
+            ${includeStudentForm ? formMarkup : ''}
+        </body>`;
+        harness.dom.window.document.documentElement.replaceWith(nextRoot);
+        harness.dom.window.document.getElementById('search-button').addEventListener('click', () => {
+            setTimeout(() => {
+                const oldForm = harness.dom.window.document.getElementById('student-form');
+                const nextForm = harness.dom.window.document.createElement('table');
+                nextForm.id = 'student-form';
+                nextForm.innerHTML = '<tr><td>Anne Adı</td><td><input id="mother-name"></td></tr><tr><td>Belge No</td><td><input id="document-number"></td></tr>';
+                if (oldForm) oldForm.replaceWith(nextForm);
+                else harness.dom.window.document.body.appendChild(nextForm);
+            }, 25);
+        });
+    };
+
+    // İlk arama için mevcut köke arama sonucunu ekle.
+    harness.dom.window.document.getElementById('search-button').addEventListener('click', () => {
+        setTimeout(() => {
+            const form = harness.dom.window.document.createElement('table');
+            form.id = 'student-form';
+            form.innerHTML = '<tr><td>Anne Adı</td><td><input id="mother-name"></td></tr><tr><td>Belge No</td><td><input id="document-number"></td></tr>';
+            harness.dom.window.document.body.appendChild(form);
+        }, 25);
+    });
+
+    try {
+        const firstResponse = await harness.send({
+            action: 'searchWithId',
+            kabulId: 'AB-123-CD',
+            requestId: 'workflow-root-replacement-1'
+        });
+        assert.equal(firstResponse.success, true);
+
+        // ZK'nin ilk öğrenci sonrası tüm document kökünü yeniden kurmasını taklit et.
+        replaceDocumentRoot(true);
+
+        const secondResponse = await harness.send({
+            action: 'searchWithId',
+            kabulId: 'EF-456-GH',
+            requestId: 'workflow-root-replacement-2'
+        });
+        assert.equal(secondResponse.success, true);
+    } finally {
+        harness.close();
+    }
+});
+
 test('YÖKSİS search uses the ZK button cell beside the acceptance input once', async () => {
     const harness = createContentHarness(`
         <table>
@@ -633,7 +698,7 @@ test('background transfer waits for a delayed fresh form after the search click'
     assert.ok(!harness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
 });
 
-test('ardışık öğrencilerde YÖKSİS sekmesi arama öncesi otomatik yenilenir', async () => {
+test('ardışık öğrencilerde YÖKSİS sekmesi yenilenmeden aynı sekmede aranır', async () => {
     const harness = createBackgroundHarness(
         { inputFound: false, buttonFound: false },
         { success: true, searchTriggered: true, formReady: true }
@@ -656,8 +721,8 @@ test('ardışık öğrencilerde YÖKSİS sekmesi arama öncesi otomatik yenileni
     assert.equal(secondResponse.success, true);
     assert.equal(
         harness.calls.filter((call) => call.type === 'reload-tab').length,
-        2,
-        'her yeni öğrenci aramasından önce YÖKSİS sekmesi yenilenmeliydi'
+        0,
+        'öğrenci değişiminde YÖKSİS sayfası yenilenmemeli; form alanları korunmalıydı'
     );
 });
 

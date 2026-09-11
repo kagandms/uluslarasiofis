@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.37';
+const CONTENT_SCRIPT_VERSION = '1.2.38';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -12,19 +12,24 @@ const FIXED_YOKSIS_PHONE = '5322431261';
 // aramanın sonucu sanmaya yol açar. ZK postback'inin gerçekten DOM'u güncellediğini
 // de izliyoruz. Sayaç content-script yaşamı boyunca korunur.
 let yoksisDomRevision = 0;
-const observedYoksisDocuments = new WeakSet();
+const observedYoksisRoots = new WeakSet();
 
 function observeYoksisDomChanges() {
     if (getPageKind() !== 'yoksis' || typeof MutationObserver === 'undefined') return;
     for (const doc of getAllDocs(document)) {
-        if (!doc || observedYoksisDocuments.has(doc)) continue;
+        if (!doc) continue;
         const root = doc.documentElement || doc.body;
         if (!root) continue;
+        // ZK bazı geçişlerde aynı Document altında documentElement'i tamamen
+        // yeniden kuruyor. Document'i değil root düğümünü izlemek, yeni kökte
+        // MutationObserver'ı tekrar kurup ikinci öğrencinin form değişimini
+        // yakalamamızı sağlar.
+        if (observedYoksisRoots.has(root)) continue;
         const observer = new MutationObserver(() => {
             yoksisDomRevision += 1;
         });
         observer.observe(root, { childList: true, subtree: true });
-        observedYoksisDocuments.add(doc);
+        observedYoksisRoots.add(root);
     }
 }
 
