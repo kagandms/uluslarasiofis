@@ -148,6 +148,10 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                 calls.push({ type: 'update-tab', updateProperties });
                 callback({ ...yoksisTab, ...updateProperties });
             },
+            reload(_tabId, reloadProperties, callback) {
+                calls.push({ type: 'reload-tab', reloadProperties });
+                callback({ ...yoksisTab });
+            },
             sendMessage(_tabId, message, callback) {
                 calls.push({ type: 'message', message });
                 chrome.runtime.lastError = null;
@@ -627,6 +631,34 @@ test('background transfer waits for a delayed fresh form after the search click'
         && call.message.afterFingerprint === 'previous-student'
         && call.message.afterDomRevision === 6));
     assert.ok(!harness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
+});
+
+test('ardışık öğrencilerde YÖKSİS sekmesi arama öncesi otomatik yenilenir', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: false, buttonFound: false },
+        { success: true, searchTriggered: true, formReady: true }
+    );
+
+    const firstResponse = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'workflow-refresh-student-1',
+        data: { yoksisId: 'AB-123-CD' }
+    });
+    const secondResponse = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'workflow-refresh-student-2',
+        data: { yoksisId: 'EF-456-GH' }
+    });
+
+    assert.equal(firstResponse.success, true);
+    assert.equal(secondResponse.success, true);
+    assert.equal(
+        harness.calls.filter((call) => call.type === 'reload-tab').length,
+        2,
+        'her yeni öğrenci aramasından önce YÖKSİS sekmesi yenilenmeliydi'
+    );
 });
 
 test('Tek Tık aktarımı açık YÖKSİS sekmesi yoksa güvenli biçimde yeni sekme açar', async () => {

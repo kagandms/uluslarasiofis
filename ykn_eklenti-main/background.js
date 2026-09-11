@@ -73,6 +73,25 @@ function updateTab(tabId, updateProperties) {
     });
 }
 
+function reloadTab(tabId) {
+    return new Promise((resolve, reject) => {
+        // Chrome MV3'te tabs.reload her zaman mevcut; bu koruma test/uyum
+        // ortamlarında API eksikse akışı gereksiz yere kırmamak içindir.
+        if (!chrome.tabs.reload) {
+            resolve();
+            return;
+        }
+        chrome.tabs.reload(tabId, {}, () => {
+            const error = chrome.runtime.lastError;
+            if (error) {
+                reject(new Error(error.message));
+                return;
+            }
+            resolve();
+        });
+    });
+}
+
 function queryTabs(queryInfo) {
     return new Promise((resolve, reject) => {
         chrome.tabs.query(queryInfo, (tabs) => {
@@ -377,6 +396,14 @@ async function getBackgroundYoksisTab() {
     yoksisTabId = yoksisTab.id;
     await waitForContentScript(yoksisTabId, 'yoksis');
     return yoksisTab;
+}
+
+async function refreshYoksisTabForNewStudent(tabId) {
+    // YÖKSİS eski öğrencinin ZK widget/form state'ini aynı sekmede tutabiliyor.
+    // Kullanıcı elle yenilediğinde düzelen bu durumu her kabul kodu aramasından
+    // önce otomatik yenile; ardından yeni content script'in hazır olmasını bekle.
+    await reloadTab(tabId);
+    await waitForContentScript(tabId, 'yoksis');
 }
 
 async function getForegroundYoksisTab() {
@@ -1723,6 +1750,7 @@ async function transferToYoksis(request) {
     if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
 
     return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
+        await refreshYoksisTabForNewStudent(yoksisTab.id);
         await new Promise((resolve) => {
             chrome.storage.local.set({ studentData: request.data }, resolve);
         });
