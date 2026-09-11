@@ -242,3 +242,112 @@ test('aynı kabul belgesi iki kez bildirildiğinde kod ve YÖKSİS aktarımı te
         delete globalThis.navigator;
     }
 });
+
+test('yeni öğrenci aramasında önceki öğrencinin kabul belgesi önbelleği kullanılmaz', async () => {
+    const dom = installPortalEnvironment();
+    const { initYknManager } = await import('../src/managers/yknManager.js');
+    const messages = [];
+    const clipboardWrites = [];
+    dom.window.navigator.clipboard = {
+        writeText: async (value) => clipboardWrites.push(value)
+    };
+    dom.window.addEventListener('message', (event) => {
+        if (event.data?.source === 'WEB_APP') messages.push(event.data.payload);
+    });
+
+    const acceptanceUrl = 'https://apply.example.test/acceptance-letter-student-series.pdf';
+    const dispatchDocuments = (requestId, fullName, passportNo) => {
+        dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+            data: {
+                source: 'EXTENSION',
+                type: 'EVENT',
+                action: 'STUDENT_DOCUMENTS_FOUND',
+                requestId,
+                data: {
+                    fullName,
+                    passportNo,
+                    acceptanceCandidates: [acceptanceUrl],
+                    acceptanceLetterUrl: acceptanceUrl,
+                    passportCandidates: [],
+                    documentsReady: true
+                }
+            },
+            source: dom.window
+        }));
+    };
+
+    const dispatchDocument = (readRequest, code) => {
+        const documentBase64 = Buffer.from(`Kabul mektubu YÖKSİS ID: ${code}`, 'utf8').toString('base64');
+        dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+            data: {
+                source: 'EXTENSION',
+                type: 'EVENT',
+                action: 'DOCUMENT_BYTES_READY',
+                requestId: readRequest.requestId,
+                data: {
+                    documentKind: 'acceptanceLetter',
+                    documentUrl: readRequest.documentUrl,
+                    contentType: 'text/plain',
+                    documentBase64
+                }
+            },
+            source: dom.window
+        }));
+    };
+
+    try {
+        initYknManager();
+        dispatchDocuments('search-student-1', 'First Student', 'P1');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        dom.window.document.getElementById('btn-ykn-one-click').click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const firstReadRequest = messages.find((payload) => payload.action === 'READ_APPLY_DOCUMENT');
+        assert.ok(firstReadRequest, 'ilk öğrenci için belge okunmalıydı');
+        dispatchDocument(firstReadRequest, 'AAA-111-BB');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const firstTransferRequest = messages.find((payload) => payload.action === 'TRANSFER_TO_YOKSIS');
+        assert.ok(firstTransferRequest, 'ilk öğrenci için YÖKSİS aktarımı başlamalıydı');
+        postExtensionResponse(dom.window, 'TRANSFER_TO_YOKSIS', firstTransferRequest.requestId, {
+            success: false,
+            error: 'test ilk akışı sonlandır'
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const passportInput = dom.window.document.getElementById('ykn-passport-input');
+        passportInput.value = 'P2';
+        dom.window.document.getElementById('btn-ykn-search').click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const secondSearchRequest = messages.filter((payload) => payload.action === 'SEARCH_STUDENT').at(-1);
+        assert.ok(secondSearchRequest, 'ikinci öğrenci araması başlamalıydı');
+
+        dispatchDocuments(secondSearchRequest.requestId, 'Second Student', 'P2');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        dom.window.document.getElementById('btn-ykn-one-click').click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const readRequests = messages.filter((payload) => payload.action === 'READ_APPLY_DOCUMENT');
+        assert.equal(readRequests.length, 2, 'ikinci öğrenci için kabul belgesi yeniden okunmalıydı');
+
+        const secondReadRequest = readRequests.at(-1);
+        dispatchDocument(secondReadRequest, 'CCC-222-DD');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        assert.deepEqual(clipboardWrites, ['AAA-111-BB', 'CCC-222-DD']);
+        const transferRequests = messages.filter((payload) => payload.action === 'TRANSFER_TO_YOKSIS');
+        assert.equal(transferRequests.length, 2, 'iki öğrenci için iki ayrı YÖKSİS aktarımı başlamalıydı');
+
+        postExtensionResponse(dom.window, 'TRANSFER_TO_YOKSIS', transferRequests.at(-1).requestId, {
+            success: false,
+            error: 'test ikinci akışı sonlandır'
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 4_500));
+    } finally {
+        dom.window.close();
+        delete globalThis.window;
+        delete globalThis.document;
+        delete globalThis.navigator;
+    }
+});

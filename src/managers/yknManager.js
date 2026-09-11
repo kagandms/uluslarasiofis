@@ -762,6 +762,9 @@ export function initYknManager() {
         shouldOpenCropperWhenReady = false;
         pendingDocumentReads.clear();
         documentRequestKeys.clear();
+        // Belge URL'leri öğrenciler arasında yeniden kullanılabildiği için
+        // yeni öğrenci aramasında önceki öğrencinin PDF/HTML içeriğini taşıma.
+        documentBytesCache.clear();
         processingAcceptanceDocumentKeys.clear();
         processedAcceptanceDocumentKeys.clear();
         workflowStepStatuses.clear();
