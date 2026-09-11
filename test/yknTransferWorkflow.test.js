@@ -134,6 +134,64 @@ test('cropperdaki Her Şeyi aktar onayı, doğrulanmış YÖKSİS formuna tüm v
     }
 });
 
+test('YÖKSİS araması tetiklenince form beklemede olsa da 3. adım açılır', async () => {
+    const dom = installPortalEnvironment();
+    const { initYknManager } = await import('../src/managers/yknManager.js');
+    const messages = [];
+    dom.window.addEventListener('message', (event) => {
+        if (event.data?.source === 'WEB_APP') messages.push(event.data.payload);
+    });
+
+    try {
+        initYknManager();
+        dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+            data: {
+                source: 'EXTENSION',
+                type: 'EVENT',
+                action: 'STUDENT_FOUND',
+                requestId: 'search-pending-form',
+                data: {
+                    fullName: 'Test Student',
+                    passportNo: 'P123',
+                    yoksisId: 'AB-123-CD'
+                }
+            },
+            source: dom.window
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        dom.window.document.getElementById('btn-ykn-transfer-yoksis').click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const transferRequest = messages.find((payload) => payload.action === 'TRANSFER_TO_YOKSIS');
+        assert.ok(transferRequest, 'YÖKSİS aktarım isteği gönderilmeliydi');
+
+        postExtensionResponse(dom.window, 'TRANSFER_TO_YOKSIS', transferRequest.requestId, {
+            success: true,
+            searchTriggered: true,
+            formReady: false
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const copyInfoButton = dom.window.document.getElementById('btn-ykn-copy-info');
+        assert.equal(copyInfoButton.disabled, false, 'form beklemede olsa da 3. buton açılmalıydı');
+        copyInfoButton.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const copyRequest = messages.find((payload) => payload.action === 'COPY_APPLY_DATA');
+        assert.ok(copyRequest, '3. adım Apply bilgilerini istemeliydi');
+
+        postExtensionResponse(dom.window, 'COPY_APPLY_DATA', copyRequest.requestId, {
+            success: false,
+            error: 'test akışını sonlandır'
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+        dom.window.close();
+        delete globalThis.window;
+        delete globalThis.document;
+        delete globalThis.navigator;
+    }
+});
+
 test('aynı kabul belgesi iki kez bildirildiğinde kod ve YÖKSİS aktarımı tek kez işlenir', async () => {
     const dom = installPortalEnvironment();
     const { initYknManager } = await import('../src/managers/yknManager.js');

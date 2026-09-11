@@ -1890,11 +1890,19 @@ export function initYknManager() {
             } else if (event.data.action === 'TRANSFER_TO_YOKSIS'
                 && isOneClickActive(ONE_CLICK_STAGE.YOKSIS_SEARCHING)) {
                 clearOneClickTimeout();
-                if (response?.success && response.searchTriggered !== false) {
-                    currentStudentData = { ...currentStudentData, yoksisReady: response.formReady === true };
-                    completedWorkflowSteps.add(2);
+                if (response?.success && response.searchTriggered === true) {
+                    const formReady = response.formReady === true;
+                    currentStudentData = {
+                        ...currentStudentData,
+                        // Arama komutu gerçekten gönderildiyse son doldurma
+                        // adımı formu YÖKSİS sekmesini öne alarak bekleyebilir.
+                        yoksisReady: true,
+                        yoksisFormPending: !formReady
+                    };
+                    setWorkflowStepStatus(2, formReady ? 'success' : 'partial');
                     updateWorkflowUI(3);
-                    if (response.formReady === false) {
+                    updateStudentActions(currentStudentData);
+                    if (!formReady) {
                         addStatus('Kabul kodu YÖKSİS’te aratıldı. Öğrenci formu yüklenmeye devam ediyor.', 'info');
                     }
                     startOneClickApplyData();
@@ -1960,22 +1968,23 @@ export function initYknManager() {
             } else if (event.data.action === 'TRANSFER_TO_YOKSIS') {
                 finishButtonAction('transfer-yoksis');
 
-                if (response?.success && response.formReady !== false) {
-                    currentStudentData = { ...currentStudentData, yoksisReady: true };
-                    setWorkflowStepStatus(2, 'success');
-                    if (currentWorkflowStep <= 2) {
-                        updateWorkflowUI(3);
-                    } else {
-                        updateWorkflowUI();
-                    }
+                if (response?.success && response.searchTriggered === true) {
+                    const formReady = response.formReady === true;
+                    currentStudentData = {
+                        ...currentStudentData,
+                        yoksisReady: true,
+                        yoksisFormPending: !formReady
+                    };
+                    setWorkflowStepStatus(2, formReady ? 'success' : 'partial');
+                    updateWorkflowUI(3);
                     updateStudentActions(currentStudentData);
-                    addStatus('Kabul kodu YÖKSİS sekmesinde aratıldı ve öğrenci formu hazır.', 'success');
-                    showToast('YÖKSİS araması tamamlandı.', 'success');
-                } else if (response?.success) {
-                    currentStudentData = { ...currentStudentData, yoksisReady: false };
-                    setWorkflowStepStatus(2, 'partial');
-                    addStatus('Kabul kodu YÖKSİS sekmesine aktarıldı ancak öğrenci formu henüz hazır değil.', 'warning');
-                    showToast('YÖKSİS formu henüz hazır değil.', 'warning');
+                    if (formReady) {
+                        addStatus('Kabul kodu YÖKSİS sekmesinde aratıldı ve öğrenci formu hazır.', 'success');
+                        showToast('YÖKSİS araması tamamlandı.', 'success');
+                    } else {
+                        addStatus('Kabul kodu YÖKSİS’te aratıldı. Öğrenci formu son aktarım sırasında beklenecek.', 'info');
+                        showToast('YÖKSİS formu hazırlanıyor; 3. adım açıldı.', 'info');
+                    }
                 } else {
                     setWorkflowStepStatus(2, 'error');
                     const errMsg = response?.error || response?.message || 'Kabul kodu YÖKSİS\'e aktarılamadı. Lütfen YÖKSİS sekmesinde öğrenci başvuru/kayıt ekranının açık olduğunu kontrol edin.';

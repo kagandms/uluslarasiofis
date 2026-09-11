@@ -1751,15 +1751,15 @@ async function transferToYoksis(request) {
                     afterDomRevision: stateBeforeMainSearch.domRevision,
                     requireFreshResult: true
                 });
-                if (!formReady) {
-                    throw new Error('YÖKSİS arama komutu gönderildi ancak yeni öğrenci formu doğrulanmadı. Önceki form korunarak işlem durduruldu.');
-                }
                 return {
                     success: true,
                     transferred: true,
                     searchTriggered: true,
-                    formReady: true,
-                    message: 'Kabul mektup kodu YÖKSİS’e aktarıldı ve yeni öğrenci formu doğrulandı.'
+                    formReady,
+                    formPending: !formReady,
+                    message: formReady
+                        ? 'Kabul mektup kodu YÖKSİS’e aktarıldı ve yeni öğrenci formu doğrulandı.'
+                        : 'Kabul mektup kodu YÖKSİS’e aktarıldı; öğrenci formu bekleniyor.'
                 };
             }
         }
@@ -1790,12 +1790,24 @@ async function transferToYoksis(request) {
             }
         }
 
-        // Content script bu noktada formun arama tıklamasından sonra yenilendiğini
-        // doğrulamış olmalıdır. "Tıklandı" yanıtını başarıya çevirmek, eski formu
-        // yeni kayıt sanan asıl hataydı.
-        const formReady = response?.formReady === true;
-        if (!formReady) {
-            throw new Error('Kabul kodu gönderildi ancak yeni YÖKSİS öğrenci formu doğrulanmadı. Aynı arama otomatik tekrar gönderilmedi.');
+        // Arama tıklaması gönderildiyse portalı yalnızca formun gecikmeli
+        // oluşturulması nedeniyle başarısız sayma. Form hazırsa hemen başarı,
+        // değilse beklemede başarılı dön; son doldurma adımı yeniden doğrular.
+        if (response?.searchTriggered === true) {
+            // ZK arama tıklamasını kabul etmiş olabilir ancak öğrenci formunu
+            // arka planda birkaç saniye sonra oluşturabilir. Bu durumda portalı
+            // bloklamadan sonucu beklemede başarılı bildir; son doldurma adımı
+            // YÖKSİS sekmesini öne alıp formu tekrar doğrulayacaktır.
+            return {
+                success: true,
+                transferred: true,
+                searchTriggered: true,
+                formReady: response.formReady === true,
+                formPending: response.formReady !== true,
+                message: response.formReady === true
+                    ? 'Kabul mektup kodu YÖKSİS’e aktarıldı ve öğrenci formu doğrulandı.'
+                    : 'Kabul mektup kodu YÖKSİS’e aktarıldı; öğrenci formu bekleniyor.'
+            };
         }
 
         return {

@@ -1,11 +1,15 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.38';
+const CONTENT_SCRIPT_VERSION = '1.2.39';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
 const FIXED_YOKSIS_PHONE = '5322431261';
+// Arama komutunu portala hızlıca bildirmek için ilk form hazır olma kontrolü
+// kısa tutulur. Form gecikirse background bunu beklemede başarılı kabul eder;
+// son doldurma adımı YÖKSİS sekmesini öne alıp daha uzun süre tekrar bekler.
+const YOKSIS_SEARCH_INITIAL_FORM_WAIT_MS = 1_500;
 
 // YÖKSİS aynı öğrenci formunu aynı id ve boş değerlerle yeniden üretebiliyor.
 // Bu nedenle yalnızca alan parmak izine bakmak, önceki öğrencinin formunu yeni
@@ -1863,7 +1867,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 
                 let formReady = false;
                 try {
-                    await waitForYoksisForm(10_000, {
+                    await waitForYoksisForm(YOKSIS_SEARCH_INITIAL_FORM_WAIT_MS, {
                         afterFingerprint: formFingerprintBeforeSearch,
                         afterDomRevision: stateBeforeSearch.domRevision,
                         requireFreshResult: true

@@ -304,6 +304,30 @@ test('YÖKSİS ikinci aramada kök DOM yeniden oluşsa bile yeni formu algılar'
     }
 });
 
+test('YÖKSİS arama yanıtı geciken formu beklerken portalı kilitlemez', async () => {
+    const harness = createContentHarness(`
+        <table>
+            <tr><td>Kabul Mektup ID</td><td><input id="acceptance-id" title="Kabul Mektup ID"></td><td><button id="search-button">Kabul Mektup ID ile Ara</button></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    try {
+        const startedAt = Date.now();
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: 'AB-123-CD',
+            requestId: 'workflow-delayed-form-response'
+        });
+        const elapsedMs = Date.now() - startedAt;
+
+        assert.equal(response.searchTriggered, true);
+        assert.equal(response.formReady, false);
+        assert.equal(response.success, false);
+        assert.ok(elapsedMs < 4_000, `arama yanıtı ${elapsedMs}ms içinde dönmeliydi`);
+    } finally {
+        harness.close();
+    }
+});
+
 test('YÖKSİS search uses the ZK button cell beside the acceptance input once', async () => {
     const harness = createContentHarness(`
         <table>
@@ -696,6 +720,25 @@ test('background transfer waits for a delayed fresh form after the search click'
         && call.message.afterFingerprint === 'previous-student'
         && call.message.afterDomRevision === 6));
     assert.ok(!harness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
+});
+
+test('YÖKSİS araması tetiklenince form gecikse de aktarımı beklemede başarılı döner', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: false, buttonFound: false },
+        { success: false, searchTriggered: true, formReady: false }
+    );
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'workflow-pending-form',
+        data: { yoksisId: 'AB-123-CD' }
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.searchTriggered, true);
+    assert.equal(response.formReady, false);
+    assert.equal(response.formPending, true);
 });
 
 test('ardışık öğrencilerde YÖKSİS sekmesi yenilenmeden aynı sekmede aranır', async () => {
