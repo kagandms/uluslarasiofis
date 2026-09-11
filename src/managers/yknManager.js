@@ -345,6 +345,34 @@ export function initYknManager() {
         }
     }
 
+    function startManualYoksisFillAfterCrop() {
+        if (currentStudentData?.yoksisReady !== true) {
+            addStatus('Fotoğraf kaydedildi. Her şeyi YÖKSİS’e aktarmak için önce kabul kodunu YÖKSİS’te aratın.', 'warning');
+            showToast('Önce kabul kodunu YÖKSİS’te aratın.', 'warning');
+            return;
+        }
+
+        if (!beginButtonAction('paste-yoksis', btnPasteYoksis, 30_000, () => {
+            setWorkflowStepStatus(4, 'error');
+            addStatus('YÖKSİS formu doldurma yanıt vermedi. Tekrar deneyebilirsiniz.', 'error');
+            showToast('YÖKSİS formu yanıt vermedi.', 'error');
+        })) return;
+
+        activeSearchRequestId = createRequestId();
+        syncUserEnteredPassportDates();
+        addStatus('Fotoğraf onaylandı. Öğrenci bilgileri ve fotoğraf YÖKSİS’e aktarılıyor...', 'info');
+        showToast('Tüm bilgiler YÖKSİS’e aktarılıyor...', 'info');
+
+        window.postMessage({
+            source: 'WEB_APP',
+            payload: {
+                action: 'FILL_YOKSIS_FORM',
+                data: getYoksisTransportData(currentStudentData),
+                requestId: activeSearchRequestId
+            }
+        }, '*');
+    }
+
     function isTurkmenStudent(student) {
         const nationalityText = `${student?.uyruk || ''} ${student?.dogumUlkesi || ''}`.toUpperCase();
         return nationalityText.includes('TÜRKMEN') || nationalityText.includes('TURKMEN') || nationalityText.includes('TKM');
@@ -504,6 +532,8 @@ export function initYknManager() {
     let oneClickWorkflow = null;
     let shouldOpenCropperWhenReady = false;
     const pendingDocumentReads = new Set();
+    const processingAcceptanceDocumentKeys = new Set();
+    const processedAcceptanceDocumentKeys = new Set();
     const buttonActionTimers = new Map();
 
     const ONE_CLICK_STAGE = Object.freeze({
@@ -732,6 +762,8 @@ export function initYknManager() {
         shouldOpenCropperWhenReady = false;
         pendingDocumentReads.clear();
         documentRequestKeys.clear();
+        processingAcceptanceDocumentKeys.clear();
+        processedAcceptanceDocumentKeys.clear();
         workflowStepStatuses.clear();
         completedWorkflowSteps.clear();
         currentWorkflowStep = 1;
@@ -1016,6 +1048,20 @@ export function initYknManager() {
         if (!documentKind || !documentBytes) return;
         const documentUrl = String(documentData?.documentUrl || '').trim();
         const documentCacheKey = getDocumentCacheKey(documentKind, documentUrl);
+        const isAcceptanceDocument = documentKind === 'acceptanceLetter' && Boolean(documentUrl);
+        if (isAcceptanceDocument) {
+            // Aynı belge bildirimi; özellikle önbellekten dönen belge olayları,
+            // kabul kodunu yeniden panoya yazıp Tek Tık aktarımını ikinci kez
+            // başlatmamalıdır. İşlem sürerken gelen ikinci bildirimi de ayrıca
+            // kilitleyelim; PDF/OCR akışı await içerdiği için bu mümkündür.
+            if (
+                processingAcceptanceDocumentKeys.has(documentCacheKey) ||
+                processedAcceptanceDocumentKeys.has(documentCacheKey)
+            ) {
+                return;
+            }
+            processingAcceptanceDocumentKeys.add(documentCacheKey);
+        }
         if (documentUrl) {
             cacheDocumentBytes(documentCacheKey, {
                 documentKind,
@@ -1463,6 +1509,9 @@ export function initYknManager() {
                 }
 
                 currentStudentData = { ...currentStudentData, yoksisId };
+                if (isAcceptanceDocument) {
+                    processedAcceptanceDocumentKeys.add(documentCacheKey);
+                }
                 copyTextToClipboard(yoksisId);
                 updateStudentActions(currentStudentData);
                 finishButtonAction('copy-letter');
@@ -1482,6 +1531,9 @@ export function initYknManager() {
             if (documentKind === 'acceptanceLetter') finishButtonAction('copy-letter');
             if (isOneClickActive(stage)) failOneClick('DOCUMENT_READ_FAILED', error.message);
         } finally {
+            if (isAcceptanceDocument) {
+                processingAcceptanceDocumentKeys.delete(documentCacheKey);
+            }
             pendingDocumentReads.delete(documentKind);
             documentRequestKeys.delete(documentKind);
         }
@@ -1713,8 +1765,12 @@ export function initYknManager() {
             }
         }, '*');
 
-        addStatus(`Vesikalık fotoğraf başarıyla kırpıldı ve kaydedildi (${fileName}). YÖKSİS formunu doldurmak için ilgili tuşa basabilirsiniz.`, 'success');
-        showToast('Fotoğraf hazırlandı.', 'success');
+        if (currentStudentData?.yoksisReady === true) {
+            startManualYoksisFillAfterCrop();
+        } else {
+            addStatus(`Vesikalık fotoğraf başarıyla kırpıldı ve kaydedildi (${fileName}). Her şeyi aktarmak için önce kabul kodunu YÖKSİS’te aratın.`, 'success');
+            showToast('Fotoğraf hazırlandı; önce kabul kodunu YÖKSİS’te aratın.', 'warning');
+        }
     });
 
     window.addEventListener('ykn:cropper-closed', () => {

@@ -433,6 +433,73 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             .trim();
                     }
 
+                    function isUsableControl(element) {
+                        if (!element || !element.isConnected || element.disabled) return false;
+                        let current = element;
+                        for (let depth = 0; current && depth < 12; depth += 1, current = current.parentElement) {
+                            if (current.hidden || current.getAttribute('aria-hidden') === 'true') return false;
+                            const inlineStyle = current.style;
+                            if (inlineStyle?.display === 'none' || inlineStyle?.visibility === 'hidden') return false;
+                            try {
+                                const style = (current.ownerDocument?.defaultView || window).getComputedStyle(current);
+                                if (style?.display === 'none' || style?.visibility === 'hidden') return false;
+                            } catch (_) {}
+                        }
+                        return true;
+                    }
+
+                    function findVisibleSearchButton(input) {
+                        if (!input) return null;
+                        const containers = [];
+                        const row = input.closest('tr');
+                        if (row) containers.push(row);
+                        let parent = input.parentElement;
+                        for (let depth = 0; parent && depth < 7; depth += 1, parent = parent.parentElement) {
+                            containers.push(parent);
+                        }
+
+                        for (const container of containers) {
+                            const clickables = container.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"]');
+                            for (let i = 0; i < clickables.length; i += 1) {
+                                const candidate = clickables[i];
+                                if (!isUsableControl(candidate)) continue;
+                                const text = norm(candidate.innerText || candidate.textContent || candidate.value || '');
+                                if (text.includes('kabul') || text.includes('ara') || text.includes('sorgula') || text.includes('getir') || text.includes('bul')) {
+                                    return candidate.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || candidate;
+                                }
+                            }
+                        }
+                        return null;
+                    }
+
+                    function findVisibleAcceptancePair(docs) {
+                        for (const doc of docs) {
+                            const inputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                            for (let i = 0; i < inputs.length; i += 1) {
+                                const candidate = inputs[i];
+                                if (!isUsableControl(candidate)) continue;
+                                const metadata = norm([
+                                    candidate.placeholder,
+                                    candidate.getAttribute('placeholder'),
+                                    candidate.title,
+                                    candidate.name,
+                                    candidate.id
+                                ].join(' '));
+                                const isAcceptanceEditor = /(?:-|_)chdextr$/i.test(candidate.id || '');
+                                if ((!metadata.includes('kabul') && !isAcceptanceEditor)
+                                    || metadata.includes('pasaport')
+                                    || metadata.includes('tc')
+                                    || metadata.includes('dogum')) continue;
+                                return {
+                                    input: candidate,
+                                    button: findVisibleSearchButton(candidate),
+                                    win: doc.defaultView || window
+                                };
+                            }
+                        }
+                        return null;
+                    }
+
                     const allDocs = getAllDocs(document);
                     console.log('[YKN MAIN WORLD] Scanning docs count:', allDocs.length, 'with code:', code);
 
@@ -449,6 +516,7 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
                         for (let i = 0; i < allInputs.length; i++) {
                             const it = allInputs[i];
+                            if (!isUsableControl(it)) continue;
                             const ph = norm((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.id || ''));
                             if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum')) {
                                 dInp = it;
@@ -460,6 +528,7 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         const allClickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"]');
                         for (let i = 0; i < allClickables.length; i++) {
                             const c = allClickables[i];
+                            if (!isUsableControl(c)) continue;
                             const cTxt = norm(c.innerText || c.textContent || c.value || '');
                             if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
                                 dBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || c;
@@ -478,7 +547,13 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                     // Komşu hücreye bak
                                     const td = node.closest('td');
                                     if (td && td.nextElementSibling && !dInp) {
-                                        dInp = td.nextElementSibling.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                        const adjacentInputs = td.nextElementSibling.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                        for (let ai = 0; ai < adjacentInputs.length; ai++) {
+                                            if (isUsableControl(adjacentInputs[ai])) {
+                                                dInp = adjacentInputs[ai];
+                                                break;
+                                            }
+                                        }
                                     }
 
                                     // En yakın kapsayıcıyı (groupbox, panel, table, form, window) bul
@@ -498,25 +573,40 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                         if (!dInp) {
                                             const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
                                             for (let j = 0; j < bInps.length; j++) {
+                                                if (!isUsableControl(bInps[j])) continue;
                                                 const bPh = norm((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
                                                 if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum')) {
                                                     dInp = bInps[j];
                                                     break;
                                                 }
                                             }
-                                            if (!dInp && bInps.length > 0) dInp = bInps[0];
+                                            if (!dInp) {
+                                                for (let j = 0; j < bInps.length; j++) {
+                                                    if (isUsableControl(bInps[j])) {
+                                                        dInp = bInps[j];
+                                                        break;
+                                                    }
+                                                }
+                                            }
                                         }
                                         if (!dBtn) {
                                             const bBtns = box.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
                                             if (bBtns.length > 0) {
                                                 for (let j = 0; j < bBtns.length; j++) {
+                                                    if (!isUsableControl(bBtns[j])) continue;
                                                     const bTxt = norm(bBtns[j].innerText || bBtns[j].textContent || bBtns[j].value || '');
                                                     if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
                                                         dBtn = bBtns[j].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[j];
                                                         break;
                                                     }
                                                 }
-                                                if (!dBtn) dBtn = bBtns[0].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[0];
+                                                if (!dBtn) {
+                                                    for (let j = 0; j < bBtns.length; j++) {
+                                                        if (!isUsableControl(bBtns[j])) continue;
+                                                        dBtn = bBtns[j].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[j];
+                                                        break;
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -531,6 +621,7 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             while (parent && parent !== doc.body) {
                                 const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
                                 for (let k = 0; k < inps.length; k++) {
+                                    if (!isUsableControl(inps[k])) continue;
                                     const itPh = norm(inps[k].placeholder || inps[k].getAttribute('placeholder') || inps[k].value || inps[k].id || '');
                                     if (!itPh.includes('pasaport') && !itPh.includes('tc') && !itPh.includes('dogum')) {
                                         dInp = inps[k];
@@ -547,6 +638,7 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             while (parent && parent !== doc.body) {
                                 const btns = parent.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
                                 for (let k = 0; k < btns.length; k++) {
+                                    if (!isUsableControl(btns[k])) continue;
                                     const bTxt = norm(btns[k].innerText || btns[k].textContent || btns[k].value || '');
                                     if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
                                         dBtn = btns[k].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[k];
@@ -555,8 +647,12 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                 }
                                 if (dBtn) break;
                                 if (btns.length > 0) {
-                                    dBtn = btns[0].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[0];
-                                    break;
+                                    for (let k = 0; k < btns.length; k++) {
+                                        if (!isUsableControl(btns[k])) continue;
+                                        dBtn = btns[k].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[k];
+                                        break;
+                                    }
+                                    if (dBtn) break;
                                 }
                                 parent = parent.parentElement;
                             }
@@ -611,6 +707,45 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
 
                     // ZK'nin onChange'i işlemesi için kısa bekleme
                     await new Promise(r => setTimeout(r, 150));
+
+                    // Kabul alanı onChange sonrasında ZK tarafından yeniden
+                    // oluşturulabilir. Eski input/buton referansına tıklamak
+                    // kod ekranda görünse bile aramayı sunucuya göndermez.
+                    const refreshedPair = findVisibleAcceptancePair(getAllDocs(document));
+                    if (refreshedPair) {
+                        inp = refreshedPair.input;
+                        targetWin = refreshedPair.win;
+                        btn = refreshedPair.button || null;
+
+                        // onChange inputu gerçekten yenilediyse yeni düğüm boş
+                        // başlayabilir. Kodu aktif düğüme tekrar yazmadan eski
+                        // değeri taşıyan butona basmak aramayı boşa düşürür.
+                        if (String(inp.value || '').trim().toUpperCase() !== String(code).trim().toUpperCase()) {
+                            const refreshedSetter = Object.getOwnPropertyDescriptor(targetWin.HTMLInputElement.prototype, 'value')?.set
+                                || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+                            if (refreshedSetter) refreshedSetter.call(inp, code);
+                            else inp.value = code;
+                            inp.setAttribute('value', code);
+                            inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                            inp.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+                            if (targetWin.zk && targetWin.zk.Widget) {
+                                try {
+                                    const refreshedWidget = targetWin.zk.Widget.$(inp);
+                                    if (refreshedWidget) {
+                                        if (typeof refreshedWidget.setValue === 'function') refreshedWidget.setValue(code);
+                                        refreshedWidget._value = code;
+                                        refreshedWidget._lastValue = code;
+                                        if (typeof refreshedWidget.fire === 'function') {
+                                            refreshedWidget.fire('onChange', { value: code }, { toServer: true });
+                                        }
+                                    }
+                                } catch (_) {}
+                            }
+                        }
+                    } else if (btn && !isUsableControl(btn)) {
+                        btn = null;
+                    }
 
                     // 6. Butonu tek kez çalıştır. ZK widget bulunduysa doğrudan onu
                     // çalıştırmak, DOM click + zAu + onClick üçlemesini engeller.
