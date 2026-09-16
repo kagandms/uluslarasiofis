@@ -14,7 +14,9 @@ test('İkamet portalında YKN çalışma alanı ve eklenti köprüsü tam kurulu
     // 1. HTML kontrolleri
     assert.match(indexHtml, /id="view-ykn"/, 'index.html içinde view-ykn paneli bulunmalı');
     assert.match(indexHtml, /data-workspace-view="ykn"/, 'index.html içinde ykn navigasyon butonu bulunmalı');
-    assert.match(indexHtml, /id="btn-ykn-search"/, 'index.html içinde pasaport arama butonu bulunmalı');
+    assert.match(indexHtml, /id="btn-read-acceptance"/, 'index.html içinde 1. Kabul Mektubu butonu bulunmalı');
+    assert.match(indexHtml, /id="btn-copy"/, 'index.html içinde 2. Bilgileri Al ve Kırp butonu bulunmalı');
+    assert.doesNotMatch(indexHtml, /btn-ykn-copy-letter|btn-ykn-transfer-yoksis|btn-ykn-one-click/, 'Eski 4 adımlı ve tek tık butonları kaldırılmış olmalı');
     assert.match(indexHtml, /id="passport-cropper-modal"/, 'index.html içinde pasaport vesikalık modalı bulunmalı');
 
     // 2. JavaScript ve Navigation kontrolleri
