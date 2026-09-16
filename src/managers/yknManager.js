@@ -289,6 +289,8 @@ export function initYknManager() {
     const inputPassport = document.getElementById('ykn-passport-input');
     const studentResult = document.getElementById('ykn-student-result');
     const studentName = document.getElementById('ykn-student-name');
+    const studentBadge = document.getElementById('ykn-student-badge');
+    const proActions = document.getElementById('ykn-pro-actions') || document.querySelector('.ykn-pro-actions');
     const statusContainer = document.getElementById('ykn-status-container');
     
     const btnReadAcceptance = document.getElementById('btn-read-acceptance');
@@ -773,6 +775,11 @@ export function initYknManager() {
         completedWorkflowSteps.clear();
         currentWorkflowStep = 1;
         updateWorkflowUI(1);
+        if (proActions) proActions.style.display = 'none';
+        if (studentBadge) {
+            studentBadge.textContent = 'Profil Bekleniyor';
+            studentBadge.style.display = 'none';
+        }
         if (btnCropPhoto) btnCropPhoto.style.display = 'none';
         if (inputIssueDate) inputIssueDate.value = '';
         if (inputExpiryDate) inputExpiryDate.value = '';
@@ -788,6 +795,9 @@ export function initYknManager() {
             studentData?.documentsReady ||
             (studentData?.yoksisId && isValidYoksisId(studentData.yoksisId))
         );
+        if (proActions) {
+            proActions.style.display = hasStudent ? 'flex' : 'none';
+        }
         if (btnCropPhoto) {
             btnCropPhoto.style.display = hasStudent ? 'flex' : 'none';
         }
@@ -1674,6 +1684,13 @@ export function initYknManager() {
             resetStudentActions();
             studentResult.style.display = 'block';
             studentName.textContent = "Aranıyor... (" + passportNo + ")";
+            if (studentBadge) {
+                studentBadge.textContent = "Aranıyor...";
+                studentBadge.style.background = "rgba(52, 152, 219, 0.15)";
+                studentBadge.style.color = "#2980b9";
+                studentBadge.style.display = "inline-block";
+            }
+            if (proActions) proActions.style.display = 'none';
             addStatus('Apply Topkapı eklentisi üzerinden arama başlatıldı...', 'info');
             
             // Arama başlamadan önce eklenti köprüsünün kullanılabilirliğini kontrol et.
@@ -1702,6 +1719,13 @@ export function initYknManager() {
                 if (studentName.textContent.startsWith('Aranıyor...')) {
                     setSearchButtonLoading(false);
                     studentName.textContent = 'Bağlantı Zaman Aşımı';
+                    if (studentBadge) {
+                        studentBadge.textContent = 'Zaman Aşımı';
+                        studentBadge.style.background = 'rgba(231, 76, 60, 0.1)';
+                        studentBadge.style.color = '#e74c3c';
+                        studentBadge.style.display = 'inline-block';
+                    }
+                    if (proActions) proActions.style.display = 'none';
                     showExtensionMissing();
                     addStatus('Eklentiden veya Apply sekmesinden zamanında yanıt alınamadı.', 'error');
                     addStatus('1. Apply Topkapı sekmesinin açık olduğunu kontrol edin.', 'error');
@@ -2214,7 +2238,16 @@ export function initYknManager() {
                 }
             } else if (response?.error) {
                 clearSearchTimeout();
-                if (event.data.action === 'SEARCH_STUDENT') studentName.textContent = 'Arama başlatılamadı';
+                if (event.data.action === 'SEARCH_STUDENT') {
+                    studentName.textContent = 'Arama başlatılamadı';
+                    if (studentBadge) {
+                        studentBadge.textContent = 'Hata';
+                        studentBadge.style.background = 'rgba(231, 76, 60, 0.1)';
+                        studentBadge.style.color = '#e74c3c';
+                        studentBadge.style.display = 'inline-block';
+                    }
+                    if (proActions) proActions.style.display = 'none';
+                }
                 addStatus(response.error, 'error');
             }
             return;
@@ -2258,6 +2291,13 @@ export function initYknManager() {
                 yoksisId: safeYoksisId
             };
             studentName.textContent = currentStudentData.fullName || "İsim Bulunamadı";
+            if (studentBadge) {
+                studentBadge.textContent = "Profil Bulundu";
+                studentBadge.style.background = "rgba(39, 174, 96, 0.1)";
+                studentBadge.style.color = "#27ae60";
+                studentBadge.style.display = "inline-block";
+            }
+            if (proActions) proActions.style.display = 'flex';
             updateStudentActions(currentStudentData);
             applyCountryDefaultsToStudent(currentStudentData);
             addStatus('Öğrenci bulundu. Bilgileri veya kabul kodunu kopyalayabilirsiniz.', 'success');
@@ -2290,6 +2330,7 @@ export function initYknManager() {
                 yoksisId: safeYoksisId,
                 documentsReady: true
             };
+            if (proActions) proActions.style.display = 'flex';
             updateStudentActions(currentStudentData);
             applyCountryDefaultsToStudent(currentStudentData);
             if (currentStudentData.yoksisId) {
@@ -2325,10 +2366,24 @@ export function initYknManager() {
             if (btnTransferYoksis) btnTransferYoksis.classList.remove('is-loading');
             if (event.data.action === 'STUDENT_NOT_FOUND') {
                 studentName.textContent = "Bulunamadı";
+                if (studentBadge) {
+                    studentBadge.textContent = "Bulunamadı";
+                    studentBadge.style.background = "rgba(231, 76, 60, 0.1)";
+                    studentBadge.style.color = "#e74c3c";
+                    studentBadge.style.display = "inline-block";
+                }
+                if (proActions) proActions.style.display = 'none';
             }
             if (event.data.code === 'EXTENSION_CONTEXT_INVALIDATED') {
                 showExtensionMissing();
                 studentName.textContent = 'Eklenti bağlantısı yenilenmeli';
+                if (studentBadge) {
+                    studentBadge.textContent = "Eklenti Hatası";
+                    studentBadge.style.background = "rgba(231, 76, 60, 0.1)";
+                    studentBadge.style.color = "#e74c3c";
+                    studentBadge.style.display = "inline-block";
+                }
+                if (proActions) proActions.style.display = 'none';
             }
             const errorMsg = event.data.error ? 'Hata: ' + event.data.error : 'İşlem başarısız oldu.';
             addStatus(errorMsg, 'error');
