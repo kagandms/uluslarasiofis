@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pasaport Fotoğrafını Kırp</title>
+    <style>
+        :root { color-scheme: light; font-family: Arial, sans-serif; color: #172033; background: #f4f7fb; }
+        body { margin: 0; padding: 24px; }
+        main { max-width: 960px; margin: auto; background: #fff; border-radius: 12px; box-shadow: 0 8px 30px #17203322; padding: 24px; }
+        h1 { margin: 0 0 8px; font-size: 22px; }
+        p { color: #52606f; line-height: 1.5; }
+        #candidates { display: flex; gap: 10px; overflow-x: auto; padding: 4px 0 14px; }
+        .candidate { flex: 0 0 auto; width: 108px; min-height: 118px; padding: 5px; border: 2px solid #c9d5e4; border-radius: 8px; background: #fff; color: #172033; }
+        .candidate.selected { border-color: #0056b3; box-shadow: 0 0 0 2px #0056b333; }
+        .candidate canvas, .candidate img { display: block; width: 96px; height: 86px; object-fit: contain; background: #e8eef6; }
+        .candidate span { display: block; margin-top: 5px; font-size: 12px; }
+        #stage { position: relative; display: inline-block; max-width: 100%; touch-action: none; background: #e8eef6; border-radius: 8px; overflow: hidden; }
+        #passport-canvas { display: block; max-width: min(100%, 820px); max-height: 68vh; }
+        #selection { position: absolute; border: 3px solid #0056b3; box-shadow: 0 0 0 9999px #0008; }
+        .handle { position: absolute; width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; background: #0056b3; transform: translate(-50%, -50%); }
+        .handle[data-handle="nw"] { left: 0; top: 0; cursor: nwse-resize; }
+        .handle[data-handle="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
+        .handle[data-handle="sw"] { left: 0; top: 100%; cursor: nesw-resize; }
+        .handle[data-handle="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+        button { border: 0; border-radius: 7px; padding: 11px 16px; font-weight: 700; cursor: pointer; }
+        #confirm { background: #0056b3; color: #fff; }
+        #reset { background: #e8eef6; color: #172033; }
+        #status { min-height: 20px; color: #52606f; font-weight: 600; }
+        #status.error { color: #ae2424; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Pasaport Fotoğrafını Kırp</h1>
+        <p>Birden fazla pasaport veya sayfa varsa aşağıdan doğru belgeyi seçin. Mavi alanın içinden sürükleyerek fotoğraf seçimini taşıyın; görselde seçimin dışından sürükleyerek yeni bir alan çizin.</p>
+        <div id="candidates" aria-label="Pasaport ve sayfa seçimleri"></div>
+        <div id="stage" hidden><canvas id="passport-canvas"></canvas><div id="selection" aria-label="Fotoğraf seçimi"><i class="handle" data-handle="nw"></i><i class="handle" data-handle="ne"></i><i class="handle" data-handle="sw"></i><i class="handle" data-handle="se"></i></div></div>
+        <p id="status" role="status">Pasaport belgesi hazırlanıyor…</p>
+        <div class="actions">
+            <button type="button" id="reset">Seçimi Sıfırla</button>
+            <button type="button" id="confirm" disabled>Kırpıp YÖKSİS’e Aktar</button>
+        </div>
+    </main>
+    <script src="pdf.min.js"></script>
+    <script type="module" src="cropper.js"></script>
+</body>
+</html>

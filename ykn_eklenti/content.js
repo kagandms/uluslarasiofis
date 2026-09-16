@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.39';
+const CONTENT_SCRIPT_VERSION = '1.2.57';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -202,17 +202,69 @@ async function simulateDateboxInput(element, formattedDate) {
         if (win.zk && win.zk.Widget) {
             const widget = win.zk.Widget.$(element);
             if (widget) {
-                widget._lastValue = formattedDate;
+                // Varsa önceki geçici ezmeleri temizle; böylece kullanıcı kutuyu sildiğinde
+                // veya elle yeni bir tarih yazdığında ZK prototipi gerçek DOM değerini okur.
+                delete widget.coerceFromString_;
+                delete widget.coerceToString_;
+                delete widget.getValue;
+                delete widget.getText;
+                delete widget.getRawValue;
+
+                widget._lastValue = '';
                 widget._defRawVal = formattedDate;
-                widget._value = formattedDate;
+                widget._lastChg = formattedDate;
                 widget._shallSubmit = true;
-                if (typeof widget.setText === 'function') widget.setText(formattedDate);
+
+                try {
+                    if (typeof widget.coerceFromString_ === 'function') {
+                        widget._value = widget.coerceFromString_(formattedDate);
+                    } else {
+                        widget._value = formattedDate;
+                    }
+                } catch (_) {
+                    widget._value = formattedDate;
+                }
+
+                if (widget.$n('real')) {
+                    widget.$n('real').value = formattedDate;
+                }
+                if (typeof widget.setText === 'function') {
+                    try { widget.setText(formattedDate); } catch (_) {}
+                }
+
+                if (typeof widget.clearErrorMessage === 'function') {
+                    try { widget.clearErrorMessage(true); } catch (_) {}
+                }
+                if (widget._errmsg) {
+                    try { widget._errmsg.close(); } catch (_) {}
+                    try { widget._errmsg.detach(); } catch (_) {}
+                    widget._errmsg = null;
+                }
+
+                if (typeof widget.updateChange_ === 'function') {
+                    try { widget.updateChange_(); } catch (_) {}
+                }
+
+                let zkSent = false;
                 if (typeof widget.fire === 'function') {
-                    widget.fire('onChange', {
-                        rawValue: formattedDate,
-                        value: formattedDate,
-                        start: formattedDate.length
-                    }, { toServer: true });
+                    try {
+                        widget.fire('onChange', {
+                            rawValue: formattedDate,
+                            value: formattedDate,
+                            start: formattedDate.length
+                        }, { toServer: true });
+                        zkSent = true;
+                    } catch (_) {}
+                }
+                if (!zkSent && win.zAu && typeof win.zAu.send === 'function') {
+                    try {
+                        win.zAu.send(new win.zk.Event(widget, 'onChange', {
+                            rawValue: formattedDate,
+                            value: formattedDate,
+                            start: formattedDate.length
+                        }, { toServer: true }));
+                        zkSent = true;
+                    } catch (_) {}
                 }
             }
         }
@@ -223,6 +275,11 @@ async function simulateDateboxInput(element, formattedDate) {
     if (parentBox) {
         parentBox.classList.remove('z-datebox-invalid');
     }
+    try {
+        const errorBoxes = (element.ownerDocument || document).querySelectorAll('.z-errorbox, [class*="errorbox"]');
+        for (const eb of errorBoxes) eb.remove();
+    } catch (_) {}
+
     element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
     element.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
     try { element.blur(); } catch (_) {}
@@ -230,70 +287,386 @@ async function simulateDateboxInput(element, formattedDate) {
 }
 
 // ZK Framework için Event Dispatcher (Select/Dropdown'lar için)
+function normalizeCountryText(value) {
+    return String(value || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .replace(/ğ/g, 'g')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ö/g, 'o')
+        .replace(/ç/g, 'c')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+}
+
+// Apply profili ülke adlarını İngilizce, YÖKSİS ise Türkçe döndürebilir.
+// Aynı ülkenin iki yazımı tek bir aday kümesinde eşleştirilir.
+const COUNTRY_ALIAS_GROUPS = [
+    ['afghanistan', 'afganistan'],
+    ['albania', 'arnavutluk'],
+    ['azerbaijan', 'azerbaycan'],
+    ['bosniaandherzegovina', 'bosnahersek'],
+    ['bulgaria', 'bulgaristan'],
+    ['china', 'cin'],
+    ['croatia', 'hirvatistan'],
+    ['egypt', 'misir'],
+    ['georgia', 'gurcistan'],
+    ['greece', 'yunanistan'],
+    ['india', 'hindistan'],
+    ['iran', 'iran'],
+    ['iraq', 'irak'],
+    ['kazakhstan', 'kazakistan'],
+    ['kyrgyzstan', 'kirgizistan'],
+    ['lebanon', 'lubnan'],
+    ['libya', 'libya'],
+    ['morocco', 'fas'],
+    ['nigeria', 'nijerya'],
+    ['northmacedonia', 'kuzeymakedonya'],
+    ['pakistan', 'pakistan'],
+    ['palestine', 'filistin'],
+    ['romania', 'romanya'],
+    ['russia', 'rusya'],
+    ['saudiarabia', 'suudiarabistan'],
+    ['somalia', 'somali'],
+    ['sudan', 'sudan'],
+    ['syria', 'suriye'],
+    ['tajikistan', 'tacikistan'],
+    ['turkmenistan', 'turkmenistan'],
+    ['ukraine', 'ukrayna'],
+    ['unitedarabemirates', 'birlesikarapemirlikleri'],
+    ['unitedkingdom', 'birlesikkrallik'],
+    ['unitedstates', 'amerika'],
+    ['uzbekistan', 'ozbekistan'],
+    ['yemen', 'yemen'],
+    ['zimbabwe', 'zimbabwe']
+];
+
+function countryNameVariants(value) {
+    const normalized = normalizeCountryText(value);
+    if (!normalized) return [];
+    const group = COUNTRY_ALIAS_GROUPS.find((aliases) => aliases.includes(normalized));
+    return group ? Array.from(new Set(group)) : [normalized];
+}
+
 function simulateSelect(element, textToMatch) {
     if (!element || !textToMatch) return false;
     let found = false;
-    const normalize = (str) => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
-    const targetText = normalize(textToMatch);
+    const targetVariants = countryNameVariants(textToMatch);
 
-    for (const option of element.options) {
-        const optText = normalize(option.text);
-        if (optText.includes(targetText) || targetText.includes(optText)) {
+    const options = element.options || [];
+    for (let i = 0; i < options.length; i++) {
+        const option = options[i];
+        const optionVariants = countryNameVariants(option.text || option.value);
+        if (targetVariants.some((target) => optionVariants.some((candidate) =>
+            candidate === target || candidate.includes(target) || target.includes(candidate)
+        ))) {
+            element.selectedIndex = i;
+            try { option.selected = true; } catch (_) {}
             element.value = option.value;
             found = true;
             break;
         }
     }
     if (found) {
-        element.dispatchEvent(new Event('change', { bubbles: true }));
-        element.dispatchEvent(new Event('blur', { bubbles: true }));
+        try {
+            element.focus();
+            element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+            element.dispatchEvent(new Event('blur', { bubbles: true, cancelable: true }));
+        } catch (_) {}
         return true;
     }
     return false;
 }
 
-// ZK Framework için Event Dispatcher (Radio Button'lar için)
-function simulateRadioByLabelText(labelText) {
-    if (!labelText) return false;
-    const normalize = (str) => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
-    const targetText = normalize(labelText);
-    
-    for (const doc of getAllDocs(document)) {
-        const labels = doc.querySelectorAll('label');
-        for (const lbl of labels) {
-            if (normalize(lbl.innerText) === targetText) {
-                const forId = lbl.getAttribute('for');
-                if (forId) {
-                    const radio = doc.getElementById(forId);
-                    if (radio) {
-                        radio.click();
-                        radio.dispatchEvent(new Event('change', { bubbles: true }));
-                        return true;
-                    }
+function getSelectedOptionText(element) {
+    if (!element || !element.options) return '';
+    const option = element.options[element.selectedIndex];
+    return (option?.text || option?.value || '').trim();
+}
+
+// ZK Framework ve HTML için Kullanıcı Tıklaması Simülatörü
+function simulateUserClick(element) {
+    if (!element) return;
+    const doc = element.ownerDocument || document;
+    const win = doc.defaultView || window;
+
+    try { element.focus(); } catch (_) {}
+
+    const eventOptions = { bubbles: true, cancelable: true, view: win, buttons: 1 };
+    try { element.dispatchEvent(new win.PointerEvent('pointerdown', eventOptions)); } catch (_) {}
+    try { element.dispatchEvent(new win.MouseEvent('mousedown', eventOptions)); } catch (_) {}
+    try { element.dispatchEvent(new win.PointerEvent('pointerup', eventOptions)); } catch (_) {}
+    try { element.dispatchEvent(new win.MouseEvent('mouseup', eventOptions)); } catch (_) {}
+    try {
+        element.click();
+    } catch (_) {
+        element.dispatchEvent(new win.MouseEvent('click', eventOptions));
+    }
+}
+
+function findGenderControls(rootDoc) {
+    const d = rootDoc || document;
+    const normalize = (str) => (str || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[*:\s]/g, '');
+
+    const result = {
+        maleRadio: null,
+        maleLabel: null,
+        maleWrapper: null,
+        femaleRadio: null,
+        femaleLabel: null,
+        femaleWrapper: null
+    };
+
+    const allLabels = d.querySelectorAll('label, .z-radio-content, .z-radio, span, b, strong');
+    for (const el of allLabels) {
+        if (el.querySelectorAll('input[type="radio"]').length > 1) continue;
+        const t = normalize(el.innerText || el.textContent || '');
+        if (t === 'erkek' || t === 'bay' || t === 'male' || t === 'm') {
+            if (!result.maleLabel || el.tagName === 'LABEL') {
+                result.maleLabel = el;
+                const forId = el.getAttribute('for');
+                let radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
+                if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
+                if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
+                if (radio) {
+                    result.maleRadio = radio;
+                    result.maleWrapper = el.closest?.('.z-radio') || el.parentElement;
+                }
+            }
+        } else if (t === 'kadin' || t === 'bayan' || t === 'female' || t === 'f') {
+            if (!result.femaleLabel || el.tagName === 'LABEL') {
+                result.femaleLabel = el;
+                const forId = el.getAttribute('for');
+                let radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
+                if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
+                if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
+                if (radio) {
+                    result.femaleRadio = radio;
+                    result.femaleWrapper = el.closest?.('.z-radio') || el.parentElement;
                 }
             }
         }
     }
-    return false;
+
+    if (!result.maleRadio || !result.femaleRadio) {
+        const allRadios = d.querySelectorAll('input[type="radio"]');
+        for (const r of allRadios) {
+            const parentText = normalize(r.parentElement ? r.parentElement.innerText : '');
+            const nextText = normalize(r.nextElementSibling ? r.nextElementSibling.innerText : '');
+            const combined = normalize([r.value, r.id, r.name, parentText, nextText].join(' '));
+            if (!result.maleRadio && (combined.includes('erkek') || r.value === 'E' || r.value === '1')) {
+                result.maleRadio = r;
+                result.maleWrapper = r.closest?.('.z-radio') || r.parentElement;
+                if (!result.maleLabel) result.maleLabel = r.nextElementSibling || r.parentElement;
+            } else if (!result.femaleRadio && (combined.includes('kadin') || r.value === 'K' || r.value === '2')) {
+                result.femaleRadio = r;
+                result.femaleWrapper = r.closest?.('.z-radio') || r.parentElement;
+                if (!result.femaleLabel) result.femaleLabel = r.nextElementSibling || r.parentElement;
+            }
+        }
+    }
+
+    return result;
+}
+
+// ZK Framework için Event Dispatcher (Radio Button'lar için)
+function simulateRadioByLabelText(labelText) {
+    if (!labelText) return false;
+    const normalize = (str) => (str || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[*:\s]/g, '');
+    const normVal = normalize(labelText);
+    const isMale = normVal === 'erkek' || normVal === 'bay' || normVal === 'male' || normVal === 'm';
+    const isFemale = normVal === 'kadin' || normVal === 'bayan' || normVal === 'female' || normVal === 'f';
+    const isGender = isMale || isFemale;
+
+    let anySet = false;
+    for (const doc of getAllDocs(document)) {
+        if (isGender) {
+            const ctrl = findGenderControls(doc);
+            const targetRadio = isMale ? ctrl.maleRadio : ctrl.femaleRadio;
+            const targetLabel = isMale ? ctrl.maleLabel : ctrl.femaleLabel;
+            const targetWrapper = isMale ? ctrl.maleWrapper : ctrl.femaleWrapper;
+
+            const oppRadio = isMale ? ctrl.femaleRadio : ctrl.maleRadio;
+            const oppLabel = isMale ? ctrl.femaleLabel : ctrl.maleLabel;
+            const oppWrapper = isMale ? ctrl.femaleWrapper : ctrl.maleWrapper;
+
+            if (targetRadio || targetLabel) {
+                // Adım 1: ZK framework change listener'larını uyandırmak ve
+                // "isChecked() == true" erken çıkışını aşmak için önce karşı cinsiyeti tıkla
+                if (oppRadio || oppLabel) {
+                    if (oppRadio) {
+                        oppRadio.checked = true;
+                        if (targetRadio) targetRadio.checked = false;
+                    }
+                    if (oppLabel) simulateUserClick(oppLabel);
+                    else if (oppWrapper) simulateUserClick(oppWrapper);
+                    if (oppRadio) {
+                        simulateUserClick(oppRadio);
+                        try { oppRadio.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {}
+                    }
+                }
+
+                // Adım 2: Şimdi hedeflenen asıl cinsiyeti gerçek kullanıcı gibi tıkla
+                if (targetRadio) {
+                    targetRadio.checked = true;
+                    if (oppRadio) oppRadio.checked = false;
+                }
+                if (targetLabel) simulateUserClick(targetLabel);
+                else if (targetWrapper) simulateUserClick(targetWrapper);
+                if (targetRadio) {
+                    simulateUserClick(targetRadio);
+                    try { targetRadio.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
+                    try { targetRadio.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {}
+                }
+                anySet = true;
+                continue;
+            }
+        }
+
+        const labels = doc.querySelectorAll('label, span, b, strong');
+        for (const lbl of labels) {
+            const text = normalize(lbl.innerText || lbl.textContent || '');
+            if (text === normVal || (text.length > 0 && text.startsWith(normVal))) {
+                const forId = lbl.getAttribute('for');
+                let radio = forId ? doc.getElementById(forId) : null;
+                if (!radio) {
+                    radio = lbl.querySelector('input[type="radio"]')
+                        || lbl.parentElement?.querySelector('input[type="radio"]')
+                        || lbl.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
+                }
+                if (radio) {
+                    simulateUserClick(lbl);
+                    radio.checked = true;
+                    simulateUserClick(radio);
+                    try { radio.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {}
+                    anySet = true;
+                    break;
+                }
+            }
+        }
+        if (!anySet) {
+            const radios = doc.querySelectorAll('input[type="radio"]');
+            for (const radio of radios) {
+                const radioText = normalize([radio.value, radio.id, radio.name].join(' '));
+                if (radioText === normVal || radioText.includes(normVal)) {
+                    radio.checked = true;
+                    simulateUserClick(radio);
+                    try { radio.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {}
+                    anySet = true;
+                    break;
+                }
+            }
+        }
+    }
+    return anySet;
 }
 
 // Kaynak Sistem - Etiket metni ile açılır liste okuyucu
 function getSourceDropdownByLabel(substring) {
-    const labels = document.querySelectorAll('label');
+    const labels = document.querySelectorAll('label, dt, th, span, strong, b');
+    const subLower = substring.toLocaleLowerCase('tr-TR');
     for (const label of labels) {
-        if (label.innerText.toLocaleLowerCase('tr-TR').includes(substring.toLocaleLowerCase('tr-TR'))) {
-            const container = label.parentElement;
+        const text = (label.innerText || label.textContent || '').toLocaleLowerCase('tr-TR');
+        if (text.includes(subLower)) {
+            const container = label.closest('.form-group, .mb-3, .form-item, .field, .col, [class*="col-"], tr, li, dl') || label.parentElement;
+            if (!container) continue;
             const select = container.querySelector('select');
             if (select && select.options.length > 0 && select.selectedIndex >= 0) {
-                return select.options[select.selectedIndex].text;
+                return select.options[select.selectedIndex].text.trim();
             }
-            const select2Span = container.querySelector('.select2-selection__rendered');
+            const select2Span = container.querySelector('.select2-selection__rendered, .filter-option-inner-inner, .form-select, [role="combobox"]');
             if (select2Span) {
-                return select2Span.innerText.trim();
+                return (select2Span.innerText || select2Span.textContent || '').trim();
             }
         }
     }
     return '';
+}
+
+function normalizeGenderValue(val) {
+    if (!val || typeof val !== 'string') return '';
+    const v = val.trim().toLocaleLowerCase('tr-TR');
+    if (v === 'erkek' || v === 'male' || v === 'e' || v === 'm' || v === 'man' || v === 'boy' || v === '1') return 'Erkek';
+    if (v === 'kadın' || v === 'kadin' || v === 'female' || v === 'k' || v === 'f' || v === 'woman' || v === 'girl' || v === '2') return 'Kadın';
+    return '';
+}
+
+function extractGenderFromApply() {
+    // 1. Doğrudan select elemanları (name/id içinde gender, cinsiyet, sex)
+    const directSelects = document.querySelectorAll('select[name*="gender" i], select[name*="cinsiyet" i], select[id*="gender" i], select[id*="cinsiyet" i], select[name*="sex" i]');
+    for (const sel of directSelects) {
+        if (sel.options && sel.options.length > 0 && sel.selectedIndex >= 0) {
+            const opt = sel.options[sel.selectedIndex];
+            const txt = normalizeGenderValue(opt.text) || normalizeGenderValue(opt.value);
+            if (txt) return txt;
+        }
+    }
+
+    // 2. Doğrudan seçili radyo butonları
+    const checkedRadios = document.querySelectorAll('input[type="radio"]:checked');
+    for (const radio of checkedRadios) {
+        const nameOrId = (radio.name + ' ' + radio.id).toLowerCase();
+        if (nameOrId.includes('gender') || nameOrId.includes('cinsiyet') || nameOrId.includes('sex')) {
+            const lbl = document.querySelector(`label[for="${radio.id}"]`) || radio.closest('label') || radio.parentElement;
+            const text = normalizeGenderValue(lbl?.innerText || radio.value);
+            if (text) return text;
+        }
+    }
+
+    // 3. Etiket metni ("Cinsiyet", "Cinsiyeti", "Gender", "Sex") içeren form alanı
+    const candidateNodes = document.querySelectorAll('label, dt, th, span, div, strong, b');
+    for (const node of candidateNodes) {
+        const rawText = (node.innerText || node.textContent || '').trim();
+        const clean = rawText.toLocaleLowerCase('tr-TR').replace(/[*:\s]/g, '');
+        if (clean === 'cinsiyet' || clean === 'cinsiyeti' || clean === 'gender' || clean === 'sex') {
+            const container = node.closest('.form-group, .mb-3, .form-item, .field, .col, [class*="col-"], tr, li, dl') || node.parentElement;
+            if (container) {
+                const sel = container.querySelector('select');
+                if (sel && sel.options && sel.options.length > 0 && sel.selectedIndex >= 0) {
+                    const opt = sel.options[sel.selectedIndex];
+                    const txt = normalizeGenderValue(opt.text) || normalizeGenderValue(opt.value);
+                    if (txt) return txt;
+                }
+                const rendered = container.querySelector('.select2-selection__rendered, .filter-option-inner-inner, .form-select, .ant-select-selection-item, [role="combobox"]');
+                if (rendered) {
+                    const txt = normalizeGenderValue(rendered.innerText || rendered.textContent);
+                    if (txt) return txt;
+                }
+                const checkedRadio = container.querySelector('input[type="radio"]:checked');
+                if (checkedRadio) {
+                    const rLbl = document.querySelector(`label[for="${checkedRadio.id}"]`) || checkedRadio.closest('label') || checkedRadio.parentElement;
+                    const txt = normalizeGenderValue(rLbl?.innerText || checkedRadio.value);
+                    if (txt) return txt;
+                }
+                const inp = container.querySelector('input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"])');
+                if (inp && inp.value) {
+                    const txt = normalizeGenderValue(inp.value);
+                    if (txt) return txt;
+                }
+                const clone = container.cloneNode(true);
+                const labelsInClone = clone.querySelectorAll('label, dt, th, strong');
+                for (const l of labelsInClone) l.remove();
+                const containerText = (clone.innerText || clone.textContent || '');
+                if (/erkek/i.test(containerText)) return 'Erkek';
+                if (/kadın|kadin|female/i.test(containerText)) return 'Kadın';
+            }
+        }
+    }
+
+    // 4. Yedek arama
+    const fallback = getSourceDropdownByLabel('Cinsiyet') || findApplyFieldValue(['Cinsiyet', 'Cinsiyeti', 'Gender', 'Sex']);
+    return normalizeGenderValue(fallback) || (fallback ? fallback.trim() : '');
 }
 
 // YÖKSİS: Kabul ID inputunu ve butonunu bul
@@ -801,8 +1174,10 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/duzenlenme/g, 'duzenleme')
-        .replace(/\s+/g, '');
+        .replace(/[*:\s]/g, '');
     const searchWord = normalize(labelText);
+    const isAdiSearch = searchWord === 'adi' || searchWord === 'ad' || searchWord === 'ogrenciadi';
+    const isSoyadSearch = searchWord === 'soyadi' || searchWord === 'soyad' || searchWord === 'ogrencisoyadi';
     const allDocs = getAllDocs(document);
 
     for (const doc of allDocs) {
@@ -812,11 +1187,23 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
                 continue;
             }
             const row = target.closest('tr');
-            if (row && normalize(row.innerText).includes(searchWord)) {
+            if (row) {
                 const targetTd = target.closest('td');
                 let prevTd = targetTd ? targetTd.previousElementSibling : null;
                 while (prevTd) {
-                    if (normalize(prevTd.innerText).includes(searchWord)) {
+                    const prevText = normalize(prevTd.innerText);
+                    if (isAdiSearch && (prevText.includes('soyad') || prevText.includes('anne') || prevText.includes('baba') || prevText.includes('foto'))) {
+                        prevTd = prevTd.previousElementSibling;
+                        continue;
+                    }
+                    if (isSoyadSearch && (prevText.includes('anne') || prevText.includes('baba'))) {
+                        prevTd = prevTd.previousElementSibling;
+                        continue;
+                    }
+                    const matches = isAdiSearch
+                        ? (prevText === 'adi' || prevText === 'ad' || prevText === 'ogrenciadi')
+                        : (prevText === searchWord || prevText.includes(searchWord));
+                    if (matches) {
                         return target;
                     }
                     prevTd = prevTd.previousElementSibling;
@@ -824,8 +1211,53 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
             }
         }
         
+        // Yeni YÖKSİS kartlarında etiket ve kontrol aynı form grubunda,
+        // tablo satırı olmadan yan yana bulunabilir. Kapsayıcıdaki ilk inputu
+        // almak yerine etikete komşu veya tekil kontrolü kullan.
+        const labelNodes = doc.querySelectorAll('label, span, div, dt, strong, b');
+        for (const labelNode of labelNodes) {
+            const labelValue = normalize(labelNode.innerText || labelNode.textContent || '');
+            if (isAdiSearch && (labelValue.includes('soyad') || labelValue.includes('anne') || labelValue.includes('baba') || labelValue.includes('foto'))) {
+                continue;
+            }
+            if (isSoyadSearch && (labelValue.includes('anne') || labelValue.includes('baba'))) {
+                continue;
+            }
+            const isExplicitLabel = ['LABEL', 'DT', 'STRONG', 'B'].includes(labelNode.tagName);
+            const exactMatch = isAdiSearch
+                ? (labelValue === 'adi' || labelValue === 'ad' || labelValue === 'ogrenciadi')
+                : (labelValue === searchWord);
+            const partialMatch = !isAdiSearch && isExplicitLabel && labelValue.includes(searchWord);
+            if (!exactMatch && !partialMatch) continue;
+
+            const ownTargets = Array.from(labelNode.querySelectorAll(tagName));
+            if (ownTargets.length === 1) return ownTargets[0];
+            if (ownTargets.length > 0) continue;
+
+            const nextNode = labelNode.nextElementSibling;
+            const nextTarget = nextNode && (nextNode.matches?.(tagName)
+                ? nextNode
+                : nextNode.querySelector?.(tagName));
+            if (nextTarget) return nextTarget;
+
+            const parent = labelNode.parentElement;
+            const parentTargets = parent ? Array.from(parent.querySelectorAll(tagName)) : [];
+            if (parentTargets.length === 1) return parentTargets[0];
+        }
+
         const elements = Array.from(doc.querySelectorAll('span, div, label')).filter(el => {
-            return normalize(el.innerText).includes(searchWord) && el.children.length <= 2;
+            const value = normalize(el.innerText || el.textContent || '');
+            if (isAdiSearch && (value.includes('soyad') || value.includes('anne') || value.includes('baba') || value.includes('foto'))) {
+                return false;
+            }
+            if (isSoyadSearch && (value.includes('anne') || value.includes('baba'))) {
+                return false;
+            }
+            const isLeafLike = !el.querySelector(tagName);
+            const isMatched = isAdiSearch
+                ? (value === 'adi' || value === 'ad' || value === 'ogrenciadi')
+                : (value === searchWord);
+            return isMatched && isLeafLike && el.children.length <= 2;
         });
 
         for (const el of elements) {
@@ -838,8 +1270,21 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
         
         for (const target of allTargets) {
             const row = target.closest('tr');
-            if (row && normalize(row.innerText).includes(searchWord)) {
-                return target;
+            if (row) {
+                const rowText = normalize(row.innerText);
+                if (isAdiSearch && (rowText.includes('soyad') || rowText.includes('anne') || rowText.includes('baba') || rowText.includes('foto'))) {
+                    continue;
+                }
+                if (isSoyadSearch && (rowText.includes('anne') || rowText.includes('baba'))) {
+                    continue;
+                }
+                const matches = isAdiSearch
+                    ? (rowText === 'adi' || rowText === 'ad' || rowText === 'ogrenciadi')
+                    : rowText.includes(searchWord);
+                if (matches) {
+                    const rowTargets = Array.from(row.querySelectorAll(tagName));
+                    if (rowTargets.length === 1) return target;
+                }
             }
         }
     }
@@ -1503,41 +1948,125 @@ function readFieldValue(target) {
 }
 
 function findApplyFieldValue(labels) {
-    const normalizedLabels = labels.map(normalizeApplyText);
-    const targets = document.querySelectorAll('input, select, textarea');
-    for (const target of targets) {
-        const rowText = normalizeApplyText(target.closest('tr')?.innerText);
-        if (normalizedLabels.some((label) => rowText.includes(label))) {
-            const value = readFieldValue(target);
-            if (value) return value;
-        }
-    }
+    const cleanNorm = (str) => (str || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/[*:\s]/g, '');
+    const normalizedLabels = (labels || []).map(cleanNorm).filter(Boolean);
+    if (normalizedLabels.length === 0) return '';
+    const isAdiSearch = normalizedLabels.some((l) => l === 'ad' || l === 'adi' || l === 'firstname' || l === 'givenname');
+    const isSoyadSearch = normalizedLabels.some((l) => l === 'soyad' || l === 'soyadi' || l === 'lastname' || l === 'surname' || l === 'familyname');
 
+    // 1. Check direct table cells
     const rows = document.querySelectorAll('tr');
     for (const row of rows) {
         const cells = row.querySelectorAll('td, th');
         if (cells.length < 2) continue;
-        const label = normalizeApplyText(cells[0].innerText);
-        if (normalizedLabels.some((value) => label.includes(value))) return cells[1].innerText.trim();
+        const cellText = cleanNorm(cells[0].innerText || cells[0].textContent);
+        if (isAdiSearch && (cellText.includes('soyad') || cellText.includes('anne') || cellText.includes('baba'))) continue;
+        if (isSoyadSearch && (cellText.includes('anne') || cellText.includes('baba'))) continue;
+        const matches = normalizedLabels.some((val) => isAdiSearch ? (cellText === val || cellText === 'ogrenciadi') : (cellText === val || cellText.includes(val)));
+        if (matches) {
+            const inputInside = cells[1].querySelector('input, select, textarea');
+            const value = inputInside ? readFieldValue(inputInside) : cells[1].innerText.trim();
+            if (value) return value;
+        }
+    }
+
+    // 2. Direct input in table cell with prevTd
+    const targets = document.querySelectorAll('input, select, textarea');
+    for (const target of targets) {
+        const targetTd = target.closest('td, th');
+        const prevTd = targetTd ? targetTd.previousElementSibling : null;
+        if (prevTd) {
+            const prevText = cleanNorm(prevTd.innerText || prevTd.textContent);
+            if (isAdiSearch && (prevText.includes('soyad') || prevText.includes('anne') || prevText.includes('baba'))) continue;
+            if (isSoyadSearch && (prevText.includes('anne') || prevText.includes('baba'))) continue;
+            const matches = normalizedLabels.some((val) => isAdiSearch ? (prevText === val || prevText === 'ogrenciadi') : (prevText === val || prevText.includes(val)));
+            if (matches) {
+                const value = readFieldValue(target);
+                if (value) return value;
+            }
+        }
+    }
+
+    // 3. Form labels / containers (strictly excluding .row to prevent cross-field leaking)
+    const labelNodes = document.querySelectorAll('label, dt, strong, b, span, div');
+    for (const labelNode of labelNodes) {
+        const rawText = labelNode.innerText || labelNode.textContent || '';
+        const labelText = cleanNorm(rawText);
+        if (!labelText) continue;
+        if (isAdiSearch && (labelText.includes('soyad') || labelText.includes('anne') || labelText.includes('baba'))) continue;
+        if (isSoyadSearch && (labelText.includes('anne') || labelText.includes('baba'))) continue;
+
+        const exactMatch = normalizedLabels.some((val) => labelText === val);
+        const isExplicitLabel = ['LABEL', 'DT', 'STRONG', 'B'].includes(labelNode.tagName);
+        const partialMatch = isExplicitLabel && normalizedLabels.some((val) => isAdiSearch ? (labelText === val || labelText === 'ogrenciadi') : labelText.includes(val));
+        if (!exactMatch && !partialMatch) continue;
+
+        // Try for attribute first
+        const forId = labelNode.getAttribute?.('for');
+        if (forId) {
+            const el = document.getElementById(forId);
+            const value = readFieldValue(el);
+            if (value) return value;
+        }
+
+        // Try input inside label
+        const insideInput = labelNode.querySelector?.('input, select, textarea');
+        if (insideInput) {
+            const value = readFieldValue(insideInput);
+            if (value) return value;
+        }
+
+        // Try next element sibling
+        const next = labelNode.nextElementSibling;
+        const nextInput = next ? (next.matches?.('input, select, textarea') ? next : next.querySelector?.('input, select, textarea')) : null;
+        if (nextInput) {
+            const value = readFieldValue(nextInput);
+            if (value) return value;
+        }
+
+        // Container (strictly excluding .row to avoid cross-column contamination)
+        const container = labelNode.closest('.form-group, .form-floating, .col, [class*="col-"], .field, .input-group, dl, li') || labelNode.parentElement;
+        if (container && !container.classList?.contains('row')) {
+            const inputs = Array.from(container.querySelectorAll('input, select, textarea'));
+            const following = inputs.filter((inp) => (labelNode.compareDocumentPosition(inp) & Node.DOCUMENT_POSITION_FOLLOWING));
+            const target = following.length > 0 ? following[0] : inputs[0];
+            const value = readFieldValue(target);
+            if (value) return value;
+        }
+    }
+    return '';
+}
+
+function findApplyInputValue(selectors) {
+    for (const selector of selectors) {
+        const target = document.querySelector(selector);
+        const value = readFieldValue(target);
+        if (value) return value;
     }
     return '';
 }
 
 function findApplyStudentData() {
     return {
+        firstName: findApplyFieldValue(['Adı', 'Ad', 'First Name', 'Given Name']),
+        lastName: findApplyFieldValue(['Soyadı', 'Soyad', 'Last Name', 'Surname', 'Family Name']),
         anneAdi: findApplyFieldValue(['Anne Adı', "Mother's Name", 'Mother Name']),
         babaAdi: findApplyFieldValue(['Baba Adı', "Father's Name", 'Father Name']),
         uyruk: findApplyFieldValue(['Uyruğu', 'Nationality']),
         dogumUlkesi: findApplyFieldValue(['Doğum Yeri Ülkesi', 'Born Country']),
-        cinsiyet: findApplyFieldValue(['Cinsiyeti', 'Gender', 'Sex']),
+        cinsiyet: extractGenderFromApply(),
         pasaportNo: findApplyFieldValue(['Pasaport No', 'Passport No', 'Number of Document']),
-        birthDate: findApplyFieldValue(['Doğum Tarihi', 'Date of Birth', 'Birth Date', 'Doğum Günü'])
+        birthDate: findApplyFieldValue(['Doğum Tarihi', 'Date of Birth', 'Birth Date', 'Doğum Günü']),
+        issueDate: findApplyFieldValue(['Belge Düzenleme Tarihi', 'Düzenleme Tarihi', 'Pasaport Düzenleme Tarihi', 'Veriliş Tarihi', 'Date of Issue', 'Issue Date', 'Tanzim Tarihi']),
+        expiryDate: findApplyFieldValue(['Belge Geçerlilik Tarihi', 'Geçerlilik Tarihi', 'Pasaport Geçerlilik Tarihi', 'Son Geçerlilik Tarihi', 'Pasaport Bitiş Tarihi', 'Belge Bitiş Tarihi', 'Date of Expiry', 'Expiry Date', 'Expiration Date'])
     };
 }
 
 function normalizeApplyBirthDate(rawDate) {
     if (!rawDate || typeof rawDate !== 'string') return '';
-    const clean = rawDate.trim();
+    const clean = rawDate.replace(/[T\s]\d{1,2}:\d{1,2}(?::\d{1,2})?.*$/, '').trim();
     if (!clean) return '';
 
     const monthMap = {
@@ -1593,8 +2122,26 @@ function normalizeApplyBirthDate(rawDate) {
 }
 
 function extractApplyProfileData() {
-    const anneInput = document.querySelector('input[name="mothersName"]');
-    const babaInput = document.querySelector('input[name="fathersName"]');
+    const firstNameInput = document.querySelector([
+        'input[name="firstName"]', 'input[name="first_name"]', 'input[name="givenName"]',
+        'input[name="ad"]', 'input[name="adi"]', 'input[name="ad_"]',
+        'input[id="ad"]', 'input[id="adi"]', 'input[id="firstName"]', 'input[id="first_name"]',
+        'input[id*="first" i]', 'input[id*="given-name" i]'
+    ].join(','));
+    const lastNameInput = document.querySelector([
+        'input[name="lastName"]', 'input[name="last_name"]', 'input[name="surname"]',
+        'input[name="familyName"]', 'input[name="soyad"]', 'input[name="soyadi"]', 'input[name="soyad_"]',
+        'input[id="soyad"]', 'input[id="soyadi"]', 'input[id="lastName"]', 'input[id="last_name"]', 'input[id="surname"]',
+        'input[id*="last" i]', 'input[id*="surname" i]', 'input[id*="soyad" i]'
+    ].join(','));
+    const anneInput = document.querySelector([
+        'input[name="mothersName"]', 'input[name="motherName"]', 'input[name="mother_name"]',
+        'input[name="motherFullName"]', 'input[id*="mother" i]'
+    ].join(','));
+    const babaInput = document.querySelector([
+        'input[name="fathersName"]', 'input[name="fatherName"]', 'input[name="father_name"]',
+        'input[name="fatherFullName"]', 'input[id*="father" i]'
+    ].join(','));
     
     let pasaportInput = document.querySelector('input[name="passportNumber"]');
     if (!pasaportInput) pasaportInput = document.querySelector('.inputPassportNumber');
@@ -1623,23 +2170,85 @@ function extractApplyProfileData() {
         }
     }
 
+    let issueDateInput = document.querySelector([
+        'input[name="passportIssueDate"]', 'input[name="issueDate"]', 'input[name="passport_issue_date"]',
+        'input[name="dateOfIssue"]', 'input[name="date_of_issue"]', 'input[id*="issue" i]',
+        'input[id*="duzenle" i]', 'input[id*="verilis" i]'
+    ].join(','));
+    if (!issueDateInput) {
+        const labels = document.querySelectorAll('label, span, th, dt');
+        for (const label of labels) {
+            const lt = label.innerText.toLowerCase();
+            if (lt.includes('düzenleme tarihi') || lt.includes('duzenleme tarihi') || lt.includes('veriliş tarihi') || lt.includes('verilis tarihi') || lt.includes('issue date') || lt.includes('date of issue') || lt.includes('tanzim tarihi')) {
+                issueDateInput = label.parentElement ? label.parentElement.querySelector('input') : null;
+                if (issueDateInput) break;
+            }
+        }
+    }
+
+    let expiryDateInput = document.querySelector([
+        'input[name="passportExpiryDate"]', 'input[name="expiryDate"]', 'input[name="passport_expiry_date"]',
+        'input[name="dateOfExpiry"]', 'input[name="date_of_expiry"]', 'input[name="expirationDate"]',
+        'input[id*="expir" i]', 'input[id*="gecerli" i]'
+    ].join(','));
+    if (!expiryDateInput) {
+        const labels = document.querySelectorAll('label, span, th, dt');
+        for (const label of labels) {
+            const lt = label.innerText.toLowerCase();
+            if (lt.includes('geçerlilik tarihi') || lt.includes('gecerlilik tarihi') || lt.includes('son geçerlilik') || lt.includes('expiry date') || lt.includes('date of expiry') || lt.includes('expiration date') || lt.includes('pasaport bitiş') || lt.includes('belge bitiş')) {
+                expiryDateInput = label.parentElement ? label.parentElement.querySelector('input') : null;
+                if (expiryDateInput) break;
+            }
+        }
+    }
+
     const fallbackData = findApplyStudentData();
-    
-    const anneAdi = (anneInput ? anneInput.value : '') || fallbackData.anneAdi || '';
-    const babaAdi = (babaInput ? babaInput.value : '') || fallbackData.babaAdi || '';
+    const firstName = (firstNameInput ? firstNameInput.value : '')
+        || fallbackData.firstName
+        || findApplyInputValue(['input[name="ad"]', 'input[id="ad"]', 'input[name="firstName"]', 'input[name="first_name"]', 'input[name="name"]', 'input[id="name"]'])
+        || '';
+    let lastName = (lastNameInput ? lastNameInput.value : '')
+        || fallbackData.lastName
+        || findApplyInputValue(['input[name="soyad"]', 'input[id="soyad"]', 'input[name="surname"]', 'input[id="surname"]', 'input[name="lastName"]', 'input[id="last_name"]'])
+        || '';
+
+    // Safeguard: if lastName somehow picked up firstName (due to .row or form grouping), do not keep it identical
+    if (lastName && firstName && lastName.trim().toLowerCase() === firstName.trim().toLowerCase()) {
+        const altLastName = findApplyInputValue(['input[name="soyad"]', 'input[id="soyad"]', 'input[name="surname"]', 'input[id="surname"]']);
+        if (altLastName && altLastName.trim().toLowerCase() !== firstName.trim().toLowerCase()) {
+            lastName = altLastName;
+        } else {
+            lastName = '';
+        }
+    }
+    const anneAdi = (anneInput ? anneInput.value : '') || fallbackData.anneAdi || findApplyFieldValue(['Anne Adı', 'Anne İsmi', "Mother's Name", 'Mother Name']) || '';
+    const babaAdi = (babaInput ? babaInput.value : '') || fallbackData.babaAdi || findApplyFieldValue(['Baba Adı', 'Baba İsmi', "Father's Name", 'Father Name']) || '';
     const pasaportNo = (pasaportInput ? pasaportInput.value : '') || fallbackData.pasaportNo || '';
     const rawBirthDate = (birthInput ? birthInput.value : '') || fallbackData.birthDate || '';
+    const rawIssueDate = (issueDateInput ? issueDateInput.value : '') || fallbackData.issueDate || '';
+    const rawExpiryDate = (expiryDateInput ? expiryDateInput.value : '') || fallbackData.expiryDate || '';
     const uyruk = getSourceDropdownByLabel('Uyruk') || fallbackData.uyruk || '';
     const dogumUlkesi = getSourceDropdownByLabel('Doğduğunuz') || getSourceDropdownByLabel('Doğum') || fallbackData.dogumUlkesi || '';
-    const cinsiyet = getSourceDropdownByLabel('Cinsiyet') || fallbackData.cinsiyet || '';
+    const cinsiyet = extractGenderFromApply() || getSourceDropdownByLabel('Cinsiyet') || fallbackData.cinsiyet || '';
 
     const normalizedBirthDate = normalizeApplyBirthDate(rawBirthDate);
+    const normalizedIssueDate = normalizeApplyBirthDate(rawIssueDate);
+    const normalizedExpiryDate = normalizeApplyBirthDate(rawExpiryDate);
+    const fullName = [firstName, lastName].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
 
     return {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        ad: firstName.trim(),
+        soyad: lastName.trim(),
+        fullName,
         anneAdi: (anneAdi || '').trim(),
         babaAdi: (babaAdi || '').trim(),
         pasaportNo: (pasaportNo || '').trim(),
+        passportNo: (pasaportNo || '').trim(),
         birthDate: normalizedBirthDate,
+        issueDate: normalizedIssueDate,
+        expiryDate: normalizedExpiryDate,
         uyruk: (uyruk || '').trim(),
         dogumUlkesi: (dogumUlkesi || '').trim(),
         cinsiyet: (cinsiyet || '').trim()
@@ -1713,6 +2322,219 @@ async function fetchApplyDocument(documentUrl) {
         contentType,
         documentBase64: await encodeBase64(arrayBuffer)
     };
+}
+
+function decodeBase64ToBytes(base64) {
+    const binary = atob(base64 || '');
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+}
+
+function decodeDocumentBytes(bytes) {
+    if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').decode(bytes);
+    return String.fromCharCode(...bytes);
+}
+
+function ensurePdfWorkerReady() {
+    if (!window.pdfjsLib) return;
+    if (!window.pdfjsLib.GlobalWorkerOptions) window.pdfjsLib.GlobalWorkerOptions = {};
+    if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        try {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdf.worker.min.js');
+        } catch (_) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+        }
+    }
+}
+
+async function extractPdfText(bytes) {
+    if (!window.pdfjsLib) throw new Error('PDF okuyucu hazır değil. Eklentiyi yenileyip tekrar deneyin.');
+    ensurePdfWorkerReady();
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const pageTexts = [];
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        const textContent = await page.getTextContent();
+        pageTexts.push(textContent.items.map((item) => item.str).join(' '));
+    }
+    return pageTexts.join('\n');
+}
+
+function requestPortalOcr(imageBase64, requestId = '') {
+    return new Promise((resolve, reject) => {
+        if (!chrome?.runtime?.sendMessage) {
+            reject(new Error('OCR servisine bağlanılamadı.'));
+            return;
+        }
+        chrome.runtime.sendMessage({ action: 'OCR_IMAGE', imageBase64, requestId }, (response) => {
+            const runtimeError = chrome.runtime.lastError;
+            if (runtimeError) {
+                reject(new Error(runtimeError.message));
+                return;
+            }
+            if (!response?.success || !response.text) {
+                reject(new Error(response?.error || 'OCR metin döndürmedi.'));
+                return;
+            }
+            resolve(response.text);
+        });
+    });
+}
+
+async function extractPdfTextWithOcr(bytes, requestId = '', maxPages = 3) {
+    if (!window.pdfjsLib) throw new Error('PDF okuyucu hazır değil.');
+    ensurePdfWorkerReady();
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const pageTexts = [];
+    const pageLimit = Math.min(pdf.numPages, maxPages);
+    for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        try {
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+            const text = await requestPortalOcr(canvas.toDataURL('image/jpeg', 0.85), requestId);
+            if (text) pageTexts.push(text);
+        } finally {
+            canvas.width = 0;
+            canvas.height = 0;
+        }
+    }
+    return pageTexts.join('\n');
+}
+
+async function extractImageTextWithOcr(bytes, contentType, requestId = '') {
+    const blob = new Blob([bytes], { type: contentType || 'image/jpeg' });
+    const imageUrl = URL.createObjectURL(blob);
+    try {
+        const image = new Image();
+        image.src = imageUrl;
+        await new Promise((resolve, reject) => {
+            image.onload = resolve;
+            image.onerror = () => reject(new Error('Pasaport görseli açılamadı.'));
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+        canvas.getContext('2d').drawImage(image, 0, 0);
+        return requestPortalOcr(canvas.toDataURL('image/jpeg', 0.85), requestId);
+    } finally {
+        URL.revokeObjectURL(imageUrl);
+    }
+}
+
+async function extractDocumentText(documentResult) {
+    const bytes = decodeBase64ToBytes(documentResult.documentBase64);
+    const contentType = String(documentResult.contentType || '').toLowerCase();
+    const signature = decodeDocumentBytes(bytes.slice(0, 8));
+    if (contentType.includes('pdf') || signature.startsWith('%PDF')) {
+        const text = await extractPdfText(bytes);
+        if (text.trim()) return text;
+        const ocrText = await extractPdfTextWithOcr(bytes, documentResult.requestId || '');
+        documentResult.ocrText = ocrText;
+        return ocrText;
+    }
+    if (contentType.startsWith('image/')) {
+        const ocrText = await extractImageTextWithOcr(bytes, contentType, documentResult.requestId || '');
+        documentResult.ocrText = ocrText;
+        return ocrText;
+    }
+    return decodeDocumentBytes(bytes);
+}
+
+function getDocumentCandidates(links, kind, requestedUrl = '') {
+    const candidates = requestedUrl ? [requestedUrl] : [];
+    const values = kind === 'passport'
+        ? (links.passportCandidates || [links.passportDocumentUrl])
+        : (links.acceptanceCandidates || [links.acceptanceLetterUrl]);
+    for (const value of values) {
+        if (value && !candidates.includes(value)) candidates.push(value);
+    }
+    return candidates.filter(Boolean);
+}
+
+async function extractPassportMetadataFromApply(request) {
+    const links = findDocumentLinks();
+    const profileData = extractApplyProfileData();
+    const candidates = getDocumentCandidates(links, 'passport', request.documentUrl);
+    if (candidates.length === 0) throw new Error('Öğrenci profilinde pasaport belgesi bulunamadı.');
+
+    const errors = [];
+    for (const documentUrl of candidates) {
+        try {
+            const documentResult = await fetchApplyDocument(documentUrl);
+            documentResult.requestId = request.requestId;
+            let text = await extractDocumentText(documentResult);
+            const parser = window.YknDocumentParser;
+            if (!parser) throw new Error('Pasaport parserı hazır değil.');
+            let metadata = parser.extractPassportMetadata(text, {
+                nationality: profileData.uyruk,
+                birthDate: profileData.birthDate
+            });
+            let missingFields = ['issueDate', 'expiryDate', 'placeOfBirth', 'issuingAuthority']
+                .filter((field) => !metadata[field]);
+
+            // PDF'nin metin katmanı mevcut olsa bile tarih satırları yalnızca
+            // görüntüde bulunabilir. Metin katmanı eksik alan bıraktığında OCR'ı
+            // ayrıca çalıştırıp parser sonucuyla birleştir.
+            if (missingFields.length > 0 && !documentResult.ocrText) {
+                try {
+                    const bytes = decodeBase64ToBytes(documentResult.documentBase64);
+                    const contentType = String(documentResult.contentType || '').toLowerCase();
+                    const signature = decodeDocumentBytes(bytes.slice(0, 8));
+                    const ocrText = contentType.includes('pdf') || signature.startsWith('%PDF')
+                        ? await extractPdfTextWithOcr(bytes, request.requestId || '')
+                        : contentType.startsWith('image/')
+                            ? await extractImageTextWithOcr(bytes, contentType, request.requestId || '')
+                            : '';
+                    if (ocrText.trim()) {
+                        text = `${text}\n${ocrText}`;
+                        metadata = parser.extractPassportMetadata(text, {
+                            nationality: profileData.uyruk,
+                            birthDate: profileData.birthDate
+                        });
+                        missingFields = ['issueDate', 'expiryDate', 'placeOfBirth', 'issuingAuthority']
+                            .filter((field) => !metadata[field]);
+                    }
+                } catch (ocrError) {
+                    errors.push(`OCR: ${ocrError.message}`);
+                }
+            }
+            if (missingFields.length < 4) {
+                return { metadata, missingFields, documentUrl };
+            }
+            errors.push('Pasaport alanları metinde bulunamadı.');
+        } catch (error) {
+            errors.push(error.message);
+        }
+    }
+    throw new Error(errors.at(-1) || 'Pasaport belgesi okunamadı.');
+}
+
+async function extractAcceptanceCodeFromApply(request) {
+    const links = findDocumentLinks();
+    const directCode = isValidYoksisId(links.kabulId) ? links.kabulId : '';
+    if (directCode) return { code: directCode, documentUrl: '' };
+
+    const candidates = getDocumentCandidates(links, 'acceptance', request.documentUrl);
+    if (candidates.length === 0) throw new Error('Öğrenci profilinde kabul mektubu bulunamadı.');
+    const errors = [];
+    for (const documentUrl of candidates) {
+        try {
+            const documentResult = await fetchApplyDocument(documentUrl);
+            const text = await extractDocumentText(documentResult);
+            const parser = window.YknDocumentParser;
+            const code = parser?.extractYoksisIdFromText(text) || '';
+            if (code) return { code, documentUrl };
+            errors.push('Kabul mektubu kodu belgede bulunamadı.');
+        } catch (error) {
+            errors.push(error.message);
+        }
+    }
+    throw new Error(errors.at(-1) || 'Kabul mektubu okunamadı.');
 }
 
 async function encodeBase64(arrayBuffer) {
@@ -1792,7 +2614,34 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             .catch((error) => sendResponse({ success: false, error: error.message }));
         return true;
     }
-    
+
+    else if (request.action === 'EXTRACT_PASSPORT_METADATA') {
+        extractPassportMetadataFromApply(request)
+            .then((result) => sendResponse({ success: true, ...result, requestId: request.requestId }))
+            .catch((error) => sendResponse({
+                success: false,
+                requestId: request.requestId,
+                error: error.message
+            }));
+        return true;
+    }
+
+    else if (request.action === 'READ_ACCEPTANCE_CODE') {
+        extractAcceptanceCodeFromApply(request)
+            .then((result) => sendResponse({
+                success: true,
+                requestId: request.requestId,
+                kabulId: result.code,
+                acceptanceDocumentUrl: result.documentUrl
+            }))
+            .catch((error) => sendResponse({
+                success: false,
+                requestId: request.requestId,
+                error: error.message
+            }));
+        return true;
+    }
+
     else if (request.action === "searchWithId") {
         const kabulId = normalizeYoksisIdValue(request.kabulId);
         
@@ -1866,7 +2715,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 if (!searchTriggered) throw new Error('YÖKSİS arama komutu tetiklenemedi.');
 
                 let formReady = false;
-                try {
+                if (request.waitForForm !== false) try {
                     await waitForYoksisForm(YOKSIS_SEARCH_INITIAL_FORM_WAIT_MS, {
                         afterFingerprint: formFingerprintBeforeSearch,
                         afterDomRevision: stateBeforeSearch.domRevision,
@@ -1982,6 +2831,19 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 return Boolean(filled);
             };
 
+            const firstNameVal = String(data.firstName || data.ad || '').trim();
+            const lastNameVal = String(data.lastName || data.soyad || '').trim();
+
+            const adiInput = findTargetElementByFuzzyLabels(['Adı', 'Öğrenci Adı', 'Ad'], 'input');
+            if (adiInput && !adiInput.disabled && !adiInput.readOnly && firstNameVal) {
+                if (recordField('Adı', firstNameVal, await simulateInput(adiInput, firstNameVal))) successCount++;
+            }
+
+            const soyadiInput = findTargetElementByFuzzyLabels(['Soyadı', 'Öğrenci Soyadı', 'Soyad'], 'input');
+            if (soyadiInput && !soyadiInput.disabled && !soyadiInput.readOnly && lastNameVal) {
+                if (recordField('Soyadı', lastNameVal, await simulateInput(soyadiInput, lastNameVal))) successCount++;
+            }
+
             const anneAdiInput = findTargetElementByFuzzyLabel('Anne Adı', 'input');
             if (recordField('Anne Adı', data.anneAdi, await simulateInput(anneAdiInput, data.anneAdi))) successCount++;
 
@@ -1989,17 +2851,19 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             if (recordField('Baba Adı', data.babaAdi, await simulateInput(babaAdiInput, data.babaAdi))) successCount++;
 
             const uyrukSelect = findTargetElementByFuzzyLabel('Uyruğu', 'select');
+            const visibleNationality = getSelectedOptionText(uyrukSelect);
+            const countryValue = data.uyruk || visibleNationality;
             if (recordField('Uyruğu', data.uyruk, simulateSelect(uyrukSelect, data.uyruk))) successCount++;
             
             const dogumUyruguSelect = findTargetElementByFuzzyLabel('Doğum Uyruğu', 'select');
-            if (recordField('Doğum Uyruğu', data.uyruk, simulateSelect(dogumUyruguSelect, data.uyruk))) successCount++;
+            if (recordField('Doğum Uyruğu', countryValue, simulateSelect(dogumUyruguSelect, countryValue))) successCount++;
             
             const dogumYeriUlkesiSelect = findTargetElementByFuzzyLabel('Doğum Yeri Ülkesi', 'select');
-            const dogumYeriDegeri = data.dogumUlkesi ? data.dogumUlkesi : data.uyruk;
+            const dogumYeriDegeri = data.dogumUlkesi ? data.dogumUlkesi : countryValue;
             if (recordField('Doğum Yeri Ülkesi', dogumYeriDegeri, simulateSelect(dogumYeriUlkesiSelect, dogumYeriDegeri))) successCount++;
             
             const belgeyiVerenUlkeSelect = findTargetElementByFuzzyLabel('Belgeyi Veren Ülke', 'select');
-            if (recordField('Belgeyi Veren Ülke', data.uyruk, simulateSelect(belgeyiVerenUlkeSelect, data.uyruk))) successCount++;
+            if (recordField('Belgeyi Veren Ülke', countryValue, simulateSelect(belgeyiVerenUlkeSelect, countryValue))) successCount++;
 
             if (data.cinsiyet) {
                 if (recordField('Cinsiyet', data.cinsiyet, simulateRadioByLabelText(data.cinsiyet))) successCount++;
@@ -2009,7 +2873,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             const normalizeCountry = (val) => val ? val.toLocaleLowerCase('tr-TR').replace(/\s+/g, '') : '';
             const isMatch = (val, search) => normalizeCountry(val).includes(search);
 
-            const uyrukNorm = normalizeCountry(data.uyruk);
+            const uyrukNorm = normalizeCountry(countryValue);
             const dogumNorm = normalizeCountry(data.dogumUlkesi);
             const isTurkmen = uyrukNorm.includes('türkmen') || uyrukNorm.includes('turkmen') || uyrukNorm === 'tkm' ||
                               dogumNorm.includes('türkmen') || dogumNorm.includes('turkmen') || dogumNorm === 'tkm';
@@ -2088,6 +2952,18 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 
             const belgeNoInput = findBelgeNoInMainPanel();
             const passportValue = data.pasaportNo || data.passportNo;
+            const foreignIdentityInput = findTargetElementByFuzzyLabels([
+                'Uyruk Kimlik No',
+                'Yabancı Kimlik No',
+                'Nationality Identity No'
+            ], 'input');
+            const normalizeIdentity = (value) => String(value || '')
+                .toLocaleLowerCase('tr-TR')
+                .replace(/\s+/g, '');
+            if (foreignIdentityInput && passportValue
+                && normalizeIdentity(foreignIdentityInput.value) === normalizeIdentity(passportValue)) {
+                await simulateInput(foreignIdentityInput, '');
+            }
             if (recordField('Belge No', passportValue, await simulateInput(belgeNoInput, passportValue))) successCount++;
 
             const issueDateInput = findTargetElementByFuzzyLabels([
@@ -2113,26 +2989,44 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 'Pasaport Son Geçerlilik Tarihi',
                 'Pasaport Geçerlilik Tarihi',
                 'Son Geçerlilik Tarihi',
-                'Bitiş Tarihi',
+                'Pasaport Bitiş Tarihi',
+                'Belge Bitiş Tarihi',
                 'Date of Expiry',
                 'Expiry Date',
                 'Expiration Date'
             ], 'input');
 
-            const issueDateFilled = issueDateInput && data.issueDate
-                ? await simulateDateboxInput(issueDateInput, formatDateForYoksisInput(issueDateInput, data.issueDate))
+            const rawIssueDate = data.issueDate || data.passportIssueDate || data.duzenlemeTarihi || data.pasaportDuzenlemeTarihi || data.verilisTarihi || data.belgeDuzenlemeTarihi || '';
+            const rawExpiryDate = data.expiryDate || data.passportExpiryDate || data.gecerlilikTarihi || data.pasaportGecerlilikTarihi || data.bitisTarihi || data.belgeGecerlilikTarihi || '';
+
+            const issueDateFilled = issueDateInput && rawIssueDate
+                ? await simulateDateboxInput(issueDateInput, formatDateForYoksisInput(issueDateInput, rawIssueDate))
                 : false;
-            if (recordField('Düzenleme Tarihi', data.issueDate, issueDateFilled)) {
+            if (recordField('Düzenleme Tarihi', rawIssueDate, issueDateFilled)) {
                 successCount++;
             }
-            const expiryDateFilled = expiryDateInput && data.expiryDate
-                ? await simulateDateboxInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, data.expiryDate))
+            const expiryDateFilled = expiryDateInput && rawExpiryDate
+                ? await simulateDateboxInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, rawExpiryDate))
                 : false;
-            if (recordField('Geçerlilik Tarihi', data.expiryDate, expiryDateFilled)) {
+            if (recordField('Geçerlilik Tarihi', rawExpiryDate, expiryDateFilled)) {
                 successCount++;
             }
 
-            // Gerçek kullanıcı tıklaması ve odaklanma geçişi zinciri (Anne Adı ve Baba Adı öncelikli metin kutuları)
+            const birthDateInput = findTargetElementByFuzzyLabels([
+                'Doğum Tarihi',
+                'Date of Birth',
+                'Birth Date'
+            ], 'input');
+            const rawBirthDate = data.birthDate || data.dogumTarihi || '';
+            const birthDateFilled = birthDateInput && rawBirthDate
+                ? await simulateDateboxInput(birthDateInput, formatDateForYoksisInput(birthDateInput, rawBirthDate))
+                : false;
+            if (recordField('Doğum Tarihi', rawBirthDate, birthDateFilled)) {
+                successCount++;
+            }
+
+            // ZK widget'ının izole dünyada blur olayında değeri sıfırlamasını engellemek için
+            // yıkıcı blur/focusout döngüsü yerine sadece input ve change güvencesi sağlanır.
             const priorityElements = [
                 anneAdiInput,
                 babaAdiInput,
@@ -2144,17 +3038,10 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 
             for (const el of priorityElements) {
                 try {
-                    el.focus();
-                    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                    el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                    await new Promise(r => setTimeout(r, 40));
-                    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                    el.blur();
-                    el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
-                    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
-                    await new Promise(r => setTimeout(r, 20));
+                    if (el.value) {
+                        el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                    }
                 } catch (_) {}
             }
 

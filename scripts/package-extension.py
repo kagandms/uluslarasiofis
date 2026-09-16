@@ -1,74 +1,58 @@
-import os
-import glob
 import json
-import hashlib
-import zipfile
+import os
 import shutil
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-extension_root = os.path.join(project_root, 'ykn_eklenti-main')
-downloads_root = os.path.join(project_root, 'public', 'downloads')
+ROOT_DIR = Path(__file__).resolve().parent.parent
+EXTENSION_DIR = ROOT_DIR / 'ykn_eklenti'
+DOWNLOADS_DIR = ROOT_DIR / 'public' / 'downloads'
 
-extension_files = [
-    'manifest.json',
-    'background.js',
-    'bridge.js',
-    'content.js',
-    'popup.html',
-    'popup.js'
-]
+def package_extension():
+    if not EXTENSION_DIR.exists():
+        print(f"HATA: Eklenti klasörü bulunamadı: {EXTENSION_DIR}")
+        return False
 
-def main():
-    manifest_path = os.path.join(extension_root, 'manifest.json')
+    manifest_path = EXTENSION_DIR / 'manifest.json'
+    if not manifest_path.exists():
+        print(f"HATA: manifest.json bulunamadı: {manifest_path}")
+        return False
+
     with open(manifest_path, 'r', encoding='utf-8') as f:
         manifest = json.load(f)
 
-    version = manifest.get('version')
-    if not version:
-        raise ValueError('Geçersiz manifest sürümü')
+    version = manifest.get('version', '1.0.0')
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-    os.makedirs(downloads_root, exist_ok=True)
+    versioned_zip_name = f"ykn-eklentisi-v{version}.zip"
+    versioned_zip_path = DOWNLOADS_DIR / versioned_zip_name
+    latest_zip_path = DOWNLOADS_DIR / "ykn-eklentisi-latest.zip"
 
-    # Remove old zips
-    for old_zip in glob.glob(os.path.join(downloads_root, 'ykn-eklentisi-*.zip')):
-        try:
-            os.remove(old_zip)
-        except OSError:
-            pass
+    with zipfile.ZipFile(latest_zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for root, _, files in os.walk(EXTENSION_DIR):
+            for file in files:
+                file_path = Path(root) / file
+                arcname = Path('ykn_eklenti') / file_path.relative_to(EXTENSION_DIR)
+                zf.write(file_path, arcname)
 
-    # Calculate fingerprint
-    h = hashlib.sha256()
-    for fname in extension_files:
-        fpath = os.path.join(extension_root, fname)
-        with open(fpath, 'rb') as f:
-            h.update(f.read())
-    fingerprint = h.hexdigest()[:12]
+    shutil.copyfile(latest_zip_path, versioned_zip_path)
 
-    archive_name = f"ykn-eklentisi-v{version}-{fingerprint}.zip"
-    archive_path = os.path.join(downloads_root, archive_name)
+    metadata = {
+        "version": version,
+        "fileName": versioned_zip_name,
+        "url": f"/downloads/{versioned_zip_name}",
+        "downloadUrl": f"/downloads/{versioned_zip_name}",
+        "latestUrl": "/downloads/ykn-eklentisi-latest.zip",
+        "updatedAt": datetime.now(timezone.utc).isoformat()
+    }
 
-    # Create zip archive with ykn_eklenti/ prefix
-    with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-        # Include directory entry
-        zf.writestr('ykn_eklenti/', '')
-        for fname in extension_files:
-            fpath = os.path.join(extension_root, fname)
-            zf.write(fpath, arcname=f"ykn_eklenti/{fname}")
+    metadata_path = DOWNLOADS_DIR / "ykn-eklentisi.json"
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-    latest_path = os.path.join(downloads_root, 'ykn-eklentisi-latest.zip')
-    shutil.copyfile(archive_path, latest_path)
-
-    meta_path = os.path.join(downloads_root, 'ykn-eklentisi.json')
-    with open(meta_path, 'w', encoding='utf-8') as f:
-        json.dump({
-            "version": version,
-            "fingerprint": fingerprint,
-            "fileName": archive_name,
-            "downloadUrl": f"/downloads/{archive_name}"
-        }, f, indent=2)
-        f.write('\n')
-
-    print(f"YKN eklentisi paketlendi: {archive_name}")
+    print(f"Paketleme başarılı: {versioned_zip_name} (v{version})")
+    return True
 
 if __name__ == '__main__':
-    main()
+    package_extension()

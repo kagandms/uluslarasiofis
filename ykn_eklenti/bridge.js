@@ -2,7 +2,7 @@
 // İkamet Portalı (Web Sayfası) ile Eklenti (Background) arasında köprü görevi görür.
 (() => {
     if (window !== window.top) return;
-    const BRIDGE_VERSION = '1.2.39';
+    const BRIDGE_VERSION = '1.2.57';
     if (window.__YKN_BRIDGE_LOADED__ && window.__YKN_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
     window.__YKN_BRIDGE_LOADED__ = true;
     window.__YKN_BRIDGE_VERSION__ = BRIDGE_VERSION;
@@ -102,6 +102,33 @@ window.addEventListener('message', (event) => {
 // Arka plandan gelen olayları (örn. arama sonuçları) dinle ve web sayfasına ilet
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        if (request.action === 'OCR_IMAGE') {
+            (async () => {
+                const raw = String(request.imageBase64 || '').replace(/^data:[^,]+,/, '');
+                if (!raw) throw new Error('OCR görüntüsü boş.');
+                const binary = atob(raw);
+                const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+                const token = window.localStorage.getItem('site_token') || sessionStorage.getItem('site_token') || '';
+                const response = await fetch('/api/ocr', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/octet-stream',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
+                    body: bytes
+                });
+                if (!response.ok) throw new Error(`OCR servisi ${response.status} döndürdü.`);
+                const result = await response.json();
+                const text = result.text
+                    || result.responses?.[0]?.textAnnotations?.[0]?.description
+                    || '';
+                if (!text.trim()) throw new Error('OCR metin döndürmedi.');
+                return { success: true, text };
+            })()
+                .then(sendResponse)
+                .catch((error) => sendResponse({ success: false, error: error.message }));
+            return true;
+        }
         if (request.source === 'APPLY_TOPKAPI') {
             window.postMessage({
                 source: 'EXTENSION',
