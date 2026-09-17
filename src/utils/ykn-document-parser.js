@@ -171,7 +171,7 @@ const ISSUE_DATE_LABELS = [
     // Uzbek
     'berilgan sanasi', 'berilgan sana', 'berilgan joyi', 'berilgan vaqti', 'berilgan',
     // Russian (Cyrillic / transliterated)
-    'дата выдачи', 'выдан', 'выдано', 'дата оформления', 'data vydachi',
+    'дата выдачи', 'дата выдачи паспорта', 'дата оформления', 'дата выпуска', 'выдан', 'выдано', 'data vydachi',
     // Kazakh, Turkmen, Azerbaijani
     'берілген күні', 'berilgen kuni', 'berlen senesi', 'berlen wagty', 'verilme tarixi', 'verilmə tarixi',
     // French
@@ -181,7 +181,7 @@ const ISSUE_DATE_LABELS = [
     // German
     'ausstellungsdatum', 'ausgestellt am',
     // Arabic transliterated / keywords
-    'tarikh al isdar', 'tarikh al-isdar', 'تاريخ الإصدار', 'تاريخ الاصدار',
+    'tarikh al isdar', 'tarikh al-isdar', 'تاريخ الإصدار', 'تاريخ الاصدار', 'تاريخ الصدور', 'تاريخ التحرير', 'صدر بتاريخ',
     // Ethiopian (Amharic)
     'የተሰጠበት ቀን', 'የተሰጠበት'
 ];
@@ -194,7 +194,7 @@ const EXPIRY_DATE_LABELS = [
     // Uzbek
     'amal qilish muddati', 'amal qilish muddat', 'amal qilish', 'amal qilishi', 'muddati',
     // Russian (Cyrillic / transliterated)
-    'дата окончания', 'дата окончания срока', 'срок действия паспорта', 'срок действия', 'действителен до', 'действительно до', 'deystvitelen do', 'srok deystviya',
+    'дата окончания', 'дата окончания срока', 'срок действия паспорта', 'срок действия', 'действителен до', 'действительно до', 'термін дії', 'deystvitelen do', 'srok deystviya',
     // Kazakh, Turkmen, Azerbaijani
     'қолданылу мерзімі', 'қолданылу мерзими', 'qoldanylu merzimi', 'hereket edis mohleti', 'hereket ediş möhleti', 'etibarliliq muddeti', 'etibarlılıq müddəti', 'bitme tarixi', 'bitmə tarixi',
     // French
@@ -204,7 +204,7 @@ const EXPIRY_DATE_LABELS = [
     // German
     'gueltig bis', 'gültig bis', 'ablaufdatum',
     // Arabic transliterated / keywords
-    'tarikh al intiha', 'tarikh al-intiha', 'تاريخ الانتهاء', 'تاريخ الصلاحية', 'صالح حتى',
+    'tarikh al intiha', 'tarikh al-intiha', 'تاريخ الانتهاء', 'تاريخ الصلاحية', 'تاريخ النفاذ', 'صالح حتى', 'صالحة لغاية', 'صالح لغاية',
     // Ethiopian (Amharic)
     'የሚያበቃበት ቀን', 'የሚያበቃበት'
 ];
@@ -607,6 +607,148 @@ export function extractPassportDatesFromText(text, options = {}) {
     };
 }
 
+const POB_LABELS = [
+    // English
+    'place of birth', 'birth place', 'place of origin', 'pob', 'city of birth', 'town of birth', 'country / place of birth',
+    // French
+    'lieu de naissance', 'lieu d\'origine', 'lieu d origine', 'lieu naissance',
+    // Turkish / Azeri
+    'doğum yeri', 'dogum yeri', 'doğduğu yer', 'dogdugu yer', 'doğulduğu yer', 'doguldugu yer',
+    // Arabic / Persian / Urdu
+    'مكان الميلاد', 'محل الميلاد', 'مكان الولادة', 'محل الولادة', 'مكان الازدياد', 'مكان الإزدياد',
+    'محل الازدياد', 'مكان وتاريخ الميلاد', 'مكان وتاريخ الولادة', 'تاريخ ومكان الميلاد', 'تاريخ ومكان الولادة',
+    'محل وتاريخ الولادة', 'محل وتاريخ الميلاد', 'محل تولد', 'محل ولادت', 'مقام پیدائش',
+    // Russian / Cyrillic
+    'место рождения', 'место рожд', 'туған жері', 'туған жер', 'туган жери', 'туулган жери',
+    'ҷои таваллуд', 'чои таваллуд', 'ҷойи таваллуд', 'туғилган жойи', 'доглан йери', 'доглан ери',
+    'місце народження', 'места нараджэння', 'место на раждане', 'место на раждање',
+    // Uzbek / Turkmen Latin
+    'tug\'ilgan joyi', 'tugilgan joyi', 'tug\'ilgan joy', 'doglan ýeri', 'doglan yeri',
+    // Other European / African
+    'geburtsort', 'lugar de nacimiento', 'local de nascimento', 'luogo di nascita', 'goobta dhallashada', 'goobta dhalashada'
+];
+
+const POB_STOP_WORDS = [
+    // English
+    'date of birth', 'date of issue', 'date of expiry', 'date', 'issue', 'issuing', 'expiry', 'expiration', 'valid until', 'valid', 'sex', 'gender', 'authority', 'issued by', 'signature', 'nationality', 'national',
+    // French
+    'date de naissance', 'date de délivrance', 'date de delivrance', 'date d\'expiration', 'date d expiration', 'date', 'sexe', 'autorité', 'autorite', 'delivre par', 'signature', 'nationalité', 'nationalite',
+    // Turkish
+    'doğum tarihi', 'dogum tarihi', 'veriliş tarihi', 'verilis tarihi', 'tanzim tarihi', 'geçerlilik tarihi', 'gecerlilik tarihi', 'son geçerlilik', 'tarih', 'tarihi', 'cinsiyet', 'veren makam', 'makam', 'imza', 'uyruk', 'uyruğu',
+    // Russian
+    'дата рождения', 'дата выдачи', 'срок действия', 'действителен до', 'дата', 'пол', 'орган выдачи', 'кем выдан', 'подпись', 'гражданство', 'национальность',
+    // Arabic
+    'تاريخ الميلاد', 'تاريخ الاصدار', 'تاريخ الإصدار', 'تاريخ الصدور', 'تاريخ الانتهاء', 'تاريخ النفاذ', 'تاريخ', 'الجنس', 'النوع', 'المهنة', 'السلطة', 'الجهة', 'الرقم الوطني', 'الرقم القومي', 'الجنسية', 'التوقيع', 'حامل',
+    // Other Turkic/Cyrillic
+    'amal', 'sana', 'sanasi', 'beril', 'berilgan', 'qoldanylu', 'mohleti', 'möhleti', 'etibarliliq', 'jynsy', 'jinsi'
+];
+
+const AUTHORITY_LABELS = [
+    // English
+    'issuing authority', 'issuing office', 'office of issue', 'place of issue', 'issued by', 'authority', 'passport office',
+    // French
+    'autorité de délivrance', 'autorite de delivrance', 'autorité', 'autorite', 'délivré par', 'delivre par', 'lieu de délivrance', 'lieu de delivrance',
+    // Turkish
+    'belgeyi veren makam', 'pasaportu veren makam', 'tanzim eden makam', 'düzenleyen makam', 'duzenleyen makam', 'veren makam', 'verildiği yer', 'verildigi yer',
+    // Arabic
+    'جهة الإصدار', 'جهة الاصدار', 'الجهة المصدرة', 'مكان الإصدار', 'مكان الاصدار', 'مكان الصدور', 'مكان التحرير',
+    'سلطة الإصدار', 'سلطة الاصدار', 'السلطة', 'مركز الإصدار', 'مركز الاصدار', 'صدر عن', 'صدرت من',
+    // Russian / Cyrillic
+    'орган, выдавший документ', 'орган выдавший документ', 'орган выдачи', 'кем выдан', 'орган що видав',
+    'берген орган', 'берген мекеме', 'орган, ки васиқа додааст',
+    // Uzbek / Turkmen
+    'kim tomonidan berilgan', 'bergan organ', 'berlen ýeri', 'berlen yeri', 'berlən yeri'
+];
+
+const AUTHORITY_STOP_WORDS = [
+    'date of issue', 'date of expiry', 'date of birth', 'date', 'issue', 'expiry', 'valid',
+    'date de délivrance', 'date de delivrance', 'date d\'expiration', 'date de naissance',
+    'tarih', 'tarihi', 'veriliş tarihi', 'verilis tarihi', 'geçerlilik tarihi', 'gecerlilik tarihi', 'doğum tarihi', 'dogum tarihi',
+    'дата выдачи', 'срок действия', 'дата рождения', 'подпись', 'signature', 'imza',
+    'تاريخ الإصدار', 'تاريخ الاصدار', 'تاريخ الصدور', 'تاريخ الانتهاء', 'تاريخ الميلاد', 'التوقيع',
+    'holder', 'bearer', 'sex', 'cinsiyet', 'пол', 'الجنس', 'photo', 'mrz'
+];
+
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function cleanPlaceOfBirthValue(rawValue) {
+    if (!rawValue) return '';
+    let val = String(rawValue).trim();
+
+    // 1. Strip date if combined label (e.g. KHARTOUM 12/05/2001)
+    val = val.replace(/\b\d{1,4}[./\-]\d{1,2}[./\-]\d{2,4}\b/g, '').trim();
+    val = val.replace(/\b\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|OCAK|ŞUBAT|MART|NİSAN|MAYIS|HAZİRAN|TEMMUZ|AĞUSTOS|EYLÜL|EKİM|KASIM|ARALIK|ЯНВ|ФЕВ|МАР|АПР|МАЙ|ИЮН|ИЮЛ|АВГ|СЕН|ОКТ|НОЯ|ДЕК|يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)[a-zа-яء-ي]*\s+\d{2,4}\b/gi, '').trim();
+
+    // 2. Strip Russian/Cyrillic city prefixes:
+    val = val.replace(/^(?:Г\.|ГОР\.|Г\b|ГОР\b|С\.|С\b|П\.|ПОС\.|ПОС\b|ОБЛ\.|ОБЛ\b|Р-Н\b|Р-Н\.)\s*/i, '');
+
+    // 3. If dual scripts separated by / or \ or |:
+    const parts = val.split(/\s*[/\\|]\s*/);
+    if (parts.length >= 2) {
+        // Prefer Latin script for Turkish YÖKSİS compatibility
+        const latinPart = parts.find(p => /[A-Za-z]/.test(p) && !/^(?:Г\.|ГОР\.|CITY|VILLE|P\b)/i.test(p.trim()));
+        if (latinPart) {
+            val = latinPart;
+        } else {
+            val = parts[0];
+        }
+    }
+
+    val = val.replace(/^[\s:;#\-_/\\\\|.,]+|[\s:;#\-_/\\\\|.,]+$/g, '').trim();
+    val = val.replace(/\s+/g, ' ');
+    val = val.replace(/^(?:Г\.|ГОР\.|Г\b|ГОР\b)\s*/i, '');
+
+    if (!val || val.length < 2 || /^\d+$/.test(val)) return '';
+    return val;
+}
+
+function cleanIssuingAuthorityValue(rawValue) {
+    if (!rawValue) return '';
+    let val = String(rawValue).trim();
+
+    val = val.replace(/\b\d{1,4}[./\-]\d{1,2}[./\-]\d{2,4}\b/g, '').trim();
+
+    const parts = val.split(/\s*[/\\|]\s*/);
+    if (parts.length >= 2) {
+        const latinPart = parts.find(p => /[A-Za-z]/.test(p) && !/^(?:AUTHORITY|AUTORITE)\b/i.test(p.trim()));
+        if (latinPart) {
+            val = latinPart;
+        } else {
+            val = parts[parts.length - 1];
+        }
+    }
+
+    val = val.replace(/^[\s:;#\-_/\\\\|.,]+|[\s:;#\-_/\\\\|.,]+$/g, '').trim();
+    val = val.replace(/\s+/g, ' ');
+
+    if (!val || val.length < 2 || /^\d{1,2}[./\-]/.test(val)) return '';
+    return val;
+}
+
+function isLabelOnlyLine(line, labels) {
+    let rem = line.trim();
+    if (!rem) return false;
+    let matchedAny = false;
+    let keepLooping = true;
+    while (keepLooping) {
+        keepLooping = false;
+        rem = rem.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
+        for (const l of labels) {
+            const regex = new RegExp('^' + escapeRegex(l), 'i');
+            if (regex.test(rem)) {
+                rem = rem.replace(regex, '').trim();
+                matchedAny = true;
+                keepLooping = true;
+                break;
+            }
+        }
+    }
+    rem = rem.replace(/^[\s:;#\-_/\\\\|.,]+|[\s:;#\-_/\\\\|.,]+$/g, '').trim();
+    return matchedAny && rem.length === 0;
+}
+
 export function extractPassportPlaceOfBirth(text, options = {}) {
     if (!text || typeof text !== 'string') return '';
     const normalized = text.replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
@@ -624,36 +766,70 @@ export function extractPassportPlaceOfBirth(text, options = {}) {
         return 'TKM';
     }
 
-    const labels = [
-        'place of birth\\s*[/\\\\]\\s*lieu de naissance',
-        'place of birth',
-        'lieu de naissance',
-        'birth place',
-        'place of origin',
-        '\\bpob\\b',
-        'doğum yeri',
-        'dogum yeri',
-        'doğduğu yer',
-        'dogdugu yer',
-        'место рождения',
-        'место рожд',
-        'mesto rozhdeniya',
-        "tug['`’]ilgan joyi",
-        'tugilgan joyi',
-        'tuulgan zheri'
-    ];
+    const lines = normalized.split(/[\r\n]+/);
 
-    const labelPattern = labels.join('|');
-    const stopWords = '(?:\\s+(?:date|дата|tarih|tarihi|veril|verilis|verildigi|verildiği|veriliş|tanzim|duzen|düzen|gecerlilik|geçerlilik|expiry|valid|sex|пол|cinsiyet|authority|орган|makam|signature|подпись|imza|uyruk|nation|гражданство|beril|berilgan|amal|sana|sanasi|qoldanylu|mohleti|möhleti|etibarliliq|bitme)|[:;\\n\\r]|$)';
-    const regex = new RegExp(`(?:${labelPattern})\\s*[:/\\-]?\\s*([^:\\n\\r]{2,45}?)(?=${stopWords})`, 'i');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
 
-    const match = normalized.match(regex);
-    if (match && match[1]) {
-        let val = match[1].replace(/^[:/\\-\\s,._]+|[:/\\-\\s,._]+$/g, '').trim();
-        if (/^\d{2,}/.test(val) || val.length < 2) return '';
-        val = val.replace(/\s+/g, ' ');
-        return val.toUpperCase();
+        const foundLabel = POB_LABELS.find(l => {
+            const regex = new RegExp('(?:^|[\\s:;#\-_/\\\\|.,])' + escapeRegex(l) + '(?:$|[\\s:;#\-_/\\\\|.,])', 'i');
+            return regex.test(line);
+        });
+
+        if (!foundLabel) continue;
+
+        const labelIndex = line.toLowerCase().indexOf(foundLabel.toLowerCase());
+        let remainder = line.slice(labelIndex);
+
+        let keepStripping = true;
+        while (keepStripping) {
+            keepStripping = false;
+            remainder = remainder.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
+            for (const l of POB_LABELS) {
+                const r = new RegExp('^' + escapeRegex(l), 'i');
+                if (r.test(remainder)) {
+                    remainder = remainder.replace(r, '').trim();
+                    keepStripping = true;
+                    break;
+                }
+            }
+        }
+
+        remainder = remainder.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
+
+        if (remainder.length >= 2) {
+            for (const stop of POB_STOP_WORDS) {
+                const stopRegex = new RegExp('(?:\\s+|^)' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i');
+                const stopMatch = remainder.match(stopRegex);
+                if (stopMatch && stopMatch.index !== undefined && stopMatch.index > 0) {
+                    remainder = remainder.slice(0, stopMatch.index).trim();
+                }
+            }
+            const cleaned = cleanPlaceOfBirthValue(remainder);
+            if (cleaned) return cleaned.toUpperCase();
+        }
+
+        for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+            const nextLine = lines[j].trim();
+            if (!nextLine) continue;
+
+            if (isLabelOnlyLine(nextLine, POB_LABELS)) continue;
+            if (isLabelOnlyLine(nextLine, POB_STOP_WORDS)) break;
+
+            let val = nextLine;
+            for (const stop of POB_STOP_WORDS) {
+                const stopRegex = new RegExp('(?:\\s+|^)' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i');
+                const stopMatch = val.match(stopRegex);
+                if (stopMatch && stopMatch.index !== undefined && stopMatch.index > 0) {
+                    val = val.slice(0, stopMatch.index).trim();
+                }
+            }
+            const cleaned = cleanPlaceOfBirthValue(val);
+            if (cleaned) return cleaned.toUpperCase();
+        }
     }
+
     return '';
 }
 
@@ -664,42 +840,68 @@ export function extractPassportIssuingAuthority(text, options = {}) {
         );
     }
     const normalized = text.replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
+    const lines = normalized.split(/[\r\n]+/);
 
-    const labels = [
-        'issuing authority',
-        'authority\\s*[/\\\\]\\s*autorité',
-        'authority\\s*[/\\\\]\\s*autorite',
-        'authority',
-        'issued by',
-        'issuing office',
-        'belgeyi veren makam',
-        'veren makam',
-        'verildiği yer',
-        'verildigi yer',
-        'tanzim eden makam',
-        'düzenleyen makam',
-        'duzenleyen makam',
-        'autorité',
-        'autorite',
-        'délivré par',
-        'delivre par',
-        'орган,\\s*выдавший документ',
-        'орган выдачи',
-        'кем выдан',
-        'kim tomonidan berilgan',
-        'bergan organ'
-    ];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
 
-    const labelPattern = labels.join('|');
-    const stopWords = '(?:\\s+(?:date|дата|tarih|tarihi|holder|imza|подпись|signature|place|doğum|место|valid|expiry|geçerlilik|düzen|выдан|beril|berilgan|amal|sana|sanasi|qoldanylu|mohleti|möhleti|etibarliliq)|[:;\\n\\r]|$)';
-    const regex = new RegExp(`(?:${labelPattern})\\s*[:/\\-]?\\s*([^:\\n\\r]{2,50}?)(?=${stopWords})`, 'i');
+        const foundLabel = AUTHORITY_LABELS.find(l => {
+            const regex = new RegExp('(?:^|[\\s:;#\-_/\\\\|.,])' + escapeRegex(l) + '(?:$|[\\s:;#\-_/\\\\|.,])', 'i');
+            return regex.test(line);
+        });
 
-    const match = normalized.match(regex);
-    if (match && match[1]) {
-        let val = match[1].replace(/^[:/\\-\\s]+|[:/\\-\\s]+$/g, '').trim();
-        if (/^\d{1,2}[./\-]/.test(val) || val.length < 2) return '';
-        val = val.replace(/\s+/g, ' ');
-        return val.toUpperCase();
+        if (!foundLabel) continue;
+
+        const labelIndex = line.toLowerCase().indexOf(foundLabel.toLowerCase());
+        let remainder = line.slice(labelIndex);
+
+        let keepStripping = true;
+        while (keepStripping) {
+            keepStripping = false;
+            remainder = remainder.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
+            for (const l of AUTHORITY_LABELS) {
+                const r = new RegExp('^' + escapeRegex(l), 'i');
+                if (r.test(remainder)) {
+                    remainder = remainder.replace(r, '').trim();
+                    keepStripping = true;
+                    break;
+                }
+            }
+        }
+
+        remainder = remainder.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
+
+        if (remainder.length >= 2) {
+            for (const stop of AUTHORITY_STOP_WORDS) {
+                const stopRegex = new RegExp('(?:\\s+|^)' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i');
+                const stopMatch = remainder.match(stopRegex);
+                if (stopMatch && stopMatch.index !== undefined && stopMatch.index > 0) {
+                    remainder = remainder.slice(0, stopMatch.index).trim();
+                }
+            }
+            const cleaned = cleanIssuingAuthorityValue(remainder);
+            if (cleaned) return cleaned.toUpperCase();
+        }
+
+        for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+            const nextLine = lines[j].trim();
+            if (!nextLine) continue;
+
+            if (isLabelOnlyLine(nextLine, AUTHORITY_LABELS)) continue;
+            if (isLabelOnlyLine(nextLine, AUTHORITY_STOP_WORDS)) break;
+
+            let val = nextLine;
+            for (const stop of AUTHORITY_STOP_WORDS) {
+                const stopRegex = new RegExp('(?:\\s+|^)' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i');
+                const stopMatch = val.match(stopRegex);
+                if (stopMatch && stopMatch.index !== undefined && stopMatch.index > 0) {
+                    val = val.slice(0, stopMatch.index).trim();
+                }
+            }
+            const cleaned = cleanIssuingAuthorityValue(val);
+            if (cleaned) return cleaned.toUpperCase();
+        }
     }
 
     const mrzMatch = normalized.toUpperCase().match(/P\s*<\s*([A-Z]{3})/);

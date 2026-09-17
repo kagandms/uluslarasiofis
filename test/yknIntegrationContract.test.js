@@ -27,7 +27,7 @@ test('İkamet portalında YKN çalışma alanı ve eklenti köprüsü tam kurulu
     const manifest = JSON.parse(manifestJson);
     const metadata = JSON.parse(metadataJson);
 
-    assert.equal(manifest.version, '1.2.58', 'Eklenti sürümü 1.2.58 olmalı');
-    assert.equal(metadata.version, '1.2.58', 'Dağıtım paketi sürümü 1.2.58 olmalı');
-    assert.equal(metadata.fileName, 'ykn-eklentisi-v1.2.58.zip', 'Dağıtım paket dosya adı doğru olmalı');
+    assert.equal(manifest.version, '1.2.59', 'Eklenti sürümü 1.2.59 olmalı');
+    assert.equal(metadata.version, '1.2.59', 'Dağıtım paketi sürümü 1.2.59 olmalı');
+    assert.equal(metadata.fileName, 'ykn-eklentisi-v1.2.59.zip', 'Dağıtım paket dosya adı doğru olmalı');
 });
