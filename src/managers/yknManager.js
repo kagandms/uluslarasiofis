@@ -1100,6 +1100,7 @@ export function initYknManager() {
             if (documentKind === 'passport') {
                 let renderedPages = [];
                 let bestPageIndex = 0;
+                let pageTextRecords = [];
 
                 try {
                     if (pdfOffset >= 0) {
@@ -1111,10 +1112,8 @@ export function initYknManager() {
                             cMapPacked: true
                         }).promise;
 
-                        // Önce tüm sayfaların metin katmanını oku; pahalı render işlemini
-                        // sayfa puanlamasından sonra yap.
+                        // Önce tüm sayfaların metin katmanını oku (hızlıdır, render gerektirmez)
                         const totalPdfPages = Math.min(pdf.numPages, PASSPORT_MAX_PAGES);
-                        const pageTextRecords = [];
                         for (let pageNum = 1; pageNum <= totalPdfPages; pageNum++) {
                             try {
                                 const page = await pdf.getPage(pageNum);
@@ -1138,46 +1137,73 @@ export function initYknManager() {
                         }
 
                         const rankedPages = [...pageTextRecords].sort((a, b) => b.score - a.score);
-                        const priorityPageNumbers = new Set(
-                            (rankedPages.some((page) => page.score > 0)
-                                ? rankedPages
-                                : pageTextRecords
-                            ).slice(0, PASSPORT_MAX_OCR_PAGES).map((page) => page.pageNumber)
-                        );
+                        const bestPageRecord = rankedPages[0] || pageTextRecords[0] || { pageNumber: 1, text: '', score: 0 };
+                        const bestPageNumber = bestPageRecord.pageNumber || 1;
 
-                        for (const pageRecord of pageTextRecords) {
-                            try {
-                                const page = await pdf.getPage(pageRecord.pageNumber);
-                                const isPriorityPage = priorityPageNumbers.has(pageRecord.pageNumber);
-                                const viewport = page.getViewport({ scale: isPriorityPage ? 1.6 : 0.75 });
-                                const canvas = document.createElement('canvas');
-                                canvas.width = viewport.width;
-                                canvas.height = viewport.height;
-                                await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-                                const dataUrl = canvas.toDataURL('image/jpeg', isPriorityPage ? 0.9 : 0.65);
+                        // EN ÖNEMLİ OPTİMİZASYON:
+                        // Kırpma ekranının beklemeden anında (<0.5s) açılabilmesi için
+                        // yalnızca en yüksek puanlı (biyometrik) sayfayı render ediyoruz.
+                        try {
+                            const bestPdfPage = await pdf.getPage(bestPageNumber);
+                            const viewport = bestPdfPage.getViewport({ scale: 1.6 });
+                            const canvas = document.createElement('canvas');
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            await bestPdfPage.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
-                                renderedPages.push({
-                                    pageNumber: pageRecord.pageNumber,
-                                    dataUrl,
-                                    text: pageRecord.text,
-                                    // Sadece OCR için seçilen sayfaların canvas'ını tut.
-                                    canvas: isPriorityPage ? canvas : null,
-                                    score: pageRecord.score,
-                                    label: totalPdfPages > 1 ? `Sayfa ${pageRecord.pageNumber}` : ''
-                                });
-
-                                if (!isPriorityPage) {
-                                    canvas.width = 0;
-                                    canvas.height = 0;
-                                }
-                            } catch (pageErr) {
-                                console.warn(`[YKN] PDF Sayfa ${pageRecord.pageNumber} render hatası:`, pageErr);
-                            }
+                            renderedPages.push({
+                                pageNumber: bestPageNumber,
+                                dataUrl,
+                                text: bestPageRecord.text,
+                                canvas,
+                                score: bestPageRecord.score,
+                                label: totalPdfPages > 1 ? `Sayfa ${bestPageNumber}` : ''
+                            });
+                        } catch (pageErr) {
+                            console.warn(`[YKN] PDF En iyi sayfa (${bestPageNumber}) render hatası:`, pageErr);
                         }
 
-                        const bestPageNumber = rankedPages[0]?.pageNumber || pageTextRecords[0]?.pageNumber;
-                        const foundBestPageIndex = renderedPages.findIndex((page) => page.pageNumber === bestPageNumber);
-                        bestPageIndex = foundBestPageIndex >= 0 ? foundBestPageIndex : 0;
+                        bestPageIndex = 0;
+
+                        // Diğer PDF sayfalarını arka planda render et (cropper modalını bloklamaz)
+                        if (totalPdfPages > 1) {
+                            (async () => {
+                                const remainingRecords = pageTextRecords.filter(p => p.pageNumber !== bestPageNumber);
+                                const otherPages = [];
+                                for (const pageRecord of remainingRecords) {
+                                    try {
+                                        const page = await pdf.getPage(pageRecord.pageNumber);
+                                        const viewport = page.getViewport({ scale: 1.0 });
+                                        const canvas = document.createElement('canvas');
+                                        canvas.width = viewport.width;
+                                        canvas.height = viewport.height;
+                                        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                                        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                                        canvas.width = 0;
+                                        canvas.height = 0;
+                                        otherPages.push({
+                                            pageNumber: pageRecord.pageNumber,
+                                            dataUrl,
+                                            text: pageRecord.text,
+                                            score: pageRecord.score,
+                                            label: `Sayfa ${pageRecord.pageNumber}`
+                                        });
+                                    } catch (err) {
+                                        console.warn(`[YKN] PDF Sayfa ${pageRecord.pageNumber} arka plan render hatası:`, err);
+                                    }
+                                }
+                                if (otherPages.length > 0) {
+                                    if (currentStudentData) {
+                                        const currentPages = currentStudentData.passportPages || [];
+                                        currentStudentData.passportPages = [...currentPages, ...otherPages];
+                                    }
+                                    if (isPassportCropperOpen()) {
+                                        appendPassportPages(otherPages);
+                                    }
+                                }
+                            })().catch(err => console.warn('[YKN] Arka plan sayfa tamamlama hatası:', err));
+                        }
                     } else if (isImage) {
                         const blob = new Blob([documentBytes], { type: contentType || 'image/jpeg' });
                         const dataUrl = URL.createObjectURL(blob);
@@ -1238,8 +1264,10 @@ export function initYknManager() {
                     }
                 }
 
-                // Pasaport dijital metin analizi (tüm sayfalardan)
-                const fullDigitalText = renderedPages.map(p => p.text).filter(Boolean).join('\n');
+                // Pasaport dijital metin analizi (tüm sayfalardan derhal okunur)
+                const fullDigitalText = (pageTextRecords && pageTextRecords.length > 0)
+                    ? pageTextRecords.map(p => p.text).filter(Boolean).join('\n')
+                    : renderedPages.map(p => p.text).filter(Boolean).join('\n');
                 let passportDates = extractPassportDatesFromText(fullDigitalText, { birthDate: currentStudentData?.birthDate });
 
                 if (passportDates.issueDate && !currentStudentData.issueDate) {
@@ -1257,107 +1285,7 @@ export function initYknManager() {
                 });
                 let detectedAuthority = extractPassportIssuingAuthority(fullDigitalText);
 
-                // Gerekirse sayfa sayfa hedefli OCR (4 zorunlu alan dolana kadar)
-                const hasAllFields = Boolean(
-                    currentStudentData.issueDate &&
-                    currentStudentData.expiryDate &&
-                    (detectedBirthPlace || currentStudentData.birthPlace) &&
-                    (detectedAuthority || currentStudentData.issuingAuthority)
-                );
-
-                if (!hasAllFields && renderedPages.length > 0) {
-                    try {
-                        const { runOCR } = await import('../services/ocrService.js');
-                        // En yüksek olasılıklı biyometrik sayfayı ilk önce tara, sonra diğer sayfaları
-                        const pageIndicesToScan = [
-                            bestPageIndex,
-                            ...renderedPages.map((_, i) => i).filter(i => i !== bestPageIndex)
-                        ].slice(0, PASSPORT_MAX_OCR_PAGES);
-
-                        for (const pIdx of pageIndicesToScan) {
-                            if (currentStudentData.issueDate && currentStudentData.expiryDate &&
-                                (detectedBirthPlace || currentStudentData.birthPlace) &&
-                                (detectedAuthority || currentStudentData.issuingAuthority)) {
-                                break;
-                            }
-
-                            const pageItem = renderedPages[pIdx];
-                            let pageCanvas = pageItem.canvas;
-                            let temporaryCanvas = false;
-                            if (!pageCanvas && pageItem.dataUrl) {
-                                try {
-                                    pageCanvas = await imageToCanvas(pageItem.dataUrl);
-                                    temporaryCanvas = true;
-                                } catch (_) {}
-                            }
-                            if (!pageCanvas) continue;
-
-                            let orientedCanvas = null;
-                            try {
-                                const orientation = await readPassportPageWithOrientation(pageCanvas, {
-                                    studentName: currentStudentData?.fullName,
-                                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim()
-                                }, runOCR);
-                                const pageOcrText = orientation.text || '';
-                                if (orientation.rotation !== 0 && orientation.canvas) {
-                                    pageItem.dataUrl = orientation.canvas.toDataURL('image/jpeg', 0.9);
-                                    orientedCanvas = orientation.canvas;
-                                }
-                                if (pageOcrText) {
-                                    if (!currentStudentData.issueDate || !currentStudentData.expiryDate) {
-                                        const ocrDates = extractPassportDatesFromText(pageOcrText, { birthDate: currentStudentData?.birthDate });
-                                        if (ocrDates.issueDate && !currentStudentData.issueDate) {
-                                            currentStudentData.issueDate = ocrDates.issueDate;
-                                            if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(ocrDates.issueDate);
-                                            passportDates.issueDate = ocrDates.issueDate;
-                                        }
-                                        if (ocrDates.expiryDate && !currentStudentData.expiryDate) {
-                                            currentStudentData.expiryDate = ocrDates.expiryDate;
-                                            if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(ocrDates.expiryDate);
-                                            passportDates.expiryDate = ocrDates.expiryDate;
-                                        }
-                                    }
-
-                                    if (!detectedBirthPlace && !currentStudentData.birthPlace) {
-                                        const bp = extractPassportPlaceOfBirth(pageOcrText, {
-                                            uyruk: currentStudentData?.uyruk,
-                                            dogumUlkesi: currentStudentData?.dogumUlkesi
-                                        });
-                                        if (bp) detectedBirthPlace = bp;
-                                    }
-
-                                    if (!detectedAuthority && (!currentStudentData.issuingAuthority || hasCountryAuthorityFallback(currentStudentData))) {
-                                        const auth = extractPassportIssuingAuthority(pageOcrText);
-                                        if (auth) detectedAuthority = auth;
-                                    }
-                                }
-                            } catch (pageOcrErr) {
-                                console.warn(`[YKN] Sayfa ${pIdx + 1} OCR atlandı:`, pageOcrErr.message);
-                            } finally {
-                                if (orientedCanvas && orientedCanvas !== pageCanvas) {
-                                    orientedCanvas.width = 0;
-                                    orientedCanvas.height = 0;
-                                }
-                                if (temporaryCanvas && pageCanvas) {
-                                    pageCanvas.width = 0;
-                                    pageCanvas.height = 0;
-                                }
-                            }
-                        }
-                    } catch (ocrModuleErr) {
-                        console.warn('[YKN] OCR servisi başlatılamadı:', ocrModuleErr);
-                    } finally {
-                        renderedPages.forEach(p => {
-                            if (p.canvas) {
-                                p.canvas.width = 0;
-                                p.canvas.height = 0;
-                                p.canvas = null;
-                            }
-                        });
-                    }
-                }
-
-                // Pasaport doğum yeri ve veren makam analizi
+                // Pasaport doğum yeri ve veren makam analizi (dijital metinden)
                 if (detectedBirthPlace) {
                     currentStudentData.birthPlace = detectedBirthPlace;
                     currentStudentData.dogumYeri = detectedBirthPlace;
@@ -1378,6 +1306,118 @@ export function initYknManager() {
                 // Pasaportta veren makam etiketi yoksa ülkenin ISO-3 kodunu kullan.
                 applyCountryDefaultsToStudent(currentStudentData);
 
+                // Gerekirse arka planda hedefli OCR (4 zorunlu alan dolana kadar, modalı bekletmez)
+                const hasAllFields = Boolean(
+                    currentStudentData.issueDate &&
+                    currentStudentData.expiryDate &&
+                    (detectedBirthPlace || currentStudentData.birthPlace) &&
+                    (detectedAuthority || currentStudentData.issuingAuthority)
+                );
+
+                if (!hasAllFields && renderedPages.length > 0) {
+                    const ocrPages = [...renderedPages];
+                    (async () => {
+                        try {
+                            const { runOCR } = await import('../services/ocrService.js');
+                            const pageItem = ocrPages[0];
+                            let pageCanvas = pageItem?.canvas;
+                            let temporaryCanvas = false;
+                            if (!pageCanvas && pageItem?.dataUrl) {
+                                try {
+                                    pageCanvas = await imageToCanvas(pageItem.dataUrl);
+                                    temporaryCanvas = true;
+                                } catch (_) {}
+                            }
+                            if (!pageCanvas) return;
+
+                            let orientedCanvas = null;
+                            try {
+                                const orientation = await readPassportPageWithOrientation(pageCanvas, {
+                                    studentName: currentStudentData?.fullName,
+                                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim()
+                                }, runOCR);
+                                const pageOcrText = orientation.text || '';
+                                if (pageOcrText) {
+                                    if (!currentStudentData.issueDate || !currentStudentData.expiryDate) {
+                                        const ocrDates = extractPassportDatesFromText(pageOcrText, { birthDate: currentStudentData?.birthDate });
+                                        if (ocrDates.issueDate && !currentStudentData.issueDate) {
+                                            currentStudentData.issueDate = ocrDates.issueDate;
+                                            if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(ocrDates.issueDate);
+                                        }
+                                        if (ocrDates.expiryDate && !currentStudentData.expiryDate) {
+                                            currentStudentData.expiryDate = ocrDates.expiryDate;
+                                            if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(ocrDates.expiryDate);
+                                        }
+                                    }
+
+                                    if (!detectedBirthPlace && !currentStudentData.birthPlace) {
+                                        const bp = extractPassportPlaceOfBirth(pageOcrText, {
+                                            uyruk: currentStudentData?.uyruk,
+                                            dogumUlkesi: currentStudentData?.dogumUlkesi
+                                        });
+                                        if (bp) {
+                                            detectedBirthPlace = bp;
+                                            currentStudentData.birthPlace = bp;
+                                            currentStudentData.dogumYeri = bp;
+                                            currentStudentData.dogumYeriAciklamasi = bp;
+                                            if (inputBirthPlace) inputBirthPlace.value = bp;
+                                        }
+                                    }
+
+                                    if (!detectedAuthority && (!currentStudentData.issuingAuthority || hasCountryAuthorityFallback(currentStudentData))) {
+                                        const auth = extractPassportIssuingAuthority(pageOcrText);
+                                        if (auth) {
+                                            detectedAuthority = auth;
+                                            currentStudentData.issuingAuthority = auth;
+                                            currentStudentData.verenMakam = auth;
+                                            if (inputIssuingAuthority) inputIssuingAuthority.value = auth;
+                                        }
+                                    }
+
+                                    applyCountryDefaultsToStudent(currentStudentData);
+
+                                    const foundItemsOcr = [];
+                                    if (currentStudentData.issueDate && currentStudentData.expiryDate) foundItemsOcr.push('tarihler');
+                                    if (currentStudentData.birthPlace || inputBirthPlace?.value) foundItemsOcr.push('doğum yeri');
+                                    if (currentStudentData.issuingAuthority || inputIssuingAuthority?.value) foundItemsOcr.push('veren makam');
+                                    if (foundItemsOcr.length > 0) {
+                                        addStatus(`Pasaport ek bilgileri OCR ile okundu (${foundItemsOcr.join(', ')}).`, 'success');
+                                    }
+                                }
+                            } catch (pageOcrErr) {
+                                console.warn('[YKN] Arka plan OCR atlandı:', pageOcrErr.message);
+                            } finally {
+                                if (orientedCanvas && orientedCanvas !== pageCanvas) {
+                                    orientedCanvas.width = 0;
+                                    orientedCanvas.height = 0;
+                                }
+                                if (temporaryCanvas && pageCanvas) {
+                                    pageCanvas.width = 0;
+                                    pageCanvas.height = 0;
+                                }
+                            }
+                        } catch (ocrModuleErr) {
+                            console.warn('[YKN] OCR servisi başlatılamadı:', ocrModuleErr);
+                        } finally {
+                            ocrPages.forEach(p => {
+                                if (p.canvas) {
+                                    p.canvas.width = 0;
+                                    p.canvas.height = 0;
+                                    p.canvas = null;
+                                }
+                            });
+                        }
+                    })().catch(err => console.warn('[YKN] Arka plan OCR hatası:', err));
+                } else {
+                    renderedPages.forEach(p => {
+                        if (p.canvas) {
+                            p.canvas.width = 0;
+                            p.canvas.height = 0;
+                            p.canvas = null;
+                        }
+                    });
+                }
+
                 // Eksik alan varsa ve incelenebilecek ek pasaport aday belgeleri varsa diğer belgeyi iste
                 const fieldsComplete = Boolean(
                     currentStudentData.issueDate &&
@@ -1390,7 +1430,7 @@ export function initYknManager() {
                 const currentIdx = currentStudentData?.currentPassportCandidateIndex || 0;
                 const nextIdx = currentIdx + 1;
 
-                if (!fieldsComplete && nextIdx < candidates.length) {
+                if (!fieldsComplete && nextIdx < candidates.length && !isPassportCropperOpen()) {
                     renderedPages.forEach((page) => {
                         if (page.canvas) {
                             page.canvas.width = 0;

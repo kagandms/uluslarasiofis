@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.59';
+const CONTENT_SCRIPT_VERSION = '1.2.60';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -2426,18 +2426,19 @@ async function extractImageTextWithOcr(bytes, contentType, requestId = '') {
     }
 }
 
-async function extractDocumentText(documentResult) {
+async function extractDocumentText(documentResult, options = {}) {
     const bytes = decodeBase64ToBytes(documentResult.documentBase64);
     const contentType = String(documentResult.contentType || '').toLowerCase();
     const signature = decodeDocumentBytes(bytes.slice(0, 8));
     if (contentType.includes('pdf') || signature.startsWith('%PDF')) {
         const text = await extractPdfText(bytes);
-        if (text.trim()) return text;
+        if (text.trim() || options.fastOnly) return text;
         const ocrText = await extractPdfTextWithOcr(bytes, documentResult.requestId || '');
         documentResult.ocrText = ocrText;
         return ocrText;
     }
     if (contentType.startsWith('image/')) {
+        if (options.fastOnly) return '';
         const ocrText = await extractImageTextWithOcr(bytes, contentType, documentResult.requestId || '');
         documentResult.ocrText = ocrText;
         return ocrText;
@@ -2462,12 +2463,13 @@ async function extractPassportMetadataFromApply(request) {
     const candidates = getDocumentCandidates(links, 'passport', request.documentUrl);
     if (candidates.length === 0) throw new Error('Öğrenci profilinde pasaport belgesi bulunamadı.');
 
+    const isFast = Boolean(request.fastOnly || request.fromPortal);
     const errors = [];
     for (const documentUrl of candidates) {
         try {
             const documentResult = await fetchApplyDocument(documentUrl);
             documentResult.requestId = request.requestId;
-            let text = await extractDocumentText(documentResult);
+            let text = await extractDocumentText(documentResult, { fastOnly: isFast });
             const parser = window.YknDocumentParser;
             if (!parser) throw new Error('Pasaport parserı hazır değil.');
             let metadata = parser.extractPassportMetadata(text, {
@@ -2477,10 +2479,8 @@ async function extractPassportMetadataFromApply(request) {
             let missingFields = ['issueDate', 'expiryDate', 'placeOfBirth', 'issuingAuthority']
                 .filter((field) => !metadata[field]);
 
-            // PDF'nin metin katmanı mevcut olsa bile tarih satırları yalnızca
-            // görüntüde bulunabilir. Metin katmanı eksik alan bıraktığında OCR'ı
-            // ayrıca çalıştırıp parser sonucuyla birleştir.
-            if (missingFields.length > 0 && !documentResult.ocrText) {
+            // Portal üzerinden çağrılmıyorsa ve eksik alan varsa OCR dene
+            if (!isFast && missingFields.length > 0 && !documentResult.ocrText) {
                 try {
                     const bytes = decodeBase64ToBytes(documentResult.documentBase64);
                     const contentType = String(documentResult.contentType || '').toLowerCase();
@@ -2503,10 +2503,15 @@ async function extractPassportMetadataFromApply(request) {
                     errors.push(`OCR: ${ocrError.message}`);
                 }
             }
-            if (missingFields.length < 4) {
-                return { metadata, missingFields, documentUrl };
-            }
-            errors.push('Pasaport alanları metinde bulunamadı.');
+
+            // Belge indirildiği için cropper'ın anında açılması adına veriyi hemen döndür
+            return {
+                metadata,
+                missingFields,
+                documentUrl,
+                documentBase64: documentResult.documentBase64,
+                contentType: documentResult.contentType
+            };
         } catch (error) {
             errors.push(error.message);
         }

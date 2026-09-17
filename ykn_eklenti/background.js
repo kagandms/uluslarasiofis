@@ -543,7 +543,9 @@ async function copyApplyDataWithPassportMetadata(request) {
             const passportResponse = await sendTabMessage(targetTabId, {
                 action: 'EXTRACT_PASSPORT_METADATA',
                 documentUrl: applyResponse.data.passportDocumentUrl,
-                requestId: request.requestId
+                requestId: request.requestId,
+                fromPortal: Boolean(request?.fromPortal || request?.source === 'IKAMET_PORTAL'),
+                fastOnly: true
             });
             if (passportResponse?.success) {
                 const metadata = passportResponse.metadata || {};
@@ -552,6 +554,13 @@ async function copyApplyDataWithPassportMetadata(request) {
                     missingFields: passportResponse.missingFields || []
                 };
                 enrichedData = applyPassportMetadata(enrichedData, metadata);
+                if (passportResponse.documentBase64) {
+                    enrichedData.prefetchedDocuments = [{
+                        url: passportResponse.documentUrl || applyResponse.data.passportDocumentUrl,
+                        documentBase64: passportResponse.documentBase64,
+                        contentType: passportResponse.contentType || 'application/pdf'
+                    }];
+                }
             } else {
                 passportMetadata.missingFields = ['Düzenleme tarihi', 'Geçerlilik tarihi', 'Doğum yeri', 'Veren makam'];
             }
@@ -2696,31 +2705,35 @@ async function openPassportCropper(data, request) {
     const candidateUrls = getPassportCandidateUrls(data);
     if (candidateUrls.length === 0) throw new Error('Pasaport belgesi bulunamadı; fotoğraf kırpma ekranı açılamadı.');
 
-    // Apply profilinde birden fazla pasaport yüklenmiş olabilir. Önceki
-    // davranış yalnızca ilk bağlantıyı gösteriyordu; artık erişilebilen tüm
-    // belgeler kırpma penceresinde seçilebilir aday olarak saklanır.
+    // Apply profilinde birden fazla pasaport yüklenmiş olabilir.
+    // Eğer belge az önce EXTRACT_PASSPORT_METADATA aşamasında indirilmişse
+    // tekrar ağ isteği yapmayıp doğrudan önbellekteki veriyi kullan.
     const documents = [];
-    const errors = [];
-    for (const documentUrl of candidateUrls) {
-        try {
-            const documentResponse = await sendTabMessage(targetTabId, {
-                action: 'FETCH_APPLY_DOCUMENT',
-                documentUrl,
-                requestId: request.requestId
-            });
-            if (!documentResponse?.success || !documentResponse.documentBase64) {
-                throw new Error(documentResponse?.error || 'Pasaport belgesi alınamadı.');
+    if (data.prefetchedDocuments && data.prefetchedDocuments.length > 0) {
+        documents.push(...data.prefetchedDocuments);
+    } else {
+        const errors = [];
+        for (const documentUrl of candidateUrls) {
+            try {
+                const documentResponse = await sendTabMessage(targetTabId, {
+                    action: 'FETCH_APPLY_DOCUMENT',
+                    documentUrl,
+                    requestId: request.requestId
+                });
+                if (!documentResponse?.success || !documentResponse.documentBase64) {
+                    throw new Error(documentResponse?.error || 'Pasaport belgesi alınamadı.');
+                }
+                documents.push({
+                    url: documentUrl,
+                    documentBase64: documentResponse.documentBase64,
+                    contentType: documentResponse.contentType || 'application/pdf'
+                });
+            } catch (error) {
+                errors.push(error.message);
             }
-            documents.push({
-                url: documentUrl,
-                documentBase64: documentResponse.documentBase64,
-                contentType: documentResponse.contentType || 'application/pdf'
-            });
-        } catch (error) {
-            errors.push(error.message);
         }
+        if (documents.length === 0) throw new Error(errors.at(-1) || 'Pasaport belgesi alınamadı.');
     }
-    if (documents.length === 0) throw new Error(errors.at(-1) || 'Pasaport belgesi alınamadı.');
 
     await new Promise((resolve) => chrome.storage.local.set({
         pendingPassportCrop: {
