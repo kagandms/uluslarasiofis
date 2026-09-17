@@ -1347,7 +1347,12 @@ export function initYknManager() {
                     uyruk: currentStudentData?.uyruk,
                     dogumUlkesi: currentStudentData?.dogumUlkesi
                 });
-                let detectedAuthority = extractPassportIssuingAuthority(fullDigitalText);
+                let detectedAuthority = extractPassportIssuingAuthority(fullDigitalText, {
+                    uyruk: currentStudentData?.uyruk,
+                    nationality: currentStudentData?.nationality,
+                    country: currentStudentData?.country,
+                    dogumUlkesi: currentStudentData?.dogumUlkesi
+                });
                 let detectedGender = extractPassportGender(fullDigitalText);
                 if (detectedGender && !currentStudentData.cinsiyet) {
                     currentStudentData.cinsiyet = detectedGender;
@@ -1433,7 +1438,12 @@ export function initYknManager() {
                                     }
 
                                     if (!detectedAuthority && (!currentStudentData.issuingAuthority || hasCountryAuthorityFallback(currentStudentData))) {
-                                        const auth = extractPassportIssuingAuthority(pageOcrText);
+                                        const auth = extractPassportIssuingAuthority(pageOcrText, {
+                                            uyruk: currentStudentData?.uyruk,
+                                            nationality: currentStudentData?.nationality,
+                                            country: currentStudentData?.country,
+                                            dogumUlkesi: currentStudentData?.dogumUlkesi
+                                        });
                                         if (auth) {
                                             detectedAuthority = auth;
                                             currentStudentData.issuingAuthority = auth;

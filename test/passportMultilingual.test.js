@@ -282,3 +282,44 @@ DATE OF EXPIRY: 14 JAN 2031`;
     assert.equal(extMeta.issueDate, '2021-01-15');
     assert.equal(extMeta.expiryDate, '2031-01-14');
 });
+
+test('Multi-line and bilingual authority extraction with RTL and fallback support', () => {
+    // 1. Multi-line Authority (e.g. US Department of State across lines)
+    const usMulti = `PASSPORT / PASSEPORT
+ISSUING AUTHORITY / AUTORITE
+UNITED STATES
+DEPARTMENT OF STATE
+DATE OF ISSUE / DATE DE DELIVRANCE
+01 JAN 2020`;
+    assert.equal(extractPassportIssuingAuthority(usMulti), 'UNITED STATES DEPARTMENT OF STATE');
+    assert.equal(extParser.extractPassportIssuingAuthority(usMulti), 'UNITED STATES DEPARTMENT OF STATE');
+
+    // 2. Multi-line bilingual across lines: prefer Latin for YOKSIS
+    const ruMulti = `ОРГАН ВЫДАЧИ / ISSUING AUTHORITY
+МВД РОССИИ
+MIA OF RUSSIA
+ДАТА ВЫДАЧИ / DATE OF ISSUE
+12.05.2021`;
+    assert.equal(extractPassportIssuingAuthority(ruMulti), 'MIA OF RUSSIA');
+    assert.equal(extParser.extractPassportIssuingAuthority(ruMulti), 'MIA OF RUSSIA');
+
+    // 3. Arabic RTL layout where authority precedes label on same line
+    const arRtl = `دمشق جهة الإصدار
+15/06/2020 تاريخ الإصدار`;
+    assert.equal(extractPassportIssuingAuthority(arRtl), 'دمشق');
+    assert.equal(extParser.extractPassportIssuingAuthority(arRtl), 'دمشق');
+
+    // 4. Known authority signature fallback when label is missing
+    const smudged = `PASSPORT
+MINISTERE DE L'INTERIEUR
+DIRECTION GENERALE DE LA POLICE
+P<FRA123456789`;
+    assert.equal(extractPassportIssuingAuthority(smudged), 'MINISTERE DE L\'INTERIEUR');
+    assert.equal(extParser.extractPassportIssuingAuthority(smudged), 'MINISTERE DE L\'INTERIEUR');
+
+    // 5. MRZ with OCR artifacts fallback
+    const mrzNoise = `DOCUMENT DE VOYAGE
+P«TUR123456789`;
+    assert.equal(extractPassportIssuingAuthority(mrzNoise), 'TUR');
+    assert.equal(extParser.extractPassportIssuingAuthority(mrzNoise), 'TUR');
+});

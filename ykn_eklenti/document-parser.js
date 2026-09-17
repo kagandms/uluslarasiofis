@@ -59,6 +59,99 @@
             .toUpperCase();
     }
 
+    const COUNTRY_CODE_ALIASES = Object.freeze({
+        AFG: ['AFGANISTAN', 'AFGHANISTAN'],
+        ALB: ['ARNAVUTLUK', 'ALBANIA', 'ALBANIE'],
+        DZA: ['CEZAYIR', 'ALGERIA', 'ALGERIE'],
+        ARG: ['ARJANTIN', 'ARGENTINA'],
+        ARM: ['ERMENISTAN', 'ARMENIA'],
+        AUS: ['AVUSTRALYA', 'AUSTRALIA'],
+        AUT: ['AVUSTURYA', 'AUSTRIA'],
+        AZE: ['AZERBAYCAN', 'AZERBAIJAN'],
+        BGD: ['BANGLADES', 'BANGLADESH'],
+        BEL: ['BELCIKA', 'BELGIUM', 'BELGIQUE'],
+        BGR: ['BULGARISTAN', 'BULGARIA'],
+        BRA: ['BREZILYA', 'BRAZIL'],
+        CAN: ['KANADA', 'CANADA'],
+        CHE: ['ISVICRE', 'SWITZERLAND', 'SUISSE'],
+        CHN: ['CIN', 'CHINA'],
+        COL: ['KOLOMBIYA', 'COLOMBIA'],
+        CZE: ['CEKYA', 'CZECHIA', 'CZECH REPUBLIC'],
+        DEU: ['ALMANYA', 'GERMANY', 'DEUTSCHLAND'],
+        DNK: ['DANIMARKA', 'DENMARK'],
+        ECU: ['EKVADOR', 'ECUADOR'],
+        EGY: ['MISIR', 'EGYPT'],
+        ESP: ['ISPANYA', 'SPAIN', 'ESPANA'],
+        ETH: ['ETIYOPYA', 'ETHIOPIA'],
+        FRA: ['FRANSA', 'FRANCE'],
+        GEO: ['GURCISTAN', 'GEORGIA'],
+        GBR: ['BIRLESIK KRALLIK', 'UNITED KINGDOM', 'INGILTERE'],
+        GHA: ['GANA', 'GHANA'],
+        GRC: ['YUNANISTAN', 'GREECE'],
+        IDN: ['ENDONEZYA', 'INDONESIA'],
+        IND: ['HINDISTAN', 'INDIA'],
+        IRN: ['IRAN'],
+        IRQ: ['IRAK', 'IRAQ'],
+        ITA: ['ITALYA', 'ITALY'],
+        JOR: ['URDUN', 'JORDAN'],
+        JPN: ['JAPONYA', 'JAPAN'],
+        KAZ: ['KAZAKISTAN', 'KAZAKHSTAN'],
+        KEN: ['KENYA'],
+        KGZ: ['KIRGIZISTAN', 'KYRGYZSTAN'],
+        KOR: ['GUNEY KORE', 'SOUTH KOREA', 'KOREA'],
+        LBN: ['LUBNAN', 'LEBANON'],
+        LBY: ['LIBYA'],
+        MAR: ['FAS', 'MOROCCO'],
+        MEX: ['MEKSIKA', 'MEXICO'],
+        MNG: ['MOGOLISTAN', 'MONGOLIA'],
+        MYS: ['MALEZYA', 'MALAYSIA'],
+        NLD: ['HOLLANDA', 'NETHERLANDS'],
+        NGA: ['NIJERYA', 'NIGERIA'],
+        NPL: ['NEPAL'],
+        PAK: ['PAKISTAN'],
+        PER: ['PERU'],
+        PHL: ['FILIPINLER', 'PHILIPPINES'],
+        PLE: ['FILISTIN', 'PALESTINE'],
+        POL: ['POLONYA', 'POLAND'],
+        PRT: ['PORTEKIZ', 'PORTUGAL'],
+        QAT: ['KATAR', 'QATAR'],
+        ROU: ['ROMANYA', 'ROMANIA'],
+        RUS: ['RUSYA', 'RUSSIA'],
+        SAU: ['SUUDI ARABISTAN', 'SAUDI ARABIA'],
+        SDN: ['SUDAN'],
+        SEN: ['SENEGAL'],
+        SOM: ['SOMALI', 'SOMALIA'],
+        SRB: ['SIRBISTAN', 'SERBIA'],
+        SYR: ['SURIYE', 'SYRIA'],
+        SWE: ['ISVEC', 'SWEDEN'],
+        TJK: ['TACIKISTAN', 'TAJIKISTAN'],
+        TKM: ['TURKMENISTAN', 'TURKMEN'],
+        TUN: ['TUNUS', 'TUNISIA'],
+        TUR: ['TURKIYE', 'TURKEY'],
+        UKR: ['UKRAYNA', 'UKRAINE'],
+        UZB: ['OZBEKISTAN', 'UZBEKISTAN'],
+        USA: ['AMERIKA BIRLESIK DEVLETLERI', 'UNITED STATES', 'USA'],
+        UGA: ['UGANDA'],
+        ARE: ['BIRLESIK ARAP EMIRLIKLERI', 'UNITED ARAB EMIRATES'],
+        VEN: ['VENEZUELA'],
+        VNM: ['VIETNAM', 'VIET NAM'],
+        YEM: ['YEMEN']
+    });
+
+    function getCountryIso3Code(value) {
+        const normalized = String(value || '')
+            .toLocaleUpperCase('tr-TR')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^A-Z0-9\u0400-\u04FF]+/g, ' ')
+            .trim();
+        if (/^[A-Z]{3}$/.test(normalized)) return normalized;
+        for (const [code, aliases] of Object.entries(COUNTRY_CODE_ALIASES)) {
+            if (aliases.some((alias) => normalized.includes(alias))) return code;
+        }
+        return (value || '').slice(0, 3).toUpperCase();
+    }
+
     function isValidYoksisId(value) {
         const id = normalizeYoksisId(value);
         return /^[A-Z0-9]{2,4}(?:-[A-Z0-9]{2,4}){2}$/.test(id)
@@ -315,23 +408,89 @@
     ];
 
     const AUTHORITY_LABELS = [
+        // English
         'issuing authority', 'issuing office', 'office of issue', 'place of issue', 'issued by', 'authority', 'passport office',
+        'issuing state', 'issuing post', 'issuing country', 'issuing government',
+        // French
         'autorité de délivrance', 'autorite de delivrance', 'autorité', 'autorite', 'délivré par', 'delivre par', 'lieu de délivrance', 'lieu de delivrance',
+        'délivré à', 'delivre a',
+        // Turkish / Azeri
         'belgeyi veren makam', 'pasaportu veren makam', 'tanzim eden makam', 'düzenleyen makam', 'duzenleyen makam', 'veren makam', 'verildiği yer', 'verildigi yer',
-        'جهة الإصدار', 'جهة الاصدار', 'الجهة المصدرة', 'مكان الإصدار', 'مكان الاصدار', 'مكان الصدور', 'مكان التحرير',
+        'verən makam', 'verən orqan', 'tərtib edən orqan',
+        // Arabic / Persian / Urdu
+        'جهة الإصدار', 'جهة الاصدار', 'الجهة المصدرة', 'الجهة المصدرة للوثيقة', 'مكان الإصدار', 'مكان الاصدار', 'مكان الصدور', 'مكان التحرير',
         'سلطة الإصدار', 'سلطة الاصدار', 'السلطة', 'مركز الإصدار', 'مركز الاصدار', 'صدر عن', 'صدرت من',
-        'орган, выдавший документ', 'орган выдавший документ', 'орган выдачи', 'кем выдан', 'орган що видав',
-        'берген орган', 'берген мекеме', 'орган, ки васиқа додааст',
-        'kim tomonidan berilgan', 'bergan organ', 'berlen ýeri', 'berlen yeri', 'berlən yeri'
+        'مكان وتاريخ الإصدار', 'مكان وتاريخ الاصدار', 'تاريخ ومكان الإصدار', 'تاريخ ومكان الاصدار', 'محل صدور', 'مرجع صدور',
+        // Russian / Cyrillic / CIS
+        'орган, выдавший документ', 'орган выдавший документ', 'орган выдачи', 'орган, що видав документ', 'орган що видав',
+        'орган що видав паспорт', 'кем выдан', 'выдан',
+        'берген орган', 'берген мекеме', 'берген жай', 'берілген жер', 'берілген жері',
+        'мақоми васиқадиҳанда', 'макоми васикадиханда', 'орган, ки васиқа додааст', 'орган ки васика додааст',
+        'ким томонидан берилган', 'берган organ', 'берган орган', 'берилган жойи',
+        'ким тарапындан берлен', 'берлен ýeri', 'берlen ýeri', 'berlen ýeri', 'berlen yeri', 'berlən yeri', 'bergan organ',
+        // Spanish / Portuguese / Italian / German
+        'autoridad de expedición', 'autoridad expedidora', 'autoridad de emision', 'lugar de expedición', 'lugar de expedicion', 'expedido por', 'autoridad',
+        'autoridade emissora', 'emitido por', 'autoridade',
+        'autorità di rilascio', 'autorita di rilascio', 'rilasciato da', 'autorità', 'autorita',
+        'ausstellende behörde', 'ausstellende behoerde', 'ausgestellt durch', 'passbehörde', 'passbehoerde', 'behörde', 'behoerde'
     ];
 
     const AUTHORITY_STOP_WORDS = [
-        'date of issue', 'date of expiry', 'date of birth', 'date', 'issue', 'expiry', 'valid',
-        'date de délivrance', 'date de delivrance', 'date d\'expiration', 'date de naissance',
-        'tarih', 'tarihi', 'veriliş tarihi', 'verilis tarihi', 'geçerlilik tarihi', 'gecerlilik tarihi', 'doğum tarihi', 'dogum tarihi',
-        'дата выдачи', 'срок действия', 'дата рождения', 'подпись', 'signature', 'imza',
-        'تاريخ الإصدار', 'تاريخ الاصدار', 'تاريخ الصدور', 'تاريخ الانتهاء', 'تاريخ الميلاد', 'التوقيع',
-        'holder', 'bearer', 'sex', 'cinsiyet', 'пол', 'الجنس', 'photo', 'mrz'
+        'date of issue', 'date of expiry', 'date of birth', 'date of expiration', 'date of validity', 'valid until',
+        'date de délivrance', 'date de delivrance', 'date d\'expiration', 'date d expiration', 'date de naissance',
+        'veriliş tarihi', 'verilis tarihi', 'geçerlilik tarihi', 'gecerlilik tarihi', 'son geçerlilik', 'doğum tarihi', 'dogum tarihi', 'tanzim tarihi',
+        'дата выдачи', 'срок действия', 'дата окончания', 'действителен до', 'дата рождения',
+        'تاريخ الإصدار', 'تاريخ الاصدار', 'تاريخ الصدور', 'تاريخ الانتهاء', 'تاريخ النفاذ', 'تاريخ الميلاد',
+        'fecha de expedicion', 'fecha de emision', 'fecha de caducidad', 'fecha de nacimiento',
+        'data di rilascio', 'data di scadenza', 'data di nascita',
+        'ausstellungsdatum', 'gueltig bis', 'gültig bis', 'geburtsdatum',
+        'place of birth', 'lieu de naissance', 'doğum yeri', 'dogum yeri', 'место рождения', 'مكان الميلاد', 'lugar de nacimiento',
+        'signature of bearer', 'bearer\'s signature', 'holder\'s signature', 'signature du titulaire', 'imza', 'sahibinin imzası', 'подпись владельца', 'подпись', 'التوقيع',
+        'sex', 'gender', 'cinsiyet', 'sexe', 'пол', 'الجنس', 'sexo', 'sesso', 'geschlecht',
+        'nationality', 'uyruk', 'uyruğu', 'nationalité', 'nationalite', 'гражданство', 'الجنسية',
+        'passport no', 'passport number', 'no de passeport', 'pasaport no', 'номер паспорта', 'رقم الجواز',
+        'berilgan sanasi', 'berilgen sanasi', 'berilgen kuni', 'berilgan vaqti', 'amal qilish muddati', 'amal qilish', 'sanasi', 'sana', 'kuni',
+        'etibarlılıq müddəti', 'etibarliliq muddati', 'bitmə tarixi', 'bitme tarixi', 'verilmə tarixi', 'verilme tarixi',
+        'qoldanylu merzimi', 'qoldanylu', 'mohleti', 'möhleti',
+        'mrz'
+    ];
+
+    const KNOWN_AUTHORITY_PATTERNS = [
+        /\bDEPARTMENT OF STATE\b/i,
+        /\bPASSPORT OFFICE\b/i,
+        /\bMINISTRY OF FOREIGN AFFAIRS\b/i,
+        /\bMINISTRY OF INTERIOR\b/i,
+        /\bMINISTRY OF HOME AFFAIRS\b/i,
+        /\bIMMIGRATION AND PASSPORTS\b/i,
+        /\bHM PASSPORT OFFICE\b/i,
+        /\bDEPARTMENT OF HOME AFFAIRS\b/i,
+        /\bIDENTITY AND PASSPORT SERVICE\b/i,
+        /\bMINISTERE DE L'INTERIEUR\b/i,
+        /\bMINISTERE DES AFFAIRES ETRANGERES\b/i,
+        /\bDIRECTION GENERALE DE LA POLICE(?: NATIONALE)?\b/i,
+        /\bPREFECTURE DE POLICE\b/i,
+        /\bCOMMISSARIAT CENTRAL\b/i,
+        /\bNÜFUS VE VATANDAŞLIK İŞLERİ(?: GENEL MÜDÜRLÜĞÜ)?\b/i,
+        /\bNUFUS VE VATANDASLIK ISLERI(?: GENEL MUDURLUGU)?\b/i,
+        /\bEMNİYET GENEL MÜDÜRLÜĞÜ\b/i,
+        /\bEMNIYET GENEL MUDURLUGU\b/i,
+        /\bİL EMNİYET MÜDÜRLÜĞÜ\b/i,
+        /\bIL EMNIYET MUDURLUGU\b/i,
+        /\bМВД(?:\s+РОССИИ|\s+[А-ЯA-Z0-9]+|\s*\d{3,6})?\b/u,
+        /\bУФМС(?:\s+РОССИИ|\s+[А-ЯA-Z0-9]+|\s*\d{3,6})?\b/u,
+        /\bФМС(?:\s+[А-ЯA-Z0-9]+|\s*\d{3,6})?\b/u,
+        /\bMIA OF RUSSIA\b/i,
+        /\bMIA\s*\d{3,6}\b/i,
+        /\bIIB\s+[A-Z\s]{2,20}\b/i,
+        /\bIIV\b/i,
+        /\bВКД\b/u,
+        /\bІІМ\b/u,
+        /\bSMST\b/i,
+        /\bمصلحة الجوازات(?: والجنسية)?\b/u,
+        /\bوزارة الداخلية\b/u,
+        /\bوزارة الخارجية\b/u,
+        /\bإدارة الهجرة والجوازات\b/u,
+        /\bادارة الهجرة والجوازات\b/u
     ];
 
     function escapeRegex(str) {
@@ -381,11 +540,18 @@
         if (!rawValue) return '';
         let val = String(rawValue).trim();
 
+        // Remove dates
         val = val.replace(/\b\d{1,4}[./\-]\d{1,2}[./\-]\d{2,4}\b/g, '').trim();
+        val = val.replace(/\b\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|OCAK|ŞUBAT|MART|NİSAN|MAYIS|HAZİRAN|TEMMUZ|AĞUSTOS|EYLÜL|EKİM|KASIM|ARALIK|ЯНВ|ФЕВ|МАР|АПР|МАЙ|ИЮН|ИЮЛ|АВГ|СЕН|ОКТ|НОЯ|ДЕК|يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)[a-zа-яء-ي]*\s+\d{2,4}\b/gi, '').trim();
 
+        // Clean OCR artifacts: brackets, guillemets, quotes, chevron fillers
+        val = val.replace(/^[«"'\(\[\{<]+|[»"'\)\]\}>]+$/g, '').trim();
+        val = val.replace(/<{2,}/g, ' ').replace(/</g, ' ');
+
+        // Bilingual / dual-script splitting (e.g. "МВД 77001 / MIA 77001" or "МВД РОССИИ / MIA OF RUSSIA")
         const parts = val.split(/\s*[/\\|]\s*/);
         if (parts.length >= 2) {
-            const latinPart = parts.find(p => /[A-Za-z]/.test(p) && !/^(?:AUTHORITY|AUTORITE)\b/i.test(p.trim()));
+            const latinPart = parts.find(p => /[A-Za-z]/.test(p) && !isLabelOnlyLine(p, AUTHORITY_LABELS));
             if (latinPart) {
                 val = latinPart;
             } else {
@@ -393,8 +559,9 @@
             }
         }
 
+        // Strip leftover leading labels
         val = val.replace(/^[\s:;#\-_/\\\\|.,]+|[\s:;#\-_/\\\\|.,]+$/g, '').trim();
-        val = val.replace(/^(?:AUTHORITY|AUTORITE|ISSUING AUTHORITY|ISSUED BY|OFFICE|PASSPORT OFFICE)\s*[:\-]?\s*/i, '');
+        val = val.replace(/^(?:AUTHORITY|AUTORITE|ISSUING AUTHORITY|ISSUED BY|OFFICE|PASSPORT OFFICE|VEREN MAKAM|BELGEYI VEREN MAKAM|ОРГАН ВЫДАЧИ|КЕМ ВЫДАН|جهة الإصدار|جهة الاصدار)\s*[:\-]?\s*/i, '');
         val = val.replace(/\s+/g, ' ');
 
         if (!val || val.length < 2 || /^\d{1,2}[./\-]/.test(val)) return '';
@@ -506,7 +673,9 @@
 
     function extractPassportIssuingAuthority(text, options = {}) {
         if (!text || typeof text !== 'string') {
-            return (options.nationality || options.country || options.uyruk || '').slice(0, 3).toUpperCase();
+            return getCountryIso3Code(
+                options.uyruk || options.nationality || options.country || options.dogumUlkesi
+            );
         }
         const normalized = text.replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
         const lines = normalized.split(/[\r\n]+/);
@@ -523,14 +692,33 @@
             if (!foundLabel) continue;
 
             const labelIndex = line.toLowerCase().indexOf(foundLabel.toLowerCase());
-            let remainder = line.slice(labelIndex);
 
+            // Check text BEFORE the label (RTL / Arabic or multi-column table layout: e.g. "دمشق جهة الإصدار")
+            let beforeRemainder = line.slice(0, labelIndex).trim();
+            beforeRemainder = beforeRemainder.replace(/^[«"'\(\[\{]+|[»"'\)\]\}]+$/g, '').trim();
+            let candidateBefore = '';
+            if (beforeRemainder.length >= 2 && !isLabelOnlyLine(beforeRemainder, AUTHORITY_LABELS) && !isLabelOnlyLine(beforeRemainder, AUTHORITY_STOP_WORDS)) {
+                for (const stop of AUTHORITY_STOP_WORDS) {
+                    const stopRegex = new RegExp('(?:\\s+|^)' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i');
+                    const stopMatch = beforeRemainder.match(stopRegex);
+                    if (stopMatch && stopMatch.index !== undefined) {
+                        beforeRemainder = beforeRemainder.slice(0, stopMatch.index).trim();
+                    }
+                }
+                const cleanedBefore = cleanIssuingAuthorityValue(beforeRemainder);
+                if (cleanedBefore && !isLabelOnlyLine(cleanedBefore, AUTHORITY_LABELS)) {
+                    candidateBefore = cleanedBefore;
+                }
+            }
+
+            // Check text AFTER the label
+            let remainder = line.slice(labelIndex);
             let keepStripping = true;
             while (keepStripping) {
                 keepStripping = false;
                 remainder = remainder.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
                 for (const l of AUTHORITY_LABELS) {
-                    const r = new RegExp('^' + escapeRegex(l), 'i');
+                    const r = new RegExp('^' + escapeRegex(l) + '(?:$|[\\s:;#\-_/\\\\|.,])', 'i');
                     if (r.test(remainder)) {
                         remainder = remainder.replace(r, '').trim();
                         keepStripping = true;
@@ -538,8 +726,9 @@
                     }
                 }
             }
-
             remainder = remainder.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
+
+            const collectedLineValues = [];
 
             if (remainder.length >= 2) {
                 for (const stop of AUTHORITY_STOP_WORDS) {
@@ -550,9 +739,10 @@
                     }
                 }
                 const cleaned = cleanIssuingAuthorityValue(remainder);
-                if (cleaned) return cleaned.toUpperCase();
+                if (cleaned) collectedLineValues.push(cleaned);
             }
 
+            // Multi-line collection: check up to 3 lines following the label
             for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
                 const nextLine = lines[j].trim();
                 if (!nextLine) continue;
@@ -560,23 +750,71 @@
                 if (isLabelOnlyLine(nextLine, AUTHORITY_LABELS)) continue;
                 if (isLabelOnlyLine(nextLine, AUTHORITY_STOP_WORDS)) break;
 
+                // If next line contains a date, it is a date field (issue/expiry/birth), not an authority name continuation
+                if (/\b(?:\d{4}[./\-]\d{1,2}[./\-]\d{1,2}|\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})\b/.test(nextLine) ||
+                    /\b\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|OCAK|ŞUBAT|MART|NİSAN|MAYIS|HAZİRAN|TEMMUZ|AĞUSTOS|EYLÜL|EKİM|KASIM|ARALIK|ЯНВ|ФЕВ|МАР|АПР|МАЙ|ИЮН|ИЮЛ|АВГ|СЕН|ОКТ|НОЯ|ДЕК|يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)[a-zа-яء-ي]*\s+\d{2,4}\b/i.test(nextLine)) {
+                    break;
+                }
+
                 let val = nextLine;
+                let hitStop = false;
                 for (const stop of AUTHORITY_STOP_WORDS) {
                     const stopRegex = new RegExp('(?:\\s+|^)' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i');
                     const stopMatch = val.match(stopRegex);
-                    if (stopMatch && stopMatch.index !== undefined && stopMatch.index > 0) {
+                    if (stopMatch && stopMatch.index !== undefined) {
+                        if (stopMatch.index === 0) {
+                            hitStop = true;
+                            break;
+                        }
                         val = val.slice(0, stopMatch.index).trim();
                     }
                 }
+                if (hitStop) break;
+
                 const cleaned = cleanIssuingAuthorityValue(val);
-                if (cleaned) return cleaned.toUpperCase();
+                if (cleaned) {
+                    collectedLineValues.push(cleaned);
+                }
+            }
+
+            if (collectedLineValues.length > 0) {
+                // Check if we have bilingual dual-script across collected lines
+                // (e.g. Line 1 Cyrillic/Arabic, Line 2 Latin). If so, prefer Latin for YÖKSİS!
+                const latinLines = collectedLineValues.filter(l => /[A-Za-z]/.test(l) && !isLabelOnlyLine(l, AUTHORITY_LABELS));
+                if (latinLines.length > 0 && latinLines.length < collectedLineValues.length) {
+                    return latinLines.join(' ').toUpperCase();
+                }
+                return collectedLineValues.join(' ').toUpperCase();
+            }
+
+            if (candidateBefore) {
+                return candidateBefore.toUpperCase();
             }
         }
 
-        const mrzMatch = normalized.toUpperCase().match(/P\s*<\s*([A-Z]{3})/);
-        if (mrzMatch) return mrzMatch[1];
+        // Fallback: Known Authority Patterns
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.length < 3) continue;
+            for (const pattern of KNOWN_AUTHORITY_PATTERNS) {
+                const match = trimmed.match(pattern);
+                if (match) {
+                    const cleaned = cleanIssuingAuthorityValue(match[0]);
+                    if (cleaned) return cleaned.toUpperCase();
+                }
+            }
+        }
 
-        return (options.nationality || options.country || options.uyruk || '').slice(0, 3).toUpperCase();
+        // Fallback: MRZ Country Code
+        const cleanMrzText = normalized.replace(/[«‹([{]/g, '<').toUpperCase();
+        const mrzMatch = cleanMrzText.match(/P\s*[<A-Z0-9]\s*([A-Z]{3})/);
+        if (mrzMatch && mrzMatch[1] !== 'UTO' && mrzMatch[1] !== 'XXX') {
+            return mrzMatch[1];
+        }
+
+        return getCountryIso3Code(
+            options.uyruk || options.nationality || options.country || options.dogumUlkesi
+        );
     }
 
     function extractMrzNames(text) {
@@ -711,6 +949,7 @@
         extractPassportGender,
         extractMrzNames,
         parseDateValue,
-        isValidYoksisId
+        isValidYoksisId,
+        getCountryIso3Code
     });
 })();
