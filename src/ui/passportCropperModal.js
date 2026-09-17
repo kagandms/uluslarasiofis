@@ -270,7 +270,7 @@ function downloadCroppedImage(autoTransfer = false) {
     }));
 
     if (autoTransfer) {
-        showToast('Fotoğraf kırpıldı ve kaydedildi! 4. Adım açıldı.', 'success');
+        showToast('Fotoğraf hazırlandı; YÖKSİS’e aktarılıyor...', 'info');
     } else {
         showToast(`Fotoğraf hazırlandı ve indirildi: ${fileName}`, 'success');
     }

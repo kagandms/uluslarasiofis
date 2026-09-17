@@ -227,7 +227,8 @@ async function extractPdfText(documentBytes) {
 }
 
 function decodeBase64ToBytes(base64) {
-    const binary = window.atob(base64);
+    const raw = String(base64 || '').replace(/^data:[^,]+,/, '').trim();
+    const binary = window.atob(raw);
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
     return bytes;
@@ -1633,7 +1634,7 @@ export function initYknManager() {
 
             const requestId = createRequestId('student');
             try {
-                const response = await postExtensionRequest('COPY_APPLY_DATA_AND_FILL_YOKSIS', { requestId });
+                const response = await postExtensionRequest('COPY_APPLY_DATA_AND_FILL_YOKSIS', { requestId, fromPortal: true });
                 btnCopy.disabled = false;
                 btnCopy.classList.remove('is-loading');
 
@@ -1653,10 +1654,87 @@ export function initYknManager() {
                     return;
                 }
 
-                const missing = response.passportMetadata?.missingFields || [];
-                const warning = missing.length > 0 ? ` Bazı pasaport alanları okunamadı: ${missing.join(', ')}.` : '';
-                addStatus(`Pasaport fotoğrafı kırpma ekranı açıldı.${warning}`, missing.length > 0 ? 'warning' : 'success');
-                showToast('Pasaport fotoğrafı kırpma ekranı açıldı.', 'success');
+                // 1. Öğrenci bilgilerini ve arayüzü güncelle
+                if (response.data) {
+                    const passCandidates = response.data.passportCandidates && response.data.passportCandidates.length > 0
+                        ? response.data.passportCandidates
+                        : (response.data.passportDocumentUrl || response.data.passportImageUrl ? [response.data.passportDocumentUrl || response.data.passportImageUrl] : []);
+                    currentStudentData = {
+                        ...currentStudentData,
+                        ...response.data,
+                        passportCandidates: passCandidates.length > 0 ? passCandidates : (currentStudentData?.passportCandidates || []),
+                        currentPassportCandidateIndex: 0
+                    };
+                    if (studentName) {
+                        studentName.textContent = currentStudentData.fullName || "İsim Bulunamadı";
+                    }
+                    const studentResult = document.getElementById('ykn-student-result');
+                    if (studentResult) studentResult.style.display = 'block';
+                    if (studentBadge) {
+                        studentBadge.textContent = "Profil Bulundu";
+                        studentBadge.style.background = "rgba(39, 174, 96, 0.1)";
+                        studentBadge.style.color = "#27ae60";
+                        studentBadge.style.display = "inline-block";
+                    }
+                    if (proActions) proActions.style.display = 'flex';
+                    updateStudentActions(currentStudentData);
+                    applyCountryDefaultsToStudent(currentStudentData);
+                    copyStudentInfoToClipboard(currentStudentData);
+                }
+
+                // 2. Pasaport metadata alanlarını forma yansıt
+                if (response.passportMetadata) {
+                    const meta = response.passportMetadata;
+                    if (meta.issueDate && !currentStudentData.issueDate) {
+                        currentStudentData.issueDate = meta.issueDate;
+                        if (inputIssueDate) inputIssueDate.value = formatDateForDisplay(meta.issueDate);
+                    }
+                    if (meta.expiryDate && !currentStudentData.expiryDate) {
+                        currentStudentData.expiryDate = meta.expiryDate;
+                        if (inputExpiryDate) inputExpiryDate.value = formatDateForDisplay(meta.expiryDate);
+                    }
+                    if (meta.placeOfBirth && !currentStudentData.birthPlace) {
+                        currentStudentData.birthPlace = meta.placeOfBirth;
+                        if (inputBirthPlace) inputBirthPlace.value = meta.placeOfBirth;
+                    }
+                    if (meta.issuingAuthority && !currentStudentData.issuingAuthority) {
+                        currentStudentData.issuingAuthority = meta.issuingAuthority;
+                        if (inputIssuingAuthority) inputIssuingAuthority.value = meta.issuingAuthority;
+                    }
+                }
+
+                // 3. Pasaport belgelerini sayfadaki modalda aç
+                if (response.documents && response.documents.length > 0) {
+                    shouldOpenCropperWhenReady = true;
+                    addStatus('Pasaport belgesi işleniyor ve kırpma ekranı açılıyor...', 'info');
+                    for (const doc of response.documents) {
+                        await handleDocumentBytesReady({
+                            documentKind: 'passport',
+                            documentUrl: doc.url,
+                            contentType: doc.contentType,
+                            documentBase64: doc.documentBase64
+                        });
+                    }
+                    const missing = response.passportMetadata?.missingFields || [];
+                    const warning = missing.length > 0 ? ` Bazı pasaport alanları okunamadı: ${missing.join(', ')}.` : '';
+                    addStatus(`Pasaport fotoğrafı kırpma ekranı açıldı.${warning}`, missing.length > 0 ? 'warning' : 'success');
+                    showToast('Pasaport fotoğrafı kırpma ekranı açıldı.', 'success');
+                } else if (currentStudentData?.passportImageSrc) {
+                    openPassportCropper({
+                        imageSrc: currentStudentData.passportImageSrc,
+                        pages: currentStudentData.passportPages || [],
+                        initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
+                        studentName: currentStudentData.fullName || '',
+                        passportNo: currentStudentData.passportNo || (inputPassport ? inputPassport.value.trim() : '')
+                    });
+                    addStatus('Pasaport fotoğrafı kırpma ekranı açıldı.', 'success');
+                    showToast('Pasaport fotoğrafı kırpma ekranı açıldı.', 'success');
+                } else {
+                    const missing = response.passportMetadata?.missingFields || [];
+                    const warning = missing.length > 0 ? ` Bazı pasaport alanları okunamadı: ${missing.join(', ')}.` : '';
+                    addStatus(`Pasaport fotoğrafı kırpma ekranı açıldı.${warning}`, missing.length > 0 ? 'warning' : 'success');
+                    showToast('Pasaport fotoğrafı kırpma ekranı açıldı.', 'success');
+                }
             } catch (err) {
                 btnCopy.disabled = false;
                 btnCopy.classList.remove('is-loading');
@@ -1868,8 +1946,8 @@ export function initYknManager() {
         inputIssuingAuthority.addEventListener('input', syncUserEnteredPassportDates);
     }
 
-    window.addEventListener('ykn:photo-cropped', (e) => {
-        const { dataUrl, fileName } = e.detail || {};
+    window.addEventListener('ykn:photo-cropped', async (e) => {
+        const { dataUrl, fileName, autoTransfer } = e.detail || {};
         if (!dataUrl) return;
 
         if (currentStudentData) {
@@ -1895,11 +1973,46 @@ export function initYknManager() {
             }
         }, '*');
 
-        if (currentStudentData?.yoksisReady === true) {
-            startManualYoksisFillAfterCrop();
+        if (autoTransfer) {
+            addStatus('Fotoğraf ve öğrenci bilgileri YÖKSİS’e aktarılıyor...', 'info');
+            showToast('Bilgiler ve fotoğraf YÖKSİS’e aktarılıyor...', 'info');
+            syncUserEnteredPassportDates();
+
+            const cropRequestId = createRequestId('crop-confirm');
+            try {
+                const response = await postExtensionRequest('CROPPED_PHOTO_CONFIRMED', {
+                    photoBase64: dataUrl,
+                    fileName: fileName || 'ogrenci_foto.jpg',
+                    requestId: cropRequestId
+                }, 45000);
+
+                if (response?.success) {
+                    if (response.partial) {
+                        const unavailable = Array.from(new Set([
+                            ...(response.unavailableFields || []),
+                            ...(response.missingFields || [])
+                        ])).filter(Boolean);
+                        const detail = unavailable.length > 0
+                            ? ` Eksik kalan alanlar: ${unavailable.join(', ')}.`
+                            : ' Bazı alanlar YÖKSİS formunda doğrulanamadı.';
+                        addStatus(`Fotoğraf ve bilgiler aktarıldı.${detail} Lütfen YÖKSİS formunda kontrol edin.`, 'warning');
+                        showToast(`Fotoğraf aktarıldı.${detail}`, 'warning');
+                    } else {
+                        addStatus('Fotoğraf ve öğrenci bilgileri başarıyla YÖKSİS’e aktarıldı.', 'success');
+                        showToast('Fotoğraf ve bilgiler YÖKSİS’e aktarıldı!', 'success');
+                    }
+                } else {
+                    const err = response?.error || response?.message || 'YÖKSİS aktarımı başarısız oldu.';
+                    addStatus(`Hata: ${err}`, 'error');
+                    showToast(`Hata: ${err}`, 'error');
+                }
+            } catch (err) {
+                addStatus(`YÖKSİS aktarım hatası: ${err.message}`, 'error');
+                showToast(`Hata: ${err.message}`, 'error');
+            }
         } else {
-            addStatus(`Vesikalık fotoğraf başarıyla kırpıldı ve kaydedildi (${fileName}). Her şeyi aktarmak için önce kabul kodunu YÖKSİS’te aratın.`, 'success');
-            showToast('Fotoğraf hazırlandı; önce kabul kodunu YÖKSİS’te aratın.', 'warning');
+            addStatus(`Vesikalık fotoğraf başarıyla kırpıldı ve indirildi (${fileName}).`, 'success');
+            showToast(`Fotoğraf indirildi: ${fileName}`, 'success');
         }
     });
 

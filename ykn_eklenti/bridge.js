@@ -2,7 +2,7 @@
 // İkamet Portalı (Web Sayfası) ile Eklenti (Background) arasında köprü görevi görür.
 (() => {
     if (window !== window.top) return;
-    const BRIDGE_VERSION = '1.2.57';
+    const BRIDGE_VERSION = '1.2.58';
     if (window.__YKN_BRIDGE_LOADED__ && window.__YKN_BRIDGE_VERSION__ === BRIDGE_VERSION) return;
     window.__YKN_BRIDGE_LOADED__ = true;
     window.__YKN_BRIDGE_VERSION__ = BRIDGE_VERSION;

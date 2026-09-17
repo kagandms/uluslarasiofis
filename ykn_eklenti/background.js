@@ -636,15 +636,19 @@ async function copyApplyDataWithPassportMetadata(request) {
         }
     }
 
-    await openPassportCropper(enrichedData, request);
+    const cropResult = await openPassportCropper(enrichedData, request);
+    const isFromPortal = request?.source === 'IKAMET_PORTAL' || request?.fromPortal === true;
 
     return {
         success: true,
         requestId: request.requestId,
         data: enrichedData,
         passportMetadata,
+        documents: cropResult?.documents || [],
         autoFilled: false,
         cropperOpened: true,
+        openInTab: !isFromPortal,
+        inPageCropper: isFromPortal,
         filledFields: [],
         missingFields: []
     };
@@ -2727,7 +2731,12 @@ async function openPassportCropper(data, request) {
             contentType: documents[0].contentType
         }
     }, resolve));
-    await createTab({ url: chrome.runtime.getURL('cropper.html') });
+
+    const isFromPortal = request?.source === 'IKAMET_PORTAL' || request?.fromPortal === true;
+    if (!isFromPortal) {
+        await createTab({ url: chrome.runtime.getURL('cropper.html') });
+    }
+    return { documents };
 }
 
 function isAllowedApplyUrl(url) {
