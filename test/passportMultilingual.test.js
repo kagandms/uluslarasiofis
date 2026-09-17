@@ -7,6 +7,7 @@ import {
     extractPassportMetadata,
     extractPassportGender,
     extractPassportDatesFromText,
+    extractPassportDatesFromText as extractPassportDates,
     parseDateValue
 } from '../src/utils/ykn-document-parser.js';
 
@@ -323,3 +324,130 @@ P«TUR123456789`;
     assert.equal(extractPassportIssuingAuthority(mrzNoise), 'TUR');
     assert.equal(extParser.extractPassportIssuingAuthority(mrzNoise), 'TUR');
 });
+
+test('Date parsing: US MM/DD/YYYY auto-detection when day > 12', () => {
+    assert.equal(parseDateValue('05/22/2018'), '2018-05-22');
+    assert.equal(parseDateValue('11/25/2023'), '2023-11-25');
+    assert.equal(extParser.parseDateValue('05/22/2018'), '2018-05-22');
+    assert.equal(extParser.parseDateValue('11/25/2023'), '2023-11-25');
+
+    const usPassport = `PASSPORT
+DATE OF ISSUE: 05/22/2018
+DATE OF EXPIRY: 05/21/2028`;
+    const res = extractPassportDates(usPassport);
+    assert.equal(res.issueDate, '2018-05-22');
+    assert.equal(res.expiryDate, '2028-05-21');
+
+    const extRes = extParser.extractPassportDates(usPassport);
+    assert.equal(extRes.issueDate, '2018-05-22');
+    assert.equal(extRes.expiryDate, '2028-05-21');
+});
+
+test('Date parsing: Ordinal suffixes (1st, 2nd, 3rd, 15th, etc.)', () => {
+    assert.equal(parseDateValue('15th August 2021'), '2021-08-15');
+    assert.equal(parseDateValue('1st January 2022'), '2022-01-01');
+    assert.equal(parseDateValue('2nd February 2023'), '2023-02-02');
+    assert.equal(parseDateValue('3rd March 2024'), '2024-03-03');
+    assert.equal(parseDateValue('August 15th, 2021'), '2021-08-15');
+    assert.equal(extParser.parseDateValue('15th August 2021'), '2021-08-15');
+    assert.equal(extParser.parseDateValue('1st January 2022'), '2022-01-01');
+    assert.equal(extParser.parseDateValue('August 15th, 2021'), '2021-08-15');
+
+    const ordinalPassport = `PASSPORT
+DATE OF ISSUE: 15th August 2021
+DATE OF EXPIRY: 14th August 2031`;
+    const res = extractPassportDates(ordinalPassport);
+    assert.equal(res.issueDate, '2021-08-15');
+    assert.equal(res.expiryDate, '2031-08-14');
+
+    const extRes = extParser.extractPassportDates(ordinalPassport);
+    assert.equal(extRes.issueDate, '2021-08-15');
+    assert.equal(extRes.expiryDate, '2031-08-14');
+});
+
+test('Date parsing: Bilingual month slashes in Cyrillic and Latin', () => {
+    assert.equal(parseDateValue('12 ДЕК / DEC 2021'), '2021-12-12');
+    assert.equal(parseDateValue('15 JUL / JUIL 2023'), '2023-07-15');
+    assert.equal(parseDateValue('20 MAY-MAI 2022'), '2022-05-20');
+    assert.equal(extParser.parseDateValue('12 ДЕК / DEC 2021'), '2021-12-12');
+    assert.equal(extParser.parseDateValue('15 JUL / JUIL 2023'), '2023-07-15');
+
+    const bilingualPassport = `ПАСПОРТ / PASSPORT
+ДАТА ВЫДАЧИ / DATE OF ISSUE: 12 ДЕК / DEC 2021
+СРОК ДЕЙСТВИЯ / DATE OF EXPIRY: 11 ДЕК / DEC 2031`;
+    const res = extractPassportDates(bilingualPassport);
+    assert.equal(res.issueDate, '2021-12-12');
+    assert.equal(res.expiryDate, '2031-12-11');
+
+    const extRes = extParser.extractPassportDates(bilingualPassport);
+    assert.equal(extRes.issueDate, '2021-12-12');
+    assert.equal(extRes.expiryDate, '2031-12-11');
+});
+
+test('Date parsing: OCR confusion characters (O/0, l/1, Z/2, S/5, B/8)', () => {
+    assert.equal(parseDateValue('l5.O8.2O2O'), '2020-08-15');
+    assert.equal(parseDateValue('Z0.05.2021'), '2021-05-20');
+    assert.equal(extParser.parseDateValue('l5.O8.2O2O'), '2020-08-15');
+    assert.equal(extParser.parseDateValue('Z0.05.2021'), '2021-05-20');
+
+    const ocrConfusedPassport = `PASAPORT
+DÜZENLEME TARİHİ: l5.O8.2O2O
+GEÇERLİLİK TARİHİ: 14.O8.2O3O`;
+    const res = extractPassportDates(ocrConfusedPassport);
+    assert.equal(res.issueDate, '2020-08-15');
+    assert.equal(res.expiryDate, '2030-08-14');
+
+    const extRes = extParser.extractPassportDates(ocrConfusedPassport);
+    assert.equal(extRes.issueDate, '2020-08-15');
+    assert.equal(extRes.expiryDate, '2030-08-14');
+});
+
+test('Date parsing: Compact month formats without spaces', () => {
+    assert.equal(parseDateValue('11MAR2021'), '2021-03-11');
+    assert.equal(parseDateValue('10MAR31'), '2031-03-10');
+    assert.equal(parseDateValue('15МАЙ2022'), '2022-05-15');
+    assert.equal(extParser.parseDateValue('11MAR2021'), '2021-03-11');
+    assert.equal(extParser.parseDateValue('10MAR31'), '2031-03-10');
+    assert.equal(extParser.parseDateValue('15МАЙ2022'), '2022-05-15');
+
+    const compactPassport = `PASSPORT
+DATE OF ISSUE: 11MAR2021
+DATE OF EXPIRY: 10MAR2031`;
+    const res = extractPassportDates(compactPassport);
+    assert.equal(res.issueDate, '2021-03-11');
+    assert.equal(res.expiryDate, '2031-03-10');
+
+    const extRes = extParser.extractPassportDates(compactPassport);
+    assert.equal(extRes.issueDate, '2021-03-11');
+    assert.equal(extRes.expiryDate, '2031-03-10');
+});
+
+test('Date parsing: Swapped dates recovery when issue > expiry', () => {
+    const swappedPassport = `PASSPORT
+DATE OF ISSUE: 14 JAN 2031
+DATE OF EXPIRY: 15 JAN 2021`;
+    const res = extractPassportDates(swappedPassport);
+    assert.equal(res.issueDate, '2021-01-15');
+    assert.equal(res.expiryDate, '2031-01-14');
+
+    const extRes = extParser.extractPassportDates(swappedPassport);
+    assert.equal(extRes.issueDate, '2021-01-15');
+    assert.equal(extRes.expiryDate, '2031-01-14');
+});
+
+test('Date parsing: Portuguese, Spanish, Italian, and Central Asian month names', () => {
+    assert.equal(parseDateValue('20 de outubro 2022'), '2022-10-20');
+    assert.equal(parseDateValue('15 de febrero 2021'), '2021-02-15');
+    assert.equal(parseDateValue('10 maggio 2023'), '2023-05-10');
+    assert.equal(parseDateValue('18 avgust 2022'), '2022-08-18');
+    assert.equal(parseDateValue('25 қазан 2023'), '2023-10-25');
+    assert.equal(parseDateValue('12 ýanwar 2022'), '2022-01-12');
+
+    assert.equal(extParser.parseDateValue('20 de outubro 2022'), '2022-10-20');
+    assert.equal(extParser.parseDateValue('15 de febrero 2021'), '2021-02-15');
+    assert.equal(extParser.parseDateValue('10 maggio 2023'), '2023-05-10');
+    assert.equal(extParser.parseDateValue('18 avgust 2022'), '2022-08-18');
+    assert.equal(extParser.parseDateValue('25 қазан 2023'), '2023-10-25');
+    assert.equal(extParser.parseDateValue('12 ýanwar 2022'), '2022-01-12');
+});
+

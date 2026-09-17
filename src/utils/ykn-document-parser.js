@@ -13,18 +13,24 @@ const MONTH_ALIASES = {
     nov: 11, november: 11,
     dec: 12, december: 12,
     // Turkish
-    ocak: 1, subat: 2, mart: 3, nisan: 4, mayis: 5, haziran: 6,
-    temmuz: 7, agustos: 8, eylul: 9, ekim: 10, kasim: 11, aralik: 12,
+    ocak: 1, oca: 1, subat: 2, şubat: 2, sub: 2, şub: 2, mart: 3, mar: 3, nisan: 4, nis: 4,
+    mayis: 5, mayıs: 5, may: 5, haziran: 6, haz: 6, temmuz: 7, tem: 7, agustos: 8, ağustos: 8, agu: 8, ağu: 8,
+    eylul: 9, eylül: 9, eyl: 9, ekim: 10, eki: 10, kasim: 11, kasım: 11, kas: 11, aralik: 12, aralık: 12, ara: 12,
     // French
-    janv: 1, janvier: 1, fevr: 2, fevrier: 2, mars: 3, avr: 4, avril: 4,
-    mai: 5, juin: 6, juil: 7, juillet: 7, aout: 8, sept: 9, septembre: 9,
-    octobre: 10, nov: 11, novembre: 11, decembre: 12,
+    janv: 1, janvier: 1, fevr: 2, fevrier: 2, février: 2, mars: 3, avr: 4, avril: 4,
+    mai: 5, juin: 6, juil: 7, juillet: 7, aout: 8, août: 8, sept: 9, septembre: 9,
+    octobre: 10, nov: 11, novembre: 11, decembre: 12, décembre: 12,
     // Spanish
     ene: 1, enero: 1, febrero: 2, marzo: 3, abr: 4, abril: 4, mayo: 5,
-    junio: 6, julio: 7, ago: 8, agosto: 8, setiembre: 9,
-    octubre: 10, diciembre: 12,
+    junio: 6, julio: 7, ago: 8, agosto: 8, setiembre: 9, septiembre: 9,
+    octubre: 10, dic: 12, diciembre: 12,
+    // Portuguese
+    janeiro: 1, fev: 2, fevereiro: 2, marco: 3, março: 3, maio: 5,
+    out: 10, outubro: 10, dez: 12, dezembro: 12,
     // German
-    mrz: 3, maerz: 3, juni: 6, juli: 7, okt: 10, dez: 12, dezember: 12,
+    mrz: 3, maerz: 3, märz: 3, mai: 5, juni: 6, juli: 7, okt: 10, oktober: 10, dez: 12, dezember: 12,
+    // Italian
+    gen: 1, gennaio: 1, mag: 5, maggio: 5, giu: 6, giugno: 6, lug: 7, luglio: 7, ott: 10, ottobre: 10,
     // Roman numerals (Eastern European & CIS passports: e.g. 12.VII.2021)
     i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6,
     vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12,
@@ -33,7 +39,7 @@ const MONTH_ALIASES = {
     фев: 2, февраль: 2, февраля: 2,
     мар: 3, март: 3, марта: 3,
     апр: 4, апрель: 4, апреля: 4,
-    май: 5, мая: 5,
+    май: 5, маи: 5, мая: 5,
     июн: 6, июнь: 6, июня: 6,
     июл: 7, июль: 7, июля: 7,
     авг: 8, август: 8, августа: 8,
@@ -41,6 +47,10 @@ const MONTH_ALIASES = {
     окт: 10, октябрь: 10, октября: 10,
     ноя: 11, ноябрь: 11, ноября: 11,
     дек: 12, декабрь: 12, декабря: 12,
+    // Central Asian / Turkic (Uzbek, Kazakh, Turkmen, Azeri)
+    yanvar: 1, fevral: 2, mart: 3, aprel: 4, iyun: 6, iyul: 7, avgust: 8, avqust: 8, sentabr: 9, sentyabr: 9, oktabr: 10, oktyabr: 10, noyabr: 11, dekabr: 12,
+    қаң: 1, қаңтар: 1, ақп: 2, ақпан: 2, нау: 3, наурыз: 3, сәу: 4, сәуір: 4, мам: 5, мамыр: 5, мау: 6, маусым: 6, шіл: 7, шілде: 7, там: 8, тамыз: 8, қыр: 9, қыркүйек: 9, қаз: 10, қазан: 10, қар: 11, қараша: 11, жел: 12, желтоқсан: 12,
+    ýanwar: 1, yanwar: 1, fewral: 2, maý: 5, iýun: 6, iýul: 7, awgust: 8, sentýabr: 9, oktýabr: 10, noýabr: 11,
     // Arabic (Gregorian & Levant)
     يناير: 1, فبراير: 2, مارس: 3, ابريل: 4, أبريل: 4, مايو: 5,
     يونيو: 6, يوليو: 7, اغسطس: 8, أغسطس: 8, سبتمبر: 9,
@@ -53,7 +63,7 @@ const MONTH_PATTERN = Object.keys(MONTH_ALIASES)
     .sort((left, right) => right.length - left.length)
     .join('|');
 
-const DATE_PATTERN = `(?:(?:19\\d{2}|20\\d{2})\\s*[./\\-]\\s*\\d{1,2}\\s*[./\\-]\\s*\\d{1,2}|\\d{1,2}\\s*[./\\-]\\s*\\d{1,2}\\s*[./\\-]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}\\s*[./\\-\\s]\\s*(?:${MONTH_PATTERN})\\.?\\s*[./\\-\\s]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|(?:${MONTH_PATTERN})\\.?\\s*[./\\-\\s]\\s*\\d{1,2}\\s*,?\\s*[./\\-\\s]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}(?:${MONTH_PATTERN})(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}\\s+\\d{1,2}\\s+(?:19\\d{2}|20\\d{2}|\\d{2})|\\b(?:19\\d{2}|20\\d{2})(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\b|\\b(?:0[1-9]|[12]\\d|3[01])(?:0[1-9]|1[0-2])(?:19\\d{2}|20\\d{2})\\b)`;
+const DATE_PATTERN = `(?:(?:19\\d{2}|20\\d{2})\\s*[./\\-]\\s*\\d{1,2}\\s*[./\\-]\\s*\\d{1,2}|\\d{1,2}\\s*[./\\-]\\s*\\d{1,2}\\s*[./\\-]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}(?:st|nd|rd|th)?\\s*[./\\-\\s]\\s*(?:${MONTH_PATTERN})\\.?\\s*[./\\-\\s]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|(?:${MONTH_PATTERN})\\.?\\s*[./\\-\\s]\\s*\\d{1,2}(?:st|nd|rd|th)?\\s*,?\\s*[./\\-\\s]\\s*(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}(?:${MONTH_PATTERN})(?:19\\d{2}|20\\d{2}|\\d{2})|\\d{1,2}\\s+\\d{1,2}\\s+(?:19\\d{2}|20\\d{2}|\\d{2})|\\b(?:19\\d{2}|20\\d{2})(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\b|\\b(?:0[1-9]|[12]\\d|3[01])(?:0[1-9]|1[0-2])(?:19\\d{2}|20\\d{2})\\b)`;
 
 const OCR_DATE_CHAR = '[0-9OoОоIiİıLl|ZzSsBbGg]';
 
@@ -168,7 +178,7 @@ function extractDateCandidatesFromText(text) {
         'ig'
     );
     for (const match of source.matchAll(spacedDatePattern)) {
-        candidates.push([match[1], match[2], match[3]].map((part) => part.replace(/\\s+/g, '')).join('.'));
+        candidates.push([match[1], match[2], match[3]].map((part) => part.replace(/\s+/g, '')).join('.'));
     }
 
     // Ayırıcılar da kaybolduğunda YYYYMMDD/DDMMYYYY biçiminin boşluklu hali.
@@ -177,7 +187,7 @@ function extractDateCandidatesFromText(text) {
         'ig'
     );
     for (const match of source.matchAll(spacedCompactPattern)) {
-        candidates.push(match[1].replace(/\\s+/g, ''));
+        candidates.push(match[1].replace(/\s+/g, ''));
     }
 
     return candidates;
@@ -191,17 +201,19 @@ const ISSUE_DATE_LABELS = [
     // Uzbek
     'berilgan sanasi', 'berilgan sana', 'berilgan joyi', 'berilgan vaqti', 'berilgan',
     // Russian (Cyrillic / transliterated)
-    'дата выдачи', 'дата выдачи паспорта', 'дата оформления', 'дата выпуска', 'выдан', 'выдано', 'data vydachi',
+    'дата выдачи', 'дата выдачи паспорта', 'дата оформления', 'дата выпуска', 'выдан', 'выдано', 'data vydachi', 'дата видачі', 'дата выдачы',
     // Kazakh, Turkmen, Azerbaijani
-    'берілген күні', 'berilgen kuni', 'berlen senesi', 'berlen wagty', 'verilme tarixi', 'verilmə tarixi',
+    'берілген күні', 'berilgen kuni', 'berlen senesi', 'berlen wagty', 'berlen güni', 'berlen guni', 'verilme tarixi', 'verilmə tarixi',
     // French
     'date de delivrance', 'date de délivrance', 'date d emission', "date d'emission", "date d'émission", 'delivre le', 'délivré le', 'delivree le', 'emise le',
-    // Spanish
-    'fecha de expedicion', 'fecha de expedición', 'fecha de emision', 'fecha de emisión', 'expedido el',
+    // Spanish / Portuguese
+    'fecha de expedicion', 'fecha de expedición', 'fecha de emision', 'fecha de emisión', 'expedido el', 'data de emissao', 'data de emissão', 'emitido em',
+    // Italian
+    'data di rilascio', 'rilasciato il', 'data rilascio',
     // German
     'ausstellungsdatum', 'ausgestellt am',
     // Arabic transliterated / keywords
-    'tarikh al isdar', 'tarikh al-isdar', 'تاريخ الإصدار', 'تاريخ الاصدار', 'تاريخ الصدور', 'تاريخ التحرير', 'صدر بتاريخ',
+    'tarikh al isdar', 'tarikh al-isdar', 'تاريخ الإصدار', 'تاريخ الاصدار', 'تاريخ الصدور', 'تاريخ التحرير', 'صدر بتاريخ', 'حرر في',
     // Ethiopian (Amharic)
     'የተሰጠበት ቀን', 'የተሰጠበት'
 ];
@@ -210,21 +222,23 @@ const EXPIRY_DATE_LABELS = [
     // English
     'date of expiry', 'date of exp1ry', 'date of expirv', 'date of expir y', 'expiry date', 'date of expiration', 'expiration date', 'passport expiry date', 'date valid until', 'valid until', 'valid untill', 'valid unt1l', 'expires on', 'valid to', 'valid thru', 'valid through', 'date of expiry / date',
     // Turkish
-    'belge geçerlilik tarihi', 'geçerlilik tarihi', 'pasaport geçerlilik tarihi', 'belgenin geçerlilik tarihi', 'son kullanma tarihi', 'son geçerlilik tarihi', 'bitiş tarihi', 'gecerlilik suresi',
+    'belge geçerlilik tarihi', 'geçerlilik tarihi', 'pasaport geçerlilik tarihi', 'belgenin geçerlilik tarihi', 'son kullanma tarihi', 'son geçerlilik tarihi', 'bitiş tarihi', 'gecerlilik suresi', 'geçerlilik süresi',
     // Uzbek
     'amal qilish muddati', 'amal qilish muddat', 'amal qilish', 'amal qilishi', 'muddati',
     // Russian (Cyrillic / transliterated)
-    'дата окончания', 'дата окончания срока', 'срок действия паспорта', 'срок действия', 'действителен до', 'действительно до', 'термін дії', 'deystvitelen do', 'srok deystviya',
-    // Kazakh, Turkmen, Azerbaijani
-    'қолданылу мерзімі', 'қолданылу мерзими', 'qoldanylu merzimi', 'hereket edis mohleti', 'hereket ediş möhleti', 'etibarliliq muddeti', 'etibarlılıq müddəti', 'bitme tarixi', 'bitmə tarixi',
+    'дата окончания', 'дата окончания срока', 'срок действия паспорта', 'срок действия', 'действителен до', 'действительно до', 'термін дії', 'deystvitelen do', 'srok deystviya', 'дзейсны да', 'дата заканчэння',
+    // Kazakh, Turkmen, Azerbaijani, Kyrgyz
+    'қолданылу мерзімі', 'қолданылу мерзими', 'qoldanylu merzimi', 'hereket edis mohleti', 'hereket ediş möhleti', 'etibarliliq muddeti', 'etibarlılıq müddəti', 'bitme tarixi', 'bitmə tarixi', 'жарамдуулук мөөнөтү',
     // French
     'date d expiration', "date d'expiration", 'expire le', 'date de validite', 'date de validité', 'valable jusqu au', 'valable jusqu\'au',
-    // Spanish
-    'fecha de caducidad', 'fecha de expiracion', 'fecha de expiración', 'fecha de vencimiento', 'valido hasta', 'válido hasta',
+    // Spanish / Portuguese
+    'fecha de caducidad', 'fecha de expiracion', 'fecha de expiración', 'fecha de vencimiento', 'valido hasta', 'válido hasta', 'data de validade', 'valido ate', 'válido até',
+    // Italian
+    'data di scadenza', 'scadenza', 'valido fino al',
     // German
     'gueltig bis', 'gültig bis', 'ablaufdatum',
     // Arabic transliterated / keywords
-    'tarikh al intiha', 'tarikh al-intiha', 'تاريخ الانتهاء', 'تاريخ الصلاحية', 'تاريخ النفاذ', 'صالح حتى', 'صالحة لغاية', 'صالح لغاية',
+    'tarikh al intiha', 'tarikh al-intiha', 'تاريخ الانتهاء', 'تاريخ الصلاحية', 'تاريخ النفاذ', 'صالح حتى', 'صالحة لغاية', 'صالح لغاية', 'تاريخ انتهاء الصلاحية', 'صالحة إلى', 'صالح الى', 'ينتهي في',
     // Ethiopian (Amharic)
     'የሚያበቃበት ቀን', 'የሚያበቃበት'
 ];
@@ -255,8 +269,12 @@ function normalizeDateText(text) {
         .replace(/[–—]/g, '-')
         .toLocaleLowerCase('tr-TR')
         .replace(/ı/g, 'i')
-        // Clean bilingual month slashes e.g. "MAR / MARS" -> "MAR", "MAY/MAI" -> "MAY"
-        .replace(/\b([a-z]{3,4})\s*\/\s*[a-z]{3,6}\b/gi, '$1')
+        // Clean bilingual month slashes e.g. "MAR / MARS" -> "MAR", "ДЕК / DEC" -> "ДЕК", "MAY-MAI" -> "MAY"
+        .replace(/(?:^|[\s\d])([a-z\u0400-\u04ff]{3,4})\s*[\/\-]\s*[a-z\u0400-\u04ff]{3,6}(?=[\s\d]|$)/giu, ' $1 ')
+        // Strip ordinal suffixes from days: "15th" -> "15", "1st" -> "1", "2nd" -> "2", "3rd" -> "3"
+        .replace(/\b(\d{1,2})(?:st|nd|rd|th)\b/gi, '$1')
+        // Strip connector words between day and month (Spanish/Portuguese "de", Italian "di", English "of")
+        .replace(/\b(?:de|di|of)\b/gi, ' ')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '');
 }
@@ -326,14 +344,29 @@ export function parseDateValue(value) {
 
     // 4. Three numeric parts separated by ., /, -, or space. OCR'da O/0,
     // I/1, Z/2, S/5 ve B/8 karışıklıkları burada düzeltilir.
+    // Desteklenenler: DD.MM.YYYY, YYYY.MM.DD ve gün > 12 olduğunda ABD biçimi MM/DD/YYYY.
     const numericNormalized = normalizeOcrNumericText(normalized);
     const parts = numericNormalized.split(/[./\-\s]+/).filter(Boolean);
     if (parts.length === 3 && parts.every((part) => /^\d+$/.test(part))) {
         const [first, second, third] = parts;
         const isYearFirst = first.length === 4 || Number(first) > 31;
         const year = normalizeYear(isYearFirst ? first : third);
-        const month = Number(second);
-        const day = Number(isYearFirst ? third : first);
+        let month = Number(second);
+        let day = Number(isYearFirst ? third : first);
+
+        // ABD biçimi MM/DD/YYYY otomatik tespiti (ikinci kısım gün ve > 12 ise)
+        if (!isYearFirst) {
+            if (month > 12 && Number(first) <= 12) {
+                month = Number(first);
+                day = Number(second);
+            }
+        } else {
+            // YYYY/DD/MM biçimi tespiti
+            if (month > 12 && Number(third) <= 12) {
+                month = Number(third);
+                day = Number(second);
+            }
+        }
         return createDateValue(year, month, day);
     }
 
@@ -371,35 +404,36 @@ function findLabeledDate(text, labels, options = {}) {
             .split(/\s+/)
             .map((part) => part.replace(/[.*+?^$()[\]{}|\\]/g, '\\$&'))
             .join('\\s*[:#\\-\\.\\s/]*');
-        const labelMatch = normalizedText.match(new RegExp(labelPattern, 'i'));
-        if (!labelMatch) continue;
-
-        // 1. Search forward (after label)
-        const start = (labelMatch.index || 0) + labelMatch[0].length;
-        for (const sourceText of [normalizedText, ocrNormalizedText]) {
-            const dateWindowAfter = sourceText.slice(start, start + 350);
-            const dateMatchesAfter = extractDateCandidatesFromText(dateWindowAfter);
-            for (const candidate of dateMatchesAfter) {
-                const parsed = parseDateValue(candidate);
-                if (parsed) {
-                    if (birthDate && parsed === birthDate) continue;
-                    if (parsed < `${minYear}-01-01` || parsed > `${maxYear}-12-31`) continue;
-                    return parsed;
+        const labelRegex = new RegExp(labelPattern, 'gi');
+        let labelMatch;
+        while ((labelMatch = labelRegex.exec(normalizedText)) !== null) {
+            // 1. Search forward (after label)
+            const start = (labelMatch.index || 0) + labelMatch[0].length;
+            for (const sourceText of [normalizedText, ocrNormalizedText]) {
+                const dateWindowAfter = sourceText.slice(start, start + 350);
+                const dateMatchesAfter = extractDateCandidatesFromText(dateWindowAfter);
+                for (const candidate of dateMatchesAfter) {
+                    const parsed = parseDateValue(candidate);
+                    if (parsed) {
+                        if (birthDate && parsed === birthDate) continue;
+                        if (parsed < `${minYear}-01-01` || parsed > `${maxYear}-12-31`) continue;
+                        return parsed;
+                    }
                 }
             }
-        }
 
-        // 2. Search backward (before label, for table cells / RTL layouts)
-        const preStart = Math.max(0, (labelMatch.index || 0) - 150);
-        for (const sourceText of [normalizedText, ocrNormalizedText]) {
-            const dateWindowBefore = sourceText.slice(preStart, labelMatch.index || 0);
-            const dateMatchesBefore = extractDateCandidatesFromText(dateWindowBefore);
-            for (let i = dateMatchesBefore.length - 1; i >= 0; i--) {
-                const parsed = parseDateValue(dateMatchesBefore[i]);
-                if (parsed) {
-                    if (birthDate && parsed === birthDate) continue;
-                    if (parsed < `${minYear}-01-01` || parsed > `${maxYear}-12-31`) continue;
-                    return parsed;
+            // 2. Search backward (before label, for table cells / RTL layouts)
+            const preStart = Math.max(0, (labelMatch.index || 0) - 150);
+            for (const sourceText of [normalizedText, ocrNormalizedText]) {
+                const dateWindowBefore = sourceText.slice(preStart, labelMatch.index || 0);
+                const dateMatchesBefore = extractDateCandidatesFromText(dateWindowBefore);
+                for (let i = dateMatchesBefore.length - 1; i >= 0; i--) {
+                    const parsed = parseDateValue(dateMatchesBefore[i]);
+                    if (parsed) {
+                        if (birthDate && parsed === birthDate) continue;
+                        if (parsed < `${minYear}-01-01` || parsed > `${maxYear}-12-31`) continue;
+                        return parsed;
+                    }
                 }
             }
         }
@@ -614,6 +648,10 @@ export function extractPassportDatesFromText(text, options = {}) {
     if (issueDate && expiryDate && issueDate >= expiryDate) {
         if (mrz.expiryDate && mrz.expiryDate > issueDate) {
             expiryDate = mrz.expiryDate;
+        } else if (issueDate > expiryDate) {
+            const temp = issueDate;
+            issueDate = expiryDate;
+            expiryDate = temp;
         } else {
             return { issueDate: '', expiryDate: '' };
         }
