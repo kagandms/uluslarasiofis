@@ -8,11 +8,36 @@
         oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12,
         ocak: 1, oca: 1, subat: 2, şubat: 2, sub: 2, şub: 2, mart: 3, mar: 3, nisan: 4, nis: 4,
         mayis: 5, mayıs: 5, may: 5, haziran: 6, haz: 6, temmuz: 7, tem: 7, agustos: 8, ağustos: 8, agu: 8, ağu: 8,
-        eylul: 9, eylül: 9, eyl: 9, ekim: 10, eki: 10, kasim: 11, kasım: 11, kas: 11, aralik: 12, aralık: 12, ara: 12
+        eylul: 9, eylul: 9, eyl: 9, ekim: 10, eki: 10, kasim: 11, kasım: 11, kas: 11, aralik: 12, aralık: 12, ara: 12,
+        // Roman numerals (12.VII.2021)
+        i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10, xi: 11, xii: 12,
+        // Russian / Cyrillic
+        янв: 1, январь: 1, января: 1, фев: 2, февраль: 2, февраля: 2, мар: 3, март: 3, марта: 3,
+        апр: 4, апрель: 4, апреля: 4, май: 5, мая: 5, июн: 6, июнь: 6, июня: 6,
+        июл: 7, июль: 7, июля: 7, авг: 8, август: 8, августа: 8, сен: 9, сентябрь: 9, сентября: 9,
+        окт: 10, октябрь: 10, октября: 10, ноя: 11, ноябрь: 11, ноября: 11, дек: 12, декабрь: 12, декабря: 12,
+        // Arabic
+        يناير: 1, فبراير: 2, مارس: 3, ابريل: 4, أبريل: 4, مايو: 5, يونيو: 6, يوليو: 7, اغسطس: 8, أغسطس: 8,
+        سبتمبر: 9, اكتوبر: 10, أكتوبر: 10, نوفمبر: 11, ديسمبر: 12, شباط: 2, آذار: 3, اذار: 3, نيسان: 4,
+        أيار: 5, ايار: 5, حزيران: 6, تموز: 7, آب: 8, اب: 8, أيلول: 9, ايلول: 9
     };
 
+    function convertEasternToAsciiDigits(text) {
+        return String(text || '')
+            .replace(/[\u0660\u06F0]/g, '0')
+            .replace(/[\u0661\u06F1]/g, '1')
+            .replace(/[\u0662\u06F2]/g, '2')
+            .replace(/[\u0663\u06F3]/g, '3')
+            .replace(/[\u0664\u06F4]/g, '4')
+            .replace(/[\u0665\u06F5]/g, '5')
+            .replace(/[\u0666\u06F6]/g, '6')
+            .replace(/[\u0667\u06F7]/g, '7')
+            .replace(/[\u0668\u06F8]/g, '8')
+            .replace(/[\u0669\u06F9]/g, '9');
+    }
+
     function normalizeText(value) {
-        return String(value || '')
+        return convertEasternToAsciiDigits(value)
             .replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ')
             .replace(/[–—−]/g, '-')
             .replace(/\s+/g, ' ')
@@ -134,7 +159,7 @@
 
     function findDateAfterLabel(text, labels) {
         if (!text) return '';
-        const source = String(text);
+        const source = normalizeText(text);
         const escaped = labels.map((l) => l.replace(/[/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|');
         const regex = new RegExp(`(?:${escaped})\\s*[:/#\\-]?\\s*([\\s\\S]{0,150})`, 'gi');
         let m;
@@ -144,8 +169,8 @@
             const cutWindow = windowText.split(/(?:date\s+of|tarihi|düzenleme|geçerlilik|expiry|issue|délivrance|delivrance|expiration|birth|doğum|senesi|wagty|möhleti|mohleti)/i)[0] || windowText;
 
             const datePatterns = [
-                /\b\d{1,2}\s+[A-Za-zÇĞİÖŞÜçğıöşü]{3,12}(?:\s*[\/\-]\s*[A-Za-zÇĞİÖŞÜçğıöşü]{3,12})?\s+\d{2,4}\b/g,
-                /\b[A-Za-zÇĞİÖŞÜçğıöşü]{3,12}\s+\d{1,2}(?:st|nd|rd|th)?[,\s]+\d{2,4}\b/g,
+                /\b\d{1,2}\s+[A-Za-zÇĞİÖŞÜçğıöşü\u0400-\u04ff\u0600-\u06ff]{1,15}(?:\s*[\/\-]\s*[A-Za-zÇĞİÖŞÜçğıöşü\u0400-\u04ff\u0600-\u06ff]{1,15})?\s+\d{2,4}\b/g,
+                /\b[A-Za-zÇĞİÖŞÜçğıöşü\u0400-\u04ff\u0600-\u06ff]{1,15}\s+\d{1,2}(?:st|nd|rd|th)?[,\s]+\d{2,4}\b/g,
                 /\b\d{1,4}[./\-]\d{1,2}[./\-]\d{2,4}\b/g,
                 /\b\d{1,2}\s+\d{1,2}\s+\d{2,4}\b/g
             ];
@@ -172,17 +197,31 @@
 
     function extractDatesFromMrz(text) {
         const compact = String(text || '').replace(/[\s\r\n]+/g, '').toUpperCase();
+        let passportNumber = '';
+        const pCodeMatch = compact.match(/P[<A-Z0-9]([A-Z]{3})([A-Z0-9<]{9})/);
+        if (pCodeMatch) {
+            const pNum = pCodeMatch[2].replace(/</g, '').trim();
+            if (pNum && pNum.length >= 5) passportNumber = pNum;
+        }
+
         // Standard TD3 (passport) line 2
-        let match = compact.match(/[A-Z0-9<]{9}[0-9A-Z<][A-Z<]{3}(\d{6})[0-9A-Z<]([MFX<])(\d{6})/);
+        let match = compact.match(/([A-Z0-9<]{9})[0-9A-Z<][A-Z<]{3}(\d{6})[0-9A-Z<]([MFX<])(\d{6})/);
         // Fallback: any 6 digits followed by check digit, sex (M/F), and 6 digits
         if (!match) {
             match = compact.match(/(\d{6})[0-9A-Z<]([MF])(\d{6})/);
         }
-        if (!match) return { expiryDate: '', birthDate: '', cinsiyet: '' };
+        if (!match) return { expiryDate: '', birthDate: '', cinsiyet: '', passportNumber };
 
-        const birthRaw = match[1];
-        const sexRaw = match[2];
-        const expiryRaw = match[3];
+        if (match.length >= 5) {
+            if (!passportNumber && match[1]) {
+                const pNum = match[1].replace(/</g, '').trim();
+                if (pNum && pNum.length >= 5) passportNumber = pNum;
+            }
+        }
+
+        const birthRaw = match.length >= 5 ? match[2] : match[1];
+        const sexRaw = match.length >= 5 ? match[3] : match[2];
+        const expiryRaw = match.length >= 5 ? match[4] : match[3];
 
         const expiryYear = Number(expiryRaw.slice(0, 2));
         const expiryDate = createDate(
@@ -203,7 +242,7 @@
         if (sexRaw === 'M') cinsiyet = 'Erkek';
         else if (sexRaw === 'F') cinsiyet = 'Kadın';
 
-        return { expiryDate, birthDate, cinsiyet };
+        return { expiryDate, birthDate, cinsiyet, passportNumber };
     }
 
     function extractPassportDates(text, options = {}) {
@@ -307,10 +346,17 @@
         val = val.replace(/\b\d{1,4}[./\-]\d{1,2}[./\-]\d{2,4}\b/g, '').trim();
         val = val.replace(/\b\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|OCAK|ŞUBAT|MART|NİSAN|MAYIS|HAZİRAN|TEMMUZ|AĞUSTOS|EYLÜL|EKİM|KASIM|ARALIK|ЯНВ|ФЕВ|МАР|АПР|МАЙ|ИЮН|ИЮЛ|АВГ|СЕН|ОКТ|НОЯ|ДЕК|يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)[a-zа-яء-ي]*\s+\d{2,4}\b/gi, '').trim();
 
-        // 2. Strip Russian/Cyrillic city prefixes
-        val = val.replace(/^(?:Г\.|ГОР\.|Г\b|ГОР\b|С\.|С\b|П\.|ПОС\.|ПОС\b|ОБЛ\.|ОБЛ\b|Р-Н\b|Р-Н\.)\s*/i, '');
+        // 2. Strip Russian/Cyrillic administrative prefixes
+        val = val.replace(/^(?:Г\.|ГОР\.|ГОРОД|С\.|СЕЛО|П\.|ПОС\.|ПОСЕЛОК|ОБЛ\.|ОБЛАСТЬ|КРАЙ|РЕСП\.|РЕСПУБЛИКА|Р-Н\.|Р-Н|РАЙОН)(?:\s+|$|[.,:;])\s*/i, '');
+        val = val.replace(/^(?:Г|С|П)(?:\s+|$|[.,:;])\s*/i, '');
 
-        // 3. Prefer Latin part in bilingual dual-script
+        // 3. Strip Arabic administrative prefixes
+        val = val.replace(/^(?:محافظة|ولاية|مدينة|منطقة|بلدية|مركز|دائرة)(?:\s+|$|[.,:;])\s*/i, '');
+
+        // 4. Strip French / English administrative prefixes
+        val = val.replace(/^(?:VILLE DE|PROVINCE DE|REGION DE|COMMUNE DE|DEPARTEMENT DE|CITY OF|PROVINCE OF|STATE OF|DISTRICT OF)(?:\s+|$|[.,:;])\s*/i, '');
+
+        // 5. Prefer Latin part in bilingual dual-script
         const parts = val.split(/\s*[/\\|]\s*/);
         if (parts.length >= 2) {
             const latinPart = parts.find(p => /[A-Za-z]/.test(p) && !/^(?:Г\.|ГОР\.|CITY|VILLE|P\b)/i.test(p.trim()));
@@ -323,7 +369,9 @@
 
         val = val.replace(/^[\s:;#\-_/\\\\|.,]+|[\s:;#\-_/\\\\|.,]+$/g, '').trim();
         val = val.replace(/\s+/g, ' ');
-        val = val.replace(/^(?:Г\.|ГОР\.|Г\b|ГОР\b)\s*/i, '');
+        val = val.replace(/^(?:Г\.|ГОР\.|ГОРОД|Г)(?:\s+|$|[.,:;])\s*/i, '');
+        val = val.replace(/^(?:محافظة|ولاية|مدينة)(?:\s+|$|[.,:;])\s*/i, '');
+        val = val.replace(/^(?:VILLE DE|CITY OF)(?:\s+|$|[.,:;])\s*/i, '');
 
         if (!val || val.length < 2 || /^\d+$/.test(val)) return '';
         return val;
@@ -346,6 +394,7 @@
         }
 
         val = val.replace(/^[\s:;#\-_/\\\\|.,]+|[\s:;#\-_/\\\\|.,]+$/g, '').trim();
+        val = val.replace(/^(?:AUTHORITY|AUTORITE|ISSUING AUTHORITY|ISSUED BY|OFFICE|PASSPORT OFFICE)\s*[:\-]?\s*/i, '');
         val = val.replace(/\s+/g, ' ');
 
         if (!val || val.length < 2 || /^\d{1,2}[./\-]/.test(val)) return '';
@@ -551,15 +600,101 @@
         return { surname: '', givenNames: '' };
     }
 
+    const GENDER_LABELS = [
+        'sex', 'gender',
+        'sexe',
+        'cinsiyet', 'cinsiyeti',
+        'пол', 'жынысы', 'жынсы',
+        'الجنس', 'النوع',
+        'geschlecht',
+        'sexo',
+        'sesso',
+        'jinsi', 'jynsy'
+    ];
+
+    function extractPassportGender(text, options = {}) {
+        if (!text || typeof text !== 'string') return '';
+
+        // 1. Try MRZ first
+        const mrz = extractDatesFromMrz(text);
+        if (mrz.cinsiyet) return mrz.cinsiyet;
+
+        // 2. Search label-based sex fields
+        const normalized = normalizeText(text);
+        const lines = normalized.split(/[\r\n]+/);
+
+        const maleRegex = /(?:^|[\s:;#\-_/\\|.,])(?:M|MALE|ERKEK|HOMME|MASCULIN|MASCULINO|MAENNLICH|MÄNNLICH|М|МУЖ|МУЖСКОЙ|МУЖЧИНА|ЕРКЕК|ЭРКЕК|МАРД|ذكر)(?:$|[\s:;#\-_/\\|.,])/i;
+        const femaleRegex = /(?:^|[\s:;#\-_/\\|.,])(?:F|FEMALE|KADIN|KIZ|FEMME|FEMININ|FEMENINO|WEIBLICH|W|Ж|ЖЕН|ЖЕНСКИЙ|ЖЕНЩИНА|ӘЙЕЛ|АЯЛ|ЗАН|انثى|أنثى)(?:$|[\s:;#\-_/\\|.,])/i;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            const foundLabel = GENDER_LABELS.find(l => {
+                const regex = new RegExp('(?:^|[\\s:;#\-_/\\\\|.,])' + escapeRegex(l) + '(?:$|[\\s:;#\-_/\\\\|.,])', 'i');
+                return regex.test(line);
+            });
+
+            if (!foundLabel) continue;
+
+            const labelIndex = line.toLowerCase().indexOf(foundLabel.toLowerCase());
+            let remainder = line.slice(labelIndex + foundLabel.length).trim();
+            remainder = remainder.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
+
+            let keepStripping = true;
+            while (keepStripping) {
+                keepStripping = false;
+                for (const l of GENDER_LABELS) {
+                    const r = new RegExp('^[\\s:;#\-_/\\\\|.,]*' + escapeRegex(l), 'i');
+                    if (r.test(remainder)) {
+                        remainder = remainder.replace(r, '').trim();
+                        keepStripping = true;
+                        break;
+                    }
+                }
+            }
+            remainder = remainder.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
+
+            if (/^(?:M\/F|F\/M|E\/K|K\/E|М\/Ж|Ж\/М)$/i.test(remainder)) {
+                remainder = '';
+            }
+
+            if (remainder) {
+                const firstToken = remainder.split(/[\s/\\,.;:-]+/)[0].trim();
+                if (firstToken) {
+                    if (maleRegex.test(` ${firstToken} `)) return 'Erkek';
+                    if (femaleRegex.test(` ${firstToken} `)) return 'Kadın';
+                }
+                if (maleRegex.test(` ${remainder} `)) return 'Erkek';
+                if (femaleRegex.test(` ${remainder} `)) return 'Kadın';
+            }
+
+            if (i + 1 < lines.length) {
+                const nextLine = lines[i + 1].trim();
+                if (nextLine && !GENDER_LABELS.some(l => nextLine.toLowerCase().includes(l.toLowerCase()))) {
+                    const firstToken = nextLine.split(/[\s/\\,.;:-]+/)[0].trim();
+                    if (firstToken) {
+                        if (maleRegex.test(` ${firstToken} `)) return 'Erkek';
+                        if (femaleRegex.test(` ${firstToken} `)) return 'Kadın';
+                    }
+                }
+            }
+        }
+
+        return '';
+    }
+
     function extractPassportMetadata(text, options = {}) {
         const dates = extractPassportDates(text, options);
         const mrz = extractDatesFromMrz(text);
         const mrzNames = extractMrzNames(text);
+        const cinsiyet = extractPassportGender(text, options) || mrz.cinsiyet || '';
         return {
             issueDate: dates.issueDate || '',
             expiryDate: dates.expiryDate || mrz.expiryDate || '',
             birthDate: mrz.birthDate || '',
-            cinsiyet: mrz.cinsiyet || '',
+            cinsiyet: cinsiyet,
+            passportNumber: mrz.passportNumber || '',
             mrzSurname: mrzNames.surname || '',
             mrzGivenNames: mrzNames.givenNames || '',
             placeOfBirth: extractPassportPlaceOfBirth(text, options),
@@ -573,6 +708,7 @@
         extractPassportDates,
         extractPassportPlaceOfBirth,
         extractPassportIssuingAuthority,
+        extractPassportGender,
         extractMrzNames,
         parseDateValue,
         isValidYoksisId

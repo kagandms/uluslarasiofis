@@ -4,7 +4,10 @@ import { readFileSync } from 'node:fs';
 import {
     extractPassportPlaceOfBirth,
     extractPassportIssuingAuthority,
-    extractPassportMetadata
+    extractPassportMetadata,
+    extractPassportGender,
+    extractPassportDatesFromText,
+    parseDateValue
 } from '../src/utils/ykn-document-parser.js';
 
 // Evaluate extension parser in global scope
@@ -145,4 +148,137 @@ DATE OF ISSUE / DATE DE DELIVRANCE: 01.01.2022`;
 
     assert.equal(extractPassportPlaceOfBirth(text), 'ALEXANDRIA');
     assert.equal(extParser.extractPassportPlaceOfBirth(text), 'ALEXANDRIA');
+});
+
+test('Date parsing: Eastern Arabic digits convert and parse correctly', () => {
+    assert.equal(parseDateValue('١٥/٠٦/٢٠٢٠'), '2020-06-15');
+    assert.equal(parseDateValue('٠١.٠٥.٢٠٢٢'), '2022-05-01');
+    assert.equal(parseDateValue('٢٠٢١-١١-٢٥'), '2021-11-25');
+    assert.equal(extParser.parseDateValue('١٥/٠٦/٢٠٢٠'), '2020-06-15');
+    assert.equal(extParser.parseDateValue('٠١.٠٥.٢٠٢٢'), '2022-05-01');
+
+    const docText = `تاريخ الإصدار: ١٥/٠٦/٢٠٢٠
+تاريخ الانتهاء: ١٤/٠٦/٢٠٣٠`;
+    const dates = extractPassportDatesFromText(docText);
+    assert.equal(dates.issueDate, '2020-06-15');
+    assert.equal(dates.expiryDate, '2030-06-14');
+
+    const extDates = extParser.extractPassportDates(docText);
+    assert.equal(extDates.issueDate, '2020-06-15');
+    assert.equal(extDates.expiryDate, '2030-06-14');
+});
+
+test('Date parsing: Roman numeral months in Eastern European and CIS passports', () => {
+    assert.equal(parseDateValue('12.VII.2021'), '2021-07-12');
+    assert.equal(parseDateValue('15/X/2023'), '2023-10-15');
+    assert.equal(parseDateValue('01 - IV - 2025'), '2025-04-01');
+    assert.equal(extParser.parseDateValue('12.VII.2021'), '2021-07-12');
+    assert.equal(extParser.parseDateValue('15/X/2023'), '2023-10-15');
+});
+
+test('Date parsing: Russian full month names (nominative and genitive)', () => {
+    assert.equal(parseDateValue('12 мая 2021'), '2021-05-12');
+    assert.equal(parseDateValue('15 января 2022'), '2022-01-15');
+    assert.equal(parseDateValue('20 октября 2024'), '2024-10-20');
+    assert.equal(extParser.parseDateValue('12 мая 2021'), '2021-05-12');
+    assert.equal(extParser.parseDateValue('15 января 2022'), '2022-01-15');
+});
+
+test('Date parsing: Arabic month names', () => {
+    assert.equal(parseDateValue('12 مايو 2021'), '2021-05-12');
+    assert.equal(parseDateValue('15 تموز 2023'), '2023-07-15');
+    assert.equal(extParser.parseDateValue('12 مايو 2021'), '2021-05-12');
+    assert.equal(extParser.parseDateValue('15 تموز 2023'), '2023-07-15');
+});
+
+test('Passport gender extraction across MRZ and text labels', () => {
+    // 1. TD3 MRZ Female
+    const mrzFemale = `P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<
+L898902C36UTO7408122F1204159ZE184226B<<<<<10`;
+    assert.equal(extractPassportGender(mrzFemale), 'Kadın');
+    assert.equal(extParser.extractPassportGender(mrzFemale), 'Kadın');
+
+    // 2. TD3 MRZ Male
+    const mrzMale = `P<UTOERIKSSON<<CARL<JOHAN<<<<<<<<<<<<<<<<<<<
+L898902C36UTO7408122M1204159ZE184226B<<<<<10`;
+    assert.equal(extractPassportGender(mrzMale), 'Erkek');
+    assert.equal(extParser.extractPassportGender(mrzMale), 'Erkek');
+
+    // 3. Russian text label
+    const ruMale = `ПАСПОРТ РОССИЯ
+ПОЛ / SEX: М / M
+МЕСТО РОЖДЕНИЯ: МОСКВА`;
+    assert.equal(extractPassportGender(ruMale), 'Erkek');
+    assert.equal(extParser.extractPassportGender(ruMale), 'Erkek');
+
+    const ruFemale = `ПАСПОРТ РОССИЯ
+ПОЛ: ЖЕН.
+МЕСТО РОЖДЕНИЯ: САМАРА`;
+    assert.equal(extractPassportGender(ruFemale), 'Kadın');
+    assert.equal(extParser.extractPassportGender(ruFemale), 'Kadın');
+
+    // 4. Arabic text label
+    const arMale = `جواز سفر
+الجنس: ذكر
+مكان الميلاد: القاهرة`;
+    assert.equal(extractPassportGender(arMale), 'Erkek');
+    assert.equal(extParser.extractPassportGender(arMale), 'Erkek');
+
+    const arFemale = `جواز سفر
+الجنس: أنثى
+مكان الميلاد: دمشق`;
+    assert.equal(extractPassportGender(arFemale), 'Kadın');
+    assert.equal(extParser.extractPassportGender(arFemale), 'Kadın');
+
+    // 5. French text label
+    const frFemale = `PASSEPORT
+SEXE / SEX: F
+LIEU DE NAISSANCE: PARIS`;
+    assert.equal(extractPassportGender(frFemale), 'Kadın');
+    assert.equal(extParser.extractPassportGender(frFemale), 'Kadın');
+
+    // 6. Turkish text label
+    const trMale = `TÜRKİYE CUMHURİYETİ
+CİNSİYETİ / SEX: ERKEK / M`;
+    assert.equal(extractPassportGender(trMale), 'Erkek');
+    assert.equal(extParser.extractPassportGender(trMale), 'Erkek');
+});
+
+test('Administrative prefix stripping in place of birth and authority', () => {
+    const arabicGov = `مكان الميلاد: محافظة الإسكندرية`;
+    assert.equal(extractPassportPlaceOfBirth(arabicGov), 'الإسكندرية');
+    assert.equal(extParser.extractPassportPlaceOfBirth(arabicGov), 'الإسكندرية');
+
+    const ruCity = `МЕСТО РОЖДЕНИЯ: ГОРОД САМАРА`;
+    assert.equal(extractPassportPlaceOfBirth(ruCity), 'САМАРА');
+    assert.equal(extParser.extractPassportPlaceOfBirth(ruCity), 'САМАРА');
+
+    const frCity = `LIEU DE NAISSANCE: VILLE DE LYON`;
+    assert.equal(extractPassportPlaceOfBirth(frCity), 'LYON');
+    assert.equal(extParser.extractPassportPlaceOfBirth(frCity), 'LYON');
+});
+
+test('Complete passport metadata extraction with gender and authority', () => {
+    const text = `PASSPORT / PASSEPORT
+SURNAME: DOE
+GIVEN NAMES: JANE
+SEX: F
+PLACE OF BIRTH: CHICAGO
+ISSUING AUTHORITY: US DEPARTMENT OF STATE
+DATE OF ISSUE: 15 JAN 2021
+DATE OF EXPIRY: 14 JAN 2031`;
+
+    const meta = extractPassportMetadata(text);
+    assert.equal(meta.cinsiyet, 'Kadın');
+    assert.equal(meta.placeOfBirth, 'CHICAGO');
+    assert.equal(meta.issuingAuthority, 'US DEPARTMENT OF STATE');
+    assert.equal(meta.issueDate, '2021-01-15');
+    assert.equal(meta.expiryDate, '2031-01-14');
+
+    const extMeta = extParser.extractPassportMetadata(text);
+    assert.equal(extMeta.cinsiyet, 'Kadın');
+    assert.equal(extMeta.placeOfBirth, 'CHICAGO');
+    assert.equal(extMeta.issuingAuthority, 'US DEPARTMENT OF STATE');
+    assert.equal(extMeta.issueDate, '2021-01-15');
+    assert.equal(extMeta.expiryDate, '2031-01-14');
 });

@@ -2006,31 +2006,78 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 var oppWrapper = isMale ? ctrl.femaleWrapper : ctrl.maleWrapper;
 
                                 if (targetRadio || targetLabel) {
-                                    // 1. ZK change listener'larını uyandırmak için önce karşı cinsiyeti tıkla
-                                    if (oppRadio || oppLabel) {
-                                        if (oppRadio) {
-                                            oppRadio.checked = true;
-                                            if (targetRadio) targetRadio.checked = false;
+                                    // 1. Karşı radyo butonunu temizle
+                                    if (oppRadio) {
+                                        oppRadio.checked = false;
+                                        try {
+                                            var oppW = win.zk && win.zk.Widget ? (win.zk.Widget.$(oppRadio) || (oppRadio.id ? win.zk.Widget.$(oppRadio.id.replace(/-real$/, '')) : null)) : null;
+                                            if (oppW && typeof oppW.setChecked === 'function') oppW.setChecked(false);
+                                        } catch (_) {}
+                                    }
+                                    if (oppWrapper && oppWrapper.classList) {
+                                        oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
+                                    }
+
+                                    // 2. Hedef radyo butonunu ZK Widget API'si ile bağla
+                                    var w = null;
+                                    try {
+                                        if (win.zk && win.zk.Widget) {
+                                            w = (targetRadio ? win.zk.Widget.$(targetRadio) : null)
+                                                || (targetRadio && targetRadio.id ? win.zk.Widget.$(targetRadio.id.replace(/-real$/, '')) : null)
+                                                || (targetLabel ? win.zk.Widget.$(targetLabel) : null)
+                                                || (targetWrapper ? win.zk.Widget.$(targetWrapper) : null);
                                         }
-                                        if (oppLabel) triggerUserClick(oppLabel);
-                                        else if (oppWrapper) triggerUserClick(oppWrapper);
-                                        if (oppRadio) {
-                                            triggerUserClick(oppRadio);
-                                            commitRadio(oppRadio, win);
+                                    } catch (_) {}
+
+                                    // 3. Hedef radyo butonunu DOM'da aktif yap
+                                    if (targetRadio) {
+                                        targetRadio.checked = true;
+                                    }
+                                    if (targetWrapper && targetWrapper.classList) {
+                                        targetWrapper.classList.add('z-radio-checked');
+                                    }
+
+                                    // 4. ZK sunucusuna tek ve temiz onCheck AU bildirimi gönder
+                                    if (w) {
+                                        try {
+                                            var rg = typeof w.getRadiogroup === 'function' ? w.getRadiogroup() : (w.parent || null);
+                                            if (typeof w.setChecked === 'function') w.setChecked(true);
+                                            if (typeof w.setSelected === 'function') w.setSelected(true);
+                                            if (rg && typeof rg.setSelectedItem === 'function') rg.setSelectedItem(w);
+
+                                            if (typeof w.fire === 'function') {
+                                                w.fire('onCheck', { checked: true }, { toServer: true });
+                                            }
+                                            if (rg && typeof rg.fire === 'function') {
+                                                rg.fire('onCheck', { selected: w, checked: true }, { toServer: true });
+                                            }
+                                            if (win.zAu && typeof win.zAu.send === 'function') {
+                                                win.zAu.send(new win.zk.Event(w, 'onCheck', { checked: true }, { toServer: true }));
+                                                if (rg) {
+                                                    win.zAu.send(new win.zk.Event(rg, 'onCheck', { selected: w, checked: true }, { toServer: true }));
+                                                }
+                                            }
+                                        } catch (_) {}
+                                    }
+
+                                    // 5. Doğal kullanıcı tıklamasını tetikle (etikete veya wrapper'a)
+                                    if (targetLabel) {
+                                        triggerUserClick(targetLabel);
+                                    } else if (targetWrapper) {
+                                        triggerUserClick(targetWrapper);
+                                    } else if (targetRadio) {
+                                        triggerUserClick(targetRadio);
+                                    }
+
+                                    // 6. Standart ve jQuery eventlerini tetikle
+                                    if (targetRadio) {
+                                        try { targetRadio.dispatchEvent(new win.Event('input', { bubbles: true })); } catch (_) {}
+                                        try { targetRadio.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (_) {}
+                                        if (win.jq) {
+                                            try { win.jq(targetRadio).trigger('change'); } catch (_) {}
                                         }
                                     }
 
-                                    // 2. Hedef cinsiyeti tıkla ve ZK durumuna işle
-                                    if (targetRadio) {
-                                        targetRadio.checked = true;
-                                        if (oppRadio) oppRadio.checked = false;
-                                    }
-                                    if (targetLabel) triggerUserClick(targetLabel);
-                                    else if (targetWrapper) triggerUserClick(targetWrapper);
-                                    if (targetRadio) {
-                                        triggerUserClick(targetRadio);
-                                        commitRadio(targetRadio, win);
-                                    }
                                     anySet = true;
                                     continue;
                                 }
@@ -2158,9 +2205,6 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             var combined = rowText + ' ' + placeholder;
 
                             if ((inp.type || '').toLowerCase() === 'radio') {
-                                if (inp.checked && combined.indexOf('cinsiyet') !== -1) {
-                                    commitRadio(inp, win);
-                                }
                                 continue;
                             }
 

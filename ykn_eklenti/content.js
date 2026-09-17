@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.60';
+const CONTENT_SCRIPT_VERSION = '1.2.61';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -502,32 +502,24 @@ function simulateRadioByLabelText(labelText) {
             const oppWrapper = isMale ? ctrl.femaleWrapper : ctrl.maleWrapper;
 
             if (targetRadio || targetLabel) {
-                // Adım 1: ZK framework change listener'larını uyandırmak ve
-                // "isChecked() == true" erken çıkışını aşmak için önce karşı cinsiyeti tıkla
-                if (oppRadio || oppLabel) {
-                    if (oppRadio) {
-                        oppRadio.checked = true;
-                        if (targetRadio) targetRadio.checked = false;
-                    }
-                    if (oppLabel) simulateUserClick(oppLabel);
-                    else if (oppWrapper) simulateUserClick(oppWrapper);
-                    if (oppRadio) {
-                        simulateUserClick(oppRadio);
-                        try { oppRadio.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {}
-                    }
+                if (oppRadio) {
+                    oppRadio.checked = false;
+                }
+                if (oppWrapper && oppWrapper.classList) {
+                    oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
                 }
 
-                // Adım 2: Şimdi hedeflenen asıl cinsiyeti gerçek kullanıcı gibi tıkla
-                if (targetRadio) {
-                    targetRadio.checked = true;
-                    if (oppRadio) oppRadio.checked = false;
-                }
                 if (targetLabel) simulateUserClick(targetLabel);
                 else if (targetWrapper) simulateUserClick(targetWrapper);
+                else if (targetRadio) simulateUserClick(targetRadio);
+
                 if (targetRadio) {
-                    simulateUserClick(targetRadio);
+                    targetRadio.checked = true;
                     try { targetRadio.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
                     try { targetRadio.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {}
+                }
+                if (targetWrapper && targetWrapper.classList) {
+                    targetWrapper.classList.add('z-radio-checked');
                 }
                 anySet = true;
                 continue;
