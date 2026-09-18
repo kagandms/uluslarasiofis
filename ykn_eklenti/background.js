@@ -503,6 +503,34 @@ function applyPassportMetadata(data, metadata = {}) {
     return enriched;
 }
 
+function getActiveTransferWarnings(data) {
+    if (!data) return [];
+    const rawWarnings = Array.isArray(data.transferWarnings) ? data.transferWarnings : [];
+    if (rawWarnings.length === 0) return [];
+
+    const hasIssueDate = Boolean((data.issueDate || data.passportIssueDate || data.duzenlemeTarihi || data.pasaportDuzenlemeTarihi || data.verilisTarihi || data.belgeDuzenlemeTarihi || '').trim());
+    const hasExpiryDate = Boolean((data.expiryDate || data.passportExpiryDate || data.gecerlilikTarihi || data.pasaportGecerlilikTarihi || data.bitisTarihi || data.belgeGecerlilikTarihi || '').trim());
+    const hasBirthPlace = Boolean((data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || '').trim());
+    const hasAuthority = Boolean((data.verenMakam || data.issuingAuthority || '').trim());
+
+    return rawWarnings.filter((warning) => {
+        const wNorm = String(warning || '').toLocaleLowerCase('tr-TR');
+        if (wNorm.includes('düzenle') || wNorm.includes('duzenle') || wNorm.includes('veriliş') || wNorm.includes('verilis')) {
+            return !hasIssueDate;
+        }
+        if (wNorm.includes('geçerli') || wNorm.includes('gecerli') || wNorm.includes('bitiş') || wNorm.includes('bitis')) {
+            return !hasExpiryDate;
+        }
+        if (wNorm.includes('doğum yeri') || wNorm.includes('dogum yeri')) {
+            return !hasBirthPlace;
+        }
+        if (wNorm.includes('makam') || wNorm.includes('authority')) {
+            return !hasAuthority;
+        }
+        return true;
+    });
+}
+
 function getPassportCandidateUrls(data = {}) {
     return Array.from(new Set([
         ...(data.passportCandidates || []),
@@ -1298,7 +1326,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         var val = (el.value || '').trim();
                         if (!val) return;
 
-                        var parts = val.split(/[./\-\s]+/);
+                        var parts = val.split(/[./\-\s]+/).filter(Boolean);
                         if (parts.length === 3) {
                             var d, m, y;
                             if (parts[0].length === 4) {
@@ -1310,6 +1338,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 m = parseInt(parts[1], 10);
                                 y = parseInt(parts[2], 10);
                             }
+                            if (y < 100) y = y <= 49 ? 2000 + y : 1900 + y;
 
                             if (y >= 1900 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
                                 var formatted = ('0' + d).slice(-2) + '.' + ('0' + m).slice(-2) + '.' + y;
@@ -2743,6 +2772,11 @@ async function fillYoksisStudentData(studentData, requestId, bringToFront = fals
         throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
     }
 
+    if (studentData) {
+        studentData.transferWarnings = getActiveTransferWarnings(studentData);
+        if (studentData.transferWarnings.length === 0) delete studentData.transferWarnings;
+    }
+
     const yoksisTab = bringToFront ? await getForegroundYoksisTab() : await getBackgroundYoksisTab();
     return runYoksisOperation(yoksisTab.id, 'fill', requestId, async () => {
         await saveStudentData(studentData);
@@ -2966,11 +3000,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 croppedPhotoBase64: request.photoBase64,
                 photoFileName: request.fileName || 'ogrenci_foto.jpg'
             });
+            data.transferWarnings = getActiveTransferWarnings(data);
+            if (data.transferWarnings.length === 0) delete data.transferWarnings;
             data = await confirmYoksisReadyForCrop(data, request.requestId);
             await saveStudentData(data);
             await new Promise((resolve) => chrome.storage.local.set({ pendingPassportCrop: null }, resolve));
             const fillResponse = await fillYoksisStudentData(data, request.requestId);
-            const unavailableFields = Array.from(new Set(data.transferWarnings || []));
+            const unavailableFields = Array.from(new Set(getActiveTransferWarnings(data)));
             return {
                 success: Boolean(fillResponse?.success),
                 ...fillResponse,
@@ -3174,9 +3210,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         else if (request.action === 'FILL_YOKSIS_FORM') {
             const studentData = request.data;
+            if (studentData) {
+                studentData.transferWarnings = getActiveTransferWarnings(studentData);
+                if (studentData.transferWarnings.length === 0) delete studentData.transferWarnings;
+            }
             fillYoksisStudentData(studentData, request.requestId)
                 .then((response) => {
-                sendResponse({ ...response, requestId: request.requestId });
+                    const unavailableFields = Array.from(new Set(getActiveTransferWarnings(studentData)));
+                    sendResponse({
+                        ...response,
+                        unavailableFields,
+                        partial: Boolean(response?.partial || unavailableFields.length > 0),
+                        requestId: request.requestId
+                    });
                 })
                 .catch((error) => sendResponse({ success: false, requestId: request.requestId, error: error.message }));
             return true;

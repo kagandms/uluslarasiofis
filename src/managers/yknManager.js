@@ -417,6 +417,27 @@ export function initYknManager() {
         return clean;
     }
 
+    function isValidDateString(str) {
+        if (!str || typeof str !== 'string') return false;
+        const clean = str.trim();
+        const parts = clean.split(/[./-]/);
+        if (parts.length !== 3) return false;
+        let d, m, y;
+        if (parts[0].length === 4) {
+            y = parseInt(parts[0], 10);
+            m = parseInt(parts[1], 10);
+            d = parseInt(parts[2], 10);
+        } else {
+            d = parseInt(parts[0], 10);
+            m = parseInt(parts[1], 10);
+            y = parseInt(parts[2], 10);
+        }
+        if (isNaN(d) || isNaN(m) || isNaN(y)) return false;
+        if (y < 1920 || y > 2050 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+        const dateObj = new Date(y, m - 1, d);
+        return dateObj.getFullYear() === y && dateObj.getMonth() === m - 1 && dateObj.getDate() === d;
+    }
+
     function updateMissingFieldsUI() {
         if (!panelFields) return;
         if (!currentStudentData) {
@@ -452,8 +473,28 @@ export function initYknManager() {
             if (!hasVal) missing.push(name);
         }
 
-        markField(inputIssueDate, badgeIssueDate, issueVal, 'Düzenleme Tarihi');
-        markField(inputExpiryDate, badgeExpiryDate, expiryVal, 'Geçerlilik Tarihi');
+        function markDateField(inputEl, badgeEl, val, name) {
+            const valid = isValidDateString(val);
+            if (inputEl) {
+                inputEl.style.borderColor = valid ? 'var(--border-color)' : '#f39c12';
+                inputEl.style.backgroundColor = valid ? 'transparent' : 'rgba(243, 156, 18, 0.05)';
+            }
+            if (badgeEl) {
+                if (valid) {
+                    badgeEl.textContent = '✓ Dolu';
+                    badgeEl.style.color = '#27ae60';
+                    badgeEl.style.fontWeight = '600';
+                } else {
+                    badgeEl.textContent = val ? '⚠️ Geçersiz Tarih' : '⚠️ Eksik';
+                    badgeEl.style.color = '#e67e22';
+                    badgeEl.style.fontWeight = '700';
+                }
+            }
+            if (!valid) missing.push(name);
+        }
+
+        markDateField(inputIssueDate, badgeIssueDate, issueVal, 'Düzenleme Tarihi');
+        markDateField(inputExpiryDate, badgeExpiryDate, expiryVal, 'Geçerlilik Tarihi');
         markField(inputBirthPlace, badgeBirthPlace, bpVal, 'Doğum Yeri');
         markField(inputIssuingAuthority, badgeAuthority, authVal, 'Veren Makam');
 
@@ -518,19 +559,29 @@ export function initYknManager() {
     function attachDateInputMask(input) {
         if (!input) return;
         input.addEventListener('input', () => {
-            let val = input.value.replace(/[^\d.]/g, '');
-            const digits = val.replace(/\./g, '');
-            if (digits.length >= 2 && !val.includes('.')) {
-                val = digits.slice(0, 2) + '.' + digits.slice(2);
-            }
-            if (digits.length >= 4) {
-                const parts = val.split('.');
-                if (parts.length === 2 && parts[1].length >= 2) {
-                    val = parts[0] + '.' + parts[1].slice(0, 2) + '.' + (parts[1].slice(2) || '');
+            let raw = input.value;
+            const endsWithSep = /[./\-\s]$/.test(raw);
+            raw = raw.replace(/[./\-\s]{2,}/g, '.');
+
+            const isoMatch = raw.trim().match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+            if (isoMatch) {
+                const [, y, m, d] = isoMatch;
+                input.value = d.padStart(2, '0') + '.' + m.padStart(2, '0') + '.' + y;
+            } else {
+                const digits = raw.replace(/\D/g, '').slice(0, 8);
+                let formatted = '';
+                if (digits.length === 0) {
+                    formatted = '';
+                } else if (digits.length <= 2) {
+                    formatted = digits + (digits.length === 2 && endsWithSep ? '.' : '');
+                } else if (digits.length <= 4) {
+                    formatted = digits.slice(0, 2) + '.' + digits.slice(2) + (digits.length === 4 && endsWithSep ? '.' : '');
+                } else {
+                    formatted = digits.slice(0, 2) + '.' + digits.slice(2, 4) + '.' + digits.slice(4);
                 }
-            }
-            if (val !== input.value) {
-                input.value = val.slice(0, 10);
+                if (input.value !== formatted) {
+                    input.value = formatted;
+                }
             }
             syncUserEnteredPassportDates();
         });
@@ -539,12 +590,18 @@ export function initYknManager() {
     function syncUserEnteredPassportDates() {
         if (!currentStudentData) return;
         if (inputIssueDate && inputIssueDate.value.trim()) {
-            const parsed = parseDateValue(inputIssueDate.value.trim());
-            currentStudentData.issueDate = parsed || inputIssueDate.value.trim();
+            const raw = inputIssueDate.value.trim();
+            if (isValidDateString(raw)) {
+                const parsed = parseDateValue(raw);
+                currentStudentData.issueDate = parsed || raw;
+            }
         }
         if (inputExpiryDate && inputExpiryDate.value.trim()) {
-            const parsed = parseDateValue(inputExpiryDate.value.trim());
-            currentStudentData.expiryDate = parsed || inputExpiryDate.value.trim();
+            const raw = inputExpiryDate.value.trim();
+            if (isValidDateString(raw)) {
+                const parsed = parseDateValue(raw);
+                currentStudentData.expiryDate = parsed || raw;
+            }
         }
         if (inputBirthPlace && inputBirthPlace.value.trim()) {
             const bp = inputBirthPlace.value.trim().toUpperCase();
@@ -564,9 +621,12 @@ export function initYknManager() {
             currentStudentData.babaAdi = inputFatherName.value.trim().toUpperCase();
         }
         if (inputBirthDate && inputBirthDate.value.trim()) {
-            const parsed = parseDateValue(inputBirthDate.value.trim());
-            currentStudentData.birthDate = parsed || inputBirthDate.value.trim();
-            currentStudentData.dogumTarihi = currentStudentData.birthDate;
+            const raw = inputBirthDate.value.trim();
+            if (isValidDateString(raw)) {
+                const parsed = parseDateValue(raw);
+                currentStudentData.birthDate = parsed || raw;
+                currentStudentData.dogumTarihi = currentStudentData.birthDate;
+            }
         }
         const medeniBekar = document.getElementById('ykn-medeni-bekar');
         const medeniEvli = document.getElementById('ykn-medeni-evli');
@@ -1929,6 +1989,13 @@ export function initYknManager() {
                     return;
                 }
 
+                if (currentStudentData) {
+                    currentStudentData.yoksisReady = true;
+                    if (response.kabulId) {
+                        currentStudentData.kabulId = response.kabulId;
+                        currentStudentData.yoksisId = response.kabulId;
+                    }
+                }
                 if (response.kabulId) {
                     try { await navigator.clipboard.writeText(response.kabulId); } catch (_) {}
                 }
@@ -2663,7 +2730,7 @@ export function initYknManager() {
                     await postExtensionRequest('FILL_YOKSIS_FORM', {
                         data: getYoksisTransportData(currentStudentData),
                         requestId: createRequestId('presave-sync')
-                    }, 8000);
+                    }, 20000);
                 } catch (_) {}
             }
             addStatus('1/2: YÖKSİS arka planda kaydediliyor...', 'info');

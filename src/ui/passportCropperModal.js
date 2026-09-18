@@ -357,23 +357,57 @@ export function initPassportCropperModal() {
         cropperSelectMedeni
     } = getElements();
 
+    function isValidDateString(str) {
+        if (!str || typeof str !== 'string') return false;
+        const clean = str.trim();
+        const parts = clean.split(/[./-]/);
+        if (parts.length !== 3) return false;
+        let d, m, y;
+        if (parts[0].length === 4) {
+            y = parseInt(parts[0], 10);
+            m = parseInt(parts[1], 10);
+            d = parseInt(parts[2], 10);
+        } else {
+            d = parseInt(parts[0], 10);
+            m = parseInt(parts[1], 10);
+            y = parseInt(parts[2], 10);
+        }
+        if (isNaN(d) || isNaN(m) || isNaN(y)) return false;
+        if (y < 1920 || y > 2050 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+        const dateObj = new Date(y, m - 1, d);
+        return dateObj.getFullYear() === y && dateObj.getMonth() === m - 1 && dateObj.getDate() === d;
+    }
+
     function attachDateMask(input, targetId) {
         if (!input) return;
         input.addEventListener('input', () => {
-            let val = input.value.replace(/[^\d.]/g, '');
-            const digits = val.replace(/\./g, '');
-            if (digits.length >= 2 && !val.includes('.')) {
-                val = digits.slice(0, 2) + '.' + digits.slice(2);
-            }
-            if (digits.length >= 4) {
-                const parts = val.split('.');
-                if (parts.length === 2 && parts[1].length >= 2) {
-                    val = parts[0] + '.' + parts[1].slice(0, 2) + '.' + (parts[1].slice(2) || '');
+            let raw = input.value;
+            const endsWithSep = /[./\-\s]$/.test(raw);
+            raw = raw.replace(/[./\-\s]{2,}/g, '.');
+
+            const isoMatch = raw.trim().match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+            if (isoMatch) {
+                const [, y, m, d] = isoMatch;
+                input.value = d.padStart(2, '0') + '.' + m.padStart(2, '0') + '.' + y;
+            } else {
+                const digits = raw.replace(/\D/g, '').slice(0, 8);
+                let formatted = '';
+                if (digits.length === 0) {
+                    formatted = '';
+                } else if (digits.length <= 2) {
+                    formatted = digits + (digits.length === 2 && endsWithSep ? '.' : '');
+                } else if (digits.length <= 4) {
+                    formatted = digits.slice(0, 2) + '.' + digits.slice(2) + (digits.length === 4 && endsWithSep ? '.' : '');
+                } else {
+                    formatted = digits.slice(0, 2) + '.' + digits.slice(2, 4) + '.' + digits.slice(4);
+                }
+                if (input.value !== formatted) {
+                    input.value = formatted;
                 }
             }
-            if (val !== input.value) {
-                input.value = val.slice(0, 10);
-            }
+
+            input.style.borderColor = isValidDateString(input.value) ? 'var(--border-color)' : '#f39c12';
+
             const portalEl = document.getElementById(targetId);
             if (portalEl && portalEl.value !== input.value) {
                 portalEl.value = input.value;

@@ -1621,7 +1621,7 @@ function formatDateForYoksisInput(element, rawDate) {
     if (!rawDate) return '';
     const clean = String(rawDate).trim();
     if (element && (element.getAttribute('type') || '').toLowerCase() === 'date') {
-        const parts = clean.split(/[./\-\s]+/);
+        const parts = clean.split(/[./\-\s]+/).filter(Boolean);
         if (parts.length === 3) {
             let y, m, d;
             if (parts[0].length === 4) {
@@ -1629,12 +1629,13 @@ function formatDateForYoksisInput(element, rawDate) {
             } else {
                 [d, m, y] = parts;
             }
+            if (String(y).length === 2) y = Number(y) <= 49 ? '20' + y : '19' + y;
             return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         }
         return clean;
     }
 
-    const parts = clean.split(/[./\-\s]+/);
+    const parts = clean.split(/[./\-\s]+/).filter(Boolean);
     if (parts.length === 3) {
         let d, m, y;
         if (parts[0].length === 4) {
