@@ -376,6 +376,20 @@ export function initYknManager() {
     const inputBirthPlace = document.getElementById('ykn-birth-place');
     const inputIssuingAuthority = document.getElementById('ykn-issuing-authority');
 
+    const btnYknAutoCycle = document.getElementById('btn-ykn-auto-cycle');
+    const btnYknDirectQuery = document.getElementById('btn-ykn-direct-query');
+    const btnStopYknPolling = document.getElementById('btn-stop-ykn-polling');
+    const btnPollNow = document.getElementById('btn-poll-now');
+    const btnCopyYkn = document.getElementById('btn-copy-ykn');
+    const btnFocusYoksis = document.getElementById('btn-focus-yoksis');
+    const yknLiveCard = document.getElementById('ykn-live-card');
+    const yknSuccessBox = document.getElementById('ykn-success-box');
+    const yknDisplayValue = document.getElementById('ykn-display-value');
+    const yknPendingBox = document.getElementById('ykn-pending-box');
+    const yknGuidBadge = document.getElementById('ykn-guid-badge');
+    const yknCountdown = document.getElementById('ykn-countdown');
+    const yknAttemptNum = document.getElementById('ykn-attempt-num');
+
     try {
         initPassportCropperModal();
     } catch (err) {
@@ -850,6 +864,12 @@ export function initYknManager() {
         if (inputExpiryDate) inputExpiryDate.value = '';
         if (inputBirthPlace) inputBirthPlace.value = '';
         if (inputIssuingAuthority) inputIssuingAuthority.value = '';
+        stopYknPolling();
+        lastFoundYkn = '';
+        if (yknLiveCard) yknLiveCard.style.display = 'none';
+        if (yknSuccessBox) yknSuccessBox.style.display = 'none';
+        if (yknPendingBox) yknPendingBox.style.display = 'none';
+        if (yknDisplayValue) yknDisplayValue.textContent = '';
         setOneClickButtonMode('ready');
         if (btnOneClick) btnOneClick.style.display = 'none';
     }
@@ -2225,6 +2245,218 @@ export function initYknManager() {
         btnExtensionRecheck.addEventListener('click', () => {
             extensionStatus.hidden = true;
             requestExtensionCheck(createRequestId());
+        });
+    }
+
+    // ==========================================
+    // YKN Talep ve Arka Plan Durum Sorgulama (Polling)
+    // ==========================================
+    let yknPollingActive = false;
+    let yknPollingTimer = null;
+    let yknCountdownInterval = null;
+    let yknAttemptCount = 0;
+    let lastFoundYkn = '';
+
+    function stopYknPolling() {
+        yknPollingActive = false;
+        if (yknPollingTimer) clearTimeout(yknPollingTimer);
+        if (yknCountdownInterval) clearInterval(yknCountdownInterval);
+        yknPollingTimer = null;
+        yknCountdownInterval = null;
+        if (btnYknAutoCycle) {
+            btnYknAutoCycle.disabled = false;
+            btnYknAutoCycle.classList.remove('is-loading');
+        }
+        if (btnYknDirectQuery) {
+            btnYknDirectQuery.disabled = false;
+            btnYknDirectQuery.classList.remove('is-loading');
+        }
+        if (!lastFoundYkn && yknPendingBox) {
+            yknPendingBox.style.display = 'none';
+        }
+    }
+
+    function showYknSuccess(ykn) {
+        stopYknPolling();
+        lastFoundYkn = ykn;
+        if (currentStudentData) currentStudentData.ykn = ykn;
+        if (yknLiveCard) yknLiveCard.style.display = 'block';
+        if (yknPendingBox) yknPendingBox.style.display = 'none';
+        if (yknSuccessBox) yknSuccessBox.style.display = 'block';
+        if (yknDisplayValue) yknDisplayValue.textContent = ykn;
+        copyTextToClipboard(ykn);
+        addStatus(`✓ YKN Başarıyla Alındı: ${ykn}`, 'success');
+        showToast(`YKN Alındı: ${ykn}`, 'success');
+    }
+
+    function showYknPending(guid = '') {
+        if (yknLiveCard) yknLiveCard.style.display = 'block';
+        if (yknSuccessBox) yknSuccessBox.style.display = 'none';
+        if (yknPendingBox) yknPendingBox.style.display = 'block';
+        if (yknGuidBadge) {
+            if (guid) {
+                yknGuidBadge.style.display = 'inline-block';
+                yknGuidBadge.textContent = `Takip GUID: ${guid}`;
+            } else {
+                yknGuidBadge.style.display = 'none';
+            }
+        }
+        if (yknAttemptNum) yknAttemptNum.textContent = String(yknAttemptCount);
+    }
+
+    function scheduleNextYknPoll(seconds = 15) {
+        let remaining = seconds;
+        if (yknCountdown) yknCountdown.textContent = String(remaining);
+        if (yknCountdownInterval) clearInterval(yknCountdownInterval);
+        yknCountdownInterval = setInterval(() => {
+            remaining--;
+            if (remaining <= 0) {
+                clearInterval(yknCountdownInterval);
+                yknCountdownInterval = null;
+            }
+            if (yknCountdown) yknCountdown.textContent = String(Math.max(0, remaining));
+        }, 1000);
+
+        if (yknPollingTimer) clearTimeout(yknPollingTimer);
+        yknPollingTimer = setTimeout(() => {
+            if (yknPollingActive) {
+                executeYknQueryStep();
+            }
+        }, seconds * 1000);
+    }
+
+    async function executeYknQueryStep() {
+        if (!yknPollingActive) return;
+        yknAttemptCount++;
+        const studentNameVal = currentStudentData?.fullName || (studentName ? studentName.textContent : '') || '';
+        const passportVal = currentStudentData?.passportNo || (inputPassport ? inputPassport.value.trim() : '') || '';
+
+        addStatus(`Sorgu #${yknAttemptCount}: YÖKSİS tablosundan durum sorgulanıyor...`, 'info');
+        showYknPending();
+
+        try {
+            const requestId = createRequestId('ykn-step');
+            const response = await postExtensionRequest('YOKSIS_STEP_YKN', {
+                studentName: studentNameVal,
+                passportNo: passportVal,
+                requestId
+            }, 25000);
+
+            if (!yknPollingActive) return;
+
+            if (response?.status === 'YKN_READY' && response.ykn) {
+                showYknSuccess(response.ykn);
+                return;
+            }
+
+            if (response?.status === 'TALEP_SENT') {
+                addStatus(`YKN Talebi Gönderildi: ${response.message || 'Göç İdaresi tarafından değerlendirilecek.'}`, 'success');
+                showToast('YKN Talebi iletildi, durum takip ediliyor...', 'info');
+                scheduleNextYknPoll(10);
+                return;
+            }
+
+            if (response?.status === 'YKN_PENDING') {
+                addStatus(`YKN Bekliyor (Deneme #${yknAttemptCount}) - 15 sn sonra tekrar sorgulanacak...`, 'warning');
+                showYknPending(response.guid);
+                scheduleNextYknPoll(15);
+                return;
+            }
+
+            if (response?.status === 'STUDENT_ROW_NOT_FOUND') {
+                addStatus(response.message || 'Öğrenci YÖKSİS listesinde bulunamadı.', 'error');
+                showToast(response.message || 'Öğrenci YÖKSİS listesinde bulunamadı.', 'error');
+                stopYknPolling();
+                return;
+            }
+
+            const msg = response?.message || response?.error || 'Durum kontrol edildi, beklemeye devam ediliyor.';
+            addStatus(`Sorgu #${yknAttemptCount}: ${msg}`, 'info');
+            if (yknAttemptCount < 30) {
+                scheduleNextYknPoll(15);
+            } else {
+                addStatus('YKN sorgulama deneme sınırına ulaşıldı (30 deneme). İsterseniz tekrar başlatabilirsiniz.', 'warning');
+                stopYknPolling();
+            }
+        } catch (err) {
+            if (!yknPollingActive) return;
+            addStatus(`Sorgu #${yknAttemptCount} hatası: ${err.message}. 15 sn sonra tekrar denenecek...`, 'error');
+            scheduleNextYknPoll(15);
+        }
+    }
+
+    async function startYknCycleFlow(includeSave = true) {
+        if (!currentStudentData && !inputPassport?.value.trim()) {
+            showToast('Lütfen önce bir öğrenci arayın.', 'warning');
+            return;
+        }
+
+        stopYknPolling();
+        yknPollingActive = true;
+        yknAttemptCount = 0;
+        lastFoundYkn = '';
+
+        if (includeSave && btnYknAutoCycle) {
+            btnYknAutoCycle.disabled = true;
+            btnYknAutoCycle.classList.add('is-loading');
+        } else if (btnYknDirectQuery) {
+            btnYknDirectQuery.disabled = true;
+            btnYknDirectQuery.classList.add('is-loading');
+        }
+
+        showYknPending();
+
+        if (includeSave) {
+            addStatus('1/2: YÖKSİS arka planda kaydediliyor...', 'info');
+            showToast('YÖKSİS arka planda kaydediliyor...', 'info');
+            try {
+                const saveReqId = createRequestId('ykn-save');
+                const saveRes = await postExtensionRequest('YOKSIS_SAVE_FORM', { requestId: saveReqId }, 15000);
+                if (saveRes?.success) {
+                    addStatus('YÖKSİS formu kaydedildi. 2/2: Öğrenci seçiliyor ve YKN döngüsü başlatılıyor...', 'success');
+                } else {
+                    addStatus('Kaydet yanıtı: ' + (saveRes?.message || 'Devam ediliyor...'), 'info');
+                }
+            } catch (saveErr) {
+                addStatus('YÖKSİS kaydet uyarısı: ' + saveErr.message + '. Tablodaki durum kontrol edilecek...', 'warning');
+            }
+            await new Promise(r => setTimeout(r, 1000));
+        }
+
+        executeYknQueryStep();
+    }
+
+    if (btnYknAutoCycle) {
+        btnYknAutoCycle.addEventListener('click', () => startYknCycleFlow(true));
+    }
+    if (btnYknDirectQuery) {
+        btnYknDirectQuery.addEventListener('click', () => startYknCycleFlow(false));
+    }
+    if (btnStopYknPolling) {
+        btnStopYknPolling.addEventListener('click', () => {
+            stopYknPolling();
+            addStatus('YKN durum sorgulama döngüsü durduruldu.', 'info');
+            showToast('Sorgulama durduruldu.', 'info');
+        });
+    }
+    if (btnPollNow) {
+        btnPollNow.addEventListener('click', () => {
+            if (yknPollingTimer) clearTimeout(yknPollingTimer);
+            if (yknCountdownInterval) clearInterval(yknCountdownInterval);
+            executeYknQueryStep();
+        });
+    }
+    if (btnCopyYkn) {
+        btnCopyYkn.addEventListener('click', () => {
+            if (lastFoundYkn) {
+                copyTextToClipboard(lastFoundYkn);
+                showToast(`YKN Panoya Kopyalandı: ${lastFoundYkn}`, 'success');
+            }
+        });
+    }
+    if (btnFocusYoksis) {
+        btnFocusYoksis.addEventListener('click', () => {
+            postExtensionRequest('FOCUS_YOKSIS_TAB', { requestId: createRequestId('focus') }, 5000);
         });
     }
 

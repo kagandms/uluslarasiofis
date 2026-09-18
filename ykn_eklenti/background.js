@@ -2678,12 +2678,12 @@ async function transferToYoksis(request) {
     });
 }
 
-async function fillYoksisStudentData(studentData, requestId) {
+async function fillYoksisStudentData(studentData, requestId, bringToFront = false) {
     if (studentData?.yoksisReady !== true) {
         throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
     }
 
-    const yoksisTab = await getForegroundYoksisTab();
+    const yoksisTab = bringToFront ? await getForegroundYoksisTab() : await getBackgroundYoksisTab();
     return runYoksisOperation(yoksisTab.id, 'fill', requestId, async () => {
         await saveStudentData(studentData);
         const formReady = await waitForYoksisFormReady(yoksisTab.id, requestId);
@@ -2737,7 +2737,7 @@ async function fillYoksisStudentData(studentData, requestId) {
 async function confirmYoksisReadyForCrop(data, requestId) {
     if (data.yoksisReady === true) return data;
 
-    const yoksisTab = await getForegroundYoksisTab();
+    const yoksisTab = await getBackgroundYoksisTab();
     const state = await getYoksisFormState(yoksisTab.id, requestId);
     if (!state?.fingerprint) {
         throw new Error('YÖKSİS öğrenci formu doğrulanamadı. Kabul kodunu aratıp öğrenci formu açıldıktan sonra tekrar deneyin.');
@@ -3133,6 +3133,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         else if (request.action === 'SYNC_YOKSIS_MAIN_WORLD') {
             sendResponse({ success: true, skipped: true, requestId: request.requestId });
+            return true;
+        }
+        else if (request.action === 'YOKSIS_SAVE_FORM') {
+            (async () => {
+                const yoksisTab = await getBackgroundYoksisTab();
+                await waitForContentScript(yoksisTab.id, 'yoksis');
+                return sendTabMessage(yoksisTab.id, {
+                    action: 'YOKSIS_SAVE_FORM',
+                    requestId: request.requestId
+                });
+            })()
+                .then(sendResponse)
+                .catch((error) => sendResponse({ success: false, requestId: request.requestId, error: error.message }));
+            return true;
+        }
+        else if (request.action === 'YOKSIS_STEP_YKN') {
+            (async () => {
+                const yoksisTab = await getBackgroundYoksisTab();
+                await waitForContentScript(yoksisTab.id, 'yoksis');
+                return sendTabMessage(yoksisTab.id, {
+                    action: 'YOKSIS_STEP_YKN',
+                    studentName: request.studentName,
+                    passportNo: request.passportNo,
+                    requestId: request.requestId
+                });
+            })()
+                .then(sendResponse)
+                .catch((error) => sendResponse({ success: false, requestId: request.requestId, error: error.message }));
+            return true;
+        }
+        else if (request.action === 'FOCUS_YOKSIS_TAB') {
+            getForegroundYoksisTab()
+                .then(() => sendResponse({ success: true, requestId: request.requestId }))
+                .catch((error) => sendResponse({ success: false, requestId: request.requestId, error: error.message }));
             return true;
         }
     }

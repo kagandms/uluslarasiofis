@@ -2548,6 +2548,303 @@ async function encodeBase64(arrayBuffer) {
     return btoa(binary);
 }
 
+// ==========================================
+// YÖKSİS YKN & Kaydetme Otomasyon Fonksiyonları
+// ==========================================
+
+function findYoksisSaveButton() {
+    const allDocs = getAllDocs(document);
+    for (const doc of allDocs) {
+        const clickables = doc.querySelectorAll(getYoksisClickableSelector());
+        for (const candidate of clickables) {
+            if (!isYoksisControlUsable(candidate)) continue;
+            const text = getYoksisClickableText(candidate);
+            if (text === 'kaydet' || text.startsWith('kaydet') || text.includes('ogrencikaydet')) {
+                return getYoksisClickableRoot(candidate);
+            }
+        }
+    }
+    return null;
+}
+
+function findYoksisStudentRows() {
+    const allDocs = getAllDocs(document);
+    for (const doc of allDocs) {
+        const candidateRows = Array.from(doc.querySelectorAll(
+            '.z-grid-body tr.z-row, .z-listbox-body tr.z-listitem, table.z-grid-body tr, table.z-listbox-body tr, tr.z-row, tr.z-listitem'
+        )).filter(row => {
+            if (!isYoksisControlUsable(row)) return false;
+            if (row.closest('.z-columns') || row.closest('.z-listhead') || row.classList.contains('z-columns') || row.classList.contains('z-listhead')) return false;
+            const cells = row.querySelectorAll('td');
+            return cells.length >= 4;
+        });
+
+        if (candidateRows.length > 0) {
+            return candidateRows;
+        }
+    }
+    return [];
+}
+
+function matchStudentInFirstThreeRows(studentName, passportNo) {
+    const rows = findYoksisStudentRows().slice(0, 3);
+    if (rows.length === 0) return null;
+
+    const normName = normalizeYoksisText(studentName || '');
+    const normPassport = normalizeYoksisText(passportNo || '');
+    const nameTokens = (studentName || '').split(/\s+/).map(normalizeYoksisText).filter(t => t.length >= 3);
+
+    let bestRow = null;
+    let highestScore = -1;
+
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowText = normalizeYoksisText(row.innerText || row.textContent || '');
+        let score = 0;
+
+        if (normPassport && normPassport.length >= 4 && rowText.includes(normPassport)) {
+            score += 100;
+        }
+
+        if (normName && normName.length >= 4 && rowText.includes(normName)) {
+            score += 70;
+        } else {
+            for (const token of nameTokens) {
+                if (rowText.includes(token)) score += 25;
+            }
+        }
+
+        if (score > highestScore) {
+            highestScore = score;
+            bestRow = row;
+        }
+    }
+
+    return bestRow || rows[0];
+}
+
+async function selectYoksisTableRow(rowElement) {
+    if (!rowElement) return false;
+    const win = rowElement.ownerDocument?.defaultView || window;
+
+    if (win.zk && win.zk.Widget) {
+        const w = win.zk.Widget.$(rowElement);
+        if (w && typeof w.fire === 'function') {
+            try {
+                w.fire('onClick', null, { toServer: true });
+                w.fire('onSelect', null, { toServer: true });
+            } catch (_) {}
+        }
+    }
+
+    const targetCell = rowElement.querySelector('td:nth-child(3)') || rowElement.querySelector('td:nth-child(2)') || rowElement.querySelector('td') || rowElement;
+    for (const el of [targetCell, rowElement]) {
+        try {
+            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
+            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+        } catch (_) {}
+    }
+
+    return true;
+}
+
+function findYoksisYknActionButtons() {
+    const allDocs = getAllDocs(document);
+    let talepButton = null;
+    let sorgulaButton = null;
+
+    for (const doc of allDocs) {
+        const clickables = doc.querySelectorAll(getYoksisClickableSelector());
+        for (const candidate of clickables) {
+            if (!isYoksisControlUsable(candidate)) continue;
+            const text = getYoksisClickableText(candidate);
+
+            // "YKN Talep Gönder" butonu
+            if (text.includes('talepgonder') || (text.includes('talep') && text.includes('gonder'))) {
+                talepButton = getYoksisClickableRoot(candidate);
+            }
+            // "Durum Sorgula" veya "Durumu Sorgula" butonu
+            else if (text.includes('durumsorgula') || text.includes('durumusorgula') || (text.includes('durum') && text.includes('sorgula'))) {
+                sorgulaButton = getYoksisClickableRoot(candidate);
+            }
+        }
+    }
+
+    return { talepButton, sorgulaButton };
+}
+
+async function waitAndHandleYoksisModal(timeoutMs = 5000) {
+    const deadline = Date.now() + timeoutMs;
+    const allDocs = getAllDocs(document);
+
+    while (Date.now() < deadline) {
+        for (const doc of allDocs) {
+            const modals = doc.querySelectorAll(
+                '.z-window-modal, .z-window-highlighted, .z-messagebox-window, .z-messagebox, [class*="z-window-modal"], [class*="z-window-highlighted"], [class*="z-messagebox"]'
+            );
+            for (const modal of modals) {
+                if (!isYoksisControlUsable(modal)) continue;
+
+                const modalText = (modal.innerText || modal.textContent || '').trim();
+                const buttons = modal.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
+                let confirmBtn = null;
+                for (const btn of buttons) {
+                    if (!isYoksisControlUsable(btn)) continue;
+                    const bTxt = normalizeYoksisText(btn.innerText || btn.textContent || btn.value || '');
+                    if (bTxt.includes('tamam') || bTxt === 'ok' || bTxt.includes('kapat')) {
+                        confirmBtn = getYoksisClickableRoot(btn) || btn;
+                        break;
+                    }
+                }
+
+                if (confirmBtn) {
+                    triggerZkClick(confirmBtn);
+                    try { confirmBtn.click(); } catch (_) {}
+                    return { found: true, text: modalText };
+                } else if (modalText && modalText.length > 5) {
+                    await new Promise(r => setTimeout(r, 200));
+                    const retryButtons = modal.querySelectorAll('button, .z-button, a, input[type="button"]');
+                    for (const rb of retryButtons) {
+                        const rbTxt = normalizeYoksisText(rb.innerText || rb.textContent || rb.value || '');
+                        if (rbTxt.includes('tamam') || rbTxt === 'ok' || rbTxt.includes('kapat')) {
+                            triggerZkClick(rb);
+                            try { rb.click(); } catch (_) {}
+                            return { found: true, text: modalText };
+                        }
+                    }
+                }
+            }
+        }
+        await new Promise(r => setTimeout(r, 250));
+    }
+
+    return { found: false, text: '' };
+}
+
+function parseYknFromText(text) {
+    if (!text || typeof text !== 'string') return null;
+    const ykn99Match = text.match(/\b(99\d{9})\b/);
+    if (ykn99Match) return ykn99Match[1];
+    const yknGeneralMatch = text.match(/(?:ykn|yabancı\s*kimlik|kimlik\s*no|durum)[\s:]*(\d{11})/i);
+    if (yknGeneralMatch) return yknGeneralMatch[1];
+    return null;
+}
+
+function parseGuidFromText(text) {
+    if (!text) return '';
+    const guidMatch = text.match(/(?:takip\s*guid|guid|takip\s*no)[\s:]*([a-zA-Z0-9-]{8,})/i);
+    return guidMatch ? guidMatch[1] : '';
+}
+
+async function executeYoksisSave() {
+    const saveBtn = findYoksisSaveButton();
+    if (!saveBtn) {
+        return { success: false, message: 'YÖKSİS Kaydet butonu ekranda bulunamadı.' };
+    }
+    triggerZkClick(saveBtn);
+    const modal = await waitAndHandleYoksisModal(3000);
+    return {
+        success: true,
+        modalText: modal.text || '',
+        message: 'Kaydet butonuna basıldı.'
+    };
+}
+
+async function executeYoksisYknCycleStep(studentName, passportNo) {
+    const row = matchStudentInFirstThreeRows(studentName, passportNo);
+    if (!row) {
+        return {
+            success: false,
+            status: 'STUDENT_ROW_NOT_FOUND',
+            message: 'YÖKSİS tablosunda ilk 3 satır arasında öğrenci kaydı bulunamadı. Lütfen önce YÖKSİS formunu kaydedin.'
+        };
+    }
+
+    // 1. Tablonun 2. sütununda (YKN alanı) önceden YKN çıkmış mı kontrol et
+    const cells = row.querySelectorAll('td');
+    if (cells.length >= 2) {
+        const tableYkn = (cells[1].innerText || cells[1].textContent || '').trim();
+        if (/^99\d{9}$/.test(tableYkn)) {
+            return {
+                success: true,
+                status: 'YKN_READY',
+                ykn: tableYkn,
+                message: `YKN Tabloda Hazır: ${tableYkn}`
+            };
+        }
+    }
+
+    // 2. Satırı seç (tıkla)
+    await selectYoksisTableRow(row);
+    await new Promise(r => setTimeout(r, 900));
+
+    // 3. Ekranda hangi butonun belirdiğini kontrol et
+    let { talepButton, sorgulaButton } = findYoksisYknActionButtons();
+
+    if (!talepButton && !sorgulaButton) {
+        await selectYoksisTableRow(row);
+        await new Promise(r => setTimeout(r, 1200));
+        const refreshed = findYoksisYknActionButtons();
+        talepButton = refreshed.talepButton;
+        sorgulaButton = refreshed.sorgulaButton;
+    }
+
+    // Senaryo A: "YKN Talep Gönder" butonu var
+    if (talepButton) {
+        triggerZkClick(talepButton);
+        const modal = await waitAndHandleYoksisModal(5000);
+        const modalText = modal.text || 'YKN talebi havuza düştü. İl Göç İdaresi Müdürlüğü tarafından değerlendirilecektir.';
+        const guid = parseGuidFromText(modalText);
+        return {
+            success: true,
+            status: 'TALEP_SENT',
+            guid: guid,
+            message: modalText
+        };
+    }
+
+    // Senaryo B: "Durum Sorgula" butonu var
+    if (sorgulaButton) {
+        triggerZkClick(sorgulaButton);
+        const modal = await waitAndHandleYoksisModal(6000);
+        const modalText = modal.text || '';
+
+        const ykn = parseYknFromText(modalText);
+        if (ykn) {
+            return {
+                success: true,
+                status: 'YKN_READY',
+                ykn: ykn,
+                message: modalText || `YKN: ${ykn}`
+            };
+        }
+
+        const isPending = /ykn\s*bekliyor/i.test(modalText) || /durum:\s*ykn\s*bekliyor/i.test(modalText) || /bekliyor/i.test(modalText) || /takip\s*guid/i.test(modalText);
+        if (isPending) {
+            const guid = parseGuidFromText(modalText);
+            return {
+                success: true,
+                status: 'YKN_PENDING',
+                guid: guid,
+                message: modalText || 'YKN Bekliyor'
+            };
+        }
+
+        return {
+            success: false,
+            status: 'MODAL_INFO',
+            message: modalText || 'Durum sorgulandı.'
+        };
+    }
+
+    return {
+        success: false,
+        status: 'BUTTON_NOT_FOUND',
+        message: 'Öğrenci satırı seçildi ancak "YKN Talep Gönder" veya "Durum Sorgula" butonu belirmedi. Kaydetmenin tamamlandığından emin olun.'
+    };
+}
+
 // Mesaj Dinleyicisi
 if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -3082,6 +3379,22 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
         uploadPhotoToYoksis(request.photoBase64, request.fileName)
             .then(success => sendResponse({ success }))
             .catch(err => sendResponse({ success: false, error: err.message }));
+        return true;
+    }
+
+    else if (request.action === 'YOKSIS_SAVE_FORM') {
+        executeYoksisSave()
+            .then(result => sendResponse({ ...result, requestId: request.requestId }))
+            .catch(err => sendResponse({ success: false, error: err.message, requestId: request.requestId }));
+        return true;
+    }
+
+    else if (request.action === 'YOKSIS_STEP_YKN') {
+        const studentName = request.studentName || '';
+        const passportNo = request.passportNo || '';
+        executeYoksisYknCycleStep(studentName, passportNo)
+            .then(result => sendResponse({ ...result, requestId: request.requestId }))
+            .catch(err => sendResponse({ success: false, error: err.message, requestId: request.requestId }));
         return true;
     }
     
