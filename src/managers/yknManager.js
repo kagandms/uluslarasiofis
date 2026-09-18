@@ -1630,6 +1630,8 @@ export function initYknManager() {
 
                 // Pasaportta veren makam etiketi yoksa ülkenin ISO-3 kodunu kullan.
                 applyCountryDefaultsToStudent(currentStudentData);
+                syncUserEnteredPassportDates();
+                updateMissingFieldsUI();
 
                 // Gerekirse arka planda hedefli OCR (4 zorunlu alan dolana kadar, modalı bekletmez)
                 const hasAllFields = Boolean(
@@ -1712,6 +1714,15 @@ export function initYknManager() {
                                     }
 
                                     applyCountryDefaultsToStudent(currentStudentData);
+                                    syncUserEnteredPassportDates();
+                                    updateMissingFieldsUI();
+
+                                    const cropperIssue = document.getElementById('cropper-input-issue-date');
+                                    const cropperExpiry = document.getElementById('cropper-input-expiry-date');
+                                    const cropperAuth = document.getElementById('cropper-input-authority');
+                                    if (cropperIssue && currentStudentData.issueDate) cropperIssue.value = formatDateForDisplay(currentStudentData.issueDate);
+                                    if (cropperExpiry && currentStudentData.expiryDate) cropperExpiry.value = formatDateForDisplay(currentStudentData.expiryDate);
+                                    if (cropperAuth && currentStudentData.issuingAuthority) cropperAuth.value = currentStudentData.issuingAuthority;
 
                                     const foundItemsOcr = [];
                                     if (currentStudentData.issueDate && currentStudentData.expiryDate) foundItemsOcr.push('tarihler');
@@ -2086,6 +2097,8 @@ export function initYknManager() {
                         currentStudentData.issuingAuthority = meta.issuingAuthority;
                         if (inputIssuingAuthority) inputIssuingAuthority.value = meta.issuingAuthority;
                     }
+                    syncUserEnteredPassportDates();
+                    updateMissingFieldsUI();
                 }
 
                 // 3. Pasaport belgelerini sayfadaki modalda aç

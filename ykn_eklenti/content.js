@@ -424,52 +424,43 @@ function findGenderControls(rootDoc) {
         femaleWrapper: null
     };
 
-    const allLabels = d.querySelectorAll('label, .z-radio-content, .z-radio, span, b, strong');
-    for (const el of allLabels) {
-        if (el.querySelectorAll('input[type="radio"]').length > 1) continue;
-        const t = normalize(el.innerText || el.textContent || '');
-        if (t === 'erkek' || t === 'bay' || t === 'male' || t === 'm') {
-            if (!result.maleLabel || el.tagName === 'LABEL') {
-                result.maleLabel = el;
-                const forId = el.getAttribute('for');
-                let radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
-                if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
-                if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
-                if (radio) {
-                    result.maleRadio = radio;
-                    result.maleWrapper = el.closest?.('.z-radio') || el.parentElement;
-                }
-            }
-        } else if (t === 'kadin' || t === 'bayan' || t === 'female' || t === 'f') {
-            if (!result.femaleLabel || el.tagName === 'LABEL') {
-                result.femaleLabel = el;
-                const forId = el.getAttribute('for');
-                let radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
-                if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
-                if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
-                if (radio) {
-                    result.femaleRadio = radio;
-                    result.femaleWrapper = el.closest?.('.z-radio') || el.parentElement;
-                }
-            }
+    // 1. Cinsiyet etiketini içeren satırı (tr veya div) bul
+    const allLabels = d.querySelectorAll('label, span, td, div, b, strong');
+    let genderRow = null;
+    for (const lbl of allLabels) {
+        const txt = normalize(lbl.innerText || lbl.textContent || '');
+        if (txt === 'cinsiyet' || txt === 'cinsiyeti' || txt === 'gender') {
+            genderRow = lbl.closest('tr') || lbl.closest('.z-row') || lbl.parentElement;
+            if (genderRow) break;
         }
     }
 
-    if (!result.maleRadio || !result.femaleRadio) {
-        const allRadios = d.querySelectorAll('input[type="radio"]');
-        for (const r of allRadios) {
-            const parentText = normalize(r.parentElement ? r.parentElement.innerText : '');
-            const nextText = normalize(r.nextElementSibling ? r.nextElementSibling.innerText : '');
-            const combined = normalize([r.value, r.id, r.name, parentText, nextText].join(' '));
-            if (!result.maleRadio && (combined.includes('erkek') || r.value === 'E' || r.value === '1')) {
-                result.maleRadio = r;
-                result.maleWrapper = r.closest?.('.z-radio') || r.parentElement;
-                if (!result.maleLabel) result.maleLabel = r.nextElementSibling || r.parentElement;
-            } else if (!result.femaleRadio && (combined.includes('kadin') || r.value === 'K' || r.value === '2')) {
-                result.femaleRadio = r;
-                result.femaleWrapper = r.closest?.('.z-radio') || r.parentElement;
-                if (!result.femaleLabel) result.femaleLabel = r.nextElementSibling || r.parentElement;
-            }
+    const scope = genderRow || d;
+    const radios = scope.querySelectorAll('input[type="radio"]');
+    for (const r of radios) {
+        const wrapper = r.closest?.('.z-radio') || r.parentElement;
+        const rText = normalize((wrapper ? (wrapper.innerText || wrapper.textContent) : '') + ' ' + (r.nextElementSibling ? (r.nextElementSibling.innerText || r.nextElementSibling.textContent) : '') + ' ' + (r.id || ''));
+        if (rText.includes('erkek') || rText.includes('male')) {
+            result.maleRadio = r;
+            result.maleWrapper = wrapper;
+            result.maleLabel = wrapper?.querySelector('label, .z-radio-cnt, .z-radio-content') || r.nextElementSibling || wrapper;
+        } else if (rText.includes('kadin') || rText.includes('female')) {
+            result.femaleRadio = r;
+            result.femaleWrapper = wrapper;
+            result.femaleLabel = wrapper?.querySelector('label, .z-radio-cnt, .z-radio-content') || r.nextElementSibling || wrapper;
+        }
+    }
+
+    if (genderRow && radios.length >= 2) {
+        if (!result.maleRadio) {
+            result.maleRadio = radios[0];
+            result.maleWrapper = radios[0].closest?.('.z-radio') || radios[0].parentElement;
+            result.maleLabel = result.maleWrapper?.querySelector('label, .z-radio-cnt, .z-radio-content') || radios[0].nextElementSibling || result.maleWrapper;
+        }
+        if (!result.femaleRadio) {
+            result.femaleRadio = radios[1];
+            result.femaleWrapper = radios[1].closest?.('.z-radio') || radios[1].parentElement;
+            result.femaleLabel = result.femaleWrapper?.querySelector('label, .z-radio-cnt, .z-radio-content') || radios[1].nextElementSibling || result.femaleWrapper;
         }
     }
 
@@ -493,52 +484,44 @@ function findMaritalControls(doc) {
         marriedWrapper: null
     };
 
-    const allLabels = d.querySelectorAll('label, .z-radio-content, .z-radio, span, b, strong');
-    for (const el of allLabels) {
-        if (el.querySelectorAll('input[type="radio"]').length > 1) continue;
-        const t = normalize(el.innerText || el.textContent || '');
-        if (t === 'bekar' || t === 'single' || t === 'b') {
-            if (!result.singleLabel || el.tagName === 'LABEL') {
-                result.singleLabel = el;
-                const forId = el.getAttribute('for');
-                let radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
-                if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
-                if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
-                if (radio) {
-                    result.singleRadio = radio;
-                    result.singleWrapper = el.closest?.('.z-radio') || el.parentElement;
-                }
-            }
-        } else if (t === 'evli' || t === 'married' || t === 'e') {
-            if (!result.marriedLabel || el.tagName === 'LABEL') {
-                result.marriedLabel = el;
-                const forId = el.getAttribute('for');
-                let radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
-                if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
-                if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
-                if (radio) {
-                    result.marriedRadio = radio;
-                    result.marriedWrapper = el.closest?.('.z-radio') || el.parentElement;
-                }
-            }
+    // 1. Medeni Hali etiketini içeren satırı (tr veya div) bul
+    const allLabels = d.querySelectorAll('label, span, td, div, b, strong');
+    let maritalRow = null;
+    for (const lbl of allLabels) {
+        const txt = normalize(lbl.innerText || lbl.textContent || '');
+        if (txt === 'medenihali' || txt === 'medenihal' || txt === 'maritalstatus') {
+            maritalRow = lbl.closest('tr') || lbl.closest('.z-row') || lbl.parentElement;
+            if (maritalRow) break;
         }
     }
 
-    if (!result.singleRadio || !result.marriedRadio) {
-        const allRadios = d.querySelectorAll('input[type="radio"]');
-        for (const r of allRadios) {
-            const parentText = normalize(r.parentElement ? r.parentElement.innerText : '');
-            const nextText = normalize(r.nextElementSibling ? r.nextElementSibling.innerText : '');
-            const combined = normalize([r.value, r.id, r.name, parentText, nextText].join(' '));
-            if (!result.singleRadio && (combined.includes('bekar') || r.value === 'B' || r.value === '1')) {
-                result.singleRadio = r;
-                result.singleWrapper = r.closest?.('.z-radio') || r.parentElement;
-                if (!result.singleLabel) result.singleLabel = r.nextElementSibling || r.parentElement;
-            } else if (!result.marriedRadio && (combined.includes('evli') || r.value === 'E' || r.value === '2')) {
-                result.marriedRadio = r;
-                result.marriedWrapper = r.closest?.('.z-radio') || r.parentElement;
-                if (!result.marriedLabel) result.marriedLabel = r.nextElementSibling || r.parentElement;
-            }
+    const scope = maritalRow || d;
+    const radios = scope.querySelectorAll('input[type="radio"]');
+    for (const r of radios) {
+        const wrapper = r.closest?.('.z-radio') || r.parentElement;
+        const rText = normalize((wrapper ? (wrapper.innerText || wrapper.textContent) : '') + ' ' + (r.nextElementSibling ? (r.nextElementSibling.innerText || r.nextElementSibling.textContent) : '') + ' ' + (r.id || ''));
+        if (rText.includes('bekar') || rText.includes('single')) {
+            result.singleRadio = r;
+            result.singleWrapper = wrapper;
+            result.singleLabel = wrapper?.querySelector('label, .z-radio-cnt, .z-radio-content') || r.nextElementSibling || wrapper;
+        } else if (rText.includes('evli') || rText.includes('married')) {
+            result.marriedRadio = r;
+            result.marriedWrapper = wrapper;
+            result.marriedLabel = wrapper?.querySelector('label, .z-radio-cnt, .z-radio-content') || r.nextElementSibling || wrapper;
+        }
+    }
+
+    // YÖKSİS standardında 1. radyo Bekar, 2. radyo Evli'dir
+    if (maritalRow && radios.length >= 2) {
+        if (!result.singleRadio) {
+            result.singleRadio = radios[0];
+            result.singleWrapper = radios[0].closest?.('.z-radio') || radios[0].parentElement;
+            result.singleLabel = result.singleWrapper?.querySelector('label, .z-radio-cnt, .z-radio-content') || radios[0].nextElementSibling || result.singleWrapper;
+        }
+        if (!result.marriedRadio) {
+            result.marriedRadio = radios[1];
+            result.marriedWrapper = radios[1].closest?.('.z-radio') || radios[1].parentElement;
+            result.marriedLabel = result.marriedWrapper?.querySelector('label, .z-radio-cnt, .z-radio-content') || radios[1].nextElementSibling || result.marriedWrapper;
         }
     }
 
@@ -585,7 +568,7 @@ function simulateRadioByLabelText(labelText) {
                 ? (isMale ? ctrl.femaleWrapper : ctrl.maleWrapper)
                 : (isBekar ? ctrl.marriedWrapper : ctrl.singleWrapper);
 
-            if (targetRadio || targetLabel) {
+            if (targetRadio || targetLabel || targetWrapper) {
                 if (oppRadio) {
                     oppRadio.checked = false;
                 }
@@ -593,9 +576,10 @@ function simulateRadioByLabelText(labelText) {
                     oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
                 }
 
-                if (targetLabel) simulateUserClick(targetLabel);
-                else if (targetWrapper) simulateUserClick(targetWrapper);
-                else if (targetRadio) simulateUserClick(targetRadio);
+                const clickTarget = targetRadio || targetLabel || targetWrapper;
+                if (clickTarget) {
+                    simulateUserClick(clickTarget);
+                }
 
                 if (targetRadio) {
                     targetRadio.checked = true;

@@ -1986,54 +1986,44 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             femaleWrapper: null
                         };
 
-                        var allLabels = d.querySelectorAll('label, .z-radio-content, .z-radio, span, b, strong');
+                        // 1. Cinsiyet etiketini içeren satırı (tr veya div) bul
+                        var allLabels = d.querySelectorAll('label, span, td, div, b, strong');
+                        var genderRow = null;
                         for (var i = 0; i < allLabels.length; i++) {
-                            var el = allLabels[i];
-                            if (el.querySelectorAll('input[type="radio"]').length > 1) continue;
-                            var t = norm(el.innerText || el.textContent || '');
-                            if (t === 'erkek' || t === 'bay' || t === 'male' || t === 'm') {
-                                if (!result.maleLabel || el.tagName === 'LABEL') {
-                                    result.maleLabel = el;
-                                    var forId = el.getAttribute && el.getAttribute('for');
-                                    var radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
-                                    if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
-                                    if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
-                                    if (radio) {
-                                        result.maleRadio = radio;
-                                        result.maleWrapper = el.closest ? el.closest('.z-radio') : el.parentElement;
-                                    }
-                                }
-                            } else if (t === 'kadin' || t === 'bayan' || t === 'female' || t === 'f') {
-                                if (!result.femaleLabel || el.tagName === 'LABEL') {
-                                    result.femaleLabel = el;
-                                    var forId = el.getAttribute && el.getAttribute('for');
-                                    var radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
-                                    if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
-                                    if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
-                                    if (radio) {
-                                        result.femaleRadio = radio;
-                                        result.femaleWrapper = el.closest ? el.closest('.z-radio') : el.parentElement;
-                                    }
-                                }
+                            var txt = norm(allLabels[i].innerText || allLabels[i].textContent || '');
+                            if (txt === 'cinsiyet' || txt === 'cinsiyeti' || txt === 'gender') {
+                                genderRow = allLabels[i].closest('tr') || allLabels[i].closest('.z-row') || allLabels[i].parentElement;
+                                if (genderRow) break;
                             }
                         }
 
-                        if (!result.maleRadio || !result.femaleRadio) {
-                            var allRadios = d.querySelectorAll('input[type="radio"]');
-                            for (var j = 0; j < allRadios.length; j++) {
-                                var r = allRadios[j];
-                                var parentText = norm(r.parentElement ? r.parentElement.innerText : '');
-                                var nextText = norm(r.nextElementSibling ? r.nextElementSibling.innerText : '');
-                                var combined = norm([r.value, r.id, r.name, parentText, nextText].join(' '));
-                                if (!result.maleRadio && (combined.indexOf('erkek') !== -1 || r.value === 'E' || r.value === '1')) {
-                                    result.maleRadio = r;
-                                    result.maleWrapper = r.closest ? r.closest('.z-radio') : r.parentElement;
-                                    if (!result.maleLabel) result.maleLabel = r.nextElementSibling || r.parentElement;
-                                } else if (!result.femaleRadio && (combined.indexOf('kadin') !== -1 || r.value === 'K' || r.value === '2')) {
-                                    result.femaleRadio = r;
-                                    result.femaleWrapper = r.closest ? r.closest('.z-radio') : r.parentElement;
-                                    if (!result.femaleLabel) result.femaleLabel = r.nextElementSibling || r.parentElement;
-                                }
+                        var scope = genderRow || d;
+                        var radios = scope.querySelectorAll('input[type="radio"]');
+                        for (var j = 0; j < radios.length; j++) {
+                            var r = radios[j];
+                            var wrapper = r.closest ? r.closest('.z-radio') : r.parentElement;
+                            var rText = norm((wrapper ? (wrapper.innerText || wrapper.textContent) : '') + ' ' + (r.nextElementSibling ? (r.nextElementSibling.innerText || r.nextElementSibling.textContent) : '') + ' ' + (r.id || ''));
+                            if (rText.indexOf('erkek') !== -1 || rText.indexOf('male') !== -1) {
+                                result.maleRadio = r;
+                                result.maleWrapper = wrapper;
+                                result.maleLabel = (wrapper ? wrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || r.nextElementSibling || wrapper;
+                            } else if (rText.indexOf('kadin') !== -1 || rText.indexOf('female') !== -1) {
+                                result.femaleRadio = r;
+                                result.femaleWrapper = wrapper;
+                                result.femaleLabel = (wrapper ? wrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || r.nextElementSibling || wrapper;
+                            }
+                        }
+
+                        if (genderRow && radios.length >= 2) {
+                            if (!result.maleRadio) {
+                                result.maleRadio = radios[0];
+                                result.maleWrapper = radios[0].closest ? radios[0].closest('.z-radio') : radios[0].parentElement;
+                                result.maleLabel = (result.maleWrapper ? result.maleWrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || radios[0].nextElementSibling || result.maleWrapper;
+                            }
+                            if (!result.femaleRadio) {
+                                result.femaleRadio = radios[1];
+                                result.femaleWrapper = radios[1].closest ? radios[1].closest('.z-radio') : radios[1].parentElement;
+                                result.femaleLabel = (result.femaleWrapper ? result.femaleWrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || radios[1].nextElementSibling || result.femaleWrapper;
                             }
                         }
 
@@ -2051,54 +2041,45 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             marriedWrapper: null
                         };
 
-                        var allLabels = d.querySelectorAll('label, .z-radio-content, .z-radio, span, b, strong');
+                        // 1. Medeni Hali etiketini içeren satırı (tr veya div) bul
+                        var allLabels = d.querySelectorAll('label, span, td, div, b, strong');
+                        var maritalRow = null;
                         for (var i = 0; i < allLabels.length; i++) {
-                            var el = allLabels[i];
-                            if (el.querySelectorAll('input[type="radio"]').length > 1) continue;
-                            var t = norm(el.innerText || el.textContent || '');
-                            if (t === 'bekar' || t === 'single' || t === 'b') {
-                                if (!result.singleLabel || el.tagName === 'LABEL') {
-                                    result.singleLabel = el;
-                                    var forId = el.getAttribute && el.getAttribute('for');
-                                    var radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
-                                    if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
-                                    if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
-                                    if (radio) {
-                                        result.singleRadio = radio;
-                                        result.singleWrapper = el.closest ? el.closest('.z-radio') : el.parentElement;
-                                    }
-                                }
-                            } else if (t === 'evli' || t === 'married' || t === 'e') {
-                                if (!result.marriedLabel || el.tagName === 'LABEL') {
-                                    result.marriedLabel = el;
-                                    var forId = el.getAttribute && el.getAttribute('for');
-                                    var radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
-                                    if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
-                                    if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
-                                    if (radio) {
-                                        result.marriedRadio = radio;
-                                        result.marriedWrapper = el.closest ? el.closest('.z-radio') : el.parentElement;
-                                    }
-                                }
+                            var txt = norm(allLabels[i].innerText || allLabels[i].textContent || '');
+                            if (txt === 'medenihali' || txt === 'medenihal' || txt === 'maritalstatus') {
+                                maritalRow = allLabels[i].closest('tr') || allLabels[i].closest('.z-row') || allLabels[i].parentElement;
+                                if (maritalRow) break;
                             }
                         }
 
-                        if (!result.singleRadio || !result.marriedRadio) {
-                            var allRadios = d.querySelectorAll('input[type="radio"]');
-                            for (var j = 0; j < allRadios.length; j++) {
-                                var r = allRadios[j];
-                                var parentText = norm(r.parentElement ? r.parentElement.innerText : '');
-                                var nextText = norm(r.nextElementSibling ? r.nextElementSibling.innerText : '');
-                                var combined = norm([r.value, r.id, r.name, parentText, nextText].join(' '));
-                                if (!result.singleRadio && (combined.indexOf('bekar') !== -1 || r.value === 'B' || r.value === '1')) {
-                                    result.singleRadio = r;
-                                    result.singleWrapper = r.closest ? r.closest('.z-radio') : r.parentElement;
-                                    if (!result.singleLabel) result.singleLabel = r.nextElementSibling || r.parentElement;
-                                } else if (!result.marriedRadio && (combined.indexOf('evli') !== -1 || r.value === 'E' || r.value === '2')) {
-                                    result.marriedRadio = r;
-                                    result.marriedWrapper = r.closest ? r.closest('.z-radio') : r.parentElement;
-                                    if (!result.marriedLabel) result.marriedLabel = r.nextElementSibling || r.parentElement;
-                                }
+                        var scope = maritalRow || d;
+                        var radios = scope.querySelectorAll('input[type="radio"]');
+                        for (var j = 0; j < radios.length; j++) {
+                            var r = radios[j];
+                            var wrapper = r.closest ? r.closest('.z-radio') : r.parentElement;
+                            var rText = norm((wrapper ? (wrapper.innerText || wrapper.textContent) : '') + ' ' + (r.nextElementSibling ? (r.nextElementSibling.innerText || r.nextElementSibling.textContent) : '') + ' ' + (r.id || ''));
+                            if (rText.indexOf('bekar') !== -1 || rText.indexOf('single') !== -1) {
+                                result.singleRadio = r;
+                                result.singleWrapper = wrapper;
+                                result.singleLabel = (wrapper ? wrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || r.nextElementSibling || wrapper;
+                            } else if (rText.indexOf('evli') !== -1 || rText.indexOf('married') !== -1) {
+                                result.marriedRadio = r;
+                                result.marriedWrapper = wrapper;
+                                result.marriedLabel = (wrapper ? wrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || r.nextElementSibling || wrapper;
+                            }
+                        }
+
+                        // YÖKSİS standardında 1. radyo Bekar, 2. radyo Evli'dir
+                        if (maritalRow && radios.length >= 2) {
+                            if (!result.singleRadio) {
+                                result.singleRadio = radios[0];
+                                result.singleWrapper = radios[0].closest ? radios[0].closest('.z-radio') : radios[0].parentElement;
+                                result.singleLabel = (result.singleWrapper ? result.singleWrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || radios[0].nextElementSibling || result.singleWrapper;
+                            }
+                            if (!result.marriedRadio) {
+                                result.marriedRadio = radios[1];
+                                result.marriedWrapper = radios[1].closest ? radios[1].closest('.z-radio') : radios[1].parentElement;
+                                result.marriedLabel = (result.marriedWrapper ? result.marriedWrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || radios[1].nextElementSibling || result.marriedWrapper;
                             }
                         }
 
@@ -2142,7 +2123,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                     ? (isMale ? ctrl.femaleWrapper : ctrl.maleWrapper)
                                     : (isBekar ? ctrl.marriedWrapper : ctrl.singleWrapper);
 
-                                if (targetRadio || targetLabel) {
+                                if (targetRadio || targetLabel || targetWrapper) {
                                     // 1. Karşı radyo butonunu temizle
                                     if (oppRadio) {
                                         oppRadio.checked = false;
@@ -2155,18 +2136,13 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                         oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
                                     }
 
-                                    // 2. Hedef radyo butonunu ZK Widget API'si ile bağla
-                                    var w = null;
-                                    try {
-                                        if (win.zk && win.zk.Widget) {
-                                            w = (targetRadio ? win.zk.Widget.$(targetRadio) : null)
-                                                || (targetRadio && targetRadio.id ? win.zk.Widget.$(targetRadio.id.replace(/-real$/, '')) : null)
-                                                || (targetLabel ? win.zk.Widget.$(targetLabel) : null)
-                                                || (targetWrapper ? win.zk.Widget.$(targetWrapper) : null);
-                                        }
-                                    } catch (_) {}
+                                    // 2. Doğal kullanıcı tıklamasını yap (önce click ki tarayıcı ve ZK olayı yakalasın)
+                                    var clickTarget = targetRadio || targetLabel || targetWrapper;
+                                    if (clickTarget) {
+                                        triggerUserClick(clickTarget);
+                                    }
 
-                                    // 3. Hedef radyo butonunu DOM'da aktif yap
+                                    // 3. DOM ve CSS durumunu zorla garanti et
                                     if (targetRadio) {
                                         targetRadio.checked = true;
                                     }
@@ -2174,12 +2150,22 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                         targetWrapper.classList.add('z-radio-checked');
                                     }
 
-                                    // 4. ZK sunucusuna tek ve temiz onCheck AU bildirimi gönder
+                                    // 4. ZK Widget API ve AU Kanalı ile sunucuya bildir
+                                    var w = null;
+                                    try {
+                                        if (win.zk && win.zk.Widget) {
+                                            w = (targetRadio ? win.zk.Widget.$(targetRadio) : null)
+                                                || (targetRadio && targetRadio.id ? win.zk.Widget.$(targetRadio.id.replace(/-real$/, '')) : null)
+                                                || (targetWrapper ? win.zk.Widget.$(targetWrapper) : null)
+                                                || (targetLabel ? win.zk.Widget.$(targetLabel) : null);
+                                        }
+                                    } catch (_) {}
+
                                     if (w) {
                                         try {
-                                            var rg = typeof w.getRadiogroup === 'function' ? w.getRadiogroup() : (w.parent || null);
                                             if (typeof w.setChecked === 'function') w.setChecked(true);
                                             if (typeof w.setSelected === 'function') w.setSelected(true);
+                                            var rg = typeof w.getRadiogroup === 'function' ? w.getRadiogroup() : (w.parent || null);
                                             if (rg && typeof rg.setSelectedItem === 'function') rg.setSelectedItem(w);
 
                                             if (typeof w.fire === 'function') {
@@ -2197,16 +2183,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                         } catch (_) {}
                                     }
 
-                                    // 5. Doğal kullanıcı tıklamasını tetikle (etikete veya wrapper'a)
-                                    if (targetLabel) {
-                                        triggerUserClick(targetLabel);
-                                    } else if (targetWrapper) {
-                                        triggerUserClick(targetWrapper);
-                                    } else if (targetRadio) {
-                                        triggerUserClick(targetRadio);
-                                    }
-
-                                    // 6. Standart ve jQuery eventlerini tetikle
+                                    // 5. Standart Eventler
                                     if (targetRadio) {
                                         try { targetRadio.dispatchEvent(new win.Event('input', { bubbles: true })); } catch (_) {}
                                         try { targetRadio.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (_) {}
