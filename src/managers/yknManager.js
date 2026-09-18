@@ -619,6 +619,13 @@ export function initYknManager() {
     const processedAcceptanceDocumentKeys = new Set();
     const buttonActionTimers = new Map();
 
+    // YKN Talep ve Arka Plan Durum Sorgulama (Polling) State
+    let yknPollingActive = false;
+    let yknPollingTimer = null;
+    let yknCountdownInterval = null;
+    let yknAttemptCount = 0;
+    let lastFoundYkn = '';
+
     const ONE_CLICK_STAGE = Object.freeze({
         ACCEPTANCE_READING: 'ACCEPTANCE_READING',
         YOKSIS_SEARCHING: 'YOKSIS_SEARCHING',
@@ -2251,12 +2258,6 @@ export function initYknManager() {
     // ==========================================
     // YKN Talep ve Arka Plan Durum Sorgulama (Polling)
     // ==========================================
-    let yknPollingActive = false;
-    let yknPollingTimer = null;
-    let yknCountdownInterval = null;
-    let yknAttemptCount = 0;
-    let lastFoundYkn = '';
-
     function stopYknPolling() {
         yknPollingActive = false;
         if (yknPollingTimer) clearTimeout(yknPollingTimer);
