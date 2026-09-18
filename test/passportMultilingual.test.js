@@ -451,3 +451,119 @@ test('Date parsing: Portuguese, Spanish, Italian, and Central Asian month names'
     assert.equal(extParser.parseDateValue('12 ýanwar 2022'), '2022-01-12');
 });
 
+test('Pakistani passport place of birth and authority extraction', () => {
+    const pakPass1 = `GOVERNMENT OF PAKISTAN
+PASSPORT
+Place of Birth: RAWALPINDI, PAKISTAN
+Issuing Authority: DGIP
+Date of Issue: 15/08/2020
+Date of Expiry: 14/08/2030`;
+
+    assert.equal(extractPassportPlaceOfBirth(pakPass1), 'RAWALPINDI');
+    assert.equal(extractPassportIssuingAuthority(pakPass1), 'DGIP');
+    assert.equal(extParser.extractPassportPlaceOfBirth(pakPass1), 'RAWALPINDI');
+    assert.equal(extParser.extractPassportIssuingAuthority(pakPass1), 'DGIP');
+
+    const pakPass2 = `ISLAMIC REPUBLIC OF PAKISTAN
+Country of Birth / Place of Birth: PAKISTAN / LAHORE
+Authority: REGIONAL PASSPORT OFFICE LAHORE
+Date of Issue: 10 JAN 2021
+Date of Expiry: 09 JAN 2031`;
+
+    assert.equal(extractPassportPlaceOfBirth(pakPass2), 'LAHORE');
+    assert.equal(extractPassportIssuingAuthority(pakPass2), 'REGIONAL PASSPORT OFFICE LAHORE');
+    assert.equal(extParser.extractPassportPlaceOfBirth(pakPass2), 'LAHORE');
+    assert.equal(extParser.extractPassportIssuingAuthority(pakPass2), 'REGIONAL PASSPORT OFFICE LAHORE');
+
+    const pakPass3 = `PAKISTAN PASSPORT
+Place of Birth: KARACHI
+Issuing Authority: IM&P`;
+
+    assert.equal(extractPassportPlaceOfBirth(pakPass3), 'KARACHI');
+    assert.equal(extractPassportIssuingAuthority(pakPass3), 'IM&P');
+    assert.equal(extParser.extractPassportPlaceOfBirth(pakPass3), 'KARACHI');
+    assert.equal(extParser.extractPassportIssuingAuthority(pakPass3), 'IM&P');
+
+    // Pakistani authority and birth place fallbacks
+    const fallbackAuth = extractPassportIssuingAuthority('', { uyruk: 'PAKISTAN' });
+    assert.equal(fallbackAuth, 'DGIP');
+    const extFallbackAuth = extParser.extractPassportIssuingAuthority('', { uyruk: 'PAKISTAN' });
+    assert.equal(extFallbackAuth, 'DGIP');
+
+    const fallbackPob = extractPassportPlaceOfBirth('PAKISTAN PASSPORT HOLDER BORN IN ISLAMABAD', { uyruk: 'PAKISTAN' });
+    assert.equal(fallbackPob, 'ISLAMABAD');
+});
+
+test('Afghan passport place of birth and authority extraction (Dari, Pashto, English)', () => {
+    const afgPass1 = `ISLAMIC REPUBLIC OF AFGHANISTAN
+د زیږیدنې ځای / محل تولد / Place of Birth: KABUL
+مرجع صدور / د صادرولو مرجع / Issuing Authority: PASSPORT DEPARTMENT
+Date of Issue: 01/01/2022
+Date of Expiry: 31/12/2026`;
+
+    assert.equal(extractPassportPlaceOfBirth(afgPass1), 'KABUL');
+    assert.equal(extractPassportIssuingAuthority(afgPass1), 'PASSPORT DEPARTMENT');
+    assert.equal(extParser.extractPassportPlaceOfBirth(afgPass1), 'KABUL');
+    assert.equal(extParser.extractPassportIssuingAuthority(afgPass1), 'PASSPORT DEPARTMENT');
+
+    // RTL Dari / Pashto with city before label
+    const afgPassRtl = `د افغانستان اسلامي جمهوریت
+کابل د زیږیدنې ځای
+د پاسپورت ریاست`;
+
+    assert.equal(extractPassportPlaceOfBirth(afgPassRtl), 'KABUL');
+    assert.equal(extractPassportIssuingAuthority(afgPassRtl), 'PASSPORT DEPARTMENT');
+    assert.equal(extParser.extractPassportPlaceOfBirth(afgPassRtl), 'KABUL');
+    assert.equal(extParser.extractPassportIssuingAuthority(afgPassRtl), 'PASSPORT DEPARTMENT');
+
+    // Afghan city mapped from Dari
+    const afgPassHerat = `محل تولد: هرات
+مرجع صدور: وزارت امور داخله`;
+
+    assert.equal(extractPassportPlaceOfBirth(afgPassHerat), 'HERAT');
+    assert.equal(extractPassportIssuingAuthority(afgPassHerat), 'MINISTRY OF INTERIOR');
+    assert.equal(extParser.extractPassportPlaceOfBirth(afgPassHerat), 'HERAT');
+    assert.equal(extParser.extractPassportIssuingAuthority(afgPassHerat), 'MINISTRY OF INTERIOR');
+
+    // Fallback Afghan authority
+    assert.equal(extractPassportIssuingAuthority('', { nationality: 'AFGHANISTAN' }), 'PASSPORT DEPARTMENT');
+    assert.equal(extParser.extractPassportIssuingAuthority('', { nationality: 'AFGHANISTAN' }), 'PASSPORT DEPARTMENT');
+});
+
+test('Russian and CIS passport place of birth and authority optimizations', () => {
+    // Biometric passport with USSR country code: should extract SAMARA, not USSR
+    const rusPass1 = `РОССИЙСКАЯ ФЕДЕРАЦИЯ / RUSSIAN FEDERATION
+МЕСТО РОЖДЕНИЯ / PLACE OF BIRTH
+Г. САМАРА / USSR
+ОРГАН ВЫДАЧИ / ISSUING AUTHORITY: УФМС 50001`;
+
+    assert.equal(extractPassportPlaceOfBirth(rusPass1), 'САМАРА');
+    assert.equal(extractPassportIssuingAuthority(rusPass1), 'УФМС 50001');
+    assert.equal(extParser.extractPassportPlaceOfBirth(rusPass1), 'САМАРА');
+    assert.equal(extParser.extractPassportIssuingAuthority(rusPass1), 'УФМС 50001');
+
+    // Biometric passport with RUSSIA country code: should extract МОСКВА, not RUSSIA
+    const rusPass2 = `РОССИЙСКАЯ ФЕДЕРАЦИЯ
+МЕСТО РОЖДЕНИЯ / PLACE OF BIRTH: Г. МОСКВА / RUSSIA
+ОРГАН ВЫДАЧИ: ГУВМ МВД РОССИИ`;
+
+    assert.equal(extractPassportPlaceOfBirth(rusPass2), 'МОСКВА');
+    assert.equal(extractPassportIssuingAuthority(rusPass2), 'ГУВМ МВД РОССИИ');
+    assert.equal(extParser.extractPassportPlaceOfBirth(rusPass2), 'МОСКВА');
+    assert.equal(extParser.extractPassportIssuingAuthority(rusPass2), 'ГУВМ МВД РОССИИ');
+
+    // Cyrillic administrative prefix stripped
+    const rusPass3 = `МЕСТО РОЖДЕНИЯ: ГОР. КАЗАНЬ
+ОРГАН ВЫДАЧИ: МВД 77001 / MIA 77001`;
+
+    assert.equal(extractPassportPlaceOfBirth(rusPass3), 'КАЗАНЬ');
+    assert.equal(extractPassportIssuingAuthority(rusPass3), 'MIA 77001');
+    assert.equal(extParser.extractPassportPlaceOfBirth(rusPass3), 'КАЗАНЬ');
+    assert.equal(extParser.extractPassportIssuingAuthority(rusPass3), 'MIA 77001');
+
+    // Fallback Russian authority
+    assert.equal(extractPassportIssuingAuthority('', { uyruk: 'RUSYA' }), 'MIA OF RUSSIA');
+    assert.equal(extParser.extractPassportIssuingAuthority('', { uyruk: 'RUSYA' }), 'MIA OF RUSSIA');
+});
+
+

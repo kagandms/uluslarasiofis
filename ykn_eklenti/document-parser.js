@@ -601,38 +601,59 @@
     }
 
     const POB_LABELS = [
-        // English
-        'place of birth', 'birth place', 'place of origin', 'pob', 'city of birth', 'town of birth', 'country / place of birth',
+        // English / Commonwealth / Pakistan
+        'place of birth', 'birth place', 'city of birth', 'town of birth', 'village of birth', 'district of birth',
+        'place of origin', 'pob', 'country / place of birth', 'place of birth / country of birth',
+        'country of birth / place of birth', 'place / country of birth', 'country / city of birth',
+        'place and country of birth', 'place & country of birth', 'country of birth', 'district', 'domicile',
         // French
-        'lieu de naissance', 'lieu d\'origine', 'lieu d origine', 'lieu naissance',
+        'lieu de naissance', 'lieu d\'origine', 'lieu d origine', 'lieu naissance', 'place/lieu de naissance',
         // Turkish / Azeri
         'doğum yeri', 'dogum yeri', 'doğduğu yer', 'dogdugu yer', 'doğulduğu yer', 'doguldugu yer',
-        // Arabic / Persian / Urdu
+        // Afghan Pashto
+        'د زیږیدنې ځای', 'د زیږیدنی ځای', 'د زېږېدو ځای', 'د زیږیدو ځای', 'د تولد ځای', 'د زوکړې ځای', 'د زوکړی ځای', 'د زېږېدنې ځای',
+        // Afghan Dari / Persian
+        'محل تولد', 'محل پیدایش', 'مكان تولد', 'مكان پیدایش', 'ولایت تولد', 'زادگاه',
+        // Combined Afghan / Dari / Pashto
+        'د زیږیدنې ځای / محل تولد', 'محل تولد / د زیږیدنې ځای',
+        // Urdu / Pakistan
+        'مقام پیدائش', 'جائے پیدائش', 'پیدائش کا مقام', 'جای پیدائش',
+        // Arabic
         'مكان الميلاد', 'محل الميلاد', 'مكان الولادة', 'محل الولادة', 'مكان الازدياد', 'مكان الإزدياد',
         'محل الازدياد', 'مكان وتاريخ الميلاد', 'مكان وتاريخ الولادة', 'تاريخ ومكان الميلاد', 'تاريخ ومكان الولادة',
-        'محل وتاريخ الولادة', 'محل وتاريخ الميلاد', 'محل تولد', 'محل ولادت', 'مقام پیدائش',
+        'محل وتاريخ الولادة', 'محل وتاريخ الميلاد',
         // Russian / Cyrillic
-        'место рождения', 'место рожд', 'туған жері', 'туған жер', 'туган жери', 'туулган жери',
+        'место рождения', 'место рождения / place of birth', 'место рожд.', 'место рожд', 'место рождения / lieu de naissance',
+        'место и дата рождения', 'дата и место рождения',
+        'туған жері', 'туған жер', 'туған жері / place of birth', 'туган жери', 'туулган жери',
         'ҷои таваллуд', 'чои таваллуд', 'ҷойи таваллуд', 'туғилган жойи', 'доглан йери', 'доглан ери',
         'місце народження', 'места нараджэння', 'место на раждане', 'место на раждање',
         // Uzbek / Turkmen Latin
         'tug\'ilgan joyi', 'tugilgan joyi', 'tug\'ilgan joy', 'doglan ýeri', 'doglan yeri',
         // Other European / African
-        'geburtsort', 'lugar de nacimiento', 'local de nascimento', 'luogo di nascita', 'goobta dhallashada', 'goobta dhalashada'
+        'geburtsort', 'lugar de nacimiento', 'lugar y fecha de nacimiento', 'local de nascimento', 'luogo di nascita',
+        'goobta dhallashada', 'goobta dhalashada'
     ];
 
     const POB_STOP_WORDS = [
+        // English
         'date of birth', 'date of issue', 'date of expiry', 'date', 'issue', 'issuing', 'expiry', 'expiration', 'valid until', 'valid', 'sex', 'gender', 'authority', 'issued by', 'signature', 'nationality', 'national',
+        // French
         'date de naissance', 'date de délivrance', 'date de delivrance', 'date d\'expiration', 'date d expiration', 'date', 'sexe', 'autorité', 'autorite', 'delivre par', 'signature', 'nationalité', 'nationalite',
+        // Turkish
         'doğum tarihi', 'dogum tarihi', 'veriliş tarihi', 'verilis tarihi', 'tanzim tarihi', 'geçerlilik tarihi', 'gecerlilik tarihi', 'son geçerlilik', 'tarih', 'tarihi', 'cinsiyet', 'veren makam', 'makam', 'imza', 'uyruk', 'uyruğu',
+        // Russian
         'дата рождения', 'дата выдачи', 'срок действия', 'действителен до', 'дата', 'пол', 'орган выдачи', 'кем выдан', 'подпись', 'гражданство', 'национальность',
+        // Arabic / Dari / Pashto
         'تاريخ الميلاد', 'تاريخ الاصدار', 'تاريخ الإصدار', 'تاريخ الصدور', 'تاريخ الانتهاء', 'تاريخ النفاذ', 'تاريخ', 'الجنس', 'النوع', 'المهنة', 'السلطة', 'الجهة', 'الرقم الوطني', 'الرقم القومي', 'الجنسية', 'التوقيع', 'حامل',
+        // Other Turkic/Cyrillic
         'amal', 'sana', 'sanasi', 'beril', 'berilgan', 'qoldanylu', 'mohleti', 'möhleti', 'etibarliliq', 'jynsy', 'jinsi'
     ];
 
     const AUTHORITY_LABELS = [
-        // English
+        // English / Pakistan / Commonwealth
         'issuing authority', 'issuing office', 'office of issue', 'place of issue', 'issued by', 'authority', 'passport office',
+        'regional passport office', 'rpo',
         'issuing state', 'issuing post', 'issuing country', 'issuing government',
         // French
         'autorité de délivrance', 'autorite de delivrance', 'autorité', 'autorite', 'délivré par', 'delivre par', 'lieu de délivrance', 'lieu de delivrance',
@@ -640,17 +661,28 @@
         // Turkish / Azeri
         'belgeyi veren makam', 'pasaportu veren makam', 'tanzim eden makam', 'düzenleyen makam', 'duzenleyen makam', 'veren makam', 'verildiği yer', 'verildigi yer',
         'verən makam', 'verən orqan', 'tərtib edən orqan',
-        // Arabic / Persian / Urdu
+        // Afghan Pashto
+        'د صادرولو مرجع', 'د صادرولو ځای', 'د ورکړې مرجع', 'د ورکړی ځای', 'د ورکړې ځای', 'صادرونکی اداره', 'اداره صادر کننده',
+        // Afghan Dari / Persian
+        'مرجع صادر کننده', 'مرجع صادرکننده', 'مرجع صدور', 'مقام صدور', 'اداره صادر کننده', 'اداره صادرکننده', 'محل صدور',
+        // Combined Afghan
+        'مرجع صدور / د صادرولو مرجع / issuing authority', 'مرجع صدور / د صادرولو مرجع', 'د صادرولو ځای / مرجع صدور',
+        // Urdu / Pakistan
+        'سلطۂ اجرا', 'سلطه اجرا', 'مجاز دفتر', 'جاری کنندہ دفتر', 'جاری کنندہ', 'جاری کنندھ', 'دفتر اجرا', 'جاری کرنے والا ادارہ',
+        // Arabic
         'جهة الإصدار', 'جهة الاصدار', 'الجهة المصدرة', 'الجهة المصدرة للوثيقة', 'مكان الإصدار', 'مكان الاصدار', 'مكان الصدور', 'مكان التحرير',
         'سلطة الإصدار', 'سلطة الاصدار', 'السلطة', 'مركز الإصدار', 'مركز الاصدار', 'صدر عن', 'صدرت من',
-        'مكان وتاريخ الإصدار', 'مكان وتاريخ الاصدار', 'تاريخ ومكان الإصدار', 'تاريخ ومكان الاصدار', 'محل صدور', 'مرجع صدور',
+        'مكان وتاريخ الإصدار', 'مكان وتاريخ الاصدار', 'تاريخ ومكان الإصدار', 'تاريخ ومكان الاصدار',
+        'دائرة الهجرة والجوازات', 'مصلحة الهجرة والجوازات', 'مصلحة الجوازات', 'إدارة الجوازات', 'ادارة الجوازات',
         // Russian / Cyrillic / CIS
+        'орган выдачи / issuing authority', 'кем выдан / authority',
         'орган, выдавший документ', 'орган выдавший документ', 'орган выдачи', 'орган, що видав документ', 'орган що видав',
-        'орган що видав паспорт', 'кем выдан', 'выдан',
-        'берген орган', 'берген мекеме', 'берген жай', 'берілген жер', 'берілген жері',
-        'мақоми васиқадиҳанда', 'макоми васикадиханда', 'орган, ки васиқа додааст', 'орган ки васика додааст',
+        'орган що видав паспорт', 'кем выдан', 'выдан', 'выдавший орган', 'паспорт выдан', 'документ выдан', 'выдано',
+        'берген орган', 'берген мекеме', 'берген жай', 'берілген жер', 'берілген жері', 'берілген күні мен органы',
+        'мақоми васиқадиҳанда', 'макоми васикадиханда', 'орган, ки васиқа додааст', 'орган ки васика додааст', 'швкд', 'рвкд', 'вкд',
         'ким томонидан берилган', 'берган organ', 'берган орган', 'берилган жойи',
-        'ким тарапындан берлен', 'берлен ýeri', 'берlen ýeri', 'berlen ýeri', 'berlen yeri', 'berlən yeri', 'bergan organ',
+        'ким тарапындан берлен', 'берлен ýeri', 'берlen ýeri', 'berlen ýeri', 'berlen yeri', 'berlən yeri', 'bergan organ', 'berlen wagty',
+        'мамлекеттик каттоо кызматы',
         // Spanish / Portuguese / Italian / German
         'autoridad de expedición', 'autoridad expedidora', 'autoridad de emision', 'lugar de expedición', 'lugar de expedicion', 'expedido por', 'autoridad',
         'autoridade emissora', 'emitido por', 'autoridade',
@@ -679,12 +711,38 @@
     ];
 
     const KNOWN_AUTHORITY_PATTERNS = [
+        // Pakistan
+        /\bDIRECTORATE GENERAL(?: OF)? IMMIGRATION (?:&|AND) PASSPORTS\b/i,
+        /\bIMMIGRATION (?:&|AND) PASSPORTS\b/i,
+        /\bDG\s*I(?:\s*&|\s*AND)\s*P\b/i,
+        /\bDGI&P\b/i,
+        /\bDGIP\b/i,
+        /\bD\.G\.I\.P\.?\b/i,
+        /\bIM&P\b/i,
+        /\bREGIONAL PASSPORT OFFICE(?:\s+[A-Z]+)?\b/i,
+        /\bRPO(?:\s+[A-Z]+)?\b/i,
+        /\bGOVERNMENT OF PAKISTAN\b/i,
+        /\bGOVT\.? OF PAKISTAN\b/i,
+        /\bEMBASSY OF PAKISTAN(?:\s+[A-Z]+)?\b/i,
+        /\bCONSULATE GENERAL OF PAKISTAN(?:\s+[A-Z]+)?\b/i,
+        /\bPAKPERS\b/i,
+        // Afghanistan
+        /\bGENERAL DIRECTORATE OF PASSPORTS\b/i,
+        /\bDIRECTORATE OF PASSPORTS\b/i,
+        /\bPASSPORT DEPARTMENT\b/i,
+        /\bKABUL PASSPORT OFFICE\b/i,
+        /\bAFGHAN EMBASSY(?:\s+[A-Z]+)?\b/i,
+        /\bEMBASSY OF AFGHANISTAN(?:\s+[A-Z]+)?\b/i,
+        /\bAFGHAN CONSULATE GENERAL(?:\s+[A-Z]+)?\b/i,
+        /(?:^|[\s:;#\-_/\\|.,])(?:د پاسپورت ریاست|ریاست پاسپورت)(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])(?:د کورنیو چارو وزارت|وزارت امور داخله)(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])(?:د بهرنیو چارو وزارت|وزارت امور خارجه)(?=$|[\s:;#\-_/\\|.,])/u,
+        // General / English / French
         /\bDEPARTMENT OF STATE\b/i,
         /\bPASSPORT OFFICE\b/i,
         /\bMINISTRY OF FOREIGN AFFAIRS\b/i,
         /\bMINISTRY OF INTERIOR\b/i,
         /\bMINISTRY OF HOME AFFAIRS\b/i,
-        /\bIMMIGRATION AND PASSPORTS\b/i,
         /\bHM PASSPORT OFFICE\b/i,
         /\bDEPARTMENT OF HOME AFFAIRS\b/i,
         /\bIDENTITY AND PASSPORT SERVICE\b/i,
@@ -693,66 +751,187 @@
         /\bDIRECTION GENERALE DE LA POLICE(?: NATIONALE)?\b/i,
         /\bPREFECTURE DE POLICE\b/i,
         /\bCOMMISSARIAT CENTRAL\b/i,
+        // Turkey
         /\bNÜFUS VE VATANDAŞLIK İŞLERİ(?: GENEL MÜDÜRLÜĞÜ)?\b/i,
         /\bNUFUS VE VATANDASLIK ISLERI(?: GENEL MUDURLUGU)?\b/i,
         /\bEMNİYET GENEL MÜDÜRLÜĞÜ\b/i,
         /\bEMNIYET GENEL MUDURLUGU\b/i,
         /\bİL EMNİYET MÜDÜRLÜĞÜ\b/i,
         /\bIL EMNIYET MUDURLUGU\b/i,
-        /\bМВД(?:\s+РОССИИ|\s+[А-ЯA-Z0-9]+|\s*\d{3,6})?\b/u,
-        /\bУФМС(?:\s+РОССИИ|\s+[А-ЯA-Z0-9]+|\s*\d{3,6})?\b/u,
-        /\bФМС(?:\s+[А-ЯA-Z0-9]+|\s*\d{3,6})?\b/u,
+        // Russia & CIS
+        /(?:^|[\s:;#\-_/\\|.,])МВД(?:\s+РОССИИ|\s+[А-ЯA-Z0-9]+|\s*\d{3,6})?(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])ГУВМ\s+МВД(?:\s+РОССИИ)?(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])УФМС(?:\s+РОССИИ|\s+[А-ЯA-Z0-9]+|\s*\d{3,6})?(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])ФМС(?:\s+[А-ЯA-Z0-9]+|\s*\d{3,6})?(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])МИД(?:\s+РОССИИ)?(?=$|[\s:;#\-_/\\|.,])/u,
         /\bMIA OF RUSSIA\b/i,
         /\bMIA\s*\d{3,6}\b/i,
+        /\bMVD(?:\s+OF\s+RUSSIA|\s*\d{3,6})?\b/i,
+        /\bUFMS\s*\d{3,6}\b/i,
+        /\bFMS\s*\d{3,6}\b/i,
+        /\bMID OF RUSSIA\b/i,
+        /\bMFA OF RUSSIA\b/i,
+        /(?:^|[\s:;#\-_/\\|.,])ҚР\s+ІІМ(?=$|[\s:;#\-_/\\|.,])/u,
+        /\bQR\s+IIM\b/i,
+        /(?:^|[\s:;#\-_/\\|.,])ІІМ(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])МВД\s+РК(?=$|[\s:;#\-_/\\|.,])/u,
+        /\bIIBB\b/i,
         /\bIIB\s+[A-Z\s]{2,20}\b/i,
         /\bIIV\b/i,
-        /\bВКД\b/u,
-        /\bІІМ\b/u,
+        /\bICHKI ISHLAR VAZIRLIGI\b/i,
+        /(?:^|[\s:;#\-_/\\|.,])ВКД(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])РВКД(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])ШВКД(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])МВД\s+РТ(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])ВХИД(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])МКК(?:\s*\d{1,4})?(?=$|[\s:;#\-_/\\|.,])/u,
+        /\bSRS\b/i,
+        /(?:^|[\s:;#\-_/\\|.,])МВД\s+КР(?=$|[\s:;#\-_/\\|.,])/u,
         /\bSMST\b/i,
-        /\bمصلحة الجوازات(?: والجنسية)?\b/u,
-        /\bوزارة الداخلية\b/u,
-        /\bوزارة الخارجية\b/u,
-        /\bإدارة الهجرة والجوازات\b/u,
-        /\bادارة الهجرة والجوازات\b/u
+        /\bSTATE MIGRATION SERVICE OF TURKMENISTAN\b/i,
+        // Arabic
+        /(?:^|[\s:;#\-_/\\|.,])مصلحة الجوازات(?: والجنسية)?(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])مديرية الهجرة والجوازات(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])إدارة الهجرة والجوازات(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])ادارة الهجرة والجوازات(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])وزارة الداخلية(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])وزارة الخارجية(?=$|[\s:;#\-_/\\|.,])/u,
+        /(?:^|[\s:;#\-_/\\|.,])مركز الإصدار(?=$|[\s:;#\-_/\\|.,])/u
     ];
 
     function escapeRegex(str) {
         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
+    const AFGHAN_CITIES = {
+        'کابل': 'KABUL',
+        'هرات': 'HERAT',
+        'مزار شریف': 'MAZAR-I-SHARIF',
+        'مزارشریف': 'MAZAR-I-SHARIF',
+        'کندهار': 'KANDAHAR',
+        'قندهار': 'KANDAHAR',
+        'جلال اباد': 'JALALABAD',
+        'جلال آباد': 'JALALABAD',
+        'کندز': 'KUNDUZ',
+        'قندوز': 'KUNDUZ',
+        'بامیان': 'BAMYAN',
+        'غزنی': 'GHAZNI',
+        'بدخشان': 'BADAKHSHAN',
+        'بغلان': 'BAGHLAN',
+        'بلخ': 'BALKH',
+        'پروان': 'PARWAN',
+        'تخار': 'TAKHAR',
+        'ننگرهار': 'NANGARHAR',
+        'هلمند': 'HELMAND',
+        'پکتیا': 'PAKTIA',
+        'پکتیکا': 'PAKTIKA',
+        'خوست': 'KHOST',
+        'فراه': 'FARAH',
+        'فاریاب': 'FARYAB',
+        'جوزجان': 'JOWZJAN',
+        'سمنگان': 'SAMANGAN',
+        'سرپل': 'SAR-E POL',
+        'لوگر': 'LOGAR',
+        'وردک': 'WARDAK',
+        'میدان وردک': 'WARDAK',
+        'لغمان': 'LAGHMAN',
+        'کاپیسا': 'KAPISA',
+        'پنجشیر': 'PANJSHIR',
+        'کنر': 'KUNAR',
+        'نورستان': 'NURISTAN',
+        'بادغیس': 'BADGHIS',
+        'غور': 'GHOR',
+        'نیمروز': 'NIMRUZ',
+        'دایکندی': 'DAYKUNDI',
+        'اروزگان': 'URUZGAN',
+        'زابل': 'ZABUL'
+    };
+
+    const COMMON_COUNTRY_NAMES_OR_CODES = new Set([
+        'RUSSIA', 'RUSSIAN FEDERATION', 'RUS', 'USSR', 'SOVIET UNION', 'SU',
+        'PAKISTAN', 'PAK', 'ISLAMIC REPUBLIC OF PAKISTAN',
+        'AFGHANISTAN', 'AFG', 'ISLAMIC REPUBLIC OF AFGHANISTAN', 'ISLAMIC EMIRATE OF AFGHANISTAN',
+        'TURKEY', 'TURKIYE', 'TUR', 'TÜRKIYE', 'TURKİYE',
+        'TURKMENISTAN', 'TKM', 'UZBEKISTAN', 'UZB', 'KAZAKHSTAN', 'KAZ',
+        'KYRGYZSTAN', 'KGZ', 'TAJIKISTAN', 'TJK', 'AZERBAIJAN', 'AZE',
+        'IRAN', 'IRN', 'IRAQ', 'IRQ', 'SYRIA', 'SYR', 'EGYPT', 'EGY',
+        'SOMALIA', 'SOM', 'SUDAN', 'SDN', 'YEMEN', 'YEM', 'JORDAN', 'JOR',
+        'LEBANON', 'LBN', 'PALESTINE', 'PSE', 'NIGERIA', 'NGA', 'GHANA', 'GHA',
+        'INDIA', 'IND', 'BANGLADESH', 'BGD', 'INDONESIA', 'IDN', 'MALAYSIA', 'MYS',
+        'GERMANY', 'DEU', 'FRANCE', 'FRA', 'UNITED KINGDOM', 'GBR', 'UK', 'USA'
+    ]);
+
+    function isCountryNameOrCode(val) {
+        if (!val) return false;
+        const clean = String(val).replace(/[.,\-_/\\#()]/g, '').trim().toUpperCase();
+        return COMMON_COUNTRY_NAMES_OR_CODES.has(clean);
+    }
+
     function cleanPlaceOfBirthValue(rawValue) {
         if (!rawValue) return '';
         let val = String(rawValue).trim();
 
-        // 1. Strip dates
+        // 1. Strip date if combined label (e.g. KHARTOUM 12/05/2001)
         val = val.replace(/\b\d{1,4}[./\-]\d{1,2}[./\-]\d{2,4}\b/g, '').trim();
         val = val.replace(/\b\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|OCAK|ŞUBAT|MART|NİSAN|MAYIS|HAZİRAN|TEMMUZ|AĞUSTOS|EYLÜL|EKİM|KASIM|ARALIK|ЯНВ|ФЕВ|МАР|АПР|МАЙ|ИЮН|ИЮЛ|АВГ|СЕН|ОКТ|НОЯ|ДЕК|يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)[a-zа-яء-ي]*\s+\d{2,4}\b/gi, '').trim();
 
-        // 2. Strip Russian/Cyrillic administrative prefixes
+        // 2. Strip leading / trailing OCR artifacts
+        val = val.replace(/^[«"'\(\[\{<]+|[»"'\)\]\}>]+$/g, '').trim();
+
+        // 3. Strip Russian/Cyrillic administrative prefixes:
         val = val.replace(/^(?:Г\.|ГОР\.|ГОРОД|С\.|СЕЛО|П\.|ПОС\.|ПОСЕЛОК|ОБЛ\.|ОБЛАСТЬ|КРАЙ|РЕСП\.|РЕСПУБЛИКА|Р-Н\.|Р-Н|РАЙОН)(?:\s+|$|[.,:;])\s*/i, '');
         val = val.replace(/^(?:Г|С|П)(?:\s+|$|[.,:;])\s*/i, '');
 
-        // 3. Strip Arabic administrative prefixes
-        val = val.replace(/^(?:محافظة|ولاية|مدينة|منطقة|بلدية|مركز|دائرة)(?:\s+|$|[.,:;])\s*/i, '');
+        // 4. Strip Arabic administrative prefixes:
+        val = val.replace(/^(?:محافظة|ولاية|مدينة|منطقة|بلدية|مركز|دائرة|ولایت)(?:\s+|$|[.,:;])\s*/i, '');
 
-        // 4. Strip French / English administrative prefixes
+        // 5. Strip French / English administrative prefixes:
         val = val.replace(/^(?:VILLE DE|PROVINCE DE|REGION DE|COMMUNE DE|DEPARTEMENT DE|CITY OF|PROVINCE OF|STATE OF|DISTRICT OF)(?:\s+|$|[.,:;])\s*/i, '');
 
-        // 5. Prefer Latin part in bilingual dual-script
+        // 6. Handle dual scripts separated by / or \ or |:
+        // E.g.: "Г. МОСКВА / RUSSIA", "Г. САМАРА / USSR", "RAWALPINDI / PAKISTAN", "PAKISTAN / LAHORE", "کابل / KABUL"
         const parts = val.split(/\s*[/\\|]\s*/);
         if (parts.length >= 2) {
-            const latinPart = parts.find(p => /[A-Za-z]/.test(p) && !/^(?:Г\.|ГОР\.|CITY|VILLE|P\b)/i.test(p.trim()));
-            if (latinPart) {
-                val = latinPart;
+            const nonCountryParts = parts.filter(p => !isCountryNameOrCode(p));
+            if (nonCountryParts.length > 0 && nonCountryParts.length < parts.length) {
+                const latinNonCountry = nonCountryParts.find(p => /[A-Za-z]/.test(p));
+                val = latinNonCountry || nonCountryParts[0];
             } else {
-                val = parts[0];
+                const latinPart = parts.find(p => /[A-Za-z]/.test(p));
+                val = latinPart || parts[0];
+            }
+        }
+
+        // 7. Handle comma-separated city and country (e.g. "RAWALPINDI, PAKISTAN" -> "RAWALPINDI", "KABUL, AFGHANISTAN" -> "KABUL")
+        const commaParts = val.split(/\s*,\s*/);
+        if (commaParts.length >= 2) {
+            if (isCountryNameOrCode(commaParts[commaParts.length - 1])) {
+                val = commaParts.slice(0, commaParts.length - 1).join(' ').trim();
+            } else if (isCountryNameOrCode(commaParts[0])) {
+                val = commaParts.slice(1).join(' ').trim();
+            }
+        }
+
+        // 8. Strip trailing country names like "- PAKISTAN", "/ PAKISTAN"
+        val = val.replace(/\s*[-/]\s*(?:PAKISTAN|AFGHANISTAN|RUSSIA|RUSSIAN FEDERATION|USSR)\b/i, '').trim();
+
+        // 9. Map Afghan cities in Dari / Pashto if exact or contained
+        const trimmedVal = val.trim();
+        if (AFGHAN_CITIES[trimmedVal]) {
+            val = AFGHAN_CITIES[trimmedVal];
+        } else {
+            for (const [arCity, latCity] of Object.entries(AFGHAN_CITIES)) {
+                if (trimmedVal.includes(arCity)) {
+                    val = latCity;
+                    break;
+                }
             }
         }
 
         val = val.replace(/^[\s:;#\-_/\\\\|.,]+|[\s:;#\-_/\\\\|.,]+$/g, '').trim();
         val = val.replace(/\s+/g, ' ');
         val = val.replace(/^(?:Г\.|ГОР\.|ГОРОД|Г)(?:\s+|$|[.,:;])\s*/i, '');
-        val = val.replace(/^(?:محافظة|ولاية|مدينة)(?:\s+|$|[.,:;])\s*/i, '');
+        val = val.replace(/^(?:محافظة|ولاية|مدينة|ولایت)(?:\s+|$|[.,:;])\s*/i, '');
         val = val.replace(/^(?:VILLE DE|CITY OF)(?:\s+|$|[.,:;])\s*/i, '');
 
         if (!val || val.length < 2 || /^\d+$/.test(val)) return '';
@@ -771,7 +950,7 @@
         val = val.replace(/^[«"'\(\[\{<]+|[»"'\)\]\}>]+$/g, '').trim();
         val = val.replace(/<{2,}/g, ' ').replace(/</g, ' ');
 
-        // Bilingual / dual-script splitting (e.g. "МВД 77001 / MIA 77001" or "МВД РОССИИ / MIA OF RUSSIA")
+        // Bilingual / dual-script splitting (e.g. "МВД 77001 / MIA 77001" or "ریاست پاسپورت / PASSPORT DEPARTMENT")
         const parts = val.split(/\s*[/\\|]\s*/);
         if (parts.length >= 2) {
             const latinPart = parts.find(p => /[A-Za-z]/.test(p) && !isLabelOnlyLine(p, AUTHORITY_LABELS));
@@ -784,8 +963,26 @@
 
         // Strip leftover leading labels
         val = val.replace(/^[\s:;#\-_/\\\\|.,]+|[\s:;#\-_/\\\\|.,]+$/g, '').trim();
-        val = val.replace(/^(?:AUTHORITY|AUTORITE|ISSUING AUTHORITY|ISSUED BY|OFFICE|PASSPORT OFFICE|VEREN MAKAM|BELGEYI VEREN MAKAM|ОРГАН ВЫДАЧИ|КЕМ ВЫДАН|جهة الإصدار|جهة الاصدار)\s*[:\-]?\s*/i, '');
+        val = val.replace(/^(?:AUTHORITY|AUTORITE|ISSUING AUTHORITY|ISSUED BY|OFFICE|PASSPORT OFFICE|VEREN MAKAM|BELGEYI VEREN MAKAM|ОРГАН ВЫДАЧИ|КЕМ ВЫДАН|جهة الإصدار|جهة الاصدار|مرجع صدور|د صادرولو مرجع)\s*[:\-]?\s*/i, '');
         val = val.replace(/\s+/g, ' ');
+
+        // Pakistani common abbreviations
+        if (/^D\.?G\.?\s*I\.?\s*(?:&|AND)\s*P\.?$/i.test(val) || /^DGIP$/i.test(val)) {
+            val = 'DGIP';
+        } else if (/^IM\s*&\s*P$/i.test(val)) {
+            val = 'IM&P';
+        } else if (/^GOVT\.?\s+OF\s+PAKISTAN$/i.test(val)) {
+            val = 'GOVERNMENT OF PAKISTAN';
+        }
+
+        // Afghan common labels in Dari/Pashto
+        if (val === 'ریاست پاسپورت' || val === 'د پاسپورت ریاست') {
+            val = 'PASSPORT DEPARTMENT';
+        } else if (val === 'وزارت امور داخله' || val === 'د کورنیو چارو وزارت') {
+            val = 'MINISTRY OF INTERIOR';
+        } else if (val === 'وزارت امور خارجه' || val === 'د بهرنیو چارو وزارت') {
+            val = 'MINISTRY OF FOREIGN AFFAIRS';
+        }
 
         if (!val || val.length < 2 || /^\d{1,2}[./\-]/.test(val)) return '';
         return val;
@@ -841,6 +1038,26 @@
             if (!foundLabel) continue;
 
             const labelIndex = line.toLowerCase().indexOf(foundLabel.toLowerCase());
+
+            // 1. Check text BEFORE the label (for RTL / Arabic / Dari / Pashto or multi-column layouts, e.g. "کابل د زیږیدنې ځای")
+            let beforeRemainder = line.slice(0, labelIndex).trim();
+            beforeRemainder = beforeRemainder.replace(/^[«"'\(\[\{]+|[»"'\)\]\}]+$/g, '').trim();
+            let candidateBefore = '';
+            if (beforeRemainder.length >= 2 && !isLabelOnlyLine(beforeRemainder, POB_LABELS) && !isLabelOnlyLine(beforeRemainder, POB_STOP_WORDS)) {
+                for (const stop of POB_STOP_WORDS) {
+                    const stopRegex = new RegExp('(?:\\s+|^)' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i');
+                    const stopMatch = beforeRemainder.match(stopRegex);
+                    if (stopMatch && stopMatch.index !== undefined) {
+                        beforeRemainder = beforeRemainder.slice(0, stopMatch.index).trim();
+                    }
+                }
+                const cleanedBefore = cleanPlaceOfBirthValue(beforeRemainder);
+                if (cleanedBefore && !isLabelOnlyLine(cleanedBefore, POB_LABELS)) {
+                    candidateBefore = cleanedBefore;
+                }
+            }
+
+            // 2. Check text AFTER the label
             let remainder = line.slice(labelIndex);
 
             let keepStripping = true;
@@ -871,12 +1088,25 @@
                 if (cleaned) return cleaned.toUpperCase();
             }
 
+            if (candidateBefore) {
+                return candidateBefore.toUpperCase();
+            }
+
+            // 3. Multi-line search after label
             for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
                 const nextLine = lines[j].trim();
                 if (!nextLine) continue;
 
                 if (isLabelOnlyLine(nextLine, POB_LABELS)) continue;
                 if (isLabelOnlyLine(nextLine, POB_STOP_WORDS)) break;
+                if (AUTHORITY_LABELS.some(l => {
+                    const regex = new RegExp('(?:^|[\\s:;#\-_/\\\\|.,])' + escapeRegex(l) + '(?:$|[\\s:;#\-_/\\\\|.,])', 'i');
+                    return regex.test(nextLine);
+                })) break;
+
+                if (/\b(?:\d{4}[./\-]\d{1,2}[./\-]\d{1,2}|\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4})\b/.test(nextLine)) {
+                    break;
+                }
 
                 let val = nextLine;
                 for (const stop of POB_STOP_WORDS) {
@@ -891,14 +1121,38 @@
             }
         }
 
+        // Heuristic fallback for Pakistani / Afghan major cities if OCR missed the label
+        const isPakistani = nationalityCheck.includes('PAK') || upperText.includes('PAKISTAN');
+        const isAfghan = nationalityCheck.includes('AFG') || upperText.includes('AFGHANISTAN');
+        if (isAfghan) {
+            for (const [arCity, latCity] of Object.entries(AFGHAN_CITIES)) {
+                if (text.includes(arCity) || upperText.includes(latCity)) {
+                    return latCity;
+                }
+            }
+        }
+        if (isPakistani) {
+            const pakCities = ['ISLAMABAD', 'RAWALPINDI', 'LAHORE', 'KARACHI', 'PESHAWAR', 'QUETTA', 'MULTAN', 'FAISALABAD', 'SIALKOT', 'GUJRANWALA', 'HYDERABAD'];
+            for (const city of pakCities) {
+                if (new RegExp('\\b' + city + '\\b', 'i').test(upperText)) {
+                    return city;
+                }
+            }
+        }
+
         return '';
     }
 
     function extractPassportIssuingAuthority(text, options = {}) {
         if (!text || typeof text !== 'string') {
-            return getCountryIso3Code(
+            const fallbackIso = getCountryIso3Code(
                 options.uyruk || options.nationality || options.country || options.dogumUlkesi
             );
+            if (fallbackIso === 'PAK') return 'DGIP';
+            if (fallbackIso === 'AFG') return 'PASSPORT DEPARTMENT';
+            if (fallbackIso === 'RUS') return 'MIA OF RUSSIA';
+            if (fallbackIso === 'TKM') return 'SMST';
+            return fallbackIso || '';
         }
         const normalized = text.replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
         const lines = normalized.split(/[\r\n]+/);
@@ -1031,13 +1285,18 @@
         // Fallback: MRZ Country Code
         const cleanMrzText = normalized.replace(/[«‹([{]/g, '<').toUpperCase();
         const mrzMatch = cleanMrzText.match(/P\s*[<A-Z0-9]\s*([A-Z]{3})/);
-        if (mrzMatch && mrzMatch[1] !== 'UTO' && mrzMatch[1] !== 'XXX') {
-            return mrzMatch[1];
-        }
+        const mrzIso = (mrzMatch && mrzMatch[1] !== 'UTO' && mrzMatch[1] !== 'XXX') ? mrzMatch[1] : '';
 
-        return getCountryIso3Code(
+        const fallbackIso = mrzIso || getCountryIso3Code(
             options.uyruk || options.nationality || options.country || options.dogumUlkesi
         );
+
+        if (fallbackIso === 'PAK') return 'DGIP';
+        if (fallbackIso === 'AFG') return 'PASSPORT DEPARTMENT';
+        if (fallbackIso === 'RUS') return 'MIA OF RUSSIA';
+        if (fallbackIso === 'TKM') return 'SMST';
+
+        return fallbackIso || '';
     }
 
     function extractMrzNames(text) {

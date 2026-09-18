@@ -2150,10 +2150,11 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         var dogumUlkesiNorm = norm(data.dogumUlkesi || '');
                         var isTurkmen = countryNorm.indexOf('turkmen') !== -1 || countryNorm === 'tkm' || dogumUlkesiNorm.indexOf('turkmen') !== -1 || dogumUlkesiNorm === 'tkm';
                         var isAfghan = countryNorm.indexOf('afgan') !== -1 || countryNorm.indexOf('afghan') !== -1 || dogumUlkesiNorm.indexOf('afgan') !== -1 || dogumUlkesiNorm.indexOf('afghan') !== -1;
-                        var isPakistan = countryNorm.indexOf('pakistan') !== -1 || dogumUlkesiNorm.indexOf('pakistan') !== -1;
+                        var isPakistan = countryNorm.indexOf('pakistan') !== -1 || countryNorm === 'pak' || dogumUlkesiNorm.indexOf('pakistan') !== -1 || dogumUlkesiNorm === 'pak';
+                        var isRussia = countryNorm.indexOf('rus') !== -1 || dogumUlkesiNorm.indexOf('rus') !== -1;
 
-                        var defaultBirthPlace = isTurkmen ? 'TKM' : (isAfghan ? 'AFG' : (isPakistan ? 'PAK' : ''));
-                        var defaultIssuingAuthority = isTurkmen ? 'SMST' : (isAfghan ? 'AFGHAN' : (isPakistan ? 'PAKISTAN' : ''));
+                        var defaultBirthPlace = isTurkmen ? 'TKM' : (isAfghan ? 'KABUL' : (isPakistan ? 'ISLAMABAD' : (isRussia ? 'MOSCOW' : '')));
+                        var defaultIssuingAuthority = isTurkmen ? 'SMST' : (isAfghan ? 'PASSPORT DEPARTMENT' : (isPakistan ? 'DGIP' : (isRussia ? 'MIA OF RUSSIA' : '')));
 
                         var birthPlace = data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || defaultBirthPlace;
                         var issuingAuthority = data.verenMakam || data.issuingAuthority || defaultIssuingAuthority;

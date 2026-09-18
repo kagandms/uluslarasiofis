@@ -2466,7 +2466,9 @@ async function extractPassportMetadataFromApply(request) {
             if (!parser) throw new Error('Pasaport parserı hazır değil.');
             let metadata = parser.extractPassportMetadata(text, {
                 nationality: profileData.uyruk,
-                birthDate: profileData.birthDate
+                birthDate: profileData.birthDate,
+                dogumUlkesi: profileData.dogumUlkesi,
+                country: profileData.country || profileData.uyruk
             });
             let missingFields = ['issueDate', 'expiryDate', 'placeOfBirth', 'issuingAuthority']
                 .filter((field) => !metadata[field]);
@@ -2486,7 +2488,9 @@ async function extractPassportMetadataFromApply(request) {
                         text = `${text}\n${ocrText}`;
                         metadata = parser.extractPassportMetadata(text, {
                             nationality: profileData.uyruk,
-                            birthDate: profileData.birthDate
+                            birthDate: profileData.birthDate,
+                            dogumUlkesi: profileData.dogumUlkesi,
+                            country: profileData.country || profileData.uyruk
                         });
                         missingFields = ['issueDate', 'expiryDate', 'placeOfBirth', 'issuingAuthority']
                             .filter((field) => !metadata[field]);
