@@ -502,6 +502,16 @@ export function initYknManager() {
         if (inputBirthDate && !inputBirthDate.value && (student.birthDate || student.dogumTarihi)) {
             inputBirthDate.value = formatDateForDisplay(student.birthDate || student.dogumTarihi);
         }
+        const medeniStatus = student.medeniHali || student.medeniHal || 'Bekar';
+        const medeniBekar = document.getElementById('ykn-medeni-bekar');
+        const medeniEvli = document.getElementById('ykn-medeni-evli');
+        if (medeniBekar && medeniEvli) {
+            if (String(medeniStatus).trim().toLowerCase().startsWith('e')) {
+                medeniEvli.checked = true;
+            } else {
+                medeniBekar.checked = true;
+            }
+        }
         updateMissingFieldsUI();
     }
 
@@ -557,6 +567,16 @@ export function initYknManager() {
             const parsed = parseDateValue(inputBirthDate.value.trim());
             currentStudentData.birthDate = parsed || inputBirthDate.value.trim();
             currentStudentData.dogumTarihi = currentStudentData.birthDate;
+        }
+        const medeniBekar = document.getElementById('ykn-medeni-bekar');
+        const medeniEvli = document.getElementById('ykn-medeni-evli');
+        if (medeniBekar && medeniEvli) {
+            const status = medeniEvli.checked ? 'Evli' : 'Bekar';
+            currentStudentData.medeniHali = status;
+            currentStudentData.medeniHal = status;
+        } else {
+            currentStudentData.medeniHali = currentStudentData.medeniHali || 'Bekar';
+            currentStudentData.medeniHal = currentStudentData.medeniHali;
         }
         updateMissingFieldsUI();
     }
@@ -2293,6 +2313,18 @@ export function initYknManager() {
             }
         });
     }
+    const radioMedeniBekar = document.getElementById('ykn-medeni-bekar');
+    const radioMedeniEvli = document.getElementById('ykn-medeni-evli');
+    if (radioMedeniBekar) {
+        radioMedeniBekar.addEventListener('change', () => {
+            syncUserEnteredPassportDates();
+        });
+    }
+    if (radioMedeniEvli) {
+        radioMedeniEvli.addEventListener('change', () => {
+            syncUserEnteredPassportDates();
+        });
+    }
 
     window.addEventListener('ykn:photo-cropped', async (e) => {
         const { dataUrl, fileName, autoTransfer, userFields } = e.detail || {};
@@ -2313,6 +2345,10 @@ export function initYknManager() {
                 if (userFields.issuingAuthority) {
                     currentStudentData.issuingAuthority = userFields.issuingAuthority;
                     currentStudentData.verenMakam = userFields.issuingAuthority;
+                }
+                if (userFields.medeniHali) {
+                    currentStudentData.medeniHali = userFields.medeniHali;
+                    currentStudentData.medeniHal = userFields.medeniHali;
                 }
             }
         }

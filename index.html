@@ -249,6 +249,19 @@
                                         </div>
                                     </details>
 
+                                    <!-- Medeni Hali Seçimi (YÖKSİS Zorunlu Alan) -->
+                                    <div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                                        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);">Medeni Hali (YÖKSİS Zorunlu):</label>
+                                        <div style="display: flex; align-items: center; gap: 14px;">
+                                            <label style="display: flex; align-items: center; gap: 4px; font-size: 0.82rem; cursor: pointer; color: var(--text-primary); font-weight: 500;">
+                                                <input type="radio" name="ykn-medeni-hal" id="ykn-medeni-bekar" value="Bekar" checked style="accent-color: var(--accent); cursor: pointer;"> Bekar
+                                            </label>
+                                            <label style="display: flex; align-items: center; gap: 4px; font-size: 0.82rem; cursor: pointer; color: var(--text-primary); font-weight: 500;">
+                                                <input type="radio" name="ykn-medeni-hal" id="ykn-medeni-evli" value="Evli" style="accent-color: var(--accent); cursor: pointer;"> Evli
+                                            </label>
+                                        </div>
+                                    </div>
+
                                     <!-- Senkronizasyon ve Manuel Gönderme Butonu -->
                                     <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-color);">
                                         <span style="font-size: 0.74rem; color: var(--text-secondary);">Değişiklikler anında kaydedilir ve aktarıma dahil edilir.</span>
@@ -799,7 +812,7 @@
                         Pasaporttan Okunamayan Alanlar (Fotoğrafa bakarak yazabilirsiniz):
                     </span>
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 115px; gap: 8px; align-items: end;">
                     <div>
                         <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 2px;">Düzenleme Tarihi</label>
                         <input type="text" id="cropper-input-issue-date" placeholder="GG.AA.YYYY" style="width: 100%; padding: 6px 8px; font-size: 0.85rem; border: 1.5px solid #f39c12; border-radius: 6px; font-weight: 600; background: var(--bg-color); color: var(--text-primary);">
@@ -811,6 +824,13 @@
                     <div>
                         <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 2px;">Veren Makam / D. Yeri</label>
                         <input type="text" id="cropper-input-authority" placeholder="Örn: AZE / BAKU" style="width: 100%; padding: 6px 8px; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 6px; font-weight: 600; background: var(--bg-color); color: var(--text-primary);">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 2px;">Medeni Hali</label>
+                        <select id="cropper-select-medeni" style="width: 100%; padding: 6px 8px; font-size: 0.85rem; border: 1.5px solid var(--accent); border-radius: 6px; font-weight: 600; background: var(--bg-color); color: var(--text-primary); cursor: pointer;">
+                            <option value="Bekar" selected>Bekar</option>
+                            <option value="Evli">Evli</option>
+                        </select>
                     </div>
                 </div>
             </div>

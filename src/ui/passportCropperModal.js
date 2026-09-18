@@ -29,7 +29,8 @@ function getElements() {
         cropperMissingBox: document.getElementById('cropper-missing-fields-box'),
         cropperInputIssueDate: document.getElementById('cropper-input-issue-date'),
         cropperInputExpiryDate: document.getElementById('cropper-input-expiry-date'),
-        cropperInputAuthority: document.getElementById('cropper-input-authority')
+        cropperInputAuthority: document.getElementById('cropper-input-authority'),
+        cropperSelectMedeni: document.getElementById('cropper-select-medeni')
     };
 }
 
@@ -199,7 +200,8 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
         cropperMissingBox,
         cropperInputIssueDate,
         cropperInputExpiryDate,
-        cropperInputAuthority
+        cropperInputAuthority,
+        cropperSelectMedeni
     } = getElements();
     if (!modal || !image) return;
 
@@ -215,7 +217,7 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
     currentAspectRatio = 3 / 4;
     if (btnAspectRatio) btnAspectRatio.textContent = 'Oran: 3:4 (Vesikalık)';
 
-    // Eksik alanları modal içinde göster ve doldur
+    // Eksik alanları ve medeni hali modal içinde göster ve doldur
     if (cropperMissingBox) {
         const issueDate = studentData?.issueDate || '';
         const expiryDate = studentData?.expiryDate || '';
@@ -233,9 +235,12 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
             cropperInputAuthority.value = authority;
             cropperInputAuthority.style.borderColor = authority ? 'var(--border-color)' : '#f39c12';
         }
+        if (cropperSelectMedeni) {
+            const medeni = studentData?.medeniHali || studentData?.medeniHal || 'Bekar';
+            cropperSelectMedeni.value = medeni.toLowerCase().startsWith('e') ? 'Evli' : 'Bekar';
+        }
 
-        const hasMissing = !issueDate || !expiryDate || !authority;
-        cropperMissingBox.style.display = hasMissing ? 'block' : 'none';
+        cropperMissingBox.style.display = 'block';
     }
 
     updatePageSelectorUI();
@@ -307,7 +312,7 @@ function downloadCroppedImage(autoTransfer = false) {
     } catch (_) {}
 
     // Kırpılan fotoğrafı web uygulamasına ve YÖKSİS aktarım mekanizmasına ilet
-    const { cropperInputIssueDate, cropperInputExpiryDate, cropperInputAuthority } = getElements();
+    const { cropperInputIssueDate, cropperInputExpiryDate, cropperInputAuthority, cropperSelectMedeni } = getElements();
     window.dispatchEvent(new CustomEvent('ykn:photo-cropped', {
         detail: {
             dataUrl,
@@ -317,7 +322,8 @@ function downloadCroppedImage(autoTransfer = false) {
             userFields: {
                 issueDate: cropperInputIssueDate?.value?.trim() || '',
                 expiryDate: cropperInputExpiryDate?.value?.trim() || '',
-                issuingAuthority: cropperInputAuthority?.value?.trim() || ''
+                issuingAuthority: cropperInputAuthority?.value?.trim() || '',
+                medeniHali: cropperSelectMedeni?.value || 'Bekar'
             }
         }
     }));
@@ -388,6 +394,20 @@ export function initPassportCropperModal() {
             if (portalEl && portalEl.value !== val) {
                 portalEl.value = val;
                 portalEl.dispatchEvent(new Event('input'));
+            }
+        });
+    }
+    if (cropperSelectMedeni) {
+        cropperSelectMedeni.addEventListener('change', () => {
+            const val = cropperSelectMedeni.value;
+            const bekarRadio = document.getElementById('ykn-medeni-bekar');
+            const evliRadio = document.getElementById('ykn-medeni-evli');
+            if (val === 'Evli' && evliRadio) {
+                evliRadio.checked = true;
+                evliRadio.dispatchEvent(new Event('change'));
+            } else if (bekarRadio) {
+                bekarRadio.checked = true;
+                bekarRadio.dispatchEvent(new Event('change'));
             }
         });
     }

@@ -476,6 +476,75 @@ function findGenderControls(rootDoc) {
     return result;
 }
 
+function findMaritalControls(doc) {
+    const d = doc || document;
+    const normalize = (str) => (str || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[*:\s]/g, '');
+
+    const result = {
+        singleRadio: null,
+        singleLabel: null,
+        singleWrapper: null,
+        marriedRadio: null,
+        marriedLabel: null,
+        marriedWrapper: null
+    };
+
+    const allLabels = d.querySelectorAll('label, .z-radio-content, .z-radio, span, b, strong');
+    for (const el of allLabels) {
+        if (el.querySelectorAll('input[type="radio"]').length > 1) continue;
+        const t = normalize(el.innerText || el.textContent || '');
+        if (t === 'bekar' || t === 'single' || t === 'b') {
+            if (!result.singleLabel || el.tagName === 'LABEL') {
+                result.singleLabel = el;
+                const forId = el.getAttribute('for');
+                let radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
+                if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
+                if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
+                if (radio) {
+                    result.singleRadio = radio;
+                    result.singleWrapper = el.closest?.('.z-radio') || el.parentElement;
+                }
+            }
+        } else if (t === 'evli' || t === 'married' || t === 'e') {
+            if (!result.marriedLabel || el.tagName === 'LABEL') {
+                result.marriedLabel = el;
+                const forId = el.getAttribute('for');
+                let radio = forId ? d.getElementById(forId) : el.querySelector('input[type="radio"]');
+                if (!radio && el.parentElement) radio = el.parentElement.querySelector('input[type="radio"]');
+                if (!radio && el.closest) radio = el.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
+                if (radio) {
+                    result.marriedRadio = radio;
+                    result.marriedWrapper = el.closest?.('.z-radio') || el.parentElement;
+                }
+            }
+        }
+    }
+
+    if (!result.singleRadio || !result.marriedRadio) {
+        const allRadios = d.querySelectorAll('input[type="radio"]');
+        for (const r of allRadios) {
+            const parentText = normalize(r.parentElement ? r.parentElement.innerText : '');
+            const nextText = normalize(r.nextElementSibling ? r.nextElementSibling.innerText : '');
+            const combined = normalize([r.value, r.id, r.name, parentText, nextText].join(' '));
+            if (!result.singleRadio && (combined.includes('bekar') || r.value === 'B' || r.value === '1')) {
+                result.singleRadio = r;
+                result.singleWrapper = r.closest?.('.z-radio') || r.parentElement;
+                if (!result.singleLabel) result.singleLabel = r.nextElementSibling || r.parentElement;
+            } else if (!result.marriedRadio && (combined.includes('evli') || r.value === 'E' || r.value === '2')) {
+                result.marriedRadio = r;
+                result.marriedWrapper = r.closest?.('.z-radio') || r.parentElement;
+                if (!result.marriedLabel) result.marriedLabel = r.nextElementSibling || r.parentElement;
+            }
+        }
+    }
+
+    return result;
+}
+
 // ZK Framework için Event Dispatcher (Radio Button'lar için)
 function simulateRadioByLabelText(labelText) {
     if (!labelText) return false;
@@ -488,18 +557,33 @@ function simulateRadioByLabelText(labelText) {
     const isMale = normVal === 'erkek' || normVal === 'bay' || normVal === 'male' || normVal === 'm';
     const isFemale = normVal === 'kadin' || normVal === 'bayan' || normVal === 'female' || normVal === 'f';
     const isGender = isMale || isFemale;
+    const isBekar = normVal === 'bekar' || normVal === 'single' || normVal === 'b';
+    const isEvli = normVal === 'evli' || normVal === 'married' || normVal === 'e';
+    const isMarital = isBekar || isEvli;
 
     let anySet = false;
     for (const doc of getAllDocs(document)) {
-        if (isGender) {
-            const ctrl = findGenderControls(doc);
-            const targetRadio = isMale ? ctrl.maleRadio : ctrl.femaleRadio;
-            const targetLabel = isMale ? ctrl.maleLabel : ctrl.femaleLabel;
-            const targetWrapper = isMale ? ctrl.maleWrapper : ctrl.femaleWrapper;
+        if (isGender || isMarital) {
+            const ctrl = isGender ? findGenderControls(doc) : findMaritalControls(doc);
+            const targetRadio = isGender
+                ? (isMale ? ctrl.maleRadio : ctrl.femaleRadio)
+                : (isBekar ? ctrl.singleRadio : ctrl.marriedRadio);
+            const targetLabel = isGender
+                ? (isMale ? ctrl.maleLabel : ctrl.femaleLabel)
+                : (isBekar ? ctrl.singleLabel : ctrl.marriedLabel);
+            const targetWrapper = isGender
+                ? (isMale ? ctrl.maleWrapper : ctrl.femaleWrapper)
+                : (isBekar ? ctrl.singleWrapper : ctrl.marriedWrapper);
 
-            const oppRadio = isMale ? ctrl.femaleRadio : ctrl.maleRadio;
-            const oppLabel = isMale ? ctrl.femaleLabel : ctrl.maleLabel;
-            const oppWrapper = isMale ? ctrl.femaleWrapper : ctrl.maleWrapper;
+            const oppRadio = isGender
+                ? (isMale ? ctrl.femaleRadio : ctrl.maleRadio)
+                : (isBekar ? ctrl.marriedRadio : ctrl.singleRadio);
+            const oppLabel = isGender
+                ? (isMale ? ctrl.femaleLabel : ctrl.maleLabel)
+                : (isBekar ? ctrl.marriedLabel : ctrl.singleLabel);
+            const oppWrapper = isGender
+                ? (isMale ? ctrl.femaleWrapper : ctrl.maleWrapper)
+                : (isBekar ? ctrl.marriedWrapper : ctrl.singleWrapper);
 
             if (targetRadio || targetLabel) {
                 if (oppRadio) {
@@ -3166,6 +3250,8 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             if (data.cinsiyet) {
                 if (recordField('Cinsiyet', data.cinsiyet, simulateRadioByLabelText(data.cinsiyet))) successCount++;
             }
+            const maritalStatus = data.medeniHali || data.medeniHal || 'Bekar';
+            if (recordField('Medeni Hali', maritalStatus, simulateRadioByLabelText(maritalStatus))) successCount++;
 
             // Özel Ülke Kuralları (Türkmenistan, Afganistan, Pakistan)
             const normalizeCountry = (val) => val ? val.toLocaleLowerCase('tr-TR').replace(/\s+/g, '') : '';
