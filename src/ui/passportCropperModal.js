@@ -353,7 +353,8 @@ export function initPassportCropperModal() {
         btnNextPage,
         cropperInputIssueDate,
         cropperInputExpiryDate,
-        cropperInputAuthority
+        cropperInputAuthority,
+        cropperSelectMedeni
     } = getElements();
 
     function attachDateMask(input, targetId) {
