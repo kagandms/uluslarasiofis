@@ -25,7 +25,11 @@ function getElements() {
         pageSelector: document.getElementById('passport-page-selector'),
         pageInfo: document.getElementById('passport-page-info'),
         btnPrevPage: document.getElementById('btn-passport-prev-page'),
-        btnNextPage: document.getElementById('btn-passport-next-page')
+        btnNextPage: document.getElementById('btn-passport-next-page'),
+        cropperMissingBox: document.getElementById('cropper-missing-fields-box'),
+        cropperInputIssueDate: document.getElementById('cropper-input-issue-date'),
+        cropperInputExpiryDate: document.getElementById('cropper-input-expiry-date'),
+        cropperInputAuthority: document.getElementById('cropper-input-authority')
     };
 }
 
@@ -160,7 +164,17 @@ export function appendPassportPages(newPages) {
     updatePageSelectorUI();
 }
 
-export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0, studentName = '', passportNo = '' }) {
+function formatDateDisplay(isoDate) {
+    if (!isoDate || typeof isoDate !== 'string') return '';
+    const clean = isoDate.trim();
+    const parts = clean.split(/[-/.]/);
+    if (parts.length === 3 && parts[0].length === 4) {
+        return `${parts[2]}.${parts[1]}.${parts[0]}`;
+    }
+    return clean;
+}
+
+export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0, studentName = '', passportNo = '', studentData = null }) {
     if (pages && pages.length > 0) {
         cropperPages = pages.map((p, idx) => {
             if (typeof p === 'string') return { dataUrl: p, pageNumber: idx + 1 };
@@ -176,7 +190,17 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
     }
 
     const activeSrc = cropperPages[currentCropperPageIndex]?.dataUrl || imageSrc;
-    const { modal, image, slider, angleLabel, btnAspectRatio } = getElements();
+    const {
+        modal,
+        image,
+        slider,
+        angleLabel,
+        btnAspectRatio,
+        cropperMissingBox,
+        cropperInputIssueDate,
+        cropperInputExpiryDate,
+        cropperInputAuthority
+    } = getElements();
     if (!modal || !image) return;
 
     if (passportCropperInstance) {
@@ -190,6 +214,29 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
     if (angleLabel) angleLabel.textContent = '0°';
     currentAspectRatio = 3 / 4;
     if (btnAspectRatio) btnAspectRatio.textContent = 'Oran: 3:4 (Vesikalık)';
+
+    // Eksik alanları modal içinde göster ve doldur
+    if (cropperMissingBox) {
+        const issueDate = studentData?.issueDate || '';
+        const expiryDate = studentData?.expiryDate || '';
+        const authority = studentData?.issuingAuthority || studentData?.verenMakam || studentData?.birthPlace || studentData?.dogumYeriAciklamasi || '';
+
+        if (cropperInputIssueDate) {
+            cropperInputIssueDate.value = formatDateDisplay(issueDate);
+            cropperInputIssueDate.style.borderColor = issueDate ? 'var(--border-color)' : '#f39c12';
+        }
+        if (cropperInputExpiryDate) {
+            cropperInputExpiryDate.value = formatDateDisplay(expiryDate);
+            cropperInputExpiryDate.style.borderColor = expiryDate ? 'var(--border-color)' : '#f39c12';
+        }
+        if (cropperInputAuthority) {
+            cropperInputAuthority.value = authority;
+            cropperInputAuthority.style.borderColor = authority ? 'var(--border-color)' : '#f39c12';
+        }
+
+        const hasMissing = !issueDate || !expiryDate || !authority;
+        cropperMissingBox.style.display = hasMissing ? 'block' : 'none';
+    }
 
     updatePageSelectorUI();
 
@@ -260,12 +307,18 @@ function downloadCroppedImage(autoTransfer = false) {
     } catch (_) {}
 
     // Kırpılan fotoğrafı web uygulamasına ve YÖKSİS aktarım mekanizmasına ilet
+    const { cropperInputIssueDate, cropperInputExpiryDate, cropperInputAuthority } = getElements();
     window.dispatchEvent(new CustomEvent('ykn:photo-cropped', {
         detail: {
             dataUrl,
             fileName,
             studentInfo: currentStudentInfo,
-            autoTransfer
+            autoTransfer,
+            userFields: {
+                issueDate: cropperInputIssueDate?.value?.trim() || '',
+                expiryDate: cropperInputExpiryDate?.value?.trim() || '',
+                issuingAuthority: cropperInputAuthority?.value?.trim() || ''
+            }
         }
     }));
 
@@ -291,8 +344,53 @@ export function initPassportCropperModal() {
         btnCancel,
         btnClose,
         btnPrevPage,
-        btnNextPage
+        btnNextPage,
+        cropperInputIssueDate,
+        cropperInputExpiryDate,
+        cropperInputAuthority
     } = getElements();
+
+    function attachDateMask(input, targetId) {
+        if (!input) return;
+        input.addEventListener('input', () => {
+            let val = input.value.replace(/[^\d.]/g, '');
+            const digits = val.replace(/\./g, '');
+            if (digits.length >= 2 && !val.includes('.')) {
+                val = digits.slice(0, 2) + '.' + digits.slice(2);
+            }
+            if (digits.length >= 4) {
+                const parts = val.split('.');
+                if (parts.length === 2 && parts[1].length >= 2) {
+                    val = parts[0] + '.' + parts[1].slice(0, 2) + '.' + (parts[1].slice(2) || '');
+                }
+            }
+            if (val !== input.value) {
+                input.value = val.slice(0, 10);
+            }
+            const portalEl = document.getElementById(targetId);
+            if (portalEl && portalEl.value !== input.value) {
+                portalEl.value = input.value;
+                portalEl.dispatchEvent(new Event('input'));
+            }
+        });
+    }
+
+    if (cropperInputIssueDate) {
+        attachDateMask(cropperInputIssueDate, 'ykn-issue-date');
+    }
+    if (cropperInputExpiryDate) {
+        attachDateMask(cropperInputExpiryDate, 'ykn-expiry-date');
+    }
+    if (cropperInputAuthority) {
+        cropperInputAuthority.addEventListener('input', () => {
+            const val = cropperInputAuthority.value.trim().toUpperCase();
+            const portalEl = document.getElementById('ykn-issuing-authority');
+            if (portalEl && portalEl.value !== val) {
+                portalEl.value = val;
+                portalEl.dispatchEvent(new Event('input'));
+            }
+        });
+    }
 
     if (modal) {
         modal.addEventListener('click', (e) => {

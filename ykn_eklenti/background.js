@@ -2901,7 +2901,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             // durumunu taşır; güncel kayıt son sözü söylemelidir.
             const pendingData = stored?.pendingPassportCrop?.data || {};
             const currentData = stored?.studentData || {};
-            let data = mergeStudentData(mergeStudentData(pendingData, currentData), {
+            const incomingData = request.data || request.studentData || {};
+            let data = mergeStudentData(mergeStudentData(mergeStudentData(pendingData, currentData), incomingData), {
                 croppedPhotoBase64: request.photoBase64,
                 photoFileName: request.fileName || 'ogrenci_foto.jpg'
             });
