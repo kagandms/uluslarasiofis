@@ -748,13 +748,46 @@ async function getForegroundYoksisTab() {
     return yoksisTab;
 }
 
+async function reloadYoksisTab(tabId) {
+    if (!tabId) return;
+    try {
+        await new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+                chrome.tabs.onUpdated.removeListener(onUpdatedListener);
+                resolve();
+            }, 10000);
+
+            function onUpdatedListener(updatedTabId, changeInfo) {
+                if (updatedTabId === tabId && changeInfo.status === 'complete') {
+                    chrome.tabs.onUpdated.removeListener(onUpdatedListener);
+                    clearTimeout(timeout);
+                    resolve();
+                }
+            }
+
+            chrome.tabs.onUpdated.addListener(onUpdatedListener);
+            chrome.tabs.reload(tabId, {}, () => {
+                if (chrome.runtime.lastError) {
+                    chrome.tabs.onUpdated.removeListener(onUpdatedListener);
+                    clearTimeout(timeout);
+                    resolve();
+                }
+            });
+        });
+
+        // Content-script ve köprülerin oturmasını bekle
+        await waitForContentScript(tabId, 'yoksis');
+        // ZK bileşenlerinin DOM'a bağlanması ve oturumun oturması için kısa bekleme
+        await wait(800);
+    } catch (err) {
+        console.warn('[YKN] reloadYoksisTab hatası:', err);
+    }
+}
+
 async function executeYoksisSearchInMainWorld(tabId, kabulId) {
     if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return null;
     try {
         const results = await chrome.scripting.executeScript({
-            // getAllDocs zaten aynı-origin YÖKSİS iframe'lerini tek geçişte
-            // tarıyor. allFrames burada her üst/alt frame için aynı aramayı
-            // yeniden çalıştırıp aynı ZK butonuna birden çok tıklama gönderirdi.
             target: { tabId },
             world: 'MAIN',
             func: async (code) => {
@@ -795,9 +828,11 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
 
                     function isUsableControl(element) {
                         if (!element || !element.isConnected || element.disabled) return false;
+                        if (element.classList?.contains('z-textbox-disd') || element.classList?.contains('z-button-disd')) return false;
                         let current = element;
                         for (let depth = 0; current && depth < 12; depth += 1, current = current.parentElement) {
                             if (current.hidden || current.getAttribute('aria-hidden') === 'true') return false;
+                            if (current.classList?.contains('z-disabled') || current.getAttribute('disabled') !== null) return false;
                             const inlineStyle = current.style;
                             if (inlineStyle?.display === 'none' || inlineStyle?.visibility === 'hidden') return false;
                             try {
@@ -806,6 +841,49 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             } catch (_) {}
                         }
                         return true;
+                    }
+
+                    function hasLoadedStudentRecord(docs) {
+                        for (const doc of docs) {
+                            const textInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                            let filledCount = 0;
+                            for (let i = 0; i < textInputs.length; i++) {
+                                const input = textInputs[i];
+                                const val = (input.value || '').trim();
+                                if (val.length >= 2) {
+                                    const ph = norm((input.placeholder || '') + ' ' + (input.name || '') + ' ' + (input.id || ''));
+                                    if (!ph.includes('kabul') && !ph.includes('search')) {
+                                        filledCount++;
+                                    }
+                                }
+                            }
+                            if (filledCount >= 3) return true;
+                        }
+                        return false;
+                    }
+
+                    function tryClickResetOrNewRecord(docs) {
+                        for (const doc of docs) {
+                            const clickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
+                            for (let i = 0; i < clickables.length; i++) {
+                                const c = clickables[i];
+                                if (!c || !c.isConnected || c.disabled) continue;
+                                const txt = norm(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
+                                if (txt === 'yeni kayit' || txt === 'yeni' || txt === 'temizle' || txt === 'vazgec' || txt.startsWith('yeni kayit')) {
+                                    const targetBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button') || c;
+                                    const win = doc.defaultView || window;
+                                    if (win.zk?.Widget) {
+                                        const w = win.zk.Widget.$(targetBtn);
+                                        if (w && typeof w.fire === 'function') {
+                                            try { w.fire('onClick', {}, { toServer: true }); } catch (_) {}
+                                        }
+                                    }
+                                    try { targetBtn.click(); } catch (_) {}
+                                    return true;
+                                }
+                            }
+                        }
+                        return false;
                     }
 
                     function findVisibleSearchButton(input) {
@@ -838,6 +916,8 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             for (let i = 0; i < inputs.length; i += 1) {
                                 const candidate = inputs[i];
                                 if (!isUsableControl(candidate)) continue;
+                                // Öğrenci form tablosu / grid içindeki alanları arama kutusu sanma
+                                if (candidate.closest('.z-grid-body, .z-listbox-body')) continue;
                                 const metadata = norm([
                                     candidate.placeholder,
                                     candidate.getAttribute('placeholder'),
@@ -877,95 +957,111 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     const allDocs = getAllDocs(document);
                     console.log('[YKN MAIN WORLD] Scanning docs count:', allDocs.length, 'with code:', code);
 
+                    // Formda önceki bir öğrencinin kaydı açık kalmışsa temizlemeyi dene
+                    if (hasLoadedStudentRecord(allDocs)) {
+                        console.log('[YKN MAIN WORLD] Formda önceki öğrenci kaydı tespit edildi, Yeni Kayıt deneniyor...');
+                        const clicked = tryClickResetOrNewRecord(allDocs);
+                        if (clicked) {
+                            await new Promise(r => setTimeout(r, 450));
+                        }
+                        if (hasLoadedStudentRecord(allDocs)) {
+                            console.log('[YKN MAIN WORLD] Sayfa hala kayıtlı modda, sekme yenilenmesi gerekiyor.');
+                            return {
+                                success: false,
+                                inputFound: false,
+                                buttonFound: false,
+                                searchTriggered: false,
+                                needsReload: true
+                            };
+                        }
+                    }
+
                     let inp = null;
                     let btn = null;
                     let targetWin = window;
 
-                    for (const doc of allDocs) {
-                        const win = doc.defaultView || window;
-                        let dInp = null;
-                        let dBtn = null;
+                    // 1. ÖNCELİK: findVisibleAcceptancePair (chdextr / kabul metadatası ile en doğru arama çifti)
+                    const pair = findVisibleAcceptancePair(allDocs);
+                    if (pair && pair.input) {
+                        inp = pair.input;
+                        btn = pair.button;
+                        targetWin = pair.win;
+                    }
 
-                        // 1. ÖNCELİK: Placeholder / Title / Name / Id / Value üzerinden doğrudan Input bulma
-                        const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                        for (let i = 0; i < allInputs.length; i++) {
-                            const it = allInputs[i];
-                            if (!isUsableControl(it)) continue;
-                            const ph = norm((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.id || ''));
-                            if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum') && !ph.includes('tarih')) {
-                                dInp = it;
-                                break;
+                    // 2. ÖNCELİK: Eğer pair bulunamadıysa etiket ve komşu hücre taraması
+                    if (!inp) {
+                        for (const doc of allDocs) {
+                            const win = doc.defaultView || window;
+                            let dInp = null;
+                            let dBtn = null;
+
+                            const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                            for (let i = 0; i < allInputs.length; i++) {
+                                const it = allInputs[i];
+                                if (!isUsableControl(it)) continue;
+                                if (it.closest('.z-grid-body, .z-listbox-body')) continue;
+                                const ph = norm((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.id || ''));
+                                if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum') && !ph.includes('tarih')) {
+                                    dInp = it;
+                                    break;
+                                }
                             }
-                        }
 
-                        // 2. ÖNCELİK: Buton bulma ("Kabul Mektup Id İle Ara" veya içinde "kabul" geçen buton)
-                        const allClickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"]');
-                        for (let i = 0; i < allClickables.length; i++) {
-                            const c = allClickables[i];
-                            if (!isUsableControl(c)) continue;
-                            const cTxt = norm(c.innerText || c.textContent || c.value || '');
-                            if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
-                                dBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || c;
-                                break;
+                            const allClickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"]');
+                            for (let i = 0; i < allClickables.length; i++) {
+                                const c = allClickables[i];
+                                if (!isUsableControl(c)) continue;
+                                const cTxt = norm(c.innerText || c.textContent || c.value || '');
+                                if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
+                                    dBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || c;
+                                    break;
+                                }
                             }
-                        }
 
-                        // 3. ÖNCELİK: Etiket ("Kabul Mektup ID ile Sorgula" veya "Kabul Mektup Id") üzerinden bulma
-                        if (!dInp || !dBtn) {
-                            const textNodes = doc.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption, .z-caption, .z-groupbox-header');
-                            for (let i = 0; i < textNodes.length; i++) {
-                                const node = textNodes[i];
-                                if (node.children.length > 3) continue;
-                                const txt = norm(node.innerText || node.textContent || '');
-                                if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup')) && !txt.includes('tarih')) {
-                                    // Komşu hücreye bak
-                                    const td = node.closest('td');
-                                    if (td && td.nextElementSibling && !dInp) {
-                                        const adjacentInputs = td.nextElementSibling.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                                        for (let ai = 0; ai < adjacentInputs.length; ai++) {
-                                            if (isUsableControl(adjacentInputs[ai])) {
-                                                dInp = adjacentInputs[ai];
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    // En yakın kapsayıcıyı (groupbox, panel, table, form, window) bul
-                                    let box = node.closest('.z-groupbox, .z-panel, fieldset, table, form, div.z-window');
-                                    if (!box) {
-                                        let p = node.parentElement;
-                                        while (p && p !== doc.body) {
-                                            if (p.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"])')) {
-                                                box = p;
-                                                break;
-                                            }
-                                            p = p.parentElement;
-                                        }
-                                    }
-
-                                    if (box) {
-                                        if (!dInp) {
-                                            const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                                            for (let j = 0; j < bInps.length; j++) {
-                                                if (!isUsableControl(bInps[j])) continue;
-                                                const bPh = norm((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
-                                                if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum') && !bPh.includes('tarih')) {
-                                                    dInp = bInps[j];
+                            if (!dInp || !dBtn) {
+                                const textNodes = doc.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption, .z-caption, .z-groupbox-header');
+                                for (let i = 0; i < textNodes.length; i++) {
+                                    const node = textNodes[i];
+                                    if (node.children.length > 3) continue;
+                                    const txt = norm(node.innerText || node.textContent || '');
+                                    if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup')) && !txt.includes('tarih')) {
+                                        const td = node.closest('td');
+                                        if (td && td.nextElementSibling && !dInp) {
+                                            const adjacentInputs = td.nextElementSibling.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                            for (let ai = 0; ai < adjacentInputs.length; ai++) {
+                                                if (isUsableControl(adjacentInputs[ai]) && !adjacentInputs[ai].closest('.z-grid-body, .z-listbox-body')) {
+                                                    dInp = adjacentInputs[ai];
                                                     break;
                                                 }
                                             }
+                                        }
+
+                                        let box = node.closest('.z-groupbox, .z-panel, fieldset, table, form, div.z-window');
+                                        if (!box) {
+                                            let p = node.parentElement;
+                                            while (p && p !== doc.body) {
+                                                if (p.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"])')) {
+                                                    box = p;
+                                                    break;
+                                                }
+                                                p = p.parentElement;
+                                            }
+                                        }
+
+                                        if (box) {
                                             if (!dInp) {
+                                                const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
                                                 for (let j = 0; j < bInps.length; j++) {
-                                                    if (isUsableControl(bInps[j])) {
+                                                    if (!isUsableControl(bInps[j]) || bInps[j].closest('.z-grid-body, .z-listbox-body')) continue;
+                                                    const bPh = norm((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
+                                                    if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum') && !bPh.includes('tarih')) {
                                                         dInp = bInps[j];
                                                         break;
                                                     }
                                                 }
                                             }
-                                        }
-                                        if (!dBtn) {
-                                            const bBtns = box.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
-                                            if (bBtns.length > 0) {
+                                            if (!dBtn) {
+                                                const bBtns = box.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
                                                 for (let j = 0; j < bBtns.length; j++) {
                                                     if (!isUsableControl(bBtns[j])) continue;
                                                     const bTxt = norm(bBtns[j].innerText || bBtns[j].textContent || bBtns[j].value || '');
@@ -974,77 +1070,35 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                                         break;
                                                     }
                                                 }
-                                                if (!dBtn) {
-                                                    for (let j = 0; j < bBtns.length; j++) {
-                                                        if (!isUsableControl(bBtns[j])) continue;
-                                                        dBtn = bBtns[j].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[j];
-                                                        break;
-                                                    }
-                                                }
                                             }
                                         }
+                                        if (dInp && dBtn) break;
                                     }
-                                    if (dInp && dBtn) break;
                                 }
                             }
-                        }
 
-                        // 4. Biri bulunup diğeri bulunamadıysa ebeveyn ağacında yukarı yürüyerek tamamla
-                        if (dBtn && !dInp) {
-                            let parent = dBtn.parentElement;
-                            while (parent && parent !== doc.body) {
-                                const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                                for (let k = 0; k < inps.length; k++) {
-                                    if (!isUsableControl(inps[k])) continue;
-                                    const itPh = norm(inps[k].placeholder || inps[k].getAttribute('placeholder') || inps[k].value || inps[k].id || '');
-                                    if (!itPh.includes('pasaport') && !itPh.includes('tc') && !itPh.includes('dogum') && !itPh.includes('tarih')) {
-                                        dInp = inps[k];
-                                        break;
-                                    }
-                                }
-                                if (dInp) break;
-                                parent = parent.parentElement;
+                            if (dInp) {
+                                inp = dInp;
+                                btn = dBtn || findVisibleSearchButton(inp);
+                                targetWin = win;
+                                break;
                             }
-                        }
-
-                        if (dInp && !dBtn) {
-                            let parent = dInp.parentElement;
-                            while (parent && parent !== doc.body) {
-                                const btns = parent.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
-                                for (let k = 0; k < btns.length; k++) {
-                                    if (!isUsableControl(btns[k])) continue;
-                                    const bTxt = norm(btns[k].innerText || btns[k].textContent || btns[k].value || '');
-                                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                                        dBtn = btns[k].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[k];
-                                        break;
-                                    }
-                                }
-                                if (dBtn) break;
-                                if (btns.length > 0) {
-                                    for (let k = 0; k < btns.length; k++) {
-                                        if (!isUsableControl(btns[k])) continue;
-                                        dBtn = btns[k].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[k];
-                                        break;
-                                    }
-                                    if (dBtn) break;
-                                }
-                                parent = parent.parentElement;
-                            }
-                        }
-
-                        if (dInp) {
-                            inp = dInp;
-                            btn = dBtn;
-                            targetWin = win;
-                            console.log('[YKN MAIN WORLD] Found in doc:', { inp: Boolean(inp), btn: Boolean(btn) });
-                            break;
                         }
                     }
 
                     console.log('[YKN MAIN WORLD] Search summary:', { inp: Boolean(inp), btn: Boolean(btn) });
 
-                    // 5. Input'a değeri yaz. ZK varsa tek bir onChange gönder;
-                    // aynı isteği DOM, zAu ve widget üzerinden çoğaltma.
+                    if (!inp || !btn) {
+                        return {
+                            success: false,
+                            inputFound: Boolean(inp),
+                            buttonFound: Boolean(btn),
+                            searchTriggered: false,
+                            needsReload: true
+                        };
+                    }
+
+                    // Input'a değeri yaz
                     let inputWidget = null;
                     let zkChangeSent = false;
                     if (inp) {
@@ -1082,18 +1136,13 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     // ZK'nin onChange'i işlemesi için kısa bekleme
                     await new Promise(r => setTimeout(r, 150));
 
-                    // Kabul alanı onChange sonrasında ZK tarafından yeniden
-                    // oluşturulabilir. Eski input/buton referansına tıklamak
-                    // kod ekranda görünse bile aramayı sunucuya göndermez.
+                    // Kabul alanı onChange sonrasında ZK tarafından yeniden oluşturulmuşsa referansı tazele
                     const refreshedPair = findVisibleAcceptancePair(getAllDocs(document));
-                    if (refreshedPair) {
+                    if (refreshedPair && refreshedPair.input) {
                         inp = refreshedPair.input;
                         targetWin = refreshedPair.win;
-                        btn = refreshedPair.button || null;
+                        btn = refreshedPair.button || btn;
 
-                        // onChange inputu gerçekten yenilediyse yeni düğüm boş
-                        // başlayabilir. Kodu aktif düğüme tekrar yazmadan eski
-                        // değeri taşıyan butona basmak aramayı boşa düşürür.
                         if (String(inp.value || '').trim().toUpperCase() !== String(code).trim().toUpperCase()) {
                             const refreshedSetter = Object.getOwnPropertyDescriptor(targetWin.HTMLInputElement.prototype, 'value')?.set
                                 || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
@@ -1117,11 +1166,9 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                 } catch (_) {}
                             }
                         }
-                    } else if (btn && !isUsableControl(btn)) {
-                        btn = null;
                     }
 
-                    // 6. Butonu ve aramayı ZK Widget + zAu + DOM ile garantili çalıştır.
+                    // Butonu ve aramayı ZK Widget + zAu + DOM ile garantili çalıştır
                     if (btn) {
                         const actualBtn = btn.querySelector('button, input[type="button"], a, [role="button"]') || btn;
                         let buttonWidget = null;
@@ -1151,7 +1198,6 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     }
 
                     if (inp) {
-                        // Kabul Mektup ID kutusunda ZK onOK eventini de tetikle
                         inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: targetWin }));
                         inp.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: targetWin }));
                         if (targetWin.zk && targetWin.zk.Widget) {
@@ -1162,15 +1208,20 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         }
                     }
 
+                    const finalVal = norm(inp?.value || '');
+                    const codeNorm = norm(code || '');
+                    const valueConfirmed = finalVal.includes(codeNorm);
+
                     return {
-                        success: Boolean(inp),
+                        success: Boolean(valueConfirmed && btn),
                         inputFound: Boolean(inp),
                         buttonFound: Boolean(btn),
-                        searchTriggered: Boolean(inp)
+                        searchTriggered: Boolean(valueConfirmed && btn),
+                        needsReload: !valueConfirmed || !btn
                     };
                 } catch (e) {
                     console.error('[YKN MAIN World Search Error]', e);
-                    return { error: e.message };
+                    return { error: e.message, searchTriggered: false, needsReload: true };
                 }
             },
             args: [kabulId]
@@ -2738,14 +2789,32 @@ async function transferToYoksis(request) {
         const baselineDomRevision = stateBeforeSearch?.domRevision;
 
         // 2. ARAMAYI DOĞRUDAN MAIN WORLD'DE ÇALIŞTIR (ZK Widget onChange, onClick AU ve DOM güvencesi)
-        const mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
+        let mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
         let searchTriggered = Boolean(mainResults?.some(r => r.result?.searchTriggered === true));
+        let needsReload = Boolean(mainResults?.some(r => r.result?.needsReload === true));
 
-        // 3. MAIN world butonu bulamadıysa izole content-script yolu ile dene
+        // 3. Eğer arama tetiklenemediyse veya sekme kilitli/yenileme gerektiriyorsa (2. ve sonraki öğrencilerde):
+        // YÖKSİS sekmesini otomatik yenile (F5 etkisi) ve temiz sayfada aramayı tekrar çalıştır!
+        if (!searchTriggered || needsReload) {
+            console.log('[YKN] YÖKSİS arama alanı ilk denemede hazır olmadı (önceki öğrenci açık veya kilitli). Sekme otomatik yenileniyor...');
+            await reloadYoksisTab(yoksisTab.id);
+            mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
+            searchTriggered = Boolean(mainResults?.some(r => r.result?.searchTriggered === true));
+        }
+
+        // 4. MAIN world butonu bulamadıysa izole content-script yolu ile dene
         if (!searchTriggered) {
             console.warn('[YKN] MAIN world kabul aramasını tetikleyemedi, content-script deneniyor...');
             const response = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId, { waitForForm: false });
             searchTriggered = response?.searchTriggered === true;
+        }
+
+        // 5. Content script de tetikleyemediyse son çare olarak sekme yeniden yüklenip deneniyor
+        if (!searchTriggered) {
+            console.warn('[YKN] Arama tetiklenemedi, son çare olarak sekme yeniden yüklenip deneniyor...');
+            await reloadYoksisTab(yoksisTab.id);
+            mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
+            searchTriggered = Boolean(mainResults?.some(r => r.result?.searchTriggered === true));
         }
 
         if (!searchTriggered) {
@@ -2964,11 +3033,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         (async () => {
             const acceptance = await readAcceptanceCodeFromCurrentProfile(request);
             const storedData = await getStoredStudentData();
-            const data = mergeStudentData(storedData, {
+            // Yeni bir öğrencinin kabul kodu okunuyorsa, önceki öğrencinin alanlarını temizle
+            const isDifferentStudent = storedData?.kabulId && storedData.kabulId !== acceptance.kabulId;
+            const baseData = isDifferentStudent ? {} : (storedData || {});
+            const data = {
+                ...baseData,
                 kabulId: acceptance.kabulId,
                 yoksisId: acceptance.kabulId,
-                acceptanceLetterUrl: acceptance.acceptanceDocumentUrl
-            });
+                acceptanceLetterUrl: acceptance.acceptanceDocumentUrl,
+                yoksisReady: false
+            };
             const transfer = await transferToYoksis({
                 ...request,
                 data,

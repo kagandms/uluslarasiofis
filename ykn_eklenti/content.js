@@ -778,10 +778,12 @@ function getYoksisClickableSelector() {
 // yazılmış gibi görünse de sunucuya yeni aramanın hiç gitmemesine yol açıyordu.
 function isYoksisControlUsable(element) {
     if (!element || !element.isConnected || element.disabled) return false;
+    if (element.classList?.contains('z-textbox-disd') || element.classList?.contains('z-button-disd')) return false;
 
     let current = element;
     for (let depth = 0; current && depth < 12; depth += 1, current = current.parentElement) {
         if (current.hidden || current.getAttribute('aria-hidden') === 'true') return false;
+        if (current.classList?.contains('z-disabled') || current.getAttribute('disabled') !== null) return false;
         const inlineStyle = current.style;
         if (inlineStyle?.display === 'none' || inlineStyle?.visibility === 'hidden') return false;
         try {
@@ -790,6 +792,24 @@ function isYoksisControlUsable(element) {
         } catch (_) {}
     }
     return true;
+}
+
+function tryResetOrNewRecord() {
+    const allDocs = getAllDocs(document);
+    for (const doc of allDocs) {
+        const clickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
+        for (const c of clickables) {
+            if (!c || !c.isConnected || c.disabled) continue;
+            const txt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
+            if (txt === 'yeni kayit' || txt === 'yeni' || txt === 'temizle' || txt === 'vazgec' || txt.startsWith('yeni kayit')) {
+                const targetBtn = getYoksisClickableRoot(c) || c;
+                triggerZkClick(targetBtn);
+                try { targetBtn.click(); } catch (_) {}
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 function getYoksisClickableText(element) {
@@ -855,6 +875,8 @@ function findYoksisKabulPair() {
         const inputCandidates = Array.from(doc.querySelectorAll(inputSelector))
             .map((input) => {
                 if (!isYoksisControlUsable(input)) return null;
+                // Öğrenci form tablosu / grid içindeki alanları arama kutusu sanma
+                if (input.closest('.z-grid-body, .z-listbox-body')) return null;
                 const metadata = normalizeYoksisText([
                     input.placeholder,
                     input.getAttribute('placeholder'),
@@ -1076,6 +1098,9 @@ function waitForYoksisSearchControls(timeoutMs = 12_000) {
             resolve(initialPair);
             return;
         }
+
+        // Başlangıçta alan bulunamadıysa (önceki öğrenci açık olabilir), Yeni Kayıt/Temizle butonunu dene
+        tryResetOrNewRecord();
 
         const intervalId = setInterval(() => {
             if (typeof chrome === 'undefined' || !chrome?.runtime?.id) {
