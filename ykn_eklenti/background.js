@@ -849,7 +849,8 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                 if ((!metadata.includes('kabul') && !isAcceptanceEditor)
                                     || metadata.includes('pasaport')
                                     || metadata.includes('tc')
-                                    || metadata.includes('dogum')) continue;
+                                    || metadata.includes('dogum')
+                                    || metadata.includes('tarih')) continue;
                                 let searchBtn = findVisibleSearchButton(candidate);
                                 if (!searchBtn) {
                                     const allClickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"], table.z-button');
@@ -891,7 +892,7 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             const it = allInputs[i];
                             if (!isUsableControl(it)) continue;
                             const ph = norm((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.id || ''));
-                            if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum')) {
+                            if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum') && !ph.includes('tarih')) {
                                 dInp = it;
                                 break;
                             }
@@ -916,7 +917,7 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                 const node = textNodes[i];
                                 if (node.children.length > 3) continue;
                                 const txt = norm(node.innerText || node.textContent || '');
-                                if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup')) && !txt.includes('kabultarih')) {
+                                if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup')) && !txt.includes('tarih')) {
                                     // Komşu hücreye bak
                                     const td = node.closest('td');
                                     if (td && td.nextElementSibling && !dInp) {
@@ -948,7 +949,7 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                             for (let j = 0; j < bInps.length; j++) {
                                                 if (!isUsableControl(bInps[j])) continue;
                                                 const bPh = norm((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
-                                                if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum')) {
+                                                if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum') && !bPh.includes('tarih')) {
                                                     dInp = bInps[j];
                                                     break;
                                                 }
@@ -996,7 +997,7 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                 for (let k = 0; k < inps.length; k++) {
                                     if (!isUsableControl(inps[k])) continue;
                                     const itPh = norm(inps[k].placeholder || inps[k].getAttribute('placeholder') || inps[k].value || inps[k].id || '');
-                                    if (!itPh.includes('pasaport') && !itPh.includes('tc') && !itPh.includes('dogum')) {
+                                    if (!itPh.includes('pasaport') && !itPh.includes('tc') && !itPh.includes('dogum') && !itPh.includes('tarih')) {
                                         dInp = inps[k];
                                         break;
                                     }
@@ -1506,6 +1507,12 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         if (!el) return;
                         var wWin = win || (el.ownerDocument && el.ownerDocument.defaultView) || window;
                         var widgetCommitted = false;
+
+                        try {
+                            el.focus();
+                            el.click();
+                        } catch (_) {}
+
                         try {
                             if (wWin.zk && wWin.zk.Widget) {
                                 var w = wWin.zk.Widget.$(el);
@@ -1534,30 +1541,19 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                         if (typeof rg._fixCheck === 'function') {
                                             try { rg._fixCheck(w); } catch (_) {}
                                         }
-                                    }
-
-                                    if (typeof w.doClick_ === 'function') {
-                                        try {
-                                            w.doClick_(new wWin.zk.Event(w, 'onClick', {}));
-                                            widgetCommitted = true;
-                                        } catch (_) {}
-                                    }
-
-                                    if (typeof w.fire === 'function') {
-                                        try {
-                                            w.fire('onCheck', { checked: true }, { toServer: true });
-                                            widgetCommitted = true;
-                                        } catch (_) {}
-                                    }
-
-                                    if (wWin.zAu && typeof wWin.zAu.send === 'function') {
-                                        try {
-                                            wWin.zAu.send(new wWin.zk.Event(w, 'onCheck', { checked: true }, { toServer: true }));
-                                            if (rg && rg.uuid) {
-                                                wWin.zAu.send(new wWin.zk.Event(rg, 'onCheck', { data: [w.uuid], checked: true }, { toServer: true }));
-                                            }
-                                            widgetCommitted = true;
-                                        } catch (_) {}
+                                        if (typeof rg.fire === 'function') {
+                                            try {
+                                                rg.fire('onCheck', { items: [w], reference: w }, { toServer: true });
+                                                widgetCommitted = true;
+                                            } catch (_) {}
+                                        }
+                                    } else {
+                                        if (typeof w.fire === 'function') {
+                                            try {
+                                                w.fire('onCheck', { checked: true }, { toServer: true });
+                                                widgetCommitted = true;
+                                            } catch (_) {}
+                                        }
                                     }
                                 }
                             }
@@ -1570,7 +1566,6 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             if (wWin.jq) {
                                 try {
                                     wWin.jq(el).trigger('change');
-                                    wWin.jq(el).trigger('click');
                                 } catch (_) {}
                             }
                         } catch (_) {}
@@ -2056,7 +2051,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         var maritalRow = null;
                         for (var i = 0; i < allLabels.length; i++) {
                             var txt = norm(allLabels[i].innerText || allLabels[i].textContent || '');
-                            if (txt === 'medenihali' || txt === 'medenihal' || txt === 'maritalstatus' || txt.indexOf('medenihal') !== -1 || txt.indexOf('maritalstatus') !== -1) {
+                            if (txt === 'medenihali' || txt === 'medenihal' || txt === 'maritalstatus' || txt.indexOf('medeni') !== -1 || txt.indexOf('marital') !== -1) {
                                 var row = allLabels[i].closest('tr') || allLabels[i].closest('.z-row') || allLabels[i].closest('.form-group') || allLabels[i].parentElement;
                                 if (row && row.querySelectorAll('input[type="radio"]').length >= 2) {
                                     maritalRow = row;
@@ -2143,33 +2138,30 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                     : (isBekar ? ctrl.marriedWrapper : ctrl.singleWrapper);
 
                                 if (targetRadio || targetLabel || targetWrapper) {
-                                    // 1. Karşı radyo butonunu temizle
-                                    if (oppRadio) {
-                                        oppRadio.checked = false;
-                                        try {
-                                            var oppW = win.zk && win.zk.Widget ? (win.zk.Widget.$(oppRadio) || (oppRadio.id ? win.zk.Widget.$(oppRadio.id.replace(/-real$/, '')) : null)) : null;
-                                            if (oppW && typeof oppW.setChecked === 'function') oppW.setChecked(false);
-                                        } catch (_) {}
-                                    }
+                                    // 1. Karşı radyo sarmalayıcısının işaret stilini kaldır
                                     if (oppWrapper && oppWrapper.classList) {
                                         oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
                                     }
 
-                                    // 2. Hedef radyoyu işaretle
+                                    // 2. Doğal kullanıcı tıklaması:
+                                    // Radyoyu doğrudan checked=true yapmadan önce click() çağrılır;
+                                    // böylece tarayıcı native change eventini ve ZK dinleyicisini eksiksiz tetikler.
+                                    if (targetRadio) {
+                                        try { targetRadio.focus(); } catch (_) {}
+                                        try { targetRadio.click(); } catch (_) {}
+                                    } else if (targetLabel || targetWrapper) {
+                                        triggerUserClick(targetLabel || targetWrapper);
+                                    }
+
+                                    // 3. DOM güvencesi
                                     if (targetRadio) {
                                         targetRadio.checked = true;
                                     }
+                                    if (oppRadio) {
+                                        oppRadio.checked = false;
+                                    }
                                     if (targetWrapper && targetWrapper.classList) {
                                         targetWrapper.classList.add('z-radio-checked');
-                                    }
-
-                                    // 3. Doğal tıklama simülasyonu (Öncelikle label veya wrapper'a tıkla, kullanıcı gibi)
-                                    var clickTarget = targetLabel || targetWrapper || targetRadio;
-                                    if (clickTarget) {
-                                        triggerUserClick(clickTarget);
-                                    }
-                                    if (targetRadio && clickTarget !== targetRadio) {
-                                        try { targetRadio.click(); } catch (_) {}
                                     }
 
                                     // 4. Standart input/change eventleri
@@ -2181,7 +2173,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                         }
                                     }
 
-                                    // 5. ZK Widget API ve AU Kanalı ile sunucuya güvenli bildir
+                                    // 5. ZK Widget API ve Radiogroup onCheck AU Senkronizasyonu
                                     try {
                                         var w = null;
                                         if (win.zk && win.zk.Widget) {
@@ -2207,30 +2199,17 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                                 if (typeof rg._fixCheck === 'function') {
                                                     try { rg._fixCheck(w); } catch (_) {}
                                                 }
-                                            }
-
-                                            // ZK'nın kendi dahili doClick_ metodunu tetikle
-                                            if (typeof w.doClick_ === 'function') {
-                                                try {
-                                                    w.doClick_(new win.zk.Event(w, 'onClick', {}));
-                                                } catch (_) {}
-                                            }
-
-                                            // onCheck olayını Radio widget'ı üzerinden sunucuya gönder
-                                            if (typeof w.fire === 'function') {
-                                                try {
-                                                    w.fire('onCheck', { checked: true }, { toServer: true });
-                                                } catch (_) {}
-                                            }
-
-                                            // zAu kanalı ile AU isteğini doğrudan ilet (Döngüsel widget nesnesi içermez!)
-                                            if (win.zAu && typeof win.zAu.send === 'function') {
-                                                try {
-                                                    win.zAu.send(new win.zk.Event(w, 'onCheck', { checked: true }, { toServer: true }));
-                                                } catch (_) {}
-                                                if (rg && rg.uuid) {
+                                                // ZK Java backend standardı: Radiogroup üzerinde items ve reference ile onCheck gönder
+                                                if (typeof rg.fire === 'function') {
                                                     try {
-                                                        win.zAu.send(new win.zk.Event(rg, 'onCheck', { data: [w.uuid], checked: true }, { toServer: true }));
+                                                        rg.fire('onCheck', { items: [w], reference: w }, { toServer: true });
+                                                    } catch (_) {}
+                                                }
+                                            } else {
+                                                // Radiogroup yoksa doğrudan Radio widget'ı üzerinden gönder
+                                                if (typeof w.fire === 'function') {
+                                                    try {
+                                                        w.fire('onCheck', { checked: true }, { toServer: true });
                                                     } catch (_) {}
                                                 }
                                             }
@@ -2315,10 +2294,10 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         var isRussia = countryNorm.indexOf('rus') !== -1 || dogumUlkesiNorm.indexOf('rus') !== -1;
 
                         var defaultBirthPlace = isTurkmen ? 'TKM' : (isAfghan ? 'KABUL' : (isPakistan ? 'ISLAMABAD' : (isRussia ? 'MOSCOW' : '')));
-                        var defaultIssuingAuthority = isTurkmen ? 'SMST' : (isAfghan ? 'PASSPORT DEPARTMENT' : (isPakistan ? 'DGIP' : (isRussia ? 'MIA OF RUSSIA' : '')));
+                        var defaultIssuingAuthority = isTurkmen ? 'SMST' : (isAfghan ? 'PASSPORT DEPARTMENT' : (isPakistan ? 'PAKISTAN' : (isRussia ? 'MIA OF RUSSIA' : '')));
 
                         var birthPlace = data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || defaultBirthPlace;
-                        var issuingAuthority = data.verenMakam || data.issuingAuthority || defaultIssuingAuthority;
+                        var issuingAuthority = isTurkmen ? 'SMST' : (isPakistan ? 'PAKISTAN' : (data.verenMakam || data.issuingAuthority || defaultIssuingAuthority));
                         var birthCountry = data.dogumUlkesi || countryValue || '';
                         var firstName = data.firstName || data.ad || data.name || '';
                         var lastName = data.lastName || data.soyad || data.surname || '';

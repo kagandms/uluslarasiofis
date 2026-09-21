@@ -1265,7 +1265,7 @@ export function extractPassportIssuingAuthority(text, options = {}) {
         const fallbackIso = getCountryIso3Code(
             options.uyruk || options.nationality || options.country || options.dogumUlkesi
         );
-        if (fallbackIso === 'PAK') return 'DGIP';
+        if (fallbackIso === 'PAK') return 'PAKISTAN';
         if (fallbackIso === 'AFG') return 'PASSPORT DEPARTMENT';
         if (fallbackIso === 'RUS') return 'MIA OF RUSSIA';
         if (fallbackIso === 'TKM') return 'SMST';
@@ -1408,7 +1408,7 @@ export function extractPassportIssuingAuthority(text, options = {}) {
         options.uyruk || options.nationality || options.country || options.dogumUlkesi
     );
 
-    if (fallbackIso === 'PAK') return 'DGIP';
+    if (fallbackIso === 'PAK') return 'PAKISTAN';
     if (fallbackIso === 'AFG') return 'PASSPORT DEPARTMENT';
     if (fallbackIso === 'RUS') return 'MIA OF RUSSIA';
     if (fallbackIso === 'TKM') return 'SMST';

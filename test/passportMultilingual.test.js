@@ -486,9 +486,9 @@ Issuing Authority: IM&P`;
 
     // Pakistani authority and birth place fallbacks
     const fallbackAuth = extractPassportIssuingAuthority('', { uyruk: 'PAKISTAN' });
-    assert.equal(fallbackAuth, 'DGIP');
+    assert.equal(fallbackAuth, 'PAKISTAN');
     const extFallbackAuth = extParser.extractPassportIssuingAuthority('', { uyruk: 'PAKISTAN' });
-    assert.equal(extFallbackAuth, 'DGIP');
+    assert.equal(extFallbackAuth, 'PAKISTAN');
 
     const fallbackPob = extractPassportPlaceOfBirth('PAKISTAN PASSPORT HOLDER BORN IN ISLAMABAD', { uyruk: 'PAKISTAN' });
     assert.equal(fallbackPob, 'ISLAMABAD');

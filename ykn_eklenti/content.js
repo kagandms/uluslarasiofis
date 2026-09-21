@@ -499,7 +499,7 @@ function findMaritalControls(doc) {
     let maritalRow = null;
     for (const lbl of allLabels) {
         const txt = normalize(lbl.innerText || lbl.textContent || '');
-        if (txt === 'medenihali' || txt === 'medenihal' || txt === 'maritalstatus' || txt.includes('medenihal') || txt.includes('maritalstatus')) {
+        if (txt === 'medenihali' || txt === 'medenihal' || txt === 'maritalstatus' || txt.includes('medeni') || txt.includes('marital')) {
             const row = lbl.closest('tr') || lbl.closest('.z-row') || lbl.closest('.form-group') || lbl.parentElement;
             if (row && row.querySelectorAll('input[type="radio"]').length >= 2) {
                 maritalRow = row;
@@ -588,26 +588,25 @@ function simulateRadioByLabelText(labelText) {
                 : (isBekar ? ctrl.marriedWrapper : ctrl.singleWrapper);
 
             if (targetRadio || targetLabel || targetWrapper) {
-                if (oppRadio) {
-                    oppRadio.checked = false;
-                }
                 if (oppWrapper && oppWrapper.classList) {
                     oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
                 }
 
                 if (targetRadio) {
+                    try { targetRadio.focus(); } catch (_) {}
+                    try { targetRadio.click(); } catch (_) {}
+                } else if (targetLabel || targetWrapper) {
+                    simulateUserClick(targetLabel || targetWrapper);
+                }
+
+                if (targetRadio) {
                     targetRadio.checked = true;
+                }
+                if (oppRadio) {
+                    oppRadio.checked = false;
                 }
                 if (targetWrapper && targetWrapper.classList) {
                     targetWrapper.classList.add('z-radio-checked');
-                }
-
-                const clickTarget = targetLabel || targetWrapper || targetRadio;
-                if (clickTarget) {
-                    simulateUserClick(clickTarget);
-                }
-                if (targetRadio && clickTarget !== targetRadio) {
-                    try { targetRadio.click(); } catch (_) {}
                 }
 
                 if (targetRadio) {
@@ -869,7 +868,7 @@ function findYoksisKabulPair() {
                 // imzayı, pasaport sorgu alanlarına göre önceliklendir.
                 const isAcceptanceEditor = /(?:-|_)chdextr$/i.test(input.id || '');
                 if ((!metadata.includes('kabul') && !isAcceptanceEditor)
-                    || metadata.includes('pasaport') || metadata.includes('tc') || metadata.includes('dogum')) return null;
+                    || metadata.includes('pasaport') || metadata.includes('tc') || metadata.includes('dogum') || metadata.includes('tarih')) return null;
                 let score = 10;
                 if (isAcceptanceEditor) score += 100;
                 if (metadata.includes('mektup')) score += 30;
@@ -886,7 +885,7 @@ function findYoksisKabulPair() {
             for (const row of doc.querySelectorAll('tr')) {
                 if (!isYoksisControlUsable(row)) continue;
                 const rowText = normalizeYoksisText(row.innerText || row.textContent || '');
-                if (!rowText.includes('kabul') || !rowText.includes('id')) continue;
+                if (!rowText.includes('kabul') || !rowText.includes('id') || rowText.includes('tarih')) continue;
                 const candidate = Array.from(row.querySelectorAll(inputSelector))
                     .find((input) => isYoksisTextInput(input) && isYoksisControlUsable(input));
                 if (candidate) {
@@ -3277,9 +3276,11 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 
             const dogumYeriAciklamasi = findTargetElementByFuzzyLabel('Doğum Yeri Açıklaması', 'input');
 
-            // Türkmenistan için doğum yeri açıklaması her zaman TKM sabittir
+            // Türkmenistan için TKM ve SMST, Pakistan için PAKISTAN sabittir
+            const isPakistani = uyrukNorm.includes('pakistan') || uyrukNorm === 'pak' ||
+                                dogumNorm.includes('pakistan') || dogumNorm === 'pak';
             const customDogumYeri = isTurkmen ? 'TKM' : (data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || '').trim();
-            const customVerenMakam = (data.verenMakam || data.issuingAuthority || (isTurkmen ? 'SMST' : '')).trim();
+            const customVerenMakam = (isTurkmen ? 'SMST' : (isPakistani ? 'PAKISTAN' : (data.verenMakam || data.issuingAuthority || ''))).trim();
 
             let filledDogumYeri = false;
             let filledVerenMakam = false;
@@ -3322,7 +3323,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                         if (recordField('Belgeyi Veren Makam', 'AFGHAN', filled)) successCount++;
                     }
                 } 
-                else if (uyrukNorm.includes('pakistan') || dogumNorm.includes('pakistan')) {
+                else if (isPakistani) {
                     if (!filledDogumYeri && dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
                         const filled = await simulateInput(dogumYeriAciklamasi, 'PAK');
                         if (recordField('Doğum Yeri Açıklaması', 'PAK', filled)) successCount++;

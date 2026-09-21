@@ -674,8 +674,14 @@ export function initYknManager() {
         return nationalityText.includes('TÜRKMEN') || nationalityText.includes('TURKMEN') || nationalityText.includes('TKM');
     }
 
+    function isPakistaniStudent(student) {
+        const nationalityText = `${student?.uyruk || ''} ${student?.dogumUlkesi || ''}`.toUpperCase();
+        return nationalityText.includes('PAKİSTAN') || nationalityText.includes('PAKISTAN') || nationalityText.includes('PAK');
+    }
+
     function getCountryAuthorityFallback(student) {
         if (isTurkmenStudent(student)) return 'SMST';
+        if (isPakistaniStudent(student)) return 'PAKISTAN';
         return getCountryIso3Code(student?.uyruk || student?.dogumUlkesi);
     }
 
@@ -701,6 +707,15 @@ export function initYknManager() {
             student.verenMakam = 'SMST';
             student.issuingAuthority = 'SMST';
             if (inputIssuingAuthority) inputIssuingAuthority.value = 'SMST';
+            return;
+        }
+
+        const isPakistani = isPakistaniStudent(student);
+        if (isPakistani) {
+            // Pakistan pasaportlarında YÖKSİS için veren makam sabit olarak PAKISTAN'dır.
+            student.verenMakam = 'PAKISTAN';
+            student.issuingAuthority = 'PAKISTAN';
+            if (inputIssuingAuthority) inputIssuingAuthority.value = 'PAKISTAN';
             return;
         }
 
