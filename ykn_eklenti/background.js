@@ -1223,7 +1223,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             .normalize('NFD')
                             .replace(/[\u0300-\u036f]/g, '')
                             .replace(/duzenlenme/g, 'duzenleme')
-                            .replace(/\s+/g, '');
+                            .replace(/[^a-z0-9]/g, '');
                     }
 
                     // Apply ülkeleri çoğunlukla İngilizce, YÖKSİS seçenekleri
@@ -1531,9 +1531,16 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                         if (typeof rg.setSelectedItem === 'function') {
                                             try { rg.setSelectedItem(w); } catch (_) {}
                                         }
-                                        if (typeof rg.fire === 'function') {
-                                            try { rg.fire('onCheck', { selected: w, checked: true }, { toServer: true }); } catch (_) {}
+                                        if (typeof rg._fixCheck === 'function') {
+                                            try { rg._fixCheck(w); } catch (_) {}
                                         }
+                                    }
+
+                                    if (typeof w.doClick_ === 'function') {
+                                        try {
+                                            w.doClick_(new wWin.zk.Event(w, 'onClick', {}));
+                                            widgetCommitted = true;
+                                        } catch (_) {}
                                     }
 
                                     if (typeof w.fire === 'function') {
@@ -1543,18 +1550,11 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                         } catch (_) {}
                                     }
 
-                                    if (typeof w.doClick_ === 'function') {
-                                        try {
-                                            w.doClick_(new wWin.zk.Event(w, 'click', {}));
-                                            widgetCommitted = true;
-                                        } catch (_) {}
-                                    }
-
                                     if (wWin.zAu && typeof wWin.zAu.send === 'function') {
                                         try {
                                             wWin.zAu.send(new wWin.zk.Event(w, 'onCheck', { checked: true }, { toServer: true }));
-                                            if (rg) {
-                                                wWin.zAu.send(new wWin.zk.Event(rg, 'onCheck', { selected: w, checked: true }, { toServer: true }));
+                                            if (rg && rg.uuid) {
+                                                wWin.zAu.send(new wWin.zk.Event(rg, 'onCheck', { data: [w.uuid], checked: true }, { toServer: true }));
                                             }
                                             widgetCommitted = true;
                                         } catch (_) {}
@@ -1991,9 +1991,14 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         var genderRow = null;
                         for (var i = 0; i < allLabels.length; i++) {
                             var txt = norm(allLabels[i].innerText || allLabels[i].textContent || '');
-                            if (txt === 'cinsiyet' || txt === 'cinsiyeti' || txt === 'gender') {
-                                genderRow = allLabels[i].closest('tr') || allLabels[i].closest('.z-row') || allLabels[i].parentElement;
-                                if (genderRow) break;
+                            if (txt === 'cinsiyet' || txt === 'cinsiyeti' || txt === 'gender' || txt.indexOf('cinsiyet') !== -1) {
+                                var row = allLabels[i].closest('tr') || allLabels[i].closest('.z-row') || allLabels[i].closest('.form-group') || allLabels[i].parentElement;
+                                if (row && row.querySelectorAll('input[type="radio"]').length >= 2) {
+                                    genderRow = row;
+                                    break;
+                                } else if (!genderRow && row) {
+                                    genderRow = row;
+                                }
                             }
                         }
 
@@ -2002,18 +2007,23 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         for (var j = 0; j < radios.length; j++) {
                             var r = radios[j];
                             var wrapper = r.closest ? r.closest('.z-radio') : r.parentElement;
-                            var rText = norm((wrapper ? (wrapper.innerText || wrapper.textContent) : '') + ' ' + (r.nextElementSibling ? (r.nextElementSibling.innerText || r.nextElementSibling.textContent) : '') + ' ' + (r.id || ''));
-                            if (rText.indexOf('erkek') !== -1 || rText.indexOf('male') !== -1) {
+                            var specificLabel = (r.labels && r.labels[0])
+                                || (r.id ? d.querySelector('label[for="' + r.id + '"]') : null)
+                                || (wrapper ? wrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null)
+                                || (r.nextElementSibling && (r.nextElementSibling.tagName === 'LABEL' || r.nextElementSibling.classList.contains('z-radio-cnt')) ? r.nextElementSibling : null);
+                            var rText = norm((specificLabel ? (specificLabel.innerText || specificLabel.textContent) : '') + ' ' + (r.id || '') + ' ' + (r.value || ''));
+                            if (rText.indexOf('erkek') !== -1 || rText.indexOf('male') !== -1 || rText === 'e' || rText === 'm') {
                                 result.maleRadio = r;
                                 result.maleWrapper = wrapper;
-                                result.maleLabel = (wrapper ? wrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || r.nextElementSibling || wrapper;
-                            } else if (rText.indexOf('kadin') !== -1 || rText.indexOf('female') !== -1) {
+                                result.maleLabel = specificLabel || wrapper;
+                            } else if (rText.indexOf('kadin') !== -1 || rText.indexOf('female') !== -1 || rText === 'k' || rText === 'f') {
                                 result.femaleRadio = r;
                                 result.femaleWrapper = wrapper;
-                                result.femaleLabel = (wrapper ? wrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || r.nextElementSibling || wrapper;
+                                result.femaleLabel = specificLabel || wrapper;
                             }
                         }
 
+                        // YÖKSİS standardında 1. radyo Erkek, 2. radyo Kadın'dır
                         if (genderRow && radios.length >= 2) {
                             if (!result.maleRadio) {
                                 result.maleRadio = radios[0];
@@ -2046,9 +2056,14 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         var maritalRow = null;
                         for (var i = 0; i < allLabels.length; i++) {
                             var txt = norm(allLabels[i].innerText || allLabels[i].textContent || '');
-                            if (txt === 'medenihali' || txt === 'medenihal' || txt === 'maritalstatus') {
-                                maritalRow = allLabels[i].closest('tr') || allLabels[i].closest('.z-row') || allLabels[i].parentElement;
-                                if (maritalRow) break;
+                            if (txt === 'medenihali' || txt === 'medenihal' || txt === 'maritalstatus' || txt.indexOf('medenihal') !== -1 || txt.indexOf('maritalstatus') !== -1) {
+                                var row = allLabels[i].closest('tr') || allLabels[i].closest('.z-row') || allLabels[i].closest('.form-group') || allLabels[i].parentElement;
+                                if (row && row.querySelectorAll('input[type="radio"]').length >= 2) {
+                                    maritalRow = row;
+                                    break;
+                                } else if (!maritalRow && row) {
+                                    maritalRow = row;
+                                }
                             }
                         }
 
@@ -2057,15 +2072,19 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         for (var j = 0; j < radios.length; j++) {
                             var r = radios[j];
                             var wrapper = r.closest ? r.closest('.z-radio') : r.parentElement;
-                            var rText = norm((wrapper ? (wrapper.innerText || wrapper.textContent) : '') + ' ' + (r.nextElementSibling ? (r.nextElementSibling.innerText || r.nextElementSibling.textContent) : '') + ' ' + (r.id || ''));
-                            if (rText.indexOf('bekar') !== -1 || rText.indexOf('single') !== -1) {
+                            var specificLabel = (r.labels && r.labels[0])
+                                || (r.id ? d.querySelector('label[for="' + r.id + '"]') : null)
+                                || (wrapper ? wrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null)
+                                || (r.nextElementSibling && (r.nextElementSibling.tagName === 'LABEL' || r.nextElementSibling.classList.contains('z-radio-cnt')) ? r.nextElementSibling : null);
+                            var rText = norm((specificLabel ? (specificLabel.innerText || specificLabel.textContent) : '') + ' ' + (r.id || '') + ' ' + (r.value || ''));
+                            if (rText.indexOf('bekar') !== -1 || rText.indexOf('single') !== -1 || rText === 'b') {
                                 result.singleRadio = r;
                                 result.singleWrapper = wrapper;
-                                result.singleLabel = (wrapper ? wrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || r.nextElementSibling || wrapper;
-                            } else if (rText.indexOf('evli') !== -1 || rText.indexOf('married') !== -1) {
+                                result.singleLabel = specificLabel || wrapper;
+                            } else if (rText.indexOf('evli') !== -1 || rText.indexOf('married') !== -1 || rText === 'e') {
                                 result.marriedRadio = r;
                                 result.marriedWrapper = wrapper;
-                                result.marriedLabel = (wrapper ? wrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || r.nextElementSibling || wrapper;
+                                result.marriedLabel = specificLabel || wrapper;
                             }
                         }
 
@@ -2136,13 +2155,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                         oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
                                     }
 
-                                    // 2. Doğal kullanıcı tıklamasını yap (önce click ki tarayıcı ve ZK olayı yakalasın)
-                                    var clickTarget = targetRadio || targetLabel || targetWrapper;
-                                    if (clickTarget) {
-                                        triggerUserClick(clickTarget);
-                                    }
-
-                                    // 3. DOM ve CSS durumunu zorla garanti et
+                                    // 2. Hedef radyoyu işaretle
                                     if (targetRadio) {
                                         targetRadio.checked = true;
                                     }
@@ -2150,46 +2163,80 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                         targetWrapper.classList.add('z-radio-checked');
                                     }
 
-                                    // 4. ZK Widget API ve AU Kanalı ile sunucuya bildir
-                                    var w = null;
+                                    // 3. Doğal tıklama simülasyonu (Öncelikle label veya wrapper'a tıkla, kullanıcı gibi)
+                                    var clickTarget = targetLabel || targetWrapper || targetRadio;
+                                    if (clickTarget) {
+                                        triggerUserClick(clickTarget);
+                                    }
+                                    if (targetRadio && clickTarget !== targetRadio) {
+                                        try { targetRadio.click(); } catch (_) {}
+                                    }
+
+                                    // 4. Standart input/change eventleri
+                                    if (targetRadio) {
+                                        try { targetRadio.dispatchEvent(new win.Event('input', { bubbles: true, cancelable: true })); } catch (_) {}
+                                        try { targetRadio.dispatchEvent(new win.Event('change', { bubbles: true, cancelable: true })); } catch (_) {}
+                                        if (win.jq) {
+                                            try { win.jq(targetRadio).trigger('change'); } catch (_) {}
+                                        }
+                                    }
+
+                                    // 5. ZK Widget API ve AU Kanalı ile sunucuya güvenli bildir
                                     try {
+                                        var w = null;
                                         if (win.zk && win.zk.Widget) {
                                             w = (targetRadio ? win.zk.Widget.$(targetRadio) : null)
                                                 || (targetRadio && targetRadio.id ? win.zk.Widget.$(targetRadio.id.replace(/-real$/, '')) : null)
                                                 || (targetWrapper ? win.zk.Widget.$(targetWrapper) : null)
                                                 || (targetLabel ? win.zk.Widget.$(targetLabel) : null);
                                         }
-                                    } catch (_) {}
 
-                                    if (w) {
-                                        try {
-                                            if (typeof w.setChecked === 'function') w.setChecked(true);
-                                            if (typeof w.setSelected === 'function') w.setSelected(true);
+                                        if (w) {
+                                            if (typeof w.setChecked === 'function') {
+                                                try { w.setChecked(true); } catch (_) {}
+                                            }
+                                            if (typeof w.setSelected === 'function') {
+                                                try { w.setSelected(true); } catch (_) {}
+                                            }
+
                                             var rg = typeof w.getRadiogroup === 'function' ? w.getRadiogroup() : (w.parent || null);
-                                            if (rg && typeof rg.setSelectedItem === 'function') rg.setSelectedItem(w);
-
-                                            if (typeof w.fire === 'function') {
-                                                w.fire('onCheck', { checked: true }, { toServer: true });
-                                            }
-                                            if (rg && typeof rg.fire === 'function') {
-                                                rg.fire('onCheck', { selected: w, checked: true }, { toServer: true });
-                                            }
-                                            if (win.zAu && typeof win.zAu.send === 'function') {
-                                                win.zAu.send(new win.zk.Event(w, 'onCheck', { checked: true }, { toServer: true }));
-                                                if (rg) {
-                                                    win.zAu.send(new win.zk.Event(rg, 'onCheck', { selected: w, checked: true }, { toServer: true }));
+                                            if (rg) {
+                                                if (typeof rg.setSelectedItem === 'function') {
+                                                    try { rg.setSelectedItem(w); } catch (_) {}
+                                                }
+                                                if (typeof rg._fixCheck === 'function') {
+                                                    try { rg._fixCheck(w); } catch (_) {}
                                                 }
                                             }
-                                        } catch (_) {}
-                                    }
 
-                                    // 5. Standart Eventler
-                                    if (targetRadio) {
-                                        try { targetRadio.dispatchEvent(new win.Event('input', { bubbles: true })); } catch (_) {}
-                                        try { targetRadio.dispatchEvent(new win.Event('change', { bubbles: true })); } catch (_) {}
-                                        if (win.jq) {
-                                            try { win.jq(targetRadio).trigger('change'); } catch (_) {}
+                                            // ZK'nın kendi dahili doClick_ metodunu tetikle
+                                            if (typeof w.doClick_ === 'function') {
+                                                try {
+                                                    w.doClick_(new win.zk.Event(w, 'onClick', {}));
+                                                } catch (_) {}
+                                            }
+
+                                            // onCheck olayını Radio widget'ı üzerinden sunucuya gönder
+                                            if (typeof w.fire === 'function') {
+                                                try {
+                                                    w.fire('onCheck', { checked: true }, { toServer: true });
+                                                } catch (_) {}
+                                            }
+
+                                            // zAu kanalı ile AU isteğini doğrudan ilet (Döngüsel widget nesnesi içermez!)
+                                            if (win.zAu && typeof win.zAu.send === 'function') {
+                                                try {
+                                                    win.zAu.send(new win.zk.Event(w, 'onCheck', { checked: true }, { toServer: true }));
+                                                } catch (_) {}
+                                                if (rg && rg.uuid) {
+                                                    try {
+                                                        win.zAu.send(new win.zk.Event(rg, 'onCheck', { data: [w.uuid], checked: true }, { toServer: true }));
+                                                    } catch (_) {}
+                                                }
+                                            }
                                         }
+                                    } catch (zkErr) {
+                                        console.warn('[YKN] fillRadioByValue ZK sync error:', zkErr);
                                     }
 
                                     anySet = true;
@@ -2358,6 +2405,12 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 selectText.indexOf('belgeverenulke') !== -1) {
                                 commitSelect(selectEl, win);
                             }
+                        }
+
+                        // Seçili radyo butonlarını (Medeni Hali ve Cinsiyet) ZK seviyesinde garanti et
+                        var checkedRadios = doc.querySelectorAll('input[type="radio"]:checked');
+                        for (var cri = 0; cri < checkedRadios.length; cri++) {
+                            commitRadio(checkedRadios[cri], win);
                         }
 
                         purgeErrorBoxes(doc);
@@ -3223,6 +3276,115 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             (async () => {
                 const yoksisTab = await getBackgroundYoksisTab();
                 await waitForContentScript(yoksisTab.id, 'yoksis');
+
+                // MAIN World: Kaydet öncesi Medeni Hali ve Cinsiyet radyo gruplarının ZK sunucusunda
+                // eksiksiz seçili olduğundan emin ol.
+                try {
+                    await chrome.scripting.executeScript({
+                        target: { tabId: yoksisTab.id },
+                        world: 'MAIN',
+                        func: () => {
+                            try {
+                                function getAllDocs(rootDoc) {
+                                    var docs = [];
+                                    function scan(d) {
+                                        if (!d || docs.indexOf(d) !== -1) return;
+                                        docs.push(d);
+                                        try {
+                                            var iframes = d.querySelectorAll('iframe, frame');
+                                            for (var i = 0; i < iframes.length; i++) {
+                                                try {
+                                                    var cDoc = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
+                                                    if (cDoc) scan(cDoc);
+                                                } catch (_) {}
+                                            }
+                                        } catch (_) {}
+                                    }
+                                    scan(rootDoc || document);
+                                    return docs;
+                                }
+
+                                function commitRadioDirect(el, win) {
+                                    if (!el) return;
+                                    var wWin = win || (el.ownerDocument && el.ownerDocument.defaultView) || window;
+                                    try {
+                                        if (wWin.zk && wWin.zk.Widget) {
+                                            var w = wWin.zk.Widget.$(el) || (el.id ? wWin.zk.Widget.$(el.id.replace(/-real$/, '')) : null);
+                                            if (w) {
+                                                if (typeof w.setChecked === 'function') {
+                                                    try { w.setChecked(true); } catch (_) {}
+                                                }
+                                                var rg = typeof w.getRadiogroup === 'function' ? w.getRadiogroup() : (w.parent || null);
+                                                if (rg) {
+                                                    if (typeof rg.setSelectedItem === 'function') {
+                                                        try { rg.setSelectedItem(w); } catch (_) {}
+                                                    }
+                                                    if (typeof rg._fixCheck === 'function') {
+                                                        try { rg._fixCheck(w); } catch (_) {}
+                                                    }
+                                                }
+                                                if (typeof w.doClick_ === 'function') {
+                                                    try { w.doClick_(new wWin.zk.Event(w, 'onClick', {})); } catch (_) {}
+                                                }
+                                                if (typeof w.fire === 'function') {
+                                                    try { w.fire('onCheck', { checked: true }, { toServer: true }); } catch (_) {}
+                                                }
+                                                if (wWin.zAu && typeof wWin.zAu.send === 'function') {
+                                                    try { wWin.zAu.send(new wWin.zk.Event(w, 'onCheck', { checked: true }, { toServer: true })); } catch (_) {}
+                                                    if (rg && rg.uuid) {
+                                                        try { wWin.zAu.send(new wWin.zk.Event(rg, 'onCheck', { data: [w.uuid], checked: true }, { toServer: true })); } catch (_) {}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (_) {}
+                                    try {
+                                        el.checked = true;
+                                        el.dispatchEvent(new wWin.Event('input', { bubbles: true, cancelable: true }));
+                                        el.dispatchEvent(new wWin.Event('change', { bubbles: true, cancelable: true }));
+                                    } catch (_) {}
+                                }
+
+                                var allDocs = getAllDocs(document);
+                                for (var di = 0; di < allDocs.length; di++) {
+                                    var doc = allDocs[di];
+                                    var win = doc.defaultView || window;
+
+                                    // 1. Zaten seçili olan tüm radyoları ZK sunucusuyla senkronize et
+                                    var checkedRadios = doc.querySelectorAll('input[type="radio"]:checked');
+                                    for (var ri = 0; ri < checkedRadios.length; ri++) {
+                                        commitRadioDirect(checkedRadios[ri], win);
+                                    }
+
+                                    // 2. Medeni Hali satırını kontrol et: eğer hiçbiri seçili değilse 'Bekar'ı seç ve commit et
+                                    var allLabels = doc.querySelectorAll('label, span, td, div, b, strong');
+                                    for (var li = 0; li < allLabels.length; li++) {
+                                        var txt = (allLabels[li].innerText || allLabels[li].textContent || '')
+                                            .toLocaleLowerCase('tr-TR')
+                                            .replace(/[^a-z0-9]/g, '');
+                                        if (txt.indexOf('medenihal') !== -1 || txt.indexOf('maritalstatus') !== -1) {
+                                            var row = allLabels[li].closest('tr') || allLabels[li].closest('.z-row') || allLabels[li].closest('.form-group') || allLabels[li].parentElement;
+                                            if (row) {
+                                                var rowRadios = row.querySelectorAll('input[type="radio"]');
+                                                if (rowRadios.length >= 2) {
+                                                    var anyChecked = false;
+                                                    for (var rj = 0; rj < rowRadios.length; rj++) {
+                                                        if (rowRadios[rj].checked) anyChecked = true;
+                                                    }
+                                                    if (!anyChecked) {
+                                                        rowRadios[0].checked = true;
+                                                        commitRadioDirect(rowRadios[0], win);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (_) {}
+                        }
+                    });
+                } catch (_) {}
+
                 return sendTabMessage(yoksisTab.id, {
                     action: 'YOKSIS_SAVE_FORM',
                     requestId: request.requestId
