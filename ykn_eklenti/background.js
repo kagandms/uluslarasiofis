@@ -749,39 +749,9 @@ async function getForegroundYoksisTab() {
 }
 
 async function reloadYoksisTab(tabId) {
-    if (!tabId) return;
-    try {
-        await new Promise((resolve) => {
-            const timeout = setTimeout(() => {
-                chrome.tabs.onUpdated.removeListener(onUpdatedListener);
-                resolve();
-            }, 10000);
-
-            function onUpdatedListener(updatedTabId, changeInfo) {
-                if (updatedTabId === tabId && changeInfo.status === 'complete') {
-                    chrome.tabs.onUpdated.removeListener(onUpdatedListener);
-                    clearTimeout(timeout);
-                    resolve();
-                }
-            }
-
-            chrome.tabs.onUpdated.addListener(onUpdatedListener);
-            chrome.tabs.reload(tabId, {}, () => {
-                if (chrome.runtime.lastError) {
-                    chrome.tabs.onUpdated.removeListener(onUpdatedListener);
-                    clearTimeout(timeout);
-                    resolve();
-                }
-            });
-        });
-
-        // Content-script ve köprülerin oturmasını bekle
-        await waitForContentScript(tabId, 'yoksis');
-        // ZK bileşenlerinin DOM'a bağlanması ve oturumun oturması için kısa bekleme
-        await wait(800);
-    } catch (err) {
-        console.warn('[YKN] reloadYoksisTab hatası:', err);
-    }
+    // YÖKSİS tek sayfa (ZK SPA) olduğu için sekme yenilenirse (F5) ana sayfaya döner
+    // ve "Öğrenciler İçin YKN Talep Ekranı" kaybolur. Bu yüzden sekme ASLA yenilenmez!
+    console.warn('[YKN] reloadYoksisTab çağrısı engellendi - sekme yenilenmeyecek.');
 }
 
 async function executeYoksisSearchInMainWorld(tabId, kabulId) {
@@ -843,47 +813,78 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         return true;
                     }
 
-                    function hasLoadedStudentRecord(docs) {
+                    // Formun "Temizle" butonunu bul (Kaydet butonunun yanındaki Temizle)
+                    // Tablo filtre temizle butonuyla karışmaması için Kaydet ile olan yakınlığı kontrol edilir
+                    function findFormClearButton(docs) {
                         for (const doc of docs) {
-                            const textInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                            let filledCount = 0;
-                            for (let i = 0; i < textInputs.length; i++) {
-                                const input = textInputs[i];
-                                const val = (input.value || '').trim();
-                                if (val.length >= 2) {
-                                    const ph = norm((input.placeholder || '') + ' ' + (input.name || '') + ' ' + (input.id || ''));
-                                    if (!ph.includes('kabul') && !ph.includes('search')) {
-                                        filledCount++;
-                                    }
+                            const win = doc.defaultView || window;
+                            const allClickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
+                            let kaydetBtn = null;
+                            for (let i = 0; i < allClickables.length; i++) {
+                                const b = allClickables[i];
+                                if (!isUsableControl(b)) continue;
+                                const txt = norm(b.innerText || b.textContent || b.value || b.getAttribute('title') || '');
+                                if (txt === 'kaydet' || txt.startsWith('kaydet')) {
+                                    kaydetBtn = b.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button') || b;
+                                    break;
                                 }
                             }
-                            if (filledCount >= 3) return true;
-                        }
-                        return false;
-                    }
 
-                    function tryClickResetOrNewRecord(docs) {
-                        for (const doc of docs) {
-                            const clickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
-                            for (let i = 0; i < clickables.length; i++) {
-                                const c = clickables[i];
-                                if (!c || !c.isConnected || c.disabled) continue;
-                                const txt = norm(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
-                                if (txt === 'yeni kayit' || txt === 'yeni' || txt === 'temizle' || txt === 'vazgec' || txt.startsWith('yeni kayit')) {
-                                    const targetBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button') || c;
-                                    const win = doc.defaultView || window;
-                                    if (win.zk?.Widget) {
-                                        const w = win.zk.Widget.$(targetBtn);
-                                        if (w && typeof w.fire === 'function') {
-                                            try { w.fire('onClick', {}, { toServer: true }); } catch (_) {}
+                            if (kaydetBtn) {
+                                let container = kaydetBtn.parentElement;
+                                for (let depth = 0; container && depth < 4; depth++, container = container.parentElement) {
+                                    const candidates = container.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
+                                    for (let j = 0; j < candidates.length; j++) {
+                                        const c = candidates[j];
+                                        if (c === kaydetBtn) continue;
+                                        if (!isUsableControl(c)) continue;
+                                        const cTxt = norm(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
+                                        if (cTxt === 'temizle') {
+                                            const targetBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button') || c;
+                                            return { btn: targetBtn, win };
                                         }
                                     }
-                                    try { targetBtn.click(); } catch (_) {}
-                                    return true;
+                                }
+                            }
+
+                            // Fallback: Kaydet bulunamazsa, tablo toolbar'ında olmayan Temizle butonunu bul
+                            for (let i = 0; i < allClickables.length; i++) {
+                                const c = allClickables[i];
+                                if (!isUsableControl(c)) continue;
+                                const txt = norm(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
+                                if (txt === 'temizle' || txt === 'yeni kayit') {
+                                    const container = c.closest('tr, .z-row, div, table');
+                                    const containerText = norm(container?.innerText || container?.textContent || '');
+                                    if (containerText.includes('excel') || containerText.includes('yil') || containerText.includes('ykn')) continue;
+                                    const targetBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button') || c;
+                                    return { btn: targetBtn, win };
                                 }
                             }
                         }
-                        return false;
+                        return null;
+                    }
+
+                    function triggerButton(targetBtn, win) {
+                        if (!targetBtn) return;
+                        const wWin = win || (targetBtn.ownerDocument && targetBtn.ownerDocument.defaultView) || window;
+                        const actualBtn = targetBtn.querySelector?.('button, input[type="button"], a, [role="button"]') || targetBtn;
+                        if (wWin.zk && wWin.zk.Widget) {
+                            try {
+                                const w = wWin.zk.Widget.$(actualBtn) || wWin.zk.Widget.$(targetBtn) || (targetBtn.parentElement ? wWin.zk.Widget.$(targetBtn.parentElement) : null);
+                                if (w && typeof w.fire === 'function') {
+                                    w.fire('onClick', {}, { toServer: true });
+                                }
+                                if (wWin.zAu && typeof wWin.zAu.send === 'function' && w && wWin.zk?.Event) {
+                                    wWin.zAu.send(new wWin.zk.Event(w, 'onClick', {}, { toServer: true }));
+                                }
+                            } catch (_) {}
+                        }
+                        try {
+                            actualBtn.focus();
+                            actualBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: wWin, button: 0 }));
+                            actualBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: wWin, button: 0 }));
+                            actualBtn.click();
+                        } catch (_) {}
                     }
 
                     function findVisibleSearchButton(input) {
@@ -916,7 +917,6 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             for (let i = 0; i < inputs.length; i += 1) {
                                 const candidate = inputs[i];
                                 if (!isUsableControl(candidate)) continue;
-                                // Öğrenci form tablosu / grid içindeki alanları arama kutusu sanma
                                 if (candidate.closest('.z-grid-body, .z-listbox-body')) continue;
                                 const metadata = norm([
                                     candidate.placeholder,
@@ -957,133 +957,101 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     const allDocs = getAllDocs(document);
                     console.log('[YKN MAIN WORLD] Scanning docs count:', allDocs.length, 'with code:', code);
 
-                    // Formda önceki bir öğrencinin kaydı açık kalmışsa temizlemeyi dene
-                    if (hasLoadedStudentRecord(allDocs)) {
-                        console.log('[YKN MAIN WORLD] Formda önceki öğrenci kaydı tespit edildi, Yeni Kayıt deneniyor...');
-                        const clicked = tryClickResetOrNewRecord(allDocs);
-                        if (clicked) {
-                            await new Promise(r => setTimeout(r, 450));
-                        }
-                        if (hasLoadedStudentRecord(allDocs)) {
-                            console.log('[YKN MAIN WORLD] Sayfa hala kayıtlı modda, sekme yenilenmesi gerekiyor.');
-                            return {
-                                success: false,
-                                inputFound: false,
-                                buttonFound: false,
-                                searchTriggered: false,
-                                needsReload: true
-                            };
-                        }
+                    // Kullanıcı talebi: Sayfayı yenilemek yerine Öğrenci Bilgileri formunun "Temizle" butonuna bas
+                    const clearTarget = findFormClearButton(allDocs);
+                    if (clearTarget && clearTarget.btn) {
+                        console.log('[YKN MAIN WORLD] Form Temizle butonuna basılıyor...');
+                        triggerButton(clearTarget.btn, clearTarget.win);
+                        await new Promise(r => setTimeout(r, 350));
                     }
 
                     let inp = null;
                     let btn = null;
                     let targetWin = window;
 
-                    // 1. ÖNCELİK: findVisibleAcceptancePair (chdextr / kabul metadatası ile en doğru arama çifti)
-                    const pair = findVisibleAcceptancePair(allDocs);
-                    if (pair && pair.input) {
-                        inp = pair.input;
-                        btn = pair.button;
-                        targetWin = pair.win;
+                    // 1. ÖNCELİK: "Kabul Mektup Id İle Ara" butonu ve onun ait olduğu panel/satırdaki input
+                    for (const doc of allDocs) {
+                        const win = doc.defaultView || window;
+                        const allClickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"], table.z-button');
+                        for (let i = 0; i < allClickables.length; i++) {
+                            const c = allClickables[i];
+                            if (!isUsableControl(c)) continue;
+                            const cTxt = norm(c.innerText || c.textContent || c.value || '');
+                            if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
+                                const foundBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button') || c;
+                                let container = foundBtn.parentElement;
+                                for (let depth = 0; container && depth < 8; depth++, container = container.parentElement) {
+                                    const inps = container.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                    for (let j = 0; j < inps.length; j++) {
+                                        const it = inps[j];
+                                        if (!isUsableControl(it) || it.closest('.z-grid-body, .z-listbox-body')) continue;
+                                        const ph = norm([it.placeholder, it.name, it.id, it.title].join(' '));
+                                        if (ph.includes('pasaport') || ph.includes('tc') || ph.includes('dogum') || ph.includes('tarih')) continue;
+                                        inp = it;
+                                        btn = foundBtn;
+                                        targetWin = win;
+                                        break;
+                                    }
+                                    if (inp) break;
+                                }
+                                if (inp) break;
+                            }
+                        }
+                        if (inp) break;
                     }
 
-                    // 2. ÖNCELİK: Eğer pair bulunamadıysa etiket ve komşu hücre taraması
+                    // 2. ÖNCELİK: "Kabul Mektup ID ile Sorgula" kutusu / başlığı üzerinden arama
                     if (!inp) {
                         for (const doc of allDocs) {
                             const win = doc.defaultView || window;
-                            let dInp = null;
-                            let dBtn = null;
-
-                            const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                            for (let i = 0; i < allInputs.length; i++) {
-                                const it = allInputs[i];
-                                if (!isUsableControl(it)) continue;
-                                if (it.closest('.z-grid-body, .z-listbox-body')) continue;
-                                const ph = norm((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.id || ''));
-                                if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum') && !ph.includes('tarih')) {
-                                    dInp = it;
-                                    break;
-                                }
-                            }
-
-                            const allClickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"]');
-                            for (let i = 0; i < allClickables.length; i++) {
-                                const c = allClickables[i];
-                                if (!isUsableControl(c)) continue;
-                                const cTxt = norm(c.innerText || c.textContent || c.value || '');
-                                if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
-                                    dBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || c;
-                                    break;
-                                }
-                            }
-
-                            if (!dInp || !dBtn) {
-                                const textNodes = doc.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption, .z-caption, .z-groupbox-header');
-                                for (let i = 0; i < textNodes.length; i++) {
-                                    const node = textNodes[i];
-                                    if (node.children.length > 3) continue;
-                                    const txt = norm(node.innerText || node.textContent || '');
-                                    if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup')) && !txt.includes('tarih')) {
-                                        const td = node.closest('td');
-                                        if (td && td.nextElementSibling && !dInp) {
-                                            const adjacentInputs = td.nextElementSibling.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                                            for (let ai = 0; ai < adjacentInputs.length; ai++) {
-                                                if (isUsableControl(adjacentInputs[ai]) && !adjacentInputs[ai].closest('.z-grid-body, .z-listbox-body')) {
-                                                    dInp = adjacentInputs[ai];
-                                                    break;
-                                                }
+                            const headers = doc.querySelectorAll('.z-groupbox-header, .z-caption, legend, caption, span, td, div, label, b, strong');
+                            for (let i = 0; i < headers.length; i++) {
+                                const h = headers[i];
+                                if (h.children.length > 3) continue;
+                                const hTxt = norm(h.innerText || h.textContent || '');
+                                if (hTxt.includes('kabul') && (hTxt.includes('id') || hTxt.includes('mektup') || hTxt.includes('sorgula')) && !hTxt.includes('tarih')) {
+                                    const box = h.closest('.z-groupbox, .z-panel, fieldset, table, form, .z-window') || h.parentElement?.parentElement;
+                                    if (box) {
+                                        const inps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                        for (let j = 0; j < inps.length; j++) {
+                                            if (!isUsableControl(inps[j]) || inps[j].closest('.z-grid-body, .z-listbox-body')) continue;
+                                            const ph = norm([inps[j].placeholder, inps[j].name, inps[j].id].join(' '));
+                                            if (ph.includes('pasaport') || ph.includes('tc') || ph.includes('dogum') || ph.includes('tarih')) continue;
+                                            inp = inps[j];
+                                            break;
+                                        }
+                                        const btns = box.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
+                                        for (let j = 0; j < btns.length; j++) {
+                                            if (!isUsableControl(btns[j])) continue;
+                                            const bTxt = norm(btns[j].innerText || btns[j].textContent || btns[j].value || '');
+                                            if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
+                                                btn = btns[j].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[j];
+                                                break;
                                             }
                                         }
-
-                                        let box = node.closest('.z-groupbox, .z-panel, fieldset, table, form, div.z-window');
-                                        if (!box) {
-                                            let p = node.parentElement;
-                                            while (p && p !== doc.body) {
-                                                if (p.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"])')) {
-                                                    box = p;
-                                                    break;
-                                                }
-                                                p = p.parentElement;
-                                            }
-                                        }
-
-                                        if (box) {
-                                            if (!dInp) {
-                                                const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                                                for (let j = 0; j < bInps.length; j++) {
-                                                    if (!isUsableControl(bInps[j]) || bInps[j].closest('.z-grid-body, .z-listbox-body')) continue;
-                                                    const bPh = norm((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
-                                                    if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum') && !bPh.includes('tarih')) {
-                                                        dInp = bInps[j];
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                            if (!dBtn) {
-                                                const bBtns = box.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
-                                                for (let j = 0; j < bBtns.length; j++) {
-                                                    if (!isUsableControl(bBtns[j])) continue;
-                                                    const bTxt = norm(bBtns[j].innerText || bBtns[j].textContent || bBtns[j].value || '');
-                                                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                                                        dBtn = bBtns[j].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[j];
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        if (dInp && dBtn) break;
+                                    }
+                                    if (inp && btn) {
+                                        targetWin = win;
+                                        break;
                                     }
                                 }
                             }
-
-                            if (dInp) {
-                                inp = dInp;
-                                btn = dBtn || findVisibleSearchButton(inp);
-                                targetWin = win;
-                                break;
-                            }
+                            if (inp) break;
                         }
+                    }
+
+                    // 3. ÖNCELİK: findVisibleAcceptancePair fallback
+                    if (!inp) {
+                        const pair = findVisibleAcceptancePair(allDocs);
+                        if (pair && pair.input) {
+                            inp = pair.input;
+                            btn = pair.button || btn;
+                            targetWin = pair.win || window;
+                        }
+                    }
+
+                    if (inp && !btn) {
+                        btn = findVisibleSearchButton(inp);
                     }
 
                     console.log('[YKN MAIN WORLD] Search summary:', { inp: Boolean(inp), btn: Boolean(btn) });
@@ -1093,108 +1061,71 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             success: false,
                             inputFound: Boolean(inp),
                             buttonFound: Boolean(btn),
-                            searchTriggered: false,
-                            needsReload: true
+                            searchTriggered: false
                         };
                     }
 
                     // Input'a değeri yaz
                     let inputWidget = null;
-                    let zkChangeSent = false;
                     if (inp) {
                         inp.focus();
                         const nativeSetter = Object.getOwnPropertyDescriptor(targetWin.HTMLInputElement.prototype, 'value')?.set
                             || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+
+                        // 1. Önce alanı temizle
+                        if (nativeSetter) {
+                            nativeSetter.call(inp, '');
+                        } else {
+                            inp.value = '';
+                        }
+                        inp.setAttribute('value', '');
+                        inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+
+                        if (targetWin.zk && targetWin.zk.Widget) {
+                            try {
+                                inputWidget = targetWin.zk.Widget.$(inp);
+                                if (inputWidget) {
+                                    inputWidget._lastValue = '';
+                                    inputWidget._value = '';
+                                    inputWidget._shallSubmit = true;
+                                }
+                            } catch (_) {}
+                        }
+
+                        // 2. Yeni değeri yaz
                         if (nativeSetter) {
                             nativeSetter.call(inp, code);
                         } else {
                             inp.value = code;
                         }
                         inp.setAttribute('value', code);
-                        inp.dispatchEvent(new Event('focus', { bubbles: true }));
                         inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                        if (targetWin.zk && targetWin.zk.Widget) {
+                        inp.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+                        if (inputWidget) {
                             try {
-                                inputWidget = targetWin.zk.Widget.$(inp);
-                                if (inputWidget) {
-                                    if (typeof inputWidget.setValue === 'function') inputWidget.setValue(code);
-                                    inputWidget._value = code;
-                                    inputWidget._lastValue = code;
-                                    if (typeof inputWidget.fire === 'function') {
-                                        inputWidget.fire('onChange', { value: code }, { toServer: true });
-                                        zkChangeSent = true;
-                                    }
+                                if (typeof inputWidget.setValue === 'function') inputWidget.setValue(code);
+                                inputWidget._value = code;
+                                inputWidget._lastValue = '';
+                                if (typeof inputWidget.fire === 'function') {
+                                    inputWidget.fire('onChange', { value: code, start: code.length }, { toServer: true });
+                                }
+                                if (targetWin.zAu && typeof targetWin.zAu.send === 'function' && targetWin.zk?.Event) {
+                                    targetWin.zAu.send(new targetWin.zk.Event(inputWidget, 'onChange', { value: code, start: code.length }, { toServer: true }));
                                 }
                             } catch (_) {}
                         }
-                        if (!zkChangeSent) inp.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
                         inp.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
                         try { inp.blur(); } catch (_) {}
                     }
 
                     // ZK'nin onChange'i işlemesi için kısa bekleme
-                    await new Promise(r => setTimeout(r, 150));
+                    await new Promise(r => setTimeout(r, 200));
 
-                    // Kabul alanı onChange sonrasında ZK tarafından yeniden oluşturulmuşsa referansı tazele
-                    const refreshedPair = findVisibleAcceptancePair(getAllDocs(document));
-                    if (refreshedPair && refreshedPair.input) {
-                        inp = refreshedPair.input;
-                        targetWin = refreshedPair.win;
-                        btn = refreshedPair.button || btn;
-
-                        if (String(inp.value || '').trim().toUpperCase() !== String(code).trim().toUpperCase()) {
-                            const refreshedSetter = Object.getOwnPropertyDescriptor(targetWin.HTMLInputElement.prototype, 'value')?.set
-                                || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-                            if (refreshedSetter) refreshedSetter.call(inp, code);
-                            else inp.value = code;
-                            inp.setAttribute('value', code);
-                            inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                            inp.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-
-                            if (targetWin.zk && targetWin.zk.Widget) {
-                                try {
-                                    const refreshedWidget = targetWin.zk.Widget.$(inp);
-                                    if (refreshedWidget) {
-                                        if (typeof refreshedWidget.setValue === 'function') refreshedWidget.setValue(code);
-                                        refreshedWidget._value = code;
-                                        refreshedWidget._lastValue = code;
-                                        if (typeof refreshedWidget.fire === 'function') {
-                                            refreshedWidget.fire('onChange', { value: code }, { toServer: true });
-                                        }
-                                    }
-                                } catch (_) {}
-                            }
-                        }
-                    }
-
-                    // Butonu ve aramayı ZK Widget + zAu + DOM ile garantili çalıştır
+                    // Butonu ve aramayı ZK Widget + zAu + DOM ile çalıştır
                     if (btn) {
-                        const actualBtn = btn.querySelector('button, input[type="button"], a, [role="button"]') || btn;
-                        let buttonWidget = null;
-                        if (targetWin.zk && targetWin.zk.Widget) {
-                            try {
-                                buttonWidget = targetWin.zk.Widget.$(actualBtn)
-                                    || targetWin.zk.Widget.$(btn)
-                                    || (btn.parentElement ? targetWin.zk.Widget.$(btn.parentElement) : null);
-                            } catch (_) {}
-                        }
-                        if (buttonWidget && typeof buttonWidget.fire === 'function') {
-                            try {
-                                buttonWidget.fire('onClick', {}, { toServer: true });
-                            } catch (_) {}
-                        }
-                        if (targetWin.zAu && typeof targetWin.zAu.send === 'function' && buttonWidget && targetWin.zk?.Event) {
-                            try {
-                                targetWin.zAu.send(new targetWin.zk.Event(buttonWidget, 'onClick', {}, { toServer: true }));
-                            } catch (_) {}
-                        }
-                        try {
-                            actualBtn.focus();
-                            actualBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: targetWin, button: 0 }));
-                            actualBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: targetWin, button: 0 }));
-                            actualBtn.click();
-                        } catch (_) {}
+                        triggerButton(btn, targetWin);
                     }
 
                     if (inp) {
@@ -1216,12 +1147,11 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         success: Boolean(valueConfirmed && btn),
                         inputFound: Boolean(inp),
                         buttonFound: Boolean(btn),
-                        searchTriggered: Boolean(valueConfirmed && btn),
-                        needsReload: !valueConfirmed || !btn
+                        searchTriggered: Boolean(valueConfirmed && btn)
                     };
                 } catch (e) {
                     console.error('[YKN MAIN World Search Error]', e);
-                    return { error: e.message, searchTriggered: false, needsReload: true };
+                    return { error: e.message, searchTriggered: false };
                 }
             },
             args: [kabulId]
@@ -2788,16 +2718,14 @@ async function transferToYoksis(request) {
         const baselineFingerprint = stateBeforeSearch?.fingerprint || '';
         const baselineDomRevision = stateBeforeSearch?.domRevision;
 
-        // 2. ARAMAYI DOĞRUDAN MAIN WORLD'DE ÇALIŞTIR (ZK Widget onChange, onClick AU ve DOM güvencesi)
+        // 2. ARAMAYI DOĞRUDAN MAIN WORLD'DE ÇALIŞTIR (Form Temizle + Kabul Mektup ID yaz + Ara)
         let mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
         let searchTriggered = Boolean(mainResults?.some(r => r.result?.searchTriggered === true));
-        let needsReload = Boolean(mainResults?.some(r => r.result?.needsReload === true));
 
-        // 3. Eğer arama tetiklenemediyse veya sekme kilitli/yenileme gerektiriyorsa (2. ve sonraki öğrencilerde):
-        // YÖKSİS sekmesini otomatik yenile (F5 etkisi) ve temiz sayfada aramayı tekrar çalıştır!
-        if (!searchTriggered || needsReload) {
-            console.log('[YKN] YÖKSİS arama alanı ilk denemede hazır olmadı (önceki öğrenci açık veya kilitli). Sekme otomatik yenileniyor...');
-            await reloadYoksisTab(yoksisTab.id);
+        // 3. İlk denemede tetiklenemediyse kısa bir bekleme sonrasında tekrar dene (SEKMEYİ ASLA YENİLEME!)
+        if (!searchTriggered) {
+            console.log('[YKN] YÖKSİS arama alanı ilk denemede hazır olmadı. 500ms bekleyip tekrar deneniyor...');
+            await wait(500);
             mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
             searchTriggered = Boolean(mainResults?.some(r => r.result?.searchTriggered === true));
         }
@@ -2807,14 +2735,6 @@ async function transferToYoksis(request) {
             console.warn('[YKN] MAIN world kabul aramasını tetikleyemedi, content-script deneniyor...');
             const response = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId, { waitForForm: false });
             searchTriggered = response?.searchTriggered === true;
-        }
-
-        // 5. Content script de tetikleyemediyse son çare olarak sekme yeniden yüklenip deneniyor
-        if (!searchTriggered) {
-            console.warn('[YKN] Arama tetiklenemedi, son çare olarak sekme yeniden yüklenip deneniyor...');
-            await reloadYoksisTab(yoksisTab.id);
-            mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
-            searchTriggered = Boolean(mainResults?.some(r => r.result?.searchTriggered === true));
         }
 
         if (!searchTriggered) {

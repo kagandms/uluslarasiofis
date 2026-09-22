@@ -797,11 +797,43 @@ function isYoksisControlUsable(element) {
 function tryResetOrNewRecord() {
     const allDocs = getAllDocs(document);
     for (const doc of allDocs) {
+        // 1. Önce Kaydet butonunu bulup hemen yanındaki Öğrenci Bilgileri formunun "Temizle" butonunu ara
         const clickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
+        let kaydetBtn = null;
         for (const c of clickables) {
             if (!c || !c.isConnected || c.disabled) continue;
             const txt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
-            if (txt === 'yeni kayit' || txt === 'yeni' || txt === 'temizle' || txt === 'vazgec' || txt.startsWith('yeni kayit')) {
+            if (txt === 'kaydet' || txt.startsWith('kaydet')) {
+                kaydetBtn = getYoksisClickableRoot(c) || c;
+                break;
+            }
+        }
+        if (kaydetBtn) {
+            let parent = kaydetBtn.parentElement;
+            for (let depth = 0; parent && depth < 4; depth++, parent = parent.parentElement) {
+                const candidates = parent.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
+                for (const c of candidates) {
+                    if (c === kaydetBtn) continue;
+                    if (!c || !c.isConnected || c.disabled) continue;
+                    const cTxt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
+                    if (cTxt === 'temizle') {
+                        const targetBtn = getYoksisClickableRoot(c) || c;
+                        triggerZkClick(targetBtn);
+                        try { targetBtn.click(); } catch (_) {}
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback: Tablo filtre çubuğunda (excel/yıl/ykn) olmayan Temizle butonunu bul
+        for (const c of clickables) {
+            if (!c || !c.isConnected || c.disabled) continue;
+            const txt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
+            if (txt === 'temizle' || txt === 'yeni kayit') {
+                const container = c.closest('tr, .z-row, div, table');
+                const containerText = normalizeYoksisText(container?.innerText || container?.textContent || '');
+                if (containerText.includes('excel') || containerText.includes('yil') || containerText.includes('ykn')) continue;
                 const targetBtn = getYoksisClickableRoot(c) || c;
                 triggerZkClick(targetBtn);
                 try { targetBtn.click(); } catch (_) {}
@@ -3066,6 +3098,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             return;
         }
 
+        tryResetOrNewRecord();
         waitForYoksisSearchControls()
             .then(async (initialPair) => {
                 let idInput = initialPair.idInput;
