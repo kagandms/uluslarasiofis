@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     const { password, rememberMe } = req.body;
     
     // Environment variables with new rotated secret & new password
-    const SITE_PASSWORD = process.env.SITE_PASSWORD_V2 || 'tpkuluslararasi369147';
+    const SITE_PASSWORD = process.env.SITE_PASSWORD || process.env.SITE_PASSWORD_V2 || 'tpkuluslararasi369147';
     const JWT_SECRET = process.env.JWT_SECRET_V2 || (process.env.JWT_SECRET ? process.env.JWT_SECRET + '_v2_tpk369147' : 'topkapi_jwt_secret_v2_tpk369147_rev987');
 
     if (!password) {
