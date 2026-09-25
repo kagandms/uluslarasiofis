@@ -10,7 +10,7 @@ test('Belgeler yapılandırması eksiksiz ve geçerlidir', () => {
     assert.ok(DOCUMENT_CATEGORIES.some(c => c.id === 'all'), 'all kategorisi bulunmalıdır');
 
     assert.ok(Array.isArray(OFFICE_DOCUMENTS), 'OFFICE_DOCUMENTS bir dizi olmalıdır');
-    assert.equal(OFFICE_DOCUMENTS.length, 8, 'Tam 8 adet belge tanımlanmış olmalıdır');
+    assert.equal(OFFICE_DOCUMENTS.length, 9, 'Tam 9 adet belge tanımlanmış olmalıdır');
 
     const expectedTitles = [
         'Başvuru Formu',
@@ -20,7 +20,8 @@ test('Belgeler yapılandırması eksiksiz ve geçerlidir', () => {
         'Kayıt Silme',
         'Taksit Dilekçesi',
         'Boş Dilekçe',
-        'İkamet/Kimlik Başvurusu İçin Gerekli Evrak Listesi'
+        'İkamet/Kimlik Başvurusu İçin Gerekli Evrak Listesi',
+        'İndirim Dilekçesi'
     ];
 
     const actualTitles = OFFICE_DOCUMENTS.map(d => d.title);

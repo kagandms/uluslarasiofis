@@ -97,5 +97,16 @@ export const OFFICE_DOCUMENTS = [
         fileUrl: '/documents/ikamet_kimlik_basvurusu_icin_verilmesi_gereken_evraklar.pdf',
         tags: ['ikamet', 'kimlik', 'göç idaresi', 'başvuru', 'evrak listesi', 'uets', 'öğrenci belgesi', 'kira sözleşmesi', 'kart bedeli', 'sigorta', 'parmak izi', 'checklist'],
         badge: 'PDF • Liste'
+    },
+    {
+        id: 'indirim-dilekcesi',
+        title: 'İndirim Dilekçesi',
+        category: 'dilekce',
+        categoryLabel: 'Dilekçeler',
+        description: '',
+        fileName: 'indirim_dilekcesi.pdf',
+        fileUrl: '/documents/indirim_dilekcesi.pdf',
+        tags: ['indirim dilekçesi', 'tömer', 'indirim', 'mütevelli heyet', 'ücret', 'dilekçe', 'tömer ücreti'],
+        badge: 'PDF • Dilekçe'
     }
 ];
