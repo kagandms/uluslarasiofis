@@ -627,6 +627,7 @@ export function initTebligatSearch() {
         const no = card.dataset.no;
 
         // 1. İyimser Güncelleme (Kullanıcıyı 25-30 sn bekletmeden arayüzü anında güncelle)
+        const originalHtml = btn.innerHTML;
         const uniqueId = `${sayfa}-${isim}-${no || ''}`;
         const unmarkBtn = card.querySelector('.btn-unmark-tebligat');
         
