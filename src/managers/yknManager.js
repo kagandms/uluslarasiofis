@@ -2480,7 +2480,8 @@ export function initYknManager() {
                     fileName: fileName || 'ogrenci_foto.jpg',
                     requestId: cropRequestId,
                     studentData: getYoksisTransportData(currentStudentData),
-                    data: getYoksisTransportData(currentStudentData)
+                    data: getYoksisTransportData(currentStudentData),
+                    bringToFront: true
                 }, 45000);
 
                 if (response?.success) {
@@ -2503,9 +2504,20 @@ export function initYknManager() {
                     addStatus(`Hata: ${err}`, 'error');
                     showToast(`Hata: ${err}`, 'error');
                 }
+
+                // Otomatik olarak YÖKSİS sekmesine odaklan
+                try {
+                    await postExtensionRequest('FOCUS_YOKSIS_TAB', { requestId: createRequestId('focus') }, 5000);
+                } catch (focusErr) {
+                    console.warn('[YKN] YÖKSİS sekmesine odaklanırken hata:', focusErr);
+                }
             } catch (err) {
                 addStatus(`YÖKSİS aktarım hatası: ${err.message}`, 'error');
                 showToast(`Hata: ${err.message}`, 'error');
+
+                try {
+                    await postExtensionRequest('FOCUS_YOKSIS_TAB', { requestId: createRequestId('focus') }, 5000);
+                } catch (_) {}
             }
         } else {
             addStatus(`Vesikalık fotoğraf başarıyla kırpıldı ve indirildi (${fileName}).`, 'success');

@@ -3008,7 +3008,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             data = await confirmYoksisReadyForCrop(data, request.requestId);
             await saveStudentData(data);
             await new Promise((resolve) => chrome.storage.local.set({ pendingPassportCrop: null }, resolve));
-            const fillResponse = await fillYoksisStudentData(data, request.requestId);
+            const fillResponse = await fillYoksisStudentData(data, request.requestId, true);
+            await getForegroundYoksisTab().catch(() => {});
             const unavailableFields = Array.from(new Set(getActiveTransferWarnings(data)));
             return {
                 success: Boolean(fillResponse?.success),
