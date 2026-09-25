@@ -626,78 +626,81 @@ export function initTebligatSearch() {
         const isim = card.dataset.isim;
         const no = card.dataset.no;
 
-        // Butonu yükleniyor durumuna al
-        const originalHtml = btn.innerHTML;
-        btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> İşleniyor...';
+        // 1. İyimser Güncelleme (Kullanıcıyı 25-30 sn bekletmeden arayüzü anında güncelle)
+        const uniqueId = `${sayfa}-${isim}-${no || ''}`;
+        const unmarkBtn = card.querySelector('.btn-unmark-tebligat');
+        
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
+        btn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+        btn.style.color = '#27ae60';
+        btn.style.borderColor = '#27ae60';
+        btn.style.cursor = 'default';
+        btn.classList.add('marked');
         btn.disabled = true;
 
-        try {
-            // Vercel'in 10-12 saniyelik timeout sınırına takılmamak ve arka planda işaretlenmesine rağmen
-            // ön yüzde zaman aşımı hatası almamak için doğrudan Google Apps Script'e bağlanıyoruz:
-            const fetchUrl = `${APPS_SCRIPT_URL}?key=${encodeURIComponent(APPS_SCRIPT_API_KEY)}&action=update&sayfa=${encodeURIComponent(sayfa)}&isim=${encodeURIComponent(isim)}&no=${encodeURIComponent(no || '')}`;
-            
-            let data;
-            let isOk = false;
+        if (unmarkBtn) {
+            unmarkBtn.style.display = 'flex';
+        }
+
+        // LocalStorage ve bellek içi RAM kaydını hemen güncelle
+        localStorage.setItem('tebligat_marked_' + uniqueId, 'true');
+        const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
+        if (memItem) {
+            memItem.isaretli = true;
+            memItem.isMarked = true;
+        }
+
+        if (window.showToast) {
+            window.showToast('İşaretlendi (E-Tablo güncelleniyor).', 'success');
+        }
+
+        // 2. Arka Planda Google Apps Script ve E-Tablo senkronizasyonunu tamamla
+        (async () => {
             try {
-                const response = await fetch(fetchUrl);
-                data = await response.json();
-                isOk = response.ok;
-            } catch (directErr) {
-                console.warn('Doğrudan Apps Script erişimi başarısız, vekil deneniyor...', directErr);
-                const proxyRes = await fetch('/api/update-tebligat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ sayfa, isim, no })
-                });
-                data = await proxyRes.json();
-                isOk = proxyRes.ok;
-            }
-            
-            if (isOk && data.success) {
-                // Başarılı durumu
-                btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
-                btn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
-                btn.style.color = '#27ae60';
-                btn.style.borderColor = '#27ae60';
-                btn.style.cursor = 'default';
-                btn.classList.add('marked');
-                btn.disabled = true;
+                const fetchUrl = `${APPS_SCRIPT_URL}?key=${encodeURIComponent(APPS_SCRIPT_API_KEY)}&action=update&sayfa=${encodeURIComponent(sayfa)}&isim=${encodeURIComponent(isim)}&no=${encodeURIComponent(no || '')}`;
                 
-                // Kaldır butonunu görünür yap
-                const unmarkBtn = card.querySelector('.btn-unmark-tebligat');
-                if (unmarkBtn) {
-                    unmarkBtn.style.display = 'flex';
-                }
-                
-                // LocalStorage'a kaydet
-                const uniqueId = `${sayfa}-${isim}-${no || ''}`;
-                localStorage.setItem('tebligat_marked_' + uniqueId, 'true');
-                
-                // Bellek içi RAM kaydını da güncelle
-                const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
-                if (memItem) {
-                    memItem.isaretli = true;
-                    memItem.isMarked = true;
+                let isOk = false;
+                try {
+                    const response = await fetch(fetchUrl);
+                    const data = await response.json();
+                    isOk = response.ok && data.success;
+                } catch (directErr) {
+                    const proxyRes = await fetch('/api/update-tebligat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ sayfa, isim, no })
+                    });
+                    const data = await proxyRes.json();
+                    isOk = proxyRes.ok && data.success;
                 }
 
-                if (window.showToast) {
-                    window.showToast('E-Tablo güncellendi (İsim yeşil oldu, C kolonuna tarih yazıldı).', 'success');
+                if (!isOk) {
+                    throw new Error('E-Tablo yanıt vermedi');
                 }
-            } else {
-                throw new Error(data.error || 'Güncelleme başarısız');
+            } catch (error) {
+                console.error('Update error (geri alınıyor):', error);
+                // Başarısızlık durumunda arayüzü eski haline döndür
+                btn.innerHTML = originalHtml;
+                btn.style.backgroundColor = 'transparent';
+                btn.style.color = 'var(--text-secondary)';
+                btn.style.borderColor = 'var(--card-border)';
+                btn.style.cursor = 'pointer';
+                btn.classList.remove('marked');
+                btn.disabled = false;
+                
+                if (unmarkBtn) unmarkBtn.style.display = 'none';
+                localStorage.removeItem('tebligat_marked_' + uniqueId);
+                if (memItem) {
+                    memItem.isaretli = false;
+                    memItem.isMarked = false;
+                }
+                if (window.showToast) {
+                    window.showToast('Hata: E-Tablo güncellenemedi, işaret geri alındı.', 'error');
+                }
             }
-        } catch (error) {
-            console.error('Update error:', error);
-            btn.innerHTML = originalHtml;
-            btn.disabled = false;
-            if (window.showToast) {
-                window.showToast('Hata: ' + error.message, 'error');
-            } else {
-                alert('Hata: ' + error.message);
-            }
-        }
+        })();
     });
 
     // Delegasyon ile işareti kaldırma butonlarını dinle
@@ -713,78 +716,79 @@ export function initTebligatSearch() {
         const isim = card.dataset.isim;
         const no = card.dataset.no;
 
-        // Butonu yükleniyor durumuna al
         const originalHtml = btn.innerHTML;
-        btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div>...';
-        btn.disabled = true;
+        const uniqueId = `${sayfa}-${isim}-${no || ''}`;
+        const markBtn = card.querySelector('.btn-mark-tebligat');
 
-        try {
-            // Vercel'in 10-12 saniyelik timeout sınırına takılmamak için doğrudan Google Apps Script'e bağlanıyoruz:
-            const fetchUrl = `${APPS_SCRIPT_URL}?key=${encodeURIComponent(APPS_SCRIPT_API_KEY)}&action=unmark&sayfa=${encodeURIComponent(sayfa)}&isim=${encodeURIComponent(isim)}&no=${encodeURIComponent(no || '')}`;
-            
-            let data;
-            let isOk = false;
-            try {
-                const response = await fetch(fetchUrl);
-                data = await response.json();
-                isOk = response.ok;
-            } catch (directErr) {
-                console.warn('Doğrudan Apps Script erişimi başarısız, vekil deneniyor...', directErr);
-                const proxyRes = await fetch('/api/unmark-tebligat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ sayfa, isim, no })
-                });
-                data = await proxyRes.json();
-                isOk = proxyRes.ok;
-            }
-            
-            if (isOk && data.success) {
-                // Başarılı durumu: Kaldır butonunu gizle
-                btn.style.display = 'none';
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
-
-                // İşaretle butonunu eski haline getir
-                const markBtn = card.querySelector('.btn-mark-tebligat');
-                if (markBtn) {
-                    markBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> İşaretle';
-                    markBtn.style.backgroundColor = 'transparent';
-                    markBtn.style.color = 'var(--text-secondary)';
-                    markBtn.style.borderColor = 'var(--card-border)';
-                    markBtn.style.cursor = 'pointer';
-                    markBtn.classList.remove('marked');
-                    markBtn.disabled = false;
-                }
-                
-                // LocalStorage'dan sil
-                const uniqueId = `${sayfa}-${isim}-${no || ''}`;
-                localStorage.removeItem('tebligat_marked_' + uniqueId);
-                
-                // Bellek içi RAM kaydını da güncelle
-                const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
-                if (memItem) {
-                    memItem.isaretli = false;
-                    memItem.isMarked = false;
-                }
-                
-                if (window.showToast) {
-                    window.showToast('İşaret başarıyla kaldırıldı.', 'success');
-                }
-            } else {
-                throw new Error(data.error || 'İşlem başarısız');
-            }
-        } catch (error) {
-            console.error('Unmark error:', error);
-            btn.innerHTML = originalHtml;
-            btn.disabled = false;
-            if (window.showToast) {
-                window.showToast('Hata: ' + error.message, 'error');
-            } else {
-                alert('Hata: ' + error.message);
-            }
+        // 1. İyimser Güncelleme: Kaldır butonunu anında gizle, işaretle butonunu aktif yap
+        btn.style.display = 'none';
+        if (markBtn) {
+            markBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> İşaretle';
+            markBtn.style.backgroundColor = 'transparent';
+            markBtn.style.color = 'var(--text-secondary)';
+            markBtn.style.borderColor = 'var(--card-border)';
+            markBtn.style.cursor = 'pointer';
+            markBtn.classList.remove('marked');
+            markBtn.disabled = false;
         }
+
+        localStorage.removeItem('tebligat_marked_' + uniqueId);
+        const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
+        if (memItem) {
+            memItem.isaretli = false;
+            memItem.isMarked = false;
+        }
+
+        if (window.showToast) {
+            window.showToast('İşaret kaldırıldı (E-Tablo güncelleniyor).', 'info');
+        }
+
+        // 2. Arka Planda Google Apps Script ve E-Tablo senkronizasyonunu tamamla
+        (async () => {
+            try {
+                const fetchUrl = `${APPS_SCRIPT_URL}?key=${encodeURIComponent(APPS_SCRIPT_API_KEY)}&action=unmark&sayfa=${encodeURIComponent(sayfa)}&isim=${encodeURIComponent(isim)}&no=${encodeURIComponent(no || '')}`;
+                
+                let isOk = false;
+                try {
+                    const response = await fetch(fetchUrl);
+                    const data = await response.json();
+                    isOk = response.ok && data.success;
+                } catch (directErr) {
+                    const proxyRes = await fetch('/api/unmark-tebligat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ sayfa, isim, no })
+                    });
+                    const data = await proxyRes.json();
+                    isOk = proxyRes.ok && data.success;
+                }
+
+                if (!isOk) {
+                    throw new Error('E-Tablo yanıt vermedi');
+                }
+            } catch (error) {
+                console.error('Unmark error (geri alınıyor):', error);
+                btn.style.display = 'flex';
+                if (markBtn) {
+                    markBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
+                    markBtn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+                    markBtn.style.color = '#27ae60';
+                    markBtn.style.borderColor = '#27ae60';
+                    markBtn.style.cursor = 'default';
+                    markBtn.classList.add('marked');
+                    markBtn.disabled = true;
+                }
+                localStorage.setItem('tebligat_marked_' + uniqueId, 'true');
+                if (memItem) {
+                    memItem.isaretli = true;
+                    memItem.isMarked = true;
+                }
+                if (window.showToast) {
+                    window.showToast('Hata: İşaret kaldırılamadı, eski duruma döndürüldü.', 'error');
+                }
+            }
+        })();
     });
 }
