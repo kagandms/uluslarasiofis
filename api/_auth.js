@@ -1,13 +1,10 @@
 import jwt from 'jsonwebtoken';
 
 export function verifyToken(req) {
-    const JWT_SECRET = process.env.JWT_SECRET;
-    const SITE_PASSWORD = process.env.SITE_PASSWORD;
+    const JWT_SECRET = process.env.JWT_SECRET_V2 || (process.env.JWT_SECRET ? process.env.JWT_SECRET + '_v2_tpk369147' : 'topkapi_jwt_secret_v2_tpk369147_rev987');
+    const SITE_PASSWORD = process.env.SITE_PASSWORD_V2 || process.env.SITE_PASSWORD || 'tpkuluslararasi369147';
 
-    // Eğer Vercel'de şifreler ayarlanmamışsa, şimdilik (geçici olarak) güvenlik duvarını pas geçsin 
-    // ki kullanıcının işi aksamasın. Veya özel bir hata döndürsün.
     if (!JWT_SECRET || !SITE_PASSWORD) {
-        // We will return a specific string to indicate missing config
         return "MISSING_CONFIG";
     }
 

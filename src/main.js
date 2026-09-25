@@ -1,13 +1,48 @@
 
 // --- Authentication Logic ---
+const AUTH_SESSION_VERSION = 'v2_20260925_rev';
 let currentToken = localStorage.getItem('site_token') || sessionStorage.getItem('site_token');
+
+function forceLogout(message) {
+    currentToken = null;
+    localStorage.removeItem('site_token');
+    localStorage.removeItem('site_token_version');
+    sessionStorage.removeItem('site_token');
+    sessionStorage.removeItem('site_token_version');
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) overlay.style.display = 'flex';
+    if (message && window.showToast) {
+        window.showToast(message, 'warning');
+    }
+}
+
+async function validateTokenWithServer() {
+    if (!currentToken) return;
+    try {
+        const res = await fetch('/api/verify-token');
+        if (res.status === 401) {
+            forceLogout('Oturum süresi doldu veya şifre güncellendi. Lütfen tekrar giriş yapın.');
+        }
+    } catch (e) {
+        // Çevrimdışı durumlarda toleranslı ol
+    }
+}
 
 function checkAuth() {
     const overlay = document.getElementById('login-overlay');
     if (!overlay) return;
 
+    const storedVersion = localStorage.getItem('site_token_version') || sessionStorage.getItem('site_token_version');
+
+    // Versiyon eşleşmiyorsa eski tüm açık oturumları anında sil ve kilit ekranını göster
+    if (currentToken && storedVersion !== AUTH_SESSION_VERSION) {
+        forceLogout('Güvenlik nedeniyle şifre ve tüm oturumlar sıfırlandı. Lütfen yeni şifre ile giriş yapın.');
+        return;
+    }
+
     if (currentToken) {
         overlay.style.display = 'none';
+        validateTokenWithServer();
     } else {
         overlay.style.display = 'flex';
     }
@@ -15,6 +50,14 @@ function checkAuth() {
 
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
+
+    // Sekmeye dönüldüğünde veya periyodik olarak açık sekmelerde oturumu denetle
+    window.addEventListener('focus', () => {
+        if (currentToken) validateTokenWithServer();
+    });
+    setInterval(() => {
+        if (currentToken) validateTokenWithServer();
+    }, 30000);
 
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
@@ -42,8 +85,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentToken = data.token;
                     if (rememberMe) {
                         localStorage.setItem('site_token', data.token);
+                        localStorage.setItem('site_token_version', AUTH_SESSION_VERSION);
                     } else {
                         sessionStorage.setItem('site_token', data.token);
+                        sessionStorage.setItem('site_token_version', AUTH_SESSION_VERSION);
                     }
                     document.getElementById('login-overlay').style.display = 'none';
                     if (window.showToast) window.showToast('Giriş başarılı!', 'success');
@@ -82,13 +127,7 @@ window.fetch = async function() {
     const response = await originalFetch(resource, config);
     
     if (response.status === 401 && typeof resource === 'string' && resource.startsWith('/api') && !resource.startsWith('/api/login')) {
-        // Token expired or invalid
-        currentToken = null;
-        localStorage.removeItem('site_token');
-        sessionStorage.removeItem('site_token');
-        const overlay = document.getElementById('login-overlay');
-        if (overlay) overlay.style.display = 'flex';
-        if (window.showToast) window.showToast('Oturum süresi doldu, lütfen tekrar giriş yapın.', 'warning');
+        forceLogout('Oturum süresi doldu veya şifre güncellendi. Lütfen tekrar giriş yapın.');
     }
     
     return response;
