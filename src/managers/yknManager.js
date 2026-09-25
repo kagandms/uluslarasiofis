@@ -641,11 +641,27 @@ export function initYknManager() {
         updateMissingFieldsUI();
     }
 
-    function startManualYoksisFillAfterCrop() {
+    async function startManualYoksisFillAfterCrop() {
         if (currentStudentData?.yoksisReady !== true) {
-            addStatus('Fotoğraf kaydedildi. Her şeyi YÖKSİS’e aktarmak için önce kabul kodunu YÖKSİS’te aratın.', 'warning');
-            showToast('Önce kabul kodunu YÖKSİS’te aratın.', 'warning');
-            return;
+            if (currentStudentData?.yoksisId) {
+                addStatus('YÖKSİS formu hazırlanıyor: kabul kodu aratılıyor...', 'info');
+                showToast('YÖKSİS formu hazırlanıyor...', 'info');
+                try {
+                    await postExtensionRequest('TRANSFER_TO_YOKSIS', {
+                        data: getYoksisTransportData(currentStudentData),
+                        kabulId: currentStudentData.yoksisId,
+                        waitForForm: true,
+                        requestId: createRequestId('auto-yoksis-prep')
+                    }, 35000);
+                    currentStudentData.yoksisReady = true;
+                } catch (prepErr) {
+                    console.warn('[YKN] YÖKSİS kabul kodu otomatik arama uyarısı:', prepErr);
+                }
+            } else {
+                addStatus('Fotoğraf kaydedildi. Her şeyi YÖKSİS’e aktarmak için önce kabul kodunu YÖKSİS’te aratın.', 'warning');
+                showToast('Önce kabul kodunu YÖKSİS’te aratın.', 'warning');
+                return;
+            }
         }
 
         if (!beginButtonAction('paste-yoksis', btnPasteYoksis, 30_000, () => {
@@ -867,6 +883,29 @@ export function initYknManager() {
 
     function createRequestId() {
         return 'ykn-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    }
+
+    window.addEventListener('focus', () => {
+        if (lastFoundYkn) {
+            copyTextToClipboard(lastFoundYkn);
+        } else if (currentStudentData?.yoksisId) {
+            copyTextToClipboard(currentStudentData.yoksisId);
+        }
+    });
+
+    function waitForStudentDocuments(timeoutMs = 6000) {
+        if (currentStudentData?.documentsReady || currentStudentData?.yoksisId) {
+            return Promise.resolve(true);
+        }
+        return new Promise((resolve) => {
+            const start = Date.now();
+            const check = setInterval(() => {
+                if (currentStudentData?.documentsReady || currentStudentData?.yoksisId || Date.now() - start >= timeoutMs) {
+                    clearInterval(check);
+                    resolve(Boolean(currentStudentData?.documentsReady || currentStudentData?.yoksisId));
+                }
+            }, 250);
+        });
     }
 
     function clearExtensionCheckTimeout() {
@@ -2026,6 +2065,13 @@ export function initYknManager() {
                     showToast('Öğrenci Apply üzerinde bulunamadı.', 'error');
                     return;
                 }
+                if (!currentStudentData.documentsReady && !currentStudentData.yoksisId) {
+                    addStatus('Apply öğrenci profil sayfası bekleniyor...', 'info');
+                    await waitForStudentDocuments(7000);
+                }
+            } else if (currentStudentData && !currentStudentData.documentsReady && !currentStudentData.yoksisId) {
+                addStatus('Apply öğrenci profil sayfası bekleniyor...', 'info');
+                await waitForStudentDocuments(6000);
             }
 
             btnReadAcceptance.disabled = true;
@@ -2056,7 +2102,8 @@ export function initYknManager() {
                     }
                 }
                 if (response.kabulId) {
-                    try { await navigator.clipboard.writeText(response.kabulId); } catch (_) {}
+                    lastFoundYkn = response.kabulId;
+                    copyTextToClipboard(response.kabulId);
                 }
                 const filled = response.autoFilled ? ' Bilgiler de YÖKSİS’e dolduruldu.' : '';
                 addStatus(`Kabul kodu kopyalandı ve YÖKSİS’te aratıldı: ${response.kabulId || ''}.${filled}`, 'success');
@@ -2081,6 +2128,10 @@ export function initYknManager() {
                     addStatus('Öğrenci Apply üzerinde bulunamadı.', 'error');
                     showToast('Öğrenci Apply üzerinde bulunamadı.', 'error');
                     return;
+                }
+                if (!currentStudentData.documentsReady && !currentStudentData.passportDocumentUrl) {
+                    addStatus('Apply belgeleri bekleniyor...', 'info');
+                    await waitForStudentDocuments(6000);
                 }
             }
 
@@ -2387,18 +2438,28 @@ export function initYknManager() {
 
     if (btnCopyLetter) {
         btnCopyLetter.addEventListener('click', async () => {
-            if (!currentStudentData) {
+            const enteredPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
+            if (enteredPassport && (!currentStudentData || currentStudentData.passportNo !== enteredPassport)) {
+                addStatus(`Yeni pasaport (${enteredPassport}) için arama yapılıyor...`, 'info');
+                const searchOk = await performStudentSearch(enteredPassport);
+                if (!searchOk || !currentStudentData) {
+                    showToast('Öğrenci bulunamadı.', 'error');
+                    return;
+                }
+                if (!currentStudentData.documentsReady && !isValidYoksisId(currentStudentData.yoksisId)) {
+                    addStatus('Apply belge paneli bekleniyor...', 'info');
+                    await waitForStudentDocuments(6000);
+                }
+            } else if (!currentStudentData) {
                 showToast('Lütfen önce bir öğrenci arayın.', 'warning');
                 return;
-            }
-
-            if (!currentStudentData.documentsReady && !isValidYoksisId(currentStudentData.yoksisId)) {
-                showToast('Apply belge paneli henüz yükleniyor. Kabul mektubu bağlantısı hazır olduğunda tekrar deneyin.', 'info');
-                addStatus('Kabul mektubu okunması bekletildi: belge paneli hazır değil.', 'info');
-                return;
+            } else if (!currentStudentData.documentsReady && !isValidYoksisId(currentStudentData.yoksisId)) {
+                addStatus('Apply belge paneli bekleniyor...', 'info');
+                await waitForStudentDocuments(5000);
             }
 
             if (currentStudentData.yoksisId && isValidYoksisId(currentStudentData.yoksisId)) {
+                lastFoundYkn = currentStudentData.yoksisId;
                 copyTextToClipboard(currentStudentData.yoksisId);
                 addStatus(`Kabul mektubu kodu panoya kopyalandı: ${currentStudentData.yoksisId}`, 'success');
                 showToast(`Kabul Kodu kopyalandı: ${currentStudentData.yoksisId}`, 'success');
@@ -2412,6 +2473,9 @@ export function initYknManager() {
                 addStatus('Kabul mektubu okunamadı. Tekrar deneyebilirsiniz.', 'error');
                 showToast('Kabul mektubu okunamadı.', 'error');
             })) return;
+
+            pendingDocumentReads.delete('acceptanceLetter');
+            documentRequestKeys.delete('acceptanceLetter');
 
             const candidates = currentStudentData.acceptanceCandidates || (currentStudentData.acceptanceLetterUrl ? [currentStudentData.acceptanceLetterUrl] : []);
             if (candidates.length > 0) {
@@ -2429,8 +2493,6 @@ export function initYknManager() {
                     requestId: activeSearchRequestId
                 }
             }, '*');
-
-            void 'Kabul mektubu PDF bağlantısı bulunamadı!';
         });
     }
 

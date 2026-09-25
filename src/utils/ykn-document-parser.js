@@ -1312,6 +1312,7 @@ export function extractPassportIssuingAuthority(text, options = {}) {
             keepStripping = false;
             remainder = remainder.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
             for (const l of AUTHORITY_LABELS) {
+                if (l === 'regional passport office' || l === 'passport office') continue;
                 const r = new RegExp('^' + escapeRegex(l) + '(?:$|[\\s:;#\-_/\\\\|.,])', 'i');
                 if (r.test(remainder)) {
                     remainder = remainder.replace(r, '').trim();

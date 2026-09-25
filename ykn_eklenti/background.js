@@ -547,6 +547,20 @@ async function getReadyApplyProfileTab() {
     }
     if (!targetTabId) throw new Error('Açık bir Apply Topkapı öğrenci profili bulunamadı.');
     applyTabId = targetTabId;
+
+    // Eğer sekme henüz profil sayfasında değilse (ör. listede veya geçişte), profilin yüklenmesini bekle
+    const start = Date.now();
+    while (Date.now() - start < 8000) {
+        try {
+            const tab = await new Promise(r => chrome.tabs.get(targetTabId, r));
+            const url = tab?.url || '';
+            if (url.includes('/applications/view/') || url.includes('/applications/edit/') || url.includes('/applications/show/')) {
+                break;
+            }
+        } catch (_) { break; }
+        await wait(300);
+    }
+
     await waitForContentScript(targetTabId, 'apply');
     return targetTabId;
 }
@@ -955,6 +969,16 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     }
 
                     const allDocs = getAllDocs(document);
+
+                    // Önceki öğrenciden açık kalan YÖKSİS formu varsa temizle
+                    const clearPair = findFormClearButton(allDocs);
+                    if (clearPair && clearPair.btn) {
+                        try {
+                            triggerButton(clearPair.btn, clearPair.win);
+                            await new Promise(r => setTimeout(r, 450));
+                        } catch (_) {}
+                    }
+
                     let inp = null;
                     let btn = null;
                     let targetWin = window;
@@ -2824,7 +2848,24 @@ async function confirmYoksisReadyForCrop(data, requestId) {
     if (data.yoksisReady === true) return data;
 
     const yoksisTab = await getBackgroundYoksisTab();
-    const state = await getYoksisFormState(yoksisTab.id, requestId);
+    let state = await getYoksisFormState(yoksisTab.id, requestId);
+    if (!state?.fingerprint) {
+        const kabulId = data.kabulId || data.yoksisId;
+        if (kabulId) {
+            console.log('[YKN] YÖKSİS formu hazır değil, kabul kodu otomatik aratılıyor:', kabulId);
+            try {
+                await transferToYoksis({
+                    data,
+                    kabulId,
+                    requestId,
+                    waitForForm: true
+                });
+                state = await getYoksisFormState(yoksisTab.id, requestId);
+            } catch (err) {
+                console.warn('[YKN] Otomatik YÖKSİS arama uyarısı:', err.message);
+            }
+        }
+    }
     if (!state?.fingerprint) {
         throw new Error('YÖKSİS öğrenci formu doğrulanamadı. Kabul kodunu aratıp öğrenci formu açıldıktan sonra tekrar deneyin.');
     }
@@ -2909,6 +2950,33 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
         });
     });
 });
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+    if (tabId === applyTabId) applyTabId = null;
+    if (tabId === yoksisTabId) yoksisTabId = null;
+    if (tabId === ikametTabId) ikametTabId = null;
+    yoksisOperationQueues.delete(String(tabId));
+});
+
+async function copyToActiveTabClipboard(text) {
+    if (!text || !chrome.scripting || !chrome.scripting.executeScript) return;
+    try {
+        const activeTabs = await queryTabs({ active: true, currentWindow: true });
+        if (activeTabs.length > 0) {
+            await chrome.scripting.executeScript({
+                target: { tabId: activeTabs[0].id },
+                func: (val) => {
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(val).catch(() => {});
+                        }
+                    } catch (_) {}
+                },
+                args: [text]
+            });
+        }
+    } catch (_) {}
+}
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'OCR_IMAGE') {
@@ -3366,12 +3434,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             (async () => {
                 const yoksisTab = await getBackgroundYoksisTab();
                 await waitForContentScript(yoksisTab.id, 'yoksis');
-                return sendTabMessage(yoksisTab.id, {
+                const response = await sendTabMessage(yoksisTab.id, {
                     action: 'YOKSIS_STEP_YKN',
                     studentName: request.studentName,
                     passportNo: request.passportNo,
                     requestId: request.requestId
                 });
+                if (response?.status === 'YKN_READY' && response?.ykn) {
+                    try {
+                        await chrome.storage.local.set({ lastFoundYkn: response.ykn, lastFoundYknTime: Date.now() });
+                        await copyToActiveTabClipboard(response.ykn);
+                    } catch (_) {}
+                }
+                return response;
             })()
                 .then(sendResponse)
                 .catch((error) => sendResponse({ success: false, requestId: request.requestId, error: error.message }));

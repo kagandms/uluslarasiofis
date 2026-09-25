@@ -1,11 +1,56 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.63';
+const CONTENT_SCRIPT_VERSION = '1.2.74';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
 const FIXED_YOKSIS_PHONE = '5322431261';
+
+function copyTextToClipboardDirect(text) {
+    if (!text) return;
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(() => {
+                fallbackCopyDirect(text);
+            });
+            return;
+        }
+    } catch (_) {}
+    fallbackCopyDirect(text);
+}
+
+function fallbackCopyDirect(text) {
+    try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        (document.body || document.documentElement).appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+    } catch (_) {}
+}
+
+// Focus olduğunda panoya en son bulunan YKN'yi senkronize et
+window.addEventListener('focus', () => {
+    try {
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+            chrome.storage.local.get(['lastFoundYkn', 'lastFoundYknTime'], (res) => {
+                if (res?.lastFoundYkn && Date.now() - (res.lastFoundYknTime || 0) < 30 * 60 * 1000) {
+                    copyTextToClipboardDirect(res.lastFoundYkn);
+                }
+            });
+        }
+    } catch (_) {}
+    if (location.hostname === 'apply.topkapi.edu.tr') {
+        attachApplyYknHelper();
+    }
+});
+
 // Arama komutunu portala hızlıca bildirmek için ilk form hazır olma kontrolü
 // kısa tutulur. Form gecikirse background bunu beklemede başarılı kabul eder;
 // son doldurma adımı YÖKSİS sekmesini öne alıp daha uzun süre tekrar bekler.
@@ -2397,6 +2442,47 @@ function extractApplyProfileData() {
     };
 }
 
+function attachApplyYknHelper() {
+    if (location.hostname !== 'apply.topkapi.edu.tr') return;
+    try {
+        if (typeof chrome === 'undefined' || !chrome?.storage?.local) return;
+        chrome.storage.local.get(['lastFoundYkn', 'lastFoundYknTime'], (res) => {
+            const ykn = res?.lastFoundYkn;
+            if (!ykn || !/^99\d{9}$/.test(ykn)) return;
+            if (Date.now() - (res.lastFoundYknTime || 0) > 60 * 60 * 1000) return;
+
+            copyTextToClipboardDirect(ykn);
+
+            const candidateInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])'))
+                .filter(inp => {
+                    const meta = (inp.name + ' ' + inp.id + ' ' + (inp.placeholder || '') + ' ' + (inp.getAttribute('aria-label') || '')).toLowerCase();
+                    return meta.includes('ykn') || meta.includes('kimlik') || meta.includes('identity') || meta.includes('yabanci');
+                });
+
+            for (const input of candidateInputs) {
+                if (input.dataset.yknHelperAttached) continue;
+                input.dataset.yknHelperAttached = 'true';
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = `📋 YKN Yapıştır (${ykn})`;
+                btn.style.cssText = 'display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: #fff; background: #27ae60; border: none; border-radius: 4px; cursor: pointer; z-index: 9999;';
+                btn.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    input.value = ykn;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    copyTextToClipboardDirect(ykn);
+                    btn.textContent = '✓ Yapıştırıldı!';
+                    setTimeout(() => { btn.textContent = `📋 YKN Yapıştır (${ykn})`; }, 2000);
+                });
+                input.parentElement?.appendChild(btn);
+            }
+        });
+    } catch (_) {}
+}
+
 function watchForDocumentLinks(requestId) {
     const deadline = Date.now() + 15_000;
     const intervalId = setInterval(() => {
@@ -2666,11 +2752,24 @@ async function extractPassportMetadataFromApply(request) {
 }
 
 async function extractAcceptanceCodeFromApply(request) {
-    const links = findDocumentLinks();
-    const directCode = isValidYoksisId(links.kabulId) ? links.kabulId : '';
-    if (directCode) return { code: directCode, documentUrl: '' };
+    const start = Date.now();
+    let links = findDocumentLinks();
+    let directCode = isValidYoksisId(links.kabulId) ? links.kabulId : '';
+    let candidates = getDocumentCandidates(links, 'acceptance', request.documentUrl);
 
-    const candidates = getDocumentCandidates(links, 'acceptance', request.documentUrl);
+    // Apply profil sayfası belgeleri AJAX ile geç yükleyebilir; 8 saniyeye kadar bekle
+    while (!directCode && candidates.length === 0 && Date.now() - start < 8000) {
+        await new Promise(r => setTimeout(r, 400));
+        links = findDocumentLinks();
+        directCode = isValidYoksisId(links.kabulId) ? links.kabulId : '';
+        candidates = getDocumentCandidates(links, 'acceptance', request.documentUrl);
+    }
+
+    if (directCode) {
+        copyTextToClipboardDirect(directCode);
+        return { code: directCode, documentUrl: '' };
+    }
+
     if (candidates.length === 0) throw new Error('Öğrenci profilinde kabul mektubu bulunamadı.');
     const errors = [];
     for (const documentUrl of candidates) {
@@ -2679,7 +2778,10 @@ async function extractAcceptanceCodeFromApply(request) {
             const text = await extractDocumentText(documentResult);
             const parser = window.YknDocumentParser;
             const code = parser?.extractYoksisIdFromText(text) || '';
-            if (code) return { code, documentUrl };
+            if (code) {
+                copyTextToClipboardDirect(code);
+                return { code, documentUrl };
+            }
             errors.push('Kabul mektubu kodu belgede bulunamadı.');
         } catch (error) {
             errors.push(error.message);
@@ -2916,6 +3018,10 @@ async function executeYoksisYknCycleStep(studentName, passportNo) {
     if (cells.length >= 2) {
         const tableYkn = (cells[1].innerText || cells[1].textContent || '').trim();
         if (/^99\d{9}$/.test(tableYkn)) {
+            copyTextToClipboardDirect(tableYkn);
+            try {
+                chrome.storage.local.set({ lastFoundYkn: tableYkn, lastFoundYknTime: Date.now() });
+            } catch (_) {}
             return {
                 success: true,
                 status: 'YKN_READY',
@@ -2962,6 +3068,10 @@ async function executeYoksisYknCycleStep(studentName, passportNo) {
 
         const ykn = parseYknFromText(modalText);
         if (ykn) {
+            copyTextToClipboardDirect(ykn);
+            try {
+                chrome.storage.local.set({ lastFoundYkn: ykn, lastFoundYknTime: Date.now() });
+            } catch (_) {}
             return {
                 success: true,
                 status: 'YKN_READY',
@@ -3577,10 +3687,15 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             return searchInput;
         })().then((searchInput) => {
         if (searchInput) {
-            // Apply arama alanı bazı sürümlerde yalnızca Enter ile sunucu
-            // tarafındaki tablo sorgusunu çalıştırıyor. Yazma işlemi ve Enter
-            // zinciri tamamlanmadan sonuçları kontrol etmeye başlama.
-            simulateInput(searchInput, passportNo, { pressEnter: true }).then(() => {
+            (async () => {
+                if (searchInput.value) {
+                    searchInput.value = '';
+                    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                await simulateInput(searchInput, passportNo, { pressEnter: true });
+                await new Promise(r => setTimeout(r, 400));
+            })().then(() => {
             // Sonuçların gelmesini bekle (Polling ile - Pasaport eşleşmesi kontrol edilir)
             let attempts = 0;
             const maxAttempts = 24; // 24 * 500ms = 12 saniye
