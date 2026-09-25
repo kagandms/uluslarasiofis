@@ -1968,6 +1968,17 @@ export function initYknManager() {
                 btnSearch.click();
             }
         });
+
+        inputPassport.addEventListener('input', () => {
+            const val = inputPassport.value.trim().toUpperCase();
+            if (currentStudentData && currentStudentData.passportNo && currentStudentData.passportNo !== val) {
+                if (studentBadge) {
+                    studentBadge.textContent = "Yeni Arama Bekleniyor";
+                    studentBadge.style.background = "rgba(243, 156, 18, 0.15)";
+                    studentBadge.style.color = "#d68910";
+                }
+            }
+        });
     }
 
     
@@ -1998,13 +2009,35 @@ export function initYknManager() {
 
     if (btnReadAcceptance) {
         btnReadAcceptance.addEventListener('click', async () => {
+            const enteredPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
+            if (!enteredPassport && !currentStudentData) {
+                showToast('Lütfen önce pasaport numarası girin.', 'warning');
+                if (inputPassport) inputPassport.focus();
+                return;
+            }
+
+            // Yeni pasaport girilmişse veya mevcut öğrenci ile uyuşmuyorsa önce arama yap
+            if (enteredPassport && (!currentStudentData || currentStudentData.passportNo !== enteredPassport)) {
+                addStatus(`Yeni pasaport (${enteredPassport}) için öğrenci aranıyor...`, 'info');
+                showToast(`Öğrenci aranıyor: ${enteredPassport}...`, 'info');
+                const searchOk = await performStudentSearch(enteredPassport);
+                if (!searchOk || !currentStudentData) {
+                    addStatus('Öğrenci Apply üzerinde bulunamadı.', 'error');
+                    showToast('Öğrenci Apply üzerinde bulunamadı.', 'error');
+                    return;
+                }
+            }
+
             btnReadAcceptance.disabled = true;
             btnReadAcceptance.classList.add('is-loading');
             addStatus('Kabul mektubu okunuyor ve YÖKSİS aranıyor...', 'info');
 
             const requestId = createRequestId('acceptance');
             try {
-                const response = await postExtensionRequest('READ_ACCEPTANCE_AND_FILL_YOKSIS', { requestId });
+                const response = await postExtensionRequest('READ_ACCEPTANCE_AND_FILL_YOKSIS', {
+                    requestId,
+                    passportNo: currentStudentData?.passportNo || enteredPassport
+                });
                 btnReadAcceptance.disabled = false;
                 btnReadAcceptance.classList.remove('is-loading');
 
@@ -2039,13 +2072,29 @@ export function initYknManager() {
 
     if (btnCopy) {
         btnCopy.addEventListener('click', async () => {
+            const enteredPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
+            if (enteredPassport && (!currentStudentData || currentStudentData.passportNo !== enteredPassport)) {
+                addStatus(`Yeni pasaport (${enteredPassport}) için öğrenci aranıyor...`, 'info');
+                showToast(`Öğrenci aranıyor: ${enteredPassport}...`, 'info');
+                const searchOk = await performStudentSearch(enteredPassport);
+                if (!searchOk || !currentStudentData) {
+                    addStatus('Öğrenci Apply üzerinde bulunamadı.', 'error');
+                    showToast('Öğrenci Apply üzerinde bulunamadı.', 'error');
+                    return;
+                }
+            }
+
             btnCopy.disabled = true;
             btnCopy.classList.add('is-loading');
             addStatus('Apply bilgileri ve pasaport belgesi hazırlanıyor...', 'info');
 
             const requestId = createRequestId('student');
             try {
-                const response = await postExtensionRequest('COPY_APPLY_DATA_AND_FILL_YOKSIS', { requestId, fromPortal: true });
+                const response = await postExtensionRequest('COPY_APPLY_DATA_AND_FILL_YOKSIS', {
+                    requestId,
+                    fromPortal: true,
+                    passportNo: currentStudentData?.passportNo || enteredPassport
+                });
                 btnCopy.disabled = false;
                 btnCopy.classList.remove('is-loading');
 
@@ -2158,73 +2207,110 @@ export function initYknManager() {
         });
     }
 
-    if (btnSearch) {
-        btnSearch.addEventListener('click', () => {
-            const passportNo = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
-            if (inputPassport) inputPassport.value = passportNo;
-            if (!passportNo) {
-                showToast('Lütfen pasaport numarası girin.', 'warning');
-                if (inputPassport) inputPassport.focus();
-                return;
-            }
-            
-            clearStatus();
-            clearSearchTimeout();
-            setSearchButtonLoading(true);
-            currentStudentData = null;
-            activeSearchRequestId = createRequestId();
-            resetStudentActions();
-            studentResult.style.display = 'block';
-            studentName.textContent = "Aranıyor... (" + passportNo + ")";
-            if (studentBadge) {
-                studentBadge.textContent = "Aranıyor...";
-                studentBadge.style.background = "rgba(52, 152, 219, 0.15)";
-                studentBadge.style.color = "#2980b9";
-                studentBadge.style.display = "inline-block";
-            }
-            if (proActions) proActions.style.display = 'none';
-            addStatus('Apply Topkapı eklentisi üzerinden arama başlatıldı...', 'info');
-            
-            // Arama başlamadan önce eklenti köprüsünün kullanılabilirliğini kontrol et.
-            requestExtensionCheck(activeSearchRequestId);
+    function performStudentSearch(passportNo) {
+        const cleanPassport = (passportNo || (inputPassport ? inputPassport.value : '')).trim().toUpperCase();
+        if (inputPassport) inputPassport.value = cleanPassport;
+        if (!cleanPassport) {
+            showToast('Lütfen pasaport numarası girin.', 'warning');
+            if (inputPassport) inputPassport.focus();
+            return Promise.resolve(false);
+        }
 
-            // Asıl arama isteği
-            window.postMessage({
-                source: 'WEB_APP',
-                payload: {
-                    action: 'SEARCH_STUDENT',
-                    passportNo: passportNo,
-                    requestId: activeSearchRequestId
-                }
-            }, '*');
+        clearStatus();
+        clearSearchTimeout();
+        setSearchButtonLoading(true);
+        currentStudentData = null;
+        activeSearchRequestId = createRequestId('search');
+        resetStudentActions();
+        if (studentResult) studentResult.style.display = 'block';
+        if (studentName) studentName.textContent = "Aranıyor... (" + cleanPassport + ")";
+        if (studentBadge) {
+            studentBadge.textContent = "Aranıyor...";
+            studentBadge.style.background = "rgba(52, 152, 219, 0.15)";
+            studentBadge.style.color = "#2980b9";
+            studentBadge.style.display = "inline-block";
+        }
+        if (proActions) proActions.style.display = 'none';
+        addStatus('Apply Topkapı eklentisi üzerinden arama başlatıldı...', 'info');
 
-            // 2.5 saniye sonra eklenti köprüsü hala ses vermediyse erken uyarı ver
-            setTimeout(() => {
-                if (!extensionBridgeActive && studentName.textContent.startsWith('Aranıyor...')) {
-                    showExtensionMissing();
-                    addStatus('Eklenti köprüsü henüz yanıt vermedi. Lütfen chrome://extensions sekmesinden eklentiyi Yenileyip (↻) bu sayfayı F5 ile tazeleyin.', 'error');
+        // Arama başlamadan önce eklenti köprüsünün kullanılabilirliğini kontrol et.
+        requestExtensionCheck(activeSearchRequestId);
+
+        // Asıl arama isteği
+        window.postMessage({
+            source: 'WEB_APP',
+            payload: {
+                action: 'SEARCH_STUDENT',
+                passportNo: cleanPassport,
+                requestId: activeSearchRequestId
+            }
+        }, '*');
+
+        // 2.5 saniye sonra eklenti köprüsü hala ses vermediyse erken uyarı ver
+        setTimeout(() => {
+            if (!extensionBridgeActive && studentName && studentName.textContent.startsWith('Aranıyor...')) {
+                showExtensionMissing();
+                addStatus('Eklenti köprüsü henüz yanıt vermedi. Lütfen chrome://extensions sekmesinden eklentiyi Yenileyip (↻) bu sayfayı F5 ile tazeleyin.', 'error');
+            }
+        }, 2500);
+
+        return new Promise((resolve) => {
+            let settled = false;
+            const cleanup = () => {
+                window.removeEventListener('message', onSearchMessage);
+                clearSearchTimeout();
+                setSearchButtonLoading(false);
+            };
+
+            const onSearchMessage = (e) => {
+                if (e.source !== window || !e.data || e.data.source !== 'EXTENSION') return;
+                const d = e.data;
+                if (d.type === 'EVENT' && (d.action === 'STUDENT_DOCUMENTS_FOUND' || d.action === 'STUDENT_FOUND')) {
+                    if (!settled) {
+                        settled = true;
+                        cleanup();
+                        resolve(true);
+                    }
+                } else if (d.type === 'EVENT' && (d.action === 'STUDENT_NOT_FOUND' || d.action === 'REQUEST_FAILED')) {
+                    if (!settled) {
+                        settled = true;
+                        cleanup();
+                        resolve(false);
+                    }
                 }
-            }, 2500);
+            };
 
             // 14 saniyelik güvenlik zaman aşımı
             searchTimeoutTimer = setTimeout(() => {
-                if (studentName.textContent.startsWith('Aranıyor...')) {
-                    setSearchButtonLoading(false);
-                    studentName.textContent = 'Bağlantı Zaman Aşımı';
-                    if (studentBadge) {
-                        studentBadge.textContent = 'Zaman Aşımı';
-                        studentBadge.style.background = 'rgba(231, 76, 60, 0.1)';
-                        studentBadge.style.color = '#e74c3c';
-                        studentBadge.style.display = 'inline-block';
+                if (!settled) {
+                    settled = true;
+                    cleanup();
+                    if (studentName && studentName.textContent.startsWith('Aranıyor...')) {
+                        studentName.textContent = 'Bağlantı Zaman Aşımı';
+                        if (studentBadge) {
+                            studentBadge.textContent = 'Zaman Aşımı';
+                            studentBadge.style.background = 'rgba(231, 76, 60, 0.1)';
+                            studentBadge.style.color = '#e74c3c';
+                            studentBadge.style.display = 'inline-block';
+                        }
+                        if (proActions) proActions.style.display = 'none';
+                        showExtensionMissing();
+                        addStatus('Eklentiden veya Apply sekmesinden zamanında yanıt alınamadı.', 'error');
+                        addStatus('1. Apply Topkapı sekmesinin açık olduğunu kontrol edin.', 'error');
+                        addStatus('2. Apply Topkapı ve bu portal sekmesini yenileyin (F5).', 'error');
+                        addStatus('3. Chrome Eklentinizin (YÖKSİS Otomasyonu) açık olduğundan emin olun.', 'error');
                     }
-                    if (proActions) proActions.style.display = 'none';
-                    showExtensionMissing();
-                    addStatus('Eklentiden veya Apply sekmesinden zamanında yanıt alınamadı.', 'error');
-                    addStatus('1. Apply Topkapı sekmesinin açık olduğunu kontrol edin.', 'error');
-                    addStatus('2. Apply Topkapı ve bu portal sekmesini yenileyin (F5).', 'error');
-                    addStatus('3. Chrome Eklentinizin (YÖKSİS Otomasyonu) açık olduğundan emin olun.', 'error');
+                    resolve(Boolean(currentStudentData));
                 }
             }, 14000);
+
+            window.addEventListener('message', onSearchMessage);
+        });
+    }
+
+    if (btnSearch) {
+        btnSearch.addEventListener('click', () => {
+            performStudentSearch();
         });
     }
 

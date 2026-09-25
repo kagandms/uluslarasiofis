@@ -27,7 +27,7 @@ const YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS = 32_000;
 
 function runYoksisOperation(tabId, operation, requestId, task) {
     const key = `${tabId}:${operation}:${requestId || 'anonymous'}`;
-    if (yoksisOperationResults.has(key)) return yoksisOperationResults.get(key);
+    if (operation !== 'search' && yoksisOperationResults.has(key)) return yoksisOperationResults.get(key);
 
     const queueKey = String(tabId);
     const previous = yoksisOperationQueues.get(queueKey) || Promise.resolve();
@@ -955,16 +955,6 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     }
 
                     const allDocs = getAllDocs(document);
-                    console.log('[YKN MAIN WORLD] Scanning docs count:', allDocs.length, 'with code:', code);
-
-                    // Kullanıcı talebi: Sayfayı yenilemek yerine Öğrenci Bilgileri formunun "Temizle" butonuna bas
-                    const clearTarget = findFormClearButton(allDocs);
-                    if (clearTarget && clearTarget.btn) {
-                        console.log('[YKN MAIN WORLD] Form Temizle butonuna basılıyor...');
-                        triggerButton(clearTarget.btn, clearTarget.win);
-                        await new Promise(r => setTimeout(r, 350));
-                    }
-
                     let inp = null;
                     let btn = null;
                     let targetWin = window;
@@ -2707,6 +2697,10 @@ async function transferToYoksis(request) {
         .trim()
         .toUpperCase();
     if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
+
+    // Yeni arama başladığında önceki öğrencinin beklemede kalmış sırasını sıfırla
+    const queueKey = String(yoksisTab.id);
+    yoksisOperationQueues.delete(queueKey);
 
     return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
         await new Promise((resolve) => {

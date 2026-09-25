@@ -3098,7 +3098,6 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             return;
         }
 
-        tryResetOrNewRecord();
         waitForYoksisSearchControls()
             .then(async (initialPair) => {
                 let idInput = initialPair.idInput;
@@ -3559,12 +3558,24 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
         const cleanPassport = passportNo.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
         
         // Apply Topkapı'daki arama kutusunu bul (Daha spesifik seçiciler)
-        const searchInput = document.querySelector('.inputDatatableSearch') ||
-                            document.querySelector('input[placeholder*="Tabloda ara"]') ||
-                            document.querySelector('input[type="search"]') || 
-                            document.querySelector('.dataTables_filter input') || 
-                            document.querySelector('input.form-control');
-        
+        function findApplySearchInput() {
+            return document.querySelector('.inputDatatableSearch') ||
+                   document.querySelector('input[placeholder*="Tabloda ara"]') ||
+                   document.querySelector('input[type="search"]') || 
+                   document.querySelector('.dataTables_filter input') || 
+                   document.querySelector('input.form-control');
+        }
+
+        // Apply listesi yeni açıldıysa veya tablo henüz render edildiyse arama kutusunu bekle
+        (async () => {
+            const start = Date.now();
+            let searchInput = findApplySearchInput();
+            while (!searchInput && Date.now() - start < 10000) {
+                await new Promise(r => setTimeout(r, 250));
+                searchInput = findApplySearchInput();
+            }
+            return searchInput;
+        })().then((searchInput) => {
         if (searchInput) {
             // Apply arama alanı bazı sürümlerde yalnızca Enter ile sunucu
             // tarafındaki tablo sorgusunu çalıştırıyor. Yazma işlemi ve Enter
@@ -3659,6 +3670,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 { error: 'Arama kutusu (.inputDatatableSearch veya form-control) sayfada bulunamadı.' }
             );
         }
+        });
         sendResponse({ success: true, requestId });
         return true;
     }
