@@ -1,7 +1,8 @@
 const VIEW_TITLES = {
     ykn: 'YKN',
     cover: 'Kapak Hazırla',
-    teblig: 'Tebliğ Bul'
+    teblig: 'Tebliğ Bul',
+    documents: 'Belgeler'
 };
 
 function getWorkspaceElements() {
@@ -24,7 +25,9 @@ function getViewPanel(viewName) {
 function focusView(viewName) {
     const targetId = viewName === 'teblig'
         ? 'tebligat-search-input'
-        : (viewName === 'ykn' ? 'ykn-passport-input' : `${viewName}-title`);
+        : (viewName === 'documents'
+            ? 'documents-search-input'
+            : (viewName === 'ykn' ? 'ykn-passport-input' : `${viewName}-title`));
     document.getElementById(targetId)?.focus();
 }
 

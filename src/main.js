@@ -106,6 +106,7 @@ import { showToast } from './ui/toastManager.js';
 import { initTebligatSearch } from './ui/tebligatSearch.js';
 import { initWorkspaceNavigation } from './ui/workspaceNavigation.js';
 import { initYknManager } from './managers/yknManager.js';
+import { initDocumentsManager } from './ui/documentsManager.js';
 
 function setAddedToSheetButtonState(button, sheetDate, assignedNo) {
     button.replaceChildren();
@@ -170,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     try { initWorkspaceNavigation(); } catch (e) { console.error('initWorkspaceNavigation error:', e); }
     try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
+    try { initDocumentsManager(); } catch (e) { console.error('initDocumentsManager error:', e); }
     
     try { initDraftAutoSave(); } catch (e) { console.error('initDraftAutoSave error:', e); }
     try { setActiveStep(STEP_IDS.UPLOAD); } catch (e) { console.error('setActiveStep error:', e); }

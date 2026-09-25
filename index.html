@@ -124,6 +124,10 @@
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg></span>
                         <span class="home-action-content"><strong>Tebliğ Bul</strong><small>Tebliğ ve tebligat araması</small></span>
                     </button>
+                    <button type="button" class="home-action" data-workspace-view="documents" aria-controls="view-documents">
+                        <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>
+                        <span class="home-action-content"><strong>Belgeler</strong><small>Sık kullanılan evrak ve formlar</small></span>
+                    </button>
                 </div>
             </section>
 
@@ -136,6 +140,7 @@
                     <button type="button" data-workspace-view="ykn" aria-controls="view-ykn">YKN</button>
                     <button type="button" data-workspace-view="cover" aria-controls="view-cover">Kapak Hazırla</button>
                     <button type="button" data-workspace-view="teblig" aria-controls="view-teblig">Tebliğ Bul</button>
+                    <button type="button" data-workspace-view="documents" aria-controls="view-documents">Belgeler</button>
                 </nav>
 
                 <section id="view-ykn" class="view-panel" hidden aria-labelledby="ykn-title">
@@ -671,6 +676,55 @@
                 <div class="history-body">
                     <p class="history-empty">Henüz kayıt bulunmuyor. PDF indirdiğinizde veya yazdırdığınızda burada görünecek.</p>
                 </div>
+                    </div>
+                </section>
+
+                <!-- Belgeler Paneli -->
+                <section id="view-documents" class="view-panel" hidden aria-labelledby="documents-title">
+                    <div class="documents-header-card glass-card">
+                        <div class="documents-header-top">
+                            <div>
+                                <p class="home-eyebrow">Uluslararası Ofis Evrak Havuzu</p>
+                                <h3 id="documents-title" tabindex="-1">Sık Kullanılan Belgeler</h3>
+                                <p class="documents-header-sub">Öğrencilere verilecek veya ofis işlemlerinde sık kullanılan form ve dilekçeleri tek tıkla yazdırabilir veya indirebilirsiniz.</p>
+                            </div>
+                            <span class="documents-counter-badge" id="documents-total-count">0 belge</span>
+                        </div>
+
+                        <!-- Arama ve Filtreleme Kontrolleri -->
+                        <div class="documents-toolbar">
+                            <div class="documents-search-wrap">
+                                <span class="documents-search-icon" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                </span>
+                                <input type="text" id="documents-search-input" class="documents-search-input" placeholder="Belge adı, dilekçe türü veya anahtar kelime ile ara..." autocomplete="off">
+                                <button type="button" id="documents-search-clear" class="documents-search-clear" aria-label="Aramayı temizle" style="display: none;">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </button>
+                            </div>
+                            <div class="documents-categories" id="documents-categories">
+                                <!-- Kategori butonları JS ile doldurulacak -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Belgeler Grid Listesi -->
+                    <div class="documents-grid" id="documents-grid">
+                        <!-- JS ile render edilecek kartlar -->
+                    </div>
+
+                    <!-- Boş Durum (Empty State) -->
+                    <div id="documents-empty-state" class="documents-empty-state card glass-card" hidden>
+                        <div class="documents-empty-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="48" height="48" stroke="currentColor" stroke-width="1.5" fill="none">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                <line x1="8" y1="11" x2="14" y2="11"></line>
+                            </svg>
+                        </div>
+                        <h4>Aradığınız kriterlere uygun belge bulunamadı</h4>
+                        <p>Farklı bir arama kelimesi deneyebilir veya filtreleri sıfırlayabilirsiniz.</p>
+                        <button type="button" id="documents-btn-reset-filters" class="btn btn-outline" style="margin-top: 1rem;">Filtreleri Temizle</button>
                     </div>
                 </section>
             </section>
