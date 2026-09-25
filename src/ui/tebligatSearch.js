@@ -1,6 +1,8 @@
 const CLOUD_SYNC_TIMEOUT_MS = 90_000;
 const CLOUD_SYNC_PROGRESS_INTERVAL_MS = 1_000;
 const SEARCH_SHEET_LIMIT = 16;
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwEHZ6-Iz-uohq4yeJRMvgNn5zXeHB6vqBRfBqvpBKai-elnKwJFSiX3EuprOPihnWHOQ/exec";
+const APPS_SCRIPT_API_KEY = "GIZLI_SIFRE_123";
 
 // In-Memory Normalized Cache for 0 ms Instant Search
 let inMemoryCache = [];
@@ -271,9 +273,7 @@ export function initTebligatSearch() {
             try {
                 // Vercel'in 10-12 saniyelik timeout sınırına takılmamak için 
                 // doğrudan Google Apps Script'e bağlanıyoruz.
-                const scriptUrl = "https://script.google.com/macros/s/AKfycbwEHZ6-Iz-uohq4yeJRMvgNn5zXeHB6vqBRfBqvpBKai-elnKwJFSiX3EuprOPihnWHOQ/exec";
-                const apiKey = "GIZLI_SIFRE_123";
-                const fetchUrl = `${scriptUrl}?key=${apiKey}&action=getAll`;
+                const fetchUrl = `${APPS_SCRIPT_URL}?key=${encodeURIComponent(APPS_SCRIPT_API_KEY)}&action=getAll`;
                 
                 const response = await fetch(fetchUrl, { signal: syncController.signal });
                 const data = await response.json();
@@ -632,17 +632,30 @@ export function initTebligatSearch() {
         btn.disabled = true;
 
         try {
-            const response = await fetch('/api/update-tebligat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ sayfa, isim, no })
-            });
-
-            const data = await response.json();
+            // Vercel'in 10-12 saniyelik timeout sınırına takılmamak ve arka planda işaretlenmesine rağmen
+            // ön yüzde zaman aşımı hatası almamak için doğrudan Google Apps Script'e bağlanıyoruz:
+            const fetchUrl = `${APPS_SCRIPT_URL}?key=${encodeURIComponent(APPS_SCRIPT_API_KEY)}&action=update&sayfa=${encodeURIComponent(sayfa)}&isim=${encodeURIComponent(isim)}&no=${encodeURIComponent(no || '')}`;
             
-            if (response.ok && data.success) {
+            let data;
+            let isOk = false;
+            try {
+                const response = await fetch(fetchUrl);
+                data = await response.json();
+                isOk = response.ok;
+            } catch (directErr) {
+                console.warn('Doğrudan Apps Script erişimi başarısız, vekil deneniyor...', directErr);
+                const proxyRes = await fetch('/api/update-tebligat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ sayfa, isim, no })
+                });
+                data = await proxyRes.json();
+                isOk = proxyRes.ok;
+            }
+            
+            if (isOk && data.success) {
                 // Başarılı durumu
                 btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
                 btn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
@@ -706,17 +719,29 @@ export function initTebligatSearch() {
         btn.disabled = true;
 
         try {
-            const response = await fetch('/api/unmark-tebligat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ sayfa, isim, no })
-            });
-
-            const data = await response.json();
+            // Vercel'in 10-12 saniyelik timeout sınırına takılmamak için doğrudan Google Apps Script'e bağlanıyoruz:
+            const fetchUrl = `${APPS_SCRIPT_URL}?key=${encodeURIComponent(APPS_SCRIPT_API_KEY)}&action=unmark&sayfa=${encodeURIComponent(sayfa)}&isim=${encodeURIComponent(isim)}&no=${encodeURIComponent(no || '')}`;
             
-            if (response.ok && data.success) {
+            let data;
+            let isOk = false;
+            try {
+                const response = await fetch(fetchUrl);
+                data = await response.json();
+                isOk = response.ok;
+            } catch (directErr) {
+                console.warn('Doğrudan Apps Script erişimi başarısız, vekil deneniyor...', directErr);
+                const proxyRes = await fetch('/api/unmark-tebligat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ sayfa, isim, no })
+                });
+                data = await proxyRes.json();
+                isOk = proxyRes.ok;
+            }
+            
+            if (isOk && data.success) {
                 // Başarılı durumu: Kaldır butonunu gizle
                 btn.style.display = 'none';
                 btn.innerHTML = originalHtml;

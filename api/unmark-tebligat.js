@@ -1,5 +1,7 @@
 import { verifyToken } from "./_auth.js";
 
+export const maxDuration = 60;
+
 export default async function handler(req, res) {
     const authStatus = verifyToken(req);
     if (authStatus === "MISSING_CONFIG") {
