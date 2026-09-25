@@ -22,6 +22,17 @@ export const OFFICE_DOCUMENTS = [
         badge: 'PDF • Form'
     },
     {
+        id: 'ikamet-kimlik-evrak-listesi',
+        title: 'İkamet / Kimlik Başvurusu İçin Verilmesi Gereken Evraklar',
+        category: 'basvuru-kayit',
+        categoryLabel: 'Başvuru & Kayıt',
+        description: 'Göç İdaresi Başkanlığı ve üniversiteye teslim edilecek e-ikamet başvuru formu, pasaport, sigorta, UETS, öğrenci belgesi, harç ve adres belgelerini içeren evrak kontrol listesi.',
+        fileName: 'ikamet_kimlik_basvurusu_icin_verilmesi_gereken_evraklar.pdf',
+        fileUrl: '/documents/ikamet_kimlik_basvurusu_icin_verilmesi_gereken_evraklar.pdf',
+        tags: ['ikamet', 'kimlik', 'göç idaresi', 'başvuru', 'evrak listesi', 'uets', 'öğrenci belgesi', 'kira sözleşmesi', 'kart bedeli', 'sigorta', 'parmak izi', 'checklist'],
+        badge: 'PDF • Liste'
+    },
+    {
         id: 'eksik-evrak-taahhutnamesi',
         title: 'Şartlı Kayıt Eksik Evrak Taahhütnamesi',
         category: 'taahhutname',
