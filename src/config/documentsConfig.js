@@ -22,17 +22,6 @@ export const OFFICE_DOCUMENTS = [
         badge: 'PDF • Form'
     },
     {
-        id: 'ikamet-kimlik-evrak-listesi',
-        title: 'İkamet/Kimlik Başvurusu İçin Gerekli Evraklar',
-        category: 'basvuru-kayit',
-        categoryLabel: 'Başvuru & Kayıt',
-        description: '',
-        fileName: 'ikamet_kimlik_basvurusu_icin_verilmesi_gereken_evraklar.pdf',
-        fileUrl: '/documents/ikamet_kimlik_basvurusu_icin_verilmesi_gereken_evraklar.pdf',
-        tags: ['ikamet', 'kimlik', 'göç idaresi', 'başvuru', 'evrak listesi', 'uets', 'öğrenci belgesi', 'kira sözleşmesi', 'kart bedeli', 'sigorta', 'parmak izi', 'checklist'],
-        badge: 'PDF • Liste'
-    },
-    {
         id: 'eksik-evrak-taahhutnamesi',
         title: 'Taahhütname',
         category: 'taahhutname',
@@ -42,6 +31,17 @@ export const OFFICE_DOCUMENTS = [
         fileUrl: '/documents/sartli_kayit_eksik_evrak_taahhutnamesi.pdf',
         tags: ['taahhütname', 'eksik evrak', 'şartlı kayıt', 'denklik', 'diploma', 'undertaking', 'kayıt'],
         badge: 'PDF • TR/EN'
+    },
+    {
+        id: 'on-lisans-lisans-checklist',
+        title: 'Ön Lisans/Lisans Checklist',
+        category: 'basvuru-kayit',
+        categoryLabel: 'Başvuru & Kayıt',
+        description: '',
+        fileName: 'on_lisans_lisans_ogrenci_evrak_kontrol_listesi.pdf',
+        fileUrl: '/documents/on_lisans_lisans_ogrenci_evrak_kontrol_listesi.pdf',
+        tags: ['ön lisans', 'lisans', 'kontrol listesi', 'checklist', 'evrak', 'başvuru', 'kabul mektubu', 'tömer', 'denklik'],
+        badge: 'PDF • Liste'
     },
     {
         id: 'lisansustu-evrak-kontrol',
@@ -56,7 +56,7 @@ export const OFFICE_DOCUMENTS = [
     },
     {
         id: 'kayit-silme-formu',
-        title: 'Kayıt Silme Formu',
+        title: 'Kayıt Silme',
         category: 'dilekce',
         categoryLabel: 'Dilekçeler',
         description: '',
@@ -75,5 +75,27 @@ export const OFFICE_DOCUMENTS = [
         fileUrl: '/documents/ogrenim_ucreti_taksitlendirme_dilekcesi.pdf',
         tags: ['taksitlendirme', 'ücret', 'mütevelli heyet', 'dilekçe', 'ödeme planı', 'öğrenim harcı'],
         badge: 'PDF • Dilekçe'
+    },
+    {
+        id: 'bos-dilekce-formu',
+        title: 'Boş Dilekçe',
+        category: 'dilekce',
+        categoryLabel: 'Dilekçeler',
+        description: '',
+        fileName: 'bos_dilekce_formu.pdf',
+        fileUrl: '/documents/bos_dilekce_formu.pdf',
+        tags: ['boş dilekçe', 'dilekçe', 'mütevelli heyet', 'talep', 'başvuru'],
+        badge: 'PDF • Dilekçe'
+    },
+    {
+        id: 'ikamet-kimlik-evrak-listesi',
+        title: 'İkamet/Kimlik Başvurusu İçin Gerekli Evrak Listesi',
+        category: 'basvuru-kayit',
+        categoryLabel: 'Başvuru & Kayıt',
+        description: '',
+        fileName: 'ikamet_kimlik_basvurusu_icin_verilmesi_gereken_evraklar.pdf',
+        fileUrl: '/documents/ikamet_kimlik_basvurusu_icin_verilmesi_gereken_evraklar.pdf',
+        tags: ['ikamet', 'kimlik', 'göç idaresi', 'başvuru', 'evrak listesi', 'uets', 'öğrenci belgesi', 'kira sözleşmesi', 'kart bedeli', 'sigorta', 'parmak izi', 'checklist'],
+        badge: 'PDF • Liste'
     }
 ];
