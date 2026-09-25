@@ -10,7 +10,19 @@ test('Belgeler yapılandırması eksiksiz ve geçerlidir', () => {
     assert.ok(DOCUMENT_CATEGORIES.some(c => c.id === 'all'), 'all kategorisi bulunmalıdır');
 
     assert.ok(Array.isArray(OFFICE_DOCUMENTS), 'OFFICE_DOCUMENTS bir dizi olmalıdır');
-    assert.ok(OFFICE_DOCUMENTS.length > 0, 'En az bir adet belge tanımlanmış olmalıdır');
+    assert.equal(OFFICE_DOCUMENTS.length, 6, 'Tam 6 adet belge tanımlanmış olmalıdır');
+
+    const expectedTitles = [
+        'Başvuru Formu',
+        'İkamet/Kimlik Başvurusu İçin Gerekli Evraklar',
+        'Taahhütname',
+        'Yüksek Lisans/Doktora Checklist',
+        'Kayıt Silme Formu',
+        'Taksit Dilekçesi'
+    ];
+
+    const actualTitles = OFFICE_DOCUMENTS.map(d => d.title);
+    assert.deepEqual(actualTitles, expectedTitles, 'Belge başlıkları ve sıralaması talep edilen sırada olmalıdır');
 
     const validCategoryIds = new Set(DOCUMENT_CATEGORIES.map(c => c.id));
 
@@ -21,6 +33,7 @@ test('Belgeler yapılandırması eksiksiz ve geçerlidir', () => {
         assert.ok(validCategoryIds.has(doc.category), `Belge kategorisi geçerli bir kategori olmalıdır: ${doc.category}`);
         assert.ok(doc.fileName, 'Belge fileName alanı zorunludur');
         assert.ok(doc.fileUrl, 'Belge fileUrl alanı zorunludur');
+        assert.equal(doc.description, '', 'Açıklamalar kaldırılmış olmalıdır');
 
         // Dosyanın public/documents altında var olduğunu kontrol et
         const filePath = path.join(process.cwd(), 'public', 'documents', doc.fileName);

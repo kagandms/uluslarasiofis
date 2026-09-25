@@ -3,6 +3,8 @@ import { showToast } from './toastManager.js';
 
 let activeCategory = 'all';
 let searchQuery = '';
+const thumbnailCache = new Map();
+let isRenderingThumbnails = false;
 
 function normalizeTurkish(text) {
     if (!text) return '';
@@ -100,12 +102,10 @@ function filterDocuments() {
         if (!normQuery) return true;
 
         const titleNorm = normalizeTurkish(doc.title);
-        const descNorm = normalizeTurkish(doc.description);
         const tagsNorm = normalizeTurkish((doc.tags || []).join(' '));
         const fileNorm = normalizeTurkish(doc.fileName);
 
         return titleNorm.includes(normQuery) ||
-               descNorm.includes(normQuery) ||
                tagsNorm.includes(normQuery) ||
                fileNorm.includes(normQuery);
     });
@@ -140,6 +140,98 @@ function renderCategoryButtons() {
     });
 }
 
+function drawCachedImage(canvas, box, dataUrl) {
+    const img = new Image();
+    img.onload = () => {
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        canvas.dataset.rendered = 'true';
+        box.classList.add('is-loaded');
+    };
+    img.src = dataUrl;
+}
+
+/**
+ * Belgelerin ilk sayfasını arka planda küçük önizleme olarak canvas üzerine çizer.
+ */
+async function renderThumbnails() {
+    if (isRenderingThumbnails) return;
+    if (typeof window === 'undefined' || !window.pdfjsLib) return;
+
+    if (!window.pdfjsLib.GlobalWorkerOptions?.workerSrc) {
+        try {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+        } catch (_) {}
+    }
+
+    const boxes = document.querySelectorAll('.documents-preview-box');
+    if (!boxes.length) return;
+
+    isRenderingThumbnails = true;
+
+    try {
+        for (const box of boxes) {
+            const url = box.dataset.url;
+            const canvas = box.querySelector('.documents-preview-canvas');
+            if (!canvas || !url || canvas.dataset.rendered === 'true') continue;
+
+            // 1. Bellek önbelleği
+            if (thumbnailCache.has(url)) {
+                drawCachedImage(canvas, box, thumbnailCache.get(url));
+                continue;
+            }
+
+            // 2. SessionStorage önbelleği
+            try {
+                const stored = sessionStorage.getItem('doc_thumb_' + url);
+                if (stored) {
+                    thumbnailCache.set(url, stored);
+                    drawCachedImage(canvas, box, stored);
+                    continue;
+                }
+            } catch (_) {}
+
+            // 3. pdfjsLib ile ilk sayfayı render et
+            try {
+                const pdf = await window.pdfjsLib.getDocument({
+                    url,
+                    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+                    cMapPacked: true
+                }).promise;
+
+                const page = await pdf.getPage(1);
+                const unscaled = page.getViewport({ scale: 1 });
+                // Keskin önizleme için genişliği 300px'e oranla
+                const targetWidth = 300;
+                const scale = targetWidth / unscaled.width;
+                const viewport = page.getViewport({ scale });
+
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                const ctx = canvas.getContext('2d');
+
+                await page.render({ canvasContext: ctx, viewport }).promise;
+
+                canvas.dataset.rendered = 'true';
+                box.classList.add('is-loaded');
+
+                try {
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                    thumbnailCache.set(url, dataUrl);
+                    sessionStorage.setItem('doc_thumb_' + url, dataUrl);
+                } catch (_) {}
+            } catch (err) {
+                console.warn(`[Belgeler] Önizleme oluşturulamadı (${url}):`, err);
+                box.classList.add('is-error');
+            }
+        }
+    } finally {
+        isRenderingThumbnails = false;
+    }
+}
+
 function renderDocumentsGrid() {
     const grid = document.getElementById('documents-grid');
     const emptyState = document.getElementById('documents-empty-state');
@@ -164,25 +256,25 @@ function renderDocumentsGrid() {
     grid.innerHTML = filtered.map(doc => `
         <article class="documents-card glass-card" data-document-id="${doc.id}">
             <div class="documents-card-header">
-                <div class="documents-badge-wrap">
-                    <span class="documents-category-tag">${doc.categoryLabel || 'Belge'}</span>
-                    ${doc.badge ? `<span class="documents-format-badge">${doc.badge}</span>` : ''}
-                </div>
-                <div class="documents-pdf-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="9" y1="13" x2="15" y2="13"></line>
-                        <line x1="9" y1="17" x2="13" y2="17"></line>
-                    </svg>
-                </div>
+                <h4 class="documents-card-title">${doc.title}</h4>
+                <span class="documents-category-tag">${doc.categoryLabel || 'Belge'}</span>
             </div>
             
-            <div class="documents-card-body">
-                <h4 class="documents-card-title">${doc.title}</h4>
-                <p class="documents-card-desc">${doc.description || ''}</p>
-                <div class="documents-meta">
-                    <span class="documents-file-name" title="${doc.fileName}">${doc.fileName}</span>
+            <div class="documents-preview-box" data-action="preview" data-url="${doc.fileUrl}" title="${doc.title} - Önizlemek için tıklayın">
+                <div class="documents-preview-skeleton" aria-hidden="true">
+                    <div class="skeleton-line" style="width: 45%;"></div>
+                    <div class="skeleton-line" style="width: 85%;"></div>
+                    <div class="skeleton-line" style="width: 75%;"></div>
+                    <div class="skeleton-line" style="width: 90%;"></div>
+                    <div class="skeleton-line" style="width: 60%;"></div>
+                </div>
+                <canvas class="documents-preview-canvas" data-url="${doc.fileUrl}"></canvas>
+                <div class="documents-preview-overlay">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <span>Önizle</span>
                 </div>
             </div>
 
@@ -197,14 +289,14 @@ function renderDocumentsGrid() {
                 </button>
                 <div class="documents-secondary-actions">
                     <button type="button" class="btn btn-outline documents-btn-preview" data-action="preview" data-url="${doc.fileUrl}" title="Önizle">
-                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                             <circle cx="12" cy="12" r="3"></circle>
                         </svg>
                         <span>Önizle</span>
                     </button>
                     <button type="button" class="btn btn-outline documents-btn-download" data-action="download" data-url="${doc.fileUrl}" data-filename="${doc.fileName}" title="İndir">
-                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                             <polyline points="7 10 12 15 17 10"></polyline>
                             <line x1="12" y1="15" x2="12" y2="3"></line>
@@ -218,22 +310,37 @@ function renderDocumentsGrid() {
 
     // Event listeners
     grid.querySelectorAll('[data-action="print"]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
             printDocumentPdf(btn.dataset.url, btn.dataset.title);
         });
     });
 
-    grid.querySelectorAll('[data-action="preview"]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            previewDocumentPdf(btn.dataset.url);
+    grid.querySelectorAll('[data-action="preview"]').forEach(el => {
+        el.addEventListener('click', () => {
+            previewDocumentPdf(el.dataset.url);
         });
     });
 
     grid.querySelectorAll('[data-action="download"]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
             downloadDocumentPdf(btn.dataset.url, btn.dataset.filename);
         });
     });
+
+    // Küçük önizlemeleri tetikle
+    if (typeof window !== 'undefined' && window.pdfjsLib) {
+        setTimeout(renderThumbnails, 20);
+    } else if (typeof window !== 'undefined') {
+        const interval = setInterval(() => {
+            if (window.pdfjsLib) {
+                clearInterval(interval);
+                renderThumbnails();
+            }
+        }, 150);
+        setTimeout(() => clearInterval(interval), 4000);
+    }
 }
 
 /**
@@ -272,6 +379,14 @@ export function initDocumentsManager() {
             if (searchClear) searchClear.style.display = 'none';
             renderCategoryButtons();
             renderDocumentsGrid();
+        });
+    }
+
+    if (typeof document !== 'undefined') {
+        document.addEventListener('workspace:view-changed', (e) => {
+            if (e.detail?.viewName === 'documents') {
+                setTimeout(renderThumbnails, 60);
+            }
         });
     }
 
