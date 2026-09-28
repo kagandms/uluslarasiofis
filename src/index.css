@@ -1107,13 +1107,59 @@ body.dark-mode .ykn-step-button.is-completed {
 }
 
 .btn-secondary {
-    background: #ffffff;
+    background: var(--card-bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
 }
 
 .btn-secondary:hover {
-    background: #f4f6f8;
+    background: var(--bg-color);
+}
+
+body.dark-mode .btn-secondary {
+    background: #252530;
+    color: #f4f6f8;
+    border: 1px solid #3e3e4f;
+}
+
+body.dark-mode .btn-secondary:hover {
+    background: #2f2f3d;
+    color: #ffffff;
+    border-color: #55556a;
+}
+
+body.dark-mode .btn-secondary:disabled {
+    background: #1c1c24;
+    color: #717182;
+    border-color: #2e2e38;
+    opacity: 0.6;
+}
+
+/* YKN Pro İşlem Butonları (Gece Modu Kontrast ve Okunurluk) */
+.ykn-pro-actions #btn-copy {
+    transition: var(--transition);
+}
+
+body.dark-mode .ykn-pro-actions #btn-copy {
+    background: #232330;
+    color: #f4f6f8;
+    border: 1px solid #454558;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+body.dark-mode .ykn-pro-actions #btn-copy:hover:not(:disabled) {
+    background: #2d2d3c;
+    color: #ffffff;
+    border-color: #63637e;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+body.dark-mode .ykn-pro-actions #btn-copy:disabled {
+    background: #1c1c24;
+    color: #717182;
+    border-color: #2e2e38;
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .btn-accent {
@@ -1137,6 +1183,17 @@ body.dark-mode .ykn-step-button.is-completed {
 .btn-outline:hover {
     background: rgba(0,0,0,0.05);
     color: var(--text-primary);
+}
+
+body.dark-mode .btn-outline {
+    border-color: #444455;
+    color: var(--text-secondary);
+}
+
+body.dark-mode .btn-outline:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border-color: #666677;
 }
 
 /* Processing Section */

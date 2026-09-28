@@ -351,13 +351,25 @@ h1 {
 }
 
 .btn-secondary {
-    background: #ffffff;
+    background: var(--card-bg);
     color: var(--text-primary);
     border: 1px solid var(--card-border);
 }
 
 .btn-secondary:hover {
-    background: #f4f6f8;
+    background: var(--bg-color);
+}
+
+body.dark-mode .btn-secondary {
+    background: #252530;
+    color: #f4f6f8;
+    border: 1px solid #3e3e4f;
+}
+
+body.dark-mode .btn-secondary:hover {
+    background: #2f2f3d;
+    color: #ffffff;
+    border-color: #55556a;
 }
 
 .btn-accent {

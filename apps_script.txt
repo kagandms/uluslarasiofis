@@ -134,6 +134,10 @@ function doGet(e) {
       invalidateGetAllCache_();
       return islemRemove_(e);
     }
+    if (action === "createWeeklySheet") {
+      var res = otomatikHaftalikSayfaOlustur();
+      return json_(res);
+    }
     if (action === "getAll") return islemGetAll_(e);
     if (q) return islemArama_(q, e.parameter.year);
 
@@ -189,7 +193,127 @@ function islemUnmark_(e) {
 }
 
 // ------------------------------------------------------------
-// KAYIT EKLEME
+// YARDIMCI: EN SON TARIHLI SAYFAYI BULMA
+// ------------------------------------------------------------
+function sonTarihliSayfayiBul_(ss) {
+  var sheets = ss.getSheets();
+  for (var i = sheets.length - 1; i >= 0; i--) {
+    var name = sheets[i].getName();
+    if (TARIH_DESENI.test(name)) {
+      return sheets[i];
+    }
+  }
+  return null;
+}
+
+// ------------------------------------------------------------
+// YARDIMCI: YENI TARIHLI SAYFA OLUSTURMA (SABLONDAN KOPYALAYIP TEMIZLEME)
+// ------------------------------------------------------------
+function yeniSayfaOlustur_(sayfaAdi) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var mevcut = ss.getSheetByName(sayfaAdi);
+  if (mevcut) return mevcut;
+
+  var sonSayfa = sonTarihliSayfayiBul_(ss);
+  var yeniSheet;
+
+  if (sonSayfa) {
+    // Son sayfayi bicimlendirmesi, sutun genislikleri ve basliklariyla kopyala
+    yeniSheet = sonSayfa.copyTo(ss);
+    yeniSheet.setName(sayfaAdi);
+    ss.setActiveSheet(yeniSheet);
+    ss.moveActiveSheet(ss.getSheets().length);
+
+    // 2. satirdan itibaren eski verileri ve renkleri temizle
+    var lastRow = yeniSheet.getLastRow();
+    var maxCols = Math.max(yeniSheet.getMaxColumns(), 3);
+    if (lastRow > 1) {
+      var veriAraligi = yeniSheet.getRange(2, 1, lastRow - 1, maxCols);
+      veriAraligi.clearContent();
+      veriAraligi.setBackground(null);
+      veriAraligi.clearNote();
+    }
+  } else {
+    // Tabloda hic tarihli sayfa yoksa sifirdan olustur
+    yeniSheet = ss.insertSheet(sayfaAdi);
+    yeniSheet.getRange(1, 1, 1, 2).setValues([["AD SOYAD", "NO"]]);
+    yeniSheet.getRange(1, 1, 1, 2).setFontWeight("bold");
+  }
+
+  return yeniSheet;
+}
+
+// ------------------------------------------------------------
+// OTOMATIK HAFTALIK SAYFA OLUSTURMA (PAZAR AKŞAMI TETIKLEYICISI ICIN)
+// ------------------------------------------------------------
+function otomatikHaftalikSayfaOlustur() {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (err) {
+    Logger.log("Kilit alinamadi: " + err.message);
+    return { success: false, error: "Kilit alinamadi: " + err.message };
+  }
+
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sonSayfa = sonTarihliSayfayiBul_(ss);
+    var yeniSayfaAdi = "";
+
+    if (sonSayfa) {
+      var sonAd = sonSayfa.getName().trim();
+      var match = sonAd.match(/^(\d{2})\.(\d{2})(?:\.(\d{4}))?$/);
+      if (match) {
+        var gun = parseInt(match[1], 10);
+        var ay = parseInt(match[2], 10) - 1;
+        var yil = match[3] ? parseInt(match[3], 10) : new Date().getFullYear();
+
+        var sonTarih = new Date(yil, ay, gun);
+        // Son sayfadaki tarihe tam 7 gun (1 hafta) ekle
+        sonTarih.setDate(sonTarih.getDate() + 7);
+
+        var yeniGun = ("0" + sonTarih.getDate()).slice(-2);
+        var yeniAy = ("0" + (sonTarih.getMonth() + 1)).slice(-2);
+        var yeniYil = sonTarih.getFullYear();
+
+        yeniSayfaAdi = match[3] ? (yeniGun + "." + yeniAy + "." + yeniYil) : (yeniGun + "." + yeniAy);
+      }
+    }
+
+    // Eger son sayfa adindan tarih cikarilamazsa, sistem saatine gore sonraki Pazartesi'yi hesapla
+    if (!yeniSayfaAdi) {
+      var bugun = new Date();
+      var gunIndex = bugun.getDay(); // 0: Pazar, 1: Pazartesi
+      var eklenecekGun = (gunIndex === 0) ? 1 : (8 - gunIndex);
+      var sonrakiPzt = new Date(bugun.getFullYear(), bugun.getMonth(), bugun.getDate() + eklenecekGun);
+
+      var g = ("0" + sonrakiPzt.getDate()).slice(-2);
+      var a = ("0" + (sonrakiPzt.getMonth() + 1)).slice(-2);
+      var y = sonrakiPzt.getFullYear();
+      yeniSayfaAdi = g + "." + a + "." + y;
+    }
+
+    // Eger sayfa zaten varsa tekrar olusturma
+    if (ss.getSheetByName(yeniSayfaAdi)) {
+      Logger.log("Sayfa zaten mevcut: " + yeniSayfaAdi);
+      return { success: true, message: "Sayfa zaten mevcut", sayfa: yeniSayfaAdi };
+    }
+
+    yeniSayfaOlustur_(yeniSayfaAdi);
+    invalidateGetAllCache_();
+    Logger.log("Yeni haftalik sayfa basariyla olusturuldu: " + yeniSayfaAdi);
+    return { success: true, message: "Sayfa olusturuldu", sayfa: yeniSayfaAdi };
+
+  } catch (err) {
+    Logger.log("Haftalik sayfa olusturma hatasi: " + err.message);
+    return { success: false, error: err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ------------------------------------------------------------
+// KAYIT EKLEME (AKILLI BOS SATIR BULMA VE NUMARA KORUMA)
 // ------------------------------------------------------------
 function islemAdd_(e) {
   var eksik = parametreKontrol_(e, ["sayfa", "isim"]);
@@ -206,25 +330,63 @@ function islemAdd_(e) {
     var sayfa = e.parameter.sayfa;
     var isim = e.parameter.isim;
 
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sayfa);
-    if (!sheet) return hataDondur_("Bu haftanin sekmesi bulunamadi.");
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(sayfa);
+    
+    // Eger sayfa henuz acilmamissa otomatik olustur (hata vermesini onler)
+    if (!sheet) {
+      sheet = yeniSayfaOlustur_(sayfa);
+      if (!sheet) return hataDondur_("Bu haftanin sekmesi bulunamadi ve olusturulamadi.");
+    }
 
     var lastRow = sheet.getLastRow();
-    var maxNo = 0;
+    var targetRow = -1;
+    var assignedNo = null;
+
+    // A sutununda (AD SOYAD) bos olan ilk satiri bul
     if (lastRow > 1) {
-      var numData = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
-      for (var i = 0; i < numData.length; i++) {
-        var num = parseInt(numData[i][0], 10);
-        if (!isNaN(num) && num > maxNo) maxNo = num;
+      var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (var i = 0; i < data.length; i++) {
+        var rowName = (data[i][0] !== null && data[i][0] !== undefined) ? data[i][0].toString().trim() : "";
+        if (rowName === "") {
+          targetRow = i + 2; // 1-tabanli satir numarasi
+          var existingNo = data[i][1];
+          if (existingNo !== "" && existingNo !== null && existingNo !== undefined) {
+            assignedNo = existingNo;
+          }
+          break;
+        }
       }
     }
-    var yeniNo = maxNo + 1;
-    var yeniSatir = lastRow + 1;
 
-    // Tek cagrida toplu yazim
-    sheet.getRange(yeniSatir, 1, 1, 2).setValues([[isim, yeniNo]]);
+    // Eger arada veya mevcut satirlar icinde bos isim bulunamadiysa, tablonun sonuna yeni satir ekle
+    if (targetRow === -1) {
+      targetRow = Math.max(lastRow + 1, 2);
+    }
 
-    return json_({ success: true, message: "Kayit eklendi", assignedNo: yeniNo });
+    // Eger B sutununda onceden suruklenmis/yazilmis bir numara yoksa, siradaki numarayi hesapla
+    if (assignedNo === null || assignedNo === "") {
+      var maxNo = 0;
+      if (lastRow > 1) {
+        var numData = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
+        for (var k = 0; k < numData.length; k++) {
+          var num = parseInt(numData[k][0], 10);
+          if (!isNaN(num) && num > maxNo) maxNo = num;
+        }
+      }
+      assignedNo = maxNo > 0 ? (maxNo + 1) : (targetRow - 1);
+
+      // Hem ismi hem yeni numarayi yaz
+      sheet.getRange(targetRow, 1, 1, 2).setValues([[isim, assignedNo]]);
+    } else {
+      // B sutununda numara zaten vardi, sadece A sutunundaki hucreye ismi yaz (numaraya dokunma)
+      sheet.getRange(targetRow, 1).setValue(isim);
+    }
+
+    // Satirin isim hucresindeki arka plan rengini temizle (eski sablon rengi kalmissa)
+    sheet.getRange(targetRow, 1).setBackground(null);
+
+    return json_({ success: true, message: "Kayit eklendi", assignedNo: assignedNo });
 
   } catch (err) {
     return hataDondur_("Kayit ekleme hatasi: " + err.message);
