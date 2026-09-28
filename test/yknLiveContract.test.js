@@ -9,6 +9,8 @@ import test from 'node:test';
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const contentSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/content.js'), 'utf8');
 const backgroundSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/background.js'), 'utf8');
+const portalSecuritySource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/portal-security.js'), 'utf8');
+const storageLifecycleSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/storage-lifecycle.js'), 'utf8');
 
 function installInnerText(window) {
     Object.defineProperty(window.Element.prototype, 'innerText', {
@@ -97,6 +99,7 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
     const calls = [];
     let messageHandler = null;
     let hasYoksisTab = options.hasYoksisTab !== false;
+    const storageValues = {};
     const yoksisTab = {
         id: 42,
         url: 'https://yoksis.yok.gov.tr/student',
@@ -107,6 +110,13 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
     const chrome = {
         runtime: {
             lastError: null,
+            getManifest() {
+                return {
+                    content_scripts: [{ js: ['bridge.js'], matches: ['http://localhost/*', 'http://127.0.0.1/*'] }]
+                };
+            },
+            onStartup: { addListener() {} },
+            onInstalled: { addListener() {} },
             onMessage: {
                 addListener(handler) {
                     messageHandler = handler;
@@ -116,10 +126,15 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         storage: {
             local: {
                 set(_values, callback) {
+                    Object.assign(storageValues, _values);
                     callback();
                 },
                 get(_keys, callback) {
-                    callback({});
+                    callback(storageValues);
+                },
+                remove(keys, callback) {
+                    for (const key of keys) delete storageValues[key];
+                    callback();
                 }
             }
         },
@@ -177,7 +192,7 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         }
     };
 
-    vm.runInNewContext(backgroundSource, {
+    const backgroundContext = vm.createContext({
         chrome,
         URL,
         console,
@@ -187,18 +202,54 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         setTimeout,
         clearTimeout
     });
+    backgroundContext.importScripts = (...scriptNames) => {
+        const sourceByName = {
+            'portal-security.js': portalSecuritySource,
+            'storage-lifecycle.js': storageLifecycleSource
+        };
+        for (const scriptName of scriptNames) {
+            vm.runInContext(sourceByName[scriptName], backgroundContext);
+        }
+    };
+    vm.runInContext(backgroundSource, backgroundContext);
 
     return {
         calls,
         async send(request) {
             assert.ok(messageHandler, 'background message listener was not registered');
             return new Promise((resolveResponse) => {
-                const isAsync = messageHandler(request, { tab: { id: 1 } }, resolveResponse);
+                const isAsync = messageHandler(request, {
+                    tab: { id: 1, url: 'http://localhost:5173/yetkili/' }
+                }, resolveResponse);
                 assert.equal(isAsync, true);
+            });
+        },
+        async sendFrom(request, senderUrl) {
+            assert.ok(messageHandler, 'background message listener was not registered');
+            return new Promise((resolveResponse) => {
+                messageHandler(request, { tab: { id: 2, url: senderUrl } }, resolveResponse);
             });
         }
     };
 }
+
+test('extension rejects staff bridge messages from an untrusted page before running workflows', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: false, buttonFound: false },
+        { success: true, searchTriggered: true, formReady: true }
+    );
+
+    const response = await harness.sendFrom({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'untrusted-request',
+        data: { yoksisId: 'AB-123-CD' }
+    }, 'https://evil.example/yetkili/');
+
+    assert.equal(response.success, false);
+    assert.equal(response.error, 'İstek doğrulanamadı. Yetkili portalı yenileyip tekrar deneyin.');
+    assert.equal(harness.calls.some((call) => call.type === 'message' && call.message.action === 'searchWithId'), false);
+});
 
 test('YÖKSİS search handles ZK-labelled controls and confirms delayed form readiness', async () => {
     const harness = createContentHarness(`

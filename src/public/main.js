@@ -1,0 +1,67 @@
+import { PUBLIC_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
+
+const LOCALE_STORAGE_KEY = 'portal_ui_locale';
+const FALLBACK_LOCALE = 'tr';
+
+function readSavedLocale() {
+    try {
+        const savedLocale = localStorage.getItem(LOCALE_STORAGE_KEY);
+        return SUPPORTED_LOCALES.includes(savedLocale) ? savedLocale : FALLBACK_LOCALE;
+    } catch {
+        return FALLBACK_LOCALE;
+    }
+}
+
+function getMessage(locale, key) {
+    return PUBLIC_MESSAGES[locale]?.[key] ?? PUBLIC_MESSAGES[FALLBACK_LOCALE][key] ?? key;
+}
+
+function applyLocale(locale) {
+    const selectedLocale = SUPPORTED_LOCALES.includes(locale) ? locale : FALLBACK_LOCALE;
+    const page = document.body.dataset.page;
+    const isApplicationPage = page === 'application';
+    const isTrackingPage = page === 'tracking';
+
+    document.documentElement.lang = selectedLocale;
+    document.documentElement.dir = selectedLocale === 'ar' ? 'rtl' : 'ltr';
+    const titleKey = isApplicationPage
+        ? 'applicationPageTitle'
+        : (isTrackingPage ? 'trackingPageTitle' : 'portalTitle');
+    document.title = getMessage(selectedLocale, titleKey);
+
+    document.querySelectorAll('[data-i18n]').forEach((element) => {
+        const messageKey = element.dataset.i18n;
+        element.textContent = getMessage(selectedLocale, messageKey);
+    });
+    document.querySelectorAll('[data-i18n-aria-label]').forEach((element) => {
+        const messageKey = element.dataset.i18nAriaLabel;
+        element.setAttribute('aria-label', getMessage(selectedLocale, messageKey));
+    });
+
+    const pageHeading = document.getElementById('page-heading');
+    const pageDescription = document.getElementById('page-description');
+    if (pageHeading && pageDescription && (isApplicationPage || isTrackingPage)) {
+        pageHeading.textContent = getMessage(selectedLocale, isApplicationPage ? 'applicationPageTitle' : 'trackingPageTitle');
+        pageDescription.textContent = getMessage(selectedLocale, isApplicationPage ? 'applicationPageText' : 'trackingPageText');
+    }
+
+    const localeSelect = document.getElementById('locale-select');
+    if (localeSelect) localeSelect.value = selectedLocale;
+}
+
+function initPublicPortal() {
+    const localeSelect = document.getElementById('locale-select');
+    localeSelect?.addEventListener('change', () => {
+        const selectedLocale = localeSelect.value;
+        applyLocale(selectedLocale);
+        try {
+            localStorage.setItem(LOCALE_STORAGE_KEY, selectedLocale);
+        } catch {
+            // The language still applies for this page view when storage is unavailable.
+        }
+    });
+
+    applyLocale(readSavedLocale());
+}
+
+initPublicPortal();

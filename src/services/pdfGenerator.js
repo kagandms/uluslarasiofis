@@ -7,6 +7,11 @@ import { calculateTebligatDate } from '../utils/dateUtils.js';
 let pdfLibsLoaded = false;
 let isPdfLoading = false;
 
+function escapeHtml(value) {
+    const htmlEntities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return String(value ?? '').replace(/[&<>"']/g, (character) => htmlEntities[character]);
+}
+
 export async function loadPdfLibraries() {
     if (pdfLibsLoaded) return true;
     if (isPdfLoading) {
@@ -143,6 +148,21 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
     };
 
     const s = profiles[mode];
+    const safeCurrentYear = escapeHtml(String(currentYear ?? '').replace(/\D/g, '').slice(0, 4));
+    const rawBasvuruNo = String(vBasvuruNo ?? '').replace(new RegExp('^' + safeCurrentYear + '-'), '');
+    const safeBasvuruNo = escapeHtml(rawBasvuruNo);
+    const safeTeslim = escapeHtml(vTeslim);
+    const safeYabanciKimlik = escapeHtml(vYabanciKimlik);
+    const safePasaportNo = escapeHtml(vPasaportNo);
+    const safeAdi = escapeHtml(vAdi);
+    const safeSoyadi = escapeHtml(vSoyadi);
+    const safeUyrugu = escapeHtml(vUyrugu);
+    const safeDogum = escapeHtml(vDogum);
+    const rawAdres = String(vAdres ?? '');
+    const safeAdres = escapeHtml(rawAdres);
+    const safeTel = escapeHtml(vTel);
+    const safeMail = escapeHtml(vMail);
+    const safeTebligatTarihi = escapeHtml(vTebligatTarihi);
 
     const wrapperStyle = isPrint 
         ? `font-family:'Times New Roman',Times,serif;padding:${s.wrapperPad};color:black;background:white;border:4px double black;box-sizing:border-box;max-width:${s.wrapperWidth};height:${s.wrapperHeight};margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;display:flex;flex-direction:column;overflow:hidden;`
@@ -176,20 +196,20 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
             <table class="pt" style="margin-bottom:6px; flex-shrink: 0;">
                 <tr><td colspan="4" style="height:12px;"></td></tr>
                 <tr>
-                    <th width="25%"><u>e</u>-İkamet<br>Başvuru No</th><td width="25%">${currentYear}-${vBasvuruNo.replace(new RegExp('^' + currentYear + '-'), '')}</td>
-                    <th width="25%">Öğrencinin Evraklarını<br>Ofise Teslim Tarihi</th><td width="25%">${vTeslim}</td>
+                    <th width="25%"><u>e</u>-İkamet<br>Başvuru No</th><td width="25%">${safeCurrentYear}-${safeBasvuruNo}</td>
+                    <th width="25%">Öğrencinin Evraklarını<br>Ofise Teslim Tarihi</th><td width="25%">${safeTeslim}</td>
                 </tr>
                 <tr>
-                    <th>Yabancı Kimlik<br>No</th><td>${vYabanciKimlik}</td>
-                    <th>Pasaport No</th><td>${vPasaportNo}</td>
+                    <th>Yabancı Kimlik<br>No</th><td>${safeYabanciKimlik}</td>
+                    <th>Pasaport No</th><td>${safePasaportNo}</td>
                 </tr>
                 <tr>
-                    <th>Adı</th><td>${vAdi}</td>
-                    <th>Soyadı</th><td>${vSoyadi}</td>
+                    <th>Adı</th><td>${safeAdi}</td>
+                    <th>Soyadı</th><td>${safeSoyadi}</td>
                 </tr>
                 <tr>
-                    <th>Uyruğu</th><td>${vUyrugu}</td>
-                    <th>Doğum Tarihi</th><td>${vDogum}</td>
+                    <th>Uyruğu</th><td>${safeUyrugu}</td>
+                    <th>Doğum Tarihi</th><td>${safeDogum}</td>
                 </tr>
                 <tr>
                     <td></td>
@@ -199,9 +219,9 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
                 </tr>
                 <tr>
                     <th>Öğrencinin<br>İletişim Bilgisi</th>
-                    <td>${vAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${vAdres}</td>
-                    <td>${vTel}</td>
-                    <td>${vMail}</td>
+                    <td>${rawAdres.toUpperCase().startsWith('İSTANBUL') ? '' : 'İSTANBUL, '}${safeAdres}</td>
+                    <td>${safeTel}</td>
+                    <td>${safeMail}</td>
                 </tr>
             </table>
             <p style="text-align:justify;font-size:${s.pFont};margin:${s.pMargin};line-height:${s.pLineHeight};text-indent:30px; flex-shrink: 0;">
@@ -227,7 +247,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
                 <li style="margin-bottom:${s.listMb};">☐ İkamet izni belge bedelinin ödendiğine dair makbuz</li>
                 <li style="margin-bottom:${s.listMb};">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
             </ul>
-            <p style="font-weight:bold;font-size:${s.boxFont};margin:${s.boxMargin};text-align:center;border:1px solid #000;padding:${s.boxPad}; flex-shrink: 0;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${vTebligatTarihi}</p>
+            <p style="font-weight:bold;font-size:${s.boxFont};margin:${s.boxMargin};text-align:center;border:1px solid #000;padding:${s.boxPad}; flex-shrink: 0;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${safeTebligatTarihi}</p>
             
             <!-- This pushes the signature block to the bottom of the page -->
             <div style="flex-grow: 1;"></div>

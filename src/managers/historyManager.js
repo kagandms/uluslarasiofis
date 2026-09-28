@@ -3,6 +3,11 @@ import { getFormDataFromNode, getFormElements } from '../ui/formManager.js';
 import { setActiveStep, STEP_IDS } from '../ui/stepWizard.js';
 import { showToast } from '../ui/toastManager.js';
 
+function escapeHtml(value) {
+    const htmlEntities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return String(value ?? '').replace(/[&<>"']/g, (character) => htmlEntities[character]);
+}
+
 export const historyManager = {
     isDeleteMode: false,
     isTrashMode: false,
@@ -103,10 +108,11 @@ export const historyManager = {
     },
     getGroupedByDate(sourceArray) {
         const history = sourceArray || this.getAll();
-        const groups = {};
+        const groups = Object.create(null);
         history.forEach(h => {
-            if (!groups[h.date]) groups[h.date] = [];
-            groups[h.date].push(h);
+            const groupDate = String(h.date || '');
+            if (!groups[groupDate]) groups[groupDate] = [];
+            groups[groupDate].push(h);
         });
         return groups;
     },
@@ -162,9 +168,10 @@ export const historyManager = {
         if (this.searchQuery && this.searchQuery.length >= 1) {
             const q = this.searchQuery.toLocaleLowerCase('tr-TR');
             allItems = allItems.filter(item => {
-                const name = `${item.fields.adi || ''} ${item.fields.soyadi || ''}`.toLocaleLowerCase('tr-TR');
-                const basvuruNo = (item.fields.basvuruNo || '').toLocaleLowerCase('tr-TR');
-                const pasaportNo = (item.fields.pasaportNo || '').toLocaleLowerCase('tr-TR');
+                const fields = item.fields || {};
+                const name = `${fields.adi || ''} ${fields.soyadi || ''}`.toLocaleLowerCase('tr-TR');
+                const basvuruNo = String(fields.basvuruNo || '').toLocaleLowerCase('tr-TR');
+                const pasaportNo = String(fields.pasaportNo || '').toLocaleLowerCase('tr-TR');
                 return name.includes(q) || basvuruNo.includes(q) || pasaportNo.includes(q);
             });
         }
@@ -214,7 +221,7 @@ export const historyManager = {
                     <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
                 <input id="history-search-input" type="text" placeholder="İsim, başvuru no veya pasaport ile ara..." 
-                    value="${this.searchQuery.replace(/"/g, '&quot;')}"
+                    value="${escapeHtml(this.searchQuery)}"
                     style="width: 100%; padding: 7px 30px 7px 30px; border: 1px solid var(--card-border); border-radius: 8px; background: var(--bg-color); color: var(--text-primary); font-size: 0.82rem; outline: none; box-sizing: border-box;">
                 ${this.searchQuery ? `<button id="history-search-clear" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 2px; display: flex; align-items: center;">
                     <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -232,13 +239,13 @@ export const historyManager = {
                 }
             } else {
                 // Has records but search found nothing
-                body.innerHTML = searchBoxHtml + `<p class="history-empty">🔍 "<strong>${this.searchQuery}</strong>" için kayıt bulunamadı.</p>`;
+                body.innerHTML = searchBoxHtml + `<p class="history-empty">🔍 "<strong>${escapeHtml(this.searchQuery)}</strong>" için kayıt bulunamadı.</p>`;
             }
         } else {
             let html = searchBoxHtml;
             const dates = Object.keys(groups);
             dates.forEach(date => {
-                const label = this._formatDateLabel(date);
+                const label = escapeHtml(this._formatDateLabel(date));
                 const items = groups[date];
                 html += `<div class="history-date-group">
                     <div class="history-date-title">
@@ -247,10 +254,14 @@ export const historyManager = {
                     </div>`;
                 
                 items.forEach(item => {
-                    const name = [item.fields.adi, item.fields.soyadi].filter(Boolean).join(' ') || '—';
-                    const basvuruNo = item.fields.basvuruNo || '';
-                    let uyruk = item.fields.uyrugu || '';
-                    if (uyruk === 'OTHER' && item.fields.uyruguOther) uyruk = item.fields.uyruguOther;
+                    const fields = item.fields || {};
+                    const name = escapeHtml([fields.adi, fields.soyadi].filter(Boolean).join(' ') || '—');
+                    const basvuruNo = escapeHtml(fields.basvuruNo || '');
+                    let uyruk = fields.uyrugu || '';
+                    if (uyruk === 'OTHER' && fields.uyruguOther) uyruk = fields.uyruguOther;
+                    uyruk = escapeHtml(uyruk);
+                    const itemId = escapeHtml(item.id);
+                    const itemTime = escapeHtml(item.time);
                     const actionIcon = item.action === 'pdf' ? '📄' : '🖨️';
                     const actionLabel = item.action === 'pdf' ? 'PDF' : 'Yazdır';
                     const isSelected = this.selectedIds.has(item.id);
@@ -263,15 +274,15 @@ export const historyManager = {
                     ` : '';
 
                     const itemActionBtn = this.isTrashMode 
-                        ? `<button class="history-restore-btn" data-restore-id="${item.id}" title="Geri Yükle">↺</button>`
-                        : (!this.isDeleteMode ? `<button class="history-delete-btn" data-delete-id="${item.id}" title="Sil">✕</button>` : '');
+                        ? `<button class="history-restore-btn" data-restore-id="${itemId}" title="Geri Yükle">↺</button>`
+                        : (!this.isDeleteMode ? `<button class="history-delete-btn" data-delete-id="${itemId}" title="Sil">✕</button>` : '');
 
-                    html += `<div class="history-item ${this.isDeleteMode ? 'delete-mode' : ''} ${selectedClass}" data-id="${item.id}" title="${this.isDeleteMode ? 'Seç / Bırak' : (this.isTrashMode ? 'Geri yüklemek için yandaki butonu kullanın' : 'Tıkla → formu doldur')}">
+                    html += `<div class="history-item ${this.isDeleteMode ? 'delete-mode' : ''} ${selectedClass}" data-id="${itemId}" title="${this.isDeleteMode ? 'Seç / Bırak' : (this.isTrashMode ? 'Geri yüklemek için yandaki butonu kullanın' : 'Tıkla → formu doldur')}">
                         ${checkboxHtml}
                         <div class="history-item-content">
                             <div class="history-item-main">
                                 <span class="history-item-name">${name}</span>
-                                <span class="history-item-time">${actionIcon} ${item.time}</span>
+                                <span class="history-item-time">${actionIcon} ${itemTime}</span>
                             </div>
                             <div class="history-item-detail">
                                 ${basvuruNo ? `<span>${basvuruNo}</span>` : ''}

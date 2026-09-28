@@ -12,6 +12,8 @@ const extensionFiles = [
     'background.js',
     'bridge.js',
     'content.js',
+    'portal-security.js',
+    'storage-lifecycle.js',
     'popup.html',
     'popup.js'
 ];
@@ -23,6 +25,38 @@ function readExtensionManifest() {
         throw new Error('YKN eklentisi manifest.json sürümü geçerli değil.');
     }
     return manifest;
+}
+
+function addProductionPortalOrigin(manifest) {
+    const configuredOrigin = process.env.PORTAL_PRODUCTION_ORIGIN?.trim();
+    if (!configuredOrigin) {
+        if (process.env.VERCEL === '1') {
+            throw new Error('PORTAL_PRODUCTION_ORIGIN is required to package the staff extension for production.');
+        }
+        return manifest;
+    }
+
+    let portalUrl;
+    try {
+        portalUrl = new URL(configuredOrigin);
+    } catch {
+        throw new Error('PORTAL_PRODUCTION_ORIGIN must be a valid HTTPS origin.');
+    }
+    if (portalUrl.protocol !== 'https:' || portalUrl.username || portalUrl.password || portalUrl.port
+        || portalUrl.pathname !== '/' || portalUrl.search || portalUrl.hash) {
+        throw new Error('PORTAL_PRODUCTION_ORIGIN must be a valid HTTPS origin without a path.');
+    }
+
+    const originPattern = `${portalUrl.origin}/*`;
+    manifest.host_permissions = [...new Set([...manifest.host_permissions, originPattern])];
+    const bridgeScript = manifest.content_scripts.find((script) => script.js.includes('bridge.js'));
+    bridgeScript.matches = [...new Set([...bridgeScript.matches, originPattern])];
+    return manifest;
+}
+
+function readPackagedFile(fileName, manifest) {
+    if (fileName === 'manifest.json') return Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+    return readFileSync(join(extensionRoot, fileName));
 }
 
 function removeGeneratedArchives() {
@@ -41,11 +75,9 @@ function assertExtensionFilesExist() {
     }
 }
 
-function calculateExtensionFingerprint() {
+function calculateExtensionFingerprint(manifest) {
     const hash = createHash('sha256');
-    for (const fileName of extensionFiles) {
-        hash.update(readFileSync(join(extensionRoot, fileName)));
-    }
+    for (const fileName of extensionFiles) hash.update(readPackagedFile(fileName, manifest));
     return hash.digest('hex').slice(0, 12);
 }
 
@@ -65,7 +97,7 @@ function calculateCrc32(buffer) {
     return (crc ^ 0xffffffff) >>> 0;
 }
 
-function createZipArchive(archivePath) {
+function createZipArchive(archivePath, manifest) {
     const localParts = [];
     const centralParts = [];
     let localOffset = 0;
@@ -105,7 +137,7 @@ function createZipArchive(archivePath) {
     localOffset += dirLocalHeader.length + dirEntryBytes.length;
 
     for (const fileName of extensionFiles) {
-        const fileData = readFileSync(join(extensionRoot, fileName));
+        const fileData = readPackagedFile(fileName, manifest);
         const compressedData = deflateRawSync(fileData, { level: 9 });
         const entryName = `${folderPrefix}${fileName}`;
         const fileNameBytes = Buffer.from(entryName, 'utf8');
@@ -157,15 +189,15 @@ function writeDownloadMetadata(manifest, archiveName, fingerprint) {
 }
 
 function packageExtension() {
-    const manifest = readExtensionManifest();
+    const manifest = addProductionPortalOrigin(readExtensionManifest());
     mkdirSync(downloadsRoot, { recursive: true });
     removeGeneratedArchives();
     assertExtensionFilesExist();
 
-    const fingerprint = calculateExtensionFingerprint();
+    const fingerprint = calculateExtensionFingerprint(manifest);
     const archiveName = `ykn-eklentisi-v${manifest.version}-${fingerprint}.zip`;
     const archivePath = join(downloadsRoot, archiveName);
-    createZipArchive(archivePath);
+    createZipArchive(archivePath, manifest);
     copyFileSync(archivePath, join(downloadsRoot, 'ykn-eklentisi-latest.zip'));
     writeDownloadMetadata(manifest, archiveName, fingerprint);
     console.log(`YKN eklentisi paketlendi: ${archiveName}`);

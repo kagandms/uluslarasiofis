@@ -1,4 +1,6 @@
-var API_KEY = "GIZLI_SIFRE_123";
+function getApiKey_() {
+  return PropertiesService.getScriptProperties().getProperty("API_KEY") || "";
+}
 
 // Sadece icinde "dd.mm" (gun.ay) gecen sayfalari tarar (Yil zorunlulugu kaldirildi).
 // Boylece sayfa adi "17.08" de olsa, "17.08.2026" da olsa tum tebligat sayfalari taranir.
@@ -110,38 +112,48 @@ function parametreKontrol_(e, alanlar) {
 }
 
 function doGet(e) {
+  return hataDondur_("GET erisimi kapali. Guvenli sunucu proxy'sini kullanin.");
+}
+
+function doPost(e) {
   try {
-    if (e.parameter.key !== API_KEY) {
+    var payload = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return hataDondur_("Gecersiz istek");
+    }
+
+    var apiKey = getApiKey_();
+    if (!apiKey || payload.key !== apiKey) {
       return hataDondur_("Yetkisiz erisim");
     }
 
-    var action = e.parameter.action;
-    var q = e.parameter.q;
+    var action = payload.action;
+    var requestEvent = { parameter: payload };
 
     if (action === "unmark") {
       invalidateGetAllCache_();
-      return islemUnmark_(e);
+      return islemUnmark_(requestEvent);
     }
     if (action === "add") {
       invalidateGetAllCache_();
-      return islemAdd_(e);
+      return islemAdd_(requestEvent);
     }
     if (action === "update") {
       invalidateGetAllCache_();
-      return islemUpdate_(e);
+      return islemUpdate_(requestEvent);
     }
     if (action === "remove") {
       invalidateGetAllCache_();
-      return islemRemove_(e);
+      return islemRemove_(requestEvent);
     }
-    if (action === "getAll") return islemGetAll_(e);
-    if (q) return islemArama_(q, e.parameter.year);
+    if (action === "getAll") return islemGetAll_(requestEvent);
+    if (action === "search") return islemArama_(payload.q || "", payload.year);
 
     return hataDondur_("Gecersiz istek");
 
   } catch (err) {
-    // Beklenmeyen her hata icin bile gecerli JSON donuyoruz
-    return hataDondur_("Sunucu hatasi: " + err.message);
+    console.error("Apps Script request failed.", err && err.name ? err.name : "UnknownError");
+    return hataDondur_("Sunucu hatasi. Lutfen tekrar deneyin.");
   }
 }
 

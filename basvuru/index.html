@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="tr" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#8b0000" />
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="stylesheet" href="/src/public/public.css" />
+    <title>Yeni başvuru</title>
+  </head>
+  <body data-page="application">
+    <header class="public-header">
+      <a class="public-brand" href="/" aria-label="İstanbul Topkapı Üniversitesi ana sayfa">
+        <img src="/topkapi_logo.jpg" alt="" />
+        <span data-i18n="portalTitle">Uluslararası Öğrenci Portalı</span>
+      </a>
+      <div class="public-header-actions">
+        <label class="language-picker">
+          <span data-i18n="languageLabel">Dil seçimi</span>
+          <select id="locale-select" data-i18n-aria-label="languageLabel">
+            <option value="tr">Türkçe</option><option value="en">English</option><option value="ru">Русский</option><option value="tk">Türkmençe</option><option value="ar">العربية</option>
+          </select>
+        </label>
+        <a class="staff-link" href="/yetkili/" data-i18n="staffLink">Yetkili girişi</a>
+      </div>
+    </header>
+    <main class="public-main">
+      <section class="placeholder-panel" aria-labelledby="page-heading">
+        <p class="public-eyebrow" data-i18n="futureLabel">Hazırlanıyor</p>
+        <h1 id="page-heading">Yeni başvuru alanı hazırlanıyor</h1>
+        <p id="page-description">Çevrimiçi başvuru adımları sonraki aşamada bu portalda sunulacaktır.</p>
+        <a href="/" data-i18n="homeLink">Ana sayfa</a>
+      </section>
+    </main>
+    <footer class="public-footer"><span data-i18n="footerText">İstanbul Topkapı Üniversitesi Uluslararası Öğrenci Ofisi</span></footer>
+    <script type="module" src="/src/public/main.js"></script>
+  </body>
+</html>

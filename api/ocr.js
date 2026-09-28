@@ -1,16 +1,15 @@
-import { verifyToken } from "./_auth.js";
+import { requireAuth, requireSameOrigin } from './_auth.js';
+
+const MAX_OCR_IMAGE_BYTES = 15_000_000;
 
 export default async function handler(req, res) {
-    const authStatus = verifyToken(req);
-    if (authStatus === "MISSING_CONFIG") {
-        return res.status(401).json({ error: "Sistemde SITE_PASSWORD ve JWT_SECRET ayarlanmamis! Lutfen Vercel panelinden bunlari ekleyip Redeploy yapin." });
-    }
-    if (!authStatus) {
-        return res.status(401).json({ error: "Unauthorized" });
-    }
+    res.setHeader('Cache-Control', 'no-store');
+    if (!requireAuth(req, res)) return;
     if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
+        res.setHeader('Allow', 'POST');
+        return res.status(405).json({ error: 'Bu işlem için POST isteği gerekir.' });
     }
+    if (!requireSameOrigin(req, res)) return;
 
     const azureKey = process.env.AZURE_VISION_KEY;
     let azureEndpoint = process.env.AZURE_VISION_ENDPOINT;
@@ -26,7 +25,14 @@ export default async function handler(req, res) {
             // Geriye dönük uyumluluk (Eski Base64 formatı gelirse)
             imageBuffer = Buffer.from(req.body.imageContent, 'base64');
         } else {
-            return res.status(400).json({ error: 'No image data provided.' });
+            return res.status(400).json({ error: 'Belge görüntüsü gerekli.' });
+        }
+
+        if (imageBuffer.length === 0) {
+            return res.status(400).json({ error: 'Belge görüntüsü boş.' });
+        }
+        if (imageBuffer.length > MAX_OCR_IMAGE_BYTES) {
+            return res.status(413).json({ error: 'Belge görüntüsü boyut sınırını aşıyor.' });
         }
 
         // ==========================================
@@ -49,7 +55,8 @@ export default async function handler(req, res) {
                         'Ocp-Apim-Subscription-Key': azureKey,
                         'Content-Type': 'application/octet-stream'
                     },
-                    body: imageBuffer
+                    body: imageBuffer,
+                    signal: AbortSignal.timeout(20_000)
                 });
 
                 if (azureResponse.ok) {
@@ -97,7 +104,7 @@ export default async function handler(req, res) {
                     console.warn("⚠️ Azure Vision API başarısız oldu (Status:", azureResponse.status, "). Google Vision Yedeği (Fallback) devreye giriyor...");
                 }
             } catch (azureError) {
-                console.error("Azure Vision API'ye ulaşılamadı (Network Hatası):", azureError);
+                console.error("Azure OCR provider request failed.", { errorName: azureError?.name || 'UnknownError' });
             }
         } else {
             console.warn("⚠️ Azure anahtarları eksik. Doğrudan Google Vision Yedeği devreye giriyor...");
@@ -112,7 +119,8 @@ export default async function handler(req, res) {
         // 2. AZURE ÇÖKERSE GOOGLE VISION'I DENE (YEDEK)
         // ==========================================
         if (!googleApiKey) {
-            return res.status(500).json({ error: 'Azure Vision çöktü ve Google Vision yedeği yapılandırılmamış.' });
+            console.error('No OCR fallback provider is configured.');
+            return res.status(503).json({ error: 'Belge şu anda otomatik okunamıyor. Lütfen tekrar deneyin.' });
         }
 
         const googleRequestBody = {
@@ -130,20 +138,21 @@ export default async function handler(req, res) {
         const googleResponse = await fetch(googleVisionUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(googleRequestBody)
+            body: JSON.stringify(googleRequestBody),
+            signal: AbortSignal.timeout(20_000)
         });
 
         if (googleResponse.ok) {
             const data = await googleResponse.json();
             return res.status(200).json(data);
         } else {
-            const errorText = await googleResponse.text();
-            console.error("Google Vision API de başarısız oldu:", errorText);
-            return res.status(500).json({ error: 'Tüm OCR servisleri (Azure ve Google) başarısız oldu.' });
+            console.error('Google OCR provider returned a failed response.', { status: googleResponse.status });
+            return res.status(502).json({ error: 'Belge şu anda otomatik okunamıyor. Lütfen tekrar deneyin.' });
         }
 
     } catch (error) {
-        console.error('OCR Error:', error);
-        return res.status(500).json({ error: 'Internal Server Error' });
+        console.error('OCR request failed.', { errorName: error?.name || 'UnknownError' });
+        const isTimeout = error?.name === 'AbortError' || error?.name === 'TimeoutError';
+        return res.status(isTimeout ? 504 : 502).json({ error: 'Belge şu anda otomatik okunamıyor. Lütfen tekrar deneyin.' });
     }
 }

@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test test/**/*.test.js",
     "package:extension": "node scripts/package-extension.mjs",
+    "pretest": "npm run package:extension",
     "predev": "npm run package:extension",
     "dev": "vite",
     "prebuild": "npm run package:extension",
@@ -26,7 +27,7 @@
   "homepage": "https://github.com/kagandms/ikamet#readme",
   "devDependencies": {
     "jsdom": "^29.1.1",
-    "pdfjs-dist": "^2.16.105",
+    "pdfjs-dist": "6.3.289",
     "vite": "^8.2.2"
   },
   "dependencies": {

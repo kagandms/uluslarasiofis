@@ -1,3 +1,5 @@
+import { createTebligatResultCard } from './tebligatResultRenderer.js';
+
 const CLOUD_SYNC_TIMEOUT_MS = 90_000;
 const CLOUD_SYNC_PROGRESS_INTERVAL_MS = 1_000;
 const SEARCH_SHEET_LIMIT = 16;
@@ -269,16 +271,10 @@ export function initTebligatSearch() {
             btnSyncCloud.disabled = true;
 
             try {
-                // Vercel'in 10-12 saniyelik timeout sınırına takılmamak için 
-                // doğrudan Google Apps Script'e bağlanıyoruz.
-                const scriptUrl = "https://script.google.com/macros/s/AKfycbwEHZ6-Iz-uohq4yeJRMvgNn5zXeHB6vqBRfBqvpBKai-elnKwJFSiX3EuprOPihnWHOQ/exec";
-                const apiKey = "GIZLI_SIFRE_123";
-                const fetchUrl = `${scriptUrl}?key=${apiKey}&action=getAll`;
-                
-                const response = await fetch(fetchUrl, { signal: syncController.signal });
+                const response = await fetch('/api/get-all-tebligat', { signal: syncController.signal });
                 const data = await response.json();
                 
-                if (response.ok && data.results) {
+                if (response.ok && Array.isArray(data.results)) {
                     const allCachedRows = data.results;
                     localStorage.setItem('tebligat_excel_cache', JSON.stringify(allCachedRows));
                     const newCount = loadCacheIntoMemory();
@@ -293,18 +289,19 @@ export function initTebligatSearch() {
                         runSearch();
                     }
                 } else {
-                    throw new Error(data.error || 'Bilinmeyen bir hata oluştu');
+                    throw new Error('SYNC_FAILED');
                 }
             } catch (err) {
-                console.error(err);
                 if (cacheStatusText) {
                     const isTimeout = err.name === 'AbortError';
-                    cacheStatusText.innerHTML = `<span style="color: #e74c3c;">${isTimeout ? 'Senkronizasyon 90 saniye içinde tamamlanamadı' : 'Senkronizasyon Hatası'}</span>`;
+                    cacheStatusText.textContent = isTimeout
+                        ? 'Senkronizasyon zaman sınırını aştı. Yerel kayıtlar kullanılabilir.'
+                        : 'Senkronizasyon tamamlanamadı. Tekrar deneyin; yerel kayıtlar kullanılabilir.';
                 }
                 if (window.showToast) {
                     const message = err.name === 'AbortError'
-                        ? 'Bulut verisi 90 saniye içinde alınamadı. Mevcut bağlantıyı ve veri kaynağını kontrol edin.'
-                        : 'Hata: ' + err.message;
+                        ? 'Bulut verisi zamanında alınamadı. Yerel kayıtlar kullanılabilir.'
+                        : 'Bulut verisi eşitlenemedi. Lütfen tekrar deneyin.';
                     window.showToast(message, 'error');
                 }
             } finally {
@@ -358,117 +355,71 @@ export function initTebligatSearch() {
     let networkDebounceTimeout;
     let networkAbortController;
 
-    // Render fonksiyonu
-    const renderResults = (resultsArray, isFinal = false, errorMessage = null, currentQuery = '') => {
+    const appendSearchStatus = (message, isError, isLoading = false) => {
+        const status = document.createElement('div');
+        status.setAttribute('role', isError ? 'alert' : 'status');
+        status.style.cssText = `text-align: center; padding: 10px; font-size: 0.85rem; color: ${isError ? '#e67e22' : 'var(--text-secondary)'};`;
+        status.textContent = message;
+        if (isLoading) {
+            const spinner = document.createElement('span');
+            spinner.className = 'spinner';
+            spinner.style.cssText = 'width: 12px; height: 12px; border-width: 2px; display: inline-block; margin-right: 6px; vertical-align: middle;';
+            status.prepend(spinner);
+        }
+        searchResults.append(status);
+    };
+
+    const renderResults = (resultsArray, isFinal = false, hasError = false, currentQuery = '') => {
+        searchResults.replaceChildren();
         if (resultsArray.length === 0) {
             if (isFinal) {
-                searchResults.innerHTML = errorMessage 
-                    ? `<div style="color: red; text-align: center;">Hata: ${errorMessage}</div>` 
-                    : '<div style="text-align: center; color: var(--text-secondary); padding: 10px;">Sonuç bulunamadı.</div>';
-            } else if (!errorMessage) {
-                searchResults.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 10px; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 6px;"><div class="spinner" style="width:12px; height:12px; border-width: 2px;"></div> Sunucuda aranıyor...</div>';
+                appendSearchStatus(hasError
+                    ? 'Canlı arama şu anda yapılamıyor. Lütfen tekrar deneyin.'
+                    : 'Sonuç bulunamadı.', hasError);
+                return;
             }
+            if (!hasError) appendSearchStatus('Sunucuda aranıyor...', false, true);
             return;
         }
 
         const uniqueResults = [];
         const seen = new Set();
-        for (const r of resultsArray) {
-            const key = r.sayfa + '_' + r.no;
-            if (!seen.has(key)) {
-                seen.add(key);
-                uniqueResults.push(r);
-            }
+        for (const record of resultsArray) {
+            const key = `${record.sayfa}_${record.no}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            uniqueResults.push(record);
         }
 
-        // Sıralama: Tam eşleşmeler önce, sonra benzer eşleşmeler; kendi içlerinde en yeni tarih en üstte
-        const reversedResults = uniqueResults.sort((a, b) => {
-            const isFuzzyA = Boolean(a._isFuzzy);
-            const isFuzzyB = Boolean(b._isFuzzy);
-            if (isFuzzyA !== isFuzzyB) return isFuzzyA ? 1 : -1;
-            if (isFuzzyA && isFuzzyB && a._score !== b._score) {
-                return (b._score || 0) - (a._score || 0);
+        const orderedResults = uniqueResults.sort((left, right) => {
+            const isFuzzyLeft = Boolean(left._isFuzzy);
+            const isFuzzyRight = Boolean(right._isFuzzy);
+            if (isFuzzyLeft !== isFuzzyRight) return isFuzzyLeft ? 1 : -1;
+            if (isFuzzyLeft && isFuzzyRight && left._score !== right._score) {
+                return (right._score || 0) - (left._score || 0);
             }
-            const dateA = a._dateVal !== undefined ? a._dateVal : parseDateStr(a.sayfa);
-            const dateB = b._dateVal !== undefined ? b._dateVal : parseDateStr(b.sayfa);
-            if (dateB !== dateA) {
-                return dateB - dateA;
-            }
-            const noA = a._noNum !== undefined ? a._noNum : (parseInt(a.no, 10) || 0);
-            const noB = b._noNum !== undefined ? b._noNum : (parseInt(b.no, 10) || 0);
-            return noB - noA;
+            const dateLeft = left._dateVal ?? parseDateStr(left.sayfa);
+            const dateRight = right._dateVal ?? parseDateStr(right.sayfa);
+            if (dateRight !== dateLeft) return dateRight - dateLeft;
+            const numberLeft = left._noNum ?? (parseInt(left.no, 10) || 0);
+            const numberRight = right._noNum ?? (parseInt(right.no, 10) || 0);
+            return numberRight - numberLeft;
         });
 
-        const activeQuery = currentQuery || searchInput.value.trim();
-        const safeQuery = activeQuery.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-        const words = safeQuery.split(/\s+/).filter(w => w.length > 0);
-
-        let html = reversedResults.map(res => {
-            let highlightedIsim = res.isim;
-            words.forEach(word => {
-                let pattern = word.replace(/[iıiİI]/gi, '[iıiİI]');
-                try {
-                    const highlightRegex = new RegExp(`(${pattern})`, 'gi');
-                    highlightedIsim = highlightedIsim.replace(highlightRegex, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px; background-image: none;">$1</mark>');
-                } catch(e) {}
-            });
-            highlightedIsim = highlightedIsim.replace(/<mark[^>]*><mark[^>]*>/g, '<mark style="background-color: rgba(33, 150, 243, 0.2); color: var(--accent); padding: 0 2px; border-radius: 3px;">');
-            highlightedIsim = highlightedIsim.replace(/<\/mark><\/mark>/g, '</mark>');
-
-            const fuzzyBadge = res._isFuzzy
-                ? `<span class="tebligat-fuzzy-badge" style="background: rgba(243, 156, 18, 0.15); color: #d35400; font-size: 0.72rem; font-weight: 600; padding: 2px 7px; border-radius: 6px; margin-left: 8px; display: inline-flex; align-items: center; gap: 3px; vertical-align: middle;">~ Benzer</span>`
-                : '';
-
-            const uniqueId = res._uniqueId || `${res.sayfa}-${res.isim}-${res.no || ''}`;
-            const isMarkedLocally = localStorage.getItem('tebligat_marked_' + uniqueId) === 'true';
-            const isMarked = Boolean(res.isMarked || res.isaretli || isMarkedLocally);
-
-            const markBtnStyle = isMarked
-                ? `border-color: #27ae60; color: #27ae60; background-color: rgba(39, 174, 96, 0.1); cursor: default;`
-                : `border-color: var(--card-border); color: var(--text-secondary); cursor: pointer;`;
-            
-            const markBtnContent = isMarked
-                ? `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi`
-                : `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> İşaretle`;
-
-            const buttonHtml = `
-                <div class="tebligat-actions" style="display: flex; gap: 6px;">
-                    <button class="btn btn-outline btn-mark-tebligat ${isMarked ? 'marked' : ''}" ${isMarked ? 'disabled' : ''} style="padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; display: flex; align-items: center; gap: 4px; transition: all 0.2s; ${markBtnStyle}" title="İşaretle">
-                        ${markBtnContent}
-                    </button>
-                    <button class="btn btn-outline btn-unmark-tebligat" style="display: ${isMarked ? 'flex' : 'none'}; padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; align-items: center; gap: 4px; border-color: #e74c3c; color: #e74c3c; background-color: rgba(231, 76, 60, 0.1); cursor: pointer; transition: all 0.2s;" title="İşareti Kaldır">
-                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                        Kaldır
-                    </button>
-                </div>
-            `;
-
-            return `
-            <div class="tebligat-result-card" data-sayfa="${res.sayfa}" data-isim="${res.isim}" data-no="${res.no || ''}" style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary); flex: 1;">${highlightedIsim}${fuzzyBadge}</div>
-                    ${buttonHtml}
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; color: var(--text-secondary);">
-                    <span style="display: flex; align-items: center; gap: 4px;">
-                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                        Sayfa: ${res.sayfa}
-                    </span>
-                    <span style="font-weight: 600; color: var(--accent); background: rgba(33, 150, 243, 0.1); padding: 4px 8px; border-radius: 12px;">
-                        No: ${res.no || '-'}
-                    </span>
-                </div>
-            </div>
-            `;
-        }).join('');
-
-        if (errorMessage) {
-            html += `<div style="text-align: center; color: #e67e22; padding: 10px; font-size: 0.85rem; font-weight: bold;">Uyarı: Canlı sunucuya ulaşılamadı. Yerel önbellekteki kayıtlar listelendi.</div>`;
-        } else if (!isFinal) {
-            html += `<div style="text-align: center; color: var(--text-secondary); padding: 10px; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 6px;"><div class="spinner" style="width:12px; height:12px; border-width: 2px;"></div> Sunucuda yeni kayıtlar taranıyor...</div>`;
+        const query = currentQuery || searchInput.value.trim();
+        for (const record of orderedResults) {
+            const uniqueId = record._uniqueId || `${record.sayfa}-${record.isim}-${record.no || ''}`;
+            const isMarkedLocally = localStorage.getItem(`tebligat_marked_${uniqueId}`) === 'true';
+            searchResults.append(createTebligatResultCard({
+                document,
+                record,
+                query,
+                isMarked: Boolean(record.isMarked || record.isaretli || isMarkedLocally)
+            }));
         }
 
-        searchResults.innerHTML = html;
+        if (hasError) appendSearchStatus('Canlı sunucuya ulaşılamadı. Yerel önbellekteki kayıtlar gösteriliyor.', true);
+        else if (!isFinal) appendSearchStatus('Sunucuda yeni kayıtlar taranıyor...', false, true);
     };
 
     // 0 ms Anlık Arama ve Arka Plan Canlı Sorgusu
@@ -539,12 +490,9 @@ export function initTebligatSearch() {
                 });
                 const data = await response.json();
 
-                if (data.error) {
-                    renderResults(localMatches, true, data.error, query);
-                    return;
-                }
+                if (!response.ok || !Array.isArray(data.results)) throw new Error('SEARCH_FAILED');
 
-                if (data.results && data.results.length > 0) {
+                if (data.results.length > 0) {
                     const combined = [...localMatches];
                     const seenKeys = new Set(localMatches.map(m => m.sayfa + '_' + m.no));
 
@@ -569,8 +517,7 @@ export function initTebligatSearch() {
                 }
             } catch (err) {
                 if (err.name === 'AbortError') return;
-                console.error('Arka plan canlı arama hatası:', err);
-                renderResults(localMatches, true, localMatches.length === 0 ? "Zaman aşımı" : null, query);
+                renderResults(localMatches, true, true, query);
             }
         }, 500);
     };
@@ -642,7 +589,7 @@ export function initTebligatSearch() {
 
             const data = await response.json();
             
-            if (response.ok && data.success) {
+            if (response.ok && data.success === true) {
                 // Başarılı durumu
                 btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
                 btn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
@@ -673,16 +620,15 @@ export function initTebligatSearch() {
                     window.showToast('E-Tablo güncellendi (İsim yeşil oldu, C kolonuna tarih yazıldı).', 'success');
                 }
             } else {
-                throw new Error(data.error || 'Güncelleme başarısız');
+                throw new Error('UPDATE_FAILED');
             }
         } catch (error) {
-            console.error('Update error:', error);
             btn.innerHTML = originalHtml;
             btn.disabled = false;
             if (window.showToast) {
-                window.showToast('Hata: ' + error.message, 'error');
+                window.showToast('İşaretleme tamamlanamadı. Tekrar deneyin.', 'error');
             } else {
-                alert('Hata: ' + error.message);
+                alert('İşaretleme tamamlanamadı. Lütfen tekrar deneyin.');
             }
         }
     });
@@ -716,7 +662,7 @@ export function initTebligatSearch() {
 
             const data = await response.json();
             
-            if (response.ok && data.success) {
+            if (response.ok && data.success === true) {
                 // Başarılı durumu: Kaldır butonunu gizle
                 btn.style.display = 'none';
                 btn.innerHTML = originalHtml;
@@ -749,14 +695,13 @@ export function initTebligatSearch() {
                     window.showToast('İşaret başarıyla kaldırıldı.', 'success');
                 }
             } else {
-                throw new Error(data.error || 'İşlem başarısız');
+                throw new Error('UNMARK_FAILED');
             }
         } catch (error) {
-            console.error('Unmark error:', error);
             btn.innerHTML = originalHtml;
             btn.disabled = false;
             if (window.showToast) {
-                window.showToast('Hata: ' + error.message, 'error');
+                window.showToast('İşaret kaldırılamadı. Tekrar deneyin.', 'error');
             } else {
                 alert('Hata: ' + error.message);
             }

@@ -1,5 +1,15 @@
 // background.js
 
+if (typeof importScripts === 'function') {
+    importScripts('portal-security.js', 'storage-lifecycle.js');
+}
+
+const portalSecurity = globalThis.YKN_PORTAL_SECURITY;
+const temporaryStorage = globalThis.YKN_TEMPORARY_STORAGE;
+const STAFF_PORTAL_PATTERN_SOURCE = 'bridge.js';
+const TEMPORARY_STORAGE_TIMESTAMP_KEY = 'temporaryStudentDataSavedAt';
+const TEMPORARY_STUDENT_DATA_KEYS = ['studentData', 'pendingPassportCrop', 'croppedPhotoBase64'];
+
 let ikametTabId = null;
 let applyTabId = null;
 let yoksisTabId = null;
@@ -23,6 +33,73 @@ const CONTENT_READY_MAX_DELAY_MS = 1_000;
 // yüklenebilir. Content tarafının 12 sn kontrol beklemesi + form doğrulaması
 // için bu sınırın daha uzun olması gerekir.
 const YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS = 32_000;
+
+function getPortalMatchPatterns() {
+    const bridgeScript = chrome.runtime.getManifest()?.content_scripts?.find((script) => {
+        return Array.isArray(script.js) && script.js.includes(STAFF_PORTAL_PATTERN_SOURCE);
+    });
+    return bridgeScript?.matches || [];
+}
+
+function getAllowedPortalMatchPatterns() {
+    return getPortalMatchPatterns();
+}
+
+function isAllowedPortalUrl(url) {
+    return Boolean(portalSecurity?.isAllowedPortalUrl(url, getAllowedPortalMatchPatterns()));
+}
+
+function isAllowedApplyUrl(url) {
+    return portalSecurity?.isAllowedApplySender(url) === true;
+}
+
+function saveTemporaryStudentData(studentData) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({
+            studentData,
+            [TEMPORARY_STORAGE_TIMESTAMP_KEY]: Date.now()
+        }, () => {
+            const storageError = chrome.runtime.lastError;
+            if (storageError) reject(new Error(storageError.message));
+            else resolve();
+        });
+    });
+}
+
+function clearTemporaryStudentData() {
+    return new Promise((resolve) => {
+        chrome.storage.local.remove([...TEMPORARY_STUDENT_DATA_KEYS, TEMPORARY_STORAGE_TIMESTAMP_KEY], () => {
+            resolve(!chrome.runtime.lastError);
+        });
+    });
+}
+
+function cleanupExpiredTemporaryStudentData() {
+    chrome.storage.local.get([...TEMPORARY_STUDENT_DATA_KEYS, TEMPORARY_STORAGE_TIMESTAMP_KEY], (snapshot) => {
+        const plan = temporaryStorage?.getCleanupPlan(snapshot || {});
+        if (!plan) return;
+
+        if (plan.removeKeys.length > 0) {
+            chrome.storage.local.remove(plan.removeKeys, () => {
+                if (chrome.runtime.lastError) {
+                    console.error('Expired temporary student data cleanup failed.', { errorName: 'StorageError' });
+                }
+            });
+            return;
+        }
+
+        if (plan.timestampToSet !== null) {
+            chrome.storage.local.set({ [TEMPORARY_STORAGE_TIMESTAMP_KEY]: plan.timestampToSet }, () => {
+                if (chrome.runtime.lastError) {
+                    console.error('Temporary student data retention marker could not be saved.', { errorName: 'StorageError' });
+                }
+            });
+        }
+    });
+}
+
+chrome.runtime.onStartup?.addListener(cleanupExpiredTemporaryStudentData);
+chrome.runtime.onInstalled?.addListener(cleanupExpiredTemporaryStudentData);
 
 function runYoksisOperation(tabId, operation, requestId, task) {
     const key = `${tabId}:${operation}:${requestId || 'anonymous'}`;
@@ -166,15 +243,14 @@ async function waitForContentScript(tabId, pageKind, requiredPath = '') {
 async function getPortalTabId() {
     if (ikametTabId) {
         try {
-            const tab = await queryTabs({ active: false });
-            // Check if tabId is still alive
             const existing = await new Promise((resolve) => {
                 chrome.tabs.get(ikametTabId, (t) => {
                     if (chrome.runtime.lastError || !t) resolve(null);
-                    else resolve(t.id);
+                    else resolve(t);
                 });
             });
-            if (existing) return existing;
+            if (existing && isAllowedPortalUrl(existing.url || '')) return existing.id;
+            ikametTabId = null;
         } catch (_) {
             ikametTabId = null;
         }
@@ -190,19 +266,6 @@ async function getPortalTabId() {
     }
 
     return null;
-}
-
-function isAllowedPortalUrl(url) {
-    try {
-        const parsedUrl = new URL(url);
-        const host = parsedUrl.hostname.toLowerCase();
-        return host === 'localhost'
-            || host === '127.0.0.1'
-            || host.endsWith('.vercel.app')
-            || host.includes('topkapi.edu.tr');
-    } catch (_) {
-        return false;
-    }
 }
 
 async function notifyPortal(message) {
@@ -228,9 +291,7 @@ async function notifyPortal(message) {
 async function handleStudentFound(data) {
     if (!data) return;
     studentData = data;
-    await new Promise((resolve) => {
-        chrome.storage.local.set({ studentData: data }, resolve);
-    });
+    await saveTemporaryStudentData(data);
 
     notifyPortal({
         source: 'APPLY_TOPKAPI',
@@ -1588,9 +1649,7 @@ async function transferToYoksis(request) {
     if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
 
     return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
-        await new Promise((resolve) => {
-            chrome.storage.local.set({ studentData: request.data }, resolve);
-        });
+        await saveTemporaryStudentData(request.data);
 
         // Öncelik content-script yolunda: arama öncesi/sonrası form imzasını
         // karşılaştırabildiği için eski öğrenci formunu yeni sonuç sanmaz.
@@ -1673,16 +1732,6 @@ async function transferToYoksis(request) {
     });
 }
 
-function isAllowedApplyUrl(url) {
-    try {
-        const parsedUrl = new URL(url);
-        return parsedUrl.hostname === 'apply.topkapi.edu.tr'
-            && parsedUrl.pathname.includes('/applications');
-    } catch (error) {
-        return false;
-    }
-}
-
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.status !== 'complete' || !pendingApplyNavigation) return;
     if (pendingApplyNavigation.tabId !== tabId) return;
@@ -1721,6 +1770,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // Mesaj İkamet Portalından geliyorsa
     if (request.source === 'IKAMET_PORTAL') {
+        if (!isAllowedPortalUrl(sender?.tab?.url || '') || !portalSecurity?.isValidPortalMessage(request)) {
+            sendResponse({ success: false, requestId: request.requestId, error: 'İstek doğrulanamadı. Yetkili portalı yenileyip tekrar deneyin.' });
+            return false;
+        }
         ikametTabId = sender.tab ? sender.tab.id : null;
         
         if (request.action === 'SEARCH_STUDENT') {
@@ -1784,9 +1837,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         throw new Error(response?.message || 'Apply profilinden bilgiler okunamadı.');
                     }
 
-                    await new Promise((resolve) => {
-                        chrome.storage.local.set({ studentData: response.data }, resolve);
-                    });
+                    await saveTemporaryStudentData(response.data);
 
                     sendResponse({ success: true, requestId: request.requestId, data: response.data });
                 } catch (error) {
@@ -1878,13 +1929,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 }
                 const yoksisTab = await getForegroundYoksisTab();
                 const response = await runYoksisOperation(yoksisTab.id, 'fill', request.requestId, async () => {
-                    await new Promise((resolve, reject) => {
-                        chrome.storage.local.set({ studentData }, () => {
-                            const storageError = chrome.runtime.lastError;
-                            if (storageError) reject(new Error(storageError.message));
-                            else resolve();
-                        });
-                    });
+                    await saveTemporaryStudentData(studentData);
 
                     // Doldurma, arama postback'i tamamen bitmeden başlayamaz.
                     // Önce formun kararlı olduğunu doğrula; aksi halde eksik
@@ -1927,7 +1972,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         partial: Boolean(contentResponse?.partial || (contentResponse?.missingFields || []).length > 0)
                     };
                 });
-                sendResponse({ ...response, requestId: request.requestId });
+                const hasCompletedAllFields = response?.success === true
+                    && response.partial !== true
+                    && (response.missingFields || []).length === 0;
+                const hasRequiredPhoto = !request.data?.croppedPhotoBase64 || response.photoUploaded === true;
+                const temporaryDataCleared = hasCompletedAllFields && hasRequiredPhoto
+                    ? await clearTemporaryStudentData()
+                    : undefined;
+                sendResponse({
+                    ...response,
+                    requestId: request.requestId,
+                    ...(temporaryDataCleared === undefined ? {} : { temporaryDataCleared })
+                });
             })().catch((error) => {
                 sendResponse({ success: false, requestId: request.requestId, error: error.message });
             });
@@ -1938,8 +1994,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const current = res?.studentData || {};
                 current.croppedPhotoBase64 = request.photoBase64;
                 current.photoFileName = request.fileName;
-                chrome.storage.local.set({ studentData: current }, () => {
+                saveTemporaryStudentData(current).then(() => {
                     sendResponse({ success: true, requestId: request.requestId });
+                }).catch(() => {
+                    sendResponse({ success: false, requestId: request.requestId, error: 'Fotoğraf geçici olarak kaydedilemedi. Lütfen tekrar deneyin.' });
                 });
             });
             return true;
@@ -1952,6 +2010,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     
     // Mesaj Apply Topkapı (content.js) tarafından geliyorsa İkamet Portala ilet
     else if (request.source === 'APPLY_TOPKAPI') {
+        if (!isAllowedApplyUrl(sender?.tab?.url || '') || !portalSecurity?.isValidApplyEvent(request)) {
+            sendResponse({ success: false, requestId: request.requestId, error: 'Apply isteği doğrulanamadı.' });
+            return false;
+        }
         if (request.action === 'OPEN_STUDENT_PROFILE') {
             if (!applyTabId || !isAllowedApplyUrl(request.profileUrl)) {
                 sendResponse({ success: false, error: 'URL not allowed' });

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YÖKSİS Otomasyonu",
-  "version": "1.2.33",
+  "version": "1.2.34",
   "description": "Topkapı Üniversitesi - YÖKSİS Veri Aktarım Eklentisi",
   "permissions": [
     "storage",
@@ -10,10 +10,8 @@
     "tabs"
   ],
   "host_permissions": [
-    "*://apply.topkapi.edu.tr/*",
-    "*://yoksis.yok.gov.tr/*",
-    "*://*.yok.gov.tr/*",
-    "*://*.vercel.app/*",
+    "https://apply.topkapi.edu.tr/*",
+    "https://yoksis.yok.gov.tr/*",
     "http://localhost/*",
     "http://127.0.0.1/*"
   ],
@@ -27,9 +25,8 @@
   "content_scripts": [
     {
       "matches": [
-        "*://apply.topkapi.edu.tr/*",
-        "*://yoksis.yok.gov.tr/*",
-        "*://*.yok.gov.tr/*"
+        "https://apply.topkapi.edu.tr/*",
+        "https://yoksis.yok.gov.tr/*"
       ],
       "js": ["content.js"],
       "run_at": "document_end",
@@ -39,9 +36,7 @@
     {
       "matches": [
         "http://localhost/*",
-        "http://127.0.0.1/*",
-        "*://*.vercel.app/*",
-        "https://*.topkapi.edu.tr/*"
+        "http://127.0.0.1/*"
       ],
       "js": ["bridge.js"],
       "run_at": "document_start"

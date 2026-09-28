@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ikamet-cache-v9';
+const CACHE_NAME = 'ikamet-cache-v11';
 
 const PRECACHE_ASSETS = [
   '/manifest.json',
@@ -32,9 +32,19 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+  const isStaffRoute = url.pathname === '/yetkili' || url.pathname.startsWith('/yetkili/');
+  const isStudentApplicationRoute = ['/basvuru', '/basvurum'].some((route) => {
+    return url.pathname === route || url.pathname.startsWith(`${route}/`);
+  });
 
-  // HTML, API veya POST isteklerini asla önbellekten verme (Her zaman doğrudan ağa git)
-  if (url.pathname === '/' || url.pathname.endsWith('.html') || url.pathname.startsWith('/api') || event.request.method !== 'GET') {
+  // Keep route documents, APIs, and student workflows on the network.
+  if (url.origin !== self.location.origin
+    || url.pathname === '/'
+    || url.pathname.endsWith('.html')
+    || url.pathname.startsWith('/api/')
+    || isStaffRoute
+    || isStudentApplicationRoute
+    || event.request.method !== 'GET') {
     return;
   }
 

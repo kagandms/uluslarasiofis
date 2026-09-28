@@ -1,111 +1,25 @@
+import { initTheme } from '../ui/themeManager.js';
+import { setActiveStep, STEP_IDS } from '../ui/stepWizard.js';
+import { renderStudentForms, getAllFormsData, populateFormNode } from '../ui/formManager.js';
+import { saveDraft, restoreDraft, clearDraft, initDraftAutoSave } from '../managers/draftManager.js';
+import { historyManager, initHistoryPanel } from '../managers/historyManager.js';
+import { showCropperForFile, getCroppedImage, cleanupCropper, initCropperControls } from '../ui/cropperModal.js';
+import { prepareImageForOCR } from '../services/imageProcessor.js';
+import { runOCR, cancelOCR } from '../services/ocrService.js';
+import { generateAndDownloadPdf, printDocument } from '../services/pdfGenerator.js';
+import { showToast } from '../ui/toastManager.js';
+import { initTebligatSearch } from '../ui/tebligatSearch.js';
+import { initWorkspaceNavigation } from '../ui/workspaceNavigation.js';
+import { initYknManager } from '../managers/yknManager.js';
+import { initStaffAuth } from './auth.js';
 
-// --- Authentication Logic ---
-let currentToken = localStorage.getItem('site_token') || sessionStorage.getItem('site_token');
-
-function checkAuth() {
-    const overlay = document.getElementById('login-overlay');
-    if (!overlay) return;
-
-    if (currentToken) {
-        overlay.style.display = 'none';
-    } else {
-        overlay.style.display = 'flex';
-    }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    checkAuth();
-
-    const loginForm = document.getElementById('login-form');
-    if (loginForm) {
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const password = document.getElementById('login-password').value;
-            const rememberMe = document.getElementById('login-remember').checked;
-            const btn = document.getElementById('btn-login-submit');
-            const errorDiv = document.getElementById('login-error');
-
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> Bekleyiniz...';
-            btn.disabled = true;
-            errorDiv.style.display = 'none';
-
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password, rememberMe })
-                });
-
-                const data = await res.json();
-                if (res.ok && data.token) {
-                    currentToken = data.token;
-                    if (rememberMe) {
-                        localStorage.setItem('site_token', data.token);
-                    } else {
-                        sessionStorage.setItem('site_token', data.token);
-                    }
-                    document.getElementById('login-overlay').style.display = 'none';
-                    if (window.showToast) window.showToast('Giriş başarılı!', 'success');
-                } else {
-                    throw new Error(data.error || 'Giriş başarısız');
-                }
-            } catch (err) {
-                errorDiv.textContent = err.message;
-                errorDiv.style.display = 'block';
-            } finally {
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
-            }
-        });
-    }
-});
-
-// Intercept fetch calls to add Authorization header and handle 401
-const originalFetch = window.fetch;
-window.fetch = async function() {
-    let [resource, config] = arguments;
-    
-    // Sadece /api isteklerine token ekle (ve login harici)
-    if (typeof resource === 'string' && resource.startsWith('/api') && !resource.startsWith('/api/login')) {
-        config = config || {};
-        config.headers = config.headers || {};
-        
-        // Headers nesnesiyse veya düz objeyse Authorization ekle
-        if (config.headers instanceof Headers) {
-            config.headers.append('Authorization', `Bearer ${currentToken}`);
-        } else {
-            config.headers['Authorization'] = `Bearer ${currentToken}`;
-        }
-    }
-    
-    const response = await originalFetch(resource, config);
-    
-    if (response.status === 401 && typeof resource === 'string' && resource.startsWith('/api') && !resource.startsWith('/api/login')) {
-        // Token expired or invalid
-        currentToken = null;
-        localStorage.removeItem('site_token');
-        sessionStorage.removeItem('site_token');
-        const overlay = document.getElementById('login-overlay');
-        if (overlay) overlay.style.display = 'flex';
-        if (window.showToast) window.showToast('Oturum süresi doldu, lütfen tekrar giriş yapın.', 'warning');
-    }
-    
-    return response;
-};
-import { initTheme } from './ui/themeManager.js';
-import { setActiveStep, STEP_IDS } from './ui/stepWizard.js';
-import { renderStudentForms, getAllFormsData, populateFormNode } from './ui/formManager.js';
-import { saveDraft, restoreDraft, clearDraft, initDraftAutoSave } from './managers/draftManager.js';
-import { historyManager, initHistoryPanel } from './managers/historyManager.js';
-import { showCropperForFile, getCroppedImage, cleanupCropper, initCropperControls } from './ui/cropperModal.js';
-import { prepareImageForOCR } from './services/imageProcessor.js';
-import { runOCR, cancelOCR } from './services/ocrService.js';
-import { generateAndDownloadPdf, printDocument } from './services/pdfGenerator.js';
-import { showToast } from './ui/toastManager.js';
-import { initTebligatSearch } from './ui/tebligatSearch.js';
-import { initWorkspaceNavigation } from './ui/workspaceNavigation.js';
-import { initYknManager } from './managers/yknManager.js';
+const staffAuthReady = document.readyState === 'loading'
+    ? new Promise((resolve) => {
+        document.addEventListener('DOMContentLoaded', () => {
+            initStaffAuth().then(resolve);
+        }, { once: true });
+    })
+    : initStaffAuth();
 
 function setAddedToSheetButtonState(button, sheetDate, assignedNo) {
     button.replaceChildren();
@@ -136,14 +50,15 @@ function setAddedToSheetButtonState(button, sheetDate, assignedNo) {
 
 // --- Clear Old PWA Service Workers ---
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
-                console.log('PWA Service Worker başarıyla kaydedildi:', registration.scope);
-            })
-            .catch(error => {
-                console.error('Service Worker kayıt hatası:', error);
-            });
+    void staffAuthReady.then((isAuthorized) => {
+        if (!isAuthorized) return;
+        navigator.serviceWorker.register('/sw.js').catch(() => {
+            const status = document.getElementById('staff-global-error');
+            if (status) {
+                status.textContent = 'Çevrimdışı kullanım etkinleştirilemedi. İnternet bağlantınızı kontrol edin.';
+                status.hidden = false;
+            }
+        });
     });
 }
 
@@ -160,7 +75,18 @@ let studentsQueue = [];
 let page1BackgroundPromise = null;
 let updateState = null;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!await staffAuthReady) return;
+    try {
+        await import('./pdfjs-bootstrap.js');
+    } catch (error) {
+        console.error('PDF reader failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+        const status = document.getElementById('staff-global-error');
+        if (status) {
+            status.textContent = 'PDF okuyucu yüklenemedi. PDF belgeleri için sayfayı yenileyip tekrar deneyin.';
+            status.hidden = false;
+        }
+    }
     // --- Initializations ---
     try { initTheme(); } catch (e) { console.error('initTheme error:', e); }
     try { initHistoryPanel(); } catch (e) { console.error('initHistoryPanel error:', e); }
@@ -891,7 +817,8 @@ let deferredPrompt;
 const isIos = () => /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!await staffAuthReady) return;
     const installBtn = document.getElementById('btn-install-pwa');
     
     // iOS Handling

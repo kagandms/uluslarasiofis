@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.33';
+const CONTENT_SCRIPT_VERSION = '1.2.34';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -1129,7 +1129,7 @@ function toApplyUrl(value) {
 
     try {
         const url = new URL(value, location.href);
-        if (url.hostname !== 'apply.topkapi.edu.tr' && !url.hostname.endsWith('.topkapi.edu.tr')) return '';
+        if (url.protocol !== 'https:' || url.hostname !== 'apply.topkapi.edu.tr') return '';
         return url.href;
     } catch (error) {
         return '';
@@ -1741,7 +1741,10 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 acceptanceCandidates: links.acceptanceCandidates || [],
                 kabulId: links.kabulId || ''
             };
-            chrome.storage.local.set({ studentData: dataToSave }, () => {
+            chrome.storage.local.set({
+                studentData: dataToSave,
+                temporaryStudentDataSavedAt: Date.now()
+            }, () => {
                 sendResponse({ success: true, data: dataToSave });
             });
         } catch (error) {

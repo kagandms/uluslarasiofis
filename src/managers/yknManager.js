@@ -15,7 +15,9 @@ import {
     isPassportCropperOpen,
     appendPassportPages
 } from '../ui/passportCropperModal.js';
+import { PDFJS_VERSION } from '../config/pdfjs-version.js';
 
+const PDFJS_SUPPORT_URL = `/pdfjs-support/${PDFJS_VERSION}`;
 const PASSPORT_MAX_PAGES = 5;
 const PASSPORT_MAX_OCR_PAGES = 2;
 const PASSPORT_ORIENTATION_ANGLES = [0, 90, 180, 270];
@@ -163,24 +165,8 @@ async function imageToCanvas(imgSrc) {
 }
 
 function ensurePdfWorkerReady() {
-    if (window.pdfjsLib) {
-        if (!window.pdfjsLib.GlobalWorkerOptions) {
-            window.pdfjsLib.GlobalWorkerOptions = {};
-        }
-        if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
-            try {
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
-            } catch (_) {
-                try {
-                    const workerBlob = new Blob([
-                        "importScripts('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js');"
-                    ], { type: 'application/javascript' });
-                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
-                } catch (_) {
-                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-                }
-            }
-        }
+    if (!window.pdfjsLib?.GlobalWorkerOptions?.workerSrc) {
+        throw new Error('PDF okuyucu hazır değil. Sayfayı yenileyip tekrar deneyin.');
     }
 }
 
@@ -214,8 +200,10 @@ async function extractPdfText(documentBytes) {
     ensurePdfWorkerReady();
     const pdf = await window.pdfjsLib.getDocument({
         data: documentBytes,
-        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
-        cMapPacked: true
+        cMapUrl: `${PDFJS_SUPPORT_URL}/cmaps/`,
+        standardFontDataUrl: `${PDFJS_SUPPORT_URL}/standard_fonts/`,
+        cMapPacked: true,
+        isEvalSupported: false
     }).promise;
     const pageTexts = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -238,8 +226,10 @@ async function extractPdfTextWithOcr(documentBytes, maxPages = Infinity) {
     ensurePdfWorkerReady();
     const pdf = await window.pdfjsLib.getDocument({
         data: documentBytes,
-        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
-        cMapPacked: true
+        cMapUrl: `${PDFJS_SUPPORT_URL}/cmaps/`,
+        standardFontDataUrl: `${PDFJS_SUPPORT_URL}/standard_fonts/`,
+        cMapPacked: true,
+        isEvalSupported: false
     }).promise;
     const { runOCR } = await import('../services/ocrService.js');
     const pageTexts = [];
@@ -1045,8 +1035,10 @@ export function initYknManager() {
                         ensurePdfWorkerReady();
                         const pdf = await window.pdfjsLib.getDocument({
                             data: validPdfBytes,
-                            cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
-                            cMapPacked: true
+                            cMapUrl: `${PDFJS_SUPPORT_URL}/cmaps/`,
+                            standardFontDataUrl: `${PDFJS_SUPPORT_URL}/standard_fonts/`,
+                            cMapPacked: true,
+                            isEvalSupported: false
                         }).promise;
 
                         // Önce tüm sayfaların metin katmanını oku; pahalı render işlemini
@@ -1878,6 +1870,9 @@ export function initYknManager() {
                     const filledFields = response.filledFields?.length || 'alanlar';
                     addStatus(`Tek Tık tamamlandı: ${filledFields}${photoRequired ? ' ve fotoğraf' : ''} YÖKSİS’e aktarıldı. Son kontrol ve kaydetme size aittir.`, 'success');
                     showToast('Tek Tık tamamlandı. YÖKSİS formunu kontrol edin.', 'success');
+                    if (response.temporaryDataCleared === false) {
+                        addStatus('Aktarım tamamlandı ancak bu cihazdaki geçici öğrenci verisi temizlenemedi. Eklentiyi yeniden başlatıp tekrar kontrol edin.', 'warning');
+                    }
                 } else if (response?.success) {
                     const missingText = missingFields.length > 0 ? ` Eksik alanlar: ${missingFields.join(', ')}.` : '';
                     const photoText = photoUploadFailed ? ' Fotoğraf yüklenemedi.' : '';
@@ -1946,6 +1941,9 @@ export function initYknManager() {
                         updateWorkflowUI(5);
                         addStatus('YÖKSİS sekmesine geçildi ve form alanları dolduruldu. Göndermeden önce kontrol edin.', 'success');
                         showToast('YÖKSİS formu dolduruldu.', 'success');
+                    }
+                    if (response.temporaryDataCleared === false) {
+                        addStatus('Aktarım tamamlandı ancak bu cihazdaki geçici öğrenci verisi temizlenemedi. Eklentiyi yeniden başlatıp tekrar kontrol edin.', 'warning');
                     }
                 } else {
                     setWorkflowStepStatus(4, 'error');

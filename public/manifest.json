@@ -1,11 +1,11 @@
 {
-  "name": "Topkapı Üniversitesi İkamet İşlemleri",
-  "short_name": "İkamet",
+  "name": "İstanbul Topkapı Uluslararası Öğrenci Portalı",
+  "short_name": "Topkapı Portalı",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#f8fafc",
-  "description": "Uluslararası Öğrenci İşlemleri Portalı",
+  "description": "İstanbul Topkapı Üniversitesi Uluslararası Öğrenci Portalı",
   "icons": [
     {
       "src": "/icon.png",
