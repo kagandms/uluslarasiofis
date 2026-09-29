@@ -53,7 +53,7 @@
 - A saved under-18 application requires the birth certificate; an adult application does not receive that conditional requirement. Requirement reads, upload intent, and finalize use the server-saved age value.
 - Birth certificate is the only under-18-specific document added by the confirmed product rule. No parental consent, guardian ID, custody record, apostille, translation, or other unconfirmed document was invented.
 
-## F. MIGRATIONS / DATA MODEL
+## F. DATA / MIGRATION CHANGES
 
 - Session 2 baseline `e6c619…` contains migration `0001_backend_foundation.sql` and does not contain `0002`.
 - Session 3 commit `1078b91…` adds `0002_session3_fingerprint_and_birth_certificate.sql`: nullable constrained fingerprint status, separate bounded code, and guarded birth-certificate requirement rows for initial and renewal applications.
