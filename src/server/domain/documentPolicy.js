@@ -83,3 +83,22 @@ export function listDocumentPolicies(applicationType, isUnder18) {
         .sort((left, right) => left.display_order - right.display_order)
         .map(createStudentPolicyDto);
 }
+
+/**
+ * Lists unique policy labels for the public landing page across both application types and age groups.
+ * @returns {Array<object>} Public-safe policy labels with their applicability summary key.
+ */
+export function listPublicDocumentOverview() {
+    return POLICIES.map((policy) => {
+        const scopeKey = policy.conditional_rule === 'under18' ? 'homeDocumentUnder18'
+            : (policy.conditional_rule ? 'homeDocumentConditional'
+                : (policy.application_types.length === 1 ? 'homeDocumentRenewal' : 'homeDocumentAllApplications'));
+        return Object.freeze({
+            code: policy.code,
+            label_key: policy.label_key,
+            scope_key: scopeKey,
+            required: policy.required,
+            display_order: policy.display_order
+        });
+    }).sort((left, right) => left.display_order - right.display_order);
+}

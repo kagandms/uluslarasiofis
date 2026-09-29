@@ -94,6 +94,61 @@ test('new and Session 2 drafts expose an empty student-safe fingerprint state', 
     assert.equal(Object.hasOwn(payload.application, 'storage_key'), false);
 });
 
+test('contact acknowledgement is accepted only explicitly, is versioned, and is idempotent', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await createDraft(environment, '2026123899');
+    const applicationId = database.prepare('SELECT id FROM applications').first().id;
+    const acceptanceEvents = () => database.prepare(`
+        SELECT event_type, json_extract(safe_metadata_json, '$.version') AS version
+        FROM audit_events WHERE application_id = ? AND event_type = 'application.contact_responsibility_accepted'
+    `).bind(applicationId).all();
+
+    const current = await worker.fetch(createRequest('/api/public/applications/current', { cookie: created.cookie }), environment, {});
+    const currentPayload = await current.json();
+    assert.equal(currentPayload.application.contact_acknowledgement.accepted_current, false);
+    assert.equal((await acceptanceEvents()).results.length, 0);
+
+    const accept = (version) => worker.fetch(createRequest('/api/public/applications/current/contact-acknowledgement', {
+        method: 'POST', cookie: created.cookie, body: { accepted: true, version }
+    }), environment, {});
+    const stale = await accept('contact-reachability-v0');
+    assert.equal(stale.status, 409);
+
+    const first = await accept('contact-reachability-v1');
+    const firstPayload = await first.json();
+    const repeated = await accept('contact-reachability-v1');
+    const events = await acceptanceEvents();
+
+    assert.equal(first.status, 200);
+    assert.equal(firstPayload.application.contact_acknowledgement.accepted_version, 'contact-reachability-v1');
+    assert.equal(firstPayload.application.contact_acknowledgement.accepted_current, true);
+    assert.equal(repeated.status, 200);
+    assert.equal(events.results.length, 1);
+    assert.equal(events.results[0].version, 'contact-reachability-v1');
+});
+
+test('contact acknowledgement rejects a malformed persisted phone without recording acceptance', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await createDraft(environment, '2026123898');
+    const applicationId = database.prepare('SELECT id FROM applications').first().id;
+    const invalidPhone = await worker.fetch(createRequest('/api/public/applications/current/autosave', {
+        method: 'PATCH', cookie: created.cookie, body: { student_phone: 'not a phone' }
+    }), environment, {});
+    const response = await worker.fetch(createRequest('/api/public/applications/current/contact-acknowledgement', {
+        method: 'POST', cookie: created.cookie,
+        body: { accepted: true, version: 'contact-reachability-v1' }
+    }), environment, {});
+    const acceptanceEvents = await database.prepare(`
+        SELECT id FROM audit_events
+        WHERE application_id = ? AND event_type = 'application.contact_responsibility_accepted'
+    `).bind(applicationId).all();
+
+    assert.equal(invalidPhone.status, 200);
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, 'CONTACT_INFORMATION_INCOMPLETE');
+    assert.equal(acceptanceEvents.results.length, 0);
+});
+
 test('registered fingerprint status persists a trimmed code without adding authorization fields', async () => {
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123902');

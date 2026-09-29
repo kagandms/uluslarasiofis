@@ -1,4 +1,5 @@
 import { ApplicationConflictError } from '../../domain/errors.js';
+import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../../config/constants.js';
 import { normalizeStudentNumber } from './studentRepository.js';
 
 const PUBLIC_APPLICATION_FIELDS = Object.freeze({
@@ -94,11 +95,46 @@ export function createApplicationRepository(database) {
         },
         async findById(applicationId) {
             return database.prepare(`
-                SELECT applications.*, students.student_number
+                SELECT applications.*, students.student_number,
+                    EXISTS (
+                        SELECT 1 FROM audit_events
+                        WHERE audit_events.application_id = applications.id
+                          AND audit_events.event_type = 'application.contact_responsibility_accepted'
+                          AND json_extract(audit_events.safe_metadata_json, '$.version') = ?
+                    ) AS contact_acknowledgement_accepted_current,
+                    (
+                        SELECT audit_events.created_at FROM audit_events
+                        WHERE audit_events.application_id = applications.id
+                          AND audit_events.event_type = 'application.contact_responsibility_accepted'
+                          AND json_extract(audit_events.safe_metadata_json, '$.version') = ?
+                        ORDER BY audit_events.created_at DESC LIMIT 1
+                    ) AS contact_acknowledgement_accepted_at
                 FROM applications
                 JOIN students ON students.id = applications.student_id
                 WHERE applications.id = ?
-            `).bind(applicationId).first();
+            `).bind(CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION,
+                CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION, applicationId).first();
+        },
+        async acceptContactResponsibilityAcknowledgement({ applicationId, version, acceptedAt, requestId }) {
+            const eventId = `${applicationId}:contact-responsibility:${version}`;
+            await database.prepare(`
+                INSERT OR IGNORE INTO audit_events (
+                    id, event_type, actor_type, application_id, request_id, safe_metadata_json, created_at
+                )
+                SELECT ?, 'application.contact_responsibility_accepted', 'student', ?, ?, json_object('version', ?), ?
+                WHERE EXISTS (
+                    SELECT 1 FROM applications
+                    WHERE id = ? AND status = 'draft'
+                      AND length(trim(COALESCE(student_email, ''))) > 0
+                      AND length(trim(COALESCE(student_phone, ''))) > 0
+                )
+            `).bind(eventId, applicationId, requestId, version, acceptedAt, applicationId).run();
+            const existingEvent = await database.prepare(`
+                SELECT id FROM audit_events
+                WHERE id = ? AND application_id = ?
+                  AND event_type = 'application.contact_responsibility_accepted'
+            `).bind(eventId, applicationId).first();
+            return existingEvent ? this.findById(applicationId) : null;
         },
         async findCurrentStatusById(applicationId) {
             return database.prepare(`

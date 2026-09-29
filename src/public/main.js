@@ -1,6 +1,7 @@
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
 import { initializeApplicationWizard } from './applicationWizard.js';
 import * as applicationApi from './applicationApi.js';
+import { renderPublicDocumentOverview } from './home.js';
 
 const LOCALE_STORAGE_KEY = 'portal_ui_locale';
 const FALLBACK_LOCALE = 'tr';
@@ -53,6 +54,8 @@ function applyLocale(locale) {
 
     const localeSelect = document.getElementById('locale-select');
     if (localeSelect) localeSelect.value = selectedLocale;
+    const documentOverview = document.getElementById('public-document-overview');
+    if (documentOverview) renderPublicDocumentOverview(documentOverview, selectedLocale);
     const localeEvent = document.createEvent('Event');
     localeEvent.initEvent('public:locale-changed', false, false);
     document.dispatchEvent(localeEvent);

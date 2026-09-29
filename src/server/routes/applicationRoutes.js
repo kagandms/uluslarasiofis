@@ -1,7 +1,9 @@
 import { ApiError, ApplicationConflictError } from '../domain/errors.js';
+import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../config/constants.js';
 import { createOpaqueSessionToken, createSessionCookie, createExpiredSessionCookie, getSessionCookieName, hashSessionToken, readCookie } from '../auth/sessionToken.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
+import { isValidPhoneNumber } from '../../shared/phoneNumber.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { readSubmissionReadiness } from '../services/submissionReadiness.js';
@@ -49,6 +51,13 @@ function createApplicationDto(application, environment) {
         is_under_18: application.is_under_18,
         fingerprint_status: application.fingerprint_status ?? null,
         fingerprint_code: application.fingerprint_code ?? null,
+        contact_acknowledgement: {
+            current_version: CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION,
+            accepted_version: application.contact_acknowledgement_accepted_current
+                ? CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION : null,
+            accepted_at: application.contact_acknowledgement_accepted_at ?? null,
+            accepted_current: Boolean(application.contact_acknowledgement_accepted_current)
+        },
         declaration: {
             current_version: currentDeclarationVersion,
             content_key: 'studentInformationAcknowledgement',
@@ -254,6 +263,51 @@ export async function acceptCurrentApplicationDeclaration(request, environment, 
         requestId
     });
     if (!application) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
+    return { application: createApplicationDto(application, environment) };
+}
+
+/**
+ * Records an explicit, current-version contact responsibility acknowledgement for the draft.
+ * @param {Request} request Owner-session request.
+ * @param {object} environment Worker bindings.
+ * @param {string} requestId Correlation identifier.
+ * @returns {Promise<object>} Student-safe application with the persisted acknowledgement state.
+ * @throws {ApiError} When origin, session, draft state, contact details, or acknowledgement version is invalid.
+ */
+export async function acceptCurrentContactAcknowledgement(request, environment, requestId) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const session = await requireApplicationSession(request, environment);
+    if (session.status !== 'draft') throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemiyor.');
+
+    const body = await readJsonBody(request);
+    if (Object.keys(body).some((key) => !['accepted', 'version'].includes(key))
+        || body.accepted !== true || typeof body.version !== 'string') {
+        throw new ApiError(400, 'CONTACT_ACKNOWLEDGEMENT_REQUIRED', 'İletişim sorumluluğu onayını kabul ederek devam edin.');
+    }
+    if (body.version !== CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION) {
+        throw new ApiError(409, 'CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT', 'İletişim onayı güncellendi. Lütfen metni yeniden okuyup kabul edin.');
+    }
+
+    const repositories = createRepositories(environment);
+    await enforceRateLimit(repositories, request, {
+        endpoint: 'contact-acknowledgement', maxRequests: 20, windowSeconds: 900
+    });
+    const currentApplication = await repositories.applications.findById(session.application_id);
+    if (!currentApplication) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(currentApplication.student_email || '')
+        || !isValidPhoneNumber(currentApplication.student_phone)) {
+        throw new ApiError(400, 'CONTACT_INFORMATION_INCOMPLETE', 'Devam etmeden önce geçerli e-posta ve telefon bilgilerini girin.');
+    }
+
+    const acceptedAt = new Date().toISOString();
+    const application = await repositories.applications.acceptContactResponsibilityAcknowledgement({
+        applicationId: session.application_id,
+        version: CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION,
+        acceptedAt,
+        requestId
+    });
+    if (!application) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemiyor.');
     return { application: createApplicationDto(application, environment) };
 }
 

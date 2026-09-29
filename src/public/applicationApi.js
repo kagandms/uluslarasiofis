@@ -75,6 +75,19 @@ export async function acceptCurrentApplicationDeclaration(version) {
 }
 
 /**
+ * Records the student's explicit contact responsibility acknowledgement for the current version.
+ * @param {string} version Current acknowledgement version returned by the application API.
+ * @returns {Promise<object>} Updated student-safe application.
+ * @throws {Error} When the session, contact fields, or acknowledgement version is invalid.
+ */
+export async function acceptCurrentContactAcknowledgement(version) {
+    const payload = await requestJson('/api/public/applications/current/contact-acknowledgement', {
+        method: 'POST', body: { accepted: true, version }
+    });
+    return payload.application;
+}
+
+/**
  * Reads the server-calculated requirements and current document states.
  * @returns {Promise<object>} Student-safe application flags and document requirements.
  * @throws {Error} When the owner session or API request is unavailable.

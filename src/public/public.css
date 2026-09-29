@@ -40,24 +40,41 @@ a { color: inherit; }
 
 .public-brand img { width: 3.1rem; height: 3.1rem; object-fit: contain; }
 .public-header-actions { display: flex; align-items: center; gap: 1rem; }
-.public-header a:focus-visible, .public-card a:focus-visible, .language-picker select:focus-visible { outline: 3px solid #8b0000; outline-offset: 3px; }
+.public-header a:focus-visible, .home-cta:focus-visible, .language-picker select:focus-visible { outline: 3px solid #8b0000; outline-offset: 3px; }
 
 .language-picker { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
 .language-picker select { min-height: 2.5rem; padding: 0.4rem 0.65rem; border: 1px solid #d1d5db; border-radius: 0.5rem; background: #fff; color: inherit; }
 .staff-link { color: #8b0000; font-size: 0.92rem; font-weight: 650; text-decoration-thickness: 1px; text-underline-offset: 0.2rem; }
 
-.public-main { width: min(1120px, calc(100% - 2.5rem)); margin: 0 auto; padding-block: clamp(3rem, 8vw, 6.5rem); }
-.public-hero { max-width: 52rem; margin-block-end: 2.5rem; }
+.public-main { width: min(1120px, calc(100% - 2.5rem)); margin: 0 auto; padding-block: clamp(2rem, 5vw, 4rem); }
+.public-hero { max-width: 52rem; margin-block-end: clamp(2rem, 5vw, 3.5rem); }
 .public-eyebrow { margin: 0 0 0.9rem; color: #8b0000; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.04em; }
-.public-hero h1, .placeholder-panel h1 { margin: 0; color: #1f2329; font-size: clamp(2.15rem, 5vw, 3.8rem); line-height: 1.12; letter-spacing: -0.035em; }
+.public-hero h1, .placeholder-panel h1 { max-width: 48rem; margin: 0; color: #1f2329; font-size: clamp(2.15rem, 5vw, 3.8rem); line-height: 1.12; letter-spacing: -0.035em; }
 .public-hero p:last-child, .placeholder-panel p { max-width: 42rem; margin-block: 1rem 0; color: #59616d; font-size: clamp(1rem, 2vw, 1.15rem); line-height: 1.7; }
 
-.public-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
-.public-card { min-height: 15rem; padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid #e4e5e8; border-radius: 1rem; background: #fff; box-shadow: 0 12px 36px rgb(31 35 41 / 5%); }
-.public-card h2 { margin: 0; font-size: 1.35rem; }
-.public-card p { min-height: 3.5rem; color: #59616d; line-height: 1.6; }
-.public-card a { display: inline-flex; align-items: center; min-height: 2.75rem; padding-inline: 1rem; border-radius: 0.6rem; background: #8b0000; color: #fff; font-weight: 650; text-decoration: none; }
-.public-card a:hover { background: #6f0000; }
+.home-actions { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-block-start: 1.5rem; }
+.home-cta { display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; padding: 0.7rem 1.25rem; border: 1px solid #8b0000; border-radius: 0.65rem; font-weight: 700; text-decoration: none; transition: background-color 140ms ease, color 140ms ease; }
+.home-cta-primary { background: #8b0000; color: #fff; }
+.home-cta-primary:hover { background: #6f0000; }
+.home-cta-secondary { background: #fff; color: #8b0000; }
+.home-cta-secondary:hover { background: #fff5f5; }
+.public-section { min-width: 0; padding: clamp(1.1rem, 2.5vw, 1.6rem); border: 1px solid #e4e5e8; border-radius: 1rem; background: #fff; box-shadow: 0 10px 30px rgb(31 35 41 / 4%); }
+.public-section h2 { margin: 0; color: #1f2329; font-size: clamp(1.2rem, 2.2vw, 1.5rem); }
+.public-section-intro { margin: 0.6rem 0 1rem; color: #59616d; line-height: 1.55; }
+.process-overview { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.8rem; margin: 1.1rem 0 0; padding: 0; list-style: none; }
+.process-overview li { min-width: 0; padding: 0.9rem; border-radius: 0.75rem; background: #f7f8fa; }
+.process-overview li > span { display: grid; width: 2rem; height: 2rem; margin-block-end: 0.7rem; place-items: center; border-radius: 50%; background: #111a2e; color: #fff; font-weight: 700; }
+.process-overview h3, .public-document-card h3 { margin: 0; color: #242833; font-size: 0.98rem; line-height: 1.35; }
+.process-overview p, .public-document-card p, .status-overview p { margin: 0.4rem 0 0; color: #59616d; font-size: 0.9rem; line-height: 1.5; }
+.public-information-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 1rem; margin-block-start: 1rem; align-items: start; }
+.public-document-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; margin: 0; padding: 0; list-style: none; }
+.public-document-card { position: relative; min-width: 0; padding: 0.85rem; border: 1px solid #e5e8ee; border-radius: 0.7rem; background: #fff; }
+.public-document-card:has(.public-document-badge) { border-color: #e5c27a; background: #fffaf0; }
+.public-document-badge { display: inline-flex; margin-block-start: 0.6rem; padding: 0.18rem 0.5rem; border-radius: 99px; background: #fff0c7; color: #6f4b00; font-size: 0.73rem; font-weight: 700; }
+.status-overview { display: grid; gap: 0.55rem; margin: 1.1rem 0 0; padding: 0; list-style: none; }
+.status-overview li { padding: 0.8rem 0.9rem; border: 1px solid #e5e8ee; border-radius: 0.7rem; }
+.status-overview li > span { color: #242833; font-weight: 700; }
+.status-overview p { margin-block-start: 0.2rem; }
 .future-label { display: inline-block; margin-block-start: 1rem; color: #68707c; font-size: 0.82rem; }
 
 .placeholder-panel { max-width: 54rem; margin: 1rem auto; padding: clamp(1.5rem, 5vw, 3rem); border: 1px solid #e4e5e8; border-radius: 1rem; background: #fff; box-shadow: 0 12px 36px rgb(31 35 41 / 5%); }
@@ -119,9 +136,14 @@ html[dir="rtl"] .application-review-section dl { direction: rtl; }
 @media (max-width: 640px) {
     .public-header { align-items: flex-start; flex-direction: column; gap: 1rem; }
     .public-header-actions { justify-content: space-between; width: 100%; }
-    .public-cards { grid-template-columns: 1fr; }
-    .public-card { min-height: unset; }
-    .public-card p { min-height: unset; }
+    .process-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .public-information-grid { grid-template-columns: 1fr; }
     .application-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .application-review-section dl { grid-template-columns: 1fr; gap: 0.2rem; }
+}
+
+@media (max-width: 420px) {
+    .home-actions { display: grid; }
+    .home-cta { width: 100%; }
+    .process-overview, .public-document-list { grid-template-columns: 1fr; }
 }

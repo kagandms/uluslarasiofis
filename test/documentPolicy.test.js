@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { listDocumentPolicies, readDocumentPolicy } from '../src/server/domain/documentPolicy.js';
+import { listDocumentPolicies, listPublicDocumentOverview, readDocumentPolicy } from '../src/server/domain/documentPolicy.js';
 
 test('document policies reconcile the registered residence list and renewal-only UETS rule', () => {
     const initial = listDocumentPolicies('initial', false);
@@ -26,4 +26,17 @@ test('document policy supplies safe labels, formats, byte limits and no storage 
     assert.equal('storage_key' in policy, false);
     assert.equal(readDocumentPolicy('fingerprint', 'initial', false).code, 'fingerprint');
     assert.equal(readDocumentPolicy('uets', 'initial', false), null);
+});
+
+test('public document overview uses each current policy once and identifies conditional requirements', () => {
+    const overview = listPublicDocumentOverview();
+    const byCode = new Map(overview.map((policy) => [policy.code, policy]));
+
+    assert.equal(overview.length, 11);
+    assert.equal(new Set(overview.map(({ code }) => code)).size, overview.length);
+    assert.equal(byCode.get('uets').scope_key, 'homeDocumentRenewal');
+    assert.equal(byCode.get('birth_certificate_under18').scope_key, 'homeDocumentUnder18');
+    assert.equal(byCode.get('fingerprint').scope_key, 'homeDocumentConditional');
+    assert.equal(byCode.get('passport_identity').scope_key, 'homeDocumentAllApplications');
+    assert.equal(overview.every(({ label_key, scope_key }) => label_key && scope_key), true);
 });

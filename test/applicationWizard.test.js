@@ -29,6 +29,7 @@ async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null
         student_email: 'student@example.edu', student_phone: '+905551112233',
         first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish',
         date_of_birth: '2000-01-01', is_under_18: 0,
+        contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true, accepted_at: '2026-09-29T00:00:00.000Z' },
         fingerprint_status: fingerprintStatus, fingerprint_code: fingerprintCode,
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAccuracy', accepted_current: false }
     };
@@ -52,6 +53,92 @@ async function submitWizard(root) {
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
 }
+
+test('contact step keeps Continue disabled until valid contact fields and the separate acknowledgement are present', async () => {
+    const { document, root } = createRoot();
+    const application = {
+        status: 'draft', application_type: 'initial', student_number: 'S3-CONTACT-1',
+        student_email: 'student@example.edu', student_phone: '+905551112233',
+        contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: false }
+    };
+    let acceptedVersion = null;
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async createApplicationDraft() { return { ...application }; },
+        async acceptCurrentContactAcknowledgement(version) {
+            acceptedVersion = version;
+            application.contact_acknowledgement.accepted_current = true;
+            return { ...application };
+        },
+        async readCurrentStudentDocumentRequirements() { return { requirements: [] }; }
+    };
+    const state = await initializeApplicationWizard(root, api);
+    const continueButton = root.querySelector('#application-step-form button[type="submit"]');
+    root.querySelector('[name="student_number"]').value = 'S3-CONTACT-1';
+    root.querySelector('[name="application_type"]').value = 'initial';
+    const email = root.querySelector('[name="student_email"]');
+    const phone = root.querySelector('[name="student_phone"]');
+    const acknowledgement = root.querySelector('[name="contact_acknowledgement_accepted"]');
+
+    assert.equal(root.querySelector('h2')?.textContent, 'İletişim Bilgileri');
+    assert.equal(continueButton.disabled, true);
+    assert.ok(acknowledgement);
+    assert.equal(root.querySelector('[name="declaration_accepted"]'), null);
+
+    email.value = 'student@example.edu';
+    phone.value = '+905551112233';
+    email.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(continueButton.disabled, true);
+
+    acknowledgement.checked = true;
+    acknowledgement.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    assert.equal(continueButton.disabled, false);
+
+    email.value = 'not-an-email';
+    email.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(continueButton.disabled, true);
+    email.value = 'student@example.edu';
+    email.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    phone.value = '';
+    phone.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(continueButton.disabled, true);
+    phone.value = 'not a phone';
+    phone.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(continueButton.disabled, true);
+    phone.value = '+905551112233';
+    phone.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(continueButton.disabled, false);
+
+    await submitWizard(root);
+
+    assert.equal(acceptedVersion, 'contact-reachability-v1');
+    assert.equal(state.step, 1);
+    assert.equal(state.application.contact_acknowledgement.accepted_current, true);
+    document.defaultView.close();
+});
+
+test('contact submit handler rejects a programmatic submission after a required email is cleared', async () => {
+    const { document, root } = createRoot();
+    let createCalls = 0;
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async createApplicationDraft() { createCalls += 1; return {}; },
+        async acceptCurrentContactAcknowledgement() { throw new Error('Must not accept an invalid contact step.'); }
+    };
+    const state = await initializeApplicationWizard(root, api);
+    root.querySelector('[name="student_number"]').value = 'S3-CONTACT-2';
+    root.querySelector('[name="application_type"]').value = 'initial';
+    root.querySelector('[name="student_email"]').value = '';
+    root.querySelector('[name="student_phone"]').value = '+905551112233';
+    const acknowledgement = root.querySelector('[name="contact_acknowledgement_accepted"]');
+    if (acknowledgement) acknowledgement.checked = true;
+
+    await submitWizard(root);
+
+    assert.equal(state.step, 0);
+    assert.equal(createCalls, 0);
+    document.defaultView.close();
+});
 
 test('registered fingerprint state shows the dedicated code input and preserves a safe code value', () => {
     const { document, root } = createRoot();
@@ -232,6 +319,7 @@ test('wizard saves under-18 and fingerprint state before loading the server requ
     const application = {
         status: 'draft', application_type: 'initial', student_number: '2026123999',
         student_email: 'student@example.edu', student_phone: '+905551112233',
+        contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null
     };
     const api = {
@@ -282,6 +370,7 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
     const saved = {
         status: 'draft', application_type: 'initial', student_number: 'S3-WIZ-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', first_name: '', last_name: '', passport_number: '', nationality: '', date_of_birth: '',
+        contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null,
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false, accepted_at: null }
     };
@@ -348,6 +437,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     const application = {
         status: 'draft', application_type: 'initial', student_number: 'S3-UP-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
+        contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }
     };
     let intentCalls = 0;
@@ -426,6 +516,7 @@ test('closeout translations have parity and the wizard rerenders in Arabic RTL',
     const application = {
         status: 'draft', application_type: 'initial', student_number: 'S3-RTL-1', student_email: 'student@example.edu',
         student_phone: '555', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
+        contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }
     };
     const api = {

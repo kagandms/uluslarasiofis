@@ -34,22 +34,44 @@
     <main class="public-main">
       <section class="public-hero" aria-labelledby="public-home-heading">
         <p class="public-eyebrow" data-i18n="publicEyebrow">İstanbul Topkapı Üniversitesi</p>
-        <h1 id="public-home-heading" data-i18n="homeHeading">Uluslararası öğrenci işlemleri</h1>
-        <p data-i18n="homeDescription">Başvuru sürecinizle ilgili doğru bilgiye ve ilgili hizmetlere buradan ulaşın.</p>
+        <h1 id="public-home-heading" data-i18n="homeHeading">İkamet izni başvuru portalı</h1>
+        <p data-i18n="homeDescription">İkamet belgelerinizi iletin, Uluslararası Öğrenci Ofisinin incelemesini takip edin.</p>
+        <nav class="home-actions" aria-label="Öğrenci işlemleri">
+          <a class="home-cta home-cta-primary" href="/basvuru/" data-i18n="homeStartAction">Başvuruya Başla</a>
+          <a class="home-cta home-cta-secondary" href="/basvurum/" data-i18n="homeTrackAction">Başvurumu Sorgula</a>
+        </nav>
       </section>
 
-      <section class="public-cards" aria-label="Öğrenci hizmetleri">
-        <article class="public-card">
-          <h2 data-i18n="applicationTitle">Yeni başvuru</h2>
-          <p data-i18n="applicationText">Başvuru koşulları ve işlem adımları hakkında bilgi alın.</p>
-          <a href="/basvuru/" data-i18n="applicationAction">Başvuru bilgileri</a>
-        </article>
-        <article class="public-card">
-          <h2 data-i18n="trackingTitle">Başvurumu takip et</h2>
-          <p data-i18n="trackingText">Başvuru durumunuzu görüntülemek için hazırlanan alana geçin.</p>
-          <a href="/basvurum/" data-i18n="trackingAction">Başvuru takibi</a>
-        </article>
+      <section class="public-section" aria-labelledby="process-heading">
+        <h2 id="process-heading" data-i18n="homeProcessHeading">Başvuru Nasıl İlerler?</h2>
+        <ol class="process-overview">
+          <li data-process-step><span>1</span><h3 data-i18n="homeProcessContactTitle">İletişim bilgilerinizi girin</h3><p data-i18n="homeProcessContactText">Size ulaşabileceğimiz e-posta ve telefonunuzu yazın.</p></li>
+          <li data-process-step><span>2</span><h3 data-i18n="homeProcessDetailsTitle">Başvuru ve kimlik bilgilerinizi tamamlayın</h3><p data-i18n="homeProcessDetailsText">Başvuru türünüzü seçip kişisel bilgilerinizi ekleyin.</p></li>
+          <li data-process-step><span>3</span><h3 data-i18n="homeProcessConfirmTitle">Bilgilerinizi kontrol edin</h3><p data-i18n="homeProcessConfirmText">İlerlemeden önce başvuru bilgilerinizi gözden geçirin.</p></li>
+          <li data-process-step><span>4</span><h3 data-i18n="homeProcessDocumentsTitle">Gerekli belgeleri yükleyin</h3><p data-i18n="homeProcessDocumentsText">Başvurunuza uygun belgeleri güvenli biçimde iletin.</p></li>
+          <li data-process-step><span>5</span><h3 data-i18n="homeProcessTrackTitle">Başvurunuzu takip edin</h3><p data-i18n="homeProcessTrackText">İnceleme ve sonraki işlemler hakkında bilgi alın.</p></li>
+        </ol>
       </section>
+
+      <div class="public-information-grid">
+        <section class="public-section" aria-labelledby="documents-heading">
+          <h2 id="documents-heading" data-i18n="homeDocumentsHeading">Hazırlamanız Gereken Belgeler</h2>
+          <p class="public-section-intro" data-i18n="homeDocumentsIntro">Gerekli belgeler başvuru türünüze, yaşınıza ve başvuru koşullarına göre değişebilir.</p>
+          <div id="public-document-overview" aria-live="polite"></div>
+        </section>
+
+        <section class="public-section" id="public-application-statuses" aria-labelledby="statuses-heading">
+          <h2 id="statuses-heading" data-i18n="homeStatusesHeading">Başvuru Durumları</h2>
+          <p class="public-section-intro" data-i18n="homeStatusesIntro">Başvurular aşağıdaki aşamalardan geçebilir; bu bilgiler genel süreç özetidir.</p>
+          <ol class="status-overview">
+            <li><span data-i18n="homeStatusDraftTitle">Taslak</span><p data-i18n="homeStatusDraftText">Başvuru bilgileri ve belgeler tamamlanıyor.</p></li>
+            <li><span data-i18n="homeStatusReviewTitle">İncelemede</span><p data-i18n="homeStatusReviewText">Ofis başvuru ve belgeleri kontrol ediyor.</p></li>
+            <li><span data-i18n="homeStatusResubmissionTitle">Belge güncellemesi</span><p data-i18n="homeStatusResubmissionText">Eksik veya yenilenmesi gereken belge iletilebilir.</p></li>
+            <li><span data-i18n="homeStatusMigrationTitle">Göç İdaresine iletildi</span><p data-i18n="homeStatusMigrationText">Kontrol sonrası dosya ilgili kuruma gönderilir.</p></li>
+            <li><span data-i18n="homeStatusCompleteTitle">Tamamlandı</span><p data-i18n="homeStatusCompleteText">Başvuru süreci sonuçlandı.</p></li>
+          </ol>
+        </section>
+      </div>
     </main>
 
     <footer class="public-footer">

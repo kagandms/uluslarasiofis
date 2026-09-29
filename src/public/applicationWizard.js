@@ -1,5 +1,6 @@
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { createDraftAutosave } from './draftAutosave.js';
+import { isValidPhoneNumber } from '../shared/phoneNumber.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
@@ -10,7 +11,10 @@ const UPLOAD_ERROR_KEYS = Object.freeze({
     UPLOAD_OBJECT_MISSING: 'uploadObjectMissing', UPLOAD_INTENT_EXPIRED: 'uploadIntentExpired',
     UPLOAD_INTENT_UNAVAILABLE: 'uploadIntentExpired', NETWORK_ERROR: 'finalizeUnknown',
     APPLICATION_SESSION_REQUIRED: 'sessionExpired', APPLICATION_NOT_EDITABLE: 'applicationNoLongerEditable',
-    DOCUMENT_NOT_EDITABLE: 'applicationNoLongerEditable', DECLARATION_VERSION_CONFLICT: 'declarationVersionChanged'
+    DOCUMENT_NOT_EDITABLE: 'applicationNoLongerEditable', DECLARATION_VERSION_CONFLICT: 'declarationVersionChanged',
+    CONTACT_ACKNOWLEDGEMENT_REQUIRED: 'contactAcknowledgementRequired',
+    CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT: 'contactAcknowledgementVersionChanged',
+    CONTACT_INFORMATION_INCOMPLETE: 'contactInformationIncomplete'
 });
 
 function readMessages(document) {
@@ -87,6 +91,38 @@ function createContinueButton(document, messages) {
     return button;
 }
 
+function createContactAcknowledgement(document, messages, isAccepted) {
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.name = 'contact_acknowledgement_accepted';
+    checkbox.required = true;
+    checkbox.checked = isAccepted;
+    label.className = 'contact-acknowledgement';
+    label.append(checkbox, createTranslatedElement(document, 'span', 'contactResponsibilityAcknowledgement', messages.contactResponsibilityAcknowledgement));
+    return label;
+}
+
+function canContinueContactStep(form) {
+    setContactPhoneValidity(form);
+    return Boolean(form?.checkValidity()
+        && form.querySelector('[name="contact_acknowledgement_accepted"]')?.checked === true);
+}
+
+function setContactPhoneValidity(form) {
+    const phone = form?.querySelector('[name="student_phone"]');
+    if (!phone) return;
+    const messages = readMessages(form.ownerDocument);
+    phone.setCustomValidity(phone.value.trim() && !isValidPhoneNumber(phone.value) ? messages.contactPhoneInvalid : '');
+}
+
+function updateContactContinueButton(root) {
+    const form = root.querySelector('#application-step-form');
+    const button = form?.querySelector('button[type="submit"]');
+    if (!form || !button) return;
+    button.disabled = !canContinueContactStep(form);
+}
+
 function createContactStep(document, application, formValues) {
     const messages = readMessages(document);
     const fields = { ...application, ...formValues };
@@ -100,7 +136,13 @@ function createContactStep(document, application, formValues) {
     }));
     form.querySelector('[name="student_number"]').disabled = Boolean(application);
     form.querySelector('[name="application_type"]').disabled = Boolean(application);
-    form.append(createContinueButton(document, messages));
+    const isContactAcknowledgementAccepted = application?.contact_acknowledgement?.accepted_current === true
+        || fields.contact_acknowledgement_accepted === true;
+    form.append(createContactAcknowledgement(document, messages, isContactAcknowledgementAccepted));
+    const continueButton = createContinueButton(document, messages);
+    form.append(continueButton);
+    setContactPhoneValidity(form);
+    continueButton.disabled = !canContinueContactStep(form);
     return form;
 }
 
@@ -680,8 +722,10 @@ async function handleDelete(root, state, api, code) {
 async function saveStep(root, state, api) {
     if (state.isAdvancing) return;
     const form = root.querySelector('#application-step-form');
+    if (state.step === 0) setContactPhoneValidity(form);
     if (form && !form.reportValidity()) return;
     const fields = readVisibleFields(root, state.application || {});
+    if (state.step === 0 && !canContinueContactStep(form)) return;
     state.formValues = fields;
     state.errorKey = null;
     state.isAdvancing = true;
@@ -692,6 +736,14 @@ async function saveStep(root, state, api) {
         } else if (state.application && state.step <= 1) {
             state.autosave.schedule(buildAutosaveValues(fields));
             if (!await state.autosave.flush()) throw Object.assign(new Error('Autosave failed.'), { code: 'AUTOSAVE_FAILED' });
+        }
+        if (state.step === 0 && !state.application.contact_acknowledgement?.accepted_current) {
+            const version = state.application.contact_acknowledgement?.current_version;
+            if (!version) throw Object.assign(new Error('Contact acknowledgement version is unavailable.'), { code: 'CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT' });
+            state.application = await api.acceptCurrentContactAcknowledgement(version);
+            if (!state.application.contact_acknowledgement?.accepted_current) {
+                throw Object.assign(new Error('Contact acknowledgement was not confirmed.'), { code: 'CONTACT_ACKNOWLEDGEMENT_REQUIRED' });
+            }
         }
         if (state.step === 1 && !canContinueResidenceStep(form, state.application)) {
             state.errorKey = null;
@@ -760,6 +812,12 @@ async function handleWizardClick(root, state, api, event) {
 }
 
 function handleWizardInput(root, state) {
+    if (state.step === 0) {
+        state.formValues = readVisibleFields(root, state.application || {});
+        if (state.application && state.autosave) scheduleCurrentFields(root, state);
+        updateContactContinueButton(root);
+        return;
+    }
     if (state.application && state.step <= 1 && state.autosave) scheduleCurrentFields(root, state);
     if (state.step === 1) updateResidenceContinueButton(root, readVisibleFields(root, state.application || {}));
 }
@@ -803,7 +861,7 @@ export async function initializeApplicationWizard(root, api) {
     root.ownerDocument.addEventListener('public:locale-changed', () => renderWizard(root, state));
     try {
         state.application = await api.readCurrentApplication();
-        state.step = 1;
+        state.step = state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0;
         state.autosave = createAutosave(state, api, root);
         await refreshRequirements(state, api);
     } catch (error) {
