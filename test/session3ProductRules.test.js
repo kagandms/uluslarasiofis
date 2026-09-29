@@ -325,6 +325,36 @@ test('document upload intents reject cross-origin mutations and expired student 
     assert.equal(expiredSession.status, 401);
 });
 
+test('staging signing diagnostics stay server-side while upload intent keeps its safe error contract', async (t) => {
+    const { environment } = createEnvironment();
+    const created = await createDraft(environment, '2026123916');
+    environment.APP_ENV = 'staging';
+    environment.R2_BUCKET_NAME = 'invalid/bucket-name';
+    environment.R2_ACCESS_KEY_ID = 'TEST-ACCESS-KEY-PRIVATE';
+    environment.R2_SECRET_ACCESS_KEY = 'TEST-SECRET-KEY-PRIVATE';
+    const serverLogs = [];
+    t.mock.method(console, 'error', (...args) => serverLogs.push(args));
+
+    const response = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
+        method: 'POST', cookie: created.cookie,
+        body: { code: 'fingerprint', filename: 'fingerprint.pdf', media_type: 'application/pdf', byte_size: 4 }
+    }), environment, {});
+    const payload = await response.json();
+    const responseText = JSON.stringify(payload);
+    const signingLog = serverLogs.find(([message]) => message === 'Student document upload capability failed.');
+    const diagnosticFields = signingLog?.[1];
+
+    assert.equal(response.status, 503);
+    assert.equal(payload.error.code, 'STORAGE_UNAVAILABLE');
+    assert.doesNotMatch(responseText, /TEST-ACCESS-KEY-PRIVATE|TEST-SECRET-KEY-PRIVATE|STORAGE_SIGNING_CONFIGURATION_ERROR|stack|R2 signing configuration/);
+    assert.equal(diagnosticFields.storageSigningStage, 'S3Client');
+    assert.equal(diagnosticFields.errorName, 'DocumentStorageError');
+    assert.equal(diagnosticFields.errorCode, 'STORAGE_SIGNING_CONFIGURATION_ERROR');
+    assert.match(diagnosticFields.errorMessage, /R2 signing configuration is unavailable/);
+    assert.match(diagnosticFields.errorStack, /createSigner/);
+    assert.doesNotMatch(JSON.stringify(diagnosticFields), /TEST-ACCESS-KEY-PRIVATE|TEST-SECRET-KEY-PRIVATE/);
+});
+
 test('fingerprint uploads use direct R2 capabilities and replacement creates a new current revision', async () => {
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123913');

@@ -150,9 +150,18 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
             expiresInSeconds: 300
         });
     } catch (error) {
+        const diagnostics = error?.storageSigningDiagnostics;
+        const logFields = {
+            storageSigningStage: diagnostics?.storageSigningStage || 'unknown',
+            errorName: diagnostics?.errorName || error?.name || 'UnknownError',
+            errorCode: diagnostics?.errorCode || error?.code || 'STORAGE_SIGNING_ERROR'
+        };
+        if (environment.APP_ENV === 'staging' && diagnostics) {
+            logFields.errorMessage = diagnostics.errorMessage;
+            logFields.errorStack = diagnostics.errorStack;
+        }
         console.error('Student document upload capability failed.', {
-            errorName: error?.name || 'UnknownError',
-            errorCode: error?.code || 'STORAGE_SIGNING_ERROR'
+            ...logFields
         });
         throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Belge yükleme hizmeti şu anda kullanılamıyor.', true);
     }

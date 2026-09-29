@@ -13,6 +13,44 @@ function createStorageError(message, code) {
     return error;
 }
 
+function redactSigningText(value, sensitiveValues) {
+    if (typeof value !== 'string') return '';
+    let safeText = value.replace(/https?:\/\/[^\s"'<>]+/gi, '[REDACTED_URL]');
+    safeText = safeText.replace(/([?&](?:X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token)=)[^&\s"'<>]+/gi, '$1[REDACTED]');
+    for (const sensitiveValue of sensitiveValues) {
+        if (typeof sensitiveValue !== 'string' || !sensitiveValue) continue;
+        for (const candidate of [sensitiveValue, encodeURIComponent(sensitiveValue)]) {
+            safeText = safeText.split(candidate).join('[REDACTED]');
+        }
+    }
+    return safeText;
+}
+
+/**
+ * Wraps an SDK signing error with safe internal diagnostics for the Worker log.
+ * @param {unknown} cause Original signing error.
+ * @param {string} stage S3Client, PutObjectCommand, GetObjectCommand, or getSignedUrl.
+ * @param {string[]} sensitiveValues Signing values to remove from diagnostic text.
+ * @returns {Error} Internal error with redacted signing-stage diagnostics.
+ */
+export function createStorageSigningFailure(cause, stage, sensitiveValues = []) {
+    const errorName = typeof cause?.name === 'string' ? cause.name : 'UnknownError';
+    const errorCode = typeof cause?.code === 'string' || typeof cause?.code === 'number'
+        ? String(cause.code)
+        : '';
+    const failure = new Error('R2 document capability signing failed.');
+    failure.name = errorName;
+    if (errorCode) failure.code = redactSigningText(errorCode, sensitiveValues);
+    failure.storageSigningDiagnostics = Object.freeze({
+        storageSigningStage: stage,
+        errorName: redactSigningText(errorName, sensitiveValues),
+        errorCode: redactSigningText(errorCode, sensitiveValues),
+        errorMessage: redactSigningText(cause?.message, sensitiveValues),
+        errorStack: redactSigningText(cause?.stack, sensitiveValues)
+    });
+    return failure;
+}
+
 function assertStorageKey(key) {
     if (typeof key === 'string' && STORAGE_KEY_PATTERN.test(key)) return;
     throw createStorageError('Storage key is outside the private quarantine namespace.', 'INVALID_STORAGE_KEY');
@@ -77,7 +115,7 @@ function createObjectOperations(bucket) {
     };
 }
 
-function createCapabilityGenerator(bucketName, readSigner, now) {
+function createCapabilityGenerator(bucketName, readSigner, now, signingValues) {
     return async (key, { expiresInSeconds = DEFAULT_SIGNED_ACCESS_SECONDS, contentType } = {}, operation) => {
         assertStorageKey(key);
         const expiry = readExpiry(expiresInSeconds);
@@ -86,14 +124,23 @@ function createCapabilityGenerator(bucketName, readSigner, now) {
             throw new TypeError('Storage clock must return a valid Date.');
         }
         const putType = operation === 'PUT' ? readContentType(contentType) : undefined;
-        const command = operation === 'PUT'
-            ? new PutObjectCommand({ Bucket: bucketName, Key: key, ContentType: putType })
-            : new GetObjectCommand({ Bucket: bucketName, Key: key });
-        const url = await getSignedUrl(readSigner(), command, {
-            expiresIn: expiry,
-            signingDate: signingTime,
-            ...(operation === 'PUT' ? { signableHeaders: new Set(['content-type']) } : {})
-        });
+        let stage = 'S3Client';
+        let url;
+        try {
+            const signer = readSigner();
+            stage = operation === 'PUT' ? 'PutObjectCommand' : 'GetObjectCommand';
+            const command = operation === 'PUT'
+                ? new PutObjectCommand({ Bucket: bucketName, Key: key, ContentType: putType })
+                : new GetObjectCommand({ Bucket: bucketName, Key: key });
+            stage = 'getSignedUrl';
+            url = await getSignedUrl(signer, command, {
+                expiresIn: expiry,
+                signingDate: signingTime,
+                ...(operation === 'PUT' ? { signableHeaders: new Set(['content-type']) } : {})
+            });
+        } catch (error) {
+            throw createStorageSigningFailure(error, stage, signingValues);
+        }
         return Object.freeze({
             method: operation,
             url,
@@ -117,7 +164,7 @@ export function createR2DocumentStorage(bucket, configuration = {}) {
     const now = configuration.now || (() => new Date());
     let signer;
     const readSigner = () => signer || (signer = createSigner({ accountId, bucketName, accessKeyId, secretAccessKey }));
-    const createCapability = createCapabilityGenerator(bucketName, readSigner, now);
+    const createCapability = createCapabilityGenerator(bucketName, readSigner, now, [accessKeyId, secretAccessKey]);
 
     return Object.freeze({
         createQuarantineKey: () => createQuarantineKey(createId),

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createDocumentStorage } from '../src/server/storage/documentStorage.js';
-import { createR2DocumentStorage } from '../src/server/storage/r2DocumentStorage.js';
+import { createR2DocumentStorage, createStorageSigningFailure } from '../src/server/storage/r2DocumentStorage.js';
 
 test('R2 storage uses generated quarantine keys without student identifiers or public URLs', async () => {
     const storedObjects = new Map();
@@ -77,6 +77,28 @@ test('R2 upload and read capabilities are method-bound, object-bound, and short-
     assert.doesNotMatch(JSON.stringify([upload, read, anotherObject]), /NEVER-RETURN-THIS-SECRET/);
     assert.match(uploadUrl.hostname, /r2\.cloudflarestorage\.com$/);
     assert.doesNotMatch(upload.url, /r2\.dev|r2\.cloudflarestorage\.com\.workers\.dev|pub-/i);
+});
+
+test('R2 signing diagnostics preserve the failure stage and redact credentials and signed URLs', () => {
+    const accessKeyId = 'TEST-ACCESS-KEY-PRIVATE';
+    const secretAccessKey = 'TEST-SECRET-KEY-PRIVATE';
+    const signedUrl = 'https://private.r2.example.test/quarantine/object?X-Amz-Signature=private-signature';
+    const cause = new TypeError(`Signing failed for ${accessKeyId} ${secretAccessKey} ${signedUrl}`);
+    cause.code = 'TEST_SIGNING_FAILURE';
+    cause.stack = `TypeError: ${cause.message}\n    at signer (${signedUrl})\n    ${secretAccessKey}`;
+
+    const failure = createStorageSigningFailure(cause, 'getSignedUrl', [accessKeyId, secretAccessKey]);
+    const diagnostics = failure.storageSigningDiagnostics;
+    const serialized = JSON.stringify(diagnostics);
+
+    assert.equal(failure.name, 'TypeError');
+    assert.equal(failure.code, 'TEST_SIGNING_FAILURE');
+    assert.equal(diagnostics.storageSigningStage, 'getSignedUrl');
+    assert.equal(diagnostics.errorName, 'TypeError');
+    assert.equal(diagnostics.errorCode, 'TEST_SIGNING_FAILURE');
+    assert.match(diagnostics.errorMessage, /Signing failed/);
+    assert.match(diagnostics.errorStack, /at signer/);
+    assert.doesNotMatch(serialized, /TEST-ACCESS-KEY-PRIVATE|TEST-SECRET-KEY-PRIVATE|private\.r2\.example\.test|private-signature/);
 });
 
 test('R2 signed capabilities reject expiry outside the documented 30 to 300 second range', async () => {
