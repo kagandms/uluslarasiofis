@@ -1,4 +1,6 @@
 import { PUBLIC_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
+import { initializeApplicationWizard } from './applicationWizard.js';
+import * as applicationApi from './applicationApi.js';
 
 const LOCALE_STORAGE_KEY = 'portal_ui_locale';
 const FALLBACK_LOCALE = 'tr';
@@ -62,6 +64,10 @@ function initPublicPortal() {
     });
 
     applyLocale(readSavedLocale());
+    if (document.body.dataset.page === 'application') {
+        const wizardRoot = document.getElementById('application-wizard');
+        if (wizardRoot) void initializeApplicationWizard(wizardRoot, applicationApi);
+    }
 }
 
 initPublicPortal();

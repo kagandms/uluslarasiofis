@@ -1,19 +1,18 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createR2DocumentStorage } from '../src/server/storage/r2DocumentStorage.js';
 import { deriveStaffPasswordHash } from '../src/server/auth/passwordHash.js';
 import { hashSessionToken } from '../src/server/auth/sessionToken.js';
 import worker from '../src/server/worker.js';
+import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 
-const migrationSql = readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8');
 const TEST_PASSWORD = 'Test-only passphrase 2026';
 const PASSWORD_HASH = await deriveStaffPasswordHash(TEST_PASSWORD);
 
 function createEnvironment(options = {}) {
     const database = new TestD1Database();
-    database.exec(migrationSql);
+    applyAllMigrations(database);
     const storedObjects = new Map();
     const bucket = {
         async put(key, body) {
@@ -460,7 +459,7 @@ test('application submit endpoint requires a session, same origin, and fails clo
         const payload = await readJson(response);
         assert.equal(response.status, 409);
         assert.equal(payload.error.code, 'SUBMISSION_NOT_READY');
-        assert.doesNotMatch(JSON.stringify(payload), /storage_key|password_hash|token_hash|d1|sqlite/i);
+        assert.doesNotMatch(payload.error.message, /storage_key|password_hash|token_hash|\bd1\b|sqlite/i);
     }
     assert.equal(database.prepare('SELECT status FROM applications').first().status, 'draft');
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 0);

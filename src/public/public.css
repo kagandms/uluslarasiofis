@@ -63,6 +63,42 @@ a { color: inherit; }
 .placeholder-panel { max-width: 54rem; margin: 1rem auto; padding: clamp(1.5rem, 5vw, 3rem); border: 1px solid #e4e5e8; border-radius: 1rem; background: #fff; box-shadow: 0 12px 36px rgb(31 35 41 / 5%); }
 .placeholder-panel a { display: inline-flex; margin-block-start: 1.5rem; color: #8b0000; font-weight: 650; text-underline-offset: 0.2rem; }
 
+.application-panel { max-width: 58rem; margin: 1rem auto; padding: clamp(1.25rem, 4vw, 2.5rem); border: 1px solid #e4e5e8; border-radius: 1rem; background: #fff; box-shadow: 0 12px 36px rgb(31 35 41 / 5%); }
+.application-panel h1 { margin: 0; color: #1f2329; font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.12; }
+.application-panel > p:not(.public-eyebrow) { max-width: 45rem; color: #59616d; line-height: 1.65; }
+.application-wizard { display: grid; gap: 1.25rem; margin-block-start: 2rem; }
+.application-progress { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.application-progress li { padding: 0.7rem 0.45rem; border-bottom: 3px solid #e5e7eb; color: #68707c; font-size: 0.82rem; }
+.application-progress li.is-current { border-color: #8b0000; color: #8b0000; font-weight: 700; }
+.application-progress li.is-complete { border-color: #3d7b58; color: #315f45; }
+.application-wizard h2 { margin: 0; font-size: 1.35rem; }
+.application-step-form, #application-step-form { display: grid; gap: 1rem; }
+.application-form-field { display: grid; gap: 0.45rem; color: #343943; font-weight: 650; }
+.application-form-field input, .application-form-field select { width: 100%; min-height: 2.8rem; padding: 0.6rem 0.75rem; border: 1px solid #cbd0d8; border-radius: 0.55rem; background: #fff; color: inherit; font: inherit; }
+.application-form-field input:focus-visible, .application-form-field select:focus-visible, .application-upload-control input:focus-visible, .application-button:focus-visible { outline: 3px solid rgb(139 0 0 / 32%); outline-offset: 2px; }
+.application-fieldset { display: grid; gap: 0.7rem; margin: 0; padding: 1rem; border: 1px solid #d8dce2; border-radius: 0.75rem; }
+.application-fieldset legend { padding-inline: 0.35rem; font-weight: 700; }
+.fingerprint-fields > label:not(:last-child) { display: flex; align-items: center; gap: 0.55rem; }
+.fingerprint-fields input[type="radio"] { accent-color: #8b0000; }
+.fingerprint-fields > p, .application-review-section > p:last-child { margin: 0; padding: 0.8rem; border-radius: 0.55rem; background: #fff5e5; color: #60430e; line-height: 1.55; }
+.application-button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0.65rem 1rem; border: 0; border-radius: 0.55rem; font: inherit; font-weight: 700; cursor: pointer; }
+.application-button-primary { background: #8b0000; color: #fff; }
+.application-button-secondary { background: #f1f2f4; color: #303640; }
+.application-document-list { display: grid; gap: 0.8rem; }
+.application-document-card { display: grid; gap: 0.55rem; padding: 1rem; border: 1px solid #e0e3e8; border-radius: 0.75rem; background: #fff; }
+.application-document-card h3 { margin: 0; font-size: 1.05rem; }
+.requirement-badge { width: fit-content; padding: 0.2rem 0.55rem; border-radius: 99px; background: #f0f1f3; color: #4c5562; font-size: 0.75rem; font-weight: 700; }
+.requirement-badge.is-required { background: #fff1f1; color: #8b0000; }
+.document-upload-status, .application-document-filename { margin: 0; color: #586170; font-size: 0.9rem; }
+.application-upload-control { display: grid; gap: 0.45rem; width: fit-content; color: #8b0000; font-weight: 700; }
+.application-upload-control input { max-width: 100%; color: #303640; font-weight: 400; }
+.application-upload-control small { color: #68707c; font-size: 0.78rem; font-weight: 400; }
+.application-review { display: grid; gap: 1.25rem; }
+.application-review-section { display: grid; gap: 0.6rem; padding: 1rem; border: 1px solid #e0e3e8; border-radius: 0.75rem; }
+.application-review-section h3 { margin: 0; }
+.application-review-section p { margin: 0; }
+.application-wizard [role="alert"] { margin: 0; color: #9b1c1c; font-weight: 650; }
+
 .public-footer { width: min(1120px, calc(100% - 2.5rem)); margin: 0 auto; padding-block: 1.25rem 2rem; border-top: 1px solid #e5e7eb; color: #68707c; font-size: 0.85rem; }
 
 html[dir="rtl"] .public-brand { direction: rtl; }
@@ -74,4 +110,5 @@ html[dir="rtl"] .public-card a { direction: rtl; }
     .public-cards { grid-template-columns: 1fr; }
     .public-card { min-height: unset; }
     .public-card p { min-height: unset; }
+    .application-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

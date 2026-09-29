@@ -1,6 +1,7 @@
 import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
 import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
 import { isRouteResult } from './http/routeResult.js';
+import { createCurrentStudentDocumentUploadIntent, finalizeCurrentStudentDocument, readCurrentStudentDocumentRequirements } from './routes/applicationDocumentRoutes.js';
 import { createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
@@ -48,6 +49,9 @@ async function routeApi(request, environment, requestId) {
     if (pathname === '/api/public/applications') return createApplicationDraft(request, environment, requestId);
     if (pathname === '/api/public/applications/current/status') return readCurrentApplicationStatus(request, environment);
     if (pathname === '/api/public/applications/current/submit') return submitCurrentApplication(request, environment, requestId);
+    if (pathname === '/api/public/applications/current/documents') return readCurrentStudentDocumentRequirements(request, environment);
+    if (pathname === '/api/public/applications/current/documents/upload-intent') return createCurrentStudentDocumentUploadIntent(request, environment);
+    if (pathname === '/api/public/applications/current/documents/finalize') return finalizeCurrentStudentDocument(request, environment);
     if (pathname === '/api/public/applications/current') {
         if (request.method === 'PATCH') return updateCurrentApplication(request, environment, requestId);
         return readCurrentApplication(request, environment);

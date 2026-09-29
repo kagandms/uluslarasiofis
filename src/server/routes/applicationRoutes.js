@@ -39,7 +39,9 @@ function createApplicationDto(application) {
         passport_number: application.passport_number,
         nationality: application.nationality,
         date_of_birth: application.date_of_birth,
-        is_under_18: application.is_under_18
+        is_under_18: application.is_under_18,
+        fingerprint_status: application.fingerprint_status ?? null,
+        fingerprint_code: application.fingerprint_code ?? null
     };
 }
 
@@ -74,7 +76,23 @@ async function persistDraftWithSession(repositories, draft, requestId) {
     }
 }
 
-function readDraftChanges(body) {
+function readFingerprintStatus(value) {
+    if (value === null) return null;
+    if (value === 'registered' || value === 'not_registered') return value;
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru bilgilerini kontrol edip tekrar deneyin.');
+}
+
+function readFingerprintCode(value) {
+    if (value === null) return null;
+    if (typeof value !== 'string') throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru bilgilerini kontrol edip tekrar deneyin.');
+    const code = value.trim();
+    if (code.length > 128 || /[\u0000-\u001f\u007f]/u.test(code)) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru bilgilerini kontrol edip tekrar deneyin.');
+    }
+    return code || null;
+}
+
+function readDraftChanges(body, application) {
     const changes = {};
     for (const [field, repositoryField] of Object.entries(DRAFT_FIELDS)) {
         if (Object.hasOwn(body, field)) changes[repositoryField] = requireString(body, field, { max: field === 'student_email' ? 254 : 255 });
@@ -82,6 +100,17 @@ function readDraftChanges(body) {
     if (Object.hasOwn(body, 'is_under_18')) {
         if (typeof body.is_under_18 !== 'boolean') throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru bilgilerini kontrol edip tekrar deneyin.');
         changes.isUnder18 = body.is_under_18 ? 1 : 0;
+    }
+    const fingerprintStatus = Object.hasOwn(body, 'fingerprint_status')
+        ? readFingerprintStatus(body.fingerprint_status)
+        : application.fingerprint_status;
+    if (Object.hasOwn(body, 'fingerprint_status')) changes.fingerprintStatus = fingerprintStatus;
+    if (Object.hasOwn(body, 'fingerprint_code')) {
+        const submittedCode = readFingerprintCode(body.fingerprint_code);
+        changes.fingerprintCode = fingerprintStatus === 'registered' ? submittedCode : null;
+    }
+    if (Object.hasOwn(body, 'fingerprint_status') && fingerprintStatus !== 'registered') {
+        changes.fingerprintCode = null;
     }
     if (Object.hasOwn(changes, 'studentEmail') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(changes.studentEmail)) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'E-posta adresini kontrol edip tekrar deneyin.');
@@ -138,8 +167,10 @@ export async function updateCurrentApplication(request, environment, requestId) 
     requireSameOrigin(request);
     const session = await requireApplicationSession(request, environment);
     if (session.status !== 'draft') throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
-    const changes = readDraftChanges(await readJsonBody(request));
     const repositories = createRepositories(environment);
+    const currentApplication = await repositories.applications.findById(session.application_id);
+    if (!currentApplication) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+    const changes = readDraftChanges(await readJsonBody(request), currentApplication);
     const application = await repositories.applications.updateDraft(session.application_id, changes);
     if (!application) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
     await createAuditEvent(repositories, {

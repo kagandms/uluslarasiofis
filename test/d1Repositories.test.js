@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createD1Repositories } from '../src/server/repositories/d1/index.js';
+import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
-
-const migrationSql = readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8');
 
 function createRepositories() {
     const database = new TestD1Database();
-    database.exec(migrationSql);
+    applyAllMigrations(database);
     return { database, repositories: createD1Repositories(database) };
 }
 

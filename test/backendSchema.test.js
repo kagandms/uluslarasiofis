@@ -2,14 +2,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { applyAllMigrations } from './helpers/apply-migrations.js';
 
-const migrationPath = new URL('../migrations/0001_backend_foundation.sql', import.meta.url);
-const migrationSql = readFileSync(migrationPath, 'utf8');
+const foundationMigration = readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8');
+const session3Migration = readFileSync(new URL('../migrations/0002_session3_fingerprint_and_birth_certificate.sql', import.meta.url), 'utf8');
 
 function createDatabase() {
     const database = new DatabaseSync(':memory:');
     database.exec('PRAGMA foreign_keys = ON;');
-    database.exec(migrationSql);
+    applyAllMigrations(database);
     return database;
 }
 
@@ -42,6 +43,35 @@ test('backend migration creates the complete Session 2 data foundation', () => {
     ]) {
         assert.ok(tableNames.includes(tableName), `missing table: ${tableName}`);
     }
+});
+
+test('Session 3 migration adds nullable fingerprint fields and only the new conditional certificate requirement', () => {
+    const database = new DatabaseSync(':memory:');
+    database.exec('PRAGMA foreign_keys = ON;');
+    database.exec(foundationMigration);
+    insertStudent(database, 'student-before-upgrade', '2026123455');
+    insertApplication(database, 'application-before-upgrade', 'student-before-upgrade');
+    database.exec(session3Migration);
+
+    const application = database.prepare(`
+        SELECT fingerprint_status, fingerprint_code FROM applications WHERE id = 'application-before-upgrade'
+    `).get();
+    const ageRequirements = database.prepare(`
+        SELECT code, application_type, is_required FROM document_requirements
+        WHERE code LIKE '%birth_certificate%' OR code LIKE '%parental%' OR code LIKE '%guardian%'
+        ORDER BY application_type, code
+    `).all();
+    const fingerprintCount = database.prepare(`
+        SELECT COUNT(*) AS count FROM document_requirements WHERE code = 'fingerprint'
+    `).get().count;
+
+    assert.equal(application.fingerprint_status, null);
+    assert.equal(application.fingerprint_code, null);
+    assert.deepEqual(ageRequirements.map(({ code, application_type, is_required }) => ({ code, application_type, is_required })), [
+        { code: 'birth_certificate_under18', application_type: 'initial', is_required: 1 },
+        { code: 'birth_certificate_under18', application_type: 'renewal', is_required: 1 }
+    ]);
+    assert.equal(fingerprintCount, 2);
 });
 
 test('database allows only one active application per normalized student number', () => {

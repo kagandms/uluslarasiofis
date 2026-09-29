@@ -10,6 +10,8 @@ const PUBLIC_APPLICATION_FIELDS = Object.freeze({
     nationality: 'nationality',
     dateOfBirth: 'date_of_birth',
     isUnder18: 'is_under_18',
+    fingerprintStatus: 'fingerprint_status',
+    fingerprintCode: 'fingerprint_code',
     declarationVersion: 'declaration_version',
     declarationAcceptedAt: 'declaration_accepted_at'
 });
