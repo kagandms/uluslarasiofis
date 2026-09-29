@@ -1,0 +1,7 @@
+# Local-only Worker variables. Copy to .dev.vars; never commit actual values.
+STAFF_BOOTSTRAP_TOKEN=
+APPS_SCRIPT_URL=
+APPS_SCRIPT_API_KEY=
+AZURE_VISION_ENDPOINT=
+AZURE_VISION_KEY=
+GOOGLE_VISION_API_KEY=

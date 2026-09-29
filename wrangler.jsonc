@@ -1,0 +1,50 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "uluslarasiofis-local",
+  "main": "./src/server/worker.js",
+  "compatibility_date": "2026-09-28",
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "404-page"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "uluslarasiofis-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+      "remote": false
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DOCUMENTS",
+      "bucket_name": "uluslarasiofis-documents-local",
+      "remote": false
+    }
+  ],
+  "env": {
+    "staging": {
+      "name": "uluslarasiofis-staging",
+      "vars": {
+        "APP_ENV": "staging"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "uluslarasiofis-staging",
+          "database_id": "8f034e90-17fc-43d7-aa5d-125571019612",
+          "migrations_dir": "migrations",
+          "remote": false
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "DOCUMENTS",
+          "bucket_name": "uluslarasiofis-documents-staging",
+          "remote": false
+        }
+      ]
+    }
+  }
+}

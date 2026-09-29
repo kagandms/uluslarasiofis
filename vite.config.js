@@ -2,6 +2,7 @@ import { join, resolve } from 'node:path';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
+import { cloudflare } from '@cloudflare/vite-plugin';
 import { PDFJS_VERSION } from './src/config/pdfjs-version.js';
 
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
@@ -56,14 +57,18 @@ function pdfjsSupportAssetsPlugin() {
 }
 
 export default defineConfig({
-    plugins: [pdfjsSupportAssetsPlugin()],
-    build: {
-        rollupOptions: {
-            input: {
-                portal: resolve(projectRoot, 'index.html'),
-                application: resolve(projectRoot, 'basvuru/index.html'),
-                tracking: resolve(projectRoot, 'basvurum/index.html'),
-                staff: resolve(projectRoot, 'yetkili/index.html')
+    plugins: [cloudflare(), pdfjsSupportAssetsPlugin()],
+    environments: {
+        client: {
+            build: {
+                rollupOptions: {
+                    input: {
+                        portal: resolve(projectRoot, 'index.html'),
+                        application: resolve(projectRoot, 'basvuru/index.html'),
+                        tracking: resolve(projectRoot, 'basvurum/index.html'),
+                        staff: resolve(projectRoot, 'yetkili/index.html')
+                    }
+                }
             }
         }
     }

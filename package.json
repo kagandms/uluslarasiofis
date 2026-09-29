@@ -4,14 +4,21 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "test": "node --test test/**/*.test.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/**/*.test.js",
+    "test:backend": "node --disable-warning=ExperimentalWarning --test test/backendSchema.test.js test/d1Repositories.test.js test/documentStorage.test.js test/backendApiContract.test.js",
     "package:extension": "node scripts/package-extension.mjs",
     "pretest": "npm run package:extension",
     "predev": "npm run package:extension",
     "dev": "vite",
+    "dev:worker": "vite dev",
     "prebuild": "npm run package:extension",
     "build": "vite build",
-    "preview": "vite preview"
+    "prebuild:staging": "npm run package:extension",
+    "build:staging": "node scripts/build-staging.mjs",
+    "preview": "vite preview",
+    "db:migrate:local": "wrangler d1 migrations apply uluslarasiofis-local --local",
+    "db:migrate:staging": "wrangler d1 migrations apply uluslarasiofis-staging --remote --env staging",
+    "deploy:staging": "npm run build:staging && wrangler deploy"
   },
   "repository": {
     "type": "git",
@@ -26,11 +33,13 @@
   },
   "homepage": "https://github.com/kagandms/ikamet#readme",
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.62.0",
     "jsdom": "^29.1.1",
     "pdfjs-dist": "6.3.289",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "wrangler": "^4.143.0"
   },
-  "dependencies": {
-    "jsonwebtoken": "^9.0.3"
+  "overrides": {
+    "undici": "7.30.0"
   }
 }

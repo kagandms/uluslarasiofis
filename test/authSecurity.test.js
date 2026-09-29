@@ -1,190 +1,183 @@
 import assert from 'node:assert/strict';
-import jwt from 'jsonwebtoken';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import loginHandler from '../api/login.js';
-import logoutHandler from '../api/logout.js';
-import sessionHandler from '../api/session.js';
-import addTebligatHandler from '../api/add-tebligat.js';
-import getAllTebligatHandler from '../api/get-all-tebligat.js';
-import removeTebligatHandler from '../api/remove-tebligat.js';
-import searchTebligatHandler from '../api/search-tebligat.js';
-import unmarkTebligatHandler from '../api/unmark-tebligat.js';
-import updateTebligatHandler from '../api/update-tebligat.js';
-import ocrHandler from '../api/ocr.js';
-import { verifyToken } from '../api/_auth.js';
+import { deriveStaffPasswordHash } from '../src/server/auth/passwordHash.js';
+import { hashSessionToken } from '../src/server/auth/sessionToken.js';
+import worker from '../src/server/worker.js';
+import { TestD1Database } from './helpers/d1-test-binding.js';
 
-const TEST_PASSWORD = 'test-only-password';
-const TEST_SECRET = 'test-only-secret-with-sufficient-length';
-const originalAuthEnvironment = {
-    sitePassword: process.env.SITE_PASSWORD,
-    jwtSecret: process.env.JWT_SECRET
-};
+const migrationSql = readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8');
+const TEST_PASSWORD = 'test-only secure staff password';
+const TEST_PASSWORD_HASH = await deriveStaffPasswordHash(TEST_PASSWORD);
 
-function createResponse() {
-    return {
-        statusCode: 200,
-        body: undefined,
-        headers: {},
-        status(statusCode) {
-            this.statusCode = statusCode;
-            return this;
-        },
-        json(body) {
-            this.body = body;
-            return this;
-        },
-        setHeader(name, value) {
-            this.headers[name.toLowerCase()] = value;
-        }
-    };
+function createEnvironment(options = {}) {
+    const database = new TestD1Database();
+    database.exec(migrationSql);
+    return { DB: database, ...options };
 }
 
-function signSession() {
-    return jwt.sign({ role: 'staff', auth: true }, TEST_SECRET, { expiresIn: '1h' });
+async function seedStaff(database, passwordHash = TEST_PASSWORD_HASH) {
+    await database.prepare(`
+        INSERT INTO staff_users (
+            id, username, normalized_username, password_hash, display_name, role
+        ) VALUES ('staff-1', 'test.staff', 'test.staff', ?, 'Test Staff', 'admin')
+    `).bind(passwordHash).run();
 }
 
-test.beforeEach(() => {
-    process.env.JWT_SECRET = TEST_SECRET;
-    process.env.SITE_PASSWORD = TEST_PASSWORD;
+async function seedSession(database, token) {
+    await database.prepare(`
+        INSERT INTO staff_sessions (id, staff_user_id, token_hash, expires_at)
+        VALUES ('session-1', 'staff-1', ?, ?)
+    `).bind(await hashSessionToken(token), new Date(Date.now() + 60_000).toISOString()).run();
+}
+
+function createRequest(path, { method = 'GET', body, cookie, authorization, origin = 'https://portal.test' } = {}) {
+    const headers = new Headers({ Origin: origin });
+    if (body !== undefined) headers.set('Content-Type', 'application/json');
+    if (cookie) headers.set('Cookie', cookie);
+    if (authorization) headers.set('Authorization', authorization);
+    return new Request(`https://portal.test${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body)
+    });
+}
+
+test('staff login uses an individual D1 account and sets an opaque HttpOnly cookie', async () => {
+    const environment = createEnvironment();
+    await seedStaff(environment.DB);
+    const response = await worker.fetch(createRequest('/api/staff/auth/login', {
+        method: 'POST', body: { username: 'test.staff', password: TEST_PASSWORD }
+    }), environment, {});
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.authenticated, true);
+    assert.match(response.headers.get('Set-Cookie'), /^staff_session=.+; HttpOnly; Secure; SameSite=Strict; Path=\/; Max-Age=43200$/);
+    assert.doesNotMatch(JSON.stringify(payload), /password_hash|token|stack/i);
 });
 
-test.afterEach(() => {
-    if (originalAuthEnvironment.jwtSecret === undefined) delete process.env.JWT_SECRET;
-    else process.env.JWT_SECRET = originalAuthEnvironment.jwtSecret;
-    if (originalAuthEnvironment.sitePassword === undefined) delete process.env.SITE_PASSWORD;
-    else process.env.SITE_PASSWORD = originalAuthEnvironment.sitePassword;
+test('staff APIs reject bearer tokens and requests without a session cookie', async () => {
+    const environment = createEnvironment();
+    const response = await worker.fetch(createRequest('/api/staff/auth/session', {
+        authorization: 'Bearer token-that-must-not-authorize'
+    }), environment, {});
+
+    assert.equal(response.status, 401);
+    assert.equal((await response.json()).error.code, 'UNAUTHORIZED');
 });
 
-test('staff auth accepts an HttpOnly session cookie without exposing bearer tokens', () => {
-    delete process.env.SITE_PASSWORD;
-    const request = { headers: { cookie: `staff_session=${signSession()}` } };
+test('staff APIs report a missing D1 binding as service unavailable', async () => {
+    const response = await worker.fetch(createRequest('/api/staff/auth/session'), {}, {});
+    const payload = await response.json();
 
-    assert.equal(verifyToken(request), true);
+    assert.equal(response.status, 503);
+    assert.equal(payload.error.code, 'SERVICE_UNAVAILABLE');
+    assert.doesNotMatch(JSON.stringify(payload), /D1Database|RepositoryConfigurationError|stack/i);
 });
 
-test('staff auth rejects bearer tokens and requests without a session cookie', () => {
-    const request = { headers: { authorization: `Bearer ${signSession()}` } };
+test('staff auth rejects malformed session cookies', async () => {
+    const environment = createEnvironment();
+    const response = await worker.fetch(createRequest('/api/staff/auth/session', {
+        cookie: 'staff_session=short-token'
+    }), environment, {});
 
-    assert.equal(verifyToken(request), false);
-    assert.equal(verifyToken({ headers: {} }), false);
+    assert.equal(response.status, 401);
 });
 
-test('staff auth reports missing signing configuration separately', () => {
-    delete process.env.JWT_SECRET;
+test('staff login fails safely when the database binding is unavailable', async () => {
+    const response = await worker.fetch(createRequest('/api/staff/auth/login', {
+        method: 'POST', body: { username: 'test.staff', password: 'a secure passphrase' }
+    }), {}, {});
+    const payload = await response.json();
 
-    assert.equal(verifyToken({ headers: {} }), 'MISSING_CONFIG');
+    assert.equal(response.status, 503);
+    assert.doesNotMatch(JSON.stringify(payload), /SITE_PASSWORD|JWT_SECRET|stack|undefined/i);
 });
 
-test('staff auth rejects an undersized signing secret as missing configuration', () => {
-    process.env.JWT_SECRET = 'short';
+test('staff session endpoint authenticates only an active D1 session cookie', async () => {
+    const environment = createEnvironment();
+    const token = 't'.repeat(43);
+    await seedStaff(environment.DB);
+    await seedSession(environment.DB, token);
+    const response = await worker.fetch(createRequest('/api/staff/auth/session', {
+        cookie: `staff_session=${token}`
+    }), environment, {});
+    const payload = await response.json();
 
-    assert.equal(verifyToken({ headers: {} }), 'MISSING_CONFIG');
+    assert.equal(response.status, 200);
+    assert.equal(payload.authenticated, true);
+    assert.equal(payload.staff.id, 'staff-1');
+    assert.doesNotMatch(JSON.stringify(payload), /password_hash|token_hash/i);
 });
 
-test('login sets a secure HttpOnly cookie and returns no token to JavaScript', async () => {
-    const response = createResponse();
+test('logout revokes the D1 session and expires its secure cookie', async () => {
+    const environment = createEnvironment();
+    const token = 'l'.repeat(43);
+    await seedStaff(environment.DB);
+    await seedSession(environment.DB, token);
+    const response = await worker.fetch(createRequest('/api/staff/auth/logout', {
+        method: 'POST', cookie: `staff_session=${token}`
+    }), environment, {});
 
-    await loginHandler({
-        method: 'POST',
-        headers: { origin: 'http://localhost:5173', host: 'localhost:5173' },
-        body: { password: TEST_PASSWORD, rememberMe: false }
-    }, response);
-
-    assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.body, { success: true });
-    assert.match(response.headers['set-cookie'], /^staff_session=.+; HttpOnly; Secure; SameSite=Strict; Path=\/; Max-Age=43200$/);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).success, true);
+    assert.match(response.headers.get('Set-Cookie'), /^staff_session=; HttpOnly; Secure; SameSite=Strict; Path=\/; Max-Age=0$/);
+    assert.ok(environment.DB.prepare('SELECT revoked_at FROM staff_sessions').first().revoked_at);
 });
 
-test('login clears the session cookie when configured secrets are missing', async () => {
-    delete process.env.JWT_SECRET;
-    const response = createResponse();
-
-    await loginHandler({
-        method: 'POST',
-        headers: { origin: 'http://localhost:5173', host: 'localhost:5173' },
-        body: { password: TEST_PASSWORD }
-    }, response);
-
-    assert.equal(response.statusCode, 500);
-    assert.doesNotMatch(JSON.stringify(response.body), /JWT_SECRET|stack|undefined/i);
-});
-
-test('session endpoint authenticates only the session cookie', async () => {
-    const response = createResponse();
-
-    await sessionHandler({ method: 'GET', headers: { cookie: `staff_session=${signSession()}` } }, response);
-
-    assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.body, { authenticated: true });
-});
-
-test('logout revokes the browser cookie', async () => {
-    const response = createResponse();
-
-    await logoutHandler({
-        method: 'POST',
-        headers: { origin: 'http://localhost:5173', host: 'localhost:5173' }
-    }, response);
-
-    assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.body, { success: true });
-    assert.match(response.headers['set-cookie'], /^staff_session=; HttpOnly; Secure; SameSite=Strict; Path=\/; Max-Age=0$/);
-});
-
-test('state-changing APIs reject cross-origin requests before calling upstream services', async () => {
+test('cross-origin staff mutations are rejected before calling upstream services', async () => {
+    const environment = createEnvironment({ APPS_SCRIPT_URL: 'https://apps.example.test/exec', APPS_SCRIPT_API_KEY: 'test-key' });
+    const token = 'c'.repeat(43);
+    await seedStaff(environment.DB);
+    await seedSession(environment.DB, token);
     const originalFetch = globalThis.fetch;
     let upstreamCalled = false;
     globalThis.fetch = async () => {
         upstreamCalled = true;
-        return { ok: true, status: 200, text: async () => '{"success":true}' };
+        return new Response('{"success":true}');
     };
 
     try {
-        const response = createResponse();
-        await addTebligatHandler({
-            method: 'POST',
-            headers: {
-                cookie: `staff_session=${signSession()}`,
-                origin: 'https://attacker.example',
-                host: 'portal.example'
-            },
+        const response = await worker.fetch(createRequest('/api/add-tebligat', {
+            method: 'POST', cookie: `staff_session=${token}`, origin: 'https://attacker.example',
             body: { sayfa: '01.01.2026', isim: 'Test' }
-        }, response);
-
-        assert.equal(response.statusCode, 403);
-        assert.equal(upstreamCalled, false);
+        }), environment, {});
+        assert.equal(response.status, 403);
+        assert.equal((await response.json()).error.code, 'CROSS_ORIGIN_REQUEST');
     } finally {
         globalThis.fetch = originalFetch;
     }
+    assert.equal(upstreamCalled, false);
 });
 
-test('every protected endpoint rejects missing sessions before calling upstream services', async () => {
-    const upstreamFetch = globalThis.fetch;
-    let upstreamCalled = false;
-    globalThis.fetch = async () => {
-        upstreamCalled = true;
-        return { ok: true, status: 200, text: async () => '{"success":true}' };
-    };
-
-    const protectedEndpoints = [
-        [getAllTebligatHandler, { method: 'GET', headers: {}, query: {} }],
-        [searchTebligatHandler, { method: 'GET', headers: {}, query: { q: 'test', year: '2026' } }],
-        [addTebligatHandler, { method: 'POST', headers: {}, body: { sayfa: '01.01.2026', isim: 'Test' } }],
-        [updateTebligatHandler, { method: 'POST', headers: {}, body: { sayfa: '01.01.2026', isim: 'Test', no: '1' } }],
-        [unmarkTebligatHandler, { method: 'POST', headers: {}, body: { sayfa: '01.01.2026', isim: 'Test', no: '1' } }],
-        [removeTebligatHandler, { method: 'POST', headers: {}, body: { sayfa: '01.01.2026', isim: 'Test', no: '1' } }],
-        [ocrHandler, { method: 'POST', headers: {}, body: {} }]
+test('all existing protected APIs reject missing sessions before upstream requests', async () => {
+    const environment = createEnvironment();
+    const protectedRequests = [
+        ['/api/get-all-tebligat', { method: 'GET' }],
+        ['/api/search-tebligat?q=test&year=2026', { method: 'GET' }],
+        ['/api/add-tebligat', { method: 'POST', body: { sayfa: '01.01.2026', isim: 'Test' } }],
+        ['/api/update-tebligat', { method: 'POST', body: { sayfa: '01.01.2026', isim: 'Test', no: '1' } }],
+        ['/api/unmark-tebligat', { method: 'POST', body: { sayfa: '01.01.2026', isim: 'Test', no: '1' } }],
+        ['/api/remove-tebligat', { method: 'POST', body: { sayfa: '01.01.2026', isim: 'Test', no: '1' } }],
+        ['/api/ocr', { method: 'POST', body: {} }]
     ];
 
-    try {
-        for (const [handler, request] of protectedEndpoints) {
-            const response = createResponse();
-            await handler(request, response);
-            assert.equal(response.statusCode, 401);
-        }
-    } finally {
-        globalThis.fetch = upstreamFetch;
+    for (const [path, options] of protectedRequests) {
+        const response = await worker.fetch(createRequest(path, options), environment, {});
+        assert.equal(response.status, 401, path);
     }
+});
 
-    assert.equal(upstreamCalled, false);
+test('legacy session route remains backed by individual staff sessions', async () => {
+    const environment = createEnvironment();
+    const token = 'b'.repeat(43);
+    await seedStaff(environment.DB);
+    await seedSession(environment.DB, token);
+    const response = await worker.fetch(createRequest('/api/session', {
+        cookie: `staff_session=${token}`
+    }), environment, {});
+
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).authenticated, true);
 });

@@ -1,11 +1,12 @@
 const LOGIN_ERROR_MESSAGES = Object.freeze({
-    400: 'Şifre alanı zorunludur.',
-    401: 'Şifre hatalı. Bilgilerinizi kontrol edip tekrar deneyin.',
-    500: 'Giriş şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.'
+    400: 'Kullanıcı adı ve şifre alanlarını kontrol edin.',
+    401: 'Kullanıcı adı veya şifre hatalı. Bilgilerinizi kontrol edip tekrar deneyin.',
+    429: 'Çok fazla başarısız giriş denemesi yapıldı. Bir süre sonra tekrar deneyin.',
+    503: 'Giriş şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.'
 });
 
 async function requestSession() {
-    const response = await fetch('/api/session', {
+    const response = await fetch('/api/staff/auth/session', {
         credentials: 'same-origin',
         cache: 'no-store'
     });
@@ -13,8 +14,8 @@ async function requestSession() {
 }
 
 /**
- * Reads the authenticated state returned by the staff session API.
- * @param {Response} response The response from `/api/session`.
+ * Reads the authenticated state returned by the D1-backed staff session API.
+ * @param {Response} response The response from `/api/staff/auth/session`.
  * @returns {Promise<'authenticated' | 'unauthenticated' | 'error'>} The validated session state.
  */
 export async function readStaffSessionState(response) {
@@ -43,6 +44,7 @@ export async function initStaffAuth() {
     const loginOverlay = document.getElementById('login-overlay');
     const appContent = document.getElementById('app-content');
     const loginForm = document.getElementById('login-form');
+    const usernameInput = document.getElementById('login-username');
     const passwordInput = document.getElementById('login-password');
     const rememberCheckbox = document.getElementById('login-remember');
     const loginButton = document.getElementById('btn-login-submit');
@@ -86,7 +88,7 @@ export async function initStaffAuth() {
 
     loginForm?.addEventListener('submit', async (event) => {
         event.preventDefault();
-        if (!loginButton || !passwordInput) return;
+        if (!loginButton || !usernameInput || !passwordInput) return;
 
         const originalContent = loginButton.innerHTML;
         loginButton.disabled = true;
@@ -94,11 +96,12 @@ export async function initStaffAuth() {
         setAlert(loginError, '');
 
         try {
-            const response = await fetch('/api/login', {
+            const response = await fetch('/api/staff/auth/login', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    username: usernameInput.value,
                     password: passwordInput.value,
                     rememberMe: rememberCheckbox?.checked === true
                 })
@@ -134,7 +137,7 @@ export async function initStaffAuth() {
         logoutButton.disabled = true;
         setAlert(globalError, '');
         try {
-            const response = await fetch('/api/logout', {
+            const response = await fetch('/api/staff/auth/logout', {
                 method: 'POST',
                 credentials: 'same-origin'
             });

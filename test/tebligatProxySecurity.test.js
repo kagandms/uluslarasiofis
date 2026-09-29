@@ -3,56 +3,44 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { callAppsScript } from '../api/_tebligat.js';
+import { callAppsScript } from '../src/server/services/appsScriptProxy.js';
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 
 test('Apps Script proxy sends its credential in a server-side POST body', async () => {
-    const originalFetch = globalThis.fetch;
-    process.env.APPS_SCRIPT_URL = 'https://apps.example.test/exec';
-    process.env.APPS_SCRIPT_API_KEY = 'test-only-api-key';
+    const environment = {
+        APPS_SCRIPT_URL: 'https://apps.example.test/exec',
+        APPS_SCRIPT_API_KEY: 'test-only-api-key'
+    };
     let requestUrl;
     let requestOptions;
-    globalThis.fetch = async (url, options) => {
+    const fetcher = async (url, options) => {
         requestUrl = String(url);
         requestOptions = options;
-        return { ok: true, status: 200, text: async () => '{"success":true}' };
+        return new Response('{"success":true}');
     };
 
-    try {
-        const result = await callAppsScript('update', { sayfa: '01.01.2026', isim: 'Test', no: '1' });
+    const result = await callAppsScript('update', { sayfa: '01.01.2026', isim: 'Test', no: '1' }, environment, fetcher);
 
-        assert.deepEqual(result, { success: true });
-        assert.equal(requestUrl, process.env.APPS_SCRIPT_URL);
-        assert.equal(requestOptions.method, 'POST');
-        assert.equal(requestOptions.headers['Content-Type'], 'application/json');
-        assert.deepEqual(JSON.parse(requestOptions.body), {
-            action: 'update',
-            key: 'test-only-api-key',
-            sayfa: '01.01.2026',
-            isim: 'Test',
-            no: '1'
-        });
-    } finally {
-        globalThis.fetch = originalFetch;
-        delete process.env.APPS_SCRIPT_URL;
-        delete process.env.APPS_SCRIPT_API_KEY;
-    }
+    assert.deepEqual(result, { success: true });
+    assert.equal(requestUrl, environment.APPS_SCRIPT_URL);
+    assert.equal(requestOptions.method, 'POST');
+    assert.equal(requestOptions.headers['Content-Type'], 'application/json');
+    assert.equal(requestOptions.redirect, 'error');
+    assert.deepEqual(JSON.parse(requestOptions.body), {
+        action: 'update',
+        key: 'test-only-api-key',
+        sayfa: '01.01.2026',
+        isim: 'Test',
+        no: '1'
+    });
 });
 
 test('Apps Script proxy rejects unknown actions and missing server configuration', async () => {
-    const originalUrl = process.env.APPS_SCRIPT_URL;
-    const originalKey = process.env.APPS_SCRIPT_API_KEY;
-    delete process.env.APPS_SCRIPT_URL;
-    delete process.env.APPS_SCRIPT_API_KEY;
+    const missingEnvironment = {};
 
-    await assert.rejects(callAppsScript('deleteEverything'), /Unsupported Apps Script action/);
-    await assert.rejects(callAppsScript('getAll'), /Server configuration/);
-
-    if (originalUrl === undefined) delete process.env.APPS_SCRIPT_URL;
-    else process.env.APPS_SCRIPT_URL = originalUrl;
-    if (originalKey === undefined) delete process.env.APPS_SCRIPT_API_KEY;
-    else process.env.APPS_SCRIPT_API_KEY = originalKey;
+    await assert.rejects(callAppsScript('deleteEverything', {}, missingEnvironment), (error) => error.code === 'UNSUPPORTED_ACTION');
+    await assert.rejects(callAppsScript('getAll', {}, missingEnvironment), (error) => error.code === 'MISSING_CONFIGURATION');
 });
 
 test('browser tebligat code uses same-origin APIs and contains no Apps Script endpoint or key', async () => {
