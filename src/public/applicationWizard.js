@@ -190,6 +190,18 @@ function createFilePolicyText(document, requirement, messages) {
     return messages.filePolicy.replace('{types}', types).replace('{size}', `${size} MB`);
 }
 
+function isFingerprintUploadEligible(application) {
+    if (application?.fingerprint_status !== 'registered' || typeof application.fingerprint_code !== 'string') return false;
+    const code = application.fingerprint_code.trim();
+    return code.length > 0 && code.length <= 128 && !/[\u0000-\u001f\u007f]/u.test(code);
+}
+
+function fingerprintBlockMessageKey(application) {
+    if (application?.fingerprint_status === 'not_registered') return 'fingerprintProgressBlocked';
+    if (application?.fingerprint_status === 'registered') return 'fingerprintCodeMissing';
+    return 'fingerprintAnswerMissing';
+}
+
 function createFileInput(document, requirement, task, messages) {
     const label = document.createElement('label');
     const textKey = requirement.filename ? 'replaceDocument' : 'uploadDocument';
@@ -227,6 +239,7 @@ function createUploadProgress(document, task, messages) {
 function createDocumentCard(document, requirement, state, { allowUpload }) {
     const messages = readMessages(document);
     const task = state.uploads[requirement.code];
+    const fingerprintUploadBlocked = requirement.code === 'fingerprint' && !isFingerprintUploadEligible(state.application);
     const card = document.createElement('article');
     const title = createTranslatedElement(document, 'h3', requirement.label_key, messages[requirement.label_key] || messages.documentNotUploaded);
     const description = createTranslatedElement(document, 'p', requirement.description_key, messages[requirement.description_key] || '');
@@ -242,12 +255,18 @@ function createDocumentCard(document, requirement, state, { allowUpload }) {
     const progress = createUploadProgress(document, task, messages);
     if (progress) card.append(progress);
     if (!allowUpload) return card;
-    card.append(createFileInput(document, requirement, task, messages));
-    if (task && ['failed_upload', 'failed_finalize', 'unknown_finalize_result', 'cancelled'].includes(task.state)) {
-        card.append(createButton(document, messages, 'retryUpload', 'document-retry'));
-    }
-    if (task && task.state === 'uploading') {
-        card.append(createButton(document, messages, 'cancelUpload', 'document-cancel'));
+    if (fingerprintUploadBlocked) {
+        const messageKey = state.application?.fingerprint_status === 'not_registered'
+            ? 'fingerprintUploadBlocked' : fingerprintBlockMessageKey(state.application);
+        card.append(createTranslatedElement(document, 'p', messageKey, messages[messageKey]));
+    } else {
+        card.append(createFileInput(document, requirement, task, messages));
+        if (task && ['failed_upload', 'failed_finalize', 'unknown_finalize_result', 'cancelled'].includes(task.state)) {
+            card.append(createButton(document, messages, 'retryUpload', 'document-retry'));
+        }
+        if (task && task.state === 'uploading') {
+            card.append(createButton(document, messages, 'cancelUpload', 'document-cancel'));
+        }
     }
     if (requirement.filename || requirement.cleanup_status === 'pending') {
         const remove = createButton(document, messages, requirement.cleanup_status === 'pending' ? 'retryCleanup' : 'deleteDocument', 'document-delete');
@@ -658,6 +677,10 @@ async function saveStep(root, state, api) {
         } else if (state.application && state.step <= 1) {
             state.autosave.schedule(buildAutosaveValues(fields));
             if (!await state.autosave.flush()) throw Object.assign(new Error('Autosave failed.'), { code: 'AUTOSAVE_FAILED' });
+        }
+        if (state.step === 1 && !isFingerprintUploadEligible(state.application)) {
+            state.errorKey = fingerprintBlockMessageKey(state.application);
+            return;
         }
         if (state.step === 1 || state.step === 2) await refreshRequirements(state, api);
         if (state.step === 3) {

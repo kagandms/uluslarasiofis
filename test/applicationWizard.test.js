@@ -14,6 +14,45 @@ function fillRequiredResidenceFields(root) {
     Object.entries(fields).forEach(([name, value]) => { root.querySelector(`[name="${name}"]`).value = value; });
 }
 
+function createFingerprintRequirements() {
+    return ['fingerprint', 'passport_identity'].map((code) => ({
+        code, required: true, label_key: code === 'fingerprint' ? 'documentFingerprint' : 'documentPassportIdentity',
+        description_key: code === 'fingerprint' ? 'documentFingerprintHelp' : 'documentPassportIdentityHelp',
+        accepted_media_types: ['application/pdf'], max_byte_size: 1024, filename: null, upload_status: null
+    }));
+}
+
+async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null) {
+    const { document, root } = createRoot();
+    const application = {
+        status: 'draft', application_type: 'initial', student_number: 'S3-FP-1',
+        student_email: 'student@example.edu', student_phone: '+905551112233',
+        first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish',
+        date_of_birth: '2000-01-01', is_under_18: 0,
+        fingerprint_status: fingerprintStatus, fingerprint_code: fingerprintCode,
+        declaration: { current_version: 'ack-v1', content_key: 'studentInformationAccuracy', accepted_current: false }
+    };
+    const api = {
+        async readCurrentApplication() { return { ...application }; },
+        async updateCurrentApplication(fields) {
+            Object.assign(application, fields);
+            if (application.fingerprint_status !== 'registered') application.fingerprint_code = null;
+            else application.fingerprint_code = typeof application.fingerprint_code === 'string'
+                ? application.fingerprint_code.trim() || null : null;
+            return { ...application };
+        },
+        async readCurrentStudentDocumentRequirements() { return { requirements: createFingerprintRequirements() }; }
+    };
+    const state = await initializeApplicationWizard(root, api);
+    return { document, root, state, api };
+}
+
+async function submitWizard(root) {
+    root.querySelector('#application-step-form').dispatchEvent(new root.ownerDocument.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+}
+
 test('registered fingerprint state shows the dedicated code input and preserves a safe code value', () => {
     const { document, root } = createRoot();
     renderFingerprintSection(root, { fingerprint_status: 'registered', fingerprint_code: 'FP-A/42' });
@@ -47,6 +86,53 @@ test('registered fingerprint state with no code remains an explicit incomplete a
 
     assert.ok(root.querySelector('input[name="fingerprint_code"]'));
     assert.match(root.textContent, /kodu girilmedi/i);
+    document.defaultView.close();
+});
+
+test('not-registered fingerprint state saves but blocks Continue with the Migration Authority instruction', async () => {
+    const { document, root, state } = await createFingerprintWizard('not_registered');
+
+    assert.equal(root.querySelector('[name="fingerprint_code"]'), null);
+    await submitWizard(root);
+
+    assert.equal(state.application.fingerprint_status, 'not_registered');
+    assert.equal(state.step, 1);
+    assert.match(root.textContent, /Devam edebilmek için önce Göç İdaresi’nde parmak izi işleminizi tamamlamalısınız\./);
+    document.defaultView.close();
+});
+
+test('registered fingerprint with missing or whitespace-only code cannot Continue', async () => {
+    for (const code of [null, '   ']) {
+        const { document, root, state } = await createFingerprintWizard('registered', code);
+        await submitWizard(root);
+
+        assert.equal(state.step, 1);
+        assert.match(root.textContent, /Parmak izi kodu girilmedi/);
+        document.defaultView.close();
+    }
+});
+
+test('registered fingerprint with a non-empty code can Continue to enabled fingerprint upload', async () => {
+    const { document, root, state } = await createFingerprintWizard('registered', 'FP-A/42');
+
+    await submitWizard(root);
+
+    assert.equal(state.step, 2);
+    assert.ok(root.querySelector('[data-document-code="fingerprint"] input[type="file"]'));
+    assert.ok(root.querySelector('[data-document-code="passport_identity"] input[type="file"]'));
+    document.defaultView.close();
+});
+
+test('not-registered fingerprint document card has no upload control and leaves other uploads enabled', async () => {
+    const { document, root, state } = await createFingerprintWizard('not_registered');
+    state.step = 2;
+    document.dispatchEvent(new document.defaultView.CustomEvent('public:locale-changed', { detail: 'tr' }));
+
+    const fingerprintCard = root.querySelector('[data-document-code="fingerprint"]');
+    assert.ok(fingerprintCard);
+    assert.equal(fingerprintCard.querySelector('input[type="file"]'), null);
+    assert.match(fingerprintCard.textContent, /Önce Göç İdaresi’nde parmak izi işleminizi tamamlayın\./);
+    assert.ok(root.querySelector('[data-document-code="passport_identity"] input[type="file"]'));
     document.defaultView.close();
 });
 
@@ -156,8 +242,9 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
 
     fillRequiredResidenceFields(root);
     root.querySelector('[name="is_under_18"]').value = 'false';
-    root.querySelector('[name="fingerprint_status"][value="not_registered"]').checked = true;
-    root.querySelector('[name="fingerprint_status"][value="not_registered"]').dispatchEvent(new window.Event('change', { bubbles: true }));
+    root.querySelector('[name="fingerprint_status"][value="registered"]').checked = true;
+    root.querySelector('[name="fingerprint_status"][value="registered"]').dispatchEvent(new window.Event('change', { bubbles: true }));
+    root.querySelector('[name="fingerprint_code"]').value = 'FP-A/42';
     root.querySelector('#application-step-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(state.step, 2);
@@ -223,9 +310,10 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     const state = await initializeApplicationWizard(root, api);
     fillRequiredResidenceFields(root);
     root.querySelector('[name="is_under_18"]').value = 'false';
-    const notRegistered = root.querySelector('[name="fingerprint_status"][value="not_registered"]');
-    notRegistered.checked = true;
-    notRegistered.dispatchEvent(new window.Event('change', { bubbles: true }));
+    const registered = root.querySelector('[name="fingerprint_status"][value="registered"]');
+    registered.checked = true;
+    registered.dispatchEvent(new window.Event('change', { bubbles: true }));
+    root.querySelector('[name="fingerprint_code"]').value = 'FP-A/42';
     root.querySelector('#application-step-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(state.step, 2);

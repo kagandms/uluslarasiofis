@@ -80,6 +80,20 @@ function requireDraftApplication(application) {
     }
 }
 
+function requireFingerprintRegistration(application, code) {
+    if (code !== 'fingerprint') return;
+    const fingerprintCode = typeof application.fingerprint_code === 'string'
+        ? application.fingerprint_code.trim() : '';
+    const hasValidCode = fingerprintCode.length > 0 && fingerprintCode.length <= 128
+        && !/[\u0000-\u001f\u007f]/u.test(fingerprintCode);
+    if (application.fingerprint_status === 'registered' && hasValidCode) return;
+    throw new ApiError(
+        409,
+        'FINGERPRINT_REGISTRATION_REQUIRED',
+        'Parmak izi belgesi yüklemek için önce Göç İdaresi’nde parmak izi işleminizi tamamlayıp geçerli kodunuzu kaydedin.'
+    );
+}
+
 function requireOwnedRequirement(requirements, code) {
     const requirement = requirements.find((entry) => entry.code === code);
     if (requirement) return requirement;
@@ -134,6 +148,7 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
     const policy = readDocumentPolicy(requestedCode, application.application_type, application.is_under_18 === 1);
     const metadata = requireUploadMetadata(body, policy);
     requireDraftApplication(application);
+    requireFingerprintRegistration(application, metadata.code);
     requireOwnedRequirement(requirements, metadata.code);
     const requirement = await repositories.documents.findStudentRequirementId(application.application_type, metadata.code);
     if (!requirement) throw new ApiError(404, 'DOCUMENT_REQUIREMENT_NOT_FOUND', 'Bu başvuru için belge gereksinimi bulunamadı.');
@@ -222,6 +237,7 @@ export async function finalizeCurrentStudentDocument(request, environment) {
     }
     if (intent.intent_status === 'completed') return { document: createFinalizedDocumentDto(intent) };
     if (intent.intent_status !== 'pending') throw new ApiError(409, 'UPLOAD_INTENT_UNAVAILABLE', 'Belge yükleme bağlantısı artık kullanılamıyor.');
+    requireFingerprintRegistration(application, intent.code);
     if (new Date(intent.expires_at).valueOf() <= Date.now()) {
         await repositories.documents.expireStudentUploadIntent(application.id, intent.id);
         throw new ApiError(409, 'UPLOAD_INTENT_EXPIRED', 'Belge yükleme süresi doldu. Yeni bir yükleme başlatın.');
