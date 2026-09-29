@@ -1,121 +1,140 @@
-# Session 3 Completion Report
+# SESSION 3 FINAL ACCEPTANCE REPORT
 
-## BASELINE
+## A. GIT / BASELINE
 
 - Canonical checkout: `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main`.
 - Required branch: `codex/phase4-phase5-public-wizard-upload`.
-- Session 2 baseline: `e6c6190565b5b29c941ec4be8b2353f0f1d6310b` (`fix: close phase2 phase3 backend acceptance gaps`).
-- Recovery began with `HEAD` exactly at that baseline and the existing Session 3 worktree changes present on `codex/phase2-phase3-cloudflare-backend`. The target branch was created from that exact `HEAD`; switching branches retained all tracked and untracked worktree changes. No main merge, rebase, reset, or Session 2 history edit was used.
-- Scope: public student application wizard, student-safe requirement API, private direct-R2 upload/finalize lifecycle, and the product-owner fingerprint and under-18 decisions. Unrelated stabilization-plan items are outside this Session 3 change set.
+- Session 2 final baseline: `e6c6190565b5b29c941ec4be8b2353f0f1d6310b`.
+- Session 3 implementation commit already on this branch: `1078b91e195f2a79716a0694d08055f6ab367f74` (`feat: add public application wizard and private document uploads`), whose parent is the Session 2 baseline.
+- Session 3 closeout source commit: `b8afb8d` (`fix: complete session3 wizard and upload acceptance`), directly on top of `1078b91e195f2a79716a0694d08055f6ab367f74`.
+- Closeout began with `HEAD` at `1078b91e195f2a79716a0694d08055f6ab367f74`, merge-base exactly `e6c6190565b5b29c941ec4be8b2353f0f1d6310b`, and all existing closeout edits present in the working tree. The final closeout source and report are committed on the required branch; this report was updated after the source validation gate.
+- No main merge, main rebase, reset, forced update, or Session 2 history edit was performed. The Session 2 branch remains at the baseline.
+- Scope is Session 3 public application wizard and private document upload acceptance. Phase 6 and unrelated stabilization-plan work were not started.
 
-## DOCUMENT SOURCE AUDIT
+## B. AUTHORITATIVE DOCUMENT SOURCE AUDIT
 
-- The Session 2 database seed in `migrations/0001_backend_foundation.sql` is the current server-side residence-document source. It contains application form, passport identity, photographs, health insurance, renewal UETS, student certificate, residence fee, address document, fingerprint, and home utility bill requirements. The student upload flow now reads these rows through the D1 document repository; the browser does not define the canonical requirement set.
-- The existing fingerprint requirements are `req-initial-fingerprint` and `req-renewal-fingerprint`, both using document code `fingerprint`. Session 3 reuses these records and does not add another fingerprint row.
-- The baseline contains no birth-certificate requirement. Migration `0002` adds a required `birth_certificate_under18` row per application type only when an equivalent `birth_certificate` code does not already exist. The server filters it out for adults and requires it for under-18 applications.
-- Before Session 3 there was no public student wizard/document-requirement endpoint or student upload-intent/finalize route in this backend. Staff document routes remain separate.
-- `migrations/0001_backend_foundation.sql` is unchanged.
+- Read-only source inspected from `origin/main` at `9d055bf4f9f0e723bae2762d31d18c6395ed01ca`: `src/config/documentsConfig.js` links the office checklist titled “İkamet/Kimlik Başvurusu İçin Gerekli Evrak Listesi” to `/documents/ikamet_kimlik_basvurusu_icin_verilmesi_gereken_evraklar.pdf`.
+- The one-page source PDF is image-only. It was rendered and visually reviewed; no text was inferred from an OCR result.
+- The published checklist lists: (1) E-ikamet application form; (2) passport and residence-card photocopies; (3) four photographs; (4) health insurance; (5) UETS for residence renewals; (6) current student certificate; (7) residence-permit card fee; (8) rental contract, undertaking, or address registration; (9) fingerprint; and (10) a home utility bill.
+- These ten categories reconcile with the Session 3 D1 requirement codes seeded by `migrations/0001_backend_foundation.sql`. The student requirement API reads the active D1 rows and applies server-owned labels, descriptions, accepted types, size limits, and age applicability. The source-accurate description clarifies passport plus residence card and the four-photo count, and marks UETS as renewal-only.
+- The checklist presents address evidence as alternatives but does not specify which alternative applies to each applicant. The UI preserves that choice for the applicant and does not invent an applicant-specific rule.
+- Existing `fingerprint` requirement rows are reused. Birth certificate is not represented as an item in this source PDF; its under-18 requirement is a separate, explicit product-owner rule.
 
-## PHASE 4 matrix
+## C. PHASE 4 ACCEPTANCE MATRIX
 
-| Area | Result | Evidence |
+| Acceptance area | Result | Evidence |
 |---|---|---|
-| Public student application wizard | PASS — contact/application type, personal/residence fields, under-18 choice, fingerprint choice, and review are rendered on the public application page. | `basvuru/index.html`, `src/public/applicationWizard.js` |
-| Localized product wording | PASS — new prompts, notices, review labels, and document names are supplied through the existing TR/EN/RU/TK/AR locale dictionaries. | `src/public/i18n/messages.js`; locale parity test |
-| Fingerprint registration state | PASS — explicit `registered` / `not_registered` status is persisted through the owner-session application API; missing code remains incomplete. | `src/server/routes/applicationRoutes.js`; `test/session3ProductRules.test.js`; `test/applicationWizard.test.js` |
-| Safe draft and review state | PASS — student DTO exposes only the current owner's application fields; review renders text safely and excludes internal IDs. | `src/public/applicationWizard.js`; backend API contract tests |
-| Submission | PASS — final submission still returns the existing fail-closed `SUBMISSION_NOT_READY` outcome; no second fake submit rule was added. | `test/backendApiContract.test.js` |
+| Public student application wizard | PASS | Five-step flow for contact and application type, applicant/residence details, conditional requirements, upload/review, and declaration in `basvuru/index.html` and `src/public/applicationWizard.js`. |
+| Localized student-facing flow | PASS | New prompts, requirement descriptions, notices, upload states, review, and declaration are represented in the existing TR/EN/RU/TK/AR dictionaries in `src/public/i18n/messages.js`; locale parity is tested. |
+| Server-backed draft and resume | PASS | Debounced serialized autosave uses the owner-session API; manual reload/resume restored the synthetic local draft. See `src/public/draftAutosave.js` and application routes. |
+| Fingerprint product state | PASS | Explicit `registered` / `not_registered` status and separate code field; no code is treated as identity or authorization. Automated product-rule and route tests cover the contract. |
+| Declaration | PASS | Current server-configured version is shown, acceptance timestamp is server-generated, and version mismatch is rejected. Manual Arabic acknowledgement displayed the persisted server timestamp. |
+| Safe review | PASS | Review uses text rendering and student-safe DTOs; internal IDs, storage keys, and credentials are not exposed. |
+| Submission behavior | PASS | Submission remains fail-closed; no OCR, malware result, or successful submission is fabricated. Backend contract tests cover the existing not-ready response. |
 
-## PHASE 5 matrix
+## D. PHASE 5 ACCEPTANCE MATRIX
 
-| Area | Result | Evidence |
+| Acceptance area | Result | Evidence |
 |---|---|---|
-| Server-calculated requirement list | PASS — current application type and saved age state determine requirements; request-supplied document codes cannot add requirements. | `src/server/domain/documentRequirements.js`, `src/server/repositories/d1/documentRepository.js`; Session 3 product tests |
-| Birth certificate | PASS — required for under-18, absent for adults, and recalculated after the saved age state changes. | Migration and `test/session3ProductRules.test.js` |
-| Upload lifecycle | PASS — owner-scoped intent, direct short-lived R2 PUT capability, server object verification, finalize, and revision promotion. | `src/server/routes/applicationDocumentRoutes.js`, D1 repository, R2 storage adapter |
-| File constraints | PASS — PDF/JPEG/PNG/WEBP, maximum 10 MiB, safe filename, then actual R2 size and content-type check. | `applicationDocumentRoutes.js`; mismatch/finalize tests |
-| Replacement and scanning state | PASS — a new revision does not replace the current revision until finalize; scan state remains `pending` until a real scanner changes it. | `documentRepository.js`; revision and R2 lifecycle tests |
-| Cross-student access | PASS — requirements, intents, finalize, fingerprint state, and age-conditioned requirements are owner-session scoped; Student A cannot read or mutate Student B's records. | `test/session3ProductRules.test.js` |
-| Fake processing | PASS — no OCR or malware-scan result is fabricated by the student upload flow. | Upload route returns `scan_status: pending`; upload tests |
+| Requirement calculation | PASS | Server calculates the active source requirements from application type and persisted age; client-provided document codes cannot add requirements. `src/server/domain/documentPolicy.js` and `test/documentPolicy.test.js`. |
+| Upload intent and private storage | PASS | Owner-scoped intent issues a short-lived, object-bound direct PUT capability for private R2; file bytes travel browser-to-R2, not through the Worker. Routes and tests cover intent ownership and finalize. |
+| File validation | PASS | PDF/JPEG/PNG/WEBP and the per-policy maximum are checked before signing; finalization verifies stored size and content type. |
+| Progress, retry, cancellation | PASS | Browser XHR reports byte progress and supports cancellation/timeout; per-document retry retains the upload intent when finalization is ambiguous. API and wizard tests cover progress and retry behavior. |
+| Replacement and delete | PASS | Replacement is promoted only after finalize. Delete removes the file from student-visible state first and records retryable R2 cleanup; approved and under-review documents are locked. `test/session3CloseoutRoutes.test.js` includes the under-review regression. |
+| Pending scan | PASS | New revisions remain `pending`; no fake malware scan is returned. |
+| Student A/B isolation | PASS | Requirement reads, fingerprint/age state, intents, finalize, replacement, and delete are owner-session scoped. Student A/B cross-owner cases are covered by backend tests. |
 
-## FINGERPRINT + UNDER-18 PRODUCT RULES
+## E. FINGERPRINT + UNDER-18 RULES
 
-- `applications.fingerprint_status` stores the explicit nullable enum `registered` or `not_registered`. Null keeps Session 2 drafts valid until the student answers.
-- `applications.fingerprint_code` is a separate nullable field. The server trims it, rejects control characters, and caps it at 128 characters without imposing an undocumented format. `not_registered` clears a prior code. A registered student with no code sees an incomplete action; no code is fabricated.
-- The wizard asks “Göç İdaresi sisteminde parmak izi kaydınız var mı?” with Yes/No choices. Registered reveals the code input. Not registered shows the supplied Migration Authority notice and preserves the outstanding action in the saved review state. Both states are localized through the existing public i18n architecture.
-- The existing fingerprint document is the `fingerprint` requirement seeded as `req-initial-fingerprint` and `req-renewal-fingerprint` in `migrations/0001_backend_foundation.sql`. The new requirement API and upload lifecycle reuse it; the migration does not duplicate it.
-- Fingerprint status and code do not authenticate or authorize anyone. The opaque `application_session` cookie is the ownership credential. Student number remains an identifier only.
-- The server computes the birth-certificate requirement from the saved `is_under_18` value for reads, upload-intent creation, and finalize. It is required for under-18 applications and excluded for adult applications.
-- Birth certificate is the ONLY newly activated under-18-specific document. No parental consent, guardian passport, custody document, apostille, translated parental document, or other age-specific requirement was added.
+- Fingerprint status is explicitly `registered` or `not_registered`; null remains valid for an unanswered Session 2 draft.
+- Fingerprint code is a separate optional field. It is required to finish the registered branch, is validated only for safe length/control characters, and is cleared when status becomes `not_registered`.
+- The not-registered branch displays the Migration Authority follow-up notice. It does not fabricate registration or let the code authenticate, identify, or authorize an applicant. The opaque application-session cookie is the ownership credential.
+- The existing `fingerprint` document requirement is reused for both application types. No duplicate fingerprint requirement was introduced.
+- A saved under-18 application requires the birth certificate; an adult application does not receive that conditional requirement. Requirement reads, upload intent, and finalize use the server-saved age value.
+- Birth certificate is the only under-18-specific document added by the confirmed product rule. No parental consent, guardian ID, custody record, apostille, translation, or other unconfirmed document was invented.
 
-## DATA / MIGRATION CHANGES
+## F. MIGRATIONS / DATA MODEL
 
-- Added forward-only migration `migrations/0002_session3_fingerprint_and_birth_certificate.sql`: nullable constrained fingerprint status, nullable code capped at 128 trimmed characters, and guarded conditional birth-certificate requirement rows for initial and renewal applications.
-- Updated the D1 application allowlist and student-safe DTO for the two fingerprint fields. Existing arbitrary-field rejection remains in place.
-- Added student requirement lookup and owner-bound upload-intent/revision operations to the D1 document repository. The intent is private and non-current until successful finalize.
-- No remote D1 migration was applied. The migration is exercised against the Session 2 baseline schema in automated tests.
+- Session 2 baseline `e6c619…` contains migration `0001_backend_foundation.sql` and does not contain `0002`.
+- Session 3 commit `1078b91…` adds `0002_session3_fingerprint_and_birth_certificate.sql`: nullable constrained fingerprint status, separate bounded code, and guarded birth-certificate requirement rows for initial and renewal applications.
+- This closeout adds `0003_session3_document_cleanup.sql` for recoverable private-object deletion state (`cleanup_status`, `cleanup_requested_at`, and an index). `0001` and Session 2 history are unchanged.
+- The D1 application allowlist/DTO and document repository support the new fields and student-scoped flows. No remote D1 migration was applied; local isolated D1 validation used the migrations in sequence.
+- Both Session 3 migrations (`0002`, then `0003`) still require owner review/application in the intended remote environment.
 
-## SECURITY REVIEW
+## G. SECURITY REVIEW
 
-- Student mutations require the current opaque application session and same-origin requests. Requirement reads and every intent lookup/finalize are scoped to that session's application. Expired sessions and cross-origin mutations are rejected.
-- The Worker handles only bounded JSON metadata and opaque intent IDs for student upload endpoints. It does not accept or proxy document bytes. The browser PUTs the file directly to private R2 using a method- and object-bound capability valid for 300 seconds; the upload intent expires after 10 minutes.
-- The student API does not return an application ID or a separate raw `storage_key`. The short-lived signed URL is intentionally returned as the direct-upload capability and necessarily identifies its one R2 target; it is used transiently by `fetch(upload.url)`. It is not written to browser storage or logs.
-- Finalize checks the stored object size and content type against the intent before revision promotion. Mismatches are rejected and the quarantine object is deleted. New uploads remain pending scan; no malware verdict is simulated.
-- Upload-signing and Worker error logs include only correlation ID and safe error name/code. Fingerprint code, signed URL, file bytes, and raw storage key are not logged.
-- Browser storage scan: the Session 3 wizard/API modules do not use `localStorage`, `sessionStorage`, or `IndexedDB` for applicant data, codes, files, upload intents, or signed URLs. The public bootstrap's existing `portal_ui_locale` localStorage value is a locale preference. A repository-wide scan also found existing localStorage draft/history/Tebligat behavior in separate legacy flows (`src/managers/draftManager.js`, `src/managers/historyManager.js`, `src/ui/tebligatSearch.js`); those files are unchanged and are outside the Session 3 wizard. No `sessionStorage` or `IndexedDB` usage was found.
-- Service worker scan: `/api/`, `/basvuru`, `/basvurum`, non-GET requests, and cross-origin requests (including signed R2 uploads) stay network-only. Only static same-origin assets use the cache.
-- Credential scan: no hard-coded credential patterns were found across 129 tracked/non-ignored text files; the known dummy bearer value in a negative auth test was excluded as a test placeholder. `SITE_PASSWORD` and `JWT_SECRET` appear only in an assertion checking that error responses do not expose them. Browser JS/MJS bundles contain no credential markers. `.dev.vars` is not tracked.
-- Client storage-key scan found no `storage_key`, `storageKey`, `object_key`, or `objectKey` field in public source or built browser JS/MJS.
-- Tracked-file review found no local D1 database, logs, upload directory, screenshot, PDF/WebP document fixture, or generated build/extension artifact in the Session 3 change set. Existing repository logo/image assets are unchanged.
+- Student mutations require the opaque current application session and same-origin checks. Requirement reads, intent lookups, finalization, and document changes are scoped to the session's application. Cross-student tests reject Student A access to Student B records.
+- Worker upload endpoints accept bounded JSON metadata and opaque intent identifiers only. They do not read or proxy document request bodies. The browser sends document bytes directly to private R2 with a short-lived signed PUT capability; the intent itself expires after ten minutes.
+- The signed URL is used transiently by `XMLHttpRequest.open(method, url, true)`. It is not persisted in browser storage or written to logs. Raw storage keys remain server-side.
+- Finalization checks R2 object size and content type against the policy and upload intent before promotion. Mismatches are rejected and the quarantine object is deleted. New revisions remain pending scan.
+- Application and cleanup logs contain safe correlation/error metadata only; they do not log file bytes, fingerprint code, signed URLs, or raw object keys.
+- Session 3 wizard/API code does not store applicant data, codes, file contents, upload intents, or signed URLs in localStorage, sessionStorage, or IndexedDB. The existing `portal_ui_locale` preference remains in localStorage. Separate legacy flows still use localStorage in `src/managers/draftManager.js`, `src/managers/historyManager.js`, and `src/ui/tebligatSearch.js`; those modules are outside this wizard and were not changed. No sessionStorage or IndexedDB use was found under `src`.
+- `public/sw.js` bypasses cache for APIs, student pages, non-GET and cross-origin requests; only static same-origin assets are cached.
+- Hard-coded credential scan found no production-source matches. Remaining credential-like matches are test-only dummy bearer/password/cookie fixtures and an assertion that verifies error responses do not disclose `SITE_PASSWORD` or `JWT_SECRET`. Those names do not occur in production configuration/source. Built `dist/client` JS/MJS contains no `SITE_PASSWORD`, `JWT_SECRET`, R2/AWS credential, or signed-query credential markers.
+- Client source and browser bundle scans found no raw storage-key field. `.dev.vars` is absent and untracked.
+- Tracked-change review found no local D1 database, temporary upload, log, screenshot, personal document fixture, or generated build junk in the Session 3 diff. Existing repository image assets are unchanged.
 
-## TEST / BUILD EVIDENCE
+## H. TEST / BUILD EVIDENCE
 
-Commands were run on `codex/phase4-phase5-public-wizard-upload`, with `HEAD` still at the Session 2 baseline during validation:
+The full requested gate was run after the final source change, on the required branch with `HEAD` at `1078b91e195f2a79716a0694d08055f6ab367f74`. It exercised the same source changes committed for this closeout. The report update followed validation.
 
-| Command | Exact result |
+| Command/check | Exact result |
 |---|---|
-| `npm ci` | Exit 0; added 120 packages; npm reported 0 vulnerabilities. |
-| `npm test` | Exit 0; 177 tests, 177 pass, 0 fail, 0 skipped; duration 18,852.294834 ms. Includes the extension packaging pretest. |
-| `npm run test:backend` | Exit 0; 42 tests, 42 pass, 0 fail, 0 skipped; duration 2,029.788833 ms. |
-| `npm run build` | Exit 0; Vite 8.2.2 transformed 789 modules. Existing non-blocking `INEFFECTIVE_DYNAMIC_IMPORT` warning for `src/services/ocrService.js`. |
-| `npm run build:staging` | Exit 0; staging build completed; 789 modules transformed. Same existing non-blocking OCR dynamic-import warning. |
-| `npm run deploy:dry-run:staging` | Exit 0; Wrangler dry-run completed and exited without deployment. It resolved staging D1 `uluslarasiofis-staging`, R2 `uluslarasiofis-documents-staging`, assets, and `APP_ENV=staging`; total upload 747.78 KiB (167.88 KiB gzip). |
-| `npm audit` | Exit 0; 0 vulnerabilities. |
-| Changed JS/MJS `node --check` | Exit 0 for every changed public, server, and test JS module. |
-| Hard-coded credential scan | PASS across 129 tracked/non-ignored text files; only known dummy negative-test bearer placeholder excluded. |
-| `SITE_PASSWORD` / `JWT_SECRET` scan | Only the safe-error-response assertion in `test/authSecurity.test.js`; no credential values/configuration in source. |
-| Browser bundle credential scan | PASS; no credential markers in `dist/client` JS/MJS. |
-| Signed URL persistence/log scan | PASS by source audit: URL is used only for direct PUT; no browser persistence or URL logging. |
-| Storage-key client scan | PASS; no raw storage-key field in public source or built browser bundles. |
-| Sensitive browser storage scan | PASS for Session 3 wizard/API fields; existing legacy storage uses are recorded in SECURITY REVIEW. |
-| Direct Worker-body document proxy scan | PASS; no document-body read/proxy in student Worker routes. |
-| Service-worker private-data cache scan | PASS; APIs, student pages, mutations, and external-origin traffic bypass cache. |
+| `npm ci` | PASS, exit 0; added 120 packages, audited 121, 0 vulnerabilities. |
+| `npm test` | PASS, exit 0; 194 tests, 194 pass, 0 fail, 0 skipped, 0 todo; 17,221.61125 ms. Includes the extension packaging pretest. |
+| `npm run test:backend` | PASS, exit 0; 42 tests, 42 pass, 0 fail, 0 skipped; 1,834.03425 ms. |
+| `npm run build` | PASS, exit 0; Vite 8.2.2 transformed 789 modules. Existing non-blocking `INEFFECTIVE_DYNAMIC_IMPORT` warning in `src/services/ocrService.js`. |
+| `npm run build:staging` | PASS, exit 0; 789 modules; same existing OCR dynamic-import warning. |
+| `npm run deploy:dry-run:staging` | PASS, exit 0; Wrangler dry-run exited without deploying. Resolved staging D1 `uluslarasiofis-staging`, R2 `uluslarasiofis-documents-staging`, assets, `APP_ENV=staging`, and `PUBLIC_DECLARATION_VERSION`; upload 763.59 KiB (170.46 KiB gzip). |
+| `npm audit` | PASS, exit 0; 0 vulnerabilities. |
+| Changed JavaScript/module syntax | PASS; `node --check` passed all 16 changed JS/MJS files. |
+| Hard-coded secret scan | PASS for production source; test-only placeholder/assertion matches reviewed. |
+| `SITE_PASSWORD` / `JWT_SECRET` scan | Only the safe-error disclosure assertion in `test/authSecurity.test.js`; no runtime source/config match. |
+| Browser bundle credential scan | PASS; zero credential markers in `dist/client` JS/MJS. |
+| Signed URL persistence/log scan | PASS by source review; only transient direct PUT use, no persistence/logging. |
+| Storage-key client leak scan | PASS; no storage/object key field in public source or built browser JS/MJS. |
+| Sensitive localStorage/sessionStorage/IndexedDB scan | PASS for the Session 3 wizard/API; legacy localStorage uses are itemized in SECURITY REVIEW. No `sessionStorage` or IndexedDB usage found under `src`. |
+| Worker-body document proxy scan | PASS; no student-route request body read/proxy for document bytes. |
+| Service-worker private/sensitive cache scan | PASS; API/student/mutation/cross-origin requests bypass cache. |
 | `git diff --check` | PASS; no whitespace errors. |
 
-The build and test logs contain expected safe error logs from tests that exercise unavailable-service and rollback paths; those tests passed. Build output contains the existing OCR chunking warning described above.
+Tests emitted expected safe error logs from unavailable-service and rollback scenarios; those cases passed. No production deploy or remote migration was part of this gate.
 
-## MANUAL UI VERIFICATION
+## I. MANUAL UI VERIFICATION
 
-- A manual browser session was not performed. Automated DOM-level wizard tests verified registered, not-registered, missing-code, under-18 document review, localized DOM output, and saving fields before loading server requirements.
-- Live Worker/D1/R2 browser upload and CORS behavior remain unverified. Wrangler `--dry-run` is build/binding validation only and does not prove live deployment or upload acceptance.
+- Ran the application against a local Worker and isolated temporary D1 state with synthetic applicant data only. No production or staging resource was contacted. Temporary local state and fixtures were removed afterward.
+- Verified a fresh draft, five-step back/forward navigation, visible unsaved-to-saved autosave state, and reload/resume from server state.
+- Verified registered fingerprint status reveals the separate code field; changing to not registered removes the field and shows the Migration Authority notice.
+- Verified the birth certificate appears for under-18 and disappears for adult; the initial adult requirement list showed nine cards and did not include renewal-only UETS.
+- Verified Replace/Delete controls against a synthetic file row; delete removed it from the visible requirement card. Verified Arabic RTL rendering at 390×844 with no horizontal overflow and accepted the localized declaration; review displayed the server timestamp.
+- A live R2 upload was not possible locally because no R2 signing configuration was present. The Worker failed closed with `STORAGE_UNAVAILABLE` before making an R2 request; retry showed the same safe failure. Therefore local browser byte-progress and signed PUT/finalize round-trip were not observed. Automated tests cover XHR progress and retry/finalize behavior. No real document was used.
 
-## OWNER MANUAL ACTIONS
+## J. GITHUB / DEPLOYMENT STATUS
 
-- Apply `0002_session3_fingerprint_and_birth_certificate.sql` to the intended remote D1 environment after reviewing the migration.
-- Configure exact-origin R2 bucket CORS for the student portal origins with PUT and the signed `Content-Type` header, then perform a real browser upload/finalize check in staging.
-- Provision the Worker signing secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`, and verify `R2_BUCKET_NAME` points at the private documents bucket. No credential values belong in the repository.
-- Complete manual UI/UAT with separate student sessions, including Student A/B read/upload/finalize isolation and age-state changes.
-- Keep document scan state pending until a real malware scanner integration marks an object clean. Final submission stays fail-closed until Phase 7 readiness is implemented and accepted.
+- The pushed Session 3 branch is `origin/codex/phase4-phase5-public-wizard-upload`; final commit and remote SHA are reported by the Git proof in the final closeout message.
+- The Session 2 remote branch remains `origin/codex/phase2-phase3-cloudflare-backend` at `e6c6190565b5b29c941ec4be8b2353f0f1d6310b`.
+- No merge to `main`, Cloudflare deploy, remote migration, R2 CORS change, or secret provisioning was performed. Wrangler dry-run is not a deployment.
+- The public check page for starting commit `1078b91…` showed `Vercel / Vercel Preview Comments` succeeded and no unresolved feedback. It did not expose a Worker build/deploy result. GitHub's unauthenticated checks API was rate-limited during review; no broader green-check claim is made.
 
-## DEFERRED ITEMS
+## K. OWNER MANUAL ACTIONS
 
-- Remote D1 migration, R2 CORS/secrets configuration, deployment, live browser upload, and UAT were not performed.
-- Manual UI inspection was not performed; automated DOM tests and production/staging builds passed.
-- Real malware scanning and OCR for newly uploaded residence documents are not implemented by this Session 3 flow. No scan or OCR success is fabricated.
-- Final application submission remains `SUBMISSION_NOT_READY` for Phase 7.
-- Additional under-18 document requirements remain deferred until confirmed by the product owner.
-- Existing localStorage draft/history/Tebligat behavior belongs to separate legacy workflows and was not changed in this Session 3 closeout.
+- Review and apply `0002_session3_fingerprint_and_birth_certificate.sql`, then `0003_session3_document_cleanup.sql`, to the intended remote D1 environment.
+- Configure exact-origin R2 bucket CORS for the portal origins, permitting PUT with the signed `Content-Type` header.
+- Provision Worker signing secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`; verify `R2_BUCKET_NAME` selects the private documents bucket. Keep secret values out of the repository.
+- Perform staging browser upload/finalize UAT with synthetic files and separate Student A/B sessions, including cross-owner reads/mutations, replacement, deletion/cleanup retry, and age-state changes.
+- Keep scan status pending until a real malware scanner marks an object clean. Keep final submission fail-closed until its separately planned readiness work is accepted.
 
-## FINAL VERDICT
+## L. INTENTIONAL DEFERRED ITEMS
 
-**PASS — Session 3 implementation and the requested local validation/security gates passed on the required branch from the exact Session 2 baseline.** The branch recovery preserved the original worktree changes. Final commit, remote branch SHA, clean-worktree status, and one-commit distance from the baseline are verified in the Git closeout. This verdict does not claim a remote migration, deployment, live upload, or manual browser UAT.
+- Remote migration, R2 CORS/secrets configuration, deploy, live R2 round trip, and owner UAT.
+- Actual malware scanning and residence-document OCR; the flow reports neither as complete.
+- Final submission readiness beyond the existing fail-closed `SUBMISSION_NOT_READY` behavior.
+- Any additional under-18 document requirements not confirmed by the product owner.
+- Existing localStorage behavior in separate legacy draft/history/Tebligat workflows.
+- Phase 6 and all work belonging to a new session.
+
+## M. FINAL VERDICT
+
+SESSION 3: PASS — ready to start the next planned session
+
+All requested local validation/security gates passed; the branch contains the Session 3 implementation and closeout on top of the exact Session 2 baseline, and GitHub received only the required Session 3 branch. This verdict does not represent remote migration, deployment, live R2 acceptance, or owner UAT.
