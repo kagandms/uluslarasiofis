@@ -3,6 +3,10 @@
   "name": "uluslarasiofis-local",
   "main": "./src/server/worker.js",
   "compatibility_date": "2026-09-28",
+  "vars": {
+    "APP_ENV": "local",
+    "R2_BUCKET_NAME": "uluslarasiofis-documents-local"
+  },
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "404-page"
@@ -27,7 +31,8 @@
     "staging": {
       "name": "uluslarasiofis-staging",
       "vars": {
-        "APP_ENV": "staging"
+        "APP_ENV": "staging",
+        "R2_BUCKET_NAME": "uluslarasiofis-documents-staging"
       },
       "d1_databases": [
         {

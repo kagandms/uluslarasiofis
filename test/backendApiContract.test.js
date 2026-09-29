@@ -54,15 +54,16 @@ async function seedStaff(database, { id, username, role = 'reviewer', isActive =
     `).bind(id, username, username.toLowerCase(), passwordHash, `Display ${username}`, role, isActive ? 1 : 0).run();
 }
 
-async function seedStaffSession(database, staffUserId, rawToken) {
+async function seedStaffSession(database, staffUserId, rawToken, { lastSeenAt, expiresAt } = {}) {
     await database.prepare(`
-        INSERT INTO staff_sessions (id, staff_user_id, token_hash, expires_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO staff_sessions (id, staff_user_id, token_hash, expires_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?)
     `).bind(
         crypto.randomUUID(),
         staffUserId,
         await hashSessionToken(rawToken),
-        new Date(Date.now() + 60 * 60 * 1000).toISOString()
+        expiresAt || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        lastSeenAt || new Date().toISOString()
     ).run();
 }
 
@@ -382,6 +383,7 @@ test('initial admin bootstrap requires a secret and closes after the first accou
     const response = await worker.fetch(authorizedRequest, environment, {});
     assert.equal(response.status, 201);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM staff_users WHERE role = 'admin'").first().count, 1);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.admin_bootstrapped'").first().count, 1);
 
     const secondRequest = createRequest('/api/staff/auth/bootstrap', {
         method: 'POST',
@@ -406,4 +408,232 @@ test('initial admin bootstrap stays closed when any staff account already exists
     assert.equal(response.status, 409);
     assert.equal((await readJson(response)).error.code, 'BOOTSTRAP_CLOSED');
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM staff_users').first().count, 1);
+});
+
+
+test('current application status is available only through its owner session', async () => {
+    const { environment, database } = createEnvironment();
+    const firstResponse = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123456', application_type: 'initial', email: 'a@example.edu', phone: '111' }
+    }), environment, {});
+    const secondResponse = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123457', application_type: 'renewal', email: 'b@example.edu', phone: '222' }
+    }), environment, {});
+    const firstCookie = firstResponse.headers.get('Set-Cookie').split(';')[0];
+    const secondApplicationId = database.prepare("SELECT id FROM applications WHERE student_id = (SELECT id FROM students WHERE student_number = '2026123457')").first().id;
+    database.prepare("UPDATE applications SET status = 'under_review' WHERE id = ?").bind(secondApplicationId).run();
+
+    const statusResponse = await worker.fetch(createRequest(`/api/public/applications/current/status?application_id=${secondApplicationId}`, { cookie: firstCookie }), environment, {});
+    const statusPayload = await readJson(statusResponse);
+
+    assert.equal(firstResponse.status, 201);
+    assert.equal(secondResponse.status, 201);
+    assert.equal(statusResponse.status, 200);
+    assert.equal(statusPayload.application.status, 'draft');
+    assert.equal(statusPayload.application.application_type, 'initial');
+    assert.equal(statusPayload.application.id, undefined);
+    assert.equal(statusPayload.application.student_number, undefined);
+    assert.doesNotMatch(JSON.stringify(statusPayload), /storage_key|staff|audit|password|token_hash|https?:/i);
+
+    const firstToken = firstCookie.split('=')[1];
+    await database.prepare('UPDATE application_sessions SET revoked_at = ? WHERE token_hash = ?')
+        .bind(new Date().toISOString(), await hashSessionToken(firstToken)).run();
+    const revokedResponse = await worker.fetch(createRequest('/api/public/applications/current/status', { cookie: firstCookie }), environment, {});
+    assert.equal(revokedResponse.status, 401);
+});
+
+
+test('application submit endpoint requires a session, same origin, and fails closed until readiness exists', async () => {
+    const { environment, database } = createEnvironment();
+    const path = '/api/public/applications/current/submit';
+    const unauthenticated = await worker.fetch(createRequest(path, { method: 'POST' }), environment, {});
+    const crossOrigin = await worker.fetch(createRequest(path, { method: 'POST', origin: 'https://attacker.test' }), environment, {});
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123458', application_type: 'initial', email: 'c@example.edu', phone: '333' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+
+    assert.equal(unauthenticated.status, 401);
+    assert.equal(crossOrigin.status, 403);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        const response = await worker.fetch(createRequest(path, { method: 'POST', cookie }), environment, {});
+        const payload = await readJson(response);
+        assert.equal(response.status, 409);
+        assert.equal(payload.error.code, 'SUBMISSION_NOT_READY');
+        assert.doesNotMatch(JSON.stringify(payload), /storage_key|password_hash|token_hash|d1|sqlite/i);
+    }
+    assert.equal(database.prepare('SELECT status FROM applications').first().status, 'draft');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 0);
+});
+
+test('staff idle timeout refreshes active sessions without touching every request', async () => {
+    const { environment, database } = createEnvironment();
+    const token = 'i'.repeat(43);
+    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
+    const staleTouch = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    await seedStaffSession(database, 'staff-reviewer', token, { lastSeenAt: staleTouch });
+
+    const active = await worker.fetch(createRequest('/api/staff/auth/session', { cookie: `staff_session=${token}` }), environment, {});
+    const refreshedAt = database.prepare('SELECT last_seen_at FROM staff_sessions').first().last_seen_at;
+    const recent = await worker.fetch(createRequest('/api/staff/auth/session', { cookie: `staff_session=${token}` }), environment, {});
+    const unchangedAt = database.prepare('SELECT last_seen_at FROM staff_sessions').first().last_seen_at;
+
+    assert.equal(active.status, 200);
+    assert.equal(recent.status, 200);
+    assert.ok(refreshedAt > staleTouch);
+    assert.equal(unchangedAt, refreshedAt);
+});
+
+test('idle-expired, absolute-expired, and disabled staff sessions are unauthorized and never revived', async () => {
+    const { environment, database } = createEnvironment();
+    const idleToken = 'j'.repeat(43);
+    const absoluteToken = 'k'.repeat(43);
+    const disabledToken = 'm'.repeat(43);
+    const expiredIdleAt = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
+    await seedStaff(database, { id: 'staff-disabled', username: 'disabled', isActive: false });
+    await seedStaffSession(database, 'staff-reviewer', idleToken, { lastSeenAt: expiredIdleAt });
+    await seedStaffSession(database, 'staff-reviewer', absoluteToken, { expiresAt: new Date(Date.now() - 1000).toISOString() });
+    await seedStaffSession(database, 'staff-disabled', disabledToken);
+
+    for (const token of [idleToken, absoluteToken, disabledToken]) {
+        const response = await worker.fetch(createRequest('/api/staff/auth/session', { cookie: `staff_session=${token}` }), environment, {});
+        assert.equal(response.status, 401);
+    }
+    const lastSeenAt = database.prepare('SELECT last_seen_at FROM staff_sessions WHERE token_hash = ?')
+        .bind(await hashSessionToken(idleToken)).first().last_seen_at;
+    assert.equal(lastSeenAt, expiredIdleAt);
+});
+
+test('staff logout records one safe audit event and remains idempotent for expired sessions', async () => {
+    const { environment, database } = createEnvironment();
+    const activeToken = 'o'.repeat(43);
+    const expiredToken = 'e'.repeat(43);
+    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
+    await seedStaffSession(database, 'staff-reviewer', activeToken);
+    await seedStaffSession(database, 'staff-reviewer', expiredToken, { expiresAt: new Date(Date.now() - 1000).toISOString() });
+
+    const activeLogout = await worker.fetch(createRequest('/api/staff/auth/logout', { method: 'POST', cookie: `staff_session=${activeToken}` }), environment, {});
+    const repeatLogout = await worker.fetch(createRequest('/api/staff/auth/logout', { method: 'POST', cookie: `staff_session=${activeToken}` }), environment, {});
+    const expiredLogout = await worker.fetch(createRequest('/api/staff/auth/logout', { method: 'POST', cookie: `staff_session=${expiredToken}` }), environment, {});
+
+    assert.equal(activeLogout.status, 200);
+    assert.equal(repeatLogout.status, 200);
+    assert.equal(expiredLogout.status, 200);
+    assert.match(activeLogout.headers.get('Set-Cookie'), /Max-Age=0$/);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.logout'").first().count, 1);
+    const audit = database.prepare("SELECT actor_staff_id, safe_metadata_json FROM audit_events WHERE event_type = 'staff.logout'").first();
+    assert.equal(audit.actor_staff_id, 'staff-reviewer');
+    assert.doesNotMatch(audit.safe_metadata_json, /cookie|token|o{20}/i);
+});
+
+test('staff logout audit failure rolls back revocation', async () => {
+    const { environment, database } = createEnvironment();
+    const token = 'f'.repeat(43);
+    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
+    await seedStaffSession(database, 'staff-reviewer', token);
+    database.exec(`CREATE TRIGGER reject_staff_logout_audit BEFORE INSERT ON audit_events WHEN NEW.event_type = 'staff.logout' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;`);
+
+    const response = await worker.fetch(createRequest('/api/staff/auth/logout', { method: 'POST', cookie: `staff_session=${token}` }), environment, {});
+
+    assert.equal(response.status, 500);
+    assert.equal(database.prepare('SELECT revoked_at FROM staff_sessions').first().revoked_at, null);
+});
+
+test('login, password reset, account state, and bootstrap actions leave audit evidence', async () => {
+    const { environment, database } = createEnvironment();
+    const adminToken = 'z'.repeat(43);
+    const targetToken = 'y'.repeat(43);
+    await seedStaff(database, { id: 'staff-admin', username: 'admin', role: 'admin' });
+    await seedStaff(database, { id: 'staff-target', username: 'target' });
+    await seedStaffSession(database, 'staff-admin', adminToken);
+    await seedStaffSession(database, 'staff-target', targetToken);
+
+    const loginResponse = await worker.fetch(createRequest('/api/staff/auth/login', { method: 'POST', body: { username: 'admin', password: TEST_PASSWORD } }), environment, {});
+    const resetResponse = await worker.fetch(createRequest('/api/staff/users/staff-target/password', {
+        method: 'PATCH', cookie: `staff_session=${adminToken}`, body: { password: 'New secure password 2026' }
+    }), environment, {});
+    const inactiveResponse = await worker.fetch(createRequest('/api/staff/users/staff-target/active', {
+        method: 'PATCH', cookie: `staff_session=${adminToken}`, body: { is_active: false }
+    }), environment, {});
+    const activeResponse = await worker.fetch(createRequest('/api/staff/users/staff-target/active', {
+        method: 'PATCH', cookie: `staff_session=${adminToken}`, body: { is_active: true }
+    }), environment, {});
+    const createUserResponse = await worker.fetch(createRequest('/api/staff/users', {
+        method: 'POST', cookie: `staff_session=${adminToken}`,
+        body: { username: 'new.reviewer', password: 'Another secure password 2026', display_name: 'New Reviewer', role: 'reviewer' }
+    }), environment, {});
+
+    assert.equal(loginResponse.status, 200);
+    assert.equal(resetResponse.status, 200);
+    assert.equal(inactiveResponse.status, 200);
+    assert.equal(activeResponse.status, 200);
+    assert.equal(createUserResponse.status, 201);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.login'").first().count, 1);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.password_reset'").first().count, 1);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.user_status_changed'").first().count, 2);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.user_created'").first().count, 1);
+    assert.equal(database.prepare("SELECT is_active FROM staff_users WHERE id = 'staff-target'").first().is_active, 1);
+    assert.ok(database.prepare('SELECT revoked_at FROM staff_sessions WHERE token_hash = ?').bind(await hashSessionToken(targetToken)).first().revoked_at);
+    assert.doesNotMatch(JSON.stringify(await readJson(resetResponse)), /password_hash|pbkdf|token_hash/i);
+});
+
+
+test('application status rejects expired sessions and student numbers never authorize access', async () => {
+    const { environment, database } = createEnvironment();
+    const unauthenticated = await worker.fetch(createRequest('/api/public/applications/current/status?student_number=2026123456'), environment, {});
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123459', application_type: 'initial', email: 'expired@example.edu', phone: '444' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+    const token = cookie.split('=')[1];
+    await database.prepare('UPDATE application_sessions SET expires_at = ? WHERE token_hash = ?')
+        .bind(new Date(Date.now() - 1000).toISOString(), await hashSessionToken(token)).run();
+
+    const expired = await worker.fetch(createRequest('/api/public/applications/current/status', { cookie }), environment, {});
+
+    assert.equal(unauthenticated.status, 401);
+    assert.equal(expired.status, 401);
+});
+
+test('application draft updates ignore fields outside the public allowlist', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123460', application_type: 'initial', email: 'draft@example.edu', phone: '555' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+    const response = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: {
+            student_email: 'updated@example.edu', status: 'submitted', student_number: '2026999999',
+            storage_key: 'quarantine/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', staff_note: 'private'
+        }
+    }), environment, {});
+    const payload = await readJson(response);
+    const row = database.prepare(`
+        SELECT applications.status, applications.student_email, students.student_number
+        FROM applications JOIN students ON students.id = applications.student_id
+    `).first();
+
+    assert.equal(response.status, 200);
+    assert.equal(row.status, 'draft');
+    assert.equal(row.student_email, 'updated@example.edu');
+    assert.equal(row.student_number, '2026123460');
+    assert.equal(payload.application.status, 'draft');
+    assert.doesNotMatch(JSON.stringify(payload), /storage_key|staff_note|2026999999/i);
+});
+
+test('non-draft applications cannot enter the submit path', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123461', application_type: 'initial', email: 'review@example.edu', phone: '666' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+    database.prepare("UPDATE applications SET status = 'under_review'").run();
+
+    const response = await worker.fetch(createRequest('/api/public/applications/current/submit', { method: 'POST', cookie }), environment, {});
+
+    assert.equal(response.status, 409);
+    assert.equal((await readJson(response)).error.code, 'APPLICATION_NOT_SUBMITTABLE');
+    assert.equal(database.prepare('SELECT status FROM applications').first().status, 'under_review');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 0);
 });

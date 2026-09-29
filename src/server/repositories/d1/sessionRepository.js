@@ -41,22 +41,42 @@ export function createSessionRepository(database) {
                 WHERE token_hash = ? AND revoked_at IS NULL
             `).bind(revokedAt, tokenHash).run();
         },
-        async findStaffSession(tokenHash, now) {
+        async findStaffSession(tokenHash, now, idleCutoff, touchCutoff) {
+            await database.prepare(`
+                UPDATE staff_sessions SET last_seen_at = ?
+                WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?
+                  AND julianday(last_seen_at) > julianday(?)
+                  AND julianday(last_seen_at) <= julianday(?)
+                  AND EXISTS (SELECT 1 FROM staff_users WHERE id = staff_sessions.staff_user_id AND is_active = 1)
+            `).bind(now, tokenHash, now, idleCutoff, touchCutoff).run();
             return database.prepare(`
                 SELECT sessions.id AS session_id, sessions.expires_at, sessions.revoked_at,
                        staff.id, staff.username, staff.display_name, staff.role, staff.auth_version
                 FROM staff_sessions AS sessions
                 JOIN staff_users AS staff ON staff.id = sessions.staff_user_id
                 WHERE sessions.token_hash = ? AND sessions.revoked_at IS NULL
-                  AND sessions.expires_at > ? AND staff.is_active = 1
+                  AND sessions.expires_at > ? AND julianday(sessions.last_seen_at) > julianday(?)
+                  AND staff.is_active = 1
                 LIMIT 1
-            `).bind(tokenHash, now).first();
+            `).bind(tokenHash, now, idleCutoff).first();
         },
-        async revokeStaffSession(tokenHash, revokedAt) {
-            await database.prepare(`
-                UPDATE staff_sessions SET revoked_at = ?
-                WHERE token_hash = ? AND revoked_at IS NULL
-            `).bind(revokedAt, tokenHash).run();
+        async revokeStaffSessionWithAudit({ tokenHash, revokedAt, idleCutoff, auditEventId, requestId }) {
+            await database.batch([
+                database.prepare(`
+                    INSERT INTO audit_events (
+                        id, event_type, actor_type, actor_staff_id, request_id, safe_metadata_json, created_at
+                    ) SELECT ?, 'staff.logout', 'staff', sessions.staff_user_id, ?, '{}', ?
+                    FROM staff_sessions AS sessions
+                    JOIN staff_users AS staff ON staff.id = sessions.staff_user_id
+                    WHERE sessions.token_hash = ? AND sessions.revoked_at IS NULL
+                      AND sessions.expires_at > ? AND julianday(sessions.last_seen_at) > julianday(?)
+                      AND staff.is_active = 1
+                `).bind(auditEventId, requestId, revokedAt, tokenHash, revokedAt, idleCutoff),
+                database.prepare(`
+                    UPDATE staff_sessions SET revoked_at = ?
+                    WHERE token_hash = ? AND revoked_at IS NULL
+                `).bind(revokedAt, tokenHash)
+            ]);
         },
         async revokeAllStaffSessions(staffUserId, revokedAt) {
             await database.prepare(`

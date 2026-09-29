@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createDocumentStorage } from '../src/server/storage/documentStorage.js';
 import { createR2DocumentStorage } from '../src/server/storage/r2DocumentStorage.js';
 
 test('R2 storage uses generated quarantine keys without student identifiers or public URLs', async () => {
@@ -20,7 +21,7 @@ test('R2 storage uses generated quarantine keys without student identifiers or p
             storedObjects.delete(key);
         }
     };
-    const storage = createR2DocumentStorage(bucket, () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    const storage = createR2DocumentStorage(bucket, { createId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
     const key = storage.createQuarantineKey();
 
     assert.equal(key, 'quarantine/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
@@ -37,4 +38,72 @@ test('R2 storage rejects keys outside the generated private quarantine prefix', 
     const storage = createR2DocumentStorage({});
 
     await assert.rejects(storage.get('students/2026123456/passport.pdf'), { code: 'INVALID_STORAGE_KEY' });
+});
+
+
+test('R2 upload and read capabilities are method-bound, object-bound, and short-lived', async () => {
+    const signingTime = new Date('2026-09-29T12:00:00.000Z');
+    const storage = createR2DocumentStorage({}, {
+        accountId: '0123456789abcdef0123456789abcdef',
+        bucketName: 'private-documents',
+        accessKeyId: 'PUBLIC-KEY-ID-FOR-TESTS',
+        secretAccessKey: 'NEVER-RETURN-THIS-SECRET',
+        now: () => signingTime
+    });
+    const firstKey = 'quarantine/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const secondKey = 'quarantine/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+    const upload = await storage.createUploadCapability(firstKey, { contentType: 'application/pdf' });
+    const read = await storage.createReadCapability(firstKey);
+    const anotherObject = await storage.createReadCapability(secondKey);
+    const uploadUrl = new URL(upload.url);
+    const readUrl = new URL(read.url);
+
+    assert.equal(upload.method, 'PUT');
+    assert.equal(upload.expiresInSeconds, 300);
+    assert.equal(upload.expiresAt, '2026-09-29T12:05:00.000Z');
+    assert.equal(uploadUrl.searchParams.get('X-Amz-Expires'), '300');
+    assert.equal(uploadUrl.searchParams.get('X-Amz-Date'), '20260929T120000Z');
+    assert.equal(read.method, 'GET');
+    assert.equal(readUrl.searchParams.get('X-Amz-Expires'), '300');
+    assert.notEqual(upload.url, read.url);
+    assert.notEqual(read.url, anotherObject.url);
+    assert.match(uploadUrl.pathname, /private-documents\/quarantine\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa$/);
+    assert.match(upload.requiredHeaders['content-type'], /^application\/pdf$/);
+    assert.match(uploadUrl.searchParams.get('X-Amz-SignedHeaders'), /content-type/);
+    assert.equal(uploadUrl.searchParams.get('X-Amz-Credential').startsWith('PUBLIC-KEY-ID-FOR-TESTS/'), true);
+    assert.equal(Object.hasOwn(upload, 'accessKeyId'), false);
+    assert.equal(Object.hasOwn(upload, 'secretAccessKey'), false);
+    assert.doesNotMatch(JSON.stringify([upload, read, anotherObject]), /NEVER-RETURN-THIS-SECRET/);
+    assert.match(uploadUrl.hostname, /r2\.cloudflarestorage\.com$/);
+    assert.doesNotMatch(upload.url, /r2\.dev|r2\.cloudflarestorage\.com\.workers\.dev|pub-/i);
+});
+
+test('R2 signed capabilities reject expiry outside the documented 30 to 300 second range', async () => {
+    const storage = createR2DocumentStorage({}, {
+        accountId: '0123456789abcdef0123456789abcdef',
+        bucketName: 'private-documents',
+        accessKeyId: 'PUBLIC-KEY-ID-FOR-TESTS',
+        secretAccessKey: 'NEVER-RETURN-THIS-SECRET'
+    });
+    const key = storage.createQuarantineKey();
+
+    for (const expiresInSeconds of [0, 29, 301, 3600, 30.5, '60']) {
+        await assert.rejects(
+            storage.createReadCapability(key, { expiresInSeconds }),
+            { code: 'INVALID_CAPABILITY_EXPIRY' }
+        );
+    }
+    assert.equal((await storage.createReadCapability(key, { expiresInSeconds: 30 })).expiresInSeconds, 30);
+    assert.equal((await storage.createReadCapability(key, { expiresInSeconds: 300 })).expiresInSeconds, 300);
+});
+
+test('application-facing storage facade requires private bindings and has no public URL fallback', async () => {
+    await assert.rejects(async () => createDocumentStorage({}), { code: 'STORAGE_CONFIGURATION_ERROR' });
+    const storage = createDocumentStorage({ DOCUMENTS: {} });
+    const key = storage.createQuarantineKey();
+
+    assert.match(key, /^quarantine\/[0-9a-f-]{36}$/i);
+    assert.equal('publicUrl' in storage, false);
+    assert.equal('url' in (await storage.createReadCapability(key).catch(() => ({}))), false);
 });

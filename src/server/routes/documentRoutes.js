@@ -1,7 +1,7 @@
 import { ApiError } from '../domain/errors.js';
 import { requireStaff } from '../auth/staffAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
-import { createR2DocumentStorage } from '../storage/r2DocumentStorage.js';
+import { createDocumentStorage } from '../storage/documentStorage.js';
 import { requireMethod } from './shared.js';
 
 function createSafeFilename(filename) {
@@ -31,7 +31,7 @@ export async function readPrivateDocument(request, environment, fileId) {
     if (typeof fileId !== 'string' || fileId.length < 1 || fileId.length > 128) throw new ApiError(404, 'DOCUMENT_NOT_FOUND', 'Belge bulunamadı.');
     const file = await createD1Repositories(environment.DB).documents.findPrivateFileById(fileId);
     if (!file || !isSafeMediaType(file.media_type)) throw new ApiError(404, 'DOCUMENT_NOT_FOUND', 'Belge bulunamadı.');
-    const storage = createR2DocumentStorage(environment.DOCUMENTS);
+    const storage = createDocumentStorage(environment);
     const object = await storage.get(file.storage_key);
     if (!object?.body) throw new ApiError(404, 'DOCUMENT_NOT_FOUND', 'Belge bulunamadı.');
     const headers = new Headers({

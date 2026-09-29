@@ -2,6 +2,7 @@ import { ApiError } from '../domain/errors.js';
 import { createOpaqueSessionToken, createSessionCookie, createExpiredSessionCookie, getSessionCookieName, hashSessionToken, readCookie } from '../auth/sessionToken.js';
 import { deriveStaffPasswordHash, verifyStaffPassword } from '../auth/passwordHash.js';
 import { requireStaff } from '../auth/staffAuth.js';
+import { STAFF_IDLE_TIMEOUT_SECONDS } from '../config/sessionPolicy.js';
 import { routeResult } from '../http/routeResult.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { normalizeUsername } from '../repositories/d1/staffRepository.js';
@@ -127,13 +128,20 @@ export async function readStaffSession(request, environment) {
  * @returns {Promise<object>} Route result with an expired session cookie.
  * @throws {ApiError} When the request method or origin is invalid.
  */
-export async function logoutStaff(request, environment) {
+export async function logoutStaff(request, environment, requestId) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
     const token = readCookie(request, getSessionCookieName('staff'));
     if (token && environment.DB) {
         const repositories = createD1Repositories(environment.DB);
-        await repositories.sessions.revokeStaffSession(await hashSessionToken(token), new Date().toISOString());
+        const revokedAt = new Date().toISOString();
+        await repositories.sessions.revokeStaffSessionWithAudit({
+            tokenHash: await hashSessionToken(token),
+            revokedAt,
+            idleCutoff: new Date(Date.now() - STAFF_IDLE_TIMEOUT_SECONDS * 1000).toISOString(),
+            auditEventId: crypto.randomUUID(),
+            requestId
+        });
     }
     return routeResult({ success: true }, { cookie: createExpiredSessionCookie('staff') });
 }

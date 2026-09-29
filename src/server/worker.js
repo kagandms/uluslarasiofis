@@ -1,7 +1,7 @@
 import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
 import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
 import { isRouteResult } from './http/routeResult.js';
-import { createApplicationDraft, logoutApplication, readCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
+import { createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
 import { bootstrapStaff, createStaffUser, listStaffUsers, loginStaff, logoutStaff, readStaffSession, updateStaffAccount } from './routes/staffRoutes.js';
@@ -43,9 +43,11 @@ async function routeApi(request, environment, requestId) {
     const { pathname } = new URL(request.url);
     if (pathname === '/api/staff/auth/login' || pathname === '/api/login') return loginStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/session' || pathname === '/api/session') return readStaffSession(request, environment);
-    if (pathname === '/api/staff/auth/logout' || pathname === '/api/logout') return logoutStaff(request, environment);
+    if (pathname === '/api/staff/auth/logout' || pathname === '/api/logout') return logoutStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/bootstrap') return bootstrapStaff(request, environment, requestId);
     if (pathname === '/api/public/applications') return createApplicationDraft(request, environment, requestId);
+    if (pathname === '/api/public/applications/current/status') return readCurrentApplicationStatus(request, environment);
+    if (pathname === '/api/public/applications/current/submit') return submitCurrentApplication(request, environment, requestId);
     if (pathname === '/api/public/applications/current') {
         if (request.method === 'PATCH') return updateCurrentApplication(request, environment, requestId);
         return readCurrentApplication(request, environment);

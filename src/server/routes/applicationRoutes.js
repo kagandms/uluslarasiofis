@@ -4,6 +4,7 @@ import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
+import { readSubmissionReadiness } from '../services/submissionReadiness.js';
 import { createAuditEvent, createRepositories, enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
 
 const APPLICATION_SESSION_SECONDS = 12 * 60 * 60;
@@ -165,4 +166,57 @@ export async function logoutApplication(request, environment) {
         );
     }
     return routeResult({ success: true }, { cookie: createExpiredSessionCookie('application') });
+}
+
+/**
+ * Returns the current session's student-safe application status.
+ * @param {Request} request Worker request.
+ * @param {object} environment Worker bindings.
+ * @returns {Promise<object>} Safe status DTO selected through the opaque owner session.
+ * @throws {ApiError} When the applicant session is invalid or the application is missing.
+ */
+export async function readCurrentApplicationStatus(request, environment) {
+    requireMethod(request, 'GET');
+    const session = await requireApplicationSession(request, environment);
+    const application = await createD1Repositories(environment.DB).applications.findCurrentStatusById(session.application_id);
+    if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+    return {
+        application: {
+            status: application.status,
+            application_type: application.application_type,
+            updated_at: application.updated_at
+        }
+    };
+}
+
+/**
+ * Establishes the owner-session submit contract while required-document readiness is closed.
+ * @param {Request} request Worker request.
+ * @param {object} environment Worker bindings.
+ * @param {string} requestId Correlation ID for the submit audit event.
+ * @returns {Promise<object>} Safe submitted application DTO if server readiness permits transition.
+ * @throws {ApiError} When origin, session, state, or readiness validation fails.
+ */
+export async function submitCurrentApplication(request, environment, requestId) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const session = await requireApplicationSession(request, environment);
+    const repositories = createRepositories(environment);
+    const application = await repositories.applications.findCurrentStatusById(session.application_id);
+    if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+    if (application.status !== 'draft') throw new ApiError(409, 'APPLICATION_NOT_SUBMITTABLE', 'Bu başvuru gönderim için uygun durumda değil.');
+
+    const readiness = await readSubmissionReadiness();
+    if (readiness.status !== 'ready') {
+        throw new ApiError(409, 'SUBMISSION_NOT_READY', 'Başvuru gönderimi, gerekli belge doğrulaması tamamlanana kadar kullanılamıyor.');
+    }
+
+    const submitted = await repositories.applications.submitDraft({
+        applicationId: session.application_id,
+        submittedAt: new Date().toISOString(),
+        auditEventId: crypto.randomUUID(),
+        requestId
+    });
+    if (!submitted) throw new ApiError(409, 'APPLICATION_NOT_SUBMITTABLE', 'Bu başvuru gönderim için uygun durumda değil.');
+    return { application: createApplicationDto(submitted) };
 }

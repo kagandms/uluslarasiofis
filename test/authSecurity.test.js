@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { deriveStaffPasswordHash } from '../src/server/auth/passwordHash.js';
+import { deriveStaffPasswordHash, verifyStaffPassword } from '../src/server/auth/passwordHash.js';
 import { hashSessionToken } from '../src/server/auth/sessionToken.js';
 import worker from '../src/server/worker.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
@@ -180,4 +180,19 @@ test('legacy session route remains backed by individual staff sessions', async (
 
     assert.equal(response.status, 200);
     assert.equal((await response.json()).authenticated, true);
+});
+
+
+test('staff password verification rejects malformed and legacy hashes without exposing errors', async () => {
+    const validHash = await deriveStaffPasswordHash(TEST_PASSWORD);
+
+    assert.equal(await verifyStaffPassword(TEST_PASSWORD, validHash), true);
+    assert.equal(await verifyStaffPassword('a different secure passphrase', validHash), false);
+    for (const malformedHash of [
+        '', 'pbkdf2_sha1$600000$invalid$invalid',
+        'pbkdf2_sha256$1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'pbkdf2_sha256$600000$short$short', 'pbkdf2_sha256$600000$%%%$%%%'
+    ]) {
+        assert.equal(await verifyStaffPassword(TEST_PASSWORD, malformedHash), false);
+    }
 });

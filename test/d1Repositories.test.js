@@ -105,3 +105,53 @@ test('document repository exposes only finalized clean current revision files', 
     database.prepare("UPDATE document_revision_files SET scan_status = 'unsafe' WHERE id = 'file-1'").run();
     assert.equal(await repositories.documents.findPrivateFileById('file-1'), null);
 });
+
+
+test('application submission transitions and audit are atomic and repeated calls have no duplicate effect', async () => {
+    const { database, repositories } = createRepositories();
+    await repositories.applications.createDraft({
+        applicationId: '11111111-1111-4111-8111-111111111111',
+        studentId: '22222222-2222-4222-8222-222222222222',
+        studentNumber: 'AB-123',
+        applicationType: 'initial',
+        studentEmail: 'student@example.edu',
+        studentPhone: '+905551112233'
+    });
+    const transition = {
+        applicationId: '11111111-1111-4111-8111-111111111111',
+        submittedAt: '2026-09-29T12:00:00.000Z',
+        auditEventId: '33333333-3333-4333-8333-333333333333',
+        requestId: 'req_submit_1'
+    };
+
+    const submitted = await repositories.applications.submitDraft(transition);
+    const repeated = await repositories.applications.submitDraft({ ...transition, auditEventId: '44444444-4444-4444-8444-444444444444', requestId: 'req_submit_2' });
+
+    assert.equal(submitted.status, 'submitted');
+    assert.equal(submitted.submitted_at, transition.submittedAt);
+    assert.equal(repeated, null);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 1);
+});
+
+test('application submission audit failure rolls back the state transition', async () => {
+    const { database, repositories } = createRepositories();
+    await repositories.applications.createDraft({
+        applicationId: '11111111-1111-4111-8111-111111111111',
+        studentId: '22222222-2222-4222-8222-222222222222',
+        studentNumber: 'AB-123',
+        applicationType: 'initial',
+        studentEmail: 'student@example.edu',
+        studentPhone: '+905551112233'
+    });
+    database.exec(`CREATE TRIGGER reject_submit_audit BEFORE INSERT ON audit_events WHEN NEW.event_type = 'application.submitted' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;`);
+
+    await assert.rejects(repositories.applications.submitDraft({
+        applicationId: '11111111-1111-4111-8111-111111111111',
+        submittedAt: '2026-09-29T12:00:00.000Z',
+        auditEventId: '33333333-3333-4333-8333-333333333333',
+        requestId: 'req_submit_1'
+    }));
+
+    assert.equal(database.prepare('SELECT status FROM applications').first().status, 'draft');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 0);
+});
