@@ -93,17 +93,90 @@ test('not-registered fingerprint state saves but blocks Continue with the Migrat
     const { document, root, state } = await createFingerprintWizard('not_registered');
 
     assert.equal(root.querySelector('[name="fingerprint_code"]'), null);
+    const continueButton = root.querySelector('#application-step-form button[type="submit"]');
+    assert.equal(continueButton.disabled, true);
+    assert.equal(root.querySelector('.fingerprint-fields [role="alert"]')?.textContent,
+        'Devam edebilmek için önce Göç İdaresi’nde parmak izi işleminizi tamamlamalısınız.');
     await submitWizard(root);
 
     assert.equal(state.application.fingerprint_status, 'not_registered');
     assert.equal(state.step, 1);
-    assert.match(root.textContent, /Devam edebilmek için önce Göç İdaresi’nde parmak izi işleminizi tamamlamalısınız\./);
+    assert.equal(root.querySelector('.fingerprint-fields [role="alert"]')?.textContent,
+        'Devam edebilmek için önce Göç İdaresi’nde parmak izi işleminizi tamamlamalısınız.');
+    document.defaultView.close();
+});
+
+test('residence Continue is disabled when an ordinary required field is missing', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+    const passportNumber = root.querySelector('[name="passport_number"]');
+    passportNumber.value = '';
+    passportNumber.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, true);
+    document.defaultView.close();
+});
+
+test('not-registered blocking alert disappears when registration is changed to registered', async () => {
+    const { document, root } = await createFingerprintWizard('not_registered');
+    const registeredChoice = root.querySelector('[name="fingerprint_status"][value="registered"]');
+    registeredChoice.checked = true;
+    registeredChoice.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+
+    assert.equal(root.querySelector('.fingerprint-fields [role="alert"]'), null);
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, true);
+    const codeInput = root.querySelector('[name="fingerprint_code"]');
+    codeInput.value = 'FP-A/42';
+    codeInput.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, false);
+    document.defaultView.close();
+});
+
+test('selecting not-registered immediately shows the blocking alert and disables Continue', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+    const notRegisteredChoice = root.querySelector('[name="fingerprint_status"][value="not_registered"]');
+    notRegisteredChoice.checked = true;
+    notRegisteredChoice.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, true);
+    assert.equal(root.querySelector('.fingerprint-fields [role="alert"]')?.textContent,
+        'Devam edebilmek için önce Göç İdaresi’nde parmak izi işleminizi tamamlamalısınız.');
+    document.defaultView.close();
+});
+
+test('registered fingerprint with a valid code enables Continue until a required field is cleared', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+    const continueButton = root.querySelector('#application-step-form button[type="submit"]');
+    assert.equal(continueButton.disabled, false);
+
+    const codeInput = root.querySelector('[name="fingerprint_code"]');
+    codeInput.value = '';
+    codeInput.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, true);
+
+    codeInput.value = 'FP-A/42';
+    codeInput.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, false);
+
+    const firstName = root.querySelector('[name="first_name"]');
+    firstName.value = '';
+    firstName.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, true);
+    document.defaultView.close();
+});
+
+test('resumed valid fingerprint and residence fields initialize Continue enabled', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, false);
     document.defaultView.close();
 });
 
 test('registered fingerprint with missing or whitespace-only code cannot Continue', async () => {
     for (const code of [null, '   ']) {
         const { document, root, state } = await createFingerprintWizard('registered', code);
+        assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, true);
         await submitWizard(root);
 
         assert.equal(state.step, 1);

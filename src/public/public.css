@@ -83,6 +83,7 @@ a { color: inherit; }
 .fingerprint-fields > p, .application-review-section > p:last-child { margin: 0; padding: 0.8rem; border-radius: 0.55rem; background: #fff5e5; color: #60430e; line-height: 1.55; }
 .application-button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0.65rem 1rem; border: 0; border-radius: 0.55rem; font: inherit; font-weight: 700; cursor: pointer; }
 .application-button-primary { background: #8b0000; color: #fff; }
+.application-button-primary:disabled { background: #e5e7eb; color: #68707c; cursor: not-allowed; }
 .application-button-secondary { background: #f1f2f4; color: #303640; }
 .application-document-list { display: grid; gap: 0.8rem; }
 .application-document-card { display: grid; gap: 0.55rem; padding: 1rem; border: 1px solid #e0e3e8; border-radius: 0.75rem; background: #fff; }

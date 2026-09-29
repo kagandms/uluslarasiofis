@@ -135,6 +135,9 @@ export function renderFingerprintSection(root, application) {
     if (application.fingerprint_status === 'registered') appendFingerprintCode(document, fieldset, application, messages);
     if (application.fingerprint_status === 'not_registered') {
         fieldset.append(createTranslatedElement(document, 'p', 'fingerprintNotRegisteredNotice', messages.fingerprintNotRegisteredNotice));
+        const error = createTranslatedElement(document, 'p', 'fingerprintProgressBlocked', messages.fingerprintProgressBlocked);
+        error.setAttribute('role', 'alert');
+        fieldset.append(error);
     }
     root.append(fieldset);
     return fieldset;
@@ -169,7 +172,9 @@ function createResidenceStep(document, application, formValues) {
         options: [{ value: '', key: 'under18Question' }, { value: 'true', key: 'yes' }, { value: 'false', key: 'no' }]
     }));
     renderFingerprintSection(form, fields);
-    form.append(createContinueButton(document, messages));
+    const continueButton = createContinueButton(document, messages);
+    form.append(continueButton);
+    continueButton.disabled = !canContinueResidenceStep(form, fields);
     return form;
 }
 
@@ -194,6 +199,16 @@ function isFingerprintUploadEligible(application) {
     if (application?.fingerprint_status !== 'registered' || typeof application.fingerprint_code !== 'string') return false;
     const code = application.fingerprint_code.trim();
     return code.length > 0 && code.length <= 128 && !/[\u0000-\u001f\u007f]/u.test(code);
+}
+
+function canContinueResidenceStep(form, fields) {
+    return Boolean(form?.checkValidity() && isFingerprintUploadEligible(fields));
+}
+
+function updateResidenceContinueButton(root, fields) {
+    const form = root.querySelector('#application-step-form');
+    const button = form?.querySelector('button[type="submit"]');
+    if (form && button) button.disabled = !canContinueResidenceStep(form, fields);
 }
 
 function fingerprintBlockMessageKey(application) {
@@ -678,8 +693,8 @@ async function saveStep(root, state, api) {
             state.autosave.schedule(buildAutosaveValues(fields));
             if (!await state.autosave.flush()) throw Object.assign(new Error('Autosave failed.'), { code: 'AUTOSAVE_FAILED' });
         }
-        if (state.step === 1 && !isFingerprintUploadEligible(state.application)) {
-            state.errorKey = fingerprintBlockMessageKey(state.application);
+        if (state.step === 1 && !canContinueResidenceStep(form, state.application)) {
+            state.errorKey = null;
             return;
         }
         if (state.step === 1 || state.step === 2) await refreshRequirements(state, api);
@@ -745,8 +760,8 @@ async function handleWizardClick(root, state, api, event) {
 }
 
 function handleWizardInput(root, state) {
-    if (!state.application || state.step > 1 || !state.autosave) return;
-    scheduleCurrentFields(root, state);
+    if (state.application && state.step <= 1 && state.autosave) scheduleCurrentFields(root, state);
+    if (state.step === 1) updateResidenceContinueButton(root, readVisibleFields(root, state.application || {}));
 }
 
 function handleWizardChange(root, state, api, event) {
@@ -760,6 +775,7 @@ function handleWizardChange(root, state, api, event) {
         const fields = readVisibleFields(root, state.application || {});
         fields.fingerprint_code = fields.fingerprint_status === 'registered' ? fields.fingerprint_code || null : null;
         state.formValues = fields;
+        state.errorKey = null;
         renderWizard(root, state);
         return;
     }
