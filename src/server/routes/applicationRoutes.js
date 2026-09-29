@@ -27,7 +27,14 @@ function requireString(body, name, { min = 1, max = 255 } = {}) {
     return value.trim();
 }
 
-function createApplicationDto(application) {
+function readDeclarationVersion(environment) {
+    const version = environment.PUBLIC_DECLARATION_VERSION || 'student-information-accuracy-v1';
+    if (typeof version === 'string' && /^[A-Za-z0-9._-]{1,80}$/.test(version)) return version;
+    throw new ApiError(503, 'DECLARATION_CONFIGURATION_UNAVAILABLE', 'Başvuru onay bilgisi şu anda kullanılamıyor.', true);
+}
+
+function createApplicationDto(application, environment) {
+    const currentDeclarationVersion = readDeclarationVersion(environment);
     return {
         status: application.status,
         application_type: application.application_type,
@@ -41,7 +48,15 @@ function createApplicationDto(application) {
         date_of_birth: application.date_of_birth,
         is_under_18: application.is_under_18,
         fingerprint_status: application.fingerprint_status ?? null,
-        fingerprint_code: application.fingerprint_code ?? null
+        fingerprint_code: application.fingerprint_code ?? null,
+        declaration: {
+            current_version: currentDeclarationVersion,
+            content_key: 'studentInformationAcknowledgement',
+            accepted_version: application.declaration_version ?? null,
+            accepted_at: application.declaration_accepted_at ?? null,
+            accepted_current: Boolean(application.declaration_accepted_at)
+                && application.declaration_version === currentDeclarationVersion
+        }
     };
 }
 
@@ -92,14 +107,19 @@ function readFingerprintCode(value) {
     return code || null;
 }
 
-function readDraftChanges(body, application) {
+function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
     const changes = {};
     for (const [field, repositoryField] of Object.entries(DRAFT_FIELDS)) {
-        if (Object.hasOwn(body, field)) changes[repositoryField] = requireString(body, field, { max: field === 'student_email' ? 254 : 255 });
+        if (Object.hasOwn(body, field)) changes[repositoryField] = requireString(body, field, {
+            min: allowIncomplete ? 0 : 1,
+            max: field === 'student_email' ? 254 : 255
+        });
     }
     if (Object.hasOwn(body, 'is_under_18')) {
-        if (typeof body.is_under_18 !== 'boolean') throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru bilgilerini kontrol edip tekrar deneyin.');
-        changes.isUnder18 = body.is_under_18 ? 1 : 0;
+        if (body.is_under_18 !== null && typeof body.is_under_18 !== 'boolean') {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru bilgilerini kontrol edip tekrar deneyin.');
+        }
+        changes.isUnder18 = body.is_under_18 === null ? null : (body.is_under_18 ? 1 : 0);
     }
     const fingerprintStatus = Object.hasOwn(body, 'fingerprint_status')
         ? readFingerprintStatus(body.fingerprint_status)
@@ -112,7 +132,7 @@ function readDraftChanges(body, application) {
     if (Object.hasOwn(body, 'fingerprint_status') && fingerprintStatus !== 'registered') {
         changes.fingerprintCode = null;
     }
-    if (Object.hasOwn(changes, 'studentEmail') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(changes.studentEmail)) {
+    if (!allowIncomplete && Object.hasOwn(changes, 'studentEmail') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(changes.studentEmail)) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'E-posta adresini kontrol edip tekrar deneyin.');
     }
     if (Object.keys(changes).length === 0) throw new ApiError(400, 'VALIDATION_ERROR', 'Güncellenecek başvuru bilgisi gerekli.');
@@ -134,7 +154,7 @@ export async function createApplicationDraft(request, environment, requestId) {
     const repositories = createRepositories(environment);
     await enforceRateLimit(repositories, request, { endpoint: 'application-create', maxRequests: 5, windowSeconds: 900 });
     const { application, token } = await persistDraftWithSession(repositories, draft, requestId);
-    return routeResult({ application: createApplicationDto(application) }, {
+    return routeResult({ application: createApplicationDto(application, environment) }, {
         status: 201, cookie: createSessionCookie('application', token, APPLICATION_SESSION_SECONDS)
     });
 }
@@ -151,7 +171,7 @@ export async function readCurrentApplication(request, environment) {
     const session = await requireApplicationSession(request, environment);
     const application = await createD1Repositories(environment.DB).applications.findById(session.application_id);
     if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
-    return { application: createApplicationDto(application) };
+    return { application: createApplicationDto(application, environment) };
 }
 
 /**
@@ -162,22 +182,79 @@ export async function readCurrentApplication(request, environment) {
  * @returns {Promise<object>} Updated student-safe application data.
  * @throws {ApiError} When the session, state, or input is invalid.
  */
-export async function updateCurrentApplication(request, environment, requestId) {
-    requireMethod(request, 'PATCH');
+async function updateCurrentApplicationFields(request, environment, requestId, { allowIncomplete }) {
     requireSameOrigin(request);
     const session = await requireApplicationSession(request, environment);
     if (session.status !== 'draft') throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
     const repositories = createRepositories(environment);
     const currentApplication = await repositories.applications.findById(session.application_id);
     if (!currentApplication) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
-    const changes = readDraftChanges(await readJsonBody(request), currentApplication);
+    const changes = readDraftChanges(await readJsonBody(request), currentApplication, { allowIncomplete });
     const application = await repositories.applications.updateDraft(session.application_id, changes);
     if (!application) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
     await createAuditEvent(repositories, {
         eventType: 'application.draft_updated', actorType: 'student', applicationId: session.application_id,
         requestId, metadata: { changedFields: Object.keys(changes).sort().join(',') }
     });
-    return { application: createApplicationDto(application) };
+    return { application: createApplicationDto(application, environment) };
+}
+
+/**
+ * Saves a validated patch of the current applicant's draft.
+ * @param {Request} request Owner-session request.
+ * @param {object} environment Worker bindings.
+ * @param {string} requestId Correlation identifier.
+ * @returns {Promise<object>} Student-safe updated application.
+ */
+export async function updateCurrentApplication(request, environment, requestId) {
+    requireMethod(request, 'PATCH');
+    return updateCurrentApplicationFields(request, environment, requestId, { allowIncomplete: false });
+}
+
+/**
+ * Saves an incomplete draft patch while the student is still editing a field.
+ * @param {Request} request Owner-session request.
+ * @param {object} environment Worker bindings.
+ * @param {string} requestId Correlation identifier.
+ * @returns {Promise<object>} Student-safe updated application.
+ */
+export async function autosaveCurrentApplication(request, environment, requestId) {
+    requireMethod(request, 'PATCH');
+    return updateCurrentApplicationFields(request, environment, requestId, { allowIncomplete: true });
+}
+
+/**
+ * Accepts the current configurable acknowledgement and records its server timestamp atomically with audit.
+ * @param {Request} request Owner-session request.
+ * @param {object} environment Worker bindings.
+ * @param {string} requestId Correlation identifier.
+ * @returns {Promise<object>} Student-safe accepted application DTO.
+ * @throws {ApiError} When ownership, origin, draft status, or current version validation fails.
+ */
+export async function acceptCurrentApplicationDeclaration(request, environment, requestId) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const session = await requireApplicationSession(request, environment);
+    if (session.status !== 'draft') throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
+    const body = await readJsonBody(request);
+    if (Object.keys(body).some((key) => !['accepted', 'version'].includes(key))
+        || body.accepted !== true || typeof body.version !== 'string') {
+        throw new ApiError(400, 'DECLARATION_ACCEPTANCE_REQUIRED', 'Devam etmek için başvuru bilgilendirmesini onaylayın.');
+    }
+    const currentVersion = readDeclarationVersion(environment);
+    if (body.version !== currentVersion) {
+        throw new ApiError(409, 'DECLARATION_VERSION_CONFLICT', 'Başvuru bilgilendirmesi güncellendi. Lütfen yeniden okuyup onaylayın.');
+    }
+    const repositories = createRepositories(environment);
+    const application = await repositories.applications.acceptDeclaration({
+        applicationId: session.application_id,
+        version: currentVersion,
+        acceptedAt: new Date().toISOString(),
+        auditEventId: crypto.randomUUID(),
+        requestId
+    });
+    if (!application) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
+    return { application: createApplicationDto(application, environment) };
 }
 
 /**
@@ -249,5 +326,5 @@ export async function submitCurrentApplication(request, environment, requestId) 
         requestId
     });
     if (!submitted) throw new ApiError(409, 'APPLICATION_NOT_SUBMITTABLE', 'Bu başvuru gönderim için uygun durumda değil.');
-    return { application: createApplicationDto(submitted) };
+    return { application: createApplicationDto(submitted, environment) };
 }

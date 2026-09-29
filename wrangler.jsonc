@@ -5,7 +5,8 @@
   "compatibility_date": "2026-09-28",
   "vars": {
     "APP_ENV": "local",
-    "R2_BUCKET_NAME": "uluslarasiofis-documents-local"
+    "R2_BUCKET_NAME": "uluslarasiofis-documents-local",
+    "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1"
   },
   "assets": {
     "binding": "ASSETS",
@@ -32,7 +33,8 @@
       "name": "uluslarasiofis-staging",
       "vars": {
         "APP_ENV": "staging",
-        "R2_BUCKET_NAME": "uluslarasiofis-documents-staging"
+        "R2_BUCKET_NAME": "uluslarasiofis-documents-staging",
+        "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1"
       },
       "d1_databases": [
         {

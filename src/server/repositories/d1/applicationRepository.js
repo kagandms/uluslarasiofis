@@ -125,6 +125,25 @@ export function createApplicationRepository(database) {
             if (results[1]?.meta?.changes !== 1) throw new Error('Application submit audit did not complete.');
             return this.findById(applicationId);
         },
+        async acceptDeclaration({ applicationId, version, acceptedAt, auditEventId, requestId }) {
+            const results = await database.batch([
+                database.prepare(`
+                    UPDATE applications
+                    SET declaration_version = ?, declaration_accepted_at = ?,
+                        updated_at = ?, last_activity_at = ?
+                    WHERE id = ? AND status = 'draft'
+                `).bind(version, acceptedAt, acceptedAt, acceptedAt, applicationId),
+                database.prepare(`
+                    INSERT INTO audit_events (
+                        id, event_type, actor_type, application_id, request_id, safe_metadata_json, created_at
+                    ) SELECT ?, 'application.declaration_accepted', 'student', ?, ?, ?, ?
+                    WHERE changes() = 1
+                `).bind(auditEventId, applicationId, requestId, JSON.stringify({ version }), acceptedAt)
+            ]);
+            if (results[0]?.meta?.changes !== 1) return null;
+            if (results[1]?.meta?.changes !== 1) throw new Error('Declaration acceptance audit did not complete.');
+            return this.findById(applicationId);
+        },
         async findActiveByStudentNumber(studentNumber) {
             const normalizedStudentNumber = normalizeStudentNumber(studentNumber);
             return database.prepare(`

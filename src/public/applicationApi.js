@@ -1,14 +1,20 @@
 async function requestJson(path, { method = 'GET', body } = {}) {
-    const response = await fetch(path, {
-        method,
-        credentials: 'same-origin',
-        headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body)
-    });
+    let response;
+    try {
+        response = await fetch(path, {
+            method,
+            credentials: 'same-origin',
+            headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+            body: body === undefined ? undefined : JSON.stringify(body)
+        });
+    } catch {
+        throw Object.assign(new Error('Application request could not reach the service.'), { code: 'NETWORK_ERROR' });
+    }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
         const error = new Error('Application request failed.');
         error.code = payload.error?.code || 'REQUEST_FAILED';
+        error.status = response.status;
         throw error;
     }
     return payload;
@@ -43,6 +49,28 @@ export async function createApplicationDraft(fields) {
  */
 export async function updateCurrentApplication(fields) {
     const payload = await requestJson('/api/public/applications/current', { method: 'PATCH', body: fields });
+    return payload.application;
+}
+
+/**
+ * Saves incomplete owner draft fields through the dedicated autosave route.
+ * @param {object} fields Allowlisted application values currently visible in the form.
+ * @returns {Promise<object>} Student-safe saved application.
+ */
+export async function autosaveCurrentApplication(fields) {
+    const payload = await requestJson('/api/public/applications/current/autosave', { method: 'PATCH', body: fields });
+    return payload.application;
+}
+
+/**
+ * Accepts the server's current acknowledgement version without a client timestamp.
+ * @param {string} version Version returned in the current application DTO.
+ * @returns {Promise<object>} Updated student-safe application.
+ */
+export async function acceptCurrentApplicationDeclaration(version) {
+    const payload = await requestJson('/api/public/applications/current/declaration', {
+        method: 'POST', body: { accepted: true, version }
+    });
     return payload.application;
 }
 
@@ -83,23 +111,68 @@ export async function finalizeStudentDocumentUpload(intentId) {
 }
 
 /**
- * Uploads the selected file directly to private R2 and asks the Worker to verify it.
- * @param {string} code Current requirement code returned by the server.
- * @param {File} file Browser-selected document file.
- * @returns {Promise<object>} Student-safe finalized document revision.
- * @throws {Error} When capability creation, R2 upload, or finalization fails.
+ * Sends one file directly to its short-lived signed R2 capability and reports byte progress.
+ * @param {object} upload Signed direct PUT capability returned by the Worker.
+ * @param {File} file In-memory browser-selected file.
+ * @param {object} options Progress, cancellation, timeout, and test transport options.
+ * @returns {Promise<void>} Resolves only for a successful R2 response.
  */
-export async function uploadStudentDocument(code, file) {
-    const { upload } = await createStudentDocumentUploadIntent(code, file);
-    const response = await fetch(upload.url, {
-        method: upload.method,
-        headers: upload.required_headers,
-        body: file
+export function putStudentDocumentDirect(upload, file, {
+    onProgress = () => {},
+    signal,
+    timeoutMs = 120000,
+    XMLHttpRequestClass = globalThis.XMLHttpRequest
+} = {}) {
+    return new Promise((resolve, reject) => {
+        if (typeof XMLHttpRequestClass !== 'function') {
+            reject(Object.assign(new Error('Direct upload is unavailable.'), { code: 'UPLOAD_UNAVAILABLE' }));
+            return;
+        }
+        const request = new XMLHttpRequestClass();
+        let isSettled = false;
+        const finish = (callback, value) => {
+            if (isSettled) return;
+            isSettled = true;
+            signal?.removeEventListener('abort', abortRequest);
+            callback(value);
+        };
+        const abortRequest = () => request.abort();
+        request.open(upload.method, upload.url, true);
+        request.withCredentials = false;
+        request.timeout = timeoutMs;
+        for (const [name, value] of Object.entries(upload.required_headers || {})) request.setRequestHeader(name, value);
+        request.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable && event.total > 0) onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+        });
+        request.addEventListener('load', () => {
+            if (request.status >= 200 && request.status < 300) {
+                onProgress(100);
+                finish(resolve);
+                return;
+            }
+            const isExpired = request.status === 401 || request.status === 403
+                || Date.parse(upload.capability_expires_at || '') <= Date.now();
+            finish(reject, Object.assign(new Error('Direct document upload was rejected.'), {
+                code: isExpired ? 'UPLOAD_CAPABILITY_EXPIRED' : 'R2_UPLOAD_FAILED'
+            }));
+        });
+        request.addEventListener('error', () => finish(reject, Object.assign(new Error('Direct upload network error.'), { code: 'UPLOAD_NETWORK_ERROR' })));
+        request.addEventListener('timeout', () => finish(reject, Object.assign(new Error('Direct upload timed out.'), { code: 'UPLOAD_TIMEOUT' })));
+        request.addEventListener('abort', () => finish(reject, Object.assign(new Error('Direct upload cancelled.'), { code: 'UPLOAD_CANCELLED' })));
+        if (signal?.aborted) {
+            abortRequest();
+            return;
+        }
+        signal?.addEventListener('abort', abortRequest, { once: true });
+        request.send(file);
     });
-    if (!response.ok) {
-        const error = new Error('Direct document upload failed.');
-        error.code = 'UPLOAD_FAILED';
-        throw error;
-    }
-    return finalizeStudentDocumentUpload(upload.intent_id);
+}
+
+/**
+ * Removes the current document for a policy code and returns recoverable cleanup state.
+ * @param {string} code Student-safe requirement code.
+ * @returns {Promise<object>} Cleanup state only.
+ */
+export async function deleteStudentDocument(code) {
+    return requestJson(`/api/public/applications/current/documents/${encodeURIComponent(code)}`, { method: 'DELETE' });
 }

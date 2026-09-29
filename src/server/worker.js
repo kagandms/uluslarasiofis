@@ -1,8 +1,8 @@
 import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
 import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
 import { isRouteResult } from './http/routeResult.js';
-import { createCurrentStudentDocumentUploadIntent, finalizeCurrentStudentDocument, readCurrentStudentDocumentRequirements } from './routes/applicationDocumentRoutes.js';
-import { createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
+import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument, finalizeCurrentStudentDocument, readCurrentStudentDocumentRequirements } from './routes/applicationDocumentRoutes.js';
+import { acceptCurrentApplicationDeclaration, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
 import { bootstrapStaff, createStaffUser, listStaffUsers, loginStaff, logoutStaff, readStaffSession, updateStaffAccount } from './routes/staffRoutes.js';
@@ -49,9 +49,13 @@ async function routeApi(request, environment, requestId) {
     if (pathname === '/api/public/applications') return createApplicationDraft(request, environment, requestId);
     if (pathname === '/api/public/applications/current/status') return readCurrentApplicationStatus(request, environment);
     if (pathname === '/api/public/applications/current/submit') return submitCurrentApplication(request, environment, requestId);
+    if (pathname === '/api/public/applications/current/declaration') return acceptCurrentApplicationDeclaration(request, environment, requestId);
     if (pathname === '/api/public/applications/current/documents') return readCurrentStudentDocumentRequirements(request, environment);
     if (pathname === '/api/public/applications/current/documents/upload-intent') return createCurrentStudentDocumentUploadIntent(request, environment);
     if (pathname === '/api/public/applications/current/documents/finalize') return finalizeCurrentStudentDocument(request, environment);
+    const studentDocumentMatch = pathname.match(/^\/api\/public\/applications\/current\/documents\/([^/]+)$/);
+    if (studentDocumentMatch) return deleteCurrentStudentDocument(request, environment, decodeURIComponent(studentDocumentMatch[1]));
+    if (pathname === '/api/public/applications/current/autosave') return autosaveCurrentApplication(request, environment, requestId);
     if (pathname === '/api/public/applications/current') {
         if (request.method === 'PATCH') return updateCurrentApplication(request, environment, requestId);
         return readCurrentApplication(request, environment);

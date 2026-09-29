@@ -9,7 +9,22 @@ export function createDocumentRepository(database) {
             const result = await database.prepare(`
                 SELECT requirements.code, requirements.is_required, requirements.display_order,
                        records.review_status, revisions.revision_number, revisions.status AS revision_status,
-                       files.upload_status, files.scan_status, files.original_filename
+                       files.upload_status, files.scan_status, files.original_filename,
+                       CASE
+                         WHEN EXISTS (
+                           SELECT 1 FROM document_revision_files AS cleanup_files
+                           JOIN document_revisions AS cleanup_revisions ON cleanup_revisions.id = cleanup_files.revision_id
+                           WHERE cleanup_revisions.document_record_id = records.id
+                             AND cleanup_files.cleanup_status = 'pending'
+                         ) THEN 'pending'
+                         WHEN EXISTS (
+                           SELECT 1 FROM document_revision_files AS cleanup_files
+                           JOIN document_revisions AS cleanup_revisions ON cleanup_revisions.id = cleanup_files.revision_id
+                           WHERE cleanup_revisions.document_record_id = records.id
+                             AND cleanup_files.cleanup_status = 'complete'
+                         ) THEN 'complete'
+                         ELSE NULL
+                       END AS cleanup_status
                 FROM applications
                 JOIN document_requirements AS requirements
                   ON requirements.application_type = applications.application_type
@@ -33,7 +48,11 @@ export function createDocumentRepository(database) {
                 LIMIT 1
             `).bind(applicationType, code).first();
         },
-        async createStudentUploadIntent({ applicationId, requirementId, documentRecordId, revisionId, fileId, storageKey, filename, mediaType, byteSize, intentId, idempotencyKey, expiresAt, createdAt }) {
+        async createStudentUploadIntent({ applicationId, requirementId, conditionalRule, documentRecordId, revisionId, fileId, storageKey, filename, mediaType, byteSize, intentId, idempotencyKey, expiresAt, createdAt }) {
+            if (conditionalRule && conditionalRule !== 'under18' && conditionalRule !== 'fingerprint_product_requirement') {
+                throw new TypeError('Unsupported document policy condition.');
+            }
+            const ageCondition = conditionalRule === 'under18' ? 'AND applications.is_under_18 = 1' : '';
             const results = await database.batch([
                 database.prepare(`
                     INSERT INTO document_records (id, application_id, requirement_id, application_type)
@@ -43,7 +62,7 @@ export function createDocumentRepository(database) {
                       ON requirements.application_type = applications.application_type
                     WHERE applications.id = ? AND applications.status = 'draft'
                       AND requirements.id = ? AND requirements.is_active = 1
-                      AND (requirements.code NOT IN ('birth_certificate_under18', 'birth_certificate') OR applications.is_under_18 = 1)
+                      ${ageCondition}
                     ON CONFLICT(application_id, requirement_id) DO NOTHING
                 `).bind(documentRecordId, applicationId, requirementId),
                 database.prepare(`
@@ -89,7 +108,7 @@ export function createDocumentRepository(database) {
                     LEFT JOIN document_revisions AS previous ON previous.document_record_id = records.id
                     WHERE records.application_id = ? AND records.requirement_id = ?
                       AND applications.status = 'draft' AND requirements.is_active = 1
-                      AND (requirements.code NOT IN ('birth_certificate_under18', 'birth_certificate') OR applications.is_under_18 = 1)
+                      ${ageCondition}
                     GROUP BY records.id
                 `).bind(revisionId, createdAt, applicationId, requirementId),
                 database.prepare(`
@@ -160,7 +179,11 @@ export function createDocumentRepository(database) {
             ]);
             return results[0]?.meta?.changes === 1;
         },
-        async finalizeStudentUpload({ applicationId, intentId, fileId, revisionId, documentRecordId, finalizedAt }) {
+        async finalizeStudentUpload({ applicationId, intentId, fileId, revisionId, documentRecordId, conditionalRule, finalizedAt }) {
+            if (conditionalRule && conditionalRule !== 'under18' && conditionalRule !== 'fingerprint_product_requirement') {
+                throw new TypeError('Unsupported document policy condition.');
+            }
+            const ageCondition = conditionalRule === 'under18' ? 'AND applications.is_under_18 = 1' : '';
             const validPendingIntent = `EXISTS (
                 SELECT 1 FROM upload_intents AS intents
                 JOIN document_revision_files AS files ON files.id = intents.revision_file_id
@@ -172,7 +195,7 @@ export function createDocumentRepository(database) {
                   AND datetime(intents.expires_at) > datetime(?)
                   AND records.application_id = ? AND applications.status = 'draft'
                   AND requirements.is_active = 1
-                  AND (requirements.code NOT IN ('birth_certificate_under18', 'birth_certificate') OR applications.is_under_18 = 1)
+                  ${ageCondition}
             )`;
             const results = await database.batch([
                 database.prepare(`
@@ -201,6 +224,71 @@ export function createDocumentRepository(database) {
                 `).bind(finalizedAt, intentId, fileId, revisionId)
             ]);
             return results[4]?.meta?.changes === 1;
+        },
+        async beginStudentDocumentDelete({ applicationId, code, requestedAt }) {
+            const record = await database.prepare(`
+                SELECT records.id, records.review_status,
+                       EXISTS (
+                           SELECT 1 FROM document_revisions AS revisions
+                           WHERE revisions.document_record_id = records.id AND revisions.status = 'approved'
+                       ) AS has_approved_revision
+                FROM document_records AS records
+                JOIN applications ON applications.id = records.application_id
+                JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
+                WHERE records.application_id = ? AND requirements.code = ?
+                  AND requirements.is_active = 1 AND applications.status = 'draft'
+                LIMIT 1
+            `).bind(applicationId, code).first();
+            if (!record) return { found: false, locked: false };
+            if (record.review_status === 'under_review' || record.review_status === 'approved' || record.has_approved_revision) {
+                return { found: true, locked: true };
+            }
+            await database.batch([
+                database.prepare(`
+                    UPDATE upload_intents SET status = 'rejected'
+                    WHERE status = 'pending' AND revision_file_id IN (
+                        SELECT files.id FROM document_revision_files AS files
+                        JOIN document_revisions AS revisions ON revisions.id = files.revision_id
+                        WHERE revisions.document_record_id = ?
+                    )
+                `).bind(record.id),
+                database.prepare(`
+                    UPDATE document_revisions SET is_current = 0, status = 'superseded'
+                    WHERE document_record_id = ? AND status <> 'approved'
+                `).bind(record.id),
+                database.prepare(`
+                    UPDATE document_revision_files SET cleanup_status = 'pending', cleanup_requested_at = ?
+                    WHERE revision_id IN (SELECT id FROM document_revisions WHERE document_record_id = ?)
+                      AND cleanup_status <> 'complete'
+                `).bind(requestedAt, record.id)
+            ]);
+            return { found: true, locked: false };
+        },
+        async listStudentDocumentCleanupFiles(applicationId, code) {
+            const result = await database.prepare(`
+                SELECT files.id, files.storage_key
+                FROM document_revision_files AS files
+                JOIN document_revisions AS revisions ON revisions.id = files.revision_id
+                JOIN document_records AS records ON records.id = revisions.document_record_id
+                JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
+                WHERE records.application_id = ? AND requirements.code = ?
+                  AND files.cleanup_status = 'pending'
+                ORDER BY files.created_at, files.id
+            `).bind(applicationId, code).all();
+            return result.results;
+        },
+        async completeStudentDocumentCleanup(applicationId, code, fileId) {
+            const result = await database.prepare(`
+                UPDATE document_revision_files SET cleanup_status = 'complete'
+                WHERE id = ? AND cleanup_status = 'pending'
+                  AND revision_id IN (
+                      SELECT revisions.id FROM document_revisions AS revisions
+                      JOIN document_records AS records ON records.id = revisions.document_record_id
+                      JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
+                      WHERE records.application_id = ? AND requirements.code = ?
+                  )
+            `).bind(fileId, applicationId, code).run();
+            return result.meta.changes === 1;
         },
         async findPrivateFileById(fileId) {
             return database.prepare(`

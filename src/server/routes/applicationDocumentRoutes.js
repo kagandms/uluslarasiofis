@@ -1,5 +1,5 @@
 import { ApiError } from '../domain/errors.js';
-import { calculateStudentDocumentRequirements } from '../domain/documentRequirements.js';
+import { listDocumentPolicies, readDocumentPolicy } from '../domain/documentPolicy.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { createDocumentStorage } from '../storage/documentStorage.js';
@@ -7,20 +7,19 @@ import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
 
-const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 const UPLOAD_INTENT_SECONDS = 10 * 60;
-const ALLOWED_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 
-function requireUploadMetadata(body) {
+function requireUploadMetadata(body, policy) {
     const code = typeof body.code === 'string' ? body.code.trim() : '';
     const filename = typeof body.filename === 'string' ? body.filename.trim() : '';
     const mediaType = typeof body.media_type === 'string' ? body.media_type.trim().toLowerCase() : '';
     const byteSize = body.byte_size;
     if (!/^[a-z0-9_]{1,80}$/.test(code)
         || !filename || filename.length > 255
-        || !ALLOWED_MEDIA_TYPES.has(mediaType)
-        || !Number.isSafeInteger(byteSize) || byteSize < 1 || byteSize > MAX_DOCUMENT_BYTES) {
-        throw new ApiError(400, 'VALIDATION_ERROR', 'Belge adı, biçimi veya boyutunu kontrol edip tekrar deneyin.');
+        || !policy.accepted_media_types.includes(mediaType)
+        || !Number.isSafeInteger(byteSize) || byteSize < 1 || byteSize > policy.max_byte_size) {
+        const code = Number.isSafeInteger(byteSize) && byteSize > policy.max_byte_size ? 'FILE_TOO_LARGE' : 'INVALID_FILE';
+        throw new ApiError(400, code, 'Belge biçimini ve boyutunu kontrol edip tekrar deneyin.');
     }
     return { code, filename: createSafeFilename(filename), mediaType, byteSize };
 }
@@ -36,20 +35,42 @@ async function readCurrentStudentRequirements(session, environment) {
     const application = await repositories.applications.findById(session.application_id);
     if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     const storedRequirements = await repositories.documents.listStudentRequirements(application.id);
-    const requirements = calculateStudentDocumentRequirements(storedRequirements, application);
+    const policies = listDocumentPolicies(application.application_type, application.is_under_18 === 1);
+    const requirements = policies.filter((policy) => storedRequirements.some((entry) => entry.code === policy.code))
+        .map((policy) => {
+            const stored = storedRequirements.find((entry) => entry.code === policy.code);
+            return {
+                ...policy,
+                review_status: stored.review_status,
+                revision_number: stored.revision_number,
+                revision_status: stored.revision_status,
+                upload_status: stored.upload_status,
+                scan_status: stored.scan_status,
+                original_filename: stored.original_filename,
+                cleanup_status: stored.cleanup_status
+            };
+        });
     return { application, repositories, requirements };
 }
 
 function createStudentRequirementDto(requirement) {
     return {
         code: requirement.code,
-        is_required: Boolean(requirement.is_required),
+        required: requirement.required,
+        is_required: requirement.required,
+        display_order: requirement.display_order,
+        label_key: requirement.label_key,
+        description_key: requirement.description_key,
+        accepted_media_types: requirement.accepted_media_types,
+        max_byte_size: requirement.max_byte_size,
+        conditional_rule: requirement.conditional_rule,
         revision_number: requirement.revision_number ?? null,
         review_status: requirement.review_status ?? null,
         revision_status: requirement.revision_status ?? null,
         upload_status: requirement.upload_status ?? null,
         scan_status: requirement.scan_status ?? null,
-        filename: requirement.original_filename ?? null
+        filename: requirement.original_filename ?? null,
+        cleanup_status: requirement.cleanup_status ?? null
     };
 }
 
@@ -90,7 +111,7 @@ export async function readCurrentStudentDocumentRequirements(request, environmen
     const session = await requireApplicationSession(request, environment);
     const { application, requirements } = await readCurrentStudentRequirements(session, environment);
     return {
-        application: { is_under_18: application.is_under_18 === 1 },
+        application: { application_type: application.application_type, is_under_18: application.is_under_18 === 1 },
         requirements: requirements.map(createStudentRequirementDto)
     };
 }
@@ -106,8 +127,12 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
     requireMethod(request, 'POST');
     requireSameOrigin(request);
     const session = await requireApplicationSession(request, environment);
-    const metadata = requireUploadMetadata(await readJsonBody(request));
     const { application, repositories, requirements } = await readCurrentStudentRequirements(session, environment);
+    const body = await readJsonBody(request);
+    const requestedCode = typeof body.code === 'string' ? body.code.trim() : '';
+    requireOwnedRequirement(requirements, requestedCode);
+    const policy = readDocumentPolicy(requestedCode, application.application_type, application.is_under_18 === 1);
+    const metadata = requireUploadMetadata(body, policy);
     requireDraftApplication(application);
     requireOwnedRequirement(requirements, metadata.code);
     const requirement = await repositories.documents.findStudentRequirementId(application.application_type, metadata.code);
@@ -135,6 +160,7 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
     const created = await repositories.documents.createStudentUploadIntent({
         applicationId: application.id,
         requirementId: requirement.id,
+        conditionalRule: policy.conditional_rule,
         documentRecordId: crypto.randomUUID(),
         revisionId: crypto.randomUUID(),
         fileId: crypto.randomUUID(),
@@ -197,7 +223,9 @@ export async function finalizeCurrentStudentDocument(request, environment) {
     if (!object) throw new ApiError(409, 'UPLOAD_OBJECT_MISSING', 'Yüklenen belge bulunamadı. Yüklemeyi yeniden deneyin.');
     const actualSize = object.size;
     const actualMediaType = object.httpMetadata?.contentType;
-    if (actualSize !== intent.byte_size || actualSize > MAX_DOCUMENT_BYTES || actualMediaType !== intent.media_type) {
+    const policy = readDocumentPolicy(intent.code, application.application_type, application.is_under_18 === 1);
+    if (!policy || actualSize !== intent.byte_size || actualSize > policy.max_byte_size
+        || !policy.accepted_media_types.includes(actualMediaType) || actualMediaType !== intent.media_type) {
         await repositories.documents.rejectStudentUpload(application.id, intent.id);
         await storage.delete(intent.storage_key);
         throw new ApiError(409, 'UPLOAD_OBJECT_MISMATCH', 'Yüklenen belge bilgileri doğrulanamadı. Yeni bir yükleme başlatın.');
@@ -210,6 +238,7 @@ export async function finalizeCurrentStudentDocument(request, environment) {
         fileId: intent.file_id,
         revisionId: intent.revision_id,
         documentRecordId: intent.document_record_id,
+        conditionalRule: policy.conditional_rule,
         finalizedAt
     });
     if (!finalized) {
@@ -220,4 +249,44 @@ export async function finalizeCurrentStudentDocument(request, environment) {
         return { document: createFinalizedDocumentDto(refreshedIntent) };
     }
     return { document: createFinalizedDocumentDto(intent) };
+}
+
+/**
+ * Removes the current student's draft document from visibility, then retries private R2 cleanup safely.
+ * @param {Request} request Owner-session DELETE request.
+ * @param {object} environment Worker bindings.
+ * @param {string} code Student-safe policy code from the route.
+ * @returns {Promise<object>} Cleanup state without exposing file identifiers or storage keys.
+ * @throws {ApiError} When the session, origin, application state, or requirement is invalid.
+ */
+export async function deleteCurrentStudentDocument(request, environment, code) {
+    requireMethod(request, 'DELETE');
+    requireSameOrigin(request);
+    const session = await requireApplicationSession(request, environment);
+    const { application, repositories, requirements } = await readCurrentStudentRequirements(session, environment);
+    requireDraftApplication(application);
+    requireOwnedRequirement(requirements, code);
+    const deletion = await repositories.documents.beginStudentDocumentDelete({
+        applicationId: application.id,
+        code,
+        requestedAt: new Date().toISOString()
+    });
+    if (!deletion.found) return { cleanup_status: 'complete' };
+    if (deletion.locked) throw new ApiError(409, 'DOCUMENT_NOT_EDITABLE', 'Bu belge artık öğrenci tarafından değiştirilemez.');
+
+    const storage = createDocumentStorage(environment);
+    const files = await repositories.documents.listStudentDocumentCleanupFiles(application.id, code);
+    for (const file of files) {
+        try {
+            await storage.delete(file.storage_key);
+            await repositories.documents.completeStudentDocumentCleanup(application.id, code, file.id);
+        } catch (error) {
+            console.error('Student document cleanup remains pending.', {
+                errorName: error?.name || 'UnknownError',
+                errorCode: error?.code || 'STORAGE_DELETE_ERROR'
+            });
+        }
+    }
+    const remaining = await repositories.documents.listStudentDocumentCleanupFiles(application.id, code);
+    return { cleanup_status: remaining.length ? 'pending' : 'complete' };
 }

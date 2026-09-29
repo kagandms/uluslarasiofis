@@ -1,4 +1,24 @@
-import { PUBLIC_MESSAGES } from './i18n/messages.js';
+import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
+import { createDraftAutosave } from './draftAutosave.js';
+
+const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
+const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
+const UPLOAD_ERROR_KEYS = Object.freeze({
+    FILE_TOO_LARGE: 'fileTooLarge', INVALID_FILE: 'invalidFileType', STORAGE_UNAVAILABLE: 'uploadIntentFailed',
+    UPLOAD_CAPABILITY_EXPIRED: 'uploadCapabilityExpired', UPLOAD_NETWORK_ERROR: 'uploadNetworkFailed',
+    UPLOAD_TIMEOUT: 'uploadNetworkFailed', R2_UPLOAD_FAILED: 'r2UploadFailed', UPLOAD_OBJECT_MISMATCH: 'finalizeFailed',
+    UPLOAD_OBJECT_MISSING: 'uploadObjectMissing', UPLOAD_INTENT_EXPIRED: 'uploadIntentExpired',
+    UPLOAD_INTENT_UNAVAILABLE: 'uploadIntentExpired', NETWORK_ERROR: 'finalizeUnknown',
+    APPLICATION_SESSION_REQUIRED: 'sessionExpired', APPLICATION_NOT_EDITABLE: 'applicationNoLongerEditable',
+    DOCUMENT_NOT_EDITABLE: 'applicationNoLongerEditable', DECLARATION_VERSION_CONFLICT: 'declarationVersionChanged'
+});
+
+function readMessages(document) {
+    const locale = document.documentElement.lang;
+    const closeoutMessages = SESSION3_MESSAGES[locale] || SESSION3_MESSAGES.tr;
+    const publicMessages = PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr;
+    return { ...closeoutMessages, ...publicMessages };
+}
 
 function createTranslatedElement(document, tag, key, text) {
     const element = document.createElement(tag);
@@ -7,80 +27,17 @@ function createTranslatedElement(document, tag, key, text) {
     return element;
 }
 
-function createFingerprintChoice(document, value, key, selected, messages) {
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'fingerprint_status';
-    input.value = value;
-    input.checked = selected === value;
-    input.required = true;
-    const text = createTranslatedElement(document, 'span', key, messages[key]);
-    label.append(input, text);
-    return label;
+function createButton(document, messages, key, action, className = 'application-button application-button-secondary') {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.dataset.action = action;
+    button.dataset.i18n = key;
+    button.textContent = messages[key];
+    return button;
 }
 
-/**
- * Renders the separate fingerprint registration state and code input for the applicant.
- * @param {HTMLElement} root Student wizard content container.
- * @param {object} application Student-safe application fields.
- * @returns {HTMLElement} The rendered fingerprint fieldset.
- */
-export function renderFingerprintSection(root, application) {
-    const document = root.ownerDocument;
-    const locale = document.documentElement.lang;
-    const messages = PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr;
-    const fieldset = document.createElement('fieldset');
-    const selected = application.fingerprint_status;
-    fieldset.className = 'application-fieldset fingerprint-fields';
-    fieldset.append(createTranslatedElement(document, 'legend', 'fingerprintQuestion', messages.fingerprintQuestion));
-    fieldset.append(
-        createFingerprintChoice(document, 'registered', 'yes', selected, messages),
-        createFingerprintChoice(document, 'not_registered', 'no', selected, messages)
-    );
-
-    if (selected === 'registered') appendFingerprintCode(document, fieldset, application, messages);
-    if (selected === 'not_registered') {
-        fieldset.append(createTranslatedElement(document, 'p', 'fingerprintNotRegisteredNotice', messages.fingerprintNotRegisteredNotice));
-    }
-    root.append(fieldset);
-    return fieldset;
-}
-
-function appendFingerprintCode(document, fieldset, application, messages) {
-    const label = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.name = 'fingerprint_code';
-    input.maxLength = 128;
-    input.autocomplete = 'off';
-    input.value = application.fingerprint_code || '';
-    label.append(createTranslatedElement(document, 'span', 'fingerprintCodeLabel', messages.fingerprintCodeLabel), input);
-    fieldset.append(label);
-    if (!input.value.trim()) fieldset.append(createTranslatedElement(document, 'p', 'fingerprintCodeMissing', messages.fingerprintCodeMissing));
-}
-
-const STEP_MESSAGE_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepReview']);
-const DOCUMENT_MESSAGE_KEYS = Object.freeze({
-    residence_application_form: 'documentResidenceApplicationForm',
-    passport_identity: 'documentPassportIdentity',
-    photographs: 'documentPhotographs',
-    health_insurance: 'documentHealthInsurance',
-    uets: 'documentUets',
-    student_certificate: 'documentStudentCertificate',
-    residence_permit_fee: 'documentResidencePermitFee',
-    address_document: 'documentAddressDocument',
-    fingerprint: 'documentFingerprint',
-    home_utility_bill: 'documentHomeUtilityBill',
-    birth_certificate: 'documentBirthCertificateUnder18',
-    birth_certificate_under18: 'documentBirthCertificateUnder18'
-});
-
-function readMessages(document) {
-    return PUBLIC_MESSAGES[document.documentElement.lang] || PUBLIC_MESSAGES.tr;
-}
-
-function createTextField(document, { key, name, value, type = 'text', required = false, disabled = false, maxLength = 255 }) {
+function createTextField(document, { key, name, value, type = 'text', required = false, maxLength = 255 }) {
     const messages = readMessages(document);
     const label = document.createElement('label');
     const input = document.createElement('input');
@@ -88,9 +45,8 @@ function createTextField(document, { key, name, value, type = 'text', required =
     label.append(createTranslatedElement(document, 'span', key, messages[key]));
     input.type = type;
     input.name = name;
-    input.value = value || '';
+    input.value = value ?? '';
     input.required = required;
-    input.disabled = disabled;
     if (type !== 'date') input.maxLength = maxLength;
     label.append(input);
     return label;
@@ -119,62 +75,6 @@ function createSelectField(document, { key, name, value, options, required = fal
 function createWizardForm(document) {
     const form = document.createElement('form');
     form.id = 'application-step-form';
-    form.noValidate = false;
-    return form;
-}
-
-function createContactStep(document, application, formValues) {
-    const messages = readMessages(document);
-    const fields = { ...application, ...formValues };
-    const form = createWizardForm(document);
-    form.append(createTextField(document, {
-        key: 'studentNumber', name: 'student_number', value: fields.student_number,
-        required: true, disabled: Boolean(application), maxLength: 64
-    }));
-    form.append(createTextField(document, {
-        key: 'email', name: 'student_email', type: 'email', value: fields.student_email,
-        required: true, maxLength: 254
-    }));
-    form.append(createTextField(document, {
-        key: 'phone', name: 'student_phone', type: 'tel', value: fields.student_phone,
-        required: true, maxLength: 40
-    }));
-    const applicationType = createSelectField(document, {
-        key: 'applicationType', name: 'application_type', value: fields.application_type,
-        required: true, options: [
-            { value: '', key: 'applicationType' },
-            { value: 'initial', key: 'initialApplication' },
-            { value: 'renewal', key: 'renewalApplication' }
-        ]
-    });
-    applicationType.querySelector('select').disabled = Boolean(application);
-    form.append(applicationType);
-    form.append(createContinueButton(document, messages));
-    return form;
-}
-
-function createResidenceStep(document, application, formValues) {
-    const messages = readMessages(document);
-    const fields = { ...application, ...formValues };
-    const form = createWizardForm(document);
-    form.append(createTextField(document, { key: 'firstName', name: 'first_name', value: fields.first_name }));
-    form.append(createTextField(document, { key: 'lastName', name: 'last_name', value: fields.last_name }));
-    form.append(createTextField(document, { key: 'passportNumber', name: 'passport_number', value: fields.passport_number }));
-    form.append(createTextField(document, { key: 'nationality', name: 'nationality', value: fields.nationality }));
-    form.append(createTextField(document, { key: 'dateOfBirth', name: 'date_of_birth', type: 'date', value: fields.date_of_birth }));
-    form.append(createSelectField(document, {
-        key: 'under18Question', name: 'is_under_18',
-        value: application.is_under_18 === 1 || fields.is_under_18 === true
-            ? 'true'
-            : (application.is_under_18 === 0 || fields.is_under_18 === false ? 'false' : ''),
-        required: true, options: [
-            { value: '', key: 'under18Question' },
-            { value: 'true', key: 'yes' },
-            { value: 'false', key: 'no' }
-        ]
-    }));
-    renderFingerprintSection(form, fields);
-    form.append(createContinueButton(document, messages));
     return form;
 }
 
@@ -187,50 +87,180 @@ function createContinueButton(document, messages) {
     return button;
 }
 
-function createPreviousButton(document, messages) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'application-button application-button-secondary';
-    button.dataset.action = 'previous';
-    button.dataset.i18n = 'previous';
-    button.textContent = messages.previous;
-    return button;
-}
-
-function createDocumentStatus(document, requirement, messages) {
-    const status = document.createElement('p');
-    let key = 'documentNotUploaded';
-    if (requirement.review_status === 'resubmission_required' || requirement.revision_status === 'resubmission_required') key = 'documentNeedsReplacement';
-    else if (requirement.review_status === 'approved' || requirement.revision_status === 'approved') key = 'documentApproved';
-    else if (requirement.upload_status === 'finalized') key = 'uploadedWaitingReview';
-    status.className = 'document-upload-status';
-    status.dataset.i18n = key;
-    status.textContent = messages[key];
-    return status;
-}
-
-function createDocumentCard(document, requirement, { allowUpload, isBusy }) {
+function createContactStep(document, application, formValues) {
     const messages = readMessages(document);
+    const fields = { ...application, ...formValues };
+    const form = createWizardForm(document);
+    form.append(createTextField(document, { key: 'studentNumber', name: 'student_number', value: fields.student_number, required: true, maxLength: 64 }));
+    form.append(createTextField(document, { key: 'email', name: 'student_email', type: 'email', value: fields.student_email, required: true, maxLength: 254 }));
+    form.append(createTextField(document, { key: 'phone', name: 'student_phone', type: 'tel', value: fields.student_phone, required: true, maxLength: 40 }));
+    form.append(createSelectField(document, {
+        key: 'applicationType', name: 'application_type', value: fields.application_type, required: true,
+        options: [{ value: '', key: 'applicationType' }, { value: 'initial', key: 'initialApplication' }, { value: 'renewal', key: 'renewalApplication' }]
+    }));
+    form.querySelector('[name="student_number"]').disabled = Boolean(application);
+    form.querySelector('[name="application_type"]').disabled = Boolean(application);
+    form.append(createContinueButton(document, messages));
+    return form;
+}
+
+function createFingerprintChoice(document, value, key, selected, messages) {
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'fingerprint_status';
+    input.value = value;
+    input.checked = selected === value;
+    input.required = true;
+    label.append(input, createTranslatedElement(document, 'span', key, messages[key]));
+    return label;
+}
+
+/**
+ * Renders separate fingerprint registration and code fields.
+ * @param {HTMLElement} root Student wizard content container.
+ * @param {object} application Student-safe application values.
+ * @returns {HTMLElement} Rendered fingerprint fieldset.
+ */
+export function renderFingerprintSection(root, application) {
+    const document = root.ownerDocument;
+    const messages = readMessages(document);
+    const fieldset = document.createElement('fieldset');
+    fieldset.className = 'application-fieldset fingerprint-fields';
+    fieldset.append(createTranslatedElement(document, 'legend', 'fingerprintQuestion', messages.fingerprintQuestion));
+    fieldset.append(
+        createFingerprintChoice(document, 'registered', 'yes', application.fingerprint_status, messages),
+        createFingerprintChoice(document, 'not_registered', 'no', application.fingerprint_status, messages)
+    );
+    if (application.fingerprint_status === 'registered') appendFingerprintCode(document, fieldset, application, messages);
+    if (application.fingerprint_status === 'not_registered') {
+        fieldset.append(createTranslatedElement(document, 'p', 'fingerprintNotRegisteredNotice', messages.fingerprintNotRegisteredNotice));
+    }
+    root.append(fieldset);
+    return fieldset;
+}
+
+function appendFingerprintCode(document, fieldset, application, messages) {
+    const label = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.name = 'fingerprint_code';
+    input.maxLength = 128;
+    input.required = true;
+    input.autocomplete = 'off';
+    input.value = application.fingerprint_code || '';
+    label.append(createTranslatedElement(document, 'span', 'fingerprintCodeLabel', messages.fingerprintCodeLabel), input);
+    fieldset.append(label);
+    if (!input.value.trim()) fieldset.append(createTranslatedElement(document, 'p', 'fingerprintCodeMissing', messages.fingerprintCodeMissing));
+}
+
+function createResidenceStep(document, application, formValues) {
+    const messages = readMessages(document);
+    const fields = { ...application, ...formValues };
+    const form = createWizardForm(document);
+    RESIDENCE_FIELDS.forEach((field) => {
+        const key = ({ first_name: 'firstName', last_name: 'lastName', passport_number: 'passportNumber', nationality: 'nationality', date_of_birth: 'dateOfBirth' })[field];
+        form.append(createTextField(document, { key, name: field, value: fields[field], type: field === 'date_of_birth' ? 'date' : 'text', required: true }));
+    });
+    const under18 = application.is_under_18 === 1 || fields.is_under_18 === true
+        ? 'true' : (application.is_under_18 === 0 || fields.is_under_18 === false ? 'false' : '');
+    form.append(createSelectField(document, {
+        key: 'under18Question', name: 'is_under_18', value: under18, required: true,
+        options: [{ value: '', key: 'under18Question' }, { value: 'true', key: 'yes' }, { value: 'false', key: 'no' }]
+    }));
+    renderFingerprintSection(form, fields);
+    form.append(createContinueButton(document, messages));
+    return form;
+}
+
+function getDocumentStatusKey(requirement, task) {
+    if (task?.state && task.state !== 'complete') return `uploadState_${task.state}`;
+    if (requirement.cleanup_status === 'pending') return 'deleteCleanupPending';
+    if (requirement.review_status === 'approved' || requirement.revision_status === 'approved') return 'documentApproved';
+    if (requirement.review_status === 'under_review') return 'documentStaffReview';
+    if (requirement.review_status === 'resubmission_required' || requirement.revision_status === 'resubmission_required') return 'documentNeedsReplacement';
+    if (requirement.scan_status === 'pending') return 'documentPendingScan';
+    if (requirement.upload_status === 'finalized') return 'uploadedWaitingReview';
+    return 'documentNotUploaded';
+}
+
+function createFilePolicyText(document, requirement, messages) {
+    const types = requirement.accepted_media_types.join(', ');
+    const size = (requirement.max_byte_size / (1024 * 1024)).toLocaleString(document.documentElement.lang);
+    return messages.filePolicy.replace('{types}', types).replace('{size}', `${size} MB`);
+}
+
+function createFileInput(document, requirement, task, messages) {
+    const label = document.createElement('label');
+    const textKey = requirement.filename ? 'replaceDocument' : 'uploadDocument';
+    const text = createTranslatedElement(document, 'span', textKey, messages[textKey]);
+    const input = document.createElement('input');
+    const help = document.createElement('small');
+    input.type = 'file';
+    input.accept = requirement.accepted_media_types.join(',');
+    input.dataset.documentCode = requirement.code;
+    input.disabled = ['preparing', 'uploading', 'verifying'].includes(task?.state);
+    help.textContent = createFilePolicyText(document, requirement, messages);
+    label.className = 'application-upload-control';
+    label.append(text, input, help);
+    return label;
+}
+
+function createUploadProgress(document, task, messages) {
+    if (!task || task.state !== 'uploading') return null;
+    const wrapper = document.createElement('div');
+    const progress = document.createElement('progress');
+    const label = createTranslatedElement(document, 'span', 'uploadProgress', messages.uploadProgress.replace('{percent}', String(task.progress || 0)));
+    label.dataset.progressLabel = 'true';
+    progress.max = 100;
+    progress.value = task.progress || 0;
+    progress.setAttribute('role', 'progressbar');
+    progress.setAttribute('aria-valuemin', '0');
+    progress.setAttribute('aria-valuemax', '100');
+    progress.setAttribute('aria-valuenow', String(task.progress || 0));
+    progress.setAttribute('aria-label', messages.uploadProgress.replace('{percent}', String(task.progress || 0)));
+    wrapper.setAttribute('aria-live', 'polite');
+    wrapper.append(progress, label);
+    return wrapper;
+}
+
+function createDocumentCard(document, requirement, state, { allowUpload }) {
+    const messages = readMessages(document);
+    const task = state.uploads[requirement.code];
     const card = document.createElement('article');
-    const name = document.createElement('h3');
-    const labelKey = DOCUMENT_MESSAGE_KEYS[requirement.code] || 'documentNotUploaded';
-    name.dataset.i18n = labelKey;
-    name.textContent = messages[labelKey];
+    const title = createTranslatedElement(document, 'h3', requirement.label_key, messages[requirement.label_key] || messages.documentNotUploaded);
+    const description = createTranslatedElement(document, 'p', requirement.description_key, messages[requirement.description_key] || '');
+    const statusKey = state.deleting[requirement.code] ? 'deleteInProgress' : (task?.errorKey || getDocumentStatusKey(requirement, task));
+    const status = createTranslatedElement(document, 'p', statusKey, messages[statusKey] || messages.documentNotUploaded);
     card.className = 'application-document-card';
-    card.append(name);
-    card.append(createRequirementBadge(document, requirement.is_required, messages));
-    card.append(createDocumentStatus(document, requirement, messages));
-    if (requirement.filename) appendFilename(document, card, requirement.filename);
-    if (allowUpload) card.append(createFileInput(document, requirement.code, messages, isBusy));
+    card.dataset.documentCode = requirement.code;
+    status.className = 'document-upload-status';
+    status.setAttribute('aria-live', 'polite');
+    card.append(title, description, createRequirementBadge(document, requirement.required ?? requirement.is_required, messages), status);
+    if (requirement.filename) appendFilename(document, card, `${messages.currentFile}: ${requirement.filename}`);
+    if (task?.file && task.state !== 'complete') appendFilename(document, card, `${messages.selectedReplacement}: ${task.file.name}`);
+    const progress = createUploadProgress(document, task, messages);
+    if (progress) card.append(progress);
+    if (!allowUpload) return card;
+    card.append(createFileInput(document, requirement, task, messages));
+    if (task && ['failed_upload', 'failed_finalize', 'unknown_finalize_result', 'cancelled'].includes(task.state)) {
+        card.append(createButton(document, messages, 'retryUpload', 'document-retry'));
+    }
+    if (task && task.state === 'uploading') {
+        card.append(createButton(document, messages, 'cancelUpload', 'document-cancel'));
+    }
+    if (requirement.filename || requirement.cleanup_status === 'pending') {
+        const remove = createButton(document, messages, requirement.cleanup_status === 'pending' ? 'retryCleanup' : 'deleteDocument', 'document-delete');
+        remove.disabled = state.deleting[requirement.code] === true;
+        card.append(remove);
+    }
     return card;
 }
 
 function createRequirementBadge(document, isRequired, messages) {
-    const badge = document.createElement('span');
     const key = isRequired ? 'required' : 'optional';
+    const badge = createTranslatedElement(document, 'span', key, messages[key]);
     badge.className = isRequired ? 'requirement-badge is-required' : 'requirement-badge';
-    badge.dataset.i18n = key;
-    badge.textContent = messages[key];
     return badge;
 }
 
@@ -241,90 +271,118 @@ function appendFilename(document, card, filename) {
     card.append(name);
 }
 
-function createFileInput(document, code, messages, isBusy) {
-    const label = document.createElement('label');
-    const text = createTranslatedElement(document, 'span', 'uploadDocument', messages.uploadDocument);
-    const input = document.createElement('input');
-    const help = createTranslatedElement(document, 'small', 'allowedFileTypes', messages.allowedFileTypes);
-    input.type = 'file';
-    input.accept = '.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp';
-    input.dataset.documentCode = code;
-    input.disabled = isBusy;
-    label.className = 'application-upload-control';
-    label.append(text, input, help);
-    return label;
-}
-
-function createDocumentList(document, requirements, { allowUpload, isBusy }) {
+function createDocumentList(document, requirements, state, { allowUpload }) {
     const list = document.createElement('div');
     list.className = 'application-document-list';
-    requirements.forEach((requirement) => list.append(createDocumentCard(document, requirement, { allowUpload, isBusy })));
+    requirements.forEach((requirement) => list.append(createDocumentCard(document, requirement, state, { allowUpload })));
     return list;
 }
 
 /**
- * Renders student-safe requirement rows without exposing internal database identifiers.
- * @param {HTMLElement} root Requirement list container.
- * @param {Array<object>} requirements Server-calculated student document requirements.
- * @returns {void} Replaces the container contents with localized document cards.
+ * Renders server-provided safe requirement policy without a client policy map.
+ * @param {HTMLElement} root Requirement list mount element.
+ * @param {Array<object>} requirements Student-safe server policy rows.
+ * @returns {void} Replaces the mount contents.
  */
 export function renderStudentDocumentRequirements(root, requirements) {
-    root.replaceChildren(createDocumentList(root.ownerDocument, requirements, { allowUpload: false, isBusy: false }));
+    root.replaceChildren(createDocumentList(root.ownerDocument, requirements, { uploads: {}, deleting: {} }, { allowUpload: false }));
 }
 
 function createFingerprintReview(document, application) {
     const messages = readMessages(document);
     const section = document.createElement('section');
-    const heading = createTranslatedElement(document, 'h3', 'reviewFingerprintHeading', messages.reviewFingerprintHeading);
-    const status = document.createElement('p');
     const statusKey = application.fingerprint_status === 'registered'
-        ? 'fingerprintRegistered'
-        : (application.fingerprint_status === 'not_registered' ? 'fingerprintNotRegistered' : 'fingerprintUnanswered');
+        ? 'fingerprintRegistered' : (application.fingerprint_status === 'not_registered' ? 'fingerprintNotRegistered' : 'fingerprintUnanswered');
     section.className = 'application-review-section';
-    status.dataset.i18n = statusKey;
-    status.textContent = messages[statusKey];
-    section.append(heading, status);
-    if (application.fingerprint_status === 'registered') appendFingerprintReviewCode(document, section, application, messages);
+    section.append(createTranslatedElement(document, 'h3', 'reviewFingerprintHeading', messages.reviewFingerprintHeading));
+    section.append(createTranslatedElement(document, 'p', statusKey, messages[statusKey]));
+    if (application.fingerprint_status === 'registered' && application.fingerprint_code) {
+        const code = document.createElement('code');
+        code.textContent = application.fingerprint_code;
+        section.append(code);
+    }
     if (application.fingerprint_status === 'not_registered') {
         section.append(createTranslatedElement(document, 'p', 'fingerprintNotRegisteredNotice', messages.fingerprintNotRegisteredNotice));
     }
-    if (!application.fingerprint_status) section.append(createTranslatedElement(document, 'p', 'fingerprintAnswerMissing', messages.fingerprintAnswerMissing));
     return section;
 }
 
-function appendFingerprintReviewCode(document, section, application, messages) {
-    const codeLabel = document.createElement('p');
-    const code = document.createElement('code');
-    codeLabel.append(createTranslatedElement(document, 'span', 'reviewFingerprintCode', messages.reviewFingerprintCode));
-    if (application.fingerprint_code) {
-        code.textContent = application.fingerprint_code;
-        codeLabel.append(document.createTextNode(': '), code);
-        section.append(codeLabel);
-        return;
+function createDeclarationStep(document, application) {
+    const messages = readMessages(document);
+    const form = createWizardForm(document);
+    const declaration = application.declaration || {};
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.name = 'declaration_accepted';
+    checkbox.required = true;
+    checkbox.checked = declaration.accepted_current === true;
+    label.append(checkbox, createTranslatedElement(document, 'span', declaration.content_key || 'studentInformationAcknowledgement', messages[declaration.content_key] || messages.studentInformationAcknowledgement));
+    form.append(label, createContinueButton(document, messages));
+    if (declaration.accepted_current && declaration.accepted_at) {
+        form.append(createTranslatedElement(document, 'p', 'declarationAccepted', messages.declarationAccepted));
     }
-    section.append(codeLabel, createTranslatedElement(document, 'p', 'fingerprintCodeMissing', messages.fingerprintCodeMissing));
+    return form;
+}
+
+function createApplicantReview(document, application) {
+    const messages = readMessages(document);
+    const values = [
+        ['studentNumber', application.student_number], ['email', application.student_email], ['phone', application.student_phone],
+        ['applicationType', application.application_type === 'renewal' ? messages.renewalApplication : messages.initialApplication],
+        ['firstName', application.first_name], ['lastName', application.last_name], ['passportNumber', application.passport_number],
+        ['nationality', application.nationality], ['dateOfBirth', application.date_of_birth],
+        ['under18Question', application.is_under_18 === true || application.is_under_18 === 1 ? messages.yes
+            : (application.is_under_18 === false || application.is_under_18 === 0 ? messages.no : '')]
+    ];
+    const section = document.createElement('section');
+    const list = document.createElement('dl');
+    section.className = 'application-review-section';
+    section.append(createTranslatedElement(document, 'h3', 'reviewApplicantHeading', messages.reviewApplicantHeading));
+    values.forEach(([key, value]) => {
+        const term = createTranslatedElement(document, 'dt', key, messages[key]);
+        const detail = document.createElement('dd');
+        detail.textContent = value ?? '';
+        list.append(term, detail);
+    });
+    section.append(list);
+    return section;
 }
 
 function createReviewStep(document, state) {
     const messages = readMessages(document);
     const review = document.createElement('div');
-    const heading = createTranslatedElement(document, 'p', 'reviewHeading', messages.reviewHeading);
     review.className = 'application-review';
-    review.append(heading, createFingerprintReview(document, state.application));
-    review.append(createDocumentList(document, state.requirements, { allowUpload: false, isBusy: state.isBusy }));
+    review.append(createTranslatedElement(document, 'p', 'reviewHeading', messages.reviewHeading));
+    review.append(createApplicantReview(document, state.application));
+    review.append(createFingerprintReview(document, state.application));
+    review.append(createDocumentList(document, state.requirements, state, { allowUpload: false }));
+    const accepted = state.application.declaration?.accepted_current === true;
+    review.append(createTranslatedElement(document, 'p', accepted ? 'declarationAccepted' : 'declarationRequired', messages[accepted ? 'declarationAccepted' : 'declarationRequired']));
+    if (accepted && state.application.declaration.accepted_at) {
+        const time = document.createElement('p');
+        time.append(createTranslatedElement(document, 'span', 'declarationAcceptedAt', messages.declarationAcceptedAt), document.createTextNode(` ${state.application.declaration.accepted_at}`));
+        review.append(time);
+    }
     return review;
 }
 
-function createStepHeading(document, step) {
-    const key = STEP_MESSAGE_KEYS[step];
+function createSaveStatus(document, state) {
     const messages = readMessages(document);
-    return createTranslatedElement(document, 'h2', key, messages[key]);
+    const key = state.saveStatus === 'session_expired' ? 'sessionExpired'
+        : (state.saveStatus === 'failed' ? 'autosaveFailed' : `autosave_${state.saveStatus}`);
+    const status = createTranslatedElement(document, 'p', key, messages[key] || messages.autosave_saved);
+    status.dataset.saveStatus = 'true';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    if (state.saveStatus === 'failed') status.append(createButton(document, messages, 'retrySave', 'autosave-retry'));
+    return status;
 }
 
 function createProgress(document, step) {
     const list = document.createElement('ol');
     list.className = 'application-progress';
-    STEP_MESSAGE_KEYS.forEach((key, index) => {
+    STEP_KEYS.forEach((key, index) => {
         const item = document.createElement('li');
         const messages = readMessages(document);
         item.className = index === step ? 'is-current' : (index < step ? 'is-complete' : '');
@@ -340,8 +398,8 @@ function renderWizard(root, state) {
     const panel = document.createElement('div');
     const stage = document.createElement('section');
     panel.className = 'application-wizard';
-    panel.setAttribute('aria-busy', String(state.isBusy));
-    panel.append(createProgress(document, state.step), createStepHeading(document, state.step));
+    panel.append(createProgress(document, state.step), createTranslatedElement(document, 'h2', STEP_KEYS[state.step], messages[STEP_KEYS[state.step]]));
+    panel.append(createSaveStatus(document, state));
     if (state.errorKey) {
         const error = createTranslatedElement(document, 'p', state.errorKey, messages[state.errorKey]);
         error.setAttribute('role', 'alert');
@@ -349,19 +407,53 @@ function renderWizard(root, state) {
     }
     if (state.step === 0) stage.append(createContactStep(document, state.application, state.formValues));
     if (state.step === 1) stage.append(createResidenceStep(document, state.application, state.formValues));
-    if (state.step === 2) appendDocumentsStep(document, stage, state, messages);
-    if (state.step === 3) stage.append(createReviewStep(document, state));
-    if (state.step > 0) panel.append(createPreviousButton(document, messages));
+    if (state.step === 2) stage.append(createDocumentsStep(document, state));
+    if (state.step === 3) stage.append(createDeclarationStep(document, state.application));
+    if (state.step === 4) stage.append(createReviewStep(document, state));
+    if (state.step > 0) panel.append(createButton(document, messages, 'previous', 'previous'));
     panel.append(stage);
     root.replaceChildren(panel);
 }
 
-function appendDocumentsStep(document, stage, state, messages) {
-    const help = createTranslatedElement(document, 'p', 'allowedFileTypes', messages.allowedFileTypes);
+function updateDocumentCard(root, state, code) {
+    const existing = [...root.querySelectorAll('.application-document-card')]
+        .find((card) => card.dataset.documentCode === code);
+    const requirement = state.requirements.find((entry) => entry.code === code);
+    if (!existing || !requirement || state.step !== 2) {
+        renderWizard(root, state);
+        return;
+    }
+    const document = root.ownerDocument;
+    const activeElement = document.activeElement;
+    const action = activeElement?.closest('.application-document-card') === existing
+        ? (activeElement.dataset.action ? `[data-action="${activeElement.dataset.action}"]` : 'input[type="file"]')
+        : null;
+    const replacement = createDocumentCard(document, requirement, state, { allowUpload: true });
+    existing.replaceWith(replacement);
+    if (action) replacement.querySelector(action)?.focus({ preventScroll: true });
+}
+
+function updateProgress(root, code, task) {
+    const card = [...root.querySelectorAll('.application-document-card')]
+        .find((entry) => entry.dataset.documentCode === code);
+    const progress = card?.querySelector('progress');
+    const messages = readMessages(root.ownerDocument);
+    if (!progress) return;
+    const percent = task.progress || 0;
+    const label = messages.uploadProgress.replace('{percent}', String(percent));
+    progress.value = percent;
+    progress.setAttribute('aria-valuenow', String(percent));
+    progress.setAttribute('aria-label', label);
+    const progressLabel = card.querySelector('[data-progress-label]');
+    if (progressLabel) progressLabel.textContent = label;
+}
+
+function createDocumentsStep(document, state) {
+    const messages = readMessages(document);
     const form = createWizardForm(document);
-    form.append(help, createDocumentList(document, state.requirements, { allowUpload: true, isBusy: state.isBusy }));
+    form.append(createDocumentList(document, state.requirements, state, { allowUpload: true }));
     form.append(createContinueButton(document, messages));
-    stage.append(form);
+    return form;
 }
 
 function readVisibleFields(root, application = {}) {
@@ -375,149 +467,308 @@ function readVisibleFields(root, application = {}) {
             fields.is_under_18 = input.value === '' ? null : input.value === 'true';
             return;
         }
-        fields[input.name] = input.value;
+        fields[input.name] = input.type === 'checkbox' ? input.checked : input.value;
     });
     return fields;
 }
 
-function createContactDraft(fields) {
-    return {
-        student_number: fields.student_number,
-        application_type: fields.application_type,
-        email: fields.student_email,
-        phone: fields.student_phone
+function buildAutosaveValues(fields) {
+    const values = {
+        student_email: fields.student_email ?? '',
+        student_phone: fields.student_phone ?? '',
+        is_under_18: fields.is_under_18 === true || fields.is_under_18 === 1 ? true
+            : (fields.is_under_18 === false || fields.is_under_18 === 0 ? false : null),
+        fingerprint_status: fields.fingerprint_status ?? null,
+        fingerprint_code: fields.fingerprint_status === 'registered' ? (fields.fingerprint_code ?? '') : null
     };
+    RESIDENCE_FIELDS.forEach((field) => { values[field] = fields[field] ?? ''; });
+    return values;
 }
 
-function createResidencePatch(fields) {
-    const patch = { is_under_18: fields.is_under_18, fingerprint_status: fields.fingerprint_status };
-    for (const field of ['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']) {
-        if (typeof fields[field] === 'string' && fields[field].trim()) patch[field] = fields[field].trim();
-    }
-    patch.fingerprint_code = fields.fingerprint_status === 'registered'
-        ? (typeof fields.fingerprint_code === 'string' ? fields.fingerprint_code.trim() || null : null)
-        : null;
-    return patch;
+function createAutosaveValuesFromApplication(application) {
+    if (!application) return {};
+    return buildAutosaveValues({
+        ...application,
+        is_under_18: application.is_under_18 === 1 ? true : (application.is_under_18 === 0 ? false : null)
+    });
 }
 
-function getFailureKey(error, step) {
-    if (step === 2) return 'uploadFailed';
-    if (step === 0 && error.code === 'APPLICATION_SESSION_REQUIRED') return null;
-    return step === 0 && !error.code ? 'applicationLoadFailed' : 'applicationSaveFailed';
+function createAutosave(state, api, root) {
+    const save = api.autosaveCurrentApplication || api.updateCurrentApplication;
+    return createDraftAutosave({
+        initialValues: createAutosaveValuesFromApplication(state.application),
+        save,
+        onSaved: (application) => { state.application = application; state.sessionExpired = false; },
+        onStatus: (status) => {
+            state.saveStatus = state.sessionExpired ? 'session_expired' : status;
+            const node = root.querySelector('[data-save-status]');
+            if (node) {
+                const messages = readMessages(root.ownerDocument);
+                const key = status === 'failed' ? 'autosaveFailed' : `autosave_${status}`;
+                node.dataset.i18n = key;
+                node.textContent = messages[key] || messages.autosave_saved;
+                if (status === 'failed' && !node.querySelector('[data-action="autosave-retry"]')) {
+                    node.append(createButton(root.ownerDocument, messages, 'retrySave', 'autosave-retry'));
+                }
+                if (status !== 'failed') node.querySelector('[data-action="autosave-retry"]')?.remove();
+            }
+        },
+        onError: (error) => {
+            if (error.code === 'APPLICATION_SESSION_REQUIRED') state.sessionExpired = true;
+        }
+    });
 }
 
-async function loadRequirements(state, api) {
+function createContactDraft(fields) {
+    return { student_number: fields.student_number, application_type: fields.application_type, email: fields.student_email, phone: fields.student_phone };
+}
+
+function scheduleCurrentFields(root, state) {
+    if (!state.autosave) return;
+    state.formValues = readVisibleFields(root, state.application);
+    state.autosave.schedule(buildAutosaveValues(state.formValues));
+}
+
+function createErrorKey(error, fallback) {
+    return UPLOAD_ERROR_KEYS[error.code] || fallback;
+}
+
+async function refreshRequirements(state, api) {
     const result = await api.readCurrentStudentDocumentRequirements();
     state.requirements = result.requirements;
 }
 
-async function saveCurrentStep(root, state, api) {
-    if (state.isBusy) return;
-    const form = root.querySelector('#application-step-form');
-    if (form && !form.reportValidity()) return;
-    const fields = readVisibleFields(root, state.application || {});
-    state.errorKey = null;
-    const hadApplication = Boolean(state.application);
-    state.formValues = fields;
-    state.isBusy = true;
-    renderWizard(root, state);
+async function finalizeTask(code, task, state, api, root) {
+    task.state = 'verifying';
+    updateDocumentCard(root, state, code);
     try {
-        await persistStepFields(state, api, fields, hadApplication);
-        if (state.step === 1 || state.step === 2) await loadRequirements(state, api);
-        state.step = Math.min(state.step + 1, 3);
-        state.formValues = null;
+        await api.finalizeStudentDocumentUpload(task.intentId);
+        await refreshRequirements(state, api);
+        task.state = 'complete';
+        task.file = null;
+        task.intentId = null;
+        updateDocumentCard(root, state, code);
     } catch (error) {
-        state.errorKey = getFailureKey(error, state.step);
-    } finally {
-        state.isBusy = false;
-        renderWizard(root, state);
+        if (['UPLOAD_OBJECT_MISSING', 'UPLOAD_INTENT_EXPIRED', 'UPLOAD_INTENT_UNAVAILABLE'].includes(error.code)) {
+            task.state = 'failed_upload';
+            task.errorKey = createErrorKey(error, 'uploadIntentExpired');
+            task.intentId = null;
+            return 'unavailable';
+        }
+        task.state = error.code === 'NETWORK_ERROR' || error.status >= 500 ? 'unknown_finalize_result' : 'failed_finalize';
+        task.errorKey = createErrorKey(error, 'finalizeFailed');
+        updateDocumentCard(root, state, code);
+        return 'failed';
     }
+    return 'complete';
 }
 
-async function persistStepFields(state, api, fields, hadApplication) {
-    if (state.step === 0 && hadApplication) {
-        state.application = await api.updateCurrentApplication({
-            student_email: fields.student_email.trim(), student_phone: fields.student_phone.trim()
+async function runUploadTask(code, task, state, api, root, { isRetry = false } = {}) {
+    if (['preparing', 'uploading', 'verifying'].includes(task.state)) return;
+    task.errorKey = null;
+    if (task.intentId) {
+        const outcome = await finalizeTask(code, task, state, api, root);
+        if (outcome !== 'unavailable') {
+            updateDocumentCard(root, state, code);
+            return;
+        }
+        if (!task.file) return;
+    }
+    if (!task.file) {
+        task.state = 'failed_upload';
+        task.errorKey = 'reselectFile';
+        updateDocumentCard(root, state, code);
+        return;
+    }
+    task.state = 'preparing';
+    task.progress = 0;
+    updateDocumentCard(root, state, code);
+    let upload;
+    try {
+        ({ upload } = await api.createStudentDocumentUploadIntent(code, task.file));
+    } catch (error) {
+        task.state = 'failed_upload';
+        task.errorKey = createErrorKey(error, 'uploadIntentFailed');
+        updateDocumentCard(root, state, code);
+        return;
+    }
+    task.intentId = upload.intent_id;
+    task.state = 'uploading';
+    task.abortController = new AbortController();
+    updateDocumentCard(root, state, code);
+    try {
+        await api.putStudentDocumentDirect(upload, task.file, {
+            signal: task.abortController.signal,
+            onProgress: (progress) => {
+                task.progress = progress;
+                updateProgress(root, code, task);
+            }
         });
+    } catch (error) {
+        task.state = error.code === 'UPLOAD_CANCELLED' ? 'cancelled' : 'failed_upload';
+        task.errorKey = createErrorKey(error, 'r2UploadFailed');
+        task.abortController = null;
+        updateDocumentCard(root, state, code);
         return;
     }
-    if (state.step === 0) {
-        state.application = await api.createApplicationDraft(createContactDraft(fields));
-        return;
-    }
-    if (state.step === 1) state.application = await api.updateCurrentApplication(createResidencePatch(fields));
+    task.abortController = null;
+    task.state = 'verifying';
+    renderWizard(root, state);
+    const result = await finalizeTask(code, task, state, api, root);
+    if (result === 'failed' && isRetry) task.errorKey = createErrorKey({ code: 'NETWORK_ERROR' }, 'finalizeUnknown');
+    updateDocumentCard(root, state, code);
 }
 
 async function handleFileSelection(root, state, api, input) {
-    if (state.isBusy) return;
     const file = input.files?.[0];
     if (!file) return;
-    state.isBusy = true;
-    state.errorKey = null;
-    renderWizard(root, state);
+    const code = input.dataset.documentCode;
+    state.uploads[code] = { state: 'selected', progress: 0, file, intentId: null, abortController: null };
+    updateDocumentCard(root, state, code);
+    await runUploadTask(code, state.uploads[code], state, api, root);
+}
+
+async function handleDelete(root, state, api, code) {
+    state.deleting[code] = true;
+    updateDocumentCard(root, state, code);
     try {
-        await api.uploadStudentDocument(input.dataset.documentCode, file);
-        await loadRequirements(state, api);
+        await api.deleteStudentDocument(code);
+        await refreshRequirements(state, api);
+        state.errorKey = null;
     } catch (error) {
-        state.errorKey = getFailureKey(error, 2);
+        state.errorKey = createErrorKey(error, 'deleteFailed');
     } finally {
-        state.isBusy = false;
+        state.deleting[code] = false;
+        updateDocumentCard(root, state, code);
+    }
+}
+
+async function saveStep(root, state, api) {
+    if (state.isAdvancing) return;
+    const form = root.querySelector('#application-step-form');
+    if (form && !form.reportValidity()) return;
+    const fields = readVisibleFields(root, state.application || {});
+    state.formValues = fields;
+    state.errorKey = null;
+    state.isAdvancing = true;
+    try {
+        if (state.step === 0 && !state.application) {
+            state.application = await api.createApplicationDraft(createContactDraft(fields));
+            state.autosave = createAutosave(state, api, root);
+        } else if (state.application && state.step <= 1) {
+            state.autosave.schedule(buildAutosaveValues(fields));
+            if (!await state.autosave.flush()) throw Object.assign(new Error('Autosave failed.'), { code: 'AUTOSAVE_FAILED' });
+        }
+        if (state.step === 1 || state.step === 2) await refreshRequirements(state, api);
+        if (state.step === 3) {
+            const declaration = state.application.declaration;
+            const accepted = fields.declaration_accepted === true;
+            if (!declaration?.accepted_current) {
+                if (!accepted) throw Object.assign(new Error('Declaration acceptance is required.'), { code: 'DECLARATION_ACCEPTANCE_REQUIRED' });
+                state.application = await api.acceptCurrentApplicationDeclaration(declaration.current_version);
+            }
+        }
+        state.step = Math.min(state.step + 1, STEP_KEYS.length - 1);
+        state.formValues = null;
+    } catch (error) {
+        state.errorKey = createErrorKey(error, error.code === 'DECLARATION_ACCEPTANCE_REQUIRED' ? 'declarationAcceptanceFailed' : 'applicationSaveFailed');
+        if (error.code === 'DECLARATION_VERSION_CONFLICT') {
+            try {
+                state.application = await api.readCurrentApplication();
+            } catch {
+                state.errorKey = 'applicationLoadFailed';
+            }
+        }
+        if (error.code === 'APPLICATION_SESSION_REQUIRED') state.saveStatus = 'session_expired';
+    } finally {
+        state.isAdvancing = false;
         renderWizard(root, state);
     }
+}
+
+async function handlePrevious(root, state) {
+    if (state.isAdvancing) return;
+    if (state.step <= 0) return;
+    if (state.step === 1 && state.autosave) {
+        scheduleCurrentFields(root, state);
+        state.isAdvancing = true;
+        const saved = await state.autosave.flush();
+        state.isAdvancing = false;
+        if (!saved) {
+            state.errorKey = 'autosaveFailed';
+            renderWizard(root, state);
+            return;
+        }
+    }
+    state.formValues = readVisibleFields(root, state.application || {});
+    state.step -= 1;
+    state.errorKey = null;
+    renderWizard(root, state);
+}
+
+async function handleWizardClick(root, state, api, event) {
+    const button = event.target.closest('[data-action]');
+    if (!button) return;
+    const code = button.closest('[data-document-code]')?.dataset.documentCode;
+    if (button.dataset.action === 'previous') await handlePrevious(root, state);
+    if (button.dataset.action === 'document-retry' && code) await runUploadTask(code, state.uploads[code], state, api, root, { isRetry: true });
+    if (button.dataset.action === 'document-delete' && code) await handleDelete(root, state, api, code);
+    if (button.dataset.action === 'document-cancel' && code) state.uploads[code]?.abortController?.abort();
+    if (button.dataset.action === 'autosave-retry' && state.autosave) {
+        const saved = await state.autosave.flush();
+        state.errorKey = saved ? null : 'autosaveFailed';
+        renderWizard(root, state);
+    }
+}
+
+function handleWizardInput(root, state) {
+    if (!state.application || state.step > 1 || !state.autosave) return;
+    scheduleCurrentFields(root, state);
 }
 
 function handleWizardChange(root, state, api, event) {
     const input = event.target;
-    if (input instanceof root.ownerDocument.defaultView.HTMLInputElement
-        && input.type === 'file') {
+    if (input instanceof root.ownerDocument.defaultView.HTMLInputElement && input.type === 'file') {
         void handleFileSelection(root, state, api, input);
         return;
     }
     if (input.name === 'fingerprint_status') {
+        scheduleCurrentFields(root, state);
         const fields = readVisibleFields(root, state.application || {});
-        state.formValues = {
-            ...state.formValues,
-            ...fields,
-            fingerprint_status: fields.fingerprint_status,
-            fingerprint_code: fields.fingerprint_status === 'registered' ? fields.fingerprint_code || null : null
-        };
+        fields.fingerprint_code = fields.fingerprint_status === 'registered' ? fields.fingerprint_code || null : null;
+        state.formValues = fields;
         renderWizard(root, state);
+        return;
     }
-}
-
-function handleWizardClick(root, state, event) {
-    if (state.isBusy) return;
-    if (event.target.closest('[data-action="previous"]')) {
-        state.application = readVisibleFields(root, state.application || {});
-        state.step = Math.max(0, state.step - 1);
-        state.errorKey = null;
-        renderWizard(root, state);
-    }
+    handleWizardInput(root, state);
 }
 
 /**
- * Starts or resumes the public application wizard using the current owner session.
+ * Starts or resumes the public application wizard through the current owner session.
  * @param {HTMLElement} root Wizard mount element.
- * @param {object} api Application API functions, overridable for isolated UI tests.
- * @returns {Promise<object>} Live wizard state for the initialized page.
+ * @param {object} api Application API functions, overridable in tests.
+ * @returns {Promise<object>} Live wizard state.
  * @throws {TypeError} When the wizard mount element is missing.
  */
 export async function initializeApplicationWizard(root, api) {
     if (!root || !root.ownerDocument) throw new TypeError('An application wizard root is required.');
-    const state = { application: null, requirements: [], step: 0, errorKey: null, isBusy: false, formValues: null };
+    const state = { application: null, requirements: [], step: 0, errorKey: null, saveStatus: 'saved', isAdvancing: false, formValues: null, uploads: {}, deleting: {} };
     root.addEventListener('submit', (event) => {
         if (event.target.id !== 'application-step-form') return;
         event.preventDefault();
-        void saveCurrentStep(root, state, api);
+        void saveStep(root, state, api);
     });
+    root.addEventListener('input', () => handleWizardInput(root, state));
     root.addEventListener('change', (event) => handleWizardChange(root, state, api, event));
-    root.addEventListener('click', (event) => handleWizardClick(root, state, event));
+    root.addEventListener('click', (event) => { void handleWizardClick(root, state, api, event); });
+    root.ownerDocument.addEventListener('public:locale-changed', () => renderWizard(root, state));
     try {
         state.application = await api.readCurrentApplication();
         state.step = 1;
-        await loadRequirements(state, api);
+        state.autosave = createAutosave(state, api, root);
+        await refreshRequirements(state, api);
     } catch (error) {
-        state.errorKey = getFailureKey(error, 0);
+        state.errorKey = error.code === 'APPLICATION_SESSION_REQUIRED' ? null : 'applicationLoadFailed';
     }
     renderWizard(root, state);
     return state;

@@ -1,6 +1,6 @@
 # Uluslararası Öğrenci Ofisi Portalı
 
-The repository contains the public student portal, staff workspaces, a YKN Chrome extension, and the backend foundation for student residence applications. The application wizard and complete document upload lifecycle belong to later sessions.
+The repository contains the public student portal, staff workspaces, a YKN Chrome extension, and a student-owned residence application wizard with private document upload lifecycle. Final readiness and submission remain fail-closed for a later phase.
 
 ## Routes
 
@@ -88,6 +88,15 @@ Local `.dev.vars` can contain:
 - R2 remains private. The storage provider adapter creates opaque UUID keys under `quarantine/`, performs Worker-mediated object operations, and creates method/object-bound S3 presigned PUT and GET capabilities with 30–300 second expiry. Student document upload intents are owner-session-bound; finalization checks the stored object metadata and advances a revision only after verification. New files remain `scan_status = 'pending'` until a scanner marks them clean. The adapter never creates public object URLs. Configure bucket CORS for the exact portal origins before enabling browser uploads. Presigned URLs must be treated as bearer tokens and never stored in D1 or logs.
 - API errors use `{ error: { code, message, retryable }, requestId }` and an `X-Request-Id` header. Provider and database details stay server-side.
 - Deployed Worker CPU use for the selected password KDF must be measured in staging before staff authentication is live-ready. Local tests do not certify deployed Cloudflare CPU budget.
+
+## Student residence application wizard
+
+- `/basvuru/` creates a draft and binds it to an opaque owner session. Editable contact and residence fields autosave to D1 after a short debounce; no applicant fields, files, upload intents, or signed capabilities are persisted in browser storage. Returning with the same valid session reloads server state.
+- The five-step wizard includes contact, residence, documents, a versioned product acknowledgement, and a safe review. The acknowledgement confirms the correctness of submitted contact/application information and responsibility for incorrect information; it is not final legal or KVKK text. `PUBLIC_DECLARATION_VERSION` is configured in `wrangler.jsonc`. The Worker stores the acknowledged version and its own timestamp with an audit event.
+- Residence-document display and upload constraints come from `src/server/domain/documentPolicy.js`; D1 requirement rows supply active identities and document state. The student requirements API returns only safe policy labels/help keys, accepted media types, byte limit, and current revision/review/scan state. Its product content follows the registered “Belgeler” residence checklist; address-document alternatives remain explicitly unresolved.
+- The browser requests a short-lived method/header-bound upload capability, then sends file bytes directly to private R2 with XHR progress and abort/timeout handling. The Worker verifies stored object metadata before making the new revision current. Ambiguous finalize responses retry the same intent first. Scan remains pending until a real scanner updates it.
+- Students can replace a current draft document by creating a new revision. Delete first removes revisions from current student visibility, then removes R2 objects. Failed R2 cleanup remains recorded in D1 and is retryable from the document card. Only owner sessions can read requirements or mutate a draft.
+- `migrations/0003_session3_document_cleanup.sql` adds retryable private-object cleanup state. Remote migrations, bucket CORS changes, secret provisioning, deployment, and live upload/UAT require owner operations.
 
 ## Apps Script integration
 
