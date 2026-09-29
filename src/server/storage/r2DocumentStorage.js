@@ -1,5 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { AwsClient } from 'aws4fetch';
 
 const STORAGE_KEY_PATTERN = /^quarantine\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const MIN_SIGNED_ACCESS_SECONDS = 30;
@@ -27,9 +26,9 @@ function redactSigningText(value, sensitiveValues) {
 }
 
 /**
- * Wraps an SDK signing error with safe internal diagnostics for the Worker log.
+ * Wraps a signing error with safe internal diagnostics for the Worker log.
  * @param {unknown} cause Original signing error.
- * @param {string} stage S3Client, PutObjectCommand, GetObjectCommand, or getSignedUrl.
+ * @param {string} stage AwsClient, requestConstruction, or sign.
  * @param {string[]} sensitiveValues Signing values to remove from diagnostic text.
  * @returns {Error} Internal error with redacted signing-stage diagnostics.
  */
@@ -78,12 +77,22 @@ function createSigner(configuration) {
         || ![accessKeyId, secretAccessKey].every((value) => typeof value === 'string' && value.trim())) {
         throw createStorageError('R2 signing configuration is unavailable.', 'STORAGE_SIGNING_CONFIGURATION_ERROR');
     }
-    return new S3Client({
+    return new AwsClient({
+        service: 's3',
         region: 'auto',
-        endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-        forcePathStyle: true,
-        credentials: { accessKeyId, secretAccessKey }
+        accessKeyId,
+        secretAccessKey
     });
+}
+
+function formatSigningDate(date) {
+    return date.toISOString().replace(/[:-]|\.\d{3}/g, '');
+}
+
+function createObjectUrl(accountId, bucketName, key) {
+    const url = new URL(`https://${accountId}.r2.cloudflarestorage.com`);
+    url.pathname = `/${bucketName}/${key}`;
+    return url;
 }
 
 function createQuarantineKey(createId) {
@@ -115,7 +124,7 @@ function createObjectOperations(bucket) {
     };
 }
 
-function createCapabilityGenerator(bucketName, readSigner, now, signingValues) {
+function createCapabilityGenerator(accountId, bucketName, readSigner, now, signingValues) {
     return async (key, { expiresInSeconds = DEFAULT_SIGNED_ACCESS_SECONDS, contentType } = {}, operation) => {
         assertStorageKey(key);
         const expiry = readExpiry(expiresInSeconds);
@@ -124,26 +133,31 @@ function createCapabilityGenerator(bucketName, readSigner, now, signingValues) {
             throw new TypeError('Storage clock must return a valid Date.');
         }
         const putType = operation === 'PUT' ? readContentType(contentType) : undefined;
-        let stage = 'S3Client';
-        let url;
+        let stage = 'AwsClient';
+        let signedRequest;
         try {
             const signer = readSigner();
-            stage = operation === 'PUT' ? 'PutObjectCommand' : 'GetObjectCommand';
-            const command = operation === 'PUT'
-                ? new PutObjectCommand({ Bucket: bucketName, Key: key, ContentType: putType })
-                : new GetObjectCommand({ Bucket: bucketName, Key: key });
-            stage = 'getSignedUrl';
-            url = await getSignedUrl(signer, command, {
-                expiresIn: expiry,
-                signingDate: signingTime,
-                ...(operation === 'PUT' ? { signableHeaders: new Set(['content-type']) } : {})
+            stage = 'requestConstruction';
+            const url = createObjectUrl(accountId, bucketName, key);
+            url.searchParams.set('X-Amz-Expires', String(expiry));
+            const request = new Request(url, {
+                method: operation,
+                ...(putType ? { headers: { 'content-type': putType } } : {})
+            });
+            stage = 'sign';
+            signedRequest = await signer.sign(request, {
+                aws: {
+                    signQuery: true,
+                    allHeaders: true,
+                    datetime: formatSigningDate(signingTime)
+                }
             });
         } catch (error) {
             throw createStorageSigningFailure(error, stage, signingValues);
         }
         return Object.freeze({
             method: operation,
-            url,
+            url: signedRequest.url,
             expiresAt: new Date(signingTime.valueOf() + expiry * 1000).toISOString(),
             expiresInSeconds: expiry,
             ...(putType ? { requiredHeaders: Object.freeze({ 'content-type': putType }) } : {})
@@ -164,7 +178,7 @@ export function createR2DocumentStorage(bucket, configuration = {}) {
     const now = configuration.now || (() => new Date());
     let signer;
     const readSigner = () => signer || (signer = createSigner({ accountId, bucketName, accessKeyId, secretAccessKey }));
-    const createCapability = createCapabilityGenerator(bucketName, readSigner, now, [accessKeyId, secretAccessKey]);
+    const createCapability = createCapabilityGenerator(accountId, bucketName, readSigner, now, [accessKeyId, secretAccessKey]);
 
     return Object.freeze({
         createQuarantineKey: () => createQuarantineKey(createId),

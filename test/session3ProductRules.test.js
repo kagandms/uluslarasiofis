@@ -347,7 +347,7 @@ test('staging signing diagnostics stay server-side while upload intent keeps its
     assert.equal(response.status, 503);
     assert.equal(payload.error.code, 'STORAGE_UNAVAILABLE');
     assert.doesNotMatch(responseText, /TEST-ACCESS-KEY-PRIVATE|TEST-SECRET-KEY-PRIVATE|STORAGE_SIGNING_CONFIGURATION_ERROR|stack|R2 signing configuration/);
-    assert.equal(diagnosticFields.storageSigningStage, 'S3Client');
+    assert.equal(diagnosticFields.storageSigningStage, 'AwsClient');
     assert.equal(diagnosticFields.errorName, 'DocumentStorageError');
     assert.equal(diagnosticFields.errorCode, 'STORAGE_SIGNING_CONFIGURATION_ERROR');
     assert.match(diagnosticFields.errorMessage, /R2 signing configuration is unavailable/);

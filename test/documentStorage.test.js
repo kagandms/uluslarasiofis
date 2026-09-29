@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createDocumentStorage } from '../src/server/storage/documentStorage.js';
 import { createR2DocumentStorage, createStorageSigningFailure } from '../src/server/storage/r2DocumentStorage.js';
@@ -66,6 +67,7 @@ test('R2 upload and read capabilities are method-bound, object-bound, and short-
     assert.equal(uploadUrl.searchParams.get('X-Amz-Date'), '20260929T120000Z');
     assert.equal(read.method, 'GET');
     assert.equal(readUrl.searchParams.get('X-Amz-Expires'), '300');
+    assert.equal(Object.hasOwn(read, 'requiredHeaders'), false);
     assert.notEqual(upload.url, read.url);
     assert.notEqual(read.url, anotherObject.url);
     assert.match(uploadUrl.pathname, /private-documents\/quarantine\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa$/);
@@ -79,6 +81,13 @@ test('R2 upload and read capabilities are method-bound, object-bound, and short-
     assert.doesNotMatch(upload.url, /r2\.dev|r2\.cloudflarestorage\.com\.workers\.dev|pub-/i);
 });
 
+test('Worker R2 signing no longer imports the AWS SDK S3Client path', () => {
+    const source = readFileSync(new URL('../src/server/storage/r2DocumentStorage.js', import.meta.url), 'utf8');
+
+    assert.match(source, /from ['"]aws4fetch['"]/);
+    assert.doesNotMatch(source, /@aws-sdk\/client-s3|@aws-sdk\/s3-request-presigner|\bS3Client\b|\bPutObjectCommand\b|\bGetObjectCommand\b/);
+});
+
 test('R2 signing diagnostics preserve the failure stage and redact credentials and signed URLs', () => {
     const accessKeyId = 'TEST-ACCESS-KEY-PRIVATE';
     const secretAccessKey = 'TEST-SECRET-KEY-PRIVATE';
@@ -87,13 +96,13 @@ test('R2 signing diagnostics preserve the failure stage and redact credentials a
     cause.code = 'TEST_SIGNING_FAILURE';
     cause.stack = `TypeError: ${cause.message}\n    at signer (${signedUrl})\n    ${secretAccessKey}`;
 
-    const failure = createStorageSigningFailure(cause, 'getSignedUrl', [accessKeyId, secretAccessKey]);
+    const failure = createStorageSigningFailure(cause, 'sign', [accessKeyId, secretAccessKey]);
     const diagnostics = failure.storageSigningDiagnostics;
     const serialized = JSON.stringify(diagnostics);
 
     assert.equal(failure.name, 'TypeError');
     assert.equal(failure.code, 'TEST_SIGNING_FAILURE');
-    assert.equal(diagnostics.storageSigningStage, 'getSignedUrl');
+    assert.equal(diagnostics.storageSigningStage, 'sign');
     assert.equal(diagnostics.errorName, 'TypeError');
     assert.equal(diagnostics.errorCode, 'TEST_SIGNING_FAILURE');
     assert.match(diagnostics.errorMessage, /Signing failed/);
@@ -118,6 +127,25 @@ test('R2 signed capabilities reject expiry outside the documented 30 to 300 seco
     }
     assert.equal((await storage.createReadCapability(key, { expiresInSeconds: 30 })).expiresInSeconds, 30);
     assert.equal((await storage.createReadCapability(key, { expiresInSeconds: 300 })).expiresInSeconds, 300);
+});
+
+test('invalid R2 signing configuration fails safely at AwsClient creation', async () => {
+    const storage = createR2DocumentStorage({}, {
+        accountId: 'invalid-account',
+        bucketName: 'private-documents',
+        accessKeyId: 'TEST-ACCESS-KEY-PRIVATE',
+        secretAccessKey: 'TEST-SECRET-KEY-PRIVATE'
+    });
+
+    await assert.rejects(
+        storage.createUploadCapability('quarantine/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { contentType: 'application/pdf' }),
+        (error) => {
+            assert.equal(error.storageSigningDiagnostics.storageSigningStage, 'AwsClient');
+            assert.equal(error.code, 'STORAGE_SIGNING_CONFIGURATION_ERROR');
+            assert.doesNotMatch(JSON.stringify(error.storageSigningDiagnostics), /TEST-ACCESS-KEY-PRIVATE|TEST-SECRET-KEY-PRIVATE/);
+            return true;
+        }
+    );
 });
 
 test('application-facing storage facade requires private bindings and has no public URL fallback', async () => {
