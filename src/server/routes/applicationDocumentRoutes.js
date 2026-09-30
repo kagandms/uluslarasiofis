@@ -35,7 +35,11 @@ async function readCurrentStudentRequirements(session, environment) {
     const application = await repositories.applications.findById(session.application_id);
     if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     const storedRequirements = await repositories.documents.listStudentRequirements(application.id);
-    const policies = listDocumentPolicies(application.application_type, application.is_under_18 === 1);
+    const policies = listDocumentPolicies(
+        application.application_type,
+        application.is_under_18 === 1,
+        application.address_evidence_type ?? null
+    );
     const requirements = policies.filter((policy) => storedRequirements.some((entry) => entry.code === policy.code))
         .map((policy) => {
             const stored = storedRequirements.find((entry) => entry.code === policy.code);
@@ -80,20 +84,6 @@ function requireDraftApplication(application) {
     }
 }
 
-function requireFingerprintRegistration(application, code) {
-    if (code !== 'fingerprint') return;
-    const fingerprintCode = typeof application.fingerprint_code === 'string'
-        ? application.fingerprint_code.trim() : '';
-    const hasValidCode = fingerprintCode.length > 0 && fingerprintCode.length <= 128
-        && !/[\u0000-\u001f\u007f]/u.test(fingerprintCode);
-    if (application.fingerprint_status === 'registered' && hasValidCode) return;
-    throw new ApiError(
-        409,
-        'FINGERPRINT_REGISTRATION_REQUIRED',
-        'Parmak izi belgesi yüklemek için önce Göç İdaresi’nde parmak izi işleminizi tamamlayıp geçerli kodunuzu kaydedin.'
-    );
-}
-
 function requireOwnedRequirement(requirements, code) {
     const requirement = requirements.find((entry) => entry.code === code);
     if (requirement) return requirement;
@@ -125,7 +115,11 @@ export async function readCurrentStudentDocumentRequirements(request, environmen
     const session = await requireApplicationSession(request, environment);
     const { application, requirements } = await readCurrentStudentRequirements(session, environment);
     return {
-        application: { application_type: application.application_type, is_under_18: application.is_under_18 === 1 },
+        application: {
+            application_type: application.application_type,
+            address_evidence_type: application.address_evidence_type ?? null,
+            is_under_18: application.is_under_18 === 1
+        },
         requirements: requirements.map(createStudentRequirementDto)
     };
 }
@@ -145,10 +139,14 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
     const body = await readJsonBody(request);
     const requestedCode = typeof body.code === 'string' ? body.code.trim() : '';
     requireOwnedRequirement(requirements, requestedCode);
-    const policy = readDocumentPolicy(requestedCode, application.application_type, application.is_under_18 === 1);
+    const policy = readDocumentPolicy(
+        requestedCode,
+        application.application_type,
+        application.is_under_18 === 1,
+        application.address_evidence_type ?? null
+    );
     const metadata = requireUploadMetadata(body, policy);
     requireDraftApplication(application);
-    requireFingerprintRegistration(application, metadata.code);
     requireOwnedRequirement(requirements, metadata.code);
     const requirement = await repositories.documents.findStudentRequirementId(application.application_type, metadata.code);
     if (!requirement) throw new ApiError(404, 'DOCUMENT_REQUIREMENT_NOT_FOUND', 'Bu başvuru için belge gereksinimi bulunamadı.');
@@ -237,7 +235,6 @@ export async function finalizeCurrentStudentDocument(request, environment) {
     }
     if (intent.intent_status === 'completed') return { document: createFinalizedDocumentDto(intent) };
     if (intent.intent_status !== 'pending') throw new ApiError(409, 'UPLOAD_INTENT_UNAVAILABLE', 'Belge yükleme bağlantısı artık kullanılamıyor.');
-    requireFingerprintRegistration(application, intent.code);
     if (new Date(intent.expires_at).valueOf() <= Date.now()) {
         await repositories.documents.expireStudentUploadIntent(application.id, intent.id);
         throw new ApiError(409, 'UPLOAD_INTENT_EXPIRED', 'Belge yükleme süresi doldu. Yeni bir yükleme başlatın.');
@@ -248,7 +245,12 @@ export async function finalizeCurrentStudentDocument(request, environment) {
     if (!object) throw new ApiError(409, 'UPLOAD_OBJECT_MISSING', 'Yüklenen belge bulunamadı. Yüklemeyi yeniden deneyin.');
     const actualSize = object.size;
     const actualMediaType = object.httpMetadata?.contentType;
-    const policy = readDocumentPolicy(intent.code, application.application_type, application.is_under_18 === 1);
+    const policy = readDocumentPolicy(
+        intent.code,
+        application.application_type,
+        application.is_under_18 === 1,
+        application.address_evidence_type ?? null
+    );
     if (!policy || actualSize !== intent.byte_size || actualSize > policy.max_byte_size
         || !policy.accepted_media_types.includes(actualMediaType) || actualMediaType !== intent.media_type) {
         await repositories.documents.rejectStudentUpload(application.id, intent.id);

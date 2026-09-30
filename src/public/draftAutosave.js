@@ -55,7 +55,7 @@ export function createDraftAutosave({
             const application = await save(patch);
             savedValues = { ...savedValues, ...patch };
             pendingValues = createPatch(latestValues, savedValues);
-            if (requestRevision === revision) onSaved(application);
+            if (requestRevision === revision || Object.keys(pendingValues).length === 0) onSaved(application);
             if (Object.keys(pendingValues).length === 0) updateStatus('saved');
             else updateStatus('unsaved');
             return true;

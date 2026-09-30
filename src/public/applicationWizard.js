@@ -12,6 +12,7 @@ const UPLOAD_ERROR_KEYS = Object.freeze({
     UPLOAD_INTENT_UNAVAILABLE: 'uploadIntentExpired', NETWORK_ERROR: 'finalizeUnknown',
     APPLICATION_SESSION_REQUIRED: 'sessionExpired', APPLICATION_NOT_EDITABLE: 'applicationNoLongerEditable',
     DOCUMENT_NOT_EDITABLE: 'applicationNoLongerEditable', DECLARATION_VERSION_CONFLICT: 'declarationVersionChanged',
+    APPLICATION_TYPE_CHANGE_BLOCKED: 'applicationTypeChangeBlocked',
     CONTACT_ACKNOWLEDGEMENT_REQUIRED: 'contactAcknowledgementRequired',
     CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT: 'contactAcknowledgementVersionChanged',
     CONTACT_INFORMATION_INCOMPLETE: 'contactInformationIncomplete'
@@ -135,7 +136,7 @@ function createContactStep(document, application, formValues) {
         options: [{ value: '', key: 'applicationType' }, { value: 'initial', key: 'initialApplication' }, { value: 'renewal', key: 'renewalApplication' }]
     }));
     form.querySelector('[name="student_number"]').disabled = Boolean(application);
-    form.querySelector('[name="application_type"]').disabled = Boolean(application);
+    form.querySelector('[name="application_type"]').disabled = Boolean(application && application.status !== 'draft');
     const isContactAcknowledgementAccepted = application?.contact_acknowledgement?.accepted_current === true
         || fields.contact_acknowledgement_accepted === true;
     form.append(createContactAcknowledgement(document, messages, isContactAcknowledgementAccepted));
@@ -213,11 +214,35 @@ function createResidenceStep(document, application, formValues) {
         key: 'under18Question', name: 'is_under_18', value: under18, required: true,
         options: [{ value: '', key: 'under18Question' }, { value: 'true', key: 'yes' }, { value: 'false', key: 'no' }]
     }));
+    form.append(createAddressEvidenceChoices(document, fields, messages, Boolean(application && application.status !== 'draft')));
     renderFingerprintSection(form, fields);
     const continueButton = createContinueButton(document, messages);
     form.append(continueButton);
     continueButton.disabled = !canContinueResidenceStep(form, fields);
     return form;
+}
+
+function createAddressEvidenceChoices(document, fields, messages, isDisabled) {
+    const fieldset = document.createElement('fieldset');
+    fieldset.className = 'application-fieldset address-evidence-fields';
+    fieldset.append(createTranslatedElement(document, 'legend', 'addressEvidenceQuestion', messages.addressEvidenceQuestion));
+    [
+        ['rental_contract', 'addressEvidenceRentalContract'],
+        ['residence_certificate', 'addressEvidenceResidenceCertificate'],
+        ['undertaking', 'addressEvidenceUndertaking']
+    ].forEach(([value, key]) => {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'address_evidence_type';
+        input.value = value;
+        input.required = true;
+        input.disabled = isDisabled;
+        input.checked = fields.address_evidence_type === value;
+        label.append(input, createTranslatedElement(document, 'span', key, messages[key]));
+        fieldset.append(label);
+    });
+    return fieldset;
 }
 
 function getDocumentStatusKey(requirement, task) {
@@ -247,16 +272,17 @@ function canContinueResidenceStep(form, fields) {
     return Boolean(form?.checkValidity() && isFingerprintUploadEligible(fields));
 }
 
+function getAddressEvidenceMessageKey(value) {
+    if (value === 'rental_contract') return 'addressEvidenceRentalContract';
+    if (value === 'residence_certificate') return 'addressEvidenceResidenceCertificate';
+    if (value === 'undertaking') return 'addressEvidenceUndertaking';
+    return null;
+}
+
 function updateResidenceContinueButton(root, fields) {
     const form = root.querySelector('#application-step-form');
     const button = form?.querySelector('button[type="submit"]');
     if (form && button) button.disabled = !canContinueResidenceStep(form, fields);
-}
-
-function fingerprintBlockMessageKey(application) {
-    if (application?.fingerprint_status === 'not_registered') return 'fingerprintProgressBlocked';
-    if (application?.fingerprint_status === 'registered') return 'fingerprintCodeMissing';
-    return 'fingerprintAnswerMissing';
 }
 
 function createFileInput(document, requirement, task, messages) {
@@ -296,7 +322,6 @@ function createUploadProgress(document, task, messages) {
 function createDocumentCard(document, requirement, state, { allowUpload }) {
     const messages = readMessages(document);
     const task = state.uploads[requirement.code];
-    const fingerprintUploadBlocked = requirement.code === 'fingerprint' && !isFingerprintUploadEligible(state.application);
     const card = document.createElement('article');
     const title = createTranslatedElement(document, 'h3', requirement.label_key, messages[requirement.label_key] || messages.documentNotUploaded);
     const description = createTranslatedElement(document, 'p', requirement.description_key, messages[requirement.description_key] || '');
@@ -312,18 +337,12 @@ function createDocumentCard(document, requirement, state, { allowUpload }) {
     const progress = createUploadProgress(document, task, messages);
     if (progress) card.append(progress);
     if (!allowUpload) return card;
-    if (fingerprintUploadBlocked) {
-        const messageKey = state.application?.fingerprint_status === 'not_registered'
-            ? 'fingerprintUploadBlocked' : fingerprintBlockMessageKey(state.application);
-        card.append(createTranslatedElement(document, 'p', messageKey, messages[messageKey]));
-    } else {
-        card.append(createFileInput(document, requirement, task, messages));
-        if (task && ['failed_upload', 'failed_finalize', 'unknown_finalize_result', 'cancelled'].includes(task.state)) {
-            card.append(createButton(document, messages, 'retryUpload', 'document-retry'));
-        }
-        if (task && task.state === 'uploading') {
-            card.append(createButton(document, messages, 'cancelUpload', 'document-cancel'));
-        }
+    card.append(createFileInput(document, requirement, task, messages));
+    if (task && ['failed_upload', 'failed_finalize', 'unknown_finalize_result', 'cancelled'].includes(task.state)) {
+        card.append(createButton(document, messages, 'retryUpload', 'document-retry'));
+    }
+    if (task && task.state === 'uploading') {
+        card.append(createButton(document, messages, 'cancelUpload', 'document-cancel'));
     }
     if (requirement.filename || requirement.cleanup_status === 'pending') {
         const remove = createButton(document, messages, requirement.cleanup_status === 'pending' ? 'retryCleanup' : 'deleteDocument', 'document-delete');
@@ -406,6 +425,7 @@ function createApplicantReview(document, application) {
     const values = [
         ['studentNumber', application.student_number], ['email', application.student_email], ['phone', application.student_phone],
         ['applicationType', application.application_type === 'renewal' ? messages.renewalApplication : messages.initialApplication],
+        ['addressEvidenceTypeLabel', messages[getAddressEvidenceMessageKey(application.address_evidence_type)] || ''],
         ['firstName', application.first_name], ['lastName', application.last_name], ['passportNumber', application.passport_number],
         ['nationality', application.nationality], ['dateOfBirth', application.date_of_birth],
         ['under18Question', application.is_under_18 === true || application.is_under_18 === 1 ? messages.yes
@@ -550,6 +570,8 @@ function readVisibleFields(root, application = {}) {
 
 function buildAutosaveValues(fields) {
     const values = {
+        application_type: fields.application_type ?? 'initial',
+        address_evidence_type: fields.address_evidence_type ?? null,
         student_email: fields.student_email ?? '',
         student_phone: fields.student_phone ?? '',
         is_under_18: fields.is_under_18 === true || fields.is_under_18 === 1 ? true
@@ -612,6 +634,16 @@ function createErrorKey(error, fallback) {
 async function refreshRequirements(state, api) {
     const result = await api.readCurrentStudentDocumentRequirements();
     state.requirements = result.requirements;
+}
+
+async function persistRequirementSelection(root, state, api) {
+    if (!state.application || !state.autosave) return;
+    if (!await state.autosave.flush()) return;
+    try {
+        await refreshRequirements(state, api);
+    } catch {
+        state.errorKey = 'applicationLoadFailed';
+    }
 }
 
 async function finalizeTask(code, task, state, api, root) {
@@ -749,7 +781,7 @@ async function saveStep(root, state, api) {
             state.errorKey = null;
             return;
         }
-        if (state.step === 1 || state.step === 2) await refreshRequirements(state, api);
+        if (state.step === 0 || state.step === 1 || state.step === 2) await refreshRequirements(state, api);
         if (state.step === 3) {
             const declaration = state.application.declaration;
             const accepted = fields.declaration_accepted === true;
@@ -838,6 +870,10 @@ function handleWizardChange(root, state, api, event) {
         return;
     }
     handleWizardInput(root, state);
+    if (['application_type', 'address_evidence_type'].includes(input.name)) {
+        state.errorKey = null;
+        void persistRequirementSelection(root, state, api);
+    }
 }
 
 /**

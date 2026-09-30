@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 
 const foundationMigration = readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8');
 const session3Migration = readFileSync(new URL('../migrations/0002_session3_fingerprint_and_birth_certificate.sql', import.meta.url), 'utf8');
+const cleanupMigration = readFileSync(new URL('../migrations/0003_session3_document_cleanup.sql', import.meta.url), 'utf8');
 
 function createDatabase() {
     const database = new DatabaseSync(':memory:');
@@ -28,6 +29,23 @@ function insertApplication(database, id, studentId, status = 'draft', applicatio
     `).run(id, studentId, applicationType, status);
 }
 
+function createSession3Database() {
+    const database = new DatabaseSync(':memory:');
+    database.exec('PRAGMA foreign_keys = ON;');
+    database.exec(foundationMigration);
+    database.exec(session3Migration);
+    database.exec(cleanupMigration);
+    return database;
+}
+
+function applyMigrationsAfter(database, lastAppliedMigration) {
+    const migrationsDirectory = new URL('../migrations/', import.meta.url);
+    const migrationFiles = readdirSync(migrationsDirectory)
+        .filter((filename) => filename.endsWith('.sql') && filename > lastAppliedMigration)
+        .sort();
+    migrationFiles.forEach((filename) => database.exec(readFileSync(new URL(filename, migrationsDirectory), 'utf8')));
+}
+
 test('backend migration creates the complete Session 2 data foundation', () => {
     const database = createDatabase();
     const tableNames = database.prepare(`
@@ -43,6 +61,71 @@ test('backend migration creates the complete Session 2 data foundation', () => {
     ]) {
         assert.ok(tableNames.includes(tableName), `missing table: ${tableName}`);
     }
+});
+
+test('public portal migration adds persisted address evidence and archives superseded requirements safely', () => {
+    const database = createDatabase();
+    const applicationColumns = database.prepare('PRAGMA table_info(applications)').all().map(({ name }) => name);
+    const newRequirements = database.prepare(`
+        SELECT code, application_type, is_required, is_active
+        FROM document_requirements
+        WHERE code IN ('passport_identity', 'address_document', 'fingerprint', 'uets')
+        ORDER BY code, application_type
+    `).all();
+
+    assert.ok(applicationColumns.includes('address_evidence_type'));
+    assert.deepEqual(newRequirements.filter(({ code }) => code !== 'uets').map(({ code, is_required, is_active }) => ({
+        code, is_required, is_active
+    })), [
+        { code: 'address_document', is_required: 0, is_active: 0 },
+        { code: 'address_document', is_required: 0, is_active: 0 },
+        { code: 'fingerprint', is_required: 0, is_active: 0 },
+        { code: 'fingerprint', is_required: 0, is_active: 0 },
+        { code: 'passport_identity', is_required: 0, is_active: 0 },
+        { code: 'passport_identity', is_required: 0, is_active: 0 }
+    ]);
+    assert.ok(newRequirements.some(({ code, application_type, is_required, is_active }) =>
+        code === 'uets' && application_type === 'initial' && is_required === 0 && is_active === 0));
+});
+
+test('forward migration preserves a pre-existing renewal UETS document and seeds its inactive initial compatibility row', () => {
+    const database = createSession3Database();
+    insertStudent(database, 'legacy-student', 'legacy-1');
+    insertApplication(database, 'legacy-application', 'legacy-student', 'draft', 'renewal');
+    database.prepare(`
+        INSERT INTO document_records (id, application_id, requirement_id, application_type)
+        VALUES ('legacy-uets', 'legacy-application', 'req-renewal-uets', 'renewal')
+    `).run();
+    database.prepare(`
+        INSERT INTO document_revisions (id, document_record_id, revision_number, status, submitted_by_type)
+        VALUES ('legacy-uets-revision', 'legacy-uets', 1, 'submitted', 'student')
+    `).run();
+    database.prepare(`
+        INSERT INTO document_revision_files (
+            id, revision_id, page_order, storage_key, original_filename, media_type, byte_size, upload_status, scan_status
+        ) VALUES (
+            'legacy-uets-file', 'legacy-uets-revision', 0, 'quarantine/legacy-uets',
+            'uets.pdf', 'application/pdf', 1024, 'finalized', 'clean'
+        )
+    `).run();
+
+    applyMigrationsAfter(database, '0003_session3_document_cleanup.sql');
+
+    const compatibilityRequirement = database.prepare(`
+        SELECT is_required, is_active FROM document_requirements
+        WHERE code = 'uets' AND application_type = 'initial'
+    `).get();
+    const preservedRows = database.prepare(`
+        SELECT
+            (SELECT COUNT(*) FROM document_records WHERE id = 'legacy-uets') AS records,
+            (SELECT COUNT(*) FROM document_revisions WHERE id = 'legacy-uets-revision') AS revisions,
+            (SELECT COUNT(*) FROM document_revision_files WHERE id = 'legacy-uets-file') AS files,
+            (SELECT storage_key FROM document_revision_files WHERE id = 'legacy-uets-file') AS storage_key
+    `).get();
+
+    assert.deepEqual({ ...compatibilityRequirement }, { is_required: 0, is_active: 0 });
+    assert.deepEqual({ ...preservedRows }, { records: 1, revisions: 1, files: 1, storage_key: 'quarantine/legacy-uets' });
+    assert.deepEqual(database.prepare('PRAGMA foreign_key_check').all(), []);
 });
 
 test('Session 3 migration adds nullable fingerprint fields and only the new conditional certificate requirement', () => {

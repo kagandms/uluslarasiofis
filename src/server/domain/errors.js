@@ -6,6 +6,14 @@ export class ApplicationConflictError extends Error {
     }
 }
 
+export class ApplicationTypeChangeBlockedError extends Error {
+    constructor() {
+        super('An existing document requirement cannot be mapped safely to the requested application type.');
+        this.name = 'ApplicationTypeChangeBlockedError';
+        this.code = 'APPLICATION_TYPE_CHANGE_BLOCKED';
+    }
+}
+
 export class RepositoryConfigurationError extends Error {
     constructor() {
         super('A required repository binding is unavailable.');

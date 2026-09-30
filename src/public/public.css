@@ -39,12 +39,16 @@ a { color: inherit; }
 }
 
 .public-brand img { width: 3.1rem; height: 3.1rem; object-fit: contain; }
+.public-brand-copy { display: grid; gap: 0.12rem; }
+.public-brand-copy strong { color: #202635; font-size: 0.92rem; line-height: 1.25; }
+.public-brand-copy > span { color: #667085; font-size: 0.82rem; font-weight: 550; }
 .public-header-actions { display: flex; align-items: center; gap: 1rem; }
 .public-header a:focus-visible, .home-cta:focus-visible, .language-picker select:focus-visible { outline: 3px solid #8b0000; outline-offset: 3px; }
 
 .language-picker { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
 .language-picker select { min-height: 2.5rem; padding: 0.4rem 0.65rem; border: 1px solid #d1d5db; border-radius: 0.5rem; background: #fff; color: inherit; }
-.staff-link { color: #8b0000; font-size: 0.92rem; font-weight: 650; text-decoration-thickness: 1px; text-underline-offset: 0.2rem; }
+.staff-entry { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem; padding: 0.55rem 0.8rem; border: 1px solid #d9dde5; border-radius: 0.6rem; background: #fff; color: #303849; font-size: 0.84rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.staff-entry:hover { border-color: #aeb6c4; background: #f7f8fa; }
 
 .public-main { width: min(1120px, calc(100% - 2.5rem)); margin: 0 auto; padding-block: clamp(2rem, 5vw, 4rem); }
 .public-hero { max-width: 52rem; margin-block-end: clamp(2rem, 5vw, 3.5rem); }
@@ -68,12 +72,26 @@ a { color: inherit; }
 .process-overview p, .public-document-card p, .status-overview p { margin: 0.4rem 0 0; color: #59616d; font-size: 0.9rem; line-height: 1.5; }
 .public-information-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 1rem; margin-block-start: 1rem; align-items: start; }
 .public-document-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; margin: 0; padding: 0; list-style: none; }
-.public-document-card { position: relative; min-width: 0; padding: 0.85rem; border: 1px solid #e5e8ee; border-radius: 0.7rem; background: #fff; }
+.public-document-card { position: relative; min-width: 0; padding: 0.85rem 0.9rem 0.85rem 1.05rem; border: 1px solid #e5e8ee; border-radius: 0.7rem; background: #fff; overflow: hidden; }
+.public-document-card::before { position: absolute; inset-block: 0.55rem; inset-inline-start: 0; width: 3px; border-radius: 99px; background: #c8d2e2; content: ""; }
 .public-document-card:has(.public-document-badge) { border-color: #e5c27a; background: #fffaf0; }
+.public-document-card:has(.public-document-badge)::before { background: #d89b27; }
+.public-document-card-address { grid-column: 1 / -1; border-color: #d8dfeb; background: #fbfcfe; }
+.public-document-card-address > p { margin-block: 0.4rem 0.7rem; }
+.public-document-card h4 { margin: 0.65rem 0 0; color: #303849; font-size: 0.9rem; line-height: 1.35; }
+.address-evidence-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
+.address-evidence-option { min-width: 0; padding: 0.65rem; border: 1px solid #e5e8ee; border-radius: 0.55rem; background: #fff; }
+.address-evidence-option p { margin: 0.3rem 0 0; color: #59616d; font-size: 0.83rem; line-height: 1.45; }
+.address-evidence-supporting-docs { display: grid; gap: 0.35rem; margin: 0.55rem 0 0; padding-inline-start: 1.15rem; color: #465163; }
+.address-evidence-supporting-docs li { padding-inline-start: 0.1rem; }
+.address-evidence-supporting-docs p { margin: 0.1rem 0 0; color: #667085; font-size: 0.8rem; line-height: 1.4; }
 .public-document-badge { display: inline-flex; margin-block-start: 0.6rem; padding: 0.18rem 0.5rem; border-radius: 99px; background: #fff0c7; color: #6f4b00; font-size: 0.73rem; font-weight: 700; }
-.status-overview { display: grid; gap: 0.55rem; margin: 1.1rem 0 0; padding: 0; list-style: none; }
-.status-overview li { padding: 0.8rem 0.9rem; border: 1px solid #e5e8ee; border-radius: 0.7rem; }
-.status-overview li > span { color: #242833; font-weight: 700; }
+.public-document-badge.is-renewal { background: #edf1f8; color: #42516a; }
+.status-overview { position: relative; display: grid; gap: 0.6rem; margin: 1.1rem 0 0; padding: 0; list-style: none; }
+.status-timeline-step { position: relative; display: grid; grid-template-columns: 2.1rem minmax(0, 1fr); align-items: start; gap: 0.7rem; min-width: 0; }
+.status-timeline-marker { z-index: 1; display: grid; width: 2rem; height: 2rem; place-items: center; border: 2px solid #fff; border-radius: 50%; background: #202a3d; color: #fff; font-size: 0.78rem; font-weight: 750; box-shadow: 0 0 0 1px #d8dfeb; }
+.status-timeline-step:not(:last-child)::after { position: absolute; inset-block: 2rem -0.65rem; inset-inline-start: 0.95rem; width: 1px; background: #d8dfeb; content: ""; }
+.status-timeline-step h3 { margin: 0.12rem 0 0; color: #242833; font-size: 0.94rem; line-height: 1.35; }
 .status-overview p { margin-block-start: 0.2rem; }
 .future-label { display: inline-block; margin-block-start: 1rem; color: #68707c; font-size: 0.82rem; }
 
@@ -97,6 +115,8 @@ a { color: inherit; }
 .application-fieldset legend { padding-inline: 0.35rem; font-weight: 700; }
 .fingerprint-fields > label:not(:last-child) { display: flex; align-items: center; gap: 0.55rem; }
 .fingerprint-fields input[type="radio"] { accent-color: #8b0000; }
+.application-fieldset input[type="radio"] { accent-color: #8b0000; }
+.application-fieldset input[type="radio"]:focus-visible { outline: 3px solid rgb(139 0 0 / 32%); outline-offset: 3px; }
 .fingerprint-fields > p, .application-review-section > p:last-child { margin: 0; padding: 0.8rem; border-radius: 0.55rem; background: #fff5e5; color: #60430e; line-height: 1.55; }
 .application-button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0.65rem 1rem; border: 0; border-radius: 0.55rem; font: inherit; font-weight: 700; cursor: pointer; }
 .application-button-primary { background: #8b0000; color: #fff; }
@@ -145,5 +165,6 @@ html[dir="rtl"] .application-review-section dl { direction: rtl; }
 @media (max-width: 420px) {
     .home-actions { display: grid; }
     .home-cta { width: 100%; }
-    .process-overview, .public-document-list { grid-template-columns: 1fr; }
+    .process-overview, .public-document-list, .address-evidence-options { grid-template-columns: 1fr; }
+    .public-document-card-address { grid-column: auto; }
 }

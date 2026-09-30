@@ -11,6 +11,7 @@ import { createAuditEvent, createRepositories, enforceRateLimit, requireMethod, 
 
 const APPLICATION_SESSION_SECONDS = 12 * 60 * 60;
 const APPLICATION_TYPE_VALUES = new Set(['initial', 'renewal']);
+const ADDRESS_EVIDENCE_VALUES = new Set(['rental_contract', 'residence_certificate', 'undertaking']);
 const DRAFT_FIELDS = Object.freeze({
     first_name: 'firstName',
     last_name: 'lastName',
@@ -40,6 +41,7 @@ function createApplicationDto(application, environment) {
     return {
         status: application.status,
         application_type: application.application_type,
+        address_evidence_type: application.address_evidence_type ?? null,
         student_number: application.student_number,
         student_email: application.student_email,
         student_phone: application.student_phone,
@@ -124,6 +126,18 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
             max: field === 'student_email' ? 254 : 255
         });
     }
+    if (Object.hasOwn(body, 'application_type')) {
+        if (!APPLICATION_TYPE_VALUES.has(body.application_type)) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru türünü kontrol edip tekrar deneyin.');
+        }
+        changes.applicationType = body.application_type;
+    }
+    if (Object.hasOwn(body, 'address_evidence_type')) {
+        if (body.address_evidence_type !== null && !ADDRESS_EVIDENCE_VALUES.has(body.address_evidence_type)) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Adres belgesi seçimini kontrol edip tekrar deneyin.');
+        }
+        changes.addressEvidenceType = body.address_evidence_type;
+    }
     if (Object.hasOwn(body, 'is_under_18')) {
         if (body.is_under_18 !== null && typeof body.is_under_18 !== 'boolean') {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru bilgilerini kontrol edip tekrar deneyin.');
@@ -199,7 +213,17 @@ async function updateCurrentApplicationFields(request, environment, requestId, {
     const currentApplication = await repositories.applications.findById(session.application_id);
     if (!currentApplication) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     const changes = readDraftChanges(await readJsonBody(request), currentApplication, { allowIncomplete });
-    const application = await repositories.applications.updateDraft(session.application_id, changes);
+    let application;
+    try {
+        application = await repositories.applications.updateDraft(session.application_id, changes, {
+            auditEventId: crypto.randomUUID(), requestId
+        });
+    } catch (error) {
+        if (error.code === 'APPLICATION_TYPE_CHANGE_BLOCKED') {
+            throw new ApiError(409, error.code, 'Başvuru türü, mevcut belge geçmişi güvenle korunamadığı için değiştirilemedi.');
+        }
+        throw error;
+    }
     if (!application) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
     await createAuditEvent(repositories, {
         eventType: 'application.draft_updated', actorType: 'student', applicationId: session.application_id,

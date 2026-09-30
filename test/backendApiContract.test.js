@@ -621,6 +621,75 @@ test('application draft updates ignore fields outside the public allowlist', asy
     assert.doesNotMatch(JSON.stringify(payload), /storage_key|staff_note|2026999999/i);
 });
 
+test('owner session can change draft application type and reload preserves it', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123462', application_type: 'initial', email: 'type@example.edu', phone: '777' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+
+    const initialRequirements = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {});
+    const changed = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { application_type: 'renewal' }
+    }), environment, {});
+    const changedPayload = await readJson(changed);
+    const resumed = await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {});
+    const resumedPayload = await readJson(resumed);
+    const renewalRequirements = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {});
+    const changedBack = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { application_type: 'initial' }
+    }), environment, {});
+    const initialAgain = await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {});
+    const initialAgainPayload = await readJson(initialAgain);
+    const audit = database.prepare(`
+        SELECT safe_metadata_json FROM audit_events WHERE event_type = 'application.application_type_changed'
+        ORDER BY created_at LIMIT 1
+    `).first();
+
+    assert.equal(changed.status, 200);
+    assert.equal(changedPayload.application.application_type, 'renewal');
+    assert.equal(resumedPayload.application.application_type, 'renewal');
+    assert.equal((await readJson(initialRequirements)).requirements.some(({ code }) => code === 'uets'), false);
+    assert.equal((await readJson(renewalRequirements)).requirements.some(({ code }) => code === 'uets'), true);
+    assert.equal(changedBack.status, 200);
+    assert.equal(initialAgainPayload.application.application_type, 'initial');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.application_type_changed'").first().count, 2);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 1);
+    assert.deepEqual(JSON.parse(audit.safe_metadata_json), {
+        previous_application_type: 'initial', new_application_type: 'renewal'
+    });
+
+    database.prepare("UPDATE applications SET status = 'submitted'").run();
+    const rejected = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { application_type: 'renewal' }
+    }), environment, {});
+    assert.equal(rejected.status, 409);
+    assert.equal((await readJson(rejected)).error.code, 'APPLICATION_NOT_EDITABLE');
+    assert.equal(database.prepare('SELECT application_type FROM applications').first().application_type, 'initial');
+});
+
+test('draft address evidence is server-validated and restored after reload', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123463', application_type: 'initial', email: 'address@example.edu', phone: '888' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+
+    const invalid = await worker.fetch(createRequest('/api/public/applications/current/autosave', {
+        method: 'PATCH', cookie, body: { address_evidence_type: 'all_documents' }
+    }), environment, {});
+    const saved = await worker.fetch(createRequest('/api/public/applications/current/autosave', {
+        method: 'PATCH', cookie, body: { address_evidence_type: 'undertaking' }
+    }), environment, {});
+    const current = await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {});
+
+    assert.equal(invalid.status, 400);
+    assert.equal(saved.status, 200);
+    assert.equal((await readJson(saved)).application.address_evidence_type, 'undertaking');
+    assert.equal((await readJson(current)).application.address_evidence_type, 'undertaking');
+    assert.equal(database.prepare('SELECT address_evidence_type FROM applications').first().address_evidence_type, 'undertaking');
+});
+
 test('non-draft applications cannot enter the submit path', async () => {
     const { environment, database } = createEnvironment();
     const created = await worker.fetch(createRequest('/api/public/applications', {

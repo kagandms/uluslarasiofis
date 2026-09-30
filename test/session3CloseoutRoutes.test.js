@@ -92,16 +92,15 @@ test('student requirements expose the safe policy contract and never leak D1 ide
     const { cookie } = await createApplicant(environment, 'S3-POLICY-1');
     const response = await worker.fetch(request('/api/public/applications/current/documents', { cookie }), environment, {});
     const payload = await json(response);
-    const passport = payload.requirements.find(({ code }) => code === 'passport_identity');
-    const fingerprint = payload.requirements.find(({ code }) => code === 'fingerprint');
+    const passport = payload.requirements.find(({ code }) => code === 'passport');
 
     assert.equal(response.status, 200);
     assert.equal(payload.requirements.some(({ code }) => code === 'uets'), false);
     assert.equal(passport.required, true);
-    assert.equal(passport.label_key, 'documentPassportIdentity');
+    assert.equal(passport.label_key, 'documentPassport');
     assert.deepEqual(passport.accepted_media_types, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
     assert.equal(passport.max_byte_size, 10 * 1024 * 1024);
-    assert.equal(fingerprint.code, 'fingerprint');
+    assert.equal(payload.requirements.some(({ code }) => code === 'fingerprint'), false);
     assert.doesNotMatch(JSON.stringify(payload), /storage_key|requirement_id|document_record_id|staff_id/i);
 });
 
@@ -135,7 +134,7 @@ test('document delete marks current revision unavailable before R2 cleanup and r
     const applicationId = database.prepare('SELECT id FROM applications').first().id;
     database.prepare(`
         INSERT INTO document_records (id, application_id, requirement_id, application_type)
-        VALUES ('doc-owned', ?, 'req-initial-passport-identity', 'initial')
+        VALUES ('doc-owned', ?, 'req-initial-passport', 'initial')
     `).bind(applicationId).run();
     database.prepare(`
         INSERT INTO document_revisions (id, document_record_id, revision_number, status, is_current, submitted_by_type)
@@ -147,7 +146,7 @@ test('document delete marks current revision unavailable before R2 cleanup and r
         VALUES ('file-owned', 'rev-owned', 0, 'quarantine/11111111-1111-4111-8111-111111111111',
             'passport.pdf', 'application/pdf', 100, 'finalized', 'pending')
     `).run();
-    const deleteRequest = () => request('/api/public/applications/current/documents/passport_identity', { method: 'DELETE', cookie });
+    const deleteRequest = () => request('/api/public/applications/current/documents/passport', { method: 'DELETE', cookie });
 
     const first = await worker.fetch(deleteRequest(), environment, {});
     const firstPayload = await json(first);
@@ -187,7 +186,7 @@ test('document delete preserves files while staff has locked a document for revi
     const applicationId = database.prepare('SELECT id FROM applications').first().id;
     database.prepare(`
         INSERT INTO document_records (id, application_id, requirement_id, application_type, review_status)
-        VALUES ('doc-review-locked', ?, 'req-initial-passport-identity', 'initial', 'under_review')
+        VALUES ('doc-review-locked', ?, 'req-initial-passport', 'initial', 'under_review')
     `).bind(applicationId).run();
     database.prepare(`
         INSERT INTO document_revisions (id, document_record_id, revision_number, status, is_current, submitted_by_type)
@@ -200,7 +199,7 @@ test('document delete preserves files while staff has locked a document for revi
             'quarantine/33333333-3333-4333-8333-333333333333', 'passport.pdf', 'application/pdf', 100, 'finalized', 'pending')
     `).run();
 
-    const deletion = await worker.fetch(request('/api/public/applications/current/documents/passport_identity', {
+    const deletion = await worker.fetch(request('/api/public/applications/current/documents/passport', {
         method: 'DELETE', cookie
     }), environment, {});
     const revision = database.prepare("SELECT is_current FROM document_revisions WHERE id = 'rev-review-locked'").first();
@@ -216,10 +215,10 @@ test('document upload metadata uses policy MIME and byte limits before signing',
     const { cookie } = await createApplicant(environment, 'S3-POLICY-2');
     const path = '/api/public/applications/current/documents/upload-intent';
     const invalidType = await worker.fetch(request(path, {
-        method: 'POST', cookie, body: { code: 'passport_identity', filename: 'document.svg', media_type: 'image/svg+xml', byte_size: 10 }
+        method: 'POST', cookie, body: { code: 'passport', filename: 'document.svg', media_type: 'image/svg+xml', byte_size: 10 }
     }), environment, {});
     const tooLarge = await worker.fetch(request(path, {
-        method: 'POST', cookie, body: { code: 'passport_identity', filename: 'large.pdf', media_type: 'application/pdf', byte_size: 10 * 1024 * 1024 + 1 }
+        method: 'POST', cookie, body: { code: 'passport', filename: 'large.pdf', media_type: 'application/pdf', byte_size: 10 * 1024 * 1024 + 1 }
     }), environment, {});
 
     assert.equal(invalidType.status, 400);
@@ -242,7 +241,7 @@ test('Student A can delete only A document while Student B current revision rema
         const recordId = `doc-${suffix}`;
         const revisionId = `rev-${suffix}`;
         database.prepare(`INSERT INTO document_records (id, application_id, requirement_id, application_type)
-            VALUES (?, ?, 'req-initial-passport-identity', 'initial')`).bind(recordId, application.id).run();
+            VALUES (?, ?, 'req-initial-passport', 'initial')`).bind(recordId, application.id).run();
         database.prepare(`INSERT INTO document_revisions (id, document_record_id, revision_number, status, is_current, submitted_by_type)
             VALUES (?, ?, 1, 'submitted', 1, 'student')`).bind(revisionId, recordId).run();
         database.prepare(`INSERT INTO document_revision_files (id, revision_id, page_order, storage_key, original_filename,
@@ -250,14 +249,14 @@ test('Student A can delete only A document while Student B current revision rema
             .bind(`file-${suffix}`, revisionId, `quarantine/22222222-2222-4222-8222-22222222222${suffix === 'a' ? '1' : '2'}`).run();
     }
 
-    const deleteResponse = await worker.fetch(request('/api/public/applications/current/documents/passport_identity', {
+    const deleteResponse = await worker.fetch(request('/api/public/applications/current/documents/passport', {
         method: 'DELETE', cookie: studentA.cookie
     }), environment, {});
     const requirements = await worker.fetch(request('/api/public/applications/current/documents', { cookie: studentA.cookie }), environment, {});
     const currentA = database.prepare("SELECT is_current FROM document_revisions WHERE id = 'rev-a'").first().is_current;
     const currentB = database.prepare("SELECT is_current FROM document_revisions WHERE id = 'rev-b'").first().is_current;
 
-    assert.equal((await json(requirements)).requirements.find(({ code }) => code === 'passport_identity').filename, null);
+    assert.equal((await json(requirements)).requirements.find(({ code }) => code === 'passport').filename, null);
     assert.equal(deleteResponse.status, 200);
     assert.equal(currentA, 0);
     assert.equal(currentB, 1);
@@ -273,7 +272,7 @@ test('non-draft applications cannot accept declarations or delete documents', as
     const declaration = await worker.fetch(request('/api/public/applications/current/declaration', {
         method: 'POST', cookie, body: { accepted: true, version: 'student-information-accuracy-v1' }
     }), environment, {});
-    const deletion = await worker.fetch(request('/api/public/applications/current/documents/passport_identity', { method: 'DELETE', cookie }), environment, {});
+    const deletion = await worker.fetch(request('/api/public/applications/current/documents/passport', { method: 'DELETE', cookie }), environment, {});
 
     assert.equal(declaration.status, 409);
     assert.equal((await json(declaration)).error.code, 'APPLICATION_NOT_EDITABLE');

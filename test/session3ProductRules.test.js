@@ -79,6 +79,7 @@ async function putSignedFile(environment, url, contentType, bytes = new Uint8Arr
     const pathParts = new URL(url).pathname.split('/').filter(Boolean);
     const storageKey = pathParts.slice(-2).join('/');
     await environment.DOCUMENTS.put(storageKey, bytes, { httpMetadata: { contentType } });
+    return storageKey;
 }
 
 test('new and Session 2 drafts expose an empty student-safe fingerprint state', async () => {
@@ -318,9 +319,87 @@ test('server-calculated document requirements change with the saved under-18 sta
     const birthCertificate = minorPayload.requirements.find(({ code }) => code === 'birth_certificate_under18');
     assert.equal(minorResponse.status, 200);
     assert.equal(birthCertificate.is_required, true);
-    assert.equal(minorPayload.requirements.filter(({ code }) => code === 'fingerprint').length, 1);
+    assert.equal(minorPayload.requirements.some(({ code }) => code === 'fingerprint'), false);
     assert.equal(minorPayload.requirements.some(({ code }) => code.includes('parental') || code.includes('guardian')), false);
     assert.equal(database.prepare('SELECT is_under_18 FROM applications').first().is_under_18, 1);
+});
+
+test('address evidence choices select one server-enforced branch and branch changes preserve an uploaded object', async () => {
+    const { environment, database, storedObjects } = createEnvironment();
+    const created = await createDraft(environment, '2026123990');
+    const updateAddress = (addressEvidenceType) => worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie: created.cookie, body: { address_evidence_type: addressEvidenceType }
+    }), environment, {});
+    const readRequirements = async () => {
+        const response = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie: created.cookie }), environment, {});
+        return { response, payload: await response.json() };
+    };
+
+    const undertakingSaved = await updateAddress('undertaking');
+    const undertakingRequirements = await readRequirements();
+    const codes = undertakingRequirements.payload.requirements.map(({ code }) => code);
+    const wrongBranchIntent = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
+        method: 'POST', cookie: created.cookie,
+        body: { code: 'address_rental_contract', filename: 'rental.pdf', media_type: 'application/pdf', byte_size: 4 }
+    }), environment, {});
+    const intentResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
+        method: 'POST', cookie: created.cookie,
+        body: { code: 'address_undertaking', filename: 'undertaking.pdf', media_type: 'application/pdf', byte_size: 4 }
+    }), environment, {});
+    assert.equal(intentResponse.status, 201);
+    const intent = await intentResponse.json();
+    const storageKey = await putSignedFile(environment, intent.upload.url, 'application/pdf');
+
+    await updateAddress('rental_contract');
+    const rentalRequirements = await readRequirements();
+    const finalize = await worker.fetch(createRequest('/api/public/applications/current/documents/finalize', {
+        method: 'POST', cookie: created.cookie, body: { intent_id: intent.upload.intent_id }
+    }), environment, {});
+
+    assert.equal(undertakingSaved.status, 200);
+    assert.equal(undertakingRequirements.response.status, 200);
+    assert.equal(wrongBranchIntent.status, 404);
+    assert.equal((await wrongBranchIntent.json()).error.code, 'DOCUMENT_REQUIREMENT_NOT_FOUND');
+    assert.deepEqual(codes.filter((code) => code.startsWith('address_') || code.startsWith('host_')), [
+        'address_undertaking', 'host_residence_certificate', 'host_identity_copy'
+    ]);
+    assert.equal(intentResponse.status, 201);
+    assert.equal(rentalRequirements.response.status, 200);
+    assert.deepEqual(rentalRequirements.payload.requirements.filter(({ code }) => code.startsWith('address_') || code.startsWith('host_')).map(({ code }) => code), [
+        'address_rental_contract'
+    ]);
+    assert.equal(finalize.status, 404);
+    assert.equal((await finalize.json()).error.code, 'DOCUMENT_REQUIREMENT_NOT_FOUND');
+    assert.equal(storedObjects.has(storageKey), true);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM document_records').first().count, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM document_revisions').first().count, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM document_revision_files').first().count, 1);
+});
+
+test('inactive compatibility requirements stay hidden and cannot start uploads', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await createDraft(environment, '2026123991');
+    const requirementsResponse = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie: created.cookie }), environment, {});
+    const requirements = await requirementsResponse.json();
+    await setFingerprintRegistration(environment, created.cookie, 'registered', 'FP-X/15');
+
+    const fingerprintIntent = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
+        method: 'POST', cookie: created.cookie,
+        body: { code: 'fingerprint', filename: 'fingerprint.pdf', media_type: 'application/pdf', byte_size: 4 }
+    }), environment, {});
+    const legacyPassportIntent = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
+        method: 'POST', cookie: created.cookie,
+        body: { code: 'passport_identity', filename: 'old-passport.pdf', media_type: 'application/pdf', byte_size: 4 }
+    }), environment, {});
+    const inactiveRows = database.prepare(`
+        SELECT is_active FROM document_requirements WHERE code IN ('fingerprint', 'passport_identity', 'address_document')
+    `).all().results;
+
+    assert.equal(requirements.requirements.some(({ code }) => ['fingerprint', 'passport_identity', 'address_document', 'uets'].includes(code)), false);
+    assert.equal(fingerprintIntent.status, 404);
+    assert.equal(legacyPassportIntent.status, 404);
+    assert.equal(inactiveRows.every(({ is_active }) => is_active === 0), true);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM upload_intents').first().count, 0);
 });
 
 test('adult sessions cannot create a birth certificate upload intent by supplying its code', async () => {
@@ -339,7 +418,7 @@ test('adult sessions cannot create a birth certificate upload intent by supplyin
     assert.equal((await response.json()).error.code, 'DOCUMENT_REQUIREMENT_NOT_FOUND');
 });
 
-test('fingerprint upload intent requires registered status and a non-empty canonical code', async () => {
+test('fingerprint registration stays separate from document uploads', async () => {
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123950');
     const createIntent = (code) => worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
@@ -350,16 +429,17 @@ test('fingerprint upload intent requires registered status and a non-empty canon
     const unanswered = await createIntent('fingerprint');
     await setFingerprintRegistration(environment, created.cookie, 'not_registered');
     const notRegistered = await createIntent('fingerprint');
-    await setFingerprintRegistration(environment, created.cookie, 'registered');
-    const missingCode = await createIntent('fingerprint');
-    const otherDocument = await createIntent('passport_identity');
+    await setFingerprintRegistration(environment, created.cookie, 'registered', 'FP-X/15');
+    const registered = await createIntent('fingerprint');
+    const passport = await createIntent('passport');
 
-    for (const response of [unanswered, notRegistered, missingCode]) {
-        assert.equal(response.status, 409);
-        assert.equal((await response.json()).error.code, 'FINGERPRINT_REGISTRATION_REQUIRED');
+    for (const response of [unanswered, notRegistered, registered]) {
+        assert.equal(response.status, 404);
+        assert.equal((await response.json()).error.code, 'DOCUMENT_REQUIREMENT_NOT_FOUND');
     }
-    assert.equal(otherDocument.status, 201);
+    assert.equal(passport.status, 201);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM upload_intents').first().count, 1);
+    assert.equal(database.prepare('SELECT fingerprint_status FROM applications').first().fingerprint_status, 'registered');
 });
 
 test('student document requirements and upload intents are scoped to the current application session', async () => {
@@ -395,14 +475,14 @@ test('document upload intents reject cross-origin mutations and expired student 
     const created = await createDraft(environment, '2026123912');
     const crossOrigin = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie, origin: 'https://attacker.test',
-        body: { code: 'fingerprint', filename: 'fingerprint.pdf', media_type: 'application/pdf', byte_size: 4 }
+        body: { code: 'passport', filename: 'passport.pdf', media_type: 'application/pdf', byte_size: 4 }
     }), environment, {});
     const token = created.cookie.split('=')[1];
     await database.prepare('UPDATE application_sessions SET expires_at = ? WHERE token_hash = ?')
         .bind(new Date(Date.now() - 1000).toISOString(), await hashSessionToken(token)).run();
     const expiredSession = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
-        body: { code: 'fingerprint', filename: 'fingerprint.pdf', media_type: 'application/pdf', byte_size: 4 }
+        body: { code: 'passport', filename: 'passport.pdf', media_type: 'application/pdf', byte_size: 4 }
     }), environment, {});
 
     assert.equal(crossOrigin.status, 403);
@@ -412,7 +492,6 @@ test('document upload intents reject cross-origin mutations and expired student 
 test('staging signing diagnostics stay server-side while upload intent keeps its safe error contract', async (t) => {
     const { environment } = createEnvironment();
     const created = await createDraft(environment, '2026123916');
-    await setFingerprintRegistration(environment, created.cookie, 'registered', 'FP-A/42');
     environment.APP_ENV = 'staging';
     environment.R2_BUCKET_NAME = 'invalid/bucket-name';
     environment.R2_ACCESS_KEY_ID = 'TEST-ACCESS-KEY-PRIVATE';
@@ -422,7 +501,7 @@ test('staging signing diagnostics stay server-side while upload intent keeps its
 
     const response = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
-        body: { code: 'fingerprint', filename: 'fingerprint.pdf', media_type: 'application/pdf', byte_size: 4 }
+        body: { code: 'passport', filename: 'passport.pdf', media_type: 'application/pdf', byte_size: 4 }
     }), environment, {});
     const payload = await response.json();
     const responseText = JSON.stringify(payload);
@@ -440,13 +519,12 @@ test('staging signing diagnostics stay server-side while upload intent keeps its
     assert.doesNotMatch(JSON.stringify(diagnosticFields), /TEST-ACCESS-KEY-PRIVATE|TEST-SECRET-KEY-PRIVATE/);
 });
 
-test('fingerprint uploads use direct R2 capabilities and replacement creates a new current revision', async () => {
+test('passport uploads use direct R2 capabilities and replacement creates a new current revision', async () => {
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123913');
-    await setFingerprintRegistration(environment, created.cookie, 'registered', 'FP-A/42');
     const createIntent = async (filename) => worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
-        body: { code: 'fingerprint', filename, media_type: 'application/pdf', byte_size: 4 }
+        body: { code: 'passport', filename, media_type: 'application/pdf', byte_size: 4 }
     }), environment, {});
     const finalize = async (intentId) => worker.fetch(createRequest('/api/public/applications/current/documents/finalize', {
         method: 'POST', cookie: created.cookie, body: { intent_id: intentId }
@@ -472,7 +550,7 @@ test('fingerprint uploads use direct R2 capabilities and replacement creates a n
         JOIN document_revision_files AS files ON files.revision_id = revisions.id
         JOIN applications ON applications.id = records.application_id
         JOIN students ON students.id = applications.student_id
-        WHERE students.student_number = '2026123913' AND requirements.code = 'fingerprint'
+        WHERE students.student_number = '2026123913' AND requirements.code = 'passport'
         ORDER BY revisions.revision_number
     `).all().results;
 
@@ -492,34 +570,64 @@ test('fingerprint uploads use direct R2 capabilities and replacement creates a n
     ]);
 });
 
-test('fingerprint finalize rechecks current registration state after a capability was issued', async () => {
-    const { environment, database } = createEnvironment();
-    const created = await createDraft(environment, '2026123951');
-    await setFingerprintRegistration(environment, created.cookie, 'registered', 'FP-A/42');
+test('draft application-type changes preserve finalized document metadata and the R2 object', async () => {
+    const { environment, database, storedObjects } = createEnvironment();
+    const created = await createDraft(environment, '2026123960');
     const intentResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
-        body: { code: 'fingerprint', filename: 'fingerprint.pdf', media_type: 'application/pdf', byte_size: 4 }
+        body: { code: 'passport', filename: 'passport.pdf', media_type: 'application/pdf', byte_size: 4 }
     }), environment, {});
     const intent = await intentResponse.json();
-    await putSignedFile(environment, intent.upload.url, 'application/pdf');
-    await setFingerprintRegistration(environment, created.cookie, 'not_registered');
-
+    const storageKey = await putSignedFile(environment, intent.upload.url, 'application/pdf');
     const finalizeResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/finalize', {
         method: 'POST', cookie: created.cookie, body: { intent_id: intent.upload.intent_id }
     }), environment, {});
 
-    assert.equal(finalizeResponse.status, 409);
-    assert.equal((await finalizeResponse.json()).error.code, 'FINGERPRINT_REGISTRATION_REQUIRED');
-    assert.equal(database.prepare('SELECT upload_status FROM document_revision_files').first().upload_status, 'intent');
+    const typeChange = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie: created.cookie, body: { application_type: 'renewal' }
+    }), environment, {});
+    const file = database.prepare(`
+        SELECT records.id AS record_id, records.application_type, requirements.code,
+               revisions.revision_number, files.storage_key, files.upload_status
+        FROM document_records AS records
+        JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
+        JOIN document_revisions AS revisions ON revisions.document_record_id = records.id
+        JOIN document_revision_files AS files ON files.revision_id = revisions.id
+    `).first();
+
+    assert.equal(intentResponse.status, 201);
+    assert.equal(finalizeResponse.status, 200);
+    assert.equal(typeChange.status, 200);
+    assert.equal(file.application_type, 'renewal');
+    assert.equal(file.code, 'passport');
+    assert.equal(file.revision_number, 1);
+    assert.equal(file.storage_key, storageKey);
+    assert.equal(file.upload_status, 'finalized');
+    assert.equal(storedObjects.has(storageKey), true);
+});
+
+test('host residence certificate accepts PDF only', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await createDraft(environment, '2026123951');
+    await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie: created.cookie, body: { address_evidence_type: 'undertaking' }
+    }), environment, {});
+    const imageIntent = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
+        method: 'POST', cookie: created.cookie,
+        body: { code: 'host_residence_certificate', filename: 'host.png', media_type: 'image/png', byte_size: 4 }
+    }), environment, {});
+
+    assert.equal(imageIntent.status, 400);
+    assert.equal((await imageIntent.json()).error.code, 'INVALID_FILE');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM upload_intents').first().count, 0);
 });
 
 test('finalize rejects a wrong-size object and does not mark the document complete', async () => {
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123914');
-    await setFingerprintRegistration(environment, created.cookie, 'registered', 'FP-A/42');
     const intentResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
-        body: { code: 'fingerprint', filename: 'fingerprint.pdf', media_type: 'application/pdf', byte_size: 5 }
+        body: { code: 'passport', filename: 'passport.pdf', media_type: 'application/pdf', byte_size: 5 }
     }), environment, {});
     const intent = await intentResponse.json();
     await putSignedFile(environment, intent.upload.url, 'application/pdf', new Uint8Array([1, 2, 3, 4]));

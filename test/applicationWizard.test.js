@@ -15,17 +15,17 @@ function fillRequiredResidenceFields(root) {
 }
 
 function createFingerprintRequirements() {
-    return ['fingerprint', 'passport_identity'].map((code) => ({
-        code, required: true, label_key: code === 'fingerprint' ? 'documentFingerprint' : 'documentPassportIdentity',
-        description_key: code === 'fingerprint' ? 'documentFingerprintHelp' : 'documentPassportIdentityHelp',
+    return ['passport', 'residence_card'].map((code) => ({
+        code, required: true, label_key: code === 'passport' ? 'documentPassport' : 'documentResidenceCard',
+        description_key: code === 'passport' ? 'documentPassportHelp' : 'documentResidenceCardHelp',
         accepted_media_types: ['application/pdf'], max_byte_size: 1024, filename: null, upload_status: null
     }));
 }
 
-async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null) {
+async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null, addressEvidenceType = 'rental_contract') {
     const { document, root } = createRoot();
     const application = {
-        status: 'draft', application_type: 'initial', student_number: 'S3-FP-1',
+        status: 'draft', application_type: 'initial', address_evidence_type: addressEvidenceType, student_number: 'S3-FP-1',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish',
         date_of_birth: '2000-01-01', is_under_18: 0,
@@ -33,9 +33,11 @@ async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null
         fingerprint_status: fingerprintStatus, fingerprint_code: fingerprintCode,
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAccuracy', accepted_current: false }
     };
+    const savedPatches = [];
     const api = {
         async readCurrentApplication() { return { ...application }; },
         async updateCurrentApplication(fields) {
+            savedPatches.push(fields);
             Object.assign(application, fields);
             if (application.fingerprint_status !== 'registered') application.fingerprint_code = null;
             else application.fingerprint_code = typeof application.fingerprint_code === 'string'
@@ -45,7 +47,7 @@ async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null
         async readCurrentStudentDocumentRequirements() { return { requirements: createFingerprintRequirements() }; }
     };
     const state = await initializeApplicationWizard(root, api);
-    return { document, root, state, api };
+    return { document, root, state, api, savedPatches };
 }
 
 async function submitWizard(root) {
@@ -203,6 +205,42 @@ test('residence Continue is disabled when an ordinary required field is missing'
     document.defaultView.close();
 });
 
+test('residence step requires one address evidence branch and persists the selected choice', async () => {
+    const { document, root, state, savedPatches } = await createFingerprintWizard('registered', 'FP-A/42', null);
+    const choices = root.querySelectorAll('[name="address_evidence_type"]');
+    const continueButton = root.querySelector('#application-step-form button[type="submit"]');
+
+    assert.equal(choices.length, 3);
+    assert.equal(continueButton.disabled, true);
+    const undertaking = root.querySelector('[name="address_evidence_type"][value="undertaking"]');
+    undertaking.checked = true;
+    undertaking.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    assert.equal(continueButton.disabled, false);
+    assert.equal(state.formValues.address_evidence_type, 'undertaking');
+    await submitWizard(root);
+
+    assert.equal(state.step, 2);
+    assert.equal(savedPatches.at(-1).address_evidence_type, 'undertaking');
+    assert.equal(state.application.address_evidence_type, 'undertaking');
+    document.defaultView.close();
+});
+
+test('draft application type remains editable and is autosaved', async () => {
+    const { document, root, state } = await createFingerprintWizard('registered', 'FP-A/42');
+    const previous = root.querySelector('[data-action="previous"]');
+    previous.dispatchEvent(new document.defaultView.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    const applicationType = root.querySelector('[name="application_type"]');
+
+    assert.equal(applicationType.disabled, false);
+    applicationType.value = 'renewal';
+    applicationType.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await state.autosave.flush();
+
+    assert.equal(state.application.application_type, 'renewal');
+    document.defaultView.close();
+});
+
 test('not-registered blocking alert disappears when registration is changed to registered', async () => {
     const { document, root } = await createFingerprintWizard('not_registered');
     const registeredChoice = root.querySelector('[name="fingerprint_status"][value="registered"]');
@@ -272,27 +310,25 @@ test('registered fingerprint with missing or whitespace-only code cannot Continu
     }
 });
 
-test('registered fingerprint with a non-empty code can Continue to enabled fingerprint upload', async () => {
+test('registered fingerprint with a non-empty code can Continue to passport and residence-card uploads', async () => {
     const { document, root, state } = await createFingerprintWizard('registered', 'FP-A/42');
 
     await submitWizard(root);
 
     assert.equal(state.step, 2);
-    assert.ok(root.querySelector('[data-document-code="fingerprint"] input[type="file"]'));
-    assert.ok(root.querySelector('[data-document-code="passport_identity"] input[type="file"]'));
+    assert.equal(root.querySelector('[data-document-code="fingerprint"]'), null);
+    assert.ok(root.querySelector('[data-document-code="passport"] input[type="file"]'));
+    assert.ok(root.querySelector('[data-document-code="residence_card"] input[type="file"]'));
     document.defaultView.close();
 });
 
-test('not-registered fingerprint document card has no upload control and leaves other uploads enabled', async () => {
+test('not-registered fingerprint status blocks progression without adding a fingerprint document', async () => {
     const { document, root, state } = await createFingerprintWizard('not_registered');
     state.step = 2;
     document.dispatchEvent(new document.defaultView.CustomEvent('public:locale-changed', { detail: 'tr' }));
 
-    const fingerprintCard = root.querySelector('[data-document-code="fingerprint"]');
-    assert.ok(fingerprintCard);
-    assert.equal(fingerprintCard.querySelector('input[type="file"]'), null);
-    assert.match(fingerprintCard.textContent, /Önce Göç İdaresi’nde parmak izi işleminizi tamamlayın\./);
-    assert.ok(root.querySelector('[data-document-code="passport_identity"] input[type="file"]'));
+    assert.equal(root.querySelector('[data-document-code="fingerprint"]'), null);
+    assert.ok(root.querySelector('[data-document-code="passport"] input[type="file"]'));
     document.defaultView.close();
 });
 
@@ -317,7 +353,7 @@ test('wizard saves under-18 and fingerprint state before loading the server requ
     const { document, root } = createRoot();
     const window = document.defaultView;
     const application = {
-        status: 'draft', application_type: 'initial', student_number: '2026123999',
+        status: 'draft', application_type: 'initial', address_evidence_type: 'rental_contract', student_number: '2026123999',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null
@@ -330,7 +366,7 @@ test('wizard saves under-18 and fingerprint state before loading the server requ
         },
         async readCurrentStudentDocumentRequirements() {
             const requirements = [{
-                code: 'fingerprint', required: true, label_key: 'documentFingerprint', description_key: 'documentFingerprintHelp',
+                code: 'passport', required: true, label_key: 'documentPassport', description_key: 'documentPassportHelp',
                 accepted_media_types: ['application/pdf'], max_byte_size: 10 * 1024 * 1024
             }];
             if (application.is_under_18) requirements.push({
@@ -368,7 +404,7 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
     const { document, root } = createRoot();
     const window = document.defaultView;
     const saved = {
-        status: 'draft', application_type: 'initial', student_number: 'S3-WIZ-1', student_email: 'student@example.edu',
+        status: 'draft', application_type: 'initial', address_evidence_type: 'rental_contract', student_number: 'S3-WIZ-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', first_name: '', last_name: '', passport_number: '', nationality: '', date_of_birth: '',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null,
@@ -377,7 +413,7 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
     const autosaved = [];
     let acceptedVersion = null;
     const policy = {
-        code: 'fingerprint', required: true, label_key: 'documentFingerprint', description_key: 'documentFingerprintHelp',
+        code: 'passport', required: true, label_key: 'documentPassport', description_key: 'documentPassportHelp',
         accepted_media_types: ['application/pdf'], max_byte_size: 1024
     };
     const api = {
@@ -435,7 +471,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     const { document, root } = createRoot();
     const window = document.defaultView;
     const application = {
-        status: 'draft', application_type: 'initial', student_number: 'S3-UP-1', student_email: 'student@example.edu',
+        status: 'draft', application_type: 'initial', address_evidence_type: 'rental_contract', student_number: 'S3-UP-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }
@@ -445,7 +481,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     let releasePut;
     let deleteCalls = 0;
     let requirements = [{
-        code: 'passport_identity', required: true, label_key: 'documentPassportIdentity', description_key: 'documentPassportIdentityHelp',
+        code: 'passport', required: true, label_key: 'documentPassport', description_key: 'documentPassportHelp',
         accepted_media_types: ['application/pdf'], max_byte_size: 1024, filename: null, upload_status: null
     }];
     const api = {
@@ -461,7 +497,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
             finalizeCalls += 1;
             if (finalizeCalls === 1) throw Object.assign(new Error('lost response'), { code: 'NETWORK_ERROR' });
             requirements = [{ ...requirements[0], filename: 'replacement.pdf', upload_status: 'finalized', scan_status: 'pending', revision_number: 2 }];
-            return { code: 'passport_identity', revision_number: 2 };
+            return { code: 'passport', revision_number: 2 };
         },
         async deleteStudentDocument() {
             deleteCalls += 1;
@@ -484,19 +520,19 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     Object.defineProperty(input, 'files', { configurable: true, value: [new window.File(['pdf'], 'passport.pdf', { type: 'application/pdf' })] });
     input.dispatchEvent(new window.Event('change', { bubbles: true }));
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(state.uploads.passport_identity.state, 'uploading');
+    assert.equal(state.uploads.passport.state, 'uploading');
     assert.equal(root.querySelector('progress').getAttribute('aria-valuenow'), '57');
     releasePut();
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(state.uploads.passport_identity.state, 'unknown_finalize_result');
+    assert.equal(state.uploads.passport.state, 'unknown_finalize_result');
     assert.equal(intentCalls, 1);
     assert.equal(finalizeCalls, 1);
 
     root.querySelector('[data-action="document-retry"]').click();
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(state.uploads.passport_identity.state, 'complete');
+    assert.equal(state.uploads.passport.state, 'complete');
     assert.equal(intentCalls, 1);
     assert.equal(finalizeCalls, 2);
     assert.match(root.textContent, /Belgeyi değiştir/);

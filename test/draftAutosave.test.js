@@ -73,3 +73,30 @@ test('older response does not replace latest canonical state and writes stay ser
     assert.deepEqual(states, ['new']);
     autosave.dispose();
 });
+
+test('rescheduling the same selected value during a save still publishes the saved draft state', async () => {
+    const savedApplications = [];
+    let releaseSave;
+    let signalSaveStarted;
+    const saveStarted = new Promise((resolve) => { signalSaveStarted = resolve; });
+    const autosave = createDraftAutosave({
+        delayMs: 1000,
+        initialValues: { address_evidence_type: null },
+        save: (patch) => new Promise((resolve) => {
+            releaseSave = () => resolve({ address_evidence_type: patch.address_evidence_type });
+            signalSaveStarted();
+        }),
+        onSaved: (application) => savedApplications.push(application.address_evidence_type)
+    });
+
+    autosave.schedule({ address_evidence_type: 'undertaking' });
+    const firstFlush = autosave.flush();
+    await saveStarted;
+    autosave.schedule({ address_evidence_type: 'undertaking' });
+    const continueFlush = autosave.flush();
+    releaseSave();
+    await Promise.all([firstFlush, continueFlush]);
+
+    assert.deepEqual(savedApplications, ['undertaking']);
+    autosave.dispose();
+});

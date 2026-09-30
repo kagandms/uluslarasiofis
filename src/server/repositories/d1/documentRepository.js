@@ -1,3 +1,17 @@
+const ADDRESS_EVIDENCE_CONDITIONS = Object.freeze({
+    'address_evidence:rental_contract': "AND applications.address_evidence_type = 'rental_contract'",
+    'address_evidence:residence_certificate': "AND applications.address_evidence_type = 'residence_certificate'",
+    'address_evidence:undertaking': "AND applications.address_evidence_type = 'undertaking'"
+});
+
+function readConditionalSql(conditionalRule) {
+    if (conditionalRule === null || conditionalRule === undefined) return '';
+    if (conditionalRule === 'under18') return 'AND applications.is_under_18 = 1';
+    const addressCondition = ADDRESS_EVIDENCE_CONDITIONS[conditionalRule];
+    if (addressCondition) return addressCondition;
+    throw new TypeError('Unsupported document policy condition.');
+}
+
 /**
  * Creates the document metadata repository for one D1 binding.
  * @param {D1Database} database Cloudflare D1 binding.
@@ -49,10 +63,7 @@ export function createDocumentRepository(database) {
             `).bind(applicationType, code).first();
         },
         async createStudentUploadIntent({ applicationId, requirementId, conditionalRule, documentRecordId, revisionId, fileId, storageKey, filename, mediaType, byteSize, intentId, idempotencyKey, expiresAt, createdAt }) {
-            if (conditionalRule && conditionalRule !== 'under18' && conditionalRule !== 'fingerprint_product_requirement') {
-                throw new TypeError('Unsupported document policy condition.');
-            }
-            const ageCondition = conditionalRule === 'under18' ? 'AND applications.is_under_18 = 1' : '';
+            const conditionalSql = readConditionalSql(conditionalRule);
             const results = await database.batch([
                 database.prepare(`
                     INSERT INTO document_records (id, application_id, requirement_id, application_type)
@@ -62,7 +73,7 @@ export function createDocumentRepository(database) {
                       ON requirements.application_type = applications.application_type
                     WHERE applications.id = ? AND applications.status = 'draft'
                       AND requirements.id = ? AND requirements.is_active = 1
-                      ${ageCondition}
+                      ${conditionalSql}
                     ON CONFLICT(application_id, requirement_id) DO NOTHING
                 `).bind(documentRecordId, applicationId, requirementId),
                 database.prepare(`
@@ -108,7 +119,7 @@ export function createDocumentRepository(database) {
                     LEFT JOIN document_revisions AS previous ON previous.document_record_id = records.id
                     WHERE records.application_id = ? AND records.requirement_id = ?
                       AND applications.status = 'draft' AND requirements.is_active = 1
-                      ${ageCondition}
+                      ${conditionalSql}
                     GROUP BY records.id
                 `).bind(revisionId, createdAt, applicationId, requirementId),
                 database.prepare(`
@@ -180,10 +191,7 @@ export function createDocumentRepository(database) {
             return results[0]?.meta?.changes === 1;
         },
         async finalizeStudentUpload({ applicationId, intentId, fileId, revisionId, documentRecordId, conditionalRule, finalizedAt }) {
-            if (conditionalRule && conditionalRule !== 'under18' && conditionalRule !== 'fingerprint_product_requirement') {
-                throw new TypeError('Unsupported document policy condition.');
-            }
-            const ageCondition = conditionalRule === 'under18' ? 'AND applications.is_under_18 = 1' : '';
+            const conditionalSql = readConditionalSql(conditionalRule);
             const validPendingIntent = `EXISTS (
                 SELECT 1 FROM upload_intents AS intents
                 JOIN document_revision_files AS files ON files.id = intents.revision_file_id
@@ -195,7 +203,7 @@ export function createDocumentRepository(database) {
                   AND datetime(intents.expires_at) > datetime(?)
                   AND records.application_id = ? AND applications.status = 'draft'
                   AND requirements.is_active = 1
-                  ${ageCondition}
+                  ${conditionalSql}
             )`;
             const results = await database.batch([
                 database.prepare(`
