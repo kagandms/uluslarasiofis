@@ -136,6 +136,49 @@ export function createApplicationRepository(database) {
             if (!selected) return null;
             return this.findById(selected.id);
         },
+        async queryStaffApplications({ statuses, searchPattern, pageSize, offset }) {
+            const conditions = ["applications.status <> 'draft'"];
+            const queryValues = [];
+            if (statuses) {
+                conditions.push(`applications.status IN (${statuses.map(() => '?').join(', ')})`);
+                queryValues.push(...statuses);
+            }
+            if (searchPattern) {
+                conditions.push(`(
+                    students.student_number LIKE ? ESCAPE '\\'
+                    OR COALESCE(applications.first_name, '') LIKE ? ESCAPE '\\'
+                    OR COALESCE(applications.last_name, '') LIKE ? ESCAPE '\\'
+                    OR (COALESCE(applications.first_name, '') || ' ' || COALESCE(applications.last_name, '')) LIKE ? ESCAPE '\\'
+                    OR (COALESCE(applications.last_name, '') || ' ' || COALESCE(applications.first_name, '')) LIKE ? ESCAPE '\\'
+                    OR COALESCE(applications.passport_number, '') LIKE ? ESCAPE '\\'
+                )`);
+                queryValues.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+            }
+            const whereClause = conditions.join(' AND ');
+            const [countResult, pageResult] = await Promise.all([
+                database.prepare(`
+                    SELECT COUNT(*) AS total_items
+                    FROM applications
+                    JOIN students ON students.id = applications.student_id
+                    WHERE ${whereClause}
+                `).bind(...queryValues).first(),
+                database.prepare(`
+                    SELECT applications.id, students.student_number, applications.first_name,
+                           applications.last_name, applications.application_type, applications.status,
+                           applications.submitted_at, applications.updated_at,
+                           assigned_staff.id AS assigned_staff_id,
+                           assigned_staff.display_name AS assigned_staff_name
+                    FROM applications
+                    JOIN students ON students.id = applications.student_id
+                    LEFT JOIN assignments ON assignments.application_id = applications.id AND assignments.status = 'active'
+                    LEFT JOIN staff_users AS assigned_staff ON assigned_staff.id = assignments.staff_user_id
+                    WHERE ${whereClause}
+                    ORDER BY applications.updated_at DESC, applications.created_at DESC, applications.id DESC
+                    LIMIT ? OFFSET ?
+                `).bind(...queryValues, pageSize, offset).all()
+            ]);
+            return { totalItems: countResult.total_items, items: pageResult.results };
+        },
         async acceptContactResponsibilityAcknowledgement({ applicationId, version, acceptedAt, requestId }) {
             const eventId = `${applicationId}:contact-responsibility:${version}`;
             await database.prepare(`

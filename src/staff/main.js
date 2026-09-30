@@ -12,6 +12,7 @@ import { initTebligatSearch } from '../ui/tebligatSearch.js';
 import { initWorkspaceNavigation } from '../ui/workspaceNavigation.js';
 import { initYknManager } from '../managers/yknManager.js';
 import { initStaffAuth } from './auth.js';
+import { initializeStaffApplicationsManager } from './applicationsManager.js';
 
 const staffAuthReady = document.readyState === 'loading'
     ? new Promise((resolve) => {
@@ -95,6 +96,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (event.detail?.viewName === 'cover') setActiveStep(STEP_IDS.UPLOAD);
     });
     try { initWorkspaceNavigation(); } catch (e) { console.error('initWorkspaceNavigation error:', e); }
+    try {
+        const applicationsRoot = document.getElementById('staff-applications-manager');
+        if (applicationsRoot) initializeStaffApplicationsManager(applicationsRoot);
+    } catch (error) {
+        console.error('Applications workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
     try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
     
     try { initDraftAutoSave(); } catch (e) { console.error('initDraftAutoSave error:', e); }

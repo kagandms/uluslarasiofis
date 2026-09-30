@@ -1755,3 +1755,186 @@ body.dark-mode .history-badge {
     margin-right: 6px;
     vertical-align: middle;
 }
+
+.staff-applications-queue,
+.staff-application-detail-view {
+    color: var(--text-primary);
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.staff-applications-filters {
+    align-items: end;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: minmax(220px, 2fr) minmax(180px, 1fr) auto;
+}
+
+.staff-applications-filters label,
+.staff-application-details-grid dt {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.staff-applications-filters .glass-input {
+    margin-top: 0.3rem;
+    width: 100%;
+}
+
+.staff-applications-table {
+    border-collapse: collapse;
+    min-width: 0;
+    table-layout: auto;
+    width: 100%;
+}
+
+.staff-applications-table th,
+.staff-applications-table td {
+    border-bottom: 1px solid var(--card-border);
+    padding: 0.75rem 0.55rem;
+    text-align: left;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+}
+
+.staff-applications-table th {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.staff-applications-table td {
+    color: var(--text-primary);
+    font-size: 0.88rem;
+}
+
+.staff-applications-pagination {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.staff-applications-pagination p,
+.staff-applications-state {
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.staff-application-summary,
+.staff-application-documents {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    color: var(--text-primary);
+    min-width: 0;
+    padding: 1rem;
+}
+
+.staff-application-summary h4,
+.staff-application-documents h4 {
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.staff-application-details-grid {
+    display: grid;
+    gap: 0.8rem 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.staff-application-details-grid dt,
+.staff-application-details-grid dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.staff-application-details-grid dd {
+    color: var(--text-primary);
+    margin-top: 0.2rem;
+}
+
+.staff-application-document-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.staff-application-document-card {
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    min-width: 0;
+    padding: 0.85rem;
+}
+
+.staff-application-document-card h5 {
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+}
+
+@media (max-width: 900px) {
+    .staff-applications-table thead {
+        position: absolute;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        width: 1px;
+    }
+
+    .staff-applications-table,
+    .staff-applications-table tbody,
+    .staff-applications-table tr,
+    .staff-applications-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .staff-applications-table tr {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        margin-bottom: 0.75rem;
+        padding: 0.35rem 0.75rem;
+    }
+
+    .staff-applications-table td {
+        align-items: baseline;
+        border-bottom: 1px solid var(--card-border);
+        display: flex;
+        gap: 0.75rem;
+        justify-content: space-between;
+        padding: 0.55rem 0;
+        text-align: right;
+    }
+
+    .staff-applications-table td::before {
+        color: var(--text-secondary);
+        content: attr(data-label);
+        flex: 0 0 38%;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-align: left;
+    }
+
+    .staff-applications-table td:last-child {
+        border-bottom: 0;
+    }
+}
+
+@media (max-width: 600px) {
+    .staff-applications-filters,
+    .staff-application-details-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .staff-applications-filters .btn {
+        width: 100%;
+    }
+
+    .staff-applications-pagination {
+        flex-wrap: wrap;
+    }
+}

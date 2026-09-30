@@ -5,6 +5,7 @@ import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument,
 import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
 import { lookupApplicationTracking, readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
+import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
 import { bootstrapStaff, createStaffUser, listStaffUsers, loginStaff, logoutStaff, readStaffSession, updateStaffAccount } from './routes/staffRoutes.js';
 import { handleTebligatRequest } from './routes/tebligatRoutes.js';
@@ -47,6 +48,17 @@ async function routeApi(request, environment, requestId) {
     if (pathname === '/api/staff/auth/session' || pathname === '/api/session') return readStaffSession(request, environment);
     if (pathname === '/api/staff/auth/logout' || pathname === '/api/logout') return logoutStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/bootstrap') return bootstrapStaff(request, environment, requestId);
+    if (pathname === '/api/staff/applications/query') return queryStaffApplications(request, environment);
+    const staffApplicationMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)$/);
+    if (staffApplicationMatch) {
+        let applicationId;
+        try {
+            applicationId = decodeURIComponent(staffApplicationMatch[1]);
+        } catch {
+            throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+        }
+        return readStaffApplicationDetail(request, environment, applicationId);
+    }
     if (pathname === '/api/public/applications') return createApplicationDraft(request, environment, requestId);
     if (pathname === '/api/public/applications/current/status') return readCurrentApplicationStatus(request, environment);
     if (pathname === '/api/public/applications/current/tracking') return readCurrentApplicationTracking(request, environment);

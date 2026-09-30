@@ -144,6 +144,63 @@ async function createReadyApplication(environment, database, studentNumber, appl
     return { cookie, applicationId: application.id };
 }
 
+async function createStaffApplication(environment, database, studentNumber, {
+    applicationType = 'initial', status = 'submitted', firstName = 'First', lastName = 'Last',
+    passportNumber = 'PASS-123', updatedAt = '2026-09-30T10:00:00.000Z'
+} = {}) {
+    const request = createRequest('/api/public/applications', {
+        method: 'POST',
+        body: { student_number: studentNumber, application_type: applicationType, email: `${studentNumber}@example.edu`, phone: '+905550000000' }
+    });
+    const headers = new Headers(request.headers);
+    headers.set('CF-Connecting-IP', studentNumber);
+    const response = await worker.fetch(new Request(request, { headers }), environment, {});
+    assert.equal(response.status, 201);
+    const application = database.prepare(`
+        SELECT applications.id FROM applications
+        JOIN students ON students.id = applications.student_id
+        WHERE students.normalized_student_number = ?
+    `).bind(studentNumber.toLocaleUpperCase('en-US')).first();
+    await database.prepare(`
+        UPDATE applications SET status = ?, first_name = ?, last_name = ?, passport_number = ?,
+            updated_at = ?, submitted_at = '2026-09-29T10:00:00.000Z'
+        WHERE id = ?
+    `).bind(status, firstName, lastName, passportNumber, updatedAt, application.id).run();
+    return application.id;
+}
+
+function staffCookie(rawToken) {
+    return `staff_session=${rawToken}`;
+}
+
+async function seedStaffDocument(database, applicationId, applicationType, code, {
+    filename = 'review-copy.pdf', reviewStatus = 'under_review', revisionStatus = 'submitted',
+    cleanupStatus = 'pending'
+} = {}) {
+    const requirement = database.prepare(`
+        SELECT id FROM document_requirements
+        WHERE application_type = ? AND code = ? AND is_active = 1
+    `).bind(applicationType, code).first();
+    assert.ok(requirement, `expected active ${applicationType} policy ${code}`);
+    const recordId = crypto.randomUUID();
+    const revisionId = crypto.randomUUID();
+    const fileId = crypto.randomUUID();
+    await database.prepare(`
+        INSERT INTO document_records (id, application_id, requirement_id, application_type, review_status)
+        VALUES (?, ?, ?, ?, ?)
+    `).bind(recordId, applicationId, requirement.id, applicationType, reviewStatus).run();
+    await database.prepare(`
+        INSERT INTO document_revisions (id, document_record_id, revision_number, status, is_current, submitted_by_type)
+        VALUES (?, ?, 3, ?, 1, 'student')
+    `).bind(revisionId, recordId, revisionStatus).run();
+    await database.prepare(`
+        INSERT INTO document_revision_files (
+            id, revision_id, page_order, storage_key, original_filename, media_type, byte_size,
+            upload_status, scan_status, cleanup_status
+        ) VALUES (?, ?, 0, 'quarantine/secret-object-key', ?, 'application/pdf', 123, 'finalized', 'clean', ?)
+    `).bind(fileId, revisionId, filename, cleanupStatus).run();
+}
+
 test('staff login creates a D1-backed HttpOnly session and returns no bearer token', async () => {
     const { environment, database } = createEnvironment();
     await seedStaff(database, { id: 'staff-admin', username: 'admin', role: 'admin' });
@@ -663,6 +720,214 @@ test('login, password reset, account state, and bootstrap actions leave audit ev
     assert.equal(database.prepare("SELECT is_active FROM staff_users WHERE id = 'staff-target'").first().is_active, 1);
     assert.ok(database.prepare('SELECT revoked_at FROM staff_sessions WHERE token_hash = ?').bind(await hashSessionToken(targetToken)).first().revoked_at);
     assert.doesNotMatch(JSON.stringify(await readJson(resetResponse)), /password_hash|pbkdf|token_hash/i);
+});
+
+test('staff application queue and detail require reviewer or admin sessions and exclude drafts', async () => {
+    const { environment, database } = createEnvironment();
+    const draftId = await createStaffApplication(environment, database, 'STAFF-DRAFT', { status: 'draft' });
+    const applicationA = await createStaffApplication(environment, database, 'STAFF-A', {
+        firstName: 'Ayşe', lastName: 'Yılmaz', passportNumber: 'PASSPORT-PRIVATE-A'
+    });
+    const applicationB = await createStaffApplication(environment, database, 'STAFF-B', {
+        firstName: 'Mert', lastName: 'Kaya', passportNumber: 'PASSPORT-PRIVATE-B'
+    });
+    await seedStaff(database, { id: 'staff-reviewer-apps', username: 'reviewer-apps' });
+    await seedStaff(database, { id: 'staff-admin-apps', username: 'admin-apps', role: 'admin' });
+    const reviewerToken = 'reviewer-apps-session-token-000000000000000000';
+    const adminToken = 'admin-apps-session-token-00000000000000000000';
+    await seedStaffSession(database, 'staff-reviewer-apps', reviewerToken);
+    await seedStaffSession(database, 'staff-admin-apps', adminToken);
+
+    const unauthenticatedQueue = await worker.fetch(createRequest('/api/staff/applications/query', {
+        method: 'POST', body: { status: 'all' }
+    }), environment, {});
+    const unauthenticatedDetail = await worker.fetch(createRequest(`/api/staff/applications/${applicationA}`), environment, {});
+    const wrongMethod = await worker.fetch(createRequest('/api/staff/applications/query', {
+        method: 'GET', cookie: staffCookie(reviewerToken)
+    }), environment, {});
+    const crossOrigin = await worker.fetch(createRequest('/api/staff/applications/query', {
+        method: 'POST', body: { status: 'all' }, cookie: staffCookie(reviewerToken), origin: 'https://attacker.test'
+    }), environment, {});
+    const reviewerQueue = await worker.fetch(createRequest('/api/staff/applications/query', {
+        method: 'POST', body: { status: 'all' }, cookie: staffCookie(reviewerToken)
+    }), environment, {});
+    const adminDetail = await worker.fetch(createRequest(`/api/staff/applications/${applicationA}`, {
+        cookie: staffCookie(adminToken)
+    }), environment, {});
+    const draftDetail = await worker.fetch(createRequest(`/api/staff/applications/${draftId}`, {
+        cookie: staffCookie(reviewerToken)
+    }), environment, {});
+    const invalidDetail = await worker.fetch(createRequest('/api/staff/applications/not-a-real-id', {
+        cookie: staffCookie(reviewerToken)
+    }), environment, {});
+    const queuePayload = await reviewerQueue.json();
+    const detailPayload = await adminDetail.json();
+
+    assert.equal(unauthenticatedQueue.status, 401);
+    assert.equal(unauthenticatedDetail.status, 401);
+    assert.equal(wrongMethod.status, 405);
+    assert.equal(crossOrigin.status, 403);
+    assert.equal(reviewerQueue.status, 200);
+    assert.equal(adminDetail.status, 200);
+    assert.equal(draftDetail.status, 404);
+    assert.equal(invalidDetail.status, 404);
+    assert.equal(queuePayload.items.some((item) => item.id === draftId), false);
+    assert.ok(queuePayload.items.some((item) => item.id === applicationA));
+    assert.equal(detailPayload.application.id, applicationA);
+    assert.equal(detailPayload.application.student_number, 'STAFF-A');
+    assert.equal(detailPayload.application.passport_number, 'PASSPORT-PRIVATE-A');
+    assert.notEqual(detailPayload.application.id, applicationB);
+    assert.doesNotMatch(JSON.stringify(queuePayload), /PASSPORT-PRIVATE|password_hash|token_hash|session|storage_key|safe_metadata_json/i);
+    assert.doesNotMatch(JSON.stringify(detailPayload), /password_hash|token_hash|session_id|storage_key|secret-object-key|safe_metadata_json|https?:\/\//i);
+});
+
+test('staff application queue maps every supported status filter and paginates deterministically', async () => {
+    const { environment, database } = createEnvironment();
+    const statuses = [
+        ['new', 'submitted'], ['under_review', 'under_review'], ['resubmission_required', 'resubmission_required'],
+        ['approved', 'approved_for_processing'], ['migration-sent', 'sent_to_migration'],
+        ['migration-approved', 'migration_approved'], ['complete', 'completed'],
+        ['cancel', 'cancelled'], ['reject', 'rejected'], ['draft-only', 'draft']
+    ];
+    const idByStatus = new Map();
+    for (const [suffix, status] of statuses) {
+        const id = await createStaffApplication(environment, database, `FILTER-${suffix}`, { status });
+        idByStatus.set(status, id);
+    }
+    await seedStaff(database, { id: 'staff-filter-reviewer', username: 'filter-reviewer' });
+    const token = 'filter-reviewer-session-token-000000000000000';
+    await seedStaffSession(database, 'staff-filter-reviewer', token);
+    const cookie = staffCookie(token);
+    const query = (body) => worker.fetch(createRequest('/api/staff/applications/query', {
+        method: 'POST', body, cookie
+    }), environment, {});
+    const allResponse = await query({ status: 'all', page: 1, page_size: 100 });
+    const all = await allResponse.json();
+    assert.equal(all.pagination.total_items, 9);
+    assert.equal(all.items.length, 9);
+    assert.ok(all.items.every((item) => item.status !== 'draft'));
+
+    const filterCases = [
+        ['new', ['submitted']], ['under_review', ['under_review']],
+        ['resubmission_required', ['resubmission_required']], ['approved', ['approved_for_processing']],
+        ['migration', ['sent_to_migration', 'migration_approved']], ['completed', ['completed']],
+        ['terminal', ['completed', 'cancelled', 'rejected']]
+    ];
+    for (const [filter, expectedStatuses] of filterCases) {
+        const response = await query({ status: filter, page: 1, page_size: 100 });
+        const payload = await response.json();
+        assert.equal(response.status, 200);
+        assert.deepEqual(payload.items.map((item) => item.status).sort(), [...expectedStatuses].sort());
+    }
+    const unknown = await query({ status: 'submitted OR 1=1' });
+    const oversized = await query({ status: 'all', page: 1, page_size: 101 });
+    const invalidPage = await query({ status: 'all', page: 0 });
+    const excessiveSearch = await query({ status: 'all', q: 'x'.repeat(121) });
+    assert.equal(unknown.status, 400);
+    assert.equal(oversized.status, 400);
+    assert.equal(invalidPage.status, 400);
+    assert.equal(excessiveSearch.status, 400);
+
+    const selected = [idByStatus.get('submitted'), idByStatus.get('under_review'), idByStatus.get('completed')];
+    for (const applicationId of idByStatus.values()) {
+        await database.prepare(`UPDATE applications SET updated_at = '2026-09-28T10:00:00.000Z', created_at = '2026-09-28T10:00:00.000Z' WHERE id = ?`)
+            .bind(applicationId).run();
+    }
+    await database.prepare(`UPDATE applications SET updated_at = '2026-09-30T10:00:00.000Z' WHERE id IN (?, ?, ?)`)
+        .bind(...selected).run();
+    const stablePage = await (await query({ status: 'all', page: 1, page_size: 2 })).json();
+    const expectedIds = [...selected].sort().reverse().slice(0, 2);
+    assert.deepEqual(stablePage.items.map((item) => item.id), expectedIds);
+    assert.deepEqual(stablePage.pagination, { page: 1, page_size: 2, total_items: 9, total_pages: 5 });
+});
+
+test('staff application search matches student number, names, and passport literally without echoing the query', async () => {
+    const { environment, database } = createEnvironment();
+    const targetId = await createStaffApplication(environment, database, 'SEARCH-123', {
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: 'PASS-SEARCH-456'
+    });
+    const wildcardId = await createStaffApplication(environment, database, 'SEARCH-%_LITERAL', {
+        firstName: 'Wild', lastName: 'Card', passportNumber: 'PASS-%_LITERAL'
+    });
+    await createStaffApplication(environment, database, 'SEARCH-OTHER', {
+        firstName: 'Other', lastName: 'Person', passportNumber: 'PASS-OTHER'
+    });
+    await seedStaff(database, { id: 'staff-search-reviewer', username: 'search-reviewer' });
+    const token = 'search-reviewer-session-token-000000000000000';
+    await seedStaffSession(database, 'staff-search-reviewer', token);
+    const query = async (q) => {
+        const response = await worker.fetch(createRequest('/api/staff/applications/query', {
+            method: 'POST', body: { q, status: 'all' }, cookie: staffCookie(token)
+        }), environment, {});
+        return { response, payload: await response.json() };
+    };
+
+    for (const value of ['SEARCH-123', 'Ada Lovelace', 'PASS-SEARCH-456']) {
+        const { response, payload } = await query(value);
+        assert.equal(response.status, 200);
+        assert.deepEqual(payload.items.map((item) => item.id), [targetId]);
+        assert.doesNotMatch(JSON.stringify(payload), /PASS-SEARCH-456/);
+    }
+    const literal = await query('%_LITERAL');
+    assert.deepEqual(literal.payload.items.map((item) => item.id), [wildcardId]);
+    const injection = await query("%' OR 1=1 --");
+    assert.equal(injection.payload.pagination.total_items, 0);
+    assert.doesNotMatch(JSON.stringify(injection.payload), /%' OR 1=1/);
+});
+
+test('staff application detail reuses policy and returns current safe document metadata and assignment', async () => {
+    const { environment, database } = createEnvironment();
+    const renewalId = await createStaffApplication(environment, database, 'DETAIL-RENEWAL', {
+        applicationType: 'renewal', status: 'under_review'
+    });
+    const initialId = await createStaffApplication(environment, database, 'DETAIL-INITIAL', {
+        applicationType: 'initial'
+    });
+    await database.prepare(`
+        UPDATE applications SET is_under_18 = 1, address_evidence_type = 'undertaking',
+            declaration_version = 'accuracy-v1', declaration_accepted_at = '2026-09-28T10:00:00.000Z'
+        WHERE id = ?
+    `).bind(renewalId).run();
+    await seedStaffDocument(database, renewalId, 'renewal', 'passport', {
+        filename: 'passport-safe-name.pdf', reviewStatus: 'approved', revisionStatus: 'approved'
+    });
+    await seedStaff(database, { id: 'staff-detail-reviewer', username: 'detail-reviewer' });
+    const token = 'detail-reviewer-session-token-000000000000000';
+    await seedStaffSession(database, 'staff-detail-reviewer', token);
+    await database.prepare(`
+        INSERT INTO assignments (id, application_id, staff_user_id, assigned_by_staff_id)
+        VALUES ('active-review-assignment', ?, 'staff-detail-reviewer', 'staff-detail-reviewer')
+    `).bind(renewalId).run();
+
+    const renewal = await worker.fetch(createRequest(`/api/staff/applications/${renewalId}`, {
+        cookie: staffCookie(token)
+    }), environment, {});
+    const initial = await worker.fetch(createRequest(`/api/staff/applications/${initialId}`, {
+        cookie: staffCookie(token)
+    }), environment, {});
+    const renewalPayload = await renewal.json();
+    const initialPayload = await initial.json();
+    const documents = renewalPayload.documents;
+    const passport = documents.find((document) => document.code === 'passport');
+
+    assert.equal(renewal.status, 200);
+    assert.equal(renewalPayload.application.contact_acknowledgement_accepted_current, false);
+    assert.equal(renewalPayload.application.declaration_version, 'accuracy-v1');
+    assert.deepEqual(renewalPayload.assignment, { staff_id: 'staff-detail-reviewer', display_name: 'Display detail-reviewer' });
+    assert.ok(documents.some((document) => document.code === 'uets'));
+    assert.ok(documents.some((document) => document.code === 'address_undertaking'));
+    assert.ok(documents.some((document) => document.code === 'host_residence_certificate'));
+    assert.ok(documents.some((document) => document.code === 'host_identity_copy'));
+    assert.ok(documents.some((document) => document.code === 'birth_certificate_under18'));
+    assert.equal(passport.revision_number, 3);
+    assert.equal(passport.review_status, 'approved');
+    assert.equal(passport.revision_status, 'approved');
+    assert.equal(passport.upload_status, 'finalized');
+    assert.equal(passport.scan_status, 'clean');
+    assert.equal(passport.cleanup_status, 'pending');
+    assert.equal(passport.filename, 'passport-safe-name.pdf');
+    assert.equal(initialPayload.documents.some((document) => document.code === 'uets'), false);
+    assert.doesNotMatch(JSON.stringify(renewalPayload), /secret-object-key|storage_key|file_id|revision_id|document_record_id|https?:\/\//i);
 });
 
 

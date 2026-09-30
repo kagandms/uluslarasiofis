@@ -1,4 +1,5 @@
 const VIEW_TITLES = {
+    applications: 'İkamet Başvuruları',
     ykn: 'YKN',
     cover: 'Kapak Hazırla',
     teblig: 'Tebliğ Bul'
