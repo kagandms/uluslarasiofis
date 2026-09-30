@@ -15,7 +15,9 @@ const UPLOAD_ERROR_KEYS = Object.freeze({
     APPLICATION_TYPE_CHANGE_BLOCKED: 'applicationTypeChangeBlocked',
     CONTACT_ACKNOWLEDGEMENT_REQUIRED: 'contactAcknowledgementRequired',
     CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT: 'contactAcknowledgementVersionChanged',
-    CONTACT_INFORMATION_INCOMPLETE: 'contactInformationIncomplete'
+    CONTACT_INFORMATION_INCOMPLETE: 'contactInformationIncomplete',
+    SUBMISSION_NOT_READY: 'submissionNotReady',
+    APPLICATION_NOT_SUBMITTABLE: 'applicationSubmitFailed'
 });
 
 function readMessages(document) {
@@ -462,21 +464,62 @@ function createApplicantReview(document, application) {
     return section;
 }
 
+function createSubmissionConfirmation(document, application, messages) {
+    const confirmation = document.createElement('section');
+    confirmation.className = 'application-submission-confirmation';
+    confirmation.setAttribute('role', 'status');
+    confirmation.setAttribute('aria-live', 'polite');
+    confirmation.append(createTranslatedElement(document, 'h3', 'submissionSuccessHeading', messages.submissionSuccessHeading));
+    confirmation.append(createTranslatedElement(document, 'p', 'submissionStatusSubmitted', messages.submissionStatusSubmitted));
+    const studentNumber = document.createElement('p');
+    studentNumber.append(
+        createTranslatedElement(document, 'span', 'submissionStudentNumber', messages.submissionStudentNumber),
+        document.createTextNode(` ${application.student_number || ''}`)
+    );
+    confirmation.append(studentNumber);
+    confirmation.append(createTranslatedElement(document, 'p', 'submissionTracking', messages.submissionTracking));
+    if (application.submitted_at) confirmation.append(createSubmissionTime(document, application.submitted_at, messages));
+    return confirmation;
+}
+
+function createSubmissionTime(document, submittedAt, messages) {
+    const time = document.createElement('p');
+    time.append(
+        createTranslatedElement(document, 'span', 'submissionSubmittedAt', messages.submissionSubmittedAt),
+        document.createTextNode(` ${submittedAt}`)
+    );
+    return time;
+}
+
 function createReviewStep(document, state) {
     const messages = readMessages(document);
     const review = document.createElement('div');
+    const application = state.application;
     review.className = 'application-review';
     review.append(createTranslatedElement(document, 'p', 'reviewHeading', messages.reviewHeading));
-    review.append(createApplicantReview(document, state.application));
-    review.append(createFingerprintReview(document, state.application));
+    review.append(createApplicantReview(document, application));
+    review.append(createFingerprintReview(document, application));
     review.append(createDocumentList(document, state.requirements, state, { allowUpload: false }));
-    const accepted = state.application.declaration?.accepted_current === true;
+    const accepted = application.declaration?.accepted_current === true;
     review.append(createTranslatedElement(document, 'p', accepted ? 'declarationAccepted' : 'declarationRequired', messages[accepted ? 'declarationAccepted' : 'declarationRequired']));
-    if (accepted && state.application.declaration.accepted_at) {
+    if (accepted && application.declaration.accepted_at) {
         const time = document.createElement('p');
-        time.append(createTranslatedElement(document, 'span', 'declarationAcceptedAt', messages.declarationAcceptedAt), document.createTextNode(` ${state.application.declaration.accepted_at}`));
+        time.append(createTranslatedElement(document, 'span', 'declarationAcceptedAt', messages.declarationAcceptedAt), document.createTextNode(` ${application.declaration.accepted_at}`));
         review.append(time);
     }
+    if (application.status === 'submitted') {
+        review.append(createSubmissionConfirmation(document, application, messages));
+        return review;
+    }
+    const submitButton = createButton(
+        document,
+        messages,
+        state.isSubmitting ? 'submissionInProgress' : 'submitApplication',
+        'submit-application',
+        'application-button application-button-primary'
+    );
+    submitButton.disabled = state.isSubmitting;
+    review.append(submitButton);
     return review;
 }
 
@@ -523,7 +566,7 @@ function renderWizard(root, state) {
     if (state.step === 2) stage.append(createDocumentsStep(document, state));
     if (state.step === 3) stage.append(createDeclarationStep(document, state.application));
     if (state.step === 4) stage.append(createReviewStep(document, state));
-    if (state.step > 0) panel.append(createButton(document, messages, 'previous', 'previous'));
+    if (state.step > 0 && state.application?.status !== 'submitted') panel.append(createButton(document, messages, 'previous', 'previous'));
     panel.append(stage);
     root.replaceChildren(panel);
 }
@@ -850,12 +893,30 @@ async function handleWizardClick(root, state, api, event) {
     if (!button) return;
     const code = button.closest('[data-document-code]')?.dataset.documentCode;
     if (button.dataset.action === 'previous') await handlePrevious(root, state);
+    if (button.dataset.action === 'submit-application') await submitApplication(root, state, api);
     if (button.dataset.action === 'document-retry' && code) await runUploadTask(code, state.uploads[code], state, api, root, { isRetry: true });
     if (button.dataset.action === 'document-delete' && code) await handleDelete(root, state, api, code);
     if (button.dataset.action === 'document-cancel' && code) state.uploads[code]?.abortController?.abort();
     if (button.dataset.action === 'autosave-retry' && state.autosave) {
         const saved = await state.autosave.flush();
         state.errorKey = saved ? null : 'autosaveFailed';
+        renderWizard(root, state);
+    }
+}
+
+async function submitApplication(root, state, api) {
+    if (state.isSubmitting || state.application?.status !== 'draft') return;
+    state.isSubmitting = true;
+    state.errorKey = null;
+    renderWizard(root, state);
+    try {
+        state.application = await api.submitCurrentApplication();
+        state.errorKey = null;
+    } catch (error) {
+        state.errorKey = createErrorKey(error, 'applicationSubmitFailed');
+        if (error.code === 'APPLICATION_SESSION_REQUIRED') state.saveStatus = 'session_expired';
+    } finally {
+        state.isSubmitting = false;
         renderWizard(root, state);
     }
 }
@@ -902,7 +963,7 @@ function handleWizardChange(root, state, api, event) {
  */
 export async function initializeApplicationWizard(root, api) {
     if (!root || !root.ownerDocument) throw new TypeError('An application wizard root is required.');
-    const state = { application: null, requirements: [], step: 0, errorKey: null, saveStatus: 'saved', isAdvancing: false, formValues: null, uploads: {}, deleting: {} };
+    const state = { application: null, requirements: [], step: 0, errorKey: null, saveStatus: 'saved', isAdvancing: false, isSubmitting: false, formValues: null, uploads: {}, deleting: {} };
     root.addEventListener('submit', (event) => {
         if (event.target.id !== 'application-step-form') return;
         event.preventDefault();
@@ -914,7 +975,8 @@ export async function initializeApplicationWizard(root, api) {
     root.ownerDocument.addEventListener('public:locale-changed', () => renderWizard(root, state));
     try {
         state.application = await api.readCurrentApplication();
-        state.step = state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0;
+        state.step = state.application.status === 'submitted' ? 4
+            : (state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0);
         state.autosave = createAutosave(state, api, root);
         await refreshRequirements(state, api);
     } catch (error) {

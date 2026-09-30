@@ -40,6 +40,7 @@ function createApplicationDto(application, environment) {
     const currentDeclarationVersion = readDeclarationVersion(environment);
     return {
         status: application.status,
+        submitted_at: application.submitted_at ?? null,
         application_type: application.application_type,
         address_evidence_type: application.address_evidence_type ?? null,
         student_number: application.student_number,
@@ -376,7 +377,7 @@ export async function readCurrentApplicationStatus(request, environment) {
 }
 
 /**
- * Establishes the owner-session submit contract while required-document readiness is closed.
+ * Submits the current owner-session application after server-side readiness validation.
  * @param {Request} request Worker request.
  * @param {object} environment Worker bindings.
  * @param {string} requestId Correlation ID for the submit audit event.
@@ -392,9 +393,13 @@ export async function submitCurrentApplication(request, environment, requestId) 
     if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     if (application.status !== 'draft') throw new ApiError(409, 'APPLICATION_NOT_SUBMITTABLE', 'Bu başvuru gönderim için uygun durumda değil.');
 
-    const readiness = await readSubmissionReadiness();
+    const readiness = await readSubmissionReadiness(
+        session.application_id,
+        environment,
+        readDeclarationVersion(environment)
+    );
     if (readiness.status !== 'ready') {
-        throw new ApiError(409, 'SUBMISSION_NOT_READY', 'Başvuru gönderimi, gerekli belge doğrulaması tamamlanana kadar kullanılamıyor.');
+        throw new ApiError(409, 'SUBMISSION_NOT_READY', 'Başvuru bilgileri ve gerekli belgeler tamamlanmadığı için gönderim yapılamıyor.');
     }
 
     const submitted = await repositories.applications.submitDraft({

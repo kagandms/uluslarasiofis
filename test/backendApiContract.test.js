@@ -4,6 +4,8 @@ import { createR2DocumentStorage } from '../src/server/storage/r2DocumentStorage
 import { deriveStaffPasswordHash } from '../src/server/auth/passwordHash.js';
 import { hashSessionToken } from '../src/server/auth/sessionToken.js';
 import worker from '../src/server/worker.js';
+import { listDocumentPolicies } from '../src/server/domain/documentPolicy.js';
+import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../src/config/constants.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 
@@ -79,6 +81,67 @@ function createRequest(path, { method = 'GET', body, cookie, origin = 'https://p
 
 async function readJson(response) {
     return response.json();
+}
+
+async function seedCurrentFinalizedDocument(database, applicationId, applicationType, code) {
+    const requirement = database.prepare(`
+        SELECT id FROM document_requirements WHERE application_type = ? AND code = ? AND is_active = 1
+    `).bind(applicationType, code).first();
+    if (!requirement) return;
+    const recordId = crypto.randomUUID();
+    const revisionId = crypto.randomUUID();
+    const fileId = crypto.randomUUID();
+    await database.prepare(`
+        INSERT INTO document_records (id, application_id, requirement_id, application_type)
+        VALUES (?, ?, ?, ?)
+    `).bind(recordId, applicationId, requirement.id, applicationType).run();
+    await database.prepare(`
+        INSERT INTO document_revisions (id, document_record_id, revision_number, status, is_current, submitted_by_type)
+        VALUES (?, ?, 1, 'submitted', 1, 'student')
+    `).bind(revisionId, recordId).run();
+    await database.prepare(`
+        INSERT INTO document_revision_files (
+            id, revision_id, page_order, storage_key, original_filename, media_type, byte_size,
+            upload_status, scan_status
+        ) VALUES (?, ?, 0, ?, 'document.pdf', 'application/pdf', 10, 'finalized', 'pending')
+    `).bind(fileId, revisionId, `quarantine/${crypto.randomUUID()}`).run();
+    await database.prepare(`
+        INSERT INTO upload_intents (id, revision_file_id, idempotency_key, expires_at, status, completed_at)
+        VALUES (?, ?, ?, '2026-10-01T00:00:00.000Z', 'completed', '2026-09-30T10:00:00.000Z')
+    `).bind(crypto.randomUUID(), fileId, crypto.randomUUID()).run();
+}
+
+async function createReadyApplication(environment, database, studentNumber, applicationType = 'initial') {
+    const response = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST',
+        body: { student_number: studentNumber, application_type: applicationType, email: 'ready@example.edu', phone: '+905551112233' }
+    }), environment, {});
+    const cookie = response.headers.get('Set-Cookie').split(';')[0];
+    const application = database.prepare('SELECT id FROM applications WHERE student_id = (SELECT id FROM students WHERE student_number = ?)')
+        .bind(studentNumber).first();
+    const acceptedAt = '2026-09-30T10:00:00.000Z';
+    await database.prepare(`
+        UPDATE applications SET first_name = 'Ayşe', last_name = 'Yılmaz', passport_number = 'P123456',
+            nationality = 'Turkish', date_of_birth = '2000-01-01', is_under_18 = 0,
+            address_evidence_type = 'rental_contract', fingerprint_status = 'registered', fingerprint_code = 'FP-A/42',
+            declaration_version = ?, declaration_accepted_at = ?
+        WHERE id = ?
+    `).bind(environment.PUBLIC_DECLARATION_VERSION || 'student-information-accuracy-v1', acceptedAt, application.id).run();
+    await database.prepare(`
+        INSERT INTO audit_events (id, event_type, actor_type, application_id, request_id, safe_metadata_json, created_at)
+        VALUES (?, 'application.contact_responsibility_accepted', 'student', ?, 'test-ready', ?, ?)
+    `).bind(
+        `${application.id}:contact-responsibility:${CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION}`,
+        application.id,
+        JSON.stringify({ version: CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION }),
+        acceptedAt
+    ).run();
+
+    const policies = listDocumentPolicies(applicationType, false, 'rental_contract');
+    for (const policy of policies) {
+        await seedCurrentFinalizedDocument(database, application.id, applicationType, policy.code);
+    }
+    return { cookie, applicationId: application.id };
 }
 
 test('staff login creates a D1-backed HttpOnly session and returns no bearer token', async () => {
@@ -442,7 +505,7 @@ test('current application status is available only through its owner session', a
 });
 
 
-test('application submit endpoint requires a session, same origin, and fails closed until readiness exists', async () => {
+test('application submit endpoint requires owner session, same origin, and current readiness', async () => {
     const { environment, database } = createEnvironment();
     const path = '/api/public/applications/current/submit';
     const unauthenticated = await worker.fetch(createRequest(path, { method: 'POST' }), environment, {});
@@ -463,6 +526,31 @@ test('application submit endpoint requires a session, same origin, and fails clo
     }
     assert.equal(database.prepare('SELECT status FROM applications').first().status, 'draft');
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 0);
+});
+
+test('ready application submits once through its owner session and returns only student-safe fields', async () => {
+    const { environment, database } = createEnvironment();
+    const first = await createReadyApplication(environment, database, '2026123990');
+    const second = await createReadyApplication(environment, database, '2026123991');
+    const path = '/api/public/applications/current/submit';
+    const response = await worker.fetch(createRequest(`${path}?application_id=${second.applicationId}`, {
+        method: 'POST', cookie: first.cookie,
+        body: { application_id: second.applicationId, student_number: '2026123991' }
+    }), environment, {});
+    const payload = await readJson(response);
+    const repeated = await worker.fetch(createRequest(path, { method: 'POST', cookie: first.cookie }), environment, {});
+
+    assert.equal(response.status, 200, JSON.stringify(payload));
+    assert.equal(payload.application.status, 'submitted');
+    assert.equal(payload.application.student_number, '2026123990');
+    assert.equal(typeof payload.application.submitted_at, 'string');
+    assert.equal(payload.application.id, undefined);
+    assert.doesNotMatch(JSON.stringify(payload), /storage_key|session_hash|token_hash|internal-application-id/i);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(first.applicationId).first().status, 'submitted');
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(second.applicationId).first().status, 'draft');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 1);
+    assert.equal(repeated.status, 409);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 1);
 });
 
 test('staff idle timeout refreshes active sessions without touching every request', async () => {

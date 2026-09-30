@@ -75,6 +75,16 @@ export async function acceptCurrentApplicationDeclaration(version) {
 }
 
 /**
+ * Submits the current application selected by the HttpOnly owner session.
+ * @returns {Promise<object>} Student-safe submitted application.
+ * @throws {Error} When readiness, origin, session, or application state is invalid.
+ */
+export async function submitCurrentApplication() {
+    const payload = await requestJson('/api/public/applications/current/submit', { method: 'POST' });
+    return payload.application;
+}
+
+/**
  * Records the student's explicit contact responsibility acknowledgement for the current version.
  * @param {string} version Current acknowledgement version returned by the application API.
  * @returns {Promise<object>} Updated student-safe application.

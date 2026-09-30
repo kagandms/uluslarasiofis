@@ -56,6 +56,14 @@ async function submitWizard(root) {
     await new Promise((resolve) => setImmediate(resolve));
 }
 
+async function advanceWizardToReview(root, state) {
+    await submitWizard(root);
+    await submitWizard(root);
+    root.querySelector('[name="declaration_accepted"]').checked = true;
+    await submitWizard(root);
+    assert.equal(state.step, 4);
+}
+
 test('contact step keeps Continue disabled until valid contact fields and the separate acknowledgement are present', async () => {
     const { document, root } = createRoot();
     const application = {
@@ -718,4 +726,69 @@ test('closeout translations have parity and the wizard rerenders in Arabic RTL',
     assert.equal(document.documentElement.dir, 'rtl');
     assert.match(root.textContent, /البيانات الشخصية والإقامة/);
     window.close();
+});
+
+test('Review submits once, keeps five steps, and shows student-safe confirmation', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    let submitCalls = 0;
+    let finishSubmission;
+    api.acceptCurrentApplicationDeclaration = async (version) => {
+        state.application.declaration = {
+            current_version: version, accepted_version: version,
+            accepted_current: true, accepted_at: '2026-09-30T10:00:00.000Z'
+        };
+        return { ...state.application };
+    };
+    api.submitCurrentApplication = async () => {
+        submitCalls += 1;
+        return new Promise((resolve) => { finishSubmission = resolve; });
+    };
+    await advanceWizardToReview(root, state);
+
+    const progressSteps = root.querySelectorAll('.application-progress li');
+    const submitButton = root.querySelector('[data-action="submit-application"]');
+    assert.equal(progressSteps.length, 5);
+    assert.ok(submitButton);
+    assert.equal(root.querySelector('[data-action*="ocr"]'), null);
+    assert.match(root.textContent, /P123456/);
+
+    submitButton.click();
+    assert.equal(root.querySelector('[data-action="submit-application"]').disabled, true);
+    root.querySelector('[data-action="submit-application"]').click();
+    assert.equal(submitCalls, 1);
+    finishSubmission({
+        ...state.application, status: 'submitted', submitted_at: '2026-09-30T10:01:00.000Z'
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(state.step, 4);
+    assert.match(root.textContent, /Başvurunuz gönderildi/);
+    assert.match(root.textContent, /S3-FP-1/);
+    assert.match(root.textContent, /öğrenci numaranızı kullanın/i);
+    assert.equal(root.querySelector('[data-action="submit-application"]'), null);
+    assert.equal(root.querySelector('.application-progress li').parentElement.children.length, 5);
+    document.defaultView.close();
+});
+
+test('readiness rejection stays on Review and shows the localized actionable error', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    api.acceptCurrentApplicationDeclaration = async (version) => {
+        state.application.declaration = {
+            current_version: version, accepted_version: version,
+            accepted_current: true, accepted_at: '2026-09-30T10:00:00.000Z'
+        };
+        return { ...state.application };
+    };
+    api.submitCurrentApplication = async () => {
+        throw Object.assign(new Error('not ready'), { code: 'SUBMISSION_NOT_READY' });
+    };
+    await advanceWizardToReview(root, state);
+    root.querySelector('[data-action="submit-application"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(state.step, 4);
+    assert.match(root.querySelector('[role="alert"]').textContent, /eksik/i);
+    assert.equal(root.querySelector('[data-action="submit-application"]').disabled, false);
+    assert.equal(root.querySelector('[data-i18n="submissionSuccessHeading"]'), null);
+    document.defaultView.close();
 });

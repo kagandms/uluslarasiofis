@@ -55,6 +55,32 @@ export function createDocumentRepository(database) {
             `).bind(applicationId).all();
             return result.results;
         },
+        async listSubmissionRequirementStates(applicationId) {
+            const result = await database.prepare(`
+                SELECT requirements.code, requirements.is_required AS is_required,
+                       CASE WHEN requirements.id IS NULL THEN 0 ELSE 1 END AS has_active_requirement,
+                       CASE WHEN revisions.id IS NULL THEN 0 ELSE 1 END AS has_current_revision,
+                       revisions.status AS revision_status,
+                       files.upload_status, files.scan_status, files.cleanup_status,
+                       CASE WHEN intents.status = 'completed' THEN 'completed' ELSE NULL END AS upload_intent_status
+                FROM applications
+                JOIN document_requirements AS requirements
+                  ON requirements.application_type = applications.application_type
+                 AND requirements.is_active = 1
+                LEFT JOIN document_records AS records
+                  ON records.application_id = applications.id
+                 AND records.requirement_id = requirements.id
+                LEFT JOIN document_revisions AS revisions
+                  ON revisions.document_record_id = records.id AND revisions.is_current = 1
+                LEFT JOIN document_revision_files AS files
+                  ON files.revision_id = revisions.id AND files.page_order = 0
+                LEFT JOIN upload_intents AS intents
+                  ON intents.revision_file_id = files.id
+                WHERE applications.id = ?
+                ORDER BY requirements.code
+            `).bind(applicationId).all();
+            return result.results;
+        },
         async findStudentRequirementId(applicationType, code) {
             return database.prepare(`
                 SELECT id FROM document_requirements
