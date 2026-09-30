@@ -201,10 +201,32 @@ function appendFingerprintCode(document, fieldset, application, messages) {
     if (!input.value.trim()) fieldset.append(createTranslatedElement(document, 'p', 'fingerprintCodeMissing', messages.fingerprintCodeMissing));
 }
 
-function createResidenceStep(document, application, formValues) {
+function createPassportOcrPanel(document, state) {
+    const messages = readMessages(document);
+    const section = document.createElement('section');
+    const statusKey = state.passportOcr.errorKey || `passportOcr_${state.passportOcr.status}`;
+    section.className = 'passport-ocr-assistance';
+    section.append(createTranslatedElement(document, 'h3', 'passportOcrHeading', messages.passportOcrHeading));
+    section.append(createTranslatedElement(document, 'p', 'passportOcrExplanation', messages.passportOcrExplanation));
+    const status = createTranslatedElement(document, 'p', statusKey, messages[statusKey]);
+    status.dataset.passportOcrStatus = 'true';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    section.append(status);
+    if (state.passportOcr.status === 'failed' && state.passportOcr.source && !state.passportOcr.retryUsed) {
+        section.append(createButton(document, messages, 'passportOcrRetry', 'passport-ocr-retry'));
+    }
+    return section;
+}
+
+function createResidenceStep(document, state) {
+    const { application, formValues } = state;
     const messages = readMessages(document);
     const fields = { ...application, ...formValues };
     const form = createWizardForm(document);
+    const passport = state.requirements.find((requirement) => requirement.code === 'passport');
+    if (passport) form.append(createDocumentCard(document, passport, state, { allowUpload: true }));
+    form.append(createPassportOcrPanel(document, state));
     RESIDENCE_FIELDS.forEach((field) => {
         const key = ({ first_name: 'firstName', last_name: 'lastName', passport_number: 'passportNumber', nationality: 'nationality', date_of_birth: 'dateOfBirth' })[field];
         form.append(createTextField(document, { key, name: field, value: fields[field], type: field === 'date_of_birth' ? 'date' : 'text', required: true }));
@@ -519,7 +541,7 @@ function renderWizard(root, state) {
         panel.append(error);
     }
     if (state.step === 0) stage.append(createContactStep(document, state.application, state.formValues));
-    if (state.step === 1) stage.append(createResidenceStep(document, state.application, state.formValues));
+    if (state.step === 1) stage.append(createResidenceStep(document, state));
     if (state.step === 2) stage.append(createDocumentsStep(document, state));
     if (state.step === 3) stage.append(createDeclarationStep(document, state.application));
     if (state.step === 4) stage.append(createReviewStep(document, state));
@@ -567,6 +589,11 @@ function createDocumentsStep(document, state) {
     form.append(createDocumentList(document, state.requirements, state, { allowUpload: true }));
     form.append(createContinueButton(document, messages));
     return form;
+}
+
+function updatePassportOcrPanel(root, state) {
+    const panel = root.querySelector('.passport-ocr-assistance');
+    if (panel && state.step === 1) panel.replaceWith(createPassportOcrPanel(root.ownerDocument, state));
 }
 
 function readVisibleFields(root, application = {}) {
@@ -653,6 +680,64 @@ async function refreshRequirements(state, api) {
     state.requirements = result.requirements;
 }
 
+function mergePassportCandidates(root, state, candidates) {
+    const current = state.step === 1
+        ? readVisibleFields(root, state.application || {})
+        : { ...(state.application || {}), ...(state.formValues || {}) };
+    RESIDENCE_FIELDS.forEach((field) => {
+        const candidate = candidates?.[field];
+        if (typeof candidate !== 'string' || !candidate.trim()) return;
+        const existing = current[field];
+        if (typeof existing === 'string' && existing.trim()) return;
+        current[field] = candidate;
+        if (state.step === 1) {
+            const input = root.querySelector(`[name="${field}"]`);
+            if (input && !input.value.trim()) input.value = candidate;
+        }
+    });
+    state.formValues = current;
+}
+
+function passportOcrErrorKey(error) {
+    if (error.code === 'OCR_NO_PASSPORT_FIELDS') return 'passportOcrNoFields';
+    if (['RATE_LIMITED', 'RATE_LIMIT_EXCEEDED'].includes(error.code)) return 'passportOcrRateLimited';
+    return 'passportOcrUnavailable';
+}
+
+async function runPassportOcr(source, state, api, root) {
+    const attemptId = state.passportOcr.attemptId + 1;
+    state.passportOcr.attemptId = attemptId;
+    state.passportOcr.status = 'preparing';
+    state.passportOcr.errorKey = null;
+    updatePassportOcrPanel(root, state);
+    try {
+        const prepareSource = api.preparePassportOcrSource;
+        const recognizeImage = api.recognizeCurrentPassportImage;
+        if (typeof prepareSource !== 'function' || typeof recognizeImage !== 'function') {
+            throw Object.assign(new Error('Passport OCR is unavailable.'), { code: 'OCR_UNAVAILABLE' });
+        }
+        const candidates = await prepareSource(source, async (image) => {
+            if (state.passportOcr.attemptId !== attemptId) return {};
+            state.passportOcr.status = 'reading';
+            updatePassportOcrPanel(root, state);
+            return recognizeImage(image);
+        });
+        if (state.passportOcr.attemptId !== attemptId) return;
+        mergePassportCandidates(root, state, candidates);
+        if (state.step === 1 && state.isAdvancing) {
+            state.autosave?.schedule(buildAutosaveValues(state.formValues));
+        }
+        state.passportOcr.source = null;
+        state.passportOcr.status = 'success';
+    } catch (error) {
+        if (state.passportOcr.attemptId !== attemptId) return;
+        state.passportOcr.status = 'failed';
+        state.passportOcr.errorKey = passportOcrErrorKey(error);
+        if (state.passportOcr.retryUsed) state.passportOcr.source = null;
+    }
+    updatePassportOcrPanel(root, state);
+}
+
 async function persistRequirementSelection(root, state, api) {
     if (!state.application || !state.autosave) return;
     if (!await state.autosave.flush()) return;
@@ -667,12 +752,24 @@ async function finalizeTask(code, task, state, api, root) {
     task.state = 'verifying';
     updateDocumentCard(root, state, code);
     try {
+        const finalizedFile = task.file;
         await api.finalizeStudentDocumentUpload(task.intentId);
         await refreshRequirements(state, api);
+        const passport = state.requirements.find((requirement) => requirement.code === 'passport');
+        if (code === 'passport' && passport?.upload_status !== 'finalized') {
+            task.state = 'failed_finalize';
+            task.errorKey = 'finalizeFailed';
+            updateDocumentCard(root, state, code);
+            return 'failed';
+        }
         task.state = 'complete';
         task.file = null;
         task.intentId = null;
         updateDocumentCard(root, state, code);
+        if (code === 'passport' && passport.revision_status === 'submitted' && finalizedFile) {
+            state.passportOcr.source = finalizedFile;
+            await runPassportOcr(finalizedFile, state, api, root);
+        }
     } catch (error) {
         if (['UPLOAD_OBJECT_MISSING', 'UPLOAD_INTENT_EXPIRED', 'UPLOAD_INTENT_UNAVAILABLE'].includes(error.code)) {
             task.state = 'failed_upload';
@@ -748,6 +845,10 @@ async function handleFileSelection(root, state, api, input) {
     const file = input.files?.[0];
     if (!file) return;
     const code = input.dataset.documentCode;
+    if (code === 'passport') {
+        state.passportOcr = { status: 'idle', errorKey: null, source: null, retryUsed: false, attemptId: state.passportOcr.attemptId + 1 };
+        updatePassportOcrPanel(root, state);
+    }
     state.uploads[code] = { state: 'selected', progress: 0, file, intentId: null, abortController: null };
     updateDocumentCard(root, state, code);
     await runUploadTask(code, state.uploads[code], state, api, root);
@@ -759,6 +860,7 @@ async function handleDelete(root, state, api, code) {
     try {
         await api.deleteStudentDocument(code);
         await refreshRequirements(state, api);
+        if (code === 'passport') state.passportOcr = { status: 'idle', errorKey: null, source: null, retryUsed: false, attemptId: state.passportOcr.attemptId + 1 };
         state.errorKey = null;
     } catch (error) {
         state.errorKey = createErrorKey(error, 'deleteFailed');
@@ -839,7 +941,7 @@ async function handlePrevious(root, state) {
             return;
         }
     }
-    state.formValues = readVisibleFields(root, state.application || {});
+    state.formValues = readVisibleFields(root, state.formValues || state.application || {});
     state.step -= 1;
     state.errorKey = null;
     renderWizard(root, state);
@@ -853,6 +955,10 @@ async function handleWizardClick(root, state, api, event) {
     if (button.dataset.action === 'document-retry' && code) await runUploadTask(code, state.uploads[code], state, api, root, { isRetry: true });
     if (button.dataset.action === 'document-delete' && code) await handleDelete(root, state, api, code);
     if (button.dataset.action === 'document-cancel' && code) state.uploads[code]?.abortController?.abort();
+    if (button.dataset.action === 'passport-ocr-retry' && state.passportOcr.source && !state.passportOcr.retryUsed) {
+        state.passportOcr.retryUsed = true;
+        await runPassportOcr(state.passportOcr.source, state, api, root);
+    }
     if (button.dataset.action === 'autosave-retry' && state.autosave) {
         const saved = await state.autosave.flush();
         state.errorKey = saved ? null : 'autosaveFailed';
@@ -902,7 +1008,7 @@ function handleWizardChange(root, state, api, event) {
  */
 export async function initializeApplicationWizard(root, api) {
     if (!root || !root.ownerDocument) throw new TypeError('An application wizard root is required.');
-    const state = { application: null, requirements: [], step: 0, errorKey: null, saveStatus: 'saved', isAdvancing: false, formValues: null, uploads: {}, deleting: {} };
+    const state = { application: null, requirements: [], step: 0, errorKey: null, saveStatus: 'saved', isAdvancing: false, formValues: null, uploads: {}, deleting: {}, passportOcr: { status: 'idle', errorKey: null, source: null, retryUsed: false, attemptId: 0 } };
     root.addEventListener('submit', (event) => {
         if (event.target.id !== 'application-step-form') return;
         event.preventDefault();

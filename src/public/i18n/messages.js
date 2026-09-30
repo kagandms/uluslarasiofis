@@ -615,6 +615,15 @@ export const SESSION3_MESSAGES = Object.freeze({
         documentHostIdentityCopyHelp: 'Taahhüt veren kişinin kimlik belgesinin ön ve arka yüzünün kopyası.',
         documentHomeUtilityBillHelp: 'Su, elektrik veya doğal gaz faturalarından birini yükleyin.',
         documentBirthCertificateUnder18Help: 'Yalnız 18 yaşından küçük başvurularda zorunludur.',
+        passportOcrHeading: 'Pasaport bilgilerine otomatik okuma yardımı',
+        passportOcrExplanation: 'Otomatik okunan bilgiler yalnızca adaydır; devam etmeden önce tüm alanları kontrol edip düzeltin.',
+        passportOcr_idle: 'Otomatik okuma isteğe bağlıdır. Bilgileri her zaman elle girebilir ve devam etmeden önce kontrol edebilirsiniz.',
+        passportOcr_preparing: 'Pasaport görüntüsü hazırlanıyor…', passportOcr_reading: 'Pasaport görüntüsü okunuyor…',
+        passportOcr_success: 'Bazı alanlar dolduruldu. Lütfen bilgileri kontrol edip düzeltin.',
+        passportOcrUnavailable: 'Otomatik okuma şu anda kullanılamıyor. Bilgileri elle girebilir veya bir kez yeniden deneyebilirsiniz.',
+        passportOcrNoFields: 'Pasaport bilgileri okunamadı. Bilgileri elle girebilir veya bir kez yeniden deneyebilirsiniz.',
+        passportOcrRateLimited: 'Otomatik okuma için kısa süreli istek sınırına ulaşıldı. Bilgileri elle girebilirsiniz.',
+        passportOcrRetry: 'Tekrar otomatik oku',
         currentFile: 'Mevcut dosya', selectedReplacement: 'Seçilen yeni dosya', deleteInProgress: 'Belge siliniyor.', uploadState_selected: 'Dosya seçildi; yükleme hazırlanıyor.'
     }),
     en: Object.freeze({
@@ -658,6 +667,15 @@ export const SESSION3_MESSAGES = Object.freeze({
         documentHostIdentityCopyHelp: 'Copies of the front and back of the host identity document.',
         documentHomeUtilityBillHelp: 'Upload one water, electricity, or natural gas bill.',
         documentBirthCertificateUnder18Help: 'Required only for applicants under 18.',
+        passportOcrHeading: 'Automatic passport reading assistance',
+        passportOcrExplanation: 'Automatically read values are candidates only. Check and correct every field before continuing.',
+        passportOcr_idle: 'Automatic reading is optional. You can always enter the information manually and review it before continuing.',
+        passportOcr_preparing: 'Preparing the passport image…', passportOcr_reading: 'Reading the passport image…',
+        passportOcr_success: 'Some fields were filled. Review and correct them before continuing.',
+        passportOcrUnavailable: 'Automatic reading is unavailable right now. Enter the information manually or retry once.',
+        passportOcrNoFields: 'Passport details could not be read. Enter them manually or retry once.',
+        passportOcrRateLimited: 'The short-term automatic reading limit was reached. You can enter the information manually.',
+        passportOcrRetry: 'Read automatically again',
         currentFile: 'Current file', selectedReplacement: 'Selected replacement', deleteInProgress: 'Deleting document.', uploadState_selected: 'File selected; preparing upload.'
     }),
     ru: Object.freeze({
@@ -700,6 +718,15 @@ export const SESSION3_MESSAGES = Object.freeze({
         documentHostIdentityCopyHelp: 'Копии лицевой и обратной сторон удостоверения личности хозяина жилья.',
         documentHomeUtilityBillHelp: 'Загрузите один счёт за воду, электричество или природный газ.',
         documentBirthCertificateUnder18Help: 'Обязательно только для заявителей младше 18 лет.',
+        passportOcrHeading: 'Помощь с автоматическим чтением паспорта',
+        passportOcrExplanation: 'Автоматически прочитанные значения являются только кандидатами. Проверьте и исправьте каждое поле перед продолжением.',
+        passportOcr_idle: 'Автоматическое чтение необязательно. Можно ввести сведения вручную и проверить их перед продолжением.',
+        passportOcr_preparing: 'Подготовка изображения паспорта…', passportOcr_reading: 'Чтение изображения паспорта…',
+        passportOcr_success: 'Некоторые поля заполнены. Проверьте и исправьте их перед продолжением.',
+        passportOcrUnavailable: 'Автоматическое чтение сейчас недоступно. Введите сведения вручную или повторите попытку один раз.',
+        passportOcrNoFields: 'Не удалось прочитать сведения паспорта. Введите их вручную или повторите попытку один раз.',
+        passportOcrRateLimited: 'Достигнут кратковременный лимит автоматического чтения. Можно ввести сведения вручную.',
+        passportOcrRetry: 'Повторить автоматическое чтение',
         currentFile: 'Текущий файл', selectedReplacement: 'Новый файл', deleteInProgress: 'Удаление документа.', uploadState_selected: 'Файл выбран; подготовка загрузки.'
     }),
     tk: Object.freeze({
@@ -742,6 +769,15 @@ export const SESSION3_MESSAGES = Object.freeze({
         documentHostIdentityCopyHelp: 'Öý eýesiniň şahsyýet resminamasynyň öň we yz taraplarynyň nusgalary.',
         documentHomeUtilityBillHelp: 'Suw, elektrik ýa-da tebigy gaz töleg hasaplarynyň birini ýükläň.',
         documentBirthCertificateUnder18Help: 'Diňe 18 ýaşdan kiçi dalaşgärler üçin hökmany.',
+        passportOcrHeading: 'Pasporty awtomatik okamak kömegi',
+        passportOcrExplanation: 'Awtomatik okalan maglumatlar diňe teklipdir. Dowam etmezden öň ähli meýdanlary barlap, düzediň.',
+        passportOcr_idle: 'Awtomatik okamak hökmany däl. Maglumatlary elmydama özüňiz girizip, dowam etmezden öň barlap bilersiňiz.',
+        passportOcr_preparing: 'Pasport suraty taýýarlanýar…', passportOcr_reading: 'Pasport suraty okalýar…',
+        passportOcr_success: 'Käbir meýdanlar dolduryldy. Dowam etmezden öň barlap, düzediň.',
+        passportOcrUnavailable: 'Awtomatik okamak häzir elýeterli däl. Maglumatlary özüňiz giriziň ýa-da bir gezek gaýtadan synanyşyň.',
+        passportOcrNoFields: 'Pasport maglumatlary okalmady. Öz maglumatlaryňyzy giriziň ýa-da bir gezek gaýtadan synanyşyň.',
+        passportOcrRateLimited: 'Awtomatik okamak üçin gysga möhletli çäge ýetildi. Maglumatlary özüňiz girizip bilersiňiz.',
+        passportOcrRetry: 'Awtomatik okamagy gaýtala',
         currentFile: 'Häzirki faýl', selectedReplacement: 'Saýlanan täze faýl', deleteInProgress: 'Resminama pozulýar.', uploadState_selected: 'Faýl saýlandy; ýükleme taýýarlanýar.'
     }),
     ar: Object.freeze({
@@ -784,6 +820,15 @@ export const SESSION3_MESSAGES = Object.freeze({
         documentHostIdentityCopyHelp: 'نسختان للوجهين الأمامي والخلفي من هوية صاحب السكن.',
         documentHomeUtilityBillHelp: 'ارفع فاتورة واحدة للماء أو الكهرباء أو الغاز الطبيعي.',
         documentBirthCertificateUnder18Help: 'مطلوب فقط للمتقدمين دون 18 عاماً.',
+        passportOcrHeading: 'مساعدة القراءة التلقائية لجواز السفر',
+        passportOcrExplanation: 'القيم المقروءة تلقائياً مجرد بيانات مرشحة. راجع كل حقل وصححه قبل المتابعة.',
+        passportOcr_idle: 'القراءة التلقائية اختيارية. يمكنك دائماً إدخال المعلومات يدوياً ومراجعتها قبل المتابعة.',
+        passportOcr_preparing: 'جارٍ تجهيز صورة جواز السفر…', passportOcr_reading: 'جارٍ قراءة صورة جواز السفر…',
+        passportOcr_success: 'تمت تعبئة بعض الحقول. راجعها وصححها قبل المتابعة.',
+        passportOcrUnavailable: 'القراءة التلقائية غير متاحة الآن. أدخل المعلومات يدوياً أو أعد المحاولة مرة واحدة.',
+        passportOcrNoFields: 'تعذرت قراءة بيانات جواز السفر. أدخلها يدوياً أو أعد المحاولة مرة واحدة.',
+        passportOcrRateLimited: 'تم بلوغ حد الطلبات المؤقت للقراءة التلقائية. يمكنك إدخال المعلومات يدوياً.',
+        passportOcrRetry: 'إعادة القراءة التلقائية',
         currentFile: 'الملف الحالي', selectedReplacement: 'الملف البديل المحدد', deleteInProgress: 'جارٍ حذف المستند.', uploadState_selected: 'تم اختيار الملف؛ جارٍ تجهيز الرفع.'
     })
 });

@@ -1,3 +1,6 @@
+const MAX_PASSPORT_OCR_IMAGE_BYTES = 10 * 1024 * 1024;
+const PASSPORT_OCR_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
 async function requestJson(path, { method = 'GET', body } = {}) {
     let response;
     try {
@@ -94,6 +97,53 @@ export async function acceptCurrentContactAcknowledgement(version) {
  */
 export async function readCurrentStudentDocumentRequirements() {
     return requestJson('/api/public/applications/current/documents');
+}
+
+/**
+ * Sends one prepared passport image to the owner-only OCR endpoint.
+ * @param {Blob} image Prepared JPEG, PNG, or WebP image bytes.
+ * @param {object} options Optional request cancellation signal.
+ * @returns {Promise<object>} Student-safe candidate fields.
+ * @throws {Error} When the request fails or the OCR service returns a safe API error.
+ */
+export async function recognizeCurrentPassportImage(image, { signal } = {}) {
+    if (!PASSPORT_OCR_IMAGE_TYPES.has(image.type)) {
+        throw Object.assign(new Error('Unsupported passport OCR image type.'), { code: 'UNSUPPORTED_OCR_MEDIA_TYPE' });
+    }
+    if (image.size > MAX_PASSPORT_OCR_IMAGE_BYTES) {
+        throw Object.assign(new Error('Passport OCR image exceeds the size limit.'), { code: 'REQUEST_TOO_LARGE' });
+    }
+    let response;
+    try {
+        response = await fetch('/api/public/applications/current/passport/ocr', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': image.type },
+            body: image,
+            signal
+        });
+    } catch {
+        throw Object.assign(new Error('Passport OCR request could not reach the service.'), { code: 'NETWORK_ERROR' });
+    }
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw Object.assign(new Error('Passport OCR is unavailable.'), {
+            code: payload.error?.code || 'REQUEST_FAILED',
+            status: response.status
+        });
+    }
+    return payload.fields;
+}
+
+/**
+ * Lazily prepares an in-memory image or PDF source for passport OCR.
+ * @param {File} source Finalized passport bytes still held in the current page.
+ * @param {Function} recognizeImage Sends one prepared image and returns candidate fields.
+ * @returns {Promise<object>} Candidate fields from the first useful page.
+ */
+export async function preparePassportOcrSource(source, recognizeImage) {
+    const { recognizePassportSource } = await import('./passportOcrClient.js');
+    return recognizePassportSource(source, recognizeImage);
 }
 
 /**
