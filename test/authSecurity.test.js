@@ -169,6 +169,31 @@ test('all existing protected APIs reject missing sessions before upstream reques
     }
 });
 
+test('staff OCR keeps its protected route and successful annotation response contract', async () => {
+    const environment = createEnvironment({
+        AZURE_VISION_ENDPOINT: 'https://vision.example.test/',
+        AZURE_VISION_KEY: 'test-azure-key'
+    });
+    await seedStaff(environment.DB);
+    const token = 'c'.repeat(43);
+    await seedSession(environment.DB, token);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({
+        readResult: { blocks: [{ lines: [{ text: 'staff OCR contract', words: [] }] }] }
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    try {
+        const response = await worker.fetch(createRequest('/api/ocr', {
+            method: 'POST', cookie: `staff_session=${token}`, body: { imageContent: 'AQID' }
+        }), environment, {});
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(payload.responses[0].textAnnotations[0].description, 'staff OCR contract');
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
 test('legacy session route remains backed by individual staff sessions', async () => {
     const environment = createEnvironment();
     const token = 'b'.repeat(43);
