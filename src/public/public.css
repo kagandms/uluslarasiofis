@@ -111,10 +111,6 @@ a { color: inherit; }
 .application-form-field { display: grid; gap: 0.45rem; color: #343943; font-weight: 650; }
 .application-form-field input, .application-form-field select { width: 100%; min-height: 2.8rem; padding: 0.6rem 0.75rem; border: 1px solid #cbd0d8; border-radius: 0.55rem; background: #fff; color: inherit; font: inherit; }
 .application-form-field input:focus-visible, .application-form-field select:focus-visible, .application-upload-control input:focus-visible, .application-button:focus-visible { outline: 3px solid rgb(139 0 0 / 32%); outline-offset: 2px; }
-.passport-ocr-assistance { display: grid; gap: 0.55rem; min-width: 0; padding: 1rem; border-inline-start: 3px solid #8b0000; border-radius: 0.45rem; background: #faf7f7; }
-.passport-ocr-assistance h3, .passport-ocr-assistance p { margin: 0; }
-.passport-ocr-assistance p { color: #59616d; line-height: 1.55; overflow-wrap: anywhere; }
-.passport-ocr-assistance [role="status"] { font-weight: 650; }
 .application-fieldset { display: grid; gap: 0.7rem; margin: 0; padding: 1rem; border: 1px solid #d8dce2; border-radius: 0.75rem; }
 .application-fieldset legend { padding-inline: 0.35rem; font-weight: 700; }
 .fingerprint-fields > label:not(:last-child) { display: flex; align-items: center; gap: 0.55rem; }
