@@ -129,6 +129,8 @@ a { color: inherit; }
 .requirement-badge { width: fit-content; padding: 0.2rem 0.55rem; border-radius: 99px; background: #f0f1f3; color: #4c5562; font-size: 0.75rem; font-weight: 700; }
 .requirement-badge.is-required { background: #fff1f1; color: #8b0000; }
 .document-upload-status, .application-document-filename { margin: 0; color: #586170; font-size: 0.9rem; }
+.document-upload-status.is-success { color: #166534; font-weight: 700; }
+.document-upload-status.is-error { color: #b42318; font-weight: 700; }
 .application-upload-control { display: grid; gap: 0.45rem; width: fit-content; color: #8b0000; font-weight: 700; }
 .application-upload-control input { max-width: 100%; color: #303640; font-weight: 400; }
 .application-upload-control small { color: #68707c; font-size: 0.78rem; font-weight: 400; }

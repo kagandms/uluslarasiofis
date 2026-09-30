@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { test } from 'node:test';
 import { initializeApplicationWizard, renderFingerprintSection, renderStudentDocumentRequirements } from '../src/public/applicationWizard.js';
-import { SESSION3_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
+import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
 
 function createRoot() {
     const document = new JSDOM('<!doctype html><html lang="tr"><body><section></section></body></html>').window.document;
@@ -349,6 +349,82 @@ test('under-18 review requirements show the required birth certificate and curre
     document.defaultView.close();
 });
 
+test('finalized upload status is a success while non-finalized pending status stays neutral', () => {
+    const { document, root } = createRoot();
+    const requirement = {
+        code: 'passport', required: true, label_key: 'documentPassport', description_key: 'documentPassportHelp',
+        accepted_media_types: ['application/pdf'], max_byte_size: 1024, filename: 'passport.pdf',
+        upload_status: 'finalized', scan_status: 'pending'
+    };
+    renderStudentDocumentRequirements(root, [requirement]);
+    let status = root.querySelector('.document-upload-status');
+    assert.equal(status.dataset.status, 'success');
+    assert.ok(status.classList.contains('is-success'));
+    assert.match(status.textContent, /Yüklendi/);
+    assert.equal(status.getAttribute('aria-live'), 'polite');
+
+    renderStudentDocumentRequirements(root, [{ ...requirement, upload_status: 'uploaded' }]);
+    status = root.querySelector('.document-upload-status');
+    assert.equal(status.dataset.status, 'pending');
+    assert.equal(status.classList.contains('is-success'), false);
+    document.defaultView.close();
+});
+
+test('under-18 select keeps its translated question separate from the required yes/no answers', async () => {
+    const { document, root, state } = await createFingerprintWizard('registered', 'FP-A/42');
+    state.application.is_under_18 = null;
+    document.dispatchEvent(new document.defaultView.CustomEvent('public:locale-changed'));
+
+    const select = root.querySelector('select[name="is_under_18"]');
+    const question = select.closest('label').querySelector('span');
+    const options = [...select.options];
+    const continueButton = root.querySelector('#application-step-form button[type="submit"]');
+    assert.equal(question.textContent, '18 yaşından küçük müsünüz?');
+    assert.equal(options[0].textContent, 'Seçmek için tıklayınız');
+    assert.equal(options[0].value, '');
+    assert.equal(options[0].disabled, true);
+    assert.equal(select.value, '');
+    assert.equal(select.required, true);
+    assert.equal(select.validity.valueMissing, true);
+    assert.equal(continueButton.disabled, true);
+    assert.equal(options.some(({ textContent }) => textContent === question.textContent), false);
+    assert.deepEqual(options.slice(1).map(({ value, textContent }) => ({ value, textContent })), [
+        { value: 'true', textContent: 'Evet' }, { value: 'false', textContent: 'Hayır' }
+    ]);
+
+    select.value = 'true';
+    select.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await state.autosave.flush();
+    assert.equal(state.application.is_under_18, true);
+    select.value = 'false';
+    select.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await state.autosave.flush();
+    assert.equal(state.application.is_under_18, false);
+    document.defaultView.close();
+});
+
+test('under-18 question and answer placeholder have complete translations in every supported locale', async () => {
+    const { document, root, state } = await createFingerprintWizard('registered', 'FP-A/42');
+    state.application.is_under_18 = null;
+    const referenceKeys = Object.keys(PUBLIC_MESSAGES.tr).sort();
+
+    for (const locale of SUPPORTED_LOCALES) {
+        assert.deepEqual(Object.keys(PUBLIC_MESSAGES[locale]).sort(), referenceKeys);
+        document.documentElement.lang = locale;
+        document.dispatchEvent(new document.defaultView.CustomEvent('public:locale-changed'));
+        const select = root.querySelector('select[name="is_under_18"]');
+        const options = [...select.options];
+        assert.equal(select.closest('label').querySelector('span').textContent, PUBLIC_MESSAGES[locale].under18Question);
+        assert.equal(options[0].textContent, PUBLIC_MESSAGES[locale].under18SelectPlaceholder);
+        assert.deepEqual(options.slice(1).map(({ textContent }) => textContent), [
+            PUBLIC_MESSAGES[locale].yes, PUBLIC_MESSAGES[locale].no
+        ]);
+        assert.ok(options.every(({ textContent }) => !textContent.startsWith('under18')));
+    }
+
+    document.defaultView.close();
+});
+
 test('wizard saves under-18 and fingerprint state before loading the server requirement set', async () => {
     const { document, root } = createRoot();
     const window = document.defaultView;
@@ -479,6 +555,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     let intentCalls = 0;
     let finalizeCalls = 0;
     let releasePut;
+    let rejectFinalize;
     let deleteCalls = 0;
     let requirements = [{
         code: 'passport', required: true, label_key: 'documentPassport', description_key: 'documentPassportHelp',
@@ -495,7 +572,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
         },
         async finalizeStudentDocumentUpload() {
             finalizeCalls += 1;
-            if (finalizeCalls === 1) throw Object.assign(new Error('lost response'), { code: 'NETWORK_ERROR' });
+            if (finalizeCalls === 1) return new Promise((resolve, reject) => { rejectFinalize = reject; });
             requirements = [{ ...requirements[0], filename: 'replacement.pdf', upload_status: 'finalized', scan_status: 'pending', revision_number: 2 }];
             return { code: 'passport', revision_number: 2 };
         },
@@ -521,11 +598,22 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     input.dispatchEvent(new window.Event('change', { bubbles: true }));
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(state.uploads.passport.state, 'uploading');
+    let status = root.querySelector('[data-document-code="passport"] .document-upload-status');
+    assert.equal(status.dataset.status, 'pending');
+    assert.equal(status.classList.contains('is-success'), false);
     assert.equal(root.querySelector('progress').getAttribute('aria-valuenow'), '57');
     releasePut();
     await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.uploads.passport.state, 'verifying');
+    status = root.querySelector('[data-document-code="passport"] .document-upload-status');
+    assert.equal(status.dataset.status, 'pending');
+    assert.equal(status.classList.contains('is-success'), false);
+    rejectFinalize(Object.assign(new Error('lost response'), { code: 'NETWORK_ERROR' }));
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(state.uploads.passport.state, 'unknown_finalize_result');
+    status = root.querySelector('[data-document-code="passport"] .document-upload-status');
+    assert.equal(status.dataset.status, 'error');
+    assert.match(status.textContent, /Doğrulama yanıtı alınamadı/);
     assert.equal(intentCalls, 1);
     assert.equal(finalizeCalls, 1);
 
@@ -533,6 +621,9 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(state.uploads.passport.state, 'complete');
+    status = root.querySelector('[data-document-code="passport"] .document-upload-status');
+    assert.equal(status.dataset.status, 'success');
+    assert.match(status.textContent, /Yüklendi/);
     assert.equal(intentCalls, 1);
     assert.equal(finalizeCalls, 2);
     assert.match(root.textContent, /Belgeyi değiştir/);
@@ -542,6 +633,59 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(deleteCalls, 1);
     assert.match(root.textContent, /özel depolamadaki temizleme yeniden denenecek/);
+    window.close();
+});
+
+test('failed browser upload gets an error status and retains its retry action', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    const window = document.defaultView;
+    api.createStudentDocumentUploadIntent = async () => ({
+        upload: { intent_id: 'intent-failed-put', method: 'PUT', url: 'https://r2.invalid', required_headers: {} }
+    });
+    api.putStudentDocumentDirect = async () => {
+        throw Object.assign(new Error('upload failed'), { code: 'UPLOAD_NETWORK_ERROR' });
+    };
+    await submitWizard(root);
+    const input = root.querySelector('[data-document-code="passport"] input[type="file"]');
+    Object.defineProperty(input, 'files', { configurable: true, value: [new window.File(['pdf'], 'passport.pdf', { type: 'application/pdf' })] });
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const card = root.querySelector('[data-document-code="passport"]');
+    const status = card.querySelector('.document-upload-status');
+    assert.equal(state.uploads.passport.state, 'failed_upload');
+    assert.equal(status.dataset.status, 'error');
+    assert.ok(status.classList.contains('is-error'));
+    assert.match(status.textContent, /Yükleme bağlantısı/);
+    assert.ok(card.querySelector('[data-action="document-retry"]'));
+    window.close();
+});
+
+test('failed finalize gets an error status and retains its retry action', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    const window = document.defaultView;
+    api.createStudentDocumentUploadIntent = async () => ({
+        upload: { intent_id: 'intent-failed-finalize', method: 'PUT', url: 'https://r2.invalid', required_headers: {} }
+    });
+    api.putStudentDocumentDirect = async () => ({ ok: true });
+    api.finalizeStudentDocumentUpload = async () => {
+        throw Object.assign(new Error('object verification failed'), { code: 'UPLOAD_OBJECT_MISMATCH' });
+    };
+    await submitWizard(root);
+    const input = root.querySelector('[data-document-code="passport"] input[type="file"]');
+    Object.defineProperty(input, 'files', { configurable: true, value: [new window.File(['pdf'], 'passport.pdf', { type: 'application/pdf' })] });
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const card = root.querySelector('[data-document-code="passport"]');
+    const status = card.querySelector('.document-upload-status');
+    assert.equal(state.uploads.passport.state, 'failed_finalize');
+    assert.equal(status.dataset.status, 'error');
+    assert.ok(status.classList.contains('is-error'));
+    assert.match(status.textContent, /doğrulanamadı/i);
+    assert.ok(card.querySelector('[data-action="document-retry"]'));
     window.close();
 });
 

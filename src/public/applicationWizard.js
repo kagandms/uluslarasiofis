@@ -65,11 +65,12 @@ function createSelectField(document, { key, name, value, options, required = fal
     label.append(createTranslatedElement(document, 'span', key, messages[key]));
     select.name = name;
     select.required = required;
-    options.forEach(({ value: optionValue, key: optionKey }) => {
+    options.forEach(({ value: optionValue, key: optionKey, disabled = false }) => {
         const option = document.createElement('option');
         option.value = optionValue;
         option.textContent = messages[optionKey];
         option.dataset.i18n = optionKey;
+        option.disabled = disabled;
         select.append(option);
     });
     select.value = value ?? '';
@@ -212,7 +213,11 @@ function createResidenceStep(document, application, formValues) {
         ? 'true' : (application.is_under_18 === 0 || fields.is_under_18 === false ? 'false' : '');
     form.append(createSelectField(document, {
         key: 'under18Question', name: 'is_under_18', value: under18, required: true,
-        options: [{ value: '', key: 'under18Question' }, { value: 'true', key: 'yes' }, { value: 'false', key: 'no' }]
+        options: [
+            { value: '', key: 'under18SelectPlaceholder', disabled: true },
+            { value: 'true', key: 'yes' },
+            { value: 'false', key: 'no' }
+        ]
     }));
     form.append(createAddressEvidenceChoices(document, fields, messages, Boolean(application && application.status !== 'draft')));
     renderFingerprintSection(form, fields);
@@ -254,6 +259,15 @@ function getDocumentStatusKey(requirement, task) {
     if (requirement.scan_status === 'pending') return 'documentPendingScan';
     if (requirement.upload_status === 'finalized') return 'uploadedWaitingReview';
     return 'documentNotUploaded';
+}
+
+function getDocumentStatusTone(requirement, task, statusKey, isDeleting) {
+    if (isDeleting) return 'pending';
+    if (statusKey === 'deleteCleanupPending' || statusKey === 'documentNeedsReplacement') return 'error';
+    if (['failed_upload', 'failed_finalize', 'unknown_finalize_result'].includes(task?.state)) return 'error';
+    if (task?.state === 'complete' || requirement.upload_status === 'finalized'
+        || requirement.review_status === 'approved' || requirement.revision_status === 'approved') return 'success';
+    return 'pending';
 }
 
 function createFilePolicyText(document, requirement, messages) {
@@ -330,6 +344,9 @@ function createDocumentCard(document, requirement, state, { allowUpload }) {
     card.className = 'application-document-card';
     card.dataset.documentCode = requirement.code;
     status.className = 'document-upload-status';
+    const statusTone = getDocumentStatusTone(requirement, task, statusKey, Boolean(state.deleting[requirement.code]));
+    status.dataset.status = statusTone;
+    if (statusTone !== 'pending') status.classList.add(`is-${statusTone}`);
     status.setAttribute('aria-live', 'polite');
     card.append(title, description, createRequirementBadge(document, requirement.required ?? requirement.is_required, messages), status);
     if (requirement.filename) appendFilename(document, card, `${messages.currentFile}: ${requirement.filename}`);
