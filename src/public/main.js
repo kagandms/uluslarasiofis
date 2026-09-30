@@ -1,5 +1,6 @@
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
 import { initializeApplicationWizard } from './applicationWizard.js';
+import { initializeApplicationTracking } from './applicationTracking.js';
 import * as applicationApi from './applicationApi.js';
 import { renderPublicDocumentOverview } from './home.js';
 
@@ -77,6 +78,10 @@ function initPublicPortal() {
     if (document.body.dataset.page === 'application') {
         const wizardRoot = document.getElementById('application-wizard');
         if (wizardRoot) void initializeApplicationWizard(wizardRoot, applicationApi);
+    }
+    if (document.body.dataset.page === 'tracking') {
+        const trackingRoot = document.getElementById('application-tracking');
+        if (trackingRoot) void initializeApplicationTracking(trackingRoot, applicationApi);
     }
 }
 

@@ -107,6 +107,15 @@ export async function readCurrentStudentDocumentRequirements() {
 }
 
 /**
+ * Reads student-safe tracking data for the application bound to the current owner session.
+ * @returns {Promise<object>} Student-safe application summary and current document statuses.
+ * @throws {Error} When the session or tracking request is unavailable.
+ */
+export async function readCurrentApplicationTracking() {
+    return requestJson('/api/public/applications/current/tracking');
+}
+
+/**
  * Requests a short-lived direct R2 upload capability for one eligible document code.
  * @param {string} code Current requirement code returned by the server.
  * @param {File} file Browser-selected document file.

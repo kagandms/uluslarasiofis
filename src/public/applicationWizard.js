@@ -479,6 +479,12 @@ function createSubmissionConfirmation(document, application, messages) {
     confirmation.append(studentNumber);
     confirmation.append(createTranslatedElement(document, 'p', 'submissionTracking', messages.submissionTracking));
     if (application.submitted_at) confirmation.append(createSubmissionTime(document, application.submitted_at, messages));
+    const trackingLink = document.createElement('a');
+    trackingLink.href = '/basvurum/';
+    trackingLink.className = 'application-button application-button-primary';
+    trackingLink.dataset.i18n = 'trackingViewAction';
+    trackingLink.textContent = messages.trackingViewAction;
+    confirmation.append(trackingLink);
     return confirmation;
 }
 

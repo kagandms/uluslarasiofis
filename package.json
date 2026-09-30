@@ -5,7 +5,7 @@
   "main": "app.js",
   "scripts": {
     "test": "node --disable-warning=ExperimentalWarning --test test/**/*.test.js",
-    "test:backend": "node --disable-warning=ExperimentalWarning --test test/backendSchema.test.js test/d1Repositories.test.js test/documentStorage.test.js test/backendApiContract.test.js",
+    "test:backend": "node --disable-warning=ExperimentalWarning --test test/backendSchema.test.js test/d1Repositories.test.js test/documentStorage.test.js test/backendApiContract.test.js test/applicationTracking.test.js",
     "package:extension": "node scripts/package-extension.mjs",
     "pretest": "npm run package:extension",
     "predev": "npm run package:extension",

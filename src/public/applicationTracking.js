@@ -1,0 +1,154 @@
+import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
+
+function readMessages(locale) {
+    const fallback = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
+    const selected = { ...SESSION3_MESSAGES[locale], ...PUBLIC_MESSAGES[locale] };
+    return { ...fallback, ...selected };
+}
+
+function createTextElement(document, tagName, className, value) {
+    const element = document.createElement(tagName);
+    if (className) element.className = className;
+    element.textContent = value;
+    return element;
+}
+
+function createLink(document, href, label, className = 'application-button application-button-secondary') {
+    const link = document.createElement('a');
+    link.href = href;
+    link.className = className;
+    link.textContent = label;
+    return link;
+}
+
+function formatDate(value, locale) {
+    if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return null;
+    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function appendDetail(document, list, label, value) {
+    const term = createTextElement(document, 'dt', '', label);
+    const detail = createTextElement(document, 'dd', '', value);
+    list.append(term, detail);
+}
+
+function renderUnavailable(root, messages) {
+    const panel = root.ownerDocument.createElement('section');
+    panel.className = 'tracking-state';
+    panel.append(
+        createTextElement(root.ownerDocument, 'h2', '', messages.trackingSessionUnavailableHeading),
+        createTextElement(root.ownerDocument, 'p', '', messages.trackingSessionUnavailableText),
+        createLink(root.ownerDocument, '/', messages.homeLink),
+        createLink(root.ownerDocument, '/basvuru/', messages.trackingStartNewApplication)
+    );
+    root.replaceChildren(panel);
+}
+
+function renderDraft(root, messages) {
+    const panel = root.ownerDocument.createElement('section');
+    panel.className = 'tracking-state';
+    panel.append(
+        createTextElement(root.ownerDocument, 'h2', '', messages.trackingDraftHeading),
+        createTextElement(root.ownerDocument, 'p', '', messages.trackingDraftText),
+        createLink(root.ownerDocument, '/basvuru/', messages.trackingReturnToApplication),
+        createLink(root.ownerDocument, '/', messages.homeLink)
+    );
+    root.replaceChildren(panel);
+}
+
+function readApplicationStatusLabel(messages, status) {
+    return messages[`applicationStatus_${status}`] || messages.trackingStatusUnknown;
+}
+
+function createApplicationSummary(document, application, messages, locale) {
+    const section = document.createElement('section');
+    const details = document.createElement('dl');
+    section.className = 'tracking-summary';
+    section.append(createTextElement(document, 'h2', '', messages.trackingApplicationDetails));
+    details.className = 'tracking-details';
+    appendDetail(document, details, messages.studentNumber, application.student_number || '');
+    appendDetail(document, details, messages.applicationType, messages[`${application.application_type}Application`] || messages.trackingStatusUnknown);
+    appendDetail(document, details, messages.trackingStatusLabel, readApplicationStatusLabel(messages, application.status));
+
+    const dates = [
+        ['created_at', 'trackingCreatedAt'],
+        ['updated_at', 'trackingUpdatedAt'],
+        ['submitted_at', 'trackingSubmittedAt']
+    ];
+    dates.forEach(([field, label]) => {
+        const value = formatDate(application[field], locale);
+        if (value) appendDetail(document, details, messages[label], value);
+    });
+    section.append(details);
+    return section;
+}
+
+function createDocumentList(document, documents, messages) {
+    const section = document.createElement('section');
+    const list = document.createElement('ul');
+    section.className = 'tracking-documents-section';
+    section.append(createTextElement(document, 'h2', '', messages.trackingDocumentsHeading));
+    list.className = 'tracking-document-list';
+
+    documents.forEach((item) => {
+        const card = document.createElement('li');
+        const title = createTextElement(document, 'h3', '', messages[item.label_key] || messages.trackingStatusUnknown);
+        const status = createTextElement(document, 'p', 'tracking-document-status', messages[`trackingDocumentStatus_${item.status}`] || messages.trackingStatusUnknown);
+        card.className = 'tracking-document-card';
+        card.append(title, status);
+        if (item.required) card.append(createTextElement(document, 'span', 'public-document-badge', messages.trackingRequiredBadge));
+        if (item.filename) card.append(createTextElement(document, 'p', 'application-document-filename', item.filename));
+        list.append(card);
+    });
+    section.append(list);
+    return section;
+}
+
+function renderTracking(root, state, locale) {
+    const document = root.ownerDocument;
+    const messages = readMessages(locale);
+    root.className = 'application-tracking';
+    if (state.kind === 'loading') {
+        root.replaceChildren(createTextElement(document, 'p', 'tracking-message', messages.trackingLoading));
+        return;
+    }
+    if (state.kind === 'unavailable') {
+        renderUnavailable(root, messages);
+        return;
+    }
+    if (state.kind === 'error') {
+        root.replaceChildren(createTextElement(document, 'p', 'tracking-message', messages.trackingLoadError));
+        return;
+    }
+    if (state.kind === 'draft') {
+        renderDraft(root, messages);
+        return;
+    }
+    root.replaceChildren(
+        createApplicationSummary(document, state.payload.application, messages, locale),
+        createDocumentList(document, state.payload.documents, messages)
+    );
+}
+
+/**
+ * Loads and renders tracking data for the current applicant session.
+ * @param {HTMLElement} root Tracking-page mount element.
+ * @param {{readCurrentApplicationTracking: () => Promise<object>}} api Same-origin application API helpers.
+ * @returns {Promise<{kind: string}>} Initial tracking view state.
+ */
+export async function initializeApplicationTracking(root, api) {
+    const document = root.ownerDocument;
+    const state = { kind: 'loading', payload: null };
+    const render = () => renderTracking(root, state, document.documentElement.lang || 'tr');
+    document.addEventListener('public:locale-changed', render);
+    render();
+    try {
+        state.payload = await api.readCurrentApplicationTracking();
+        state.kind = state.payload.application.status === 'draft' ? 'draft' : 'ready';
+    } catch (error) {
+        state.kind = error?.code === 'APPLICATION_SESSION_REQUIRED' || error?.status === 401
+            ? 'unavailable' : 'error';
+    }
+    render();
+    return { kind: state.kind };
+}
