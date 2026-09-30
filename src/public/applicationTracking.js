@@ -32,15 +32,47 @@ function appendDetail(document, list, label, value) {
     list.append(term, detail);
 }
 
-function renderUnavailable(root, messages) {
-    const panel = root.ownerDocument.createElement('section');
-    panel.className = 'tracking-state';
+function createLookupForm(document, state, messages, submitLookup) {
+    const form = document.createElement('form');
+    const input = document.createElement('input');
+    const isSubmitting = state.kind === 'lookupLoading';
+    form.className = 'tracking-lookup-form';
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitLookup(input.value);
+    });
+    input.type = 'text';
+    input.name = 'student_number';
+    input.maxLength = 64;
+    input.required = true;
+    input.autocomplete = 'off';
+    input.value = state.studentNumber;
+    input.id = 'tracking-student-number';
+    input.setAttribute('aria-label', messages.trackingLookupStudentNumberLabel);
+    const label = createTextElement(document, 'label', '', messages.trackingLookupStudentNumberLabel);
+    label.htmlFor = input.id;
+    const button = document.createElement('button');
+    button.type = 'submit';
+    button.className = 'application-button application-button-primary';
+    button.disabled = isSubmitting;
+    button.textContent = isSubmitting ? messages.trackingLoading : messages.trackingLookupSubmit;
+    form.append(label, input, button);
+    return form;
+}
+
+function renderLookup(root, state, messages, submitLookup) {
+    const document = root.ownerDocument;
+    const panel = document.createElement('section');
+    panel.className = 'tracking-state tracking-lookup';
     panel.append(
-        createTextElement(root.ownerDocument, 'h2', '', messages.trackingSessionUnavailableHeading),
-        createTextElement(root.ownerDocument, 'p', '', messages.trackingSessionUnavailableText),
-        createLink(root.ownerDocument, '/', messages.homeLink),
-        createLink(root.ownerDocument, '/basvuru/', messages.trackingStartNewApplication)
+        createTextElement(document, 'h2', '', messages.trackingLookupHeading),
+        createTextElement(document, 'p', '', messages.trackingLookupExplanation),
+        createLookupForm(document, state, messages, submitLookup)
     );
+    const feedbackKey = state.kind === 'notFound' ? 'trackingLookupNotFound'
+        : state.kind === 'rateLimited' ? 'trackingLookupRateLimited'
+            : state.kind === 'lookupError' ? 'trackingLookupError' : null;
+    if (feedbackKey) panel.append(createTextElement(document, 'p', 'tracking-message', messages[feedbackKey]));
     root.replaceChildren(panel);
 }
 
@@ -83,7 +115,7 @@ function createApplicationSummary(document, application, messages, locale) {
     return section;
 }
 
-function createDocumentList(document, documents, messages) {
+function createDocumentList(document, documents, messages, allowFilename) {
     const section = document.createElement('section');
     const list = document.createElement('ul');
     section.className = 'tracking-documents-section';
@@ -97,14 +129,14 @@ function createDocumentList(document, documents, messages) {
         card.className = 'tracking-document-card';
         card.append(title, status);
         if (item.required) card.append(createTextElement(document, 'span', 'public-document-badge', messages.trackingRequiredBadge));
-        if (item.filename) card.append(createTextElement(document, 'p', 'application-document-filename', item.filename));
+        if (allowFilename && item.filename) card.append(createTextElement(document, 'p', 'application-document-filename', item.filename));
         list.append(card);
     });
     section.append(list);
     return section;
 }
 
-function renderTracking(root, state, locale) {
+function renderTracking(root, state, locale, submitLookup) {
     const document = root.ownerDocument;
     const messages = readMessages(locale);
     root.className = 'application-tracking';
@@ -112,8 +144,8 @@ function renderTracking(root, state, locale) {
         root.replaceChildren(createTextElement(document, 'p', 'tracking-message', messages.trackingLoading));
         return;
     }
-    if (state.kind === 'unavailable') {
-        renderUnavailable(root, messages);
+    if (['lookup', 'lookupLoading', 'notFound', 'rateLimited', 'lookupError'].includes(state.kind)) {
+        renderLookup(root, state, messages, submitLookup);
         return;
     }
     if (state.kind === 'error') {
@@ -126,20 +158,32 @@ function renderTracking(root, state, locale) {
     }
     root.replaceChildren(
         createApplicationSummary(document, state.payload.application, messages, locale),
-        createDocumentList(document, state.payload.documents, messages)
+        createDocumentList(document, state.payload.documents, messages, state.kind === 'ready')
     );
 }
 
 /**
  * Loads and renders tracking data for the current applicant session.
  * @param {HTMLElement} root Tracking-page mount element.
- * @param {{readCurrentApplicationTracking: () => Promise<object>}} api Same-origin application API helpers.
+ * @param {{readCurrentApplicationTracking: () => Promise<object>, lookupApplicationTracking: (studentNumber: string) => Promise<object>}} api Same-origin application API helpers.
  * @returns {Promise<{kind: string}>} Initial tracking view state.
  */
 export async function initializeApplicationTracking(root, api) {
     const document = root.ownerDocument;
-    const state = { kind: 'loading', payload: null };
-    const render = () => renderTracking(root, state, document.documentElement.lang || 'tr');
+    const state = { kind: 'loading', payload: null, studentNumber: '' };
+    const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup);
+    async function submitLookup(studentNumber) {
+        state.studentNumber = studentNumber.trim();
+        state.kind = 'lookupLoading';
+        render();
+        try {
+            state.payload = await api.lookupApplicationTracking(state.studentNumber);
+            state.kind = state.payload.found ? 'publicReady' : 'notFound';
+        } catch (error) {
+            state.kind = error?.code === 'RATE_LIMITED' ? 'rateLimited' : 'lookupError';
+        }
+        render();
+    }
     document.addEventListener('public:locale-changed', render);
     render();
     try {
@@ -147,7 +191,7 @@ export async function initializeApplicationTracking(root, api) {
         state.kind = state.payload.application.status === 'draft' ? 'draft' : 'ready';
     } catch (error) {
         state.kind = error?.code === 'APPLICATION_SESSION_REQUIRED' || error?.status === 401
-            ? 'unavailable' : 'error';
+            ? 'lookup' : 'error';
     }
     render();
     return { kind: state.kind };

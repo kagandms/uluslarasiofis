@@ -64,7 +64,7 @@ test('draft owner session links back to the existing application wizard', async 
     document.defaultView.close();
 });
 
-test('missing or expired owner session shows a safe access-unavailable state without student lookup', async () => {
+test('missing or expired owner session renders a student-number-only lookup form', async () => {
     const { document, root } = createTrackingRoot();
     const api = {
         async readCurrentApplicationTracking() {
@@ -74,17 +74,81 @@ test('missing or expired owner session shows a safe access-unavailable state wit
 
     const result = await initializeApplicationTracking(root, api);
 
-    assert.equal(result.kind, 'unavailable');
-    assert.match(root.textContent, /geçerli bir başvuru erişim oturumu yok/i);
-    assert.ok(root.querySelector('a[href="/"]'));
-    assert.ok(root.querySelector('a[href="/basvuru/"]'));
-    assert.doesNotMatch(root.textContent, /öğrenci numarasıyla arama yapın|öğrenci numarasıyla erişin/i);
+    assert.equal(result.kind, 'lookup');
+    assert.match(root.textContent, /Başvurumu sorgula/i);
+    assert.equal(root.querySelectorAll('input').length, 1);
+    assert.equal(root.querySelector('input[name="student_number"]')?.type, 'text');
+    assert.equal(root.querySelector('input[name="passport_number"]'), null);
+    assert.equal(root.querySelector('input[type="password"]'), null);
+    assert.equal(root.querySelector('input[type="file"]'), null);
+    assert.doesNotMatch(root.innerHTML, /otp|recovery|tracking.code|ocr/i);
+    document.defaultView.close();
+});
+
+test('public lookup renders statuses without filenames or document controls', async () => {
+    const { document, root } = createTrackingRoot();
+    const api = {
+        async readCurrentApplicationTracking() {
+            throw Object.assign(new Error('session required'), { code: 'APPLICATION_SESSION_REQUIRED', status: 401 });
+        },
+        async lookupApplicationTracking() {
+            return {
+                found: true,
+                ...createTrackingDto({ documents: [
+                    { code: 'passport', label_key: 'documentPassport', required: true, status: 'waiting_review', filename: 'PRIVATE-FILENAME.pdf' }
+                ] })
+            };
+        }
+    };
+    await initializeApplicationTracking(root, api);
+    root.querySelector('input[name="student_number"]').value = 'TRACK-STUDENT-1';
+    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.match(root.textContent, /Gönderildi/);
+    assert.match(root.textContent, /İnceleme bekliyor/);
+    assert.doesNotMatch(root.textContent, /PRIVATE-FILENAME\.pdf/);
+    assert.equal(root.querySelectorAll('input').length, 0);
+    assert.equal(root.querySelector('input[type="file"]'), null);
+    assert.equal(root.querySelector('a'), null);
+    assert.doesNotMatch(root.innerHTML, /download|preview|upload|ocr/i);
+    document.defaultView.close();
+});
+
+test('not-found lookup is neutral and allows a retry', async () => {
+    const { document, root } = createTrackingRoot();
+    let lookupCount = 0;
+    const api = {
+        async readCurrentApplicationTracking() {
+            throw Object.assign(new Error('session required'), { code: 'APPLICATION_SESSION_REQUIRED', status: 401 });
+        },
+        async lookupApplicationTracking() {
+            lookupCount += 1;
+            return lookupCount === 1 ? { found: false, application: null, documents: [] } : { found: true, ...createTrackingDto() };
+        }
+    };
+    await initializeApplicationTracking(root, api);
+    const submit = async (studentNumber) => {
+        root.querySelector('input[name="student_number"]').value = studentNumber;
+        root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setImmediate(resolve));
+    };
+
+    await submit('UNKNOWN-STUDENT');
+    assert.match(root.textContent, /görüntülenebilir bir başvuru bulunamadı/i);
+    assert.equal(root.querySelectorAll('input').length, 1);
+    assert.doesNotMatch(root.textContent, /draft exists|student exists/i);
+    await submit('TRACK-STUDENT-1');
+    assert.equal(lookupCount, 2);
+    assert.match(root.textContent, /Gönderildi/);
     document.defaultView.close();
 });
 
 test('tracking supports all locales and the public main entry keeps Arabic right-to-left', async (context) => {
     const requiredKeys = [
         'trackingPageTitle', 'trackingPageText', 'trackingSessionUnavailableHeading', 'trackingSessionUnavailableText',
+        'trackingLookupHeading', 'trackingLookupStudentNumberLabel', 'trackingLookupSubmit', 'trackingLookupExplanation',
+        'trackingLookupNotFound', 'trackingLookupRateLimited', 'trackingLookupError',
         'trackingDraftHeading', 'trackingDraftText', 'trackingStatusLabel', 'trackingStatusUnknown',
         ...['draft', 'submitted', 'under_review', 'resubmission_required', 'approved_for_processing', 'sent_to_migration',
             'migration_approved', 'completed', 'cancelled', 'rejected'].map((status) => `applicationStatus_${status}`),

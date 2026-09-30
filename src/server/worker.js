@@ -3,7 +3,7 @@ import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse
 import { isRouteResult } from './http/routeResult.js';
 import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument, finalizeCurrentStudentDocument, readCurrentStudentDocumentRequirements } from './routes/applicationDocumentRoutes.js';
 import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
-import { readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
+import { lookupApplicationTracking, readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
 import { bootstrapStaff, createStaffUser, listStaffUsers, loginStaff, logoutStaff, readStaffSession, updateStaffAccount } from './routes/staffRoutes.js';
@@ -50,6 +50,7 @@ async function routeApi(request, environment, requestId) {
     if (pathname === '/api/public/applications') return createApplicationDraft(request, environment, requestId);
     if (pathname === '/api/public/applications/current/status') return readCurrentApplicationStatus(request, environment);
     if (pathname === '/api/public/applications/current/tracking') return readCurrentApplicationTracking(request, environment);
+    if (pathname === '/api/public/applications/tracking-lookup') return lookupApplicationTracking(request, environment);
     if (pathname === '/api/public/applications/current/submit') return submitCurrentApplication(request, environment, requestId);
     if (pathname === '/api/public/applications/current/declaration') return acceptCurrentApplicationDeclaration(request, environment, requestId);
     if (pathname === '/api/public/applications/current/contact-acknowledgement') {

@@ -765,7 +765,7 @@ test('Review submits once, keeps five steps, and shows student-safe confirmation
     assert.match(root.textContent, /Başvurunuz gönderildi/);
     assert.match(root.textContent, /S3-FP-1/);
     assert.equal(root.querySelector('a[data-i18n="trackingViewAction"]')?.getAttribute('href'), '/basvurum/');
-    assert.doesNotMatch(root.textContent, /öğrenci numaranızı kullanın/i);
+    assert.match(root.textContent, /öğrenci numaranızla \/basvurum\//i);
     assert.equal(root.querySelector('[data-action="submit-application"]'), null);
     assert.equal(root.querySelector('.application-progress li').parentElement.children.length, 5);
     document.defaultView.close();

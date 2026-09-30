@@ -116,6 +116,18 @@ export async function readCurrentApplicationTracking() {
 }
 
 /**
+ * Looks up a privacy-minimized tracking view using only a student number.
+ * @param {string} studentNumber Student number entered on the public tracking page.
+ * @returns {Promise<object>} Public-safe tracking result without session authority.
+ * @throws {Error} When validation, rate limit, or the lookup request fails.
+ */
+export async function lookupApplicationTracking(studentNumber) {
+    return requestJson('/api/public/applications/tracking-lookup', {
+        method: 'POST', body: { student_number: studentNumber }
+    });
+}
+
+/**
  * Requests a short-lived direct R2 upload capability for one eligible document code.
  * @param {string} code Current requirement code returned by the server.
  * @param {File} file Browser-selected document file.

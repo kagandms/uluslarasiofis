@@ -118,6 +118,24 @@ export function createApplicationRepository(database) {
             `).bind(CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION,
                 CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION, applicationId).first();
         },
+        async findTrackableByStudentNumber(studentNumber) {
+            const normalizedStudentNumber = normalizeStudentNumber(studentNumber);
+            const selected = await database.prepare(`
+                SELECT applications.id
+                FROM applications
+                JOIN students ON students.id = applications.student_id
+                WHERE students.normalized_student_number = ?
+                  AND applications.status <> 'draft'
+                ORDER BY
+                    CASE WHEN applications.status IN ('completed', 'cancelled', 'rejected') THEN 1 ELSE 0 END,
+                    applications.updated_at DESC,
+                    applications.created_at DESC,
+                    applications.id DESC
+                LIMIT 1
+            `).bind(normalizedStudentNumber).first();
+            if (!selected) return null;
+            return this.findById(selected.id);
+        },
         async acceptContactResponsibilityAcknowledgement({ applicationId, version, acceptedAt, requestId }) {
             const eventId = `${applicationId}:contact-responsibility:${version}`;
             await database.prepare(`

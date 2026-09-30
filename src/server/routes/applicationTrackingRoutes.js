@@ -2,14 +2,16 @@ import { ApiError } from '../domain/errors.js';
 import { listDocumentPolicies } from '../domain/documentPolicy.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
-import { requireMethod } from './shared.js';
+import { normalizeStudentNumber } from '../repositories/d1/studentRepository.js';
+import { enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
+import { readJsonBody } from '../http/requestBody.js';
 
 function isStudentVisibleFile(requirement) {
     return requirement?.upload_status === 'finalized'
         && ['pending', 'clean'].includes(requirement.scan_status);
 }
 
-function readStudentDocumentStatus(requirement) {
+export function readStudentDocumentStatus(requirement) {
     if (requirement?.review_status === 'resubmission_required'
         || requirement?.revision_status === 'resubmission_required') return 'resubmission_required';
     if (requirement?.review_status === 'approved' || requirement?.revision_status === 'approved') return 'approved';
@@ -29,6 +31,36 @@ function createTrackingDocumentDto(policy, requirement) {
     };
 }
 
+function createPublicTrackingDocumentDto(policy, requirement) {
+    return {
+        code: policy.code,
+        label_key: policy.label_key,
+        required: policy.required,
+        status: readStudentDocumentStatus(requirement)
+    };
+}
+
+function createTrackingApplicationDto(application) {
+    return {
+        student_number: application.student_number,
+        status: application.status,
+        application_type: application.application_type,
+        created_at: application.created_at ?? null,
+        updated_at: application.updated_at ?? null,
+        submitted_at: application.submitted_at ?? null
+    };
+}
+
+function createDocumentTrackingView(application, storedRequirements, createDto) {
+    const policies = listDocumentPolicies(
+        application.application_type,
+        application.is_under_18 === 1,
+        application.address_evidence_type ?? null
+    );
+    const requirementsByCode = new Map(storedRequirements.map((requirement) => [requirement.code, requirement]));
+    return policies.map((policy) => createDto(policy, requirementsByCode.get(policy.code)));
+}
+
 /**
  * Reads current application tracking data using only the authenticated applicant session.
  * @param {Request} request Request carrying the applicant HttpOnly session cookie.
@@ -43,23 +75,47 @@ export async function readCurrentApplicationTracking(request, environment) {
     const application = await repositories.applications.findById(session.application_id);
     if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
 
-    const policies = listDocumentPolicies(
-        application.application_type,
-        application.is_under_18 === 1,
-        application.address_evidence_type ?? null
-    );
     const storedRequirements = await repositories.documents.listStudentRequirements(application.id);
-    const requirementsByCode = new Map(storedRequirements.map((requirement) => [requirement.code, requirement]));
 
     return {
-        application: {
-            student_number: application.student_number,
-            status: application.status,
-            application_type: application.application_type,
-            created_at: application.created_at ?? null,
-            updated_at: application.updated_at ?? null,
-            submitted_at: application.submitted_at ?? null
-        },
-        documents: policies.map((policy) => createTrackingDocumentDto(policy, requirementsByCode.get(policy.code)))
+        application: createTrackingApplicationDto(application),
+        documents: createDocumentTrackingView(application, storedRequirements, createTrackingDocumentDto)
+    };
+}
+
+/**
+ * Reads a privacy-minimized public tracking view by normalized student number.
+ * @param {Request} request Same-origin JSON POST request.
+ * @param {object} environment Worker bindings containing D1.
+ * @returns {Promise<object>} Public-safe tracking result, or an indistinguishable not-found result.
+ * @throws {ApiError} When method, origin, body, or rate policy is invalid.
+ */
+export async function lookupApplicationTracking(request, environment) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const body = await readJsonBody(request);
+    if (Object.keys(body).length !== 1 || !Object.hasOwn(body, 'student_number')) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Öğrenci numarasını kontrol edip tekrar deneyin.');
+    }
+
+    let studentNumber;
+    try {
+        studentNumber = normalizeStudentNumber(body.student_number);
+    } catch {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Öğrenci numarasını kontrol edip tekrar deneyin.');
+    }
+
+    const repositories = createD1Repositories(environment.DB);
+    await enforceRateLimit(repositories, request, {
+        endpoint: 'application-tracking-lookup', maxRequests: 10, windowSeconds: 900
+    });
+    const application = await repositories.applications.findTrackableByStudentNumber(studentNumber);
+    if (!application) return { found: false, application: null, documents: [] };
+
+    const storedRequirements = await repositories.documents.listStudentRequirements(application.id);
+    return {
+        found: true,
+        application: createTrackingApplicationDto(application),
+        documents: createDocumentTrackingView(application, storedRequirements, createPublicTrackingDocumentDto)
     };
 }
