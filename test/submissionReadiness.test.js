@@ -70,6 +70,26 @@ test('complete persisted application and current finalized required documents ar
     });
 });
 
+test('a finalized current document requiring resubmission is not ready', () => {
+    const application = createApplication();
+    const documents = createReadyDocuments(application);
+    const rejectedDocument = documents[0];
+    rejectedDocument.revision_status = 'resubmission_required';
+
+    const readiness = evaluate(application, documents);
+
+    assert.equal(readiness.status, 'not_ready');
+    assert.ok(readiness.missing_documents.includes(rejectedDocument.code));
+});
+
+test('an approved current finalized revision remains ready', () => {
+    const application = createApplication();
+    const documents = createReadyDocuments(application);
+    documents[0].revision_status = 'approved';
+
+    assert.equal(evaluate(application, documents).status, 'ready');
+});
+
 test('incomplete application fields, acknowledgement, declaration, fingerprint and address choice are not ready', () => {
     const readiness = evaluate(createApplication({
         student_email: 'invalid-email',

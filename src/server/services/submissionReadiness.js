@@ -4,7 +4,7 @@ import { createD1Repositories } from '../repositories/d1/index.js';
 
 const APPLICATION_TYPES = new Set(['initial', 'renewal']);
 const ADDRESS_EVIDENCE_TYPES = new Set(['rental_contract', 'residence_certificate', 'undertaking']);
-const ACCEPTED_REVISION_STATUSES = new Set(['submitted', 'approved', 'resubmission_required']);
+const ACCEPTED_REVISION_STATUSES = new Set(['submitted', 'approved']);
 const ACCEPTED_SCAN_STATUSES = new Set(['pending', 'clean']);
 const REQUIRED_FIELDS = Object.freeze([
     'student_number', 'application_type', 'student_email', 'student_phone', 'first_name',
