@@ -76,6 +76,71 @@ test('passport upload and OCR assistance appear before identity fields in the ex
     assert.equal(root.querySelectorAll('.application-document-card[data-document-code="passport"]').length, 1);
 });
 
+test('OCR retry enables Continue after pending identity fields are filled without saving candidates', async () => {
+    const { root, api, patches } = createWizard({ applicationValues: {
+        address_evidence_type: null, is_under_18: null, fingerprint_status: 'registered', fingerprint_code: ''
+    } });
+    let finishOcr;
+    let ocrAttempts = 0;
+    api.preparePassportOcrSource = async (_source, recognizeImage) => {
+        ocrAttempts += 1;
+        if (ocrAttempts === 1) throw Object.assign(new Error('retry required'), { code: 'OCR_PROVIDER_FAILURE' });
+        return new Promise((resolve) => { finishOcr = () => resolve(recognizeImage(new Blob(['prepared'], { type: 'image/jpeg' }))); });
+    };
+    const state = await initializeApplicationWizard(root, api);
+
+    assert.equal(state.step, 1);
+    for (const field of ['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']) {
+        assert.equal(root.querySelector(`[name="${field}"]`).value, '');
+    }
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, true);
+
+    selectPassport(root, new Blob(['passport'], { type: 'image/png' }));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.passportOcr.status, 'failed');
+    root.querySelector('[data-action="passport-ocr-retry"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(typeof finishOcr, 'function');
+
+    const document = root.ownerDocument;
+    const under18 = root.querySelector('[name="is_under_18"]');
+    under18.value = 'false';
+    under18.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    const addressEvidence = root.querySelector('[name="address_evidence_type"][value="residence_certificate"]');
+    addressEvidence.checked = true;
+    addressEvidence.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    const fingerprintCode = root.querySelector('[name="fingerprint_code"]');
+    fingerprintCode.value = 'APPLICANT-FP-9';
+    fingerprintCode.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, true);
+    const patchesBeforeOcrResult = patches.length;
+    const formBeforeOcrResult = root.querySelector('#application-step-form');
+    const buttonBeforeOcrResult = formBeforeOcrResult.querySelector('button[type="submit"]');
+
+    finishOcr();
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, true);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(state.step, 1);
+    assert.strictEqual(root.querySelector('#application-step-form'), formBeforeOcrResult);
+    assert.strictEqual(root.querySelector('#application-step-form button[type="submit"]'), buttonBeforeOcrResult);
+
+    assert.equal(root.querySelector('[name="first_name"]').value, 'OCR NAME');
+    assert.equal(root.querySelector('[name="last_name"]').value, 'DOE');
+    assert.equal(root.querySelector('[name="passport_number"]').value, 'P123456');
+    assert.equal(root.querySelector('[name="nationality"]').value, 'TUR');
+    assert.equal(root.querySelector('[name="date_of_birth"]').value, '2000-01-02');
+    assert.equal(root.querySelector('[name="is_under_18"]').value, 'false');
+    assert.equal(root.querySelector('[name="address_evidence_type"]:checked').value, 'residence_certificate');
+    assert.equal(root.querySelector('[name="fingerprint_code"]').value, 'APPLICANT-FP-9');
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, false);
+    assert.equal(patches.length, patchesBeforeOcrResult);
+    assert.equal(state.passportOcr.status, 'success');
+});
+
 test('passport OCR waits for direct upload and finalize, then fills only fields still blank', async () => {
     const { root, api, calls, patches } = createWizard();
     let finishOcr;

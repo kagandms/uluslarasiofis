@@ -696,6 +696,7 @@ function mergePassportCandidates(root, state, candidates) {
         }
     });
     state.formValues = current;
+    if (state.step === 1) updateResidenceContinueButton(root, current);
 }
 
 function passportOcrErrorKey(error) {
