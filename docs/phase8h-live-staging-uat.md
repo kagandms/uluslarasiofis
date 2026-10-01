@@ -231,3 +231,47 @@ All application records and uploaded content in this pass were synthetic. The te
 | `git diff --check` | Passed. |
 
 No source fix was retained: the confirmed blocker is the runtime's inability to perform the existing 600,000-iteration PBKDF2 operation on the current Workers Free plan, and the attempted CPU-limit configuration is unsupported there. Production, schema, and migrations remain untouched. Phase 8H is **NOT COMPLETE** because first-staff bootstrap and the staff-side review/resubmission/second-review chain could not be completed. No Phase 8I work was started.
+
+## 17. Owner-authorized 100k PBKDF2 change — continued staging UAT (2026-10-01)
+
+This is the latest continuation record and supersedes earlier completion blockers that say no shared credentials were available, no source change was made, or that the active implementation still uses 600,000 iterations. The owner explicitly authorized staying on Workers Free and changing the new-password PBKDF2 baseline to 100,000. The 100k runtime attempt described below did not reach password derivation, so runtime compatibility remains unverified.
+
+### PBKDF2 implementation and regression coverage
+
+- The original source generated `pbkdf2_sha256` hashes with 600,000 PBKDF2-HMAC-SHA-256 iterations. Only `PASSWORD_HASH_ITERATIONS` changed to 100,000 in `src/server/auth/passwordHash.js`; the versioned `pbkdf2_sha256$ITERATIONS$SALT$KEY` format and parameterized historical-hash verification remain intact.
+- New hashes continue to use a random 16-byte salt and 32-byte derived key. Password minimum/maximum validation, constant-time key comparison, generic invalid-credential response, five failed attempts per 15-minute window, shared-account-only authorization, secure HttpOnly/Secure/SameSite=Strict cookie, session expiry/revocation, and server-side staff authorization were not weakened or changed.
+- Verification rejects stored iteration counts below 100,000 and above the existing safe maximum of 1,000,000. A Node-generated 600,000-iteration reference hash verifies successfully in the local regression test; no 600,000-round hash was generated in a Worker.
+- Focused coverage now verifies new hash metadata, salt/key lengths, absence of plaintext, salt uniqueness, correct and incorrect passwords, rejection below the 100,000 floor, valid historical 600,000-hash compatibility, malformed hashes, and existing password input bounds.
+- Staging had zero staff password hashes before bootstrap. No D1 migration was needed or created.
+
+### Staging deployment and bootstrap result
+
+- Expected starting checkout was confirmed: `codex/phase8h-live-staging-uat` at `2d8bee4aeb6878648a7204d5509f305d7807879f`; owner credential environment variables were checked for presence only and their values were never printed or written to disk.
+- Pre-deployment checks confirmed Worker `goc-staging`, D1 `uluslarasiofis-staging`, R2 `uluslarasiofis-documents-staging`, secret name `STAFF_SHARED_USERNAME`, 0 staff rows, 0 active staff rows, 0 bootstrap-state rows, and absence of `goc-staging-staging` (Wrangler error 10007). The staging dry-run resolved the expected D1/R2 bindings.
+- Narrow source commit `da6d33724b231f5c45c80848669f11adc2a96cd6` (`fix(auth): use Workers-compatible PBKDF2 cost`) was pushed only to `codex/phase8h-live-staging-uat`.
+- `npm run deploy:staging` deployed that source to `goc-staging` as version `35ea0b38-83fa-46ec-9627-b2aa787c17d6`, created `2026-10-01T19:12:11.411Z`. Subsequent bootstrap-token rotations created secret-change versions; the last active deployment is `17bc105f-98cc-4e89-88ff-36dadc3fb90b` under deployment `d6438255-91ce-4d57-a403-7b1fae389cf4`, created `2026-10-01T19:21:00.210664Z`. Production was not targeted.
+- Four supported bootstrap calls using fresh cryptographically random tokens returned HTTP 403 `BOOTSTRAP_TOKEN_REQUIRED` before password derivation. Wrangler confirms the secret name/binding exists in staging, but values are intentionally inaccessible; the cause of the sent-token/Worker-secret mismatch was not established. After each rejected attempt the secret was rotated again to a fresh unknown random value. No further bootstrap attempt was made.
+- Because the bootstrap handler rejects each request at the token check, the actual Workers Free runtime has **not yet executed the 100,000-iteration path**. This is not evidence that 100k succeeds or fails. The iteration count was not reduced further. Final read-only D1 counts remain 0 staff, 0 active staff, and 0 bootstrap rows.
+
+### Post-deployment smoke checks and synthetic data
+
+- After deployment, `/` and `/basvurum/` returned HTTP 200; anonymous `/api/staff/auth/session` returned 401. Reloading the existing `/basvurum/` browser tab displayed the already-submitted synthetic application and its 9 documents as `İnceleme bekliyor` (`pending_scan`). No scan completion is claimed.
+- No applicant or document records were created or changed in this continuation. A current aggregate-only D1 query found 5 application rows: 4 drafts and 1 submitted. Three records are the previously known synthetic UAT applications (one submitted, two IDOR-test drafts); the other two draft rows were not inspected and remain unclassified. They were not changed.
+- Staff login/session UAT, queue/detail, private preview/download, review, resubmission, second review, and authenticated legacy workspace checks remain **NOT EXECUTED** because no staff account was bootstrapped. No XSS payload was submitted. Public YKN/Tebliğ calls remain **NOT EXECUTED — external integration configuration unavailable**; no university/YÖKSİS records were accessed or changed.
+
+### Security tradeoff and validation
+
+The owner explicitly chose Workers Free operation and a 100,000-round PBKDF2-SHA-256 baseline for new password hashes after the prior 600,000-round path failed in the staging runtime. This reduces the per-hash computational work and is **not equivalent in password-cracking resistance** to 600,000 rounds. Salted PBKDF2-SHA-256 storage, key size, password complexity bounds, generic login errors, rate limiting, session protections, and shared-account restriction remain unchanged. No old staging hashes existed, and no database migration was required.
+
+| Command | Result |
+|---|---|
+| Focused `node --disable-warning=ExperimentalWarning --test test/authSecurity.test.js` | RED before implementation on expected `600000` vs `100000`; then passed 18/18 after the one-line baseline change. |
+| `npm test` | Passed: 359 passed, 0 failed. |
+| `npm run test:backend` | Passed: 124 passed, 0 failed. |
+| `npm run build` | Passed; existing Vite dynamic/static import warning for `src/services/ocrService.js`. |
+| `npm run build:staging` | Passed with the same existing Vite warning. |
+| `npm run deploy:dry-run:staging` | Passed; expected staging bindings resolved. |
+| `npm audit` | Passed; 0 vulnerabilities. |
+| `git diff --check` | Passed. |
+
+Phase 8H remains **NOT COMPLETE**: PBKDF2 100k has not run in the Worker because the one-time bootstrap token is rejected before password derivation, leaving staff authentication and the staff-side review/resubmission/second-review chain blocked. No Worker CPU limit was raised, no further KDF reduction was made, no production resources or schema were changed, and Phase 8I was not started.
