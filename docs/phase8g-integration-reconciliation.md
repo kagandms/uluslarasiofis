@@ -11,6 +11,8 @@
 
 The matrix classifies every commit reachable only from `origin/main`. “Selected” means its scoped user-facing behavior or static assets are restored in the Phase 8G branch. Static residence and office PDFs are copied byte-for-byte; product policy text and PDF contents are not edited.
 
+Classification counts: **6 KEEP/selected**, **25 SUPERSEDED**, and **13 CONFLICT/REVIEW or out-of-scope**. “Selected” is the KEEP decision for a narrow behavioral port; review/excluded entries are not imported because they are obsolete, conflict with the current architecture, or are outside Phase 8G.
+
 | Commit | Main-only change | Decision and Phase 8G treatment |
 |---|---|---|
 | `f696053` | Prevent duplicate acceptance-code transfer | Superseded by Phase 8F request correlation, single-flight guards, and YÖKSİS contract tests. |
@@ -69,3 +71,44 @@ The matrix classifies every commit reachable only from `origin/main`. “Selecte
 ## Vercel status diagnosis
 
 The failing GitHub Vercel status belongs to the legacy `/ikamet/` Vercel project. The status pointed to deployment `dpl_6RnppzP1NqD7juEe4ryCAjwaqDJz` (branch `codex/phase8f-shared-staff-domain-prep`, commit `ecb018b`). Authenticated `vercel inspect --logs` confirmed that the remote build reached `npm run build`, then `prebuild` called `scripts/package-extension.mjs` and stopped because `PORTAL_PRODUCTION_ORIGIN` was not configured. This is the exact failure cause; it is not a Worker build error. No Vercel environment setting was changed. The current repository's deployment target remains the Cloudflare Worker configured in `wrangler.jsonc`.
+
+## Final integration and verification record
+
+- **Starting branch / SHA:** `codex/phase8f-shared-staff-domain-prep` / `ecb018b4eee9e2f632411f7b128b1633419e9f22`; the source worktree was clean.
+- **Final Phase 8G branch:** `codex/phase8g-integration-baseline`.
+- **Integration implementation commit:** `a1407352b1f5c3fc1ebc863f35b4a4f0e36ccade` (`feat: reconcile Phase 8G integration baseline`). This is the code integration commit; the final reconciliation-record commit is documentation-only.
+- **Inspected `origin/main`:** `9d055bf4f9f0e723bae2762d31d18c6395ed01ca`; **merge-base:** `31ba7bd129d69914500fbd94be698c30a6eaa7a6`; **divergence:** 44 main-only and 32 Phase 8F-only commits.
+- **KEEP changes:** `973f88c` cache reset plus `b63a555`, `56b4492`, `aa00503`, `44e35c7`, and `5ed8930` Belgeler workspace/catalog/PDF behavior. All nine general office PDFs match `origin/main` byte-for-byte.
+- **Integrated architecture changes:** one configured shared staff username is enforced at login/session/bootstrap boundaries; individual-user management endpoints and runtime assignment reads were removed. The old `assignments` migration/table is retained unchanged. The Belgeler workspace is staff-only; its general office PDFs remain public static files, matching `main`.
+- **Intentionally excluded:** legacy extension/runtime rewrites, public passport OCR, automatic background YKN polling, unverified marital-status and country-specific authority behavior, direct browser-to-Apps-Script mutations, legacy Vercel authentication changes, and unrelated spreadsheet automation. No unresolved code conflict remains; no merge or bulk cherry-pick was used.
+
+### Validation results
+
+All commands below exited successfully (exit code 0):
+
+| Command | Result |
+|---|---|
+| `npm ci` | Installed dependencies; audit reported 0 vulnerabilities. |
+| `npm test` | 352 passed, 0 failed, 0 skipped. |
+| `npm run test:backend` | 124 passed, 0 failed, 0 skipped. |
+| Focused targeted regression tests | 74 passed, 0 failed. |
+| `npm run build` | Passed. Vite emitted the existing `INEFFECTIVE_DYNAMIC_IMPORT` warning for `src/services/ocrService.js`. |
+| `npm run build:staging` | Passed with the same existing Vite warning. |
+| `npm run deploy:dry-run:staging` | Passed and exited in dry-run mode; no deployment or resource mutation occurred. |
+| `npm audit` | 0 vulnerabilities. |
+| `git diff --check` | Passed with no whitespace errors. |
+
+### Product, security, and regression findings
+
+- Shared-staff V1 is enforced; staff assignment, person-based queue behavior, and individual account management were not reintroduced. The legacy assignment table remains inert pending a separately authorized migration.
+- No public/student passport OCR was added. Existing staff passport OCR, YKN OCR/parsing, Chrome extension, and YÖKSİS implementation files were preserved; no changes were needed in those OCR/parser/extension modules.
+- Existing public application, owner-session, upload/revision, tracking, resubmission, staff review, protected document access, service-worker, and storage-security contracts remained in place and the full regression suites passed.
+- Repository health review kept `wrangler.jsonc` and the Worker as the Cloudflare deployment source, corrected package repository metadata and stale README guidance, retained the matching lockfile, and added only a non-secret shared-username placeholder to `.dev.vars.example`. Migration files and the service worker were unchanged.
+- No production secret was added. No production deployment, D1 migration, R2 mutation, or external application mutation occurred. Staging validation was a local dry-run only; live staging UAT remains separate.
+- No product blocker was found in the local integration. The legacy Vercel status still requires an owner decision: configure `PORTAL_PRODUCTION_ORIGIN` if that old project remains supported, or retire that integration through a separately reviewed change. This status does not block the Cloudflare Worker build path.
+
+## Recommended Phase 8H scope
+
+1. Decide whether the legacy `/ikamet/` Vercel project is retired or remains supported; if retained, provision `PORTAL_PRODUCTION_ORIGIN` through the Vercel environment without exposing a secret in source.
+2. Run owner-authorized live staging UAT for the Cloudflare Worker, D1, R2, public application flows, shared staff login, review, and Belgeler workspace.
+3. Plan any future removal of the inert `assignments` table as a separate migration with production backup, compatibility review, and explicit authorization.
