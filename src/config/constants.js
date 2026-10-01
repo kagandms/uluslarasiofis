@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
 };
 
 export const HISTORY_MAX_DAYS = 30;
+export const APPLICATION_OWNER_SESSION_DAYS = 180;
 export const CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION = 'contact-reachability-v1';
 export const OFFICIAL_APPLICATION_RETENTION_DAYS = 365;
 

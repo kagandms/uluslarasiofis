@@ -20,7 +20,7 @@ export function createApplicationReviewRepository(database, notes) {
             const isCompleted = targetStatus === 'completed';
             const terminalAt = isCompleted ? now : null;
             const retentionDueAt = isCompleted ? addUtcDays(now, OFFICIAL_APPLICATION_RETENTION_DAYS) : null;
-            const results = await database.batch([
+            const statements = [
                 database.prepare(`
                     UPDATE applications SET status = ?, updated_at = ?, last_activity_at = ?,
                         terminal_at = ?, retention_due_at = ?
@@ -34,7 +34,14 @@ export function createApplicationReviewRepository(database, notes) {
                 `).bind(auditId, targetStatus === 'under_review' && currentStatus === 'submitted'
                     ? 'staff.application_review_started' : 'staff.application_status_changed',
                 staffId, applicationId, requestId, JSON.stringify({ applicationStatus: targetStatus, result: 'success' }))
-            ]);
+            ];
+            if (isCompleted) {
+                statements.push(database.prepare(`
+                    UPDATE application_sessions SET revoked_at = ?
+                    WHERE application_id = ? AND revoked_at IS NULL AND changes() = 1
+                `).bind(now, applicationId));
+            }
+            const results = await database.batch(statements);
             return results[0]?.meta?.changes === 1 && results[1]?.meta?.changes === 1;
         },
         async approveCurrentDocument({ applicationId, documentRecordId, revisionId, revisionNumber, code, staffId, now, requestId, auditId }) {

@@ -33,6 +33,15 @@ async function seedStaff(database, id = 'reviewer-1', token = 'reviewer-session-
     return `staff_session=${token}`;
 }
 
+async function seedOwnerSession(database, applicationId, token) {
+    await database.prepare(`
+        INSERT INTO application_sessions (id, application_id, token_hash, expires_at)
+        VALUES (?, ?, ?, ?)
+    `).bind(crypto.randomUUID(), applicationId, await hashSessionToken(token),
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()).run();
+    return `application_session=${token}`;
+}
+
 async function seedApplication(database, { id = crypto.randomUUID(), studentNumber = id.slice(0, 12), status = 'under_review' } = {}) {
     await database.prepare(`
         INSERT INTO students (id, student_number, normalized_student_number)
@@ -91,10 +100,15 @@ test('staff starts review explicitly and application status updates use optimist
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'submitted' });
     const cookie = await seedStaff(database);
+    const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-session-under-review-0000000000000000');
     const initial = database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first();
     const detail = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment);
+    const submittedTracking = await worker.fetch(request('/api/public/applications/current/tracking', {
+        cookie: ownerCookie
+    }), environment);
     assert.equal(detail.status, 200);
     assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status, 'submitted');
+    assert.equal((await readJson(submittedTracking)).application.status, 'submitted');
 
     const started = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
         method: 'POST', cookie, body: { target_status: 'under_review', expected_updated_at: initial.updated_at }
@@ -111,6 +125,10 @@ test('staff starts review explicitly and application status updates use optimist
 
     assert.equal(started.status, 200);
     assert.equal((await readJson(started)).application_status, 'under_review');
+    const underReviewTracking = await worker.fetch(request('/api/public/applications/current/tracking', {
+        cookie: ownerCookie
+    }), environment);
+    assert.equal((await readJson(underReviewTracking)).application.status, 'under_review');
     assert.equal(stale.status, 409);
     assert.equal((await readJson(stale)).error.code, 'APPLICATION_STATE_CONFLICT');
     assert.equal(incompleteApproval.status, 409);
@@ -124,7 +142,11 @@ test('staff starts review explicitly and application status updates use optimist
 
 test('approved workflow transitions require all applicable current required documents to be approved', async () => {
     const { environment, database } = createEnvironment();
-    const applicationId = await seedApplication(database);
+    const applicationId = await seedApplication(database, { studentNumber: 'STUDENT-DONE' });
+    const firstOwnerCookie = await seedOwnerSession(database, applicationId, 'owner-session-complete-a-00000000000000000');
+    const secondOwnerCookie = await seedOwnerSession(database, applicationId, 'owner-session-complete-b-00000000000000000');
+    const otherApplicationId = await seedApplication(database, { studentNumber: 'STUDENT-OTHER-DONE' });
+    const otherOwnerCookie = await seedOwnerSession(database, otherApplicationId, 'owner-session-other-00000000000000000000');
     const cookie = await seedStaff(database);
     const requiredCodes = [
         'residence_application_form', 'passport', 'residence_card', 'photographs', 'health_insurance',
@@ -142,7 +164,25 @@ test('approved workflow transitions require all applicable current required docu
         'approved_for_processing', 'sent_to_migration', 'migration_approved', 'completed'
     ];
     let expectedUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first().updated_at;
+    const ownerTrackingBeforeComplete = await worker.fetch(request('/api/public/applications/current/tracking', {
+        cookie: firstOwnerCookie
+    }), environment);
+    assert.equal((await readJson(ownerTrackingBeforeComplete)).application.status, 'under_review');
     for (const targetStatus of transitions) {
+        if (targetStatus === 'completed') {
+            const staleCompletion = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+                method: 'POST', cookie,
+                body: { target_status: 'completed', expected_updated_at: `${expectedUpdatedAt}:stale` }
+            }), environment);
+            assert.equal(staleCompletion.status, 409);
+            assert.equal((await readJson(staleCompletion)).error.code, 'APPLICATION_STATE_CONFLICT');
+            const unchanged = database.prepare('SELECT terminal_at, retention_due_at FROM applications WHERE id = ?')
+                .bind(applicationId).first();
+            assert.equal(unchanged.terminal_at, null);
+            assert.equal(unchanged.retention_due_at, null);
+            assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_sessions WHERE application_id = ? AND revoked_at IS NOT NULL')
+                .bind(applicationId).first().count, 0);
+        }
         const response = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
             method: 'POST', cookie, body: { target_status: targetStatus, expected_updated_at: expectedUpdatedAt }
         }), environment);
@@ -173,6 +213,79 @@ test('approved workflow transitions require all applicable current required docu
         WHERE event_type = 'staff.application_status_changed'
           AND application_id = ? AND safe_metadata_json LIKE '%"applicationStatus":"completed"%'
     `).bind(applicationId).first().count, 1);
+    const completedSessions = database.prepare(`
+        SELECT revoked_at FROM application_sessions WHERE application_id = ? ORDER BY created_at, id
+    `).bind(applicationId).all().results;
+    assert.equal(completedSessions.length, 2);
+    assert.ok(completedSessions.every(({ revoked_at }) => revoked_at === database.prepare(
+        'SELECT terminal_at FROM applications WHERE id = ?'
+    ).bind(applicationId).first().terminal_at));
+    assert.equal(database.prepare('SELECT revoked_at FROM application_sessions WHERE application_id = ?')
+        .bind(otherApplicationId).first().revoked_at, null);
+
+    const revokedOwnerTracking = await worker.fetch(request('/api/public/applications/current/tracking', {
+        cookie: secondOwnerCookie
+    }), environment);
+    assert.equal(revokedOwnerTracking.status, 401);
+    const completedLookup = await worker.fetch(request('/api/public/applications/tracking-lookup', {
+        method: 'POST', body: { student_number: 'STUDENT-DONE' }
+    }), environment);
+    const completedLookupPayload = await readJson(completedLookup);
+    assert.equal(completedLookup.status, 200);
+    assert.equal(completedLookupPayload.application.status, 'completed');
+    assert.equal(completedLookup.headers.get('Set-Cookie'), null);
+    assert.equal(database.prepare('SELECT revoked_at FROM application_sessions WHERE token_hash = ?')
+        .bind(await hashSessionToken(otherOwnerCookie.split('=')[1])).first().revoked_at, null);
+});
+
+test('completion succeeds when an application has no owner sessions', async () => {
+    const { environment, database } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'migration_approved' });
+    const cookie = await seedStaff(database);
+    const expectedUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?')
+        .bind(applicationId).first().updated_at;
+
+    const response = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie,
+        body: { target_status: 'completed', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+
+    assert.equal(response.status, 200);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status, 'completed');
+});
+
+test('failed completion audit rolls back application retention and all owner-session revocations', async () => {
+    const { environment, database } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'migration_approved' });
+    await seedOwnerSession(database, applicationId, 'owner-session-rollback-a-00000000000000000');
+    await seedOwnerSession(database, applicationId, 'owner-session-rollback-b-00000000000000000');
+    const cookie = await seedStaff(database);
+    database.exec(`CREATE TRIGGER reject_completion_audit BEFORE INSERT ON audit_events
+        WHEN NEW.event_type = 'staff.application_status_changed'
+         AND NEW.safe_metadata_json LIKE '%"applicationStatus":"completed"%'
+        BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;`);
+    const expectedUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?')
+        .bind(applicationId).first().updated_at;
+
+    const response = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie,
+        body: { target_status: 'completed', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+
+    assert.equal(response.status, 500);
+    const application = database.prepare('SELECT status, terminal_at, retention_due_at FROM applications WHERE id = ?')
+        .bind(applicationId).first();
+    assert.equal(application.status, 'migration_approved');
+    assert.equal(application.terminal_at, null);
+    assert.equal(application.retention_due_at, null);
+    const sessions = database.prepare('SELECT revoked_at FROM application_sessions WHERE application_id = ?')
+        .bind(applicationId).all().results;
+    assert.equal(sessions.length, 2);
+    assert.ok(sessions.every(({ revoked_at }) => revoked_at === null));
+    assert.equal(database.prepare(`
+        SELECT COUNT(*) AS count FROM audit_events
+        WHERE application_id = ? AND event_type = 'staff.application_status_changed'
+    `).bind(applicationId).first().count, 0);
 });
 
 test('staff approves only the current clean revision and records safe audit metadata', async () => {
@@ -249,6 +362,7 @@ test('staff may flag another submitted document during resubmission, but cannot 
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'resubmission_required' });
     const cookie = await seedStaff(database);
+    const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-session-resubmission-00000000000000000');
     await seedReviewableDocument(database, applicationId, 'passport', {
         revisionStatus: 'resubmission_required', reviewStatus: 'resubmission_required'
     });
@@ -261,6 +375,10 @@ test('staff may flag another submitted document during resubmission, but cannot 
     assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status, 'resubmission_required');
     assert.equal(database.prepare('SELECT status FROM document_revisions WHERE id = ?').bind(secondDocument.revisionId).first().status,
         'resubmission_required');
+    const ownerTracking = await worker.fetch(request('/api/public/applications/current/tracking', {
+        cookie: ownerCookie
+    }), environment);
+    assert.equal((await readJson(ownerTracking)).application.status, 'resubmission_required');
 
     const applicationUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first().updated_at;
     const resume = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {

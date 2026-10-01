@@ -5,7 +5,7 @@ import { deriveStaffPasswordHash } from '../src/server/auth/passwordHash.js';
 import { hashSessionToken } from '../src/server/auth/sessionToken.js';
 import worker from '../src/server/worker.js';
 import { listDocumentPolicies } from '../src/server/domain/documentPolicy.js';
-import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../src/config/constants.js';
+import { APPLICATION_OWNER_SESSION_DAYS, CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../src/config/constants.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 
@@ -392,13 +392,25 @@ test('application API creates an opaque owner session and enforces the active ap
     }), environment, {});
     const createPayload = await readJson(createResponse);
     const sessionCookie = createResponse.headers.get('Set-Cookie');
+    const sessionToken = sessionCookie.split(';')[0].split('=')[1];
 
     assert.equal(createResponse.status, 201);
-    assert.match(sessionCookie, /^application_session=.+; HttpOnly; Secure; SameSite=Strict; Path=\/; Max-Age=43200$/);
+    assert.match(sessionCookie, new RegExp(`^application_session=.+; HttpOnly; Secure; SameSite=Strict; Path=\\/; Max-Age=${APPLICATION_OWNER_SESSION_DAYS * 24 * 60 * 60}$`));
     assert.equal(createPayload.application.status, 'draft');
     assert.equal(createPayload.application.application_type, 'initial');
     assert.doesNotMatch(JSON.stringify(createPayload), /token_hash|storage_key|password_hash/i);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.draft_created'").first().count, 1);
+    const ownerSession = database.prepare(`
+        SELECT sessions.token_hash, sessions.created_at, sessions.expires_at, applications.id AS application_id
+        FROM application_sessions AS sessions
+        JOIN applications ON applications.id = sessions.application_id
+        JOIN students ON students.id = applications.student_id
+        WHERE students.normalized_student_number = '2026123456'
+    `).first();
+    assert.equal(ownerSession.token_hash, await hashSessionToken(sessionToken));
+    assert.notEqual(ownerSession.token_hash, sessionToken);
+    assert.equal(Date.parse(ownerSession.expires_at) - Date.parse(ownerSession.created_at),
+        APPLICATION_OWNER_SESSION_DAYS * 24 * 60 * 60 * 1000);
     const retentionMinutes = database.prepare(`
         SELECT (julianday(retention_due_at) - julianday(created_at)) * 24 * 60 AS minutes
         FROM applications
@@ -410,6 +422,8 @@ test('application API creates an opaque owner session and enforces the active ap
     const currentPayload = await readJson(currentResponse);
     assert.equal(currentPayload.application.student_number, '2026123456');
     assert.equal(currentPayload.application.id, undefined);
+    assert.equal(database.prepare('SELECT expires_at FROM application_sessions WHERE application_id = ?')
+        .bind(ownerSession.application_id).first().expires_at, ownerSession.expires_at);
 
     const duplicateResponse = await worker.fetch(createRequest('/api/public/applications', {
         method: 'POST',
@@ -444,6 +458,28 @@ test('application draft and owner session roll back when their audit event canno
     assert.equal(response.status, 500);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 0);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_sessions').first().count, 0);
+});
+
+test('applicant logout revokes the owner session and expires its secure cookie', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST',
+        body: { student_number: '2026123468', application_type: 'initial', email: 'logout@example.edu', phone: '555' }
+    }), environment, {});
+    const ownerCookie = created.headers.get('Set-Cookie').split(';')[0];
+    const tokenHash = await hashSessionToken(ownerCookie.split('=')[1]);
+
+    const logout = await worker.fetch(createRequest('/api/public/applications/logout', {
+        method: 'POST', cookie: ownerCookie
+    }), environment, {});
+    const afterLogout = await worker.fetch(createRequest('/api/public/applications/current/status', {
+        cookie: ownerCookie
+    }), environment, {});
+
+    assert.equal(logout.status, 200);
+    assert.match(logout.headers.get('Set-Cookie'), /^application_session=; HttpOnly; Secure; SameSite=Strict; Path=\/; Max-Age=0$/);
+    assert.ok(database.prepare('SELECT revoked_at FROM application_sessions WHERE token_hash = ?').bind(tokenHash).first().revoked_at);
+    assert.equal(afterLogout.status, 401);
 });
 
 test('private documents require a staff session and clean finalized metadata', async () => {
@@ -633,6 +669,9 @@ test('ready application submits once through its owner session and returns only 
     }), environment, {});
     const payload = await readJson(response);
     const repeated = await worker.fetch(createRequest(path, { method: 'POST', cookie: first.cookie }), environment, {});
+    const submittedTracking = await worker.fetch(createRequest('/api/public/applications/current/tracking', {
+        cookie: first.cookie
+    }), environment, {});
 
     assert.equal(response.status, 200, JSON.stringify(payload));
     assert.equal(payload.application.status, 'submitted');
@@ -653,6 +692,8 @@ test('ready application submits once through its owner session and returns only 
     assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(second.applicationId).first().status, 'draft');
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 1);
     assert.equal(repeated.status, 409);
+    assert.equal(submittedTracking.status, 200);
+    assert.equal((await readJson(submittedTracking)).application.status, 'submitted');
     assert.equal(database.prepare('SELECT retention_due_at, terminal_at FROM applications WHERE id = ?')
         .bind(first.applicationId).first().retention_due_at, null);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 1);

@@ -1,5 +1,5 @@
 import { ApiError, ApplicationConflictError } from '../domain/errors.js';
-import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../config/constants.js';
+import { APPLICATION_OWNER_SESSION_DAYS, CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../config/constants.js';
 import { createOpaqueSessionToken, createSessionCookie, createExpiredSessionCookie, getSessionCookieName, hashSessionToken, readCookie } from '../auth/sessionToken.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
@@ -9,7 +9,7 @@ import { routeResult } from '../http/routeResult.js';
 import { readSubmissionReadiness } from '../services/submissionReadiness.js';
 import { createAuditEvent, createRepositories, enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
 
-const APPLICATION_SESSION_SECONDS = 12 * 60 * 60;
+const APPLICATION_SESSION_SECONDS = APPLICATION_OWNER_SESSION_DAYS * 24 * 60 * 60;
 const APPLICATION_TYPE_VALUES = new Set(['initial', 'renewal']);
 const ADDRESS_EVIDENCE_VALUES = new Set(['rental_contract', 'residence_certificate', 'undertaking']);
 const DRAFT_FIELDS = Object.freeze({
@@ -93,7 +93,7 @@ async function persistDraftWithSession(repositories, draft, requestId) {
             auditEventId: crypto.randomUUID(),
             requestId,
             tokenHash: await hashSessionToken(token),
-            expiresAt: new Date(Date.now() + APPLICATION_SESSION_SECONDS * 1000).toISOString(),
+            expiresAt: new Date(Date.parse(createdAt) + APPLICATION_SESSION_SECONDS * 1000).toISOString(),
             createdAt
         });
         return { application, token };
