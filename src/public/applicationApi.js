@@ -115,6 +115,11 @@ export async function readCurrentApplicationTracking() {
     return requestJson('/api/public/applications/current/tracking');
 }
 
+/** Reads server-derived replacement-upload hints through the current owner session. */
+export async function readCurrentResubmissionEligibility() {
+    return requestJson('/api/public/applications/current/documents/resubmission-eligibility');
+}
+
 /**
  * Looks up a privacy-minimized tracking view using only a student number.
  * @param {string} studentNumber Student number entered on the public tracking page.
@@ -149,6 +154,21 @@ export async function createStudentDocumentUploadIntent(code, file) {
  */
 export async function finalizeStudentDocumentUpload(intentId) {
     const payload = await requestJson('/api/public/applications/current/documents/finalize', {
+        method: 'POST', body: { intent_id: intentId }
+    });
+    return payload.document;
+}
+
+/** Creates a replacement intent using only a stable document code and file metadata. */
+export async function createResubmissionUploadIntent(code, file) {
+    return requestJson('/api/public/applications/current/documents/resubmission-upload-intent', {
+        method: 'POST', body: { code, filename: file.name, media_type: file.type, byte_size: file.size }
+    });
+}
+
+/** Finalizes a replacement using only its opaque server-issued intent ID. */
+export async function finalizeResubmissionUpload(intentId) {
+    const payload = await requestJson('/api/public/applications/current/documents/resubmission-finalize', {
         method: 'POST', body: { intent_id: intentId }
     });
     return payload.document;

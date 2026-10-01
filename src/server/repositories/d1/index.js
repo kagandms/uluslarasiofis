@@ -4,6 +4,7 @@ import { createApplicationReviewRepository } from './applicationReviewRepository
 import { createAssignmentRepository } from './assignmentRepository.js';
 import { createAuditRepository } from './auditRepository.js';
 import { createDocumentRepository } from './documentRepository.js';
+import { createResubmissionUploadRepository } from './resubmissionUploadRepository.js';
 import { createNotificationRepository } from './notificationRepository.js';
 import { createRateLimitRepository } from './rateLimitRepository.js';
 import { createSessionRepository } from './sessionRepository.js';
@@ -25,6 +26,7 @@ export function createD1Repositories(database) {
         assignments: createAssignmentRepository(database),
         audit: createAuditRepository(database),
         documents: createDocumentRepository(database),
+        resubmissionUploads: createResubmissionUploadRepository(database),
         notifications: createNotificationRepository(database),
         rateLimits: createRateLimitRepository(database),
         sessions: createSessionRepository(database),

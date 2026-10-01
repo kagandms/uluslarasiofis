@@ -109,6 +109,7 @@ test('missing or expired owner session renders a student-number-only lookup form
 
 test('public lookup renders statuses without filenames or document controls', async () => {
     const { document, root } = createTrackingRoot();
+    let privateEndpointCalls = 0;
     const api = {
         async readCurrentApplicationTracking() {
             throw Object.assign(new Error('session required'), { code: 'APPLICATION_SESSION_REQUIRED', status: 401 });
@@ -120,7 +121,10 @@ test('public lookup renders statuses without filenames or document controls', as
                     { code: 'passport', label_key: 'documentPassport', required: true, status: 'waiting_review', filename: 'PRIVATE-FILENAME.pdf' }
                 ] })
             };
-        }
+        },
+        async readCurrentResubmissionEligibility() { privateEndpointCalls += 1; return { documents: [] }; },
+        async createResubmissionUploadIntent() { privateEndpointCalls += 1; },
+        async finalizeResubmissionUpload() { privateEndpointCalls += 1; }
     };
     await initializeApplicationTracking(root, api);
     root.querySelector('input[name="student_number"]').value = 'TRACK-STUDENT-1';
@@ -133,7 +137,77 @@ test('public lookup renders statuses without filenames or document controls', as
     assert.equal(root.querySelectorAll('input').length, 0);
     assert.equal(root.querySelector('input[type="file"]'), null);
     assert.equal(root.querySelector('a'), null);
+    assert.equal(root.querySelector('input[type="file"]'), null);
+    assert.equal(privateEndpointCalls, 0);
     assert.doesNotMatch(root.innerHTML, /download|preview|upload|ocr/i);
+    document.defaultView.close();
+});
+
+test('owner resubmission view mounts controls only for server-eligible codes and preserves office message', async () => {
+    const { document, root } = createTrackingRoot();
+    const officeMessage = 'Please provide a clearer passport copy.';
+    let intentCalls = 0;
+    const api = {
+        async readCurrentApplicationTracking() {
+            return createTrackingDto({ application: { status: 'resubmission_required' }, documents: [
+                { code: 'passport', label_key: 'documentPassport', required: true,
+                    status: 'resubmission_required', student_message: officeMessage },
+                { code: 'residence_card', label_key: 'documentResidenceCard', required: true,
+                    status: 'resubmission_required', student_message: 'Not eligible for replacement.' }
+            ] });
+        },
+        async readCurrentResubmissionEligibility() {
+            return { documents: [{ code: 'passport', accepted_media_types: ['application/pdf'], max_byte_size: 100 }] };
+        },
+        async createResubmissionUploadIntent() { intentCalls += 1; }
+    };
+
+    await initializeApplicationTracking(root, api);
+
+    assert.match(root.textContent, new RegExp(officeMessage));
+    assert.equal(root.querySelectorAll('input[type="file"]').length, 1);
+    assert.equal(root.querySelector('input[type="file"]').accept, 'application/pdf');
+    assert.equal(root.querySelectorAll('button').length, 1);
+    assert.equal(intentCalls, 0);
+    document.defaultView.close();
+});
+
+test('finalize refreshes owner tracking to waiting review while application stays in resubmission status', async () => {
+    const { document, root } = createTrackingRoot();
+    let trackingReads = 0;
+    const api = {
+        async readCurrentApplicationTracking() {
+            trackingReads += 1;
+            const replacement = trackingReads > 1;
+            return createTrackingDto({
+                application: { status: 'resubmission_required' },
+                documents: [{ code: 'passport', label_key: 'documentPassport', required: true,
+                    status: replacement ? 'waiting_review' : 'resubmission_required',
+                    student_message: 'Please provide a clearer passport copy.' }]
+            });
+        },
+        async readCurrentResubmissionEligibility() {
+            return { documents: trackingReads > 1 ? [] : [{ code: 'passport',
+                accepted_media_types: ['application/pdf'], max_byte_size: 100 }] };
+        },
+        async createResubmissionUploadIntent() {
+            return { upload: { intent_id: 'intent-ui', method: 'PUT', url: 'https://capability.invalid', required_headers: {} } };
+        },
+        async putStudentDocumentDirect() {},
+        async finalizeResubmissionUpload() { return { scan_status: 'pending' }; }
+    };
+    api.putStudentDocumentDirect = async () => {};
+    await initializeApplicationTracking(root, api);
+    const input = root.querySelector('input[type="file"]');
+    Object.defineProperty(input, 'files', { configurable: true, value: [{ name: 'passport.pdf', type: 'application/pdf', size: 10 }] });
+    input.dispatchEvent(new document.defaultView.Event('change'));
+    root.querySelector('button').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(trackingReads, 2);
+    assert.match(root.textContent, /Belge yeniden gönderilmeli/);
+    assert.match(root.textContent, /İnceleme bekliyor/);
+    assert.equal(root.querySelector('input[type="file"]'), null);
     document.defaultView.close();
 });
 

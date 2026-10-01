@@ -6,29 +6,9 @@ import { createDocumentStorage } from '../storage/documentStorage.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
+import { readStudentUploadMetadata } from '../domain/studentUploadMetadata.js';
 
 const UPLOAD_INTENT_SECONDS = 10 * 60;
-
-function requireUploadMetadata(body, policy) {
-    const code = typeof body.code === 'string' ? body.code.trim() : '';
-    const filename = typeof body.filename === 'string' ? body.filename.trim() : '';
-    const mediaType = typeof body.media_type === 'string' ? body.media_type.trim().toLowerCase() : '';
-    const byteSize = body.byte_size;
-    if (!/^[a-z0-9_]{1,80}$/.test(code)
-        || !filename || filename.length > 255
-        || !policy.accepted_media_types.includes(mediaType)
-        || !Number.isSafeInteger(byteSize) || byteSize < 1 || byteSize > policy.max_byte_size) {
-        const code = Number.isSafeInteger(byteSize) && byteSize > policy.max_byte_size ? 'FILE_TOO_LARGE' : 'INVALID_FILE';
-        throw new ApiError(400, code, 'Belge biçimini ve boyutunu kontrol edip tekrar deneyin.');
-    }
-    return { code, filename: createSafeFilename(filename), mediaType, byteSize };
-}
-
-function createSafeFilename(filename) {
-    const leafName = filename.split(/[\\/]/).pop() || 'document';
-    const safeName = leafName.normalize('NFKC').replace(/[^A-Za-z0-9._ -]/g, '_').replace(/^[. ]+|[. ]+$/g, '');
-    return (safeName || 'document').slice(0, 120);
-}
 
 async function readCurrentStudentRequirements(session, environment) {
     const repositories = createD1Repositories(environment.DB);
@@ -145,7 +125,7 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
         application.is_under_18 === 1,
         application.address_evidence_type ?? null
     );
-    const metadata = requireUploadMetadata(body, policy);
+    const metadata = readStudentUploadMetadata(body, policy);
     requireDraftApplication(application);
     requireOwnedRequirement(requirements, metadata.code);
     const requirement = await repositories.documents.findStudentRequirementId(application.application_type, metadata.code);

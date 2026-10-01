@@ -12,6 +12,26 @@ function createEnvironment() {
     return { database, environment: { DB: database, APP_ENV: 'test' } };
 }
 
+function attachPrivateStorage(environment) {
+    const objects = new Map();
+    environment.R2_ACCOUNT_ID = '0123456789abcdef0123456789abcdef';
+    environment.R2_BUCKET_NAME = 'private-documents';
+    environment.R2_ACCESS_KEY_ID = 'test-access-key';
+    environment.R2_SECRET_ACCESS_KEY = 'test-secret-key';
+    environment.DOCUMENTS = {
+        async head(key) { return objects.get(key) ?? null; },
+        async put(key, body, options = {}) {
+            objects.set(key, { size: body.byteLength, httpMetadata: options.httpMetadata ?? {} });
+        },
+        async get(key) {
+            return objects.has(key) ? { body: new Response('replacement-document').body,
+                httpMetadata: { contentType: 'application/pdf' } } : null;
+        },
+        async delete(key) { objects.delete(key); }
+    };
+    return objects;
+}
+
 function request(path, { method = 'GET', body, cookie, origin = 'https://portal.test' } = {}) {
     const headers = new Headers({ Origin: origin });
     if (body !== undefined) headers.set('Content-Type', 'application/json');
@@ -499,4 +519,170 @@ test('resubmission audit failure rolls back document, application, and student n
     assert.equal(database.prepare('SELECT status FROM document_revisions WHERE id = ?').bind(revisionId).first().status, 'submitted');
     assert.equal(database.prepare('SELECT review_status FROM document_records WHERE id = ?').bind(documentRecordId).first().review_status, 'pending');
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_notes').first().count, 0);
+});
+
+test('staff reads, previews, downloads, and re-requests the finalized replacement current revision', async () => {
+    const { environment, database } = createEnvironment();
+    const objects = attachPrivateStorage(environment);
+    const applicationId = await seedApplication(database, { status: 'resubmission_required', studentNumber: 'PHASE8E-STAFF' });
+    const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-session-phase8e-staff-00000000000000000');
+    const staffCookie = await seedStaff(database);
+    const { documentRecordId, revisionId, fileId } = await seedReviewableDocument(database, applicationId, 'passport', {
+        revisionStatus: 'resubmission_required', reviewStatus: 'resubmission_required'
+    });
+    await database.prepare(`
+        INSERT INTO application_notes (id, application_id, document_record_id, author_type, author_staff_id, visibility, body)
+        VALUES ('phase8e-staff-message', ?, ?, 'staff', 'reviewer-1', 'student', 'Send a clear replacement.')
+    `).bind(applicationId, documentRecordId).run();
+
+    const intentResponse = await worker.fetch(request('/api/public/applications/current/documents/resubmission-upload-intent', {
+        method: 'POST', cookie: ownerCookie,
+        body: { code: 'passport', filename: 'new-passport.pdf', media_type: 'application/pdf', byte_size: 20 }
+    }), environment);
+    const { upload } = await readJson(intentResponse);
+    assert.equal(intentResponse.status, 201);
+    const replacementFile = database.prepare(`
+        SELECT files.id, files.storage_key FROM upload_intents AS intents
+        JOIN document_revision_files AS files ON files.id = intents.revision_file_id WHERE intents.id = ?
+    `).bind(upload.intent_id).first();
+    await environment.DOCUMENTS.put(replacementFile.storage_key, new Uint8Array(20), {
+        httpMetadata: { contentType: 'application/pdf' }
+    });
+    const finalized = await worker.fetch(request('/api/public/applications/current/documents/resubmission-finalize', {
+        method: 'POST', cookie: ownerCookie, body: { intent_id: upload.intent_id }
+    }), environment);
+    assert.equal(finalized.status, 200);
+    await database.prepare(`UPDATE document_revision_files SET scan_status = 'clean' WHERE id = ?`)
+        .bind(replacementFile.id).run();
+
+    const detailResponse = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie: staffCookie }), environment);
+    const detail = await readJson(detailResponse);
+    const passport = detail.documents.find((document) => document.code === 'passport');
+    assert.equal(passport.revision_number, 2);
+    assert.equal(passport.revision_status, 'submitted');
+    assert.equal(passport.access_available, true);
+    assert.equal(database.prepare(`SELECT is_current FROM document_revisions WHERE id = ?`).bind(revisionId).first().is_current, 0);
+    assert.equal(database.prepare(`SELECT is_current FROM document_revisions WHERE id = ?`).bind(
+        database.prepare(`SELECT revision_id FROM document_revision_files WHERE id = ?`).bind(replacementFile.id).first().revision_id
+    ).first().is_current, 1);
+
+    const preview = await worker.fetch(request(`/api/staff/applications/${applicationId}/documents/passport/preview`, {
+        method: 'POST', cookie: staffCookie
+    }), environment);
+    assert.equal(preview.status, 200);
+    const replacementStorageKey = database.prepare(`SELECT storage_key FROM document_revision_files WHERE id = ?`)
+        .bind(replacementFile.id).first().storage_key;
+    assert.equal(objects.has(replacementStorageKey), true);
+    const download = await worker.fetch(request(`/api/staff/applications/${applicationId}/documents/passport/download`, {
+        cookie: staffCookie
+    }), environment);
+    assert.equal(download.status, 200);
+    assert.equal(await download.text(), 'replacement-document');
+
+    const reRequest = await worker.fetch(request(`/api/staff/applications/${applicationId}/documents/passport/request-resubmission`, {
+        method: 'POST', cookie: staffCookie,
+        body: { expected_revision_number: 2, reason: 'The scan is not readable.' }
+    }), environment);
+    assert.equal(reRequest.status, 200);
+    const nextIntentResponse = await worker.fetch(request('/api/public/applications/current/documents/resubmission-upload-intent', {
+        method: 'POST', cookie: ownerCookie,
+        body: { code: 'passport', filename: 'next-passport.pdf', media_type: 'application/pdf', byte_size: 12 }
+    }), environment);
+    assert.equal(nextIntentResponse.status, 201);
+    const nextIntent = await readJson(nextIntentResponse);
+    const nextRevision = database.prepare(`
+        SELECT revisions.revision_number, revisions.is_current, revisions.status
+        FROM upload_intents AS intents JOIN document_revision_files AS files ON files.id = intents.revision_file_id
+        JOIN document_revisions AS revisions ON revisions.id = files.revision_id
+        WHERE intents.id = ?
+    `).bind(nextIntent.upload.intent_id).first();
+    assert.deepEqual({ ...nextRevision }, { revision_number: 3, is_current: 0, status: 'pending_scan' });
+    assert.equal(database.prepare(`SELECT MAX(revision_number) AS revision_number FROM document_revisions WHERE document_record_id = ?`)
+        .bind(documentRecordId).first().revision_number, 3);
+    assert.equal(database.prepare(`SELECT id FROM document_revisions WHERE document_record_id = ? AND is_current = 1`)
+        .bind(documentRecordId).first().id,
+    database.prepare(`SELECT revision_id FROM document_revision_files WHERE id = ?`).bind(replacementFile.id).first().revision_id);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status,
+        'resubmission_required');
+});
+
+test('replacing one requested document does not resume review; staff must clear remaining requests explicitly', async () => {
+    const { environment, database } = createEnvironment();
+    attachPrivateStorage(environment);
+    const applicationId = await seedApplication(database, { status: 'resubmission_required', studentNumber: 'PHASE8E-REMAINING' });
+    const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-session-phase8e-remain-00000000000000000');
+    const staffCookie = await seedStaff(database);
+    const passport = await seedReviewableDocument(database, applicationId, 'passport', {
+        revisionStatus: 'resubmission_required', reviewStatus: 'resubmission_required'
+    });
+    const address = await seedReviewableDocument(database, applicationId, 'address_rental_contract', {
+        revisionStatus: 'resubmission_required', reviewStatus: 'resubmission_required'
+    });
+    for (const [code, documentRecordId] of [['passport', passport.documentRecordId], ['address_rental_contract', address.documentRecordId]]) {
+        await database.prepare(`
+            INSERT INTO application_notes (id, application_id, document_record_id, author_type, author_staff_id, visibility, body)
+            VALUES (?, ?, ?, 'staff', 'reviewer-1', 'student', ?)
+        `).bind(crypto.randomUUID(), applicationId, documentRecordId, `Replace ${code}.`).run();
+    }
+
+    const intentResponse = await worker.fetch(request('/api/public/applications/current/documents/resubmission-upload-intent', {
+        method: 'POST', cookie: ownerCookie,
+        body: { code: 'passport', filename: 'passport.pdf', media_type: 'application/pdf', byte_size: 8 }
+    }), environment);
+    const { upload } = await readJson(intentResponse);
+    const file = database.prepare(`
+        SELECT files.id, files.storage_key FROM upload_intents AS intents
+        JOIN document_revision_files AS files ON files.id = intents.revision_file_id WHERE intents.id = ?
+    `).bind(upload.intent_id).first();
+    await environment.DOCUMENTS.put(file.storage_key, new Uint8Array(8), { httpMetadata: { contentType: 'application/pdf' } });
+    const finalized = await worker.fetch(request('/api/public/applications/current/documents/resubmission-finalize', {
+        method: 'POST', cookie: ownerCookie, body: { intent_id: upload.intent_id }
+    }), environment);
+    assert.equal(finalized.status, 200);
+    await database.prepare(`UPDATE document_revision_files SET scan_status = 'clean' WHERE id = ?`)
+        .bind(file.id).run();
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status,
+        'resubmission_required');
+    const applicationUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first().updated_at;
+    const blockedResume = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie: staffCookie,
+        body: { target_status: 'under_review', expected_updated_at: applicationUpdatedAt }
+    }), environment);
+    assert.equal(blockedResume.status, 409);
+    assert.equal((await readJson(blockedResume)).error.code, 'APPLICATION_NOT_READY_FOR_REVIEW');
+
+    const addressIntentResponse = await worker.fetch(request('/api/public/applications/current/documents/resubmission-upload-intent', {
+        method: 'POST', cookie: ownerCookie,
+        body: { code: 'address_rental_contract', filename: 'address.pdf', media_type: 'application/pdf', byte_size: 8 }
+    }), environment);
+    assert.equal(addressIntentResponse.status, 201);
+    const addressUpload = await readJson(addressIntentResponse);
+    const addressFile = database.prepare(`
+        SELECT files.id, files.storage_key FROM upload_intents AS intents
+        JOIN document_revision_files AS files ON files.id = intents.revision_file_id WHERE intents.id = ?
+    `).bind(addressUpload.upload.intent_id).first();
+    await environment.DOCUMENTS.put(addressFile.storage_key, new Uint8Array(8), { httpMetadata: { contentType: 'application/pdf' } });
+    const addressFinalized = await worker.fetch(request('/api/public/applications/current/documents/resubmission-finalize', {
+        method: 'POST', cookie: ownerCookie, body: { intent_id: addressUpload.upload.intent_id }
+    }), environment);
+    assert.equal(addressFinalized.status, 200);
+    await database.prepare(`UPDATE document_revision_files SET scan_status = 'clean' WHERE id IN (?, ?)`)
+        .bind(file.id, addressFile.id).run();
+
+    const approvePassport = await worker.fetch(request(`/api/staff/applications/${applicationId}/documents/passport/approve`, {
+        method: 'POST', cookie: staffCookie, body: { expected_revision_number: 2 }
+    }), environment);
+    const approveAddress = await worker.fetch(request(`/api/staff/applications/${applicationId}/documents/address_rental_contract/approve`, {
+        method: 'POST', cookie: staffCookie, body: { expected_revision_number: 2 }
+    }), environment);
+    assert.equal(approvePassport.status, 200);
+    assert.equal(approveAddress.status, 200);
+
+    const latestUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first().updated_at;
+    const explicitResume = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie: staffCookie,
+        body: { target_status: 'under_review', expected_updated_at: latestUpdatedAt }
+    }), environment);
+    assert.equal(explicitResume.status, 200);
+    assert.equal((await readJson(explicitResume)).application_status, 'under_review');
 });

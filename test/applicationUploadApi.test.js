@@ -32,12 +32,14 @@ function createFactory(options) {
     };
 }
 
-test('direct R2 upload uses the signed method and headers and reports measurable progress', async () => {
+test('direct R2 upload uses signed headers including write-once conditions and reports progress', async () => {
     const progress = [];
     const file = { name: 'passport.pdf', size: 4 };
     const requestClass = createFactory({ status: 200 });
 
-    await putStudentDocumentDirect({ method: 'PUT', url: 'https://signed-capability.invalid', required_headers: { 'content-type': 'application/pdf' } }, file, {
+    await putStudentDocumentDirect({ method: 'PUT', url: 'https://signed-capability.invalid', required_headers: {
+        'content-type': 'application/pdf', 'if-none-match': '*'
+    } }, file, {
         XMLHttpRequestClass: requestClass, onProgress: (value) => progress.push(value)
     });
     const request = requestClass.instances.at(-1);
@@ -45,6 +47,7 @@ test('direct R2 upload uses the signed method and headers and reports measurable
     assert.equal(request.method, 'PUT');
     assert.equal(request.isAsync, true);
     assert.equal(request.headers['content-type'], 'application/pdf');
+    assert.equal(request.headers['if-none-match'], '*');
     assert.equal(request.withCredentials, false);
     assert.equal(request.body, file);
     assert.deepEqual(progress, [75, 100]);

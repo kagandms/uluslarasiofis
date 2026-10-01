@@ -125,7 +125,8 @@ function createObjectOperations(bucket) {
 }
 
 function createCapabilityGenerator(accountId, bucketName, readSigner, now, signingValues) {
-    return async (key, { expiresInSeconds = DEFAULT_SIGNED_ACCESS_SECONDS, contentType } = {}, operation) => {
+    return async (key, options = {}, operation, writeOnce = false) => {
+        const { expiresInSeconds = DEFAULT_SIGNED_ACCESS_SECONDS, contentType } = options;
         assertStorageKey(key);
         const expiry = readExpiry(expiresInSeconds);
         const signingTime = now();
@@ -133,6 +134,7 @@ function createCapabilityGenerator(accountId, bucketName, readSigner, now, signi
             throw new TypeError('Storage clock must return a valid Date.');
         }
         const putType = operation === 'PUT' ? readContentType(contentType) : undefined;
+        const conditionalHeader = operation === 'PUT' && writeOnce ? { 'if-none-match': '*' } : {};
         let stage = 'AwsClient';
         let signedRequest;
         try {
@@ -142,7 +144,7 @@ function createCapabilityGenerator(accountId, bucketName, readSigner, now, signi
             url.searchParams.set('X-Amz-Expires', String(expiry));
             const request = new Request(url, {
                 method: operation,
-                ...(putType ? { headers: { 'content-type': putType } } : {})
+                ...(putType ? { headers: { 'content-type': putType, ...conditionalHeader } } : {})
             });
             stage = 'sign';
             signedRequest = await signer.sign(request, {
@@ -160,7 +162,7 @@ function createCapabilityGenerator(accountId, bucketName, readSigner, now, signi
             url: signedRequest.url,
             expiresAt: new Date(signingTime.valueOf() + expiry * 1000).toISOString(),
             expiresInSeconds: expiry,
-            ...(putType ? { requiredHeaders: Object.freeze({ 'content-type': putType }) } : {})
+            ...(putType ? { requiredHeaders: Object.freeze({ 'content-type': putType, ...conditionalHeader }) } : {})
         });
     };
 }
@@ -184,6 +186,7 @@ export function createR2DocumentStorage(bucket, configuration = {}) {
         createQuarantineKey: () => createQuarantineKey(createId),
         ...createObjectOperations(bucket),
         createUploadCapability: (key, options = {}) => createCapability(key, options, 'PUT'),
+        createWriteOnceUploadCapability: (key, options = {}) => createCapability(key, options, 'PUT', true),
         createReadCapability: (key, options = {}) => createCapability(key, options, 'GET')
     });
 }

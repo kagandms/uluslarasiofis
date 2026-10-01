@@ -55,9 +55,11 @@ test('R2 upload and read capabilities are method-bound, object-bound, and short-
     const secondKey = 'quarantine/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
     const upload = await storage.createUploadCapability(firstKey, { contentType: 'application/pdf' });
+    const writeOnceUpload = await storage.createWriteOnceUploadCapability(secondKey, { contentType: 'application/pdf' });
     const read = await storage.createReadCapability(firstKey);
     const anotherObject = await storage.createReadCapability(secondKey);
     const uploadUrl = new URL(upload.url);
+    const writeOnceUrl = new URL(writeOnceUpload.url);
     const readUrl = new URL(read.url);
 
     assert.equal(upload.method, 'PUT');
@@ -72,7 +74,10 @@ test('R2 upload and read capabilities are method-bound, object-bound, and short-
     assert.notEqual(read.url, anotherObject.url);
     assert.match(uploadUrl.pathname, /private-documents\/quarantine\/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa$/);
     assert.match(upload.requiredHeaders['content-type'], /^application\/pdf$/);
+    assert.equal(Object.hasOwn(upload.requiredHeaders, 'if-none-match'), false);
     assert.match(uploadUrl.searchParams.get('X-Amz-SignedHeaders'), /content-type/);
+    assert.equal(writeOnceUpload.requiredHeaders['if-none-match'], '*');
+    assert.equal(writeOnceUrl.searchParams.get('X-Amz-SignedHeaders').split(';').includes('if-none-match'), true);
     assert.equal(uploadUrl.searchParams.get('X-Amz-Credential').startsWith('PUBLIC-KEY-ID-FOR-TESTS/'), true);
     assert.equal(Object.hasOwn(upload, 'accessKeyId'), false);
     assert.equal(Object.hasOwn(upload, 'secretAccessKey'), false);

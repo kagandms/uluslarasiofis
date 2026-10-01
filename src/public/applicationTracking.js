@@ -1,4 +1,5 @@
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
+import { initializeResubmissionUpload } from './resubmissionUpload.js';
 
 function readMessages(locale) {
     const fallback = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
@@ -115,7 +116,7 @@ function createApplicationSummary(document, application, messages, locale) {
     return section;
 }
 
-function createDocumentList(document, documents, messages, allowFilename) {
+function createDocumentList(document, documents, messages, allowFilename, replacementDocuments, onReplacementComplete, onSessionFailure) {
     const section = document.createElement('section');
     const list = document.createElement('ul');
     section.className = 'tracking-documents-section';
@@ -135,6 +136,13 @@ function createDocumentList(document, documents, messages, allowFilename) {
                 createTextElement(document, 'strong', 'tracking-document-message-label', messages.trackingDocumentMessageLabel),
                 createTextElement(document, 'p', 'tracking-document-message', item.student_message)
             );
+        }
+        const replacement = replacementDocuments?.find((entry) => entry.code === item.code);
+        if (allowFilename && replacement) {
+            initializeResubmissionUpload(card, replacement, replacement.api, {
+                messages, onComplete: onReplacementComplete, onSessionFailure,
+                putStudentDocumentDirect: replacement.api.putStudentDocumentDirect
+            });
         }
         list.append(card);
     });
@@ -164,7 +172,8 @@ function renderTracking(root, state, locale, submitLookup) {
     }
     root.replaceChildren(
         createApplicationSummary(document, state.payload.application, messages, locale),
-        createDocumentList(document, state.payload.documents, messages, state.kind === 'ready')
+        createDocumentList(document, state.payload.documents, messages, state.kind === 'ready',
+            state.replacementDocuments, state.onReplacementComplete, state.onSessionFailure)
     );
 }
 
@@ -176,7 +185,7 @@ function renderTracking(root, state, locale, submitLookup) {
  */
 export async function initializeApplicationTracking(root, api) {
     const document = root.ownerDocument;
-    const state = { kind: 'loading', payload: null, studentNumber: '' };
+    const state = { kind: 'loading', payload: null, studentNumber: '', replacementDocuments: [] };
     const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup);
     async function submitLookup(studentNumber) {
         state.studentNumber = studentNumber.trim();
@@ -195,6 +204,33 @@ export async function initializeApplicationTracking(root, api) {
     try {
         state.payload = await api.readCurrentApplicationTracking();
         state.kind = state.payload.application.status === 'draft' ? 'draft' : 'ready';
+        if (state.payload.application.status === 'resubmission_required'
+            && typeof api.readCurrentResubmissionEligibility === 'function') {
+            try {
+                const eligibility = await api.readCurrentResubmissionEligibility();
+                state.replacementDocuments = (eligibility.documents || []).map((requirement) => ({ ...requirement, api }));
+                state.onReplacementComplete = async () => {
+                    state.payload = await api.readCurrentApplicationTracking();
+                    state.replacementDocuments = [];
+                    if (state.payload.application.status === 'resubmission_required') {
+                        const refreshed = await api.readCurrentResubmissionEligibility();
+                        state.replacementDocuments = (refreshed.documents || []).map((requirement) => ({ ...requirement, api }));
+                    }
+                    render();
+                };
+                state.onSessionFailure = () => {
+                    state.kind = 'lookup';
+                    state.payload = null;
+                    state.replacementDocuments = [];
+                    render();
+                };
+            } catch (error) {
+                if (error?.status === 401 || error?.code === 'APPLICATION_SESSION_REQUIRED') {
+                    state.kind = 'lookup';
+                    state.payload = null;
+                }
+            }
+        }
     } catch (error) {
         state.kind = error?.code === 'APPLICATION_SESSION_REQUIRED' || error?.status === 401
             ? 'lookup' : 'error';

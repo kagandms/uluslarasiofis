@@ -5,6 +5,7 @@ import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument,
 import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
 import { lookupApplicationTracking, readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
+import { createCurrentResubmissionUploadIntent, finalizeCurrentResubmissionUpload, readCurrentResubmissionEligibility } from './routes/resubmissionUploadRoutes.js';
 import { createStaffDocumentPreview, downloadStaffApplicationDocument } from './routes/staffDocumentAccessRoutes.js';
 import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
 import { approveStaffApplicationDocument, requestStaffDocumentResubmission, transitionStaffApplicationStatus } from './routes/staffReviewRoutes.js';
@@ -102,6 +103,15 @@ async function routeApi(request, environment, requestId) {
         return acceptCurrentContactAcknowledgement(request, environment, requestId);
     }
     if (pathname === '/api/public/applications/current/documents') return readCurrentStudentDocumentRequirements(request, environment);
+    if (pathname === '/api/public/applications/current/documents/resubmission-eligibility') {
+        return readCurrentResubmissionEligibility(request, environment);
+    }
+    if (pathname === '/api/public/applications/current/documents/resubmission-upload-intent') {
+        return createCurrentResubmissionUploadIntent(request, environment, requestId);
+    }
+    if (pathname === '/api/public/applications/current/documents/resubmission-finalize') {
+        return finalizeCurrentResubmissionUpload(request, environment, requestId);
+    }
     if (pathname === '/api/public/applications/current/documents/upload-intent') return createCurrentStudentDocumentUploadIntent(request, environment);
     if (pathname === '/api/public/applications/current/documents/finalize') return finalizeCurrentStudentDocument(request, environment);
     const studentDocumentMatch = pathname.match(/^\/api\/public\/applications\/current\/documents\/([^/]+)$/);
