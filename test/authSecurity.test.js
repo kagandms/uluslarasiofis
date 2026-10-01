@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { pbkdf2Sync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { deriveStaffPasswordHash, verifyStaffPassword } from '../src/server/auth/passwordHash.js';
@@ -193,6 +194,70 @@ test('staff password verification rejects malformed and legacy hashes without ex
         'pbkdf2_sha256$1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         'pbkdf2_sha256$600000$short$short', 'pbkdf2_sha256$600000$%%%$%%%'
     ]) {
+        assert.equal(await verifyStaffPassword(TEST_PASSWORD, malformedHash), false);
+    }
+});
+
+test('new staff password hashes use salted PBKDF2-SHA-256 with 100000 iterations', async () => {
+    const passwordHash = await deriveStaffPasswordHash(TEST_PASSWORD);
+    const [scheme, iterations, saltText, keyText] = passwordHash.split('$');
+
+    assert.equal(scheme, 'pbkdf2_sha256');
+    assert.equal(iterations, '100000');
+    assert.equal(Buffer.from(saltText, 'base64url').length, 16);
+    assert.equal(Buffer.from(keyText, 'base64url').length, 32);
+    assert.equal(passwordHash.includes(TEST_PASSWORD), false);
+});
+
+test('hashing the same staff password generates a unique random salt', async () => {
+    const firstHash = await deriveStaffPasswordHash(TEST_PASSWORD);
+    const secondHash = await deriveStaffPasswordHash(TEST_PASSWORD);
+
+    assert.notEqual(firstHash, secondHash);
+    assert.notEqual(firstHash.split('$')[2], secondHash.split('$')[2]);
+});
+
+test('staff password verification accepts correct passwords and rejects incorrect passwords', async () => {
+    const passwordHash = await deriveStaffPasswordHash(TEST_PASSWORD);
+
+    assert.equal(await verifyStaffPassword(TEST_PASSWORD, passwordHash), true);
+    assert.equal(await verifyStaffPassword('incorrect staff password', passwordHash), false);
+});
+
+test('staff password verification rejects hashes below the 100000 iteration floor', async () => {
+    const belowFloorHash = 'pbkdf2_sha256$99999$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+    assert.equal(await verifyStaffPassword(TEST_PASSWORD, belowFloorHash), false);
+});
+
+test('staff password verification supports valid historical hashes above the new baseline', async () => {
+    const salt = Buffer.alloc(16, 0x5a);
+    const key = pbkdf2Sync(TEST_PASSWORD, salt, 600_000, 32, 'sha256');
+    const historicalHash = `pbkdf2_sha256$600000$${salt.toString('base64url')}$${key.toString('base64url')}`;
+
+    assert.equal(await verifyStaffPassword(TEST_PASSWORD, historicalHash), true);
+});
+
+test('staff password hashing preserves minimum and maximum input bounds', async () => {
+    await assert.rejects(deriveStaffPasswordHash('short'), TypeError);
+    await assert.rejects(deriveStaffPasswordHash('é'.repeat(513)), TypeError);
+    assert.equal(typeof await deriveStaffPasswordHash('a'.repeat(12)), 'string');
+    assert.equal(typeof await deriveStaffPasswordHash('a'.repeat(1024)), 'string');
+    assert.equal(await verifyStaffPassword('a'.repeat(1025), TEST_PASSWORD_HASH), false);
+});
+
+test('malformed staff password hashes fail safely', async () => {
+    const malformedHashes = [
+        'pbkdf2_sha1$100000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'pbkdf2_sha256$invalid$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'pbkdf2_sha256$100000.5$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'pbkdf2_sha256$1000001$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'pbkdf2_sha256$100000$short$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'pbkdf2_sha256$100000$AAAAAAAAAAAAAAAAAAAAAA$short',
+        'pbkdf2_sha256$100000$%%%$%%%'
+    ];
+
+    for (const malformedHash of malformedHashes) {
         assert.equal(await verifyStaffPassword(TEST_PASSWORD, malformedHash), false);
     }
 });
