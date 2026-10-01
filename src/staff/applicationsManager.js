@@ -16,6 +16,9 @@ const STATUS_FILTERS = Object.freeze([
     ['resubmission_required', 'Yeniden yükleme gerekli'], ['approved', 'Onaylandı'],
     ['migration', 'Göç İdaresi'], ['completed', 'Tamamlanan'], ['terminal', 'Terminal']
 ]);
+const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+const APPLICATION_DOCUMENT_ROUTE = (applicationId, code, action) =>
+    `/api/staff/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(code)}/${action}`;
 
 function createText(document, tag, className, value) {
     const element = document.createElement(tag);
@@ -215,7 +218,35 @@ function createApplicationSummary(document, application, assignment) {
     return section;
 }
 
-function createDocumentSection(document, documents) {
+function createDocumentAccessActions(document, applicationId, item, handlers) {
+    const actions = document.createElement('div');
+    actions.className = 'staff-application-document-actions';
+    const preview = document.createElement('button');
+    preview.type = 'button';
+    preview.className = 'btn btn-outline';
+    preview.dataset.action = 'preview-document';
+    preview.dataset.documentCode = item.code;
+    preview.textContent = 'Önizle';
+    preview.addEventListener('click', () => handlers.onPreview(item));
+    const download = document.createElement('a');
+    download.className = 'btn btn-outline';
+    download.dataset.action = 'download-document';
+    download.href = APPLICATION_DOCUMENT_ROUTE(applicationId, item.code, 'download');
+    download.download = item.filename || 'belge';
+    download.textContent = 'İndir';
+    actions.append(preview, download);
+    return actions;
+}
+
+function createUnavailableDocumentState(document, item) {
+    const state = createText(document, 'p', 'staff-application-document-unavailable', 'Belge güvenli erişime uygun değil.');
+    if (!item.upload_status) state.textContent = 'Belge henüz yüklenmedi.';
+    else if (item.scan_status && item.scan_status !== 'clean') state.textContent = 'Belge güvenlik kontrolünden geçmedi.';
+    else if (item.cleanup_status === 'pending') state.textContent = 'Belge temizleme işlemi nedeniyle erişilemiyor.';
+    return state;
+}
+
+function createDocumentSection(document, applicationId, documents, handlers) {
     const section = document.createElement('section');
     const list = document.createElement('div');
     section.className = 'staff-application-documents';
@@ -235,11 +266,72 @@ function createDocumentSection(document, documents) {
         card.append(createText(document, 'h5', '', label));
         details.className = 'staff-application-details-grid';
         fields.forEach(([fieldLabel, value]) => appendDetail(document, details, fieldLabel, value));
-        card.append(details);
+        card.append(details, item.access_available === true
+            ? createDocumentAccessActions(document, applicationId, item, handlers)
+            : createUnavailableDocumentState(document, item));
         list.append(card);
     });
     section.append(list);
     return section;
+}
+
+function validatePreviewCapability(capability) {
+    const url = new URL(capability?.url);
+    const isValidExpiry = typeof capability?.expires_at === 'string' && Number.isFinite(Date.parse(capability.expires_at));
+    const isPrivateR2Host = /^[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/i.test(url.hostname);
+    if (url.protocol !== 'https:' || url.username || url.password || !isPrivateR2Host
+        || !SAFE_PREVIEW_MEDIA_TYPES.has(capability?.media_type) || !isValidExpiry) {
+        throw new Error('Preview capability is invalid.');
+    }
+    return { ...capability, url: url.href };
+}
+
+function createPreviewPanel(document, preview, handlers) {
+    if (!preview) return null;
+    const panel = document.createElement('section');
+    const close = document.createElement('button');
+    panel.id = 'staff-document-preview';
+    panel.className = 'staff-document-preview';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-label', `Belge önizlemesi: ${preview.document.filename || ''}`);
+    close.type = 'button';
+    close.className = 'btn btn-outline';
+    close.dataset.action = 'close-document-preview';
+    close.textContent = 'Önizlemeyi kapat';
+    close.addEventListener('click', handlers.onClose);
+    panel.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') handlers.onClose();
+    });
+    panel.append(createText(document, 'h4', '', `Önizleme: ${preview.document.filename || 'Belge'}`), close);
+    if (preview.status === 'loading') {
+        panel.append(createText(document, 'p', 'staff-applications-state', 'Önizleme hazırlanıyor…'));
+    } else if (preview.status === 'error' || preview.status === 'expired') {
+        const message = preview.status === 'expired'
+            ? 'Önizleme süresi doldu. Yeni bir erişim oluşturun.'
+            : 'Belge önizlemesi açılamadı. Lütfen tekrar deneyin.';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'btn btn-outline';
+        retry.dataset.action = 'retry-document-preview';
+        retry.textContent = 'Yeniden önizle';
+        retry.addEventListener('click', (event) => handlers.onRetry(event.currentTarget));
+        panel.append(createText(document, 'p', 'staff-applications-state', message), retry);
+    } else if (preview.status === 'ready' && preview.capability.media_type === 'application/pdf') {
+        const frame = document.createElement('iframe');
+        frame.title = `Belge önizlemesi: ${preview.document.filename || 'PDF'}`;
+        frame.setAttribute('sandbox', '');
+        frame.referrerPolicy = 'no-referrer';
+        frame.src = preview.capability.url;
+        panel.append(frame);
+    } else if (preview.status === 'ready') {
+        const image = document.createElement('img');
+        image.alt = `Belge önizlemesi: ${preview.document.filename || 'Görsel'}`;
+        image.referrerPolicy = 'no-referrer';
+        image.src = preview.capability.url;
+        panel.append(image);
+    }
+    return panel;
 }
 
 function renderDetail(root, state, handlers) {
@@ -263,9 +355,11 @@ function renderDetail(root, state, handlers) {
     } else if (state.detail) {
         panel.append(
             createApplicationSummary(document, state.detail.application, state.detail.assignment),
-            createDocumentSection(document, state.detail.documents)
+            createDocumentSection(document, state.detail.application.id, state.detail.documents, handlers)
         );
     }
+    const previewPanel = createPreviewPanel(document, state.preview, handlers);
+    if (previewPanel) panel.append(previewPanel);
     root.replaceChildren(panel);
 }
 
@@ -289,6 +383,9 @@ function createStaffApplicationsApi() {
         },
         readApplicationDetail(applicationId) {
             return request(`/api/staff/applications/${encodeURIComponent(applicationId)}`);
+        },
+        createPreviewCapability(applicationId, code) {
+            return request(APPLICATION_DOCUMENT_ROUTE(applicationId, code, 'preview'), { method: 'POST' });
         }
     };
 }
@@ -303,14 +400,83 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     const document = root.ownerDocument;
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
-        result: null, query: { q: '', status: 'all', page: 1, page_size: 25 }
+        preview: null, result: null, query: { q: '', status: 'all', page: 1, page_size: 25 }
+    };
+    let previewTimer = null;
+    let previewRequestId = 0;
+    let previewTriggerCode = null;
+    const clearPreviewTimer = () => {
+        if (previewTimer !== null) document.defaultView.clearTimeout(previewTimer);
+        previewTimer = null;
     };
     const render = () => {
-        if (state.view === 'detail') renderDetail(root, state, { onBack: returnToQueue });
+        if (state.view === 'detail') renderDetail(root, state, {
+            onBack: returnToQueue,
+            onPreview: openPreview,
+            onClose: closePreview,
+            onRetry: () => openPreview(state.preview?.document)
+        });
         else renderQueue(root, state, {
             onSearch: submitSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail
         });
     };
+    function discardPreview() {
+        previewRequestId += 1;
+        clearPreviewTimer();
+        state.preview = null;
+        previewTriggerCode = null;
+    }
+    function closePreview() {
+        const documentCode = previewTriggerCode;
+        discardPreview();
+        render();
+        [...root.querySelectorAll('[data-action="preview-document"]')]
+            .find((button) => button.dataset.documentCode === documentCode)?.focus();
+    }
+    function closePreviewOnWorkspaceExit() {
+        if (!state.preview) return;
+        discardPreview();
+        render();
+    }
+    async function openPreview(documentItem) {
+        if (!documentItem || documentItem.access_available !== true) return;
+        clearPreviewTimer();
+        const requestId = ++previewRequestId;
+        previewTriggerCode = documentItem.code;
+        state.preview = { status: 'loading', document: documentItem, capability: null, requestId };
+        render();
+        root.querySelector('[data-action="close-document-preview"]')?.focus();
+        try {
+            const capability = validatePreviewCapability(await api.createPreviewCapability(
+                state.detail.application.id, documentItem.code
+            ));
+            if (state.preview?.requestId !== requestId) return;
+            const expiresIn = Date.parse(capability.expires_at) - Date.now();
+            if (expiresIn <= 0) {
+                state.preview = { status: 'expired', document: documentItem, capability: null, requestId };
+            } else {
+                state.preview = { status: 'ready', document: documentItem, capability, requestId };
+                previewTimer = document.defaultView.setTimeout(() => {
+                    if (state.preview?.requestId !== requestId) return;
+                    state.preview = { status: 'expired', document: documentItem, capability: null, requestId };
+                    previewTimer = null;
+                    render();
+                    root.querySelector('[data-action="retry-document-preview"]')?.focus();
+                }, expiresIn);
+            }
+            render();
+            const focusTarget = state.preview.status === 'expired'
+                ? '[data-action="retry-document-preview"]'
+                : '[data-action="close-document-preview"]';
+            root.querySelector(focusTarget)?.focus();
+            return;
+        } catch {
+            if (state.preview?.requestId !== requestId) return;
+            state.preview = { status: 'error', document: documentItem, capability: null, requestId };
+        }
+        render();
+        root.querySelector('[data-action="retry-document-preview"]')?.focus();
+    }
     async function loadQueue() {
         state.loading = true;
         state.error = false;
@@ -333,6 +499,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         await loadQueue();
     }
     async function openDetail(applicationId) {
+        discardPreview();
         state.view = 'detail';
         state.loading = true;
         state.error = false;
@@ -348,6 +515,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         render();
     }
     function returnToQueue() {
+        discardPreview();
         state.view = 'queue';
         state.error = false;
         state.loading = false;
@@ -355,8 +523,11 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     }
     document.addEventListener('workspace:view-changed', (event) => {
         if (event.detail?.viewName !== 'applications') return;
+        discardPreview();
         state.view = 'queue';
         void loadQueue();
     });
+    document.getElementById('btn-workspace-home')?.addEventListener('click', closePreviewOnWorkspaceExit);
+    document.getElementById('btn-go-home-global')?.addEventListener('click', closePreviewOnWorkspaceExit);
     render();
 }

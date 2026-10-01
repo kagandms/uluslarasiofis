@@ -18,6 +18,7 @@ const APPLICATION_STATUS_FILTERS = Object.freeze({
 });
 const MAX_PAGE_SIZE = 100;
 const MAX_SEARCH_LENGTH = 120;
+const READABLE_REVISION_STATUSES = new Set(['submitted', 'approved', 'resubmission_required']);
 
 function readSearchTerm(value) {
     if (value === undefined) return '';
@@ -122,10 +123,17 @@ function createDocumentDetailDtos(application, storedRequirements) {
         application.address_evidence_type ?? null
     ).map((policy) => {
         const requirement = requirementsByCode.get(policy.code) || {};
+        const hasSafeCurrentDocument = READABLE_REVISION_STATUSES.has(requirement.revision_status)
+            && requirement.upload_status === 'finalized'
+            && requirement.scan_status === 'clean'
+            && requirement.current_cleanup_status === 'none'
+            && requirement.upload_intent_status === 'completed'
+            && policy.accepted_media_types.includes(requirement.media_type);
         return {
             code: policy.code,
             label_key: policy.label_key,
             required: policy.required,
+            access_available: hasSafeCurrentDocument,
             revision_number: requirement.revision_number ?? null,
             review_status: requirement.review_status ?? null,
             revision_status: requirement.revision_status ?? null,

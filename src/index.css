@@ -1873,6 +1873,73 @@ body.dark-mode .history-badge {
     margin-bottom: 0.75rem;
 }
 
+.staff-application-document-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+}
+
+.staff-application-document-actions .btn {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.staff-application-document-unavailable {
+    color: var(--text-secondary);
+    margin-top: 0.85rem;
+}
+
+.staff-document-preview {
+    align-content: start;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+    color: var(--text-primary);
+    display: grid;
+    gap: 1rem;
+    inset: 0;
+    overflow: auto;
+    padding: 5vh 5vw;
+    position: fixed;
+    z-index: 1000;
+}
+
+.staff-document-preview h4 {
+    color: var(--text-primary);
+}
+
+.staff-document-preview iframe,
+.staff-document-preview img {
+    background: #fff;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    height: min(72vh, 900px);
+    justify-self: center;
+    max-width: 100%;
+    width: min(100%, 1100px);
+}
+
+.staff-document-preview img {
+    height: auto;
+    max-height: 72vh;
+    object-fit: contain;
+}
+
+@media (max-width: 600px) {
+    .staff-document-preview {
+        inset: 1rem;
+        padding: 0.75rem;
+    }
+
+    .staff-document-preview iframe {
+        height: 70vh;
+    }
+}
+
 @media (max-width: 900px) {
     .staff-applications-table thead {
         position: absolute;

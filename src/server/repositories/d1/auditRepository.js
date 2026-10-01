@@ -1,6 +1,6 @@
 const SAFE_AUDIT_KEYS = new Set([
     'role', 'targetRole', 'active', 'changedFields', 'applicationStatus',
-    'documentStatus', 'outboxId', 'channel', 'result', 'retentionDays'
+    'documentStatus', 'documentCode', 'revisionNumber', 'outboxId', 'channel', 'result', 'retentionDays'
 ]);
 
 function sanitizeAuditMetadata(metadata = {}) {

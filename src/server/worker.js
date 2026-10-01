@@ -5,6 +5,7 @@ import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument,
 import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
 import { lookupApplicationTracking, readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
+import { createStaffDocumentPreview, downloadStaffApplicationDocument } from './routes/staffDocumentAccessRoutes.js';
 import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
 import { bootstrapStaff, createStaffUser, listStaffUsers, loginStaff, logoutStaff, readStaffSession, updateStaffAccount } from './routes/staffRoutes.js';
@@ -49,6 +50,21 @@ async function routeApi(request, environment, requestId) {
     if (pathname === '/api/staff/auth/logout' || pathname === '/api/logout') return logoutStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/bootstrap') return bootstrapStaff(request, environment, requestId);
     if (pathname === '/api/staff/applications/query') return queryStaffApplications(request, environment);
+    const staffDocumentMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/(preview|download)$/);
+    if (staffDocumentMatch) {
+        let applicationId;
+        let documentCode;
+        try {
+            applicationId = decodeURIComponent(staffDocumentMatch[1]);
+            documentCode = decodeURIComponent(staffDocumentMatch[2]);
+        } catch {
+            throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya erişilemiyor.');
+        }
+        if (staffDocumentMatch[3] === 'preview') {
+            return createStaffDocumentPreview({ request, environment, applicationId, code: documentCode, requestId });
+        }
+        return downloadStaffApplicationDocument({ request, environment, applicationId, code: documentCode, requestId });
+    }
     const staffApplicationMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)$/);
     if (staffApplicationMatch) {
         let applicationId;

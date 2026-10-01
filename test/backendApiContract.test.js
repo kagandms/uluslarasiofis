@@ -84,7 +84,7 @@ async function readJson(response) {
 }
 
 async function seedCurrentFinalizedDocument(database, applicationId, applicationType, code) {
-    const requirement = database.prepare(`
+    const requirement = await database.prepare(`
         SELECT id FROM document_requirements WHERE application_type = ? AND code = ? AND is_active = 1
     `).bind(applicationType, code).first();
     if (!requirement) return;
@@ -177,7 +177,7 @@ async function seedStaffDocument(database, applicationId, applicationType, code,
     filename = 'review-copy.pdf', reviewStatus = 'under_review', revisionStatus = 'submitted',
     cleanupStatus = 'pending'
 } = {}) {
-    const requirement = database.prepare(`
+    const requirement = await database.prepare(`
         SELECT id FROM document_requirements
         WHERE application_type = ? AND code = ? AND is_active = 1
     `).bind(applicationType, code).first();
@@ -199,6 +199,43 @@ async function seedStaffDocument(database, applicationId, applicationType, code,
             upload_status, scan_status, cleanup_status
         ) VALUES (?, ?, 0, 'quarantine/secret-object-key', ?, 'application/pdf', 123, 'finalized', 'clean', ?)
     `).bind(fileId, revisionId, filename, cleanupStatus).run();
+}
+
+async function seedAccessibleStaffDocument(database, storedObjects, applicationId, applicationType, code, {
+    filename = 'current-passport.pdf', mediaType = 'application/pdf', uploadStatus = 'finalized',
+    scanStatus = 'clean', cleanupStatus = 'none', revisionStatus = 'submitted', isCurrent = 1,
+    intentStatus = 'completed', objectExists = true
+} = {}) {
+    const requirement = await database.prepare(`
+        SELECT id FROM document_requirements
+        WHERE application_type = ? AND code = ? AND is_active = 1
+    `).bind(applicationType, code).first();
+    assert.ok(requirement, `expected active ${applicationType} policy ${code}`);
+    const recordId = crypto.randomUUID();
+    const revisionId = crypto.randomUUID();
+    const fileId = crypto.randomUUID();
+    const intentId = crypto.randomUUID();
+    const storageKey = `quarantine/${crypto.randomUUID()}`;
+    await database.prepare(`
+        INSERT INTO document_records (id, application_id, requirement_id, application_type)
+        VALUES (?, ?, ?, ?)
+    `).bind(recordId, applicationId, requirement.id, applicationType).run();
+    await database.prepare(`
+        INSERT INTO document_revisions (id, document_record_id, revision_number, status, is_current, submitted_by_type)
+        VALUES (?, ?, 1, ?, ?, 'student')
+    `).bind(revisionId, recordId, revisionStatus, isCurrent).run();
+    await database.prepare(`
+        INSERT INTO document_revision_files (
+            id, revision_id, page_order, storage_key, original_filename, media_type, byte_size,
+            upload_status, scan_status, cleanup_status
+        ) VALUES (?, ?, 0, ?, ?, ?, 30, ?, ?, ?)
+    `).bind(fileId, revisionId, storageKey, filename, mediaType, uploadStatus, scanStatus, cleanupStatus).run();
+    await database.prepare(`
+        INSERT INTO upload_intents (id, revision_file_id, idempotency_key, expires_at, status)
+        VALUES (?, ?, ?, '2026-10-01T00:00:00.000Z', ?)
+    `).bind(intentId, fileId, `idempotency-${intentId}`, intentStatus).run();
+    if (objectExists) storedObjects.set(storageKey, 'private current document bytes');
+    return { recordId, revisionId, fileId, intentId, storageKey };
 }
 
 test('staff login creates a D1-backed HttpOnly session and returns no bearer token', async () => {
@@ -928,6 +965,190 @@ test('staff application detail reuses policy and returns current safe document m
     assert.equal(passport.filename, 'passport-safe-name.pdf');
     assert.equal(initialPayload.documents.some((document) => document.code === 'uets'), false);
     assert.doesNotMatch(JSON.stringify(renewalPayload), /secret-object-key|storage_key|file_id|revision_id|document_record_id|https?:\/\//i);
+});
+
+test('staff current-document preview and download share application-scoped authorization and audit safe access', async () => {
+    const { environment, database, storedObjects } = createEnvironment({
+        R2_ACCOUNT_ID: '0123456789abcdef0123456789abcdef',
+        R2_BUCKET_NAME: 'private-documents', R2_ACCESS_KEY_ID: 'PUBLIC-KEY-ID-FOR-TESTS',
+        R2_SECRET_ACCESS_KEY: 'NEVER-RETURN-THIS-SECRET'
+    });
+    const applicationA = await createStaffApplication(environment, database, 'ACCESS-A');
+    const applicationB = await createStaffApplication(environment, database, 'ACCESS-B');
+    const document = await seedAccessibleStaffDocument(database, storedObjects, applicationA, 'initial', 'passport', {
+        filename: '../passport résumé.pdf'
+    });
+    await seedStaff(database, { id: 'staff-access-reviewer', username: 'access-reviewer' });
+    await seedStaff(database, { id: 'staff-access-admin', username: 'access-admin', role: 'admin' });
+    const reviewerToken = 'access-reviewer-session-token-000000000000000';
+    const adminToken = 'access-admin-session-token-0000000000000000';
+    await seedStaffSession(database, 'staff-access-reviewer', reviewerToken);
+    await seedStaffSession(database, 'staff-access-admin', adminToken);
+    const previewPath = `/api/staff/applications/${applicationA}/documents/passport/preview`;
+    const downloadPath = `/api/staff/applications/${applicationA}/documents/passport/download`;
+
+    const unauthenticatedPreview = await worker.fetch(createRequest(previewPath, { method: 'POST' }), environment, {});
+    const unauthenticatedDownload = await worker.fetch(createRequest(downloadPath), environment, {});
+    const wrongPreviewMethod = await worker.fetch(createRequest(previewPath, {
+        cookie: staffCookie(reviewerToken)
+    }), environment, {});
+    const crossOriginPreview = await worker.fetch(createRequest(previewPath, {
+        method: 'POST', cookie: staffCookie(reviewerToken), origin: 'https://attacker.test'
+    }), environment, {});
+    const reviewerPreview = await worker.fetch(createRequest(previewPath, {
+        method: 'POST', cookie: staffCookie(reviewerToken)
+    }), environment, {});
+    const adminDownload = await worker.fetch(createRequest(downloadPath, {
+        cookie: staffCookie(adminToken)
+    }), environment, {});
+    const wrongApplication = await worker.fetch(createRequest(
+        `/api/staff/applications/${applicationB}/documents/passport/download`, { cookie: staffCookie(reviewerToken) }
+    ), environment, {});
+    const detailResponse = await worker.fetch(createRequest(`/api/staff/applications/${applicationA}`, {
+        cookie: staffCookie(reviewerToken)
+    }), environment, {});
+    const preview = await readJson(reviewerPreview);
+    const detail = await readJson(detailResponse);
+    const auditRows = database.prepare(`
+        SELECT event_type, actor_staff_id, application_id, document_record_id, request_id, safe_metadata_json
+        FROM audit_events WHERE event_type IN ('staff.document_preview_issued', 'staff.document_downloaded')
+        ORDER BY event_type
+    `).all().results;
+    const previewAudit = auditRows.find((event) => event.event_type === 'staff.document_preview_issued');
+    const downloadAudit = auditRows.find((event) => event.event_type === 'staff.document_downloaded');
+
+    assert.equal(unauthenticatedPreview.status, 401);
+    assert.equal(unauthenticatedDownload.status, 401);
+    assert.equal(wrongPreviewMethod.status, 405);
+    assert.equal(crossOriginPreview.status, 403);
+    assert.equal(reviewerPreview.status, 200);
+    assert.equal(adminDownload.status, 200);
+    assert.equal(wrongApplication.status, 404);
+    assert.equal(detail.documents.find((item) => item.code === 'passport').access_available, true);
+    assert.equal(preview.method, 'GET');
+    assert.equal(new URL(preview.url).searchParams.get('X-Amz-Expires'), '120');
+    assert.ok(Math.abs(Date.parse(preview.expires_at) - Date.now() - 120_000) < 10_000);
+    assert.equal(preview.media_type, 'application/pdf');
+    assert.equal(preview.filename, 'passport r_sum_.pdf');
+    assert.equal(reviewerPreview.headers.get('Cache-Control'), 'no-store');
+    assert.equal(reviewerPreview.headers.has('Set-Cookie'), false);
+    assert.doesNotMatch(JSON.stringify(preview), /file_id|revision_id|document_record_id|storage_key|NEVER-RETURN-THIS-SECRET/);
+    assert.equal(adminDownload.headers.get('Content-Type'), 'application/pdf');
+    assert.equal(adminDownload.headers.get('Content-Disposition'), 'attachment; filename="passport r_sum_.pdf"');
+    assert.equal(adminDownload.headers.get('Cache-Control'), 'private, no-store');
+    assert.equal(adminDownload.headers.get('X-Content-Type-Options'), 'nosniff');
+    assert.equal(await adminDownload.text(), 'private current document bytes');
+    assert.ok(previewAudit && downloadAudit);
+    assert.equal(previewAudit.actor_staff_id, 'staff-access-reviewer');
+    assert.equal(downloadAudit.actor_staff_id, 'staff-access-admin');
+    assert.equal(previewAudit.application_id, applicationA);
+    assert.equal(previewAudit.document_record_id, document.recordId);
+    assert.equal(previewAudit.request_id, reviewerPreview.headers.get('x-request-id'));
+    assert.deepEqual(JSON.parse(previewAudit.safe_metadata_json), {
+        documentCode: 'passport', revisionNumber: 1, result: 'capability_issued'
+    });
+    assert.deepEqual(JSON.parse(downloadAudit.safe_metadata_json), {
+        documentCode: 'passport', revisionNumber: 1, result: 'downloaded'
+    });
+    assert.doesNotMatch(JSON.stringify(auditRows), /storage_key|quarantine|X-Amz|passport r_sum_|NEVER-RETURN-THIS-SECRET/);
+    assert.equal(database.prepare(`
+        SELECT COUNT(*) AS count FROM audit_events
+        WHERE application_id = ? AND event_type IN ('staff.document_preview_issued', 'staff.document_downloaded')
+    `).bind(applicationB).first().count, 0);
+});
+
+test('staff current-document access rejects unsafe, incomplete, stale, missing, and inapplicable documents', async () => {
+    const { environment, database, storedObjects } = createEnvironment({
+        R2_ACCOUNT_ID: '0123456789abcdef0123456789abcdef',
+        R2_BUCKET_NAME: 'private-documents', R2_ACCESS_KEY_ID: 'PUBLIC-KEY-ID-FOR-TESTS',
+        R2_SECRET_ACCESS_KEY: 'NEVER-RETURN-THIS-SECRET'
+    });
+    const applicationId = await createStaffApplication(environment, database, 'ACCESS-INVALID');
+    const draftId = await createStaffApplication(environment, database, 'ACCESS-DRAFT', { status: 'draft' });
+    await database.prepare('UPDATE applications SET is_under_18 = 0, address_evidence_type = ? WHERE id = ?')
+        .bind('undertaking', applicationId).run();
+    const accessible = await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'passport');
+    await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'address_rental_contract');
+    await seedStaff(database, { id: 'staff-invalid-access', username: 'invalid-access' });
+    const token = 'invalid-access-session-token-0000000000000000';
+    await seedStaffSession(database, 'staff-invalid-access', token);
+    const requestDownload = (targetApplicationId, code = 'passport') => worker.fetch(createRequest(
+        `/api/staff/applications/${targetApplicationId}/documents/${code}/download`, { cookie: staffCookie(token) }
+    ), environment, {});
+    const assertUnavailable = async (response) => {
+        const payload = await readJson(response);
+        assert.equal(response.status, 404);
+        assert.equal(payload.error.code, 'DOCUMENT_NOT_AVAILABLE');
+        assert.equal(payload.error.message, 'Belge mevcut değil veya erişilemiyor.');
+    };
+
+    const approvedApplication = await createStaffApplication(environment, database, 'ACCESS-APPROVED', { status: 'under_review' });
+    await seedAccessibleStaffDocument(database, storedObjects, approvedApplication, 'initial', 'passport', {
+        revisionStatus: 'approved'
+    });
+    assert.equal((await requestDownload(approvedApplication)).status, 200);
+
+    await database.prepare("UPDATE document_revision_files SET scan_status = 'pending' WHERE id = ?").bind(accessible.fileId).run();
+    await assertUnavailable(await requestDownload(applicationId));
+    await database.prepare("UPDATE document_revision_files SET scan_status = 'unsafe' WHERE id = ?").bind(accessible.fileId).run();
+    await assertUnavailable(await requestDownload(applicationId));
+    await database.prepare("UPDATE document_revision_files SET scan_status = 'failed' WHERE id = ?").bind(accessible.fileId).run();
+    await assertUnavailable(await requestDownload(applicationId));
+    await database.prepare("UPDATE document_revision_files SET scan_status = 'clean', upload_status = 'uploaded' WHERE id = ?").bind(accessible.fileId).run();
+    await assertUnavailable(await requestDownload(applicationId));
+    await database.prepare("UPDATE document_revision_files SET upload_status = 'finalized', cleanup_status = 'pending' WHERE id = ?").bind(accessible.fileId).run();
+    await assertUnavailable(await requestDownload(applicationId));
+    await database.prepare("UPDATE document_revision_files SET cleanup_status = 'none' WHERE id = ?").bind(accessible.fileId).run();
+    await database.prepare("UPDATE upload_intents SET status = 'pending' WHERE id = ?").bind(accessible.intentId).run();
+    await assertUnavailable(await requestDownload(applicationId));
+    await database.prepare("UPDATE upload_intents SET status = 'completed' WHERE id = ?").bind(accessible.intentId).run();
+    await database.prepare("UPDATE document_revisions SET is_current = 0, status = 'superseded' WHERE id = ?").bind(accessible.revisionId).run();
+    await assertUnavailable(await requestDownload(applicationId));
+    await assertUnavailable(await requestDownload(applicationId, 'uets'));
+    await assertUnavailable(await requestDownload(applicationId, 'birth_certificate_under18'));
+    await assertUnavailable(await requestDownload(applicationId, 'address_rental_contract'));
+    const draftResponse = await requestDownload(draftId);
+    assert.equal(draftResponse.status, 404);
+    assert.equal((await readJson(draftResponse)).error.code, 'APPLICATION_NOT_FOUND');
+    const unknownApplication = await requestDownload('not-an-application');
+    assert.equal(unknownApplication.status, 404);
+    assert.equal((await readJson(unknownApplication)).error.code, 'APPLICATION_NOT_FOUND');
+
+    const inactiveApplication = await createStaffApplication(environment, database, 'ACCESS-INACTIVE');
+    await seedAccessibleStaffDocument(database, storedObjects, inactiveApplication, 'initial', 'passport');
+    await database.prepare("UPDATE document_requirements SET is_active = 0 WHERE code = 'passport' AND application_type = 'initial'").run();
+    await assertUnavailable(await requestDownload(inactiveApplication));
+    await database.prepare("UPDATE document_requirements SET is_active = 1 WHERE code = 'passport' AND application_type = 'initial'").run();
+    const missingObjectApplication = await createStaffApplication(environment, database, 'ACCESS-MISSING-OBJECT');
+    await seedAccessibleStaffDocument(database, storedObjects, missingObjectApplication, 'initial', 'passport', { objectExists: false });
+    await assertUnavailable(await requestDownload(missingObjectApplication));
+    const unsupportedMediaApplication = await createStaffApplication(environment, database, 'ACCESS-UNSUPPORTED-MEDIA');
+    await seedAccessibleStaffDocument(database, storedObjects, unsupportedMediaApplication, 'initial', 'passport', {
+        mediaType: 'text/html'
+    });
+    await assertUnavailable(await requestDownload(unsupportedMediaApplication));
+
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_events WHERE event_type = ?').bind('staff.document_downloaded').first().count, 1);
+});
+
+test('staff preview signing failure returns a safe service error and issues no audited capability', async () => {
+    const { environment, database, storedObjects } = createEnvironment();
+    const applicationId = await createStaffApplication(environment, database, 'ACCESS-SIGNING-ERROR');
+    await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'passport');
+    await seedStaff(database, { id: 'staff-signing-error', username: 'signing-error' });
+    const token = 'signing-error-session-token-000000000000000';
+    await seedStaffSession(database, 'staff-signing-error', token);
+
+    const response = await worker.fetch(createRequest(
+        `/api/staff/applications/${applicationId}/documents/passport/preview`,
+        { method: 'POST', cookie: staffCookie(token) }
+    ), environment, {});
+    const payload = await readJson(response);
+
+    assert.equal(response.status, 503);
+    assert.equal(payload.error.code, 'SERVICE_UNAVAILABLE');
+    assert.doesNotMatch(JSON.stringify(payload), /PUBLIC-KEY-ID-FOR-TESTS|NEVER-RETURN-THIS-SECRET|storage_key|quarantine/);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.document_preview_issued'").first().count, 0);
 });
 
 

@@ -197,3 +197,127 @@ test('applications manager submits filters, changes pages, renders detail safely
     root.querySelector('[data-action="back-to-queue"]').click();
     assert.ok(root.querySelector('[data-action="open-detail"]'));
 });
+
+test('document preview is lazy, closable, expires safely, and downloads use application plus policy code', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const previewRequests = [];
+    const releasePreviews = [];
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM }, assignment: null,
+                documents: [
+                    { code: 'passport', label_key: 'documentPassport', required: true, revision_number: 2,
+                        revision_status: 'submitted', upload_status: 'finalized', scan_status: 'clean',
+                        cleanup_status: null, filename: 'passport.pdf', access_available: true, file_id: 'private-file-id' },
+                    { code: 'residence_card', label_key: 'documentResidenceCard', required: true, revision_number: 1,
+                        revision_status: 'submitted', upload_status: 'finalized', scan_status: 'clean',
+                        cleanup_status: null, filename: 'residence-card.jpg', access_available: true },
+                    { code: 'student_certificate', label_key: 'documentStudentCertificate', required: true,
+                        revision_number: 1, revision_status: 'submitted', upload_status: 'finalized', scan_status: 'pending',
+                        cleanup_status: 'none', filename: 'student-certificate.pdf', access_available: false, file_id: 'unavailable-file-id' }
+                ]
+            };
+        },
+        createPreviewCapability(applicationId, code) {
+            previewRequests.push({ applicationId, code });
+            return new Promise((resolve, reject) => { releasePreviews.push({ resolve, reject }); });
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const download = root.querySelector('[data-action="download-document"]');
+    assert.ok(download);
+    assert.equal(new URL(download.href).pathname, '/api/staff/applications/app-001/documents/passport/download');
+    assert.doesNotMatch(download.href, /private-file-id|file_id/);
+    assert.equal(root.querySelectorAll('[data-action="preview-document"]').length, 2);
+    assert.equal(root.querySelectorAll('[data-action="download-document"]').length, 2);
+    assert.match(root.textContent, /Belge güvenlik kontrolünden geçmedi/);
+    assert.doesNotMatch(root.innerHTML, /private-file-id|unavailable-file-id|X-Amz-Signature|private\.r2\.example/);
+    const actionLabels = [...root.querySelectorAll('button, a')].map((element) => element.textContent.trim());
+    assert.equal(actionLabels.includes('Onayla'), false);
+    assert.equal(actionLabels.includes('Yeniden gönderim iste'), false);
+    assert.equal(actionLabels.includes('Ata'), false);
+    assert.equal(actionLabels.includes('Üzerime al'), false);
+
+    root.querySelector('[data-action="preview-document"]').click();
+    assert.match(root.textContent, /Önizleme hazırlanıyor/);
+    assert.deepEqual(previewRequests, [{ applicationId: 'app-001', code: 'passport' }]);
+    assert.doesNotMatch(root.innerHTML, /X-Amz-Signature/);
+    releasePreviews[0].resolve({
+        method: 'GET', url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?X-Amz-Signature=capability-1',
+        expires_at: new Date(Date.now() + 30_000).toISOString(), media_type: 'application/pdf', filename: 'passport.pdf'
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    const frame = root.querySelector('#staff-document-preview iframe');
+    assert.ok(frame);
+    assert.equal(frame.getAttribute('sandbox'), '');
+    assert.equal(frame.referrerPolicy, 'no-referrer');
+    assert.match(frame.src, /capability-1/);
+
+    root.querySelectorAll('[data-action="preview-document"]')[1].click();
+    assert.match(root.textContent, /Önizleme hazırlanıyor/);
+    assert.doesNotMatch(root.innerHTML, /capability-1/);
+    releasePreviews[1].resolve({
+        method: 'GET', url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?X-Amz-Signature=capability-2',
+        expires_at: new Date(Date.now() + 200).toISOString(), media_type: 'image/jpeg', filename: 'residence-card.jpg'
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    const image = root.querySelector('#staff-document-preview img');
+    assert.ok(image);
+    assert.equal(image.referrerPolicy, 'no-referrer');
+    assert.match(image.src, /capability-2/);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.doesNotMatch(root.innerHTML, /capability-2/);
+    assert.match(root.textContent, /Önizleme süresi doldu/);
+
+    root.querySelector('[data-action="retry-document-preview"]').click();
+    assert.equal(previewRequests.length, 3);
+    releasePreviews[2].resolve({
+        method: 'GET', url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?X-Amz-Signature=capability-3',
+        expires_at: new Date(Date.now() + 30_000).toISOString(), media_type: 'image/jpeg', filename: 'residence-card.jpg'
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="close-document-preview"]').click();
+    assert.doesNotMatch(root.innerHTML, /capability-1|capability-2|capability-3/);
+    assert.equal(root.querySelector('#staff-document-preview'), null);
+});
+
+test('document preview errors show safe recovery without provider details', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM }, assignment: null,
+                documents: [{ code: 'passport', label_key: 'documentPassport', required: true,
+                    revision_number: 1, revision_status: 'submitted', upload_status: 'finalized',
+                    scan_status: 'clean', cleanup_status: 'none', filename: 'passport.pdf', access_available: true }]
+            };
+        },
+        async createPreviewCapability() {
+            throw new Error('provider-secret https://signed.example.test/key?X-Amz-Signature=private');
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="preview-document"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.match(root.textContent, /Belge önizlemesi açılamadı/);
+    assert.ok(root.querySelector('[data-action="retry-document-preview"]'));
+    assert.doesNotMatch(root.textContent, /provider-secret|signed\.example|X-Amz-Signature/);
+    assert.doesNotMatch(root.innerHTML, /provider-secret|signed\.example|X-Amz-Signature/);
+});

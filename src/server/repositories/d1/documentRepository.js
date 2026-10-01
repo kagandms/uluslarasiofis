@@ -23,7 +23,8 @@ export function createDocumentRepository(database) {
             const result = await database.prepare(`
                 SELECT requirements.code, requirements.is_required, requirements.display_order,
                        records.review_status, revisions.revision_number, revisions.status AS revision_status,
-                       files.upload_status, files.scan_status, files.original_filename,
+                       files.upload_status, files.scan_status, files.original_filename, files.media_type,
+                       files.cleanup_status AS current_cleanup_status, intents.status AS upload_intent_status,
                        CASE
                          WHEN EXISTS (
                            SELECT 1 FROM document_revision_files AS cleanup_files
@@ -50,6 +51,7 @@ export function createDocumentRepository(database) {
                   ON revisions.document_record_id = records.id AND revisions.is_current = 1
                 LEFT JOIN document_revision_files AS files
                   ON files.revision_id = revisions.id AND files.page_order = 0
+                LEFT JOIN upload_intents AS intents ON intents.revision_file_id = files.id
                 WHERE applications.id = ?
                 ORDER BY requirements.display_order, requirements.code
             `).bind(applicationId).all();
@@ -338,6 +340,30 @@ export function createDocumentRepository(database) {
                   AND revisions.status IN ('submitted', 'approved', 'resubmission_required')
                 LIMIT 1
             `).bind(fileId).first();
+        },
+        async findCurrentPrivateFileByApplicationAndCode(applicationId, code) {
+            return database.prepare(`
+                SELECT files.id, files.storage_key, files.original_filename, files.media_type, files.byte_size,
+                       records.id AS document_record_id, records.application_id,
+                       revisions.id AS revision_id, revisions.revision_number,
+                       revisions.status AS revision_status, records.review_status,
+                       files.upload_status, files.scan_status, files.cleanup_status
+                FROM applications
+                JOIN document_records AS records ON records.application_id = applications.id
+                JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
+                JOIN document_revisions AS revisions ON revisions.document_record_id = records.id
+                JOIN document_revision_files AS files ON files.revision_id = revisions.id AND files.page_order = 0
+                JOIN upload_intents AS intents ON intents.revision_file_id = files.id
+                WHERE applications.id = ? AND applications.status <> 'draft'
+                  AND records.application_type = applications.application_type
+                  AND requirements.application_type = applications.application_type
+                  AND requirements.code = ? AND requirements.is_active = 1
+                  AND revisions.is_current = 1
+                  AND revisions.status IN ('submitted', 'approved', 'resubmission_required')
+                  AND files.upload_status = 'finalized' AND files.scan_status = 'clean'
+                  AND files.cleanup_status = 'none' AND intents.status = 'completed'
+                LIMIT 1
+            `).bind(applicationId, code).first();
         }
     });
 }
