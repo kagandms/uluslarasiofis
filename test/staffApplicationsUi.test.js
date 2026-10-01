@@ -321,3 +321,87 @@ test('document preview errors show safe recovery without provider details', asyn
     assert.doesNotMatch(root.textContent, /provider-secret|signed\.example|X-Amz-Signature/);
     assert.doesNotMatch(root.innerHTML, /provider-secret|signed\.example|X-Amz-Signature/);
 });
+
+test('leaving applications for YKN removes a ready document preview from the DOM', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM }, assignment: null,
+                documents: [{ code: 'passport', label_key: 'documentPassport', required: true,
+                    revision_number: 1, revision_status: 'submitted', upload_status: 'finalized',
+                    scan_status: 'clean', cleanup_status: null, filename: 'passport.pdf', access_available: true }]
+            };
+        },
+        async createPreviewCapability() {
+            return {
+                method: 'GET',
+                url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?X-Amz-Signature=exit-ready',
+                expires_at: new Date(Date.now() + 30_000).toISOString(),
+                media_type: 'application/pdf', filename: 'passport.pdf'
+            };
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="preview-document"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.match(root.innerHTML, /exit-ready/);
+    document.querySelector('.workspace-nav [data-workspace-view="ykn"]').click();
+
+    assert.equal(document.getElementById('view-ykn').hidden, false);
+    assert.equal(document.querySelector('.workspace-nav [data-workspace-view="ykn"]').getAttribute('aria-current'), 'page');
+    assert.doesNotMatch(root.innerHTML, /exit-ready/);
+    assert.equal(root.querySelector('#staff-document-preview'), null);
+    assert.equal(root.querySelector('#staff-document-preview iframe, #staff-document-preview img'), null);
+});
+
+test('leaving applications invalidates a pending document preview request', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let resolvePreview;
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM }, assignment: null,
+                documents: [{ code: 'passport', label_key: 'documentPassport', required: true,
+                    revision_number: 1, revision_status: 'submitted', upload_status: 'finalized',
+                    scan_status: 'clean', cleanup_status: null, filename: 'passport.pdf', access_available: true }]
+            };
+        },
+        createPreviewCapability() {
+            return new Promise((resolve) => { resolvePreview = resolve; });
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="preview-document"]').click();
+    assert.match(root.textContent, /Önizleme hazırlanıyor/);
+    assert.doesNotMatch(root.innerHTML, /exit-pending/);
+
+    document.querySelector('.workspace-nav [data-workspace-view="ykn"]').click();
+    resolvePreview({
+        method: 'GET',
+        url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?X-Amz-Signature=exit-pending',
+        expires_at: new Date(Date.now() + 30_000).toISOString(),
+        media_type: 'application/pdf', filename: 'passport.pdf'
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(document.getElementById('view-ykn').hidden, false);
+    assert.doesNotMatch(root.innerHTML, /exit-pending/);
+    assert.equal(root.querySelector('#staff-document-preview'), null);
+    assert.doesNotMatch(root.textContent, /Önizleme hazırlanıyor/);
+});

@@ -434,7 +434,6 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             .find((button) => button.dataset.documentCode === documentCode)?.focus();
     }
     function closePreviewOnWorkspaceExit() {
-        if (!state.preview) return;
         discardPreview();
         render();
     }
@@ -522,7 +521,10 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         render();
     }
     document.addEventListener('workspace:view-changed', (event) => {
-        if (event.detail?.viewName !== 'applications') return;
+        if (event.detail?.viewName !== 'applications') {
+            closePreviewOnWorkspaceExit();
+            return;
+        }
         discardPreview();
         state.view = 'queue';
         void loadQueue();
