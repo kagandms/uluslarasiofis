@@ -1824,7 +1824,8 @@ body.dark-mode .history-badge {
 }
 
 .staff-application-summary,
-.staff-application-documents {
+.staff-application-documents,
+.staff-application-workflow {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: 12px;
@@ -1885,6 +1886,31 @@ body.dark-mode .history-badge {
     display: inline-flex;
     justify-content: center;
     text-decoration: none;
+}
+
+.staff-application-workflow {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.staff-resubmission-form {
+    display: grid;
+    gap: 0.65rem;
+    margin-top: 0.85rem;
+}
+
+.staff-resubmission-form textarea {
+    min-height: 7rem;
+    resize: vertical;
+    width: 100%;
+}
+
+.staff-application-student-message {
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
 }
 
 .staff-application-document-unavailable {

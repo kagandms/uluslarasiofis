@@ -7,6 +7,7 @@ import { applyAllMigrations } from './helpers/apply-migrations.js';
 const foundationMigration = readFileSync(new URL('../migrations/0001_backend_foundation.sql', import.meta.url), 'utf8');
 const session3Migration = readFileSync(new URL('../migrations/0002_session3_fingerprint_and_birth_certificate.sql', import.meta.url), 'utf8');
 const cleanupMigration = readFileSync(new URL('../migrations/0003_session3_document_cleanup.sql', import.meta.url), 'utf8');
+const publicPolicyMigration = readFileSync(new URL('../migrations/0004_public_portal_document_policy.sql', import.meta.url), 'utf8');
 
 function createDatabase() {
     const database = new DatabaseSync(':memory:');
@@ -233,4 +234,45 @@ test('database enforces staff roles and unique notification idempotency keys', (
         INSERT INTO notification_outbox (id, notification_id, idempotency_key)
         VALUES ('outbox-2', 'notification-1', 'application-submitted:application-1')
     `).run(), /UNIQUE constraint failed/);
+});
+
+test('document-scoped notes migration preserves existing rows and enforces its nullable document reference', () => {
+    const database = new DatabaseSync(':memory:');
+    database.exec('PRAGMA foreign_keys = ON;');
+    database.exec(foundationMigration);
+    database.exec(session3Migration);
+    database.exec(cleanupMigration);
+    database.exec(publicPolicyMigration);
+    insertStudent(database, 'note-student', 'NOTE-001');
+    insertApplication(database, 'note-application', 'note-student', 'submitted');
+    database.prepare(`
+        INSERT INTO application_notes (id, application_id, author_type, visibility, body)
+        VALUES ('legacy-note', 'note-application', 'student', 'student', 'Existing note')
+    `).run();
+    applyMigrationsAfter(database, '0004_public_portal_document_policy.sql');
+
+    const legacyNote = database.prepare('SELECT document_record_id FROM application_notes WHERE id = ?').get('legacy-note');
+    const requirementId = database.prepare(`
+        SELECT id FROM document_requirements WHERE code = 'passport' AND application_type = 'initial'
+    `).get().id;
+    database.prepare(`
+        INSERT INTO document_records (id, application_id, requirement_id, application_type)
+        VALUES ('note-document', 'note-application', ?, 'initial')
+    `).run(requirementId);
+    database.prepare(`
+        INSERT INTO application_notes (id, application_id, document_record_id, author_type, visibility, body)
+        VALUES ('document-note', 'note-application', 'note-document', 'student', 'student', 'Document note')
+    `).run();
+
+    assert.deepEqual({ ...legacyNote }, { document_record_id: null });
+    assert.equal(database.prepare('SELECT document_record_id FROM application_notes WHERE id = ?').get('document-note').document_record_id, 'note-document');
+    assert.throws(() => database.prepare(`
+        INSERT INTO application_notes (id, application_id, document_record_id, author_type, visibility, body)
+        VALUES ('invalid-document-note', 'note-application', 'missing-document', 'student', 'student', 'Invalid')
+    `).run(), /FOREIGN KEY constraint failed/);
+    assert.ok(database.prepare(`
+        SELECT name FROM sqlite_master WHERE type = 'index'
+          AND name = 'idx_application_notes_document_visibility_created'
+    `).get());
+    assert.deepEqual(database.prepare('PRAGMA foreign_key_check').all(), []);
 });

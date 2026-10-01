@@ -51,6 +51,28 @@ test('submitted owner session renders localized application and current document
     document.defaultView.close();
 });
 
+test('student tracking renders document-specific office messages as plain text', async () => {
+    const { document, root } = createTrackingRoot();
+    const studentMessage = '</p><script>do not execute</script>';
+    const api = {
+        async readCurrentApplicationTracking() {
+            return createTrackingDto({ documents: [
+                { code: 'passport', label_key: 'documentPassport', required: true,
+                    status: 'resubmission_required', student_message: studentMessage }
+            ] });
+        }
+    };
+
+    await initializeApplicationTracking(root, api);
+
+    assert.match(root.textContent, /Ofis açıklaması/);
+    assert.match(root.textContent, new RegExp(studentMessage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.equal(root.querySelector('script'), null);
+    assert.ok(root.querySelector('.tracking-document-message'));
+    assert.ok(SUPPORTED_LOCALES.every((locale) => PUBLIC_MESSAGES[locale].trackingDocumentMessageLabel));
+    document.defaultView.close();
+});
+
 test('draft owner session links back to the existing application wizard', async () => {
     const { document, root } = createTrackingRoot();
     const api = { async readCurrentApplicationTracking() { return createTrackingDto({ application: { status: 'draft' } }); } };

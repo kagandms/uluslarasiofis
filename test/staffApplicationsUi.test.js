@@ -405,3 +405,144 @@ test('leaving applications invalidates a pending document preview request', asyn
     assert.equal(root.querySelector('#staff-document-preview'), null);
     assert.doesNotMatch(root.textContent, /Önizleme hazırlanıyor/);
 });
+
+test('staff starts review explicitly and resubmission reasons render as plain text', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const actions = [];
+    let status = 'submitted';
+    let studentMessage = null;
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM, status, updated_at: `2026-10-01T10:00:0${status.length}.000Z` },
+                assignment: null,
+                allowed_status_transitions: status === 'submitted' ? ['under_review'] : [],
+                documents: [{ code: 'passport', label_key: 'documentPassport', required: true, revision_number: 1,
+                    revision_status: status === 'resubmission_required' ? 'resubmission_required' : 'submitted',
+                    review_status: status === 'resubmission_required' ? 'resubmission_required' : 'pending',
+                    upload_status: 'finalized', scan_status: 'clean', cleanup_status: 'none',
+                    filename: 'passport.pdf', access_available: true,
+                    can_approve: status === 'under_review', can_request_resubmission: status === 'under_review',
+                    student_message: studentMessage }]
+            };
+        },
+        async transitionApplication(applicationId, targetStatus, updatedAt) {
+            actions.push({ type: 'status', applicationId, targetStatus, updatedAt });
+            status = targetStatus;
+        },
+        async requestDocumentResubmission(applicationId, code, revisionNumber, reason) {
+            actions.push({ type: 'resubmission', applicationId, code, revisionNumber, reason });
+            studentMessage = reason;
+            status = 'resubmission_required';
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.ok(root.querySelector('[data-target-status="under_review"]'));
+    assert.equal(root.querySelector('[data-action="approve-document"]'), null);
+    assert.deepEqual(actions, []);
+    root.querySelector('[data-target-status="under_review"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(actions[0].targetStatus, 'under_review');
+    assert.ok(root.querySelector('[data-action="approve-document"]'));
+    root.querySelector('[data-action="request-document-resubmission"]').click();
+    const form = root.querySelector('.staff-resubmission-form');
+    const reason = form.querySelector('textarea');
+    assert.equal(reason.required, true);
+    assert.equal(reason.maxLength, 1000);
+    reason.value = '</p><script>plain text only</script>';
+    form.dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(actions[1].type, 'resubmission');
+    assert.equal(actions[1].reason, '</p><script>plain text only</script>');
+    assert.equal(root.querySelector('.staff-application-student-message')?.textContent,
+        'Öğrenciye iletilen neden: </p><script>plain text only</script>');
+    assert.equal(root.querySelector('script'), null);
+    assert.equal(root.querySelector('[data-action="approve-document"]'), null);
+});
+
+test('document approval disables repeat action and refreshes detail after a conflict', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let approveCalls = 0;
+    let releaseApproval;
+    let detailReads = 0;
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            detailReads += 1;
+            return {
+                application: { ...QUEUE_ITEM, status: 'under_review' }, assignment: null,
+                allowed_status_transitions: [],
+                documents: [{ code: 'passport', label_key: 'documentPassport', required: true,
+                    revision_number: 2, revision_status: 'submitted', review_status: 'pending',
+                    upload_status: 'finalized', scan_status: 'clean', cleanup_status: 'none',
+                    filename: 'passport.pdf', access_available: true, can_approve: true, can_request_resubmission: true }]
+            };
+        },
+        approveDocument() {
+            approveCalls += 1;
+            return new Promise((resolve, reject) => { releaseApproval = { resolve, reject }; });
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    const approve = root.querySelector('[data-action="approve-document"]');
+    approve.click();
+
+    assert.equal(root.querySelector('[data-action="approve-document"]').disabled, true);
+    root.querySelector('[data-action="approve-document"]').click();
+    assert.equal(approveCalls, 1);
+    releaseApproval.reject(Object.assign(new Error('stale'), { status: 409, code: 'DOCUMENT_REVIEW_CONFLICT' }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(detailReads, 2);
+    assert.equal(root.querySelector('[data-action="approve-document"]').disabled, false);
+    assert.match(root.textContent, /başka bir işlem nedeniyle değişti/i);
+    assert.doesNotMatch(root.textContent, /stale/);
+});
+
+test('approved documents and terminal applications remain read-only while preview and download stay available', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM, status: 'completed' }, assignment: null,
+                allowed_status_transitions: [],
+                documents: [{ code: 'passport', label_key: 'documentPassport', required: true,
+                    revision_number: 1, revision_status: 'approved', review_status: 'approved',
+                    upload_status: 'finalized', scan_status: 'clean', cleanup_status: 'none',
+                    filename: 'passport.pdf', access_available: true, can_approve: false,
+                    can_request_resubmission: false }]
+            };
+        },
+        async createPreviewCapability() { return {}; }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.match(root.textContent, /Onaylandı/);
+    assert.equal(root.querySelector('[data-action="approve-document"]'), null);
+    assert.equal(root.querySelector('[data-action="request-document-resubmission"]'), null);
+    assert.equal(root.querySelector('[data-action="application-status-transition"]'), null);
+    assert.ok(root.querySelector('[data-action="preview-document"]'));
+    assert.ok(root.querySelector('[data-action="download-document"]'));
+});

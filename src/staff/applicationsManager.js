@@ -17,6 +17,13 @@ const STATUS_FILTERS = Object.freeze([
     ['migration', 'Göç İdaresi'], ['completed', 'Tamamlanan'], ['terminal', 'Terminal']
 ]);
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+const STATUS_ACTION_LABELS = Object.freeze({
+    under_review: 'İncelemeye Başla',
+    approved_for_processing: 'İşlem İçin Onayla',
+    sent_to_migration: 'Göç İdaresine Aktarıldı Olarak İşaretle',
+    migration_approved: 'Göç İdaresi Onayladı',
+    completed: 'Başvuruyu Tamamla'
+});
 const APPLICATION_DOCUMENT_ROUTE = (applicationId, code, action) =>
     `/api/staff/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(code)}/${action}`;
 
@@ -218,14 +225,35 @@ function createApplicationSummary(document, application, assignment) {
     return section;
 }
 
-function createDocumentAccessActions(document, applicationId, item, handlers) {
+function createDocumentAccessActions(document, applicationId, item, handlers, isPending) {
     const actions = document.createElement('div');
     actions.className = 'staff-application-document-actions';
+    if (item.can_approve === true) {
+        const approve = document.createElement('button');
+        approve.type = 'button';
+        approve.className = 'btn btn-primary';
+        approve.dataset.action = 'approve-document';
+        approve.disabled = isPending;
+        approve.textContent = isPending ? 'İşleniyor…' : 'Onayla';
+        approve.addEventListener('click', () => handlers.onApprove(item));
+        actions.append(approve);
+    }
+    if (item.can_request_resubmission === true) {
+        const request = document.createElement('button');
+        request.type = 'button';
+        request.className = 'btn btn-outline';
+        request.dataset.action = 'request-document-resubmission';
+        request.disabled = isPending;
+        request.textContent = 'Yeniden Yükleme İste';
+        request.addEventListener('click', () => handlers.onOpenResubmission(item));
+        actions.append(request);
+    }
     const preview = document.createElement('button');
     preview.type = 'button';
     preview.className = 'btn btn-outline';
     preview.dataset.action = 'preview-document';
     preview.dataset.documentCode = item.code;
+    preview.disabled = isPending;
     preview.textContent = 'Önizle';
     preview.addEventListener('click', () => handlers.onPreview(item));
     const download = document.createElement('a');
@@ -233,6 +261,7 @@ function createDocumentAccessActions(document, applicationId, item, handlers) {
     download.dataset.action = 'download-document';
     download.href = APPLICATION_DOCUMENT_ROUTE(applicationId, item.code, 'download');
     download.download = item.filename || 'belge';
+    if (isPending) download.setAttribute('aria-disabled', 'true');
     download.textContent = 'İndir';
     actions.append(preview, download);
     return actions;
@@ -246,7 +275,54 @@ function createUnavailableDocumentState(document, item) {
     return state;
 }
 
-function createDocumentSection(document, applicationId, documents, handlers) {
+function createResubmissionForm(document, item, state, handlers) {
+    if (state.resubmissionDocument?.code !== item.code) return null;
+    const form = document.createElement('form');
+    const label = createText(document, 'label', '', `Yeniden yükleme nedeni: ${PUBLIC_MESSAGES.tr[item.label_key] || item.code}`);
+    const reason = document.createElement('textarea');
+    const cancel = document.createElement('button');
+    const submit = document.createElement('button');
+    reason.name = 'reason';
+    reason.required = true;
+    reason.minLength = 3;
+    reason.maxLength = 1000;
+    reason.rows = 4;
+    reason.dataset.action = 'resubmission-reason';
+    label.htmlFor = 'staff-resubmission-reason';
+    reason.id = label.htmlFor;
+    reason.addEventListener('input', () => reason.setCustomValidity(''));
+    cancel.type = 'button';
+    cancel.className = 'btn btn-outline';
+    cancel.dataset.action = 'cancel-document-resubmission';
+    cancel.disabled = Boolean(state.actionPending);
+    cancel.textContent = 'Vazgeç';
+    cancel.addEventListener('click', handlers.onCancelResubmission);
+    submit.type = 'submit';
+    submit.className = 'btn btn-primary';
+    submit.dataset.action = 'submit-document-resubmission';
+    submit.disabled = Boolean(state.actionPending);
+    submit.textContent = state.actionPending === `resubmission:${item.code}` ? 'Gönderiliyor…' : 'Nedeni Gönder';
+    form.className = 'staff-resubmission-form';
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        if ([...reason.value.trim().replace(/[\s\p{C}]/gu, '')].length < 3) {
+            reason.setCustomValidity('En az 3 karakter girin.');
+            reason.reportValidity();
+            return;
+        }
+        reason.setCustomValidity('');
+        handlers.onRequestResubmission(item, reason.value);
+    });
+    form.append(label, reason, createText(document, 'p', 'staff-application-state', 'En fazla 1000 karakter.'), cancel, submit);
+    if (state.actionError) {
+        const error = createText(document, 'p', 'staff-application-state', state.actionError);
+        error.setAttribute('role', 'alert');
+        form.append(error);
+    }
+    return form;
+}
+
+function createDocumentSection(document, applicationId, documents, state, handlers) {
     const section = document.createElement('section');
     const list = document.createElement('div');
     section.className = 'staff-application-documents';
@@ -267,11 +343,43 @@ function createDocumentSection(document, applicationId, documents, handlers) {
         details.className = 'staff-application-details-grid';
         fields.forEach(([fieldLabel, value]) => appendDetail(document, details, fieldLabel, value));
         card.append(details, item.access_available === true
-            ? createDocumentAccessActions(document, applicationId, item, handlers)
+            ? createDocumentAccessActions(document, applicationId, item, handlers, Boolean(state.actionPending))
             : createUnavailableDocumentState(document, item));
+        if (item.student_message) {
+            card.append(createText(document, 'p', 'staff-application-student-message', `Öğrenciye iletilen neden: ${item.student_message}`));
+        }
+        const resubmissionForm = createResubmissionForm(document, item, state, handlers);
+        if (resubmissionForm) card.append(resubmissionForm);
         list.append(card);
     });
     section.append(list);
+    return section;
+}
+
+function createApplicationWorkflow(document, application, detail, state, handlers) {
+    const section = document.createElement('section');
+    section.className = 'staff-application-workflow';
+    if (application.status === 'resubmission_required') {
+        section.append(createText(document, 'p', 'staff-applications-state', 'Öğrenciden belge bekleniyor.'));
+    }
+    for (const targetStatus of detail.allowed_status_transitions || []) {
+        const label = STATUS_ACTION_LABELS[targetStatus];
+        if (!label) continue;
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'btn btn-primary';
+        action.dataset.action = 'application-status-transition';
+        action.dataset.targetStatus = targetStatus;
+        action.disabled = Boolean(state.actionPending);
+        action.textContent = state.actionPending === `status:${targetStatus}` ? 'İşleniyor…' : label;
+        action.addEventListener('click', () => handlers.onTransition(targetStatus));
+        section.append(action);
+    }
+    if (state.actionError && !state.resubmissionDocument) {
+        const error = createText(document, 'p', 'staff-application-state', state.actionError);
+        error.setAttribute('role', 'alert');
+        section.append(error);
+    }
     return section;
 }
 
@@ -355,7 +463,8 @@ function renderDetail(root, state, handlers) {
     } else if (state.detail) {
         panel.append(
             createApplicationSummary(document, state.detail.application, state.detail.assignment),
-            createDocumentSection(document, state.detail.application.id, state.detail.documents, handlers)
+            createApplicationWorkflow(document, state.detail.application, state.detail, state, handlers),
+            createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers)
         );
     }
     const previewPanel = createPreviewPanel(document, state.preview, handlers);
@@ -372,9 +481,14 @@ function createStaffApplicationsApi() {
             throw Object.assign(new Error('Staff request failed.'), { status: 0 });
         }
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw Object.assign(new Error('Staff request failed.'), { status: response.status });
+        if (!response.ok) throw Object.assign(new Error('Staff request failed.'), {
+            status: response.status, code: payload?.error?.code
+        });
         return payload;
     }
+    const postJson = (path, body) => request(path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
     return {
         queryApplications(query) {
             return request('/api/staff/applications/query', {
@@ -386,6 +500,21 @@ function createStaffApplicationsApi() {
         },
         createPreviewCapability(applicationId, code) {
             return request(APPLICATION_DOCUMENT_ROUTE(applicationId, code, 'preview'), { method: 'POST' });
+        },
+        approveDocument(applicationId, code, revisionNumber) {
+            return postJson(APPLICATION_DOCUMENT_ROUTE(applicationId, code, 'approve'), {
+                expected_revision_number: revisionNumber
+            });
+        },
+        requestDocumentResubmission(applicationId, code, revisionNumber, reason) {
+            return postJson(APPLICATION_DOCUMENT_ROUTE(applicationId, code, 'request-resubmission'), {
+                expected_revision_number: revisionNumber, reason
+            });
+        },
+        transitionApplication(applicationId, targetStatus, updatedAt) {
+            return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/status`, {
+                target_status: targetStatus, expected_updated_at: updatedAt
+            });
         }
     };
 }
@@ -400,6 +529,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     const document = root.ownerDocument;
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
+        actionPending: null, actionError: null, resubmissionDocument: null,
         preview: null, result: null, query: { q: '', status: 'all', page: 1, page_size: 25 }
     };
     let previewTimer = null;
@@ -414,7 +544,12 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onBack: returnToQueue,
             onPreview: openPreview,
             onClose: closePreview,
-            onRetry: () => openPreview(state.preview?.document)
+            onRetry: () => openPreview(state.preview?.document),
+            onApprove: approveDocument,
+            onOpenResubmission: openResubmission,
+            onCancelResubmission: cancelResubmission,
+            onRequestResubmission: requestResubmission,
+            onTransition: transitionApplication
         });
         else renderQueue(root, state, {
             onSearch: submitSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail
@@ -512,6 +647,88 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         }
         state.loading = false;
         render();
+    }
+    async function refreshDetail() {
+        const applicationId = state.detail?.application.id;
+        if (!applicationId) return;
+        state.loading = true;
+        state.error = false;
+        render();
+        try {
+            state.detail = await api.readApplicationDetail(applicationId);
+        } catch (error) {
+            state.error = true;
+            state.errorStatus = error?.status ?? null;
+        }
+        state.loading = false;
+        render();
+    }
+    async function refreshQueueSnapshot() {
+        try {
+            state.result = await api.queryApplications({ ...state.query });
+        } catch {
+            // The visible detail remains usable; queue reloads when staff returns to it.
+        }
+    }
+    function readActionError(error) {
+        if (error?.code === 'DOCUMENT_REVIEW_CONFLICT' || error?.code === 'APPLICATION_STATE_CONFLICT') {
+            return 'Başvuru veya belge başka bir işlem nedeniyle değişti. Güncel durumu yeniden yüklendi.';
+        }
+        if (error?.code === 'APPLICATION_NOT_READY_FOR_APPROVAL') {
+            return 'İşlem onayı için tüm zorunlu belgeler onaylanmış olmalıdır.';
+        }
+        return 'İşlem tamamlanamadı. Güncel durumu kontrol edip tekrar deneyin.';
+    }
+    async function completeAction(actionKey, operation) {
+        state.actionPending = actionKey;
+        state.actionError = null;
+        render();
+        try {
+            await operation();
+            state.resubmissionDocument = null;
+            discardPreview();
+            await refreshDetail();
+            await refreshQueueSnapshot();
+            state.actionPending = null;
+            render();
+        } catch (error) {
+            state.actionError = readActionError(error);
+            state.actionPending = null;
+            if (error?.status === 409) {
+                state.resubmissionDocument = null;
+                discardPreview();
+                await refreshDetail();
+                await refreshQueueSnapshot();
+            }
+            render();
+        }
+    }
+    function approveDocument(item) {
+        return completeAction(`approve:${item.code}`, () => api.approveDocument(
+            state.detail.application.id, item.code, item.revision_number
+        ));
+    }
+    function openResubmission(item) {
+        state.resubmissionDocument = item;
+        state.actionError = null;
+        render();
+        root.querySelector('[data-action="resubmission-reason"]')?.focus();
+    }
+    function cancelResubmission() {
+        if (state.actionPending) return;
+        state.resubmissionDocument = null;
+        state.actionError = null;
+        render();
+    }
+    function requestResubmission(item, reason) {
+        return completeAction(`resubmission:${item.code}`, () => api.requestDocumentResubmission(
+            state.detail.application.id, item.code, item.revision_number, reason
+        ));
+    }
+    function transitionApplication(targetStatus) {
+        return completeAction(`status:${targetStatus}`, () => api.transitionApplication(
+            state.detail.application.id, targetStatus, state.detail.application.updated_at
+        ));
     }
     function returnToQueue() {
         discardPreview();

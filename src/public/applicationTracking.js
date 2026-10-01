@@ -130,6 +130,12 @@ function createDocumentList(document, documents, messages, allowFilename) {
         card.append(title, status);
         if (item.required) card.append(createTextElement(document, 'span', 'public-document-badge', messages.trackingRequiredBadge));
         if (allowFilename && item.filename) card.append(createTextElement(document, 'p', 'application-document-filename', item.filename));
+        if (item.student_message) {
+            card.append(
+                createTextElement(document, 'strong', 'tracking-document-message-label', messages.trackingDocumentMessageLabel),
+                createTextElement(document, 'p', 'tracking-document-message', item.student_message)
+            );
+        }
         list.append(card);
     });
     section.append(list);

@@ -22,6 +22,7 @@ export function createDocumentRepository(database) {
         async listStudentRequirements(applicationId) {
             const result = await database.prepare(`
                 SELECT requirements.code, requirements.is_required, requirements.display_order,
+                       records.id AS document_record_id,
                        records.review_status, revisions.revision_number, revisions.status AS revision_status,
                        files.upload_status, files.scan_status, files.original_filename, files.media_type,
                        files.cleanup_status AS current_cleanup_status, intents.status AS upload_intent_status,
@@ -347,7 +348,8 @@ export function createDocumentRepository(database) {
                        records.id AS document_record_id, records.application_id,
                        revisions.id AS revision_id, revisions.revision_number,
                        revisions.status AS revision_status, records.review_status,
-                       files.upload_status, files.scan_status, files.cleanup_status
+                       files.upload_status, files.scan_status, files.cleanup_status,
+                       intents.status AS upload_intent_status
                 FROM applications
                 JOIN document_records AS records ON records.application_id = applications.id
                 JOIN document_requirements AS requirements ON requirements.id = records.requirement_id

@@ -27,7 +27,8 @@ function createTrackingDocumentDto(policy, requirement) {
         required: policy.required,
         revision_number: requirement?.revision_number ?? null,
         status: readStudentDocumentStatus(requirement),
-        filename: isStudentVisibleFile(requirement) ? requirement.original_filename ?? null : null
+        filename: isStudentVisibleFile(requirement) ? requirement.original_filename ?? null : null,
+        ...(typeof requirement?.student_message === 'string' ? { student_message: requirement.student_message } : {})
     };
 }
 
@@ -36,7 +37,8 @@ function createPublicTrackingDocumentDto(policy, requirement) {
         code: policy.code,
         label_key: policy.label_key,
         required: policy.required,
-        status: readStudentDocumentStatus(requirement)
+        status: readStudentDocumentStatus(requirement),
+        ...(typeof requirement?.student_message === 'string' ? { student_message: requirement.student_message } : {})
     };
 }
 
@@ -75,11 +77,17 @@ export async function readCurrentApplicationTracking(request, environment) {
     const application = await repositories.applications.findById(session.application_id);
     if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
 
-    const storedRequirements = await repositories.documents.listStudentRequirements(application.id);
+    const [storedRequirements, studentMessages] = await Promise.all([
+        repositories.documents.listStudentRequirements(application.id),
+        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id)
+    ]);
+    const requirementsWithMessages = storedRequirements.map((requirement) => ({
+        ...requirement, student_message: studentMessages.get(requirement.document_record_id)
+    }));
 
     return {
         application: createTrackingApplicationDto(application),
-        documents: createDocumentTrackingView(application, storedRequirements, createTrackingDocumentDto)
+        documents: createDocumentTrackingView(application, requirementsWithMessages, createTrackingDocumentDto)
     };
 }
 
@@ -112,10 +120,16 @@ export async function lookupApplicationTracking(request, environment) {
     const application = await repositories.applications.findTrackableByStudentNumber(studentNumber);
     if (!application) return { found: false, application: null, documents: [] };
 
-    const storedRequirements = await repositories.documents.listStudentRequirements(application.id);
+    const [storedRequirements, studentMessages] = await Promise.all([
+        repositories.documents.listStudentRequirements(application.id),
+        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id)
+    ]);
+    const requirementsWithMessages = storedRequirements.map((requirement) => ({
+        ...requirement, student_message: studentMessages.get(requirement.document_record_id)
+    }));
     return {
         found: true,
         application: createTrackingApplicationDto(application),
-        documents: createDocumentTrackingView(application, storedRequirements, createPublicTrackingDocumentDto)
+        documents: createDocumentTrackingView(application, requirementsWithMessages, createPublicTrackingDocumentDto)
     };
 }

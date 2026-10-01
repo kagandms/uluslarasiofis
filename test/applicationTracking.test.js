@@ -104,7 +104,7 @@ test('tracking UI and persisted application statuses have translations in all su
         'applicationStatus_completed', 'applicationStatus_cancelled', 'applicationStatus_rejected',
         'trackingDocumentStatus_not_uploaded', 'trackingDocumentStatus_waiting_review',
         'trackingDocumentStatus_under_review', 'trackingDocumentStatus_approved',
-        'trackingDocumentStatus_resubmission_required'
+        'trackingDocumentStatus_resubmission_required', 'trackingDocumentMessageLabel'
     ];
 
     for (const locale of SUPPORTED_LOCALES) {

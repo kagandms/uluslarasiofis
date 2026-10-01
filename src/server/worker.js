@@ -7,6 +7,7 @@ import { lookupApplicationTracking, readCurrentApplicationTracking } from './rou
 import { readPrivateDocument } from './routes/documentRoutes.js';
 import { createStaffDocumentPreview, downloadStaffApplicationDocument } from './routes/staffDocumentAccessRoutes.js';
 import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
+import { approveStaffApplicationDocument, requestStaffDocumentResubmission, transitionStaffApplicationStatus } from './routes/staffReviewRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
 import { bootstrapStaff, createStaffUser, listStaffUsers, loginStaff, logoutStaff, readStaffSession, updateStaffAccount } from './routes/staffRoutes.js';
 import { handleTebligatRequest } from './routes/tebligatRoutes.js';
@@ -50,7 +51,17 @@ async function routeApi(request, environment, requestId) {
     if (pathname === '/api/staff/auth/logout' || pathname === '/api/logout') return logoutStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/bootstrap') return bootstrapStaff(request, environment, requestId);
     if (pathname === '/api/staff/applications/query') return queryStaffApplications(request, environment);
-    const staffDocumentMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/(preview|download)$/);
+    const staffStatusMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/status$/);
+    if (staffStatusMatch) {
+        let applicationId;
+        try {
+            applicationId = decodeURIComponent(staffStatusMatch[1]);
+        } catch {
+            throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+        }
+        return transitionStaffApplicationStatus({ request, environment, applicationId, requestId });
+    }
+    const staffDocumentMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/(preview|download|approve|request-resubmission)$/);
     if (staffDocumentMatch) {
         let applicationId;
         let documentCode;
@@ -63,7 +74,13 @@ async function routeApi(request, environment, requestId) {
         if (staffDocumentMatch[3] === 'preview') {
             return createStaffDocumentPreview({ request, environment, applicationId, code: documentCode, requestId });
         }
-        return downloadStaffApplicationDocument({ request, environment, applicationId, code: documentCode, requestId });
+        if (staffDocumentMatch[3] === 'download') {
+            return downloadStaffApplicationDocument({ request, environment, applicationId, code: documentCode, requestId });
+        }
+        if (staffDocumentMatch[3] === 'approve') {
+            return approveStaffApplicationDocument({ request, environment, applicationId, code: documentCode, requestId });
+        }
+        return requestStaffDocumentResubmission({ request, environment, applicationId, code: documentCode, requestId });
     }
     const staffApplicationMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)$/);
     if (staffApplicationMatch) {

@@ -156,6 +156,8 @@ a { color: inherit; }
 .tracking-document-card { display: grid; gap: 0.4rem; padding: 0.85rem; border: 1px solid #e5e8ee; border-radius: 0.65rem; }
 .tracking-document-card h3, .tracking-document-card p { margin: 0; }
 .tracking-document-status { color: #424b59; font-weight: 650; }
+.tracking-document-message-label { color: #394150; }
+.tracking-document-message { color: #424b59; overflow-wrap: anywhere; white-space: pre-wrap; }
 .tracking-message { margin: 0; color: #59616d; }
 .application-wizard [role="alert"] { margin: 0; color: #9b1c1c; font-weight: 650; }
 

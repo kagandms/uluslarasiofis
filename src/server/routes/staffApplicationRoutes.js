@@ -1,5 +1,6 @@
 import { ApiError } from '../domain/errors.js';
 import { listDocumentPolicies } from '../domain/documentPolicy.js';
+import { evaluateApplicationTransition, listApplicationStatusTransitions } from '../domain/applicationStateMachine.js';
 import { requireStaff } from '../auth/staffAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { readJsonBody } from '../http/requestBody.js';
@@ -134,15 +135,44 @@ function createDocumentDetailDtos(application, storedRequirements) {
             label_key: policy.label_key,
             required: policy.required,
             access_available: hasSafeCurrentDocument,
+            can_approve: hasSafeCurrentDocument && requirement.revision_status === 'submitted'
+                && ['pending', 'under_review'].includes(requirement.review_status)
+                && ['under_review', 'resubmission_required'].includes(application.status),
+            can_request_resubmission: hasSafeCurrentDocument && requirement.revision_status === 'submitted'
+                && ['pending', 'under_review'].includes(requirement.review_status)
+                && ['under_review', 'resubmission_required'].includes(application.status),
             revision_number: requirement.revision_number ?? null,
             review_status: requirement.review_status ?? null,
             revision_status: requirement.revision_status ?? null,
             upload_status: requirement.upload_status ?? null,
             scan_status: requirement.scan_status ?? null,
             cleanup_status: requirement.cleanup_status ?? null,
-            filename: readSafeFilename(requirement.original_filename)
+            filename: readSafeFilename(requirement.original_filename),
+            ...(typeof requirement.student_message === 'string' ? { student_message: requirement.student_message } : {})
         };
     });
+}
+
+function readAllowedStatusTransitions(application, requirements) {
+    const requirementsByCode = new Map(requirements.map((requirement) => [requirement.code, requirement]));
+    const applicableRequirements = listDocumentPolicies(
+        application.application_type,
+        application.is_under_18 === 1,
+        application.address_evidence_type ?? null
+    ).map((policy) => ({ ...requirementsByCode.get(policy.code), is_required: policy.required ? 1 : 0 }));
+    const hasResubmissionRequiredDocuments = applicableRequirements.some((requirement) =>
+        requirement.review_status === 'resubmission_required' || requirement.revision_status === 'resubmission_required');
+    const allRequiredDocumentsApproved = applicableRequirements.filter((requirement) => requirement.is_required === 1)
+        .every((requirement) => requirement.review_status === 'approved'
+            && requirement.revision_status === 'approved'
+            && requirement.upload_status === 'finalized'
+            && requirement.scan_status === 'clean'
+            && requirement.current_cleanup_status === 'none'
+            && requirement.upload_intent_status === 'completed');
+    return listApplicationStatusTransitions(application.status).filter((targetStatus) =>
+        evaluateApplicationTransition(application.status, targetStatus, {
+            hasResubmissionRequiredDocuments, allRequiredDocumentsApproved
+        }).allowed);
 }
 
 /**
@@ -191,13 +221,19 @@ export async function readStaffApplicationDetail(request, environment, applicati
     if (!application || application.status === 'draft') {
         throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     }
-    const [storedRequirements, assignment] = await Promise.all([
+    const [storedRequirements, assignment, studentMessages] = await Promise.all([
         repositories.documents.listStudentRequirements(application.id),
-        repositories.assignments.findCurrent(application.id)
+        repositories.assignments.findCurrent(application.id),
+        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id)
     ]);
+    const requirementsWithMessages = storedRequirements.map((requirement) => ({
+        ...requirement,
+        student_message: studentMessages.get(requirement.document_record_id)
+    }));
     return {
         application: createApplicationDetailDto(application),
         assignment: createAssignmentDto(assignment),
-        documents: createDocumentDetailDtos(application, storedRequirements)
+        allowed_status_transitions: readAllowedStatusTransitions(application, storedRequirements),
+        documents: createDocumentDetailDtos(application, requirementsWithMessages)
     };
 }
