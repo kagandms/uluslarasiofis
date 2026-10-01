@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { hashSessionToken } from '../src/server/auth/sessionToken.js';
+import { OFFICIAL_APPLICATION_RETENTION_DAYS } from '../src/config/constants.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 import worker from '../src/server/worker.js';
@@ -114,6 +115,10 @@ test('staff starts review explicitly and application status updates use optimist
     assert.equal((await readJson(stale)).error.code, 'APPLICATION_STATE_CONFLICT');
     assert.equal(incompleteApproval.status, 409);
     assert.equal((await readJson(incompleteApproval)).error.code, 'APPLICATION_NOT_READY_FOR_APPROVAL');
+    const applicationLifecycle = database.prepare('SELECT terminal_at, retention_due_at FROM applications WHERE id = ?')
+        .bind(applicationId).first();
+    assert.equal(applicationLifecycle.terminal_at, null);
+    assert.equal(applicationLifecycle.retention_due_at, null);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.application_review_started'").first().count, 1);
 });
 
@@ -142,10 +147,32 @@ test('approved workflow transitions require all applicable current required docu
             method: 'POST', cookie, body: { target_status: targetStatus, expected_updated_at: expectedUpdatedAt }
         }), environment);
         assert.equal(response.status, 200, `${targetStatus} should follow the approved state edge`);
-        expectedUpdatedAt = (await readJson(response)).updated_at;
+        const payload = await readJson(response);
+        expectedUpdatedAt = payload.updated_at;
+        const application = database.prepare(`
+            SELECT status, terminal_at, retention_due_at, updated_at, last_activity_at
+            FROM applications WHERE id = ?
+        `).bind(applicationId).first();
+        assert.equal(application.status, targetStatus);
+        if (targetStatus === 'completed') {
+            assert.equal(application.terminal_at, payload.updated_at);
+            assert.equal(application.updated_at, payload.updated_at);
+            assert.equal(application.last_activity_at, payload.updated_at);
+            assert.equal(application.retention_due_at, new Date(
+                Date.parse(application.terminal_at) + OFFICIAL_APPLICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000
+            ).toISOString());
+        } else {
+            assert.equal(application.terminal_at, null);
+            assert.equal(application.retention_due_at, null);
+        }
     }
     assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status, 'completed');
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.application_status_changed'").first().count, 4);
+    assert.equal(database.prepare(`
+        SELECT COUNT(*) AS count FROM audit_events
+        WHERE event_type = 'staff.application_status_changed'
+          AND application_id = ? AND safe_metadata_json LIKE '%"applicationStatus":"completed"%'
+    `).bind(applicationId).first().count, 1);
 });
 
 test('staff approves only the current clean revision and records safe audit metadata', async () => {

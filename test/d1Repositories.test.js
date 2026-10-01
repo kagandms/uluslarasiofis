@@ -283,6 +283,10 @@ test('application submission transitions and audit are atomic and repeated calls
         studentEmail: 'student@example.edu',
         studentPhone: '+905551112233'
     });
+    const draft = database.prepare('SELECT retention_due_at, terminal_at FROM applications WHERE id = ?')
+        .bind('11111111-1111-4111-8111-111111111111').first();
+    assert.ok(draft.retention_due_at);
+    assert.equal(draft.terminal_at, null);
     const transition = {
         applicationId: '11111111-1111-4111-8111-111111111111',
         submittedAt: '2026-09-29T12:00:00.000Z',
@@ -295,7 +299,15 @@ test('application submission transitions and audit are atomic and repeated calls
 
     assert.equal(submitted.status, 'submitted');
     assert.equal(submitted.submitted_at, transition.submittedAt);
+    assert.equal(submitted.retention_due_at, null);
+    assert.equal(submitted.terminal_at, null);
+    assert.equal(submitted.updated_at, transition.submittedAt);
+    assert.equal(submitted.last_activity_at, transition.submittedAt);
     assert.equal(repeated, null);
+    const persistedAfterRepeat = database.prepare('SELECT retention_due_at, terminal_at FROM applications WHERE id = ?')
+        .bind(transition.applicationId).first();
+    assert.equal(persistedAfterRepeat.retention_due_at, null);
+    assert.equal(persistedAfterRepeat.terminal_at, null);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 1);
 });
 
@@ -309,6 +321,8 @@ test('application submission audit failure rolls back the state transition', asy
         studentEmail: 'student@example.edu',
         studentPhone: '+905551112233'
     });
+    const retentionBeforeSubmit = database.prepare('SELECT retention_due_at FROM applications').first().retention_due_at;
+    assert.ok(retentionBeforeSubmit);
     database.exec(`CREATE TRIGGER reject_submit_audit BEFORE INSERT ON audit_events WHEN NEW.event_type = 'application.submitted' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;`);
 
     await assert.rejects(repositories.applications.submitDraft({
@@ -318,6 +332,9 @@ test('application submission audit failure rolls back the state transition', asy
         requestId: 'req_submit_1'
     }));
 
-    assert.equal(database.prepare('SELECT status FROM applications').first().status, 'draft');
+    const applicationAfterFailure = database.prepare('SELECT status, retention_due_at, terminal_at FROM applications').first();
+    assert.equal(applicationAfterFailure.status, 'draft');
+    assert.equal(applicationAfterFailure.retention_due_at, retentionBeforeSubmit);
+    assert.equal(applicationAfterFailure.terminal_at, null);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 0);
 });

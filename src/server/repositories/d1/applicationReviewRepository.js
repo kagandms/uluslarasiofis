@@ -1,3 +1,13 @@
+import { OFFICIAL_APPLICATION_RETENTION_DAYS } from '../../../config/constants.js';
+
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function addUtcDays(timestamp, days) {
+    const timestampMilliseconds = Date.parse(timestamp);
+    if (!Number.isFinite(timestampMilliseconds)) throw new TypeError('Application timestamp must be valid.');
+    return new Date(timestampMilliseconds + days * MILLISECONDS_PER_DAY).toISOString();
+}
+
 /**
  * Creates atomic persistence operations for staff application and document review.
  * @param {D1Database} database Cloudflare D1 binding.
@@ -7,11 +17,16 @@
 export function createApplicationReviewRepository(database, notes) {
     return Object.freeze({
         async transitionApplicationStatus({ applicationId, currentStatus, expectedUpdatedAt, targetStatus, staffId, now, requestId, auditId }) {
+            const isCompleted = targetStatus === 'completed';
+            const terminalAt = isCompleted ? now : null;
+            const retentionDueAt = isCompleted ? addUtcDays(now, OFFICIAL_APPLICATION_RETENTION_DAYS) : null;
             const results = await database.batch([
                 database.prepare(`
-                    UPDATE applications SET status = ?, updated_at = ?, last_activity_at = ?
+                    UPDATE applications SET status = ?, updated_at = ?, last_activity_at = ?,
+                        terminal_at = ?, retention_due_at = ?
                     WHERE id = ? AND status = ? AND updated_at = ?
-                `).bind(targetStatus, now, now, applicationId, currentStatus, expectedUpdatedAt),
+                `).bind(targetStatus, now, now, terminalAt, retentionDueAt,
+                    applicationId, currentStatus, expectedUpdatedAt),
                 database.prepare(`
                     INSERT INTO audit_events (
                         id, event_type, actor_type, actor_staff_id, application_id, request_id, safe_metadata_json

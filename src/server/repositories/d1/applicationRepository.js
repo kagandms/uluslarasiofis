@@ -211,7 +211,8 @@ export function createApplicationRepository(database) {
             const results = await database.batch([
                 database.prepare(`
                     UPDATE applications
-                    SET status = 'submitted', submitted_at = ?, updated_at = ?, last_activity_at = ?
+                    SET status = 'submitted', submitted_at = ?, updated_at = ?, last_activity_at = ?,
+                        terminal_at = NULL, retention_due_at = NULL
                     WHERE id = ? AND status = 'draft'
                 `).bind(submittedAt, submittedAt, submittedAt, applicationId),
                 database.prepare(`

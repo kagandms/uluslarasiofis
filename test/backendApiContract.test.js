@@ -641,9 +641,20 @@ test('ready application submits once through its owner session and returns only 
     assert.equal(payload.application.id, undefined);
     assert.doesNotMatch(JSON.stringify(payload), /storage_key|session_hash|token_hash|internal-application-id/i);
     assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(first.applicationId).first().status, 'submitted');
+    const submittedLifecycle = database.prepare(`
+        SELECT retention_due_at, terminal_at, submitted_at, updated_at, last_activity_at
+        FROM applications WHERE id = ?
+    `).bind(first.applicationId).first();
+    assert.equal(submittedLifecycle.retention_due_at, null);
+    assert.equal(submittedLifecycle.terminal_at, null);
+    assert.equal(submittedLifecycle.submitted_at, payload.application.submitted_at);
+    assert.equal(submittedLifecycle.updated_at, payload.application.submitted_at);
+    assert.equal(submittedLifecycle.last_activity_at, payload.application.submitted_at);
     assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(second.applicationId).first().status, 'draft');
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 1);
     assert.equal(repeated.status, 409);
+    assert.equal(database.prepare('SELECT retention_due_at, terminal_at FROM applications WHERE id = ?')
+        .bind(first.applicationId).first().retention_due_at, null);
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 1);
 });
 

@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
 
 export const HISTORY_MAX_DAYS = 30;
 export const CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION = 'contact-reachability-v1';
+export const OFFICIAL_APPLICATION_RETENTION_DAYS = 365;
 
 export const IMAGE_CONFIG = {
     OCR_MAX_WIDTH: 1200,
