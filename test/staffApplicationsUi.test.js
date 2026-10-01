@@ -87,7 +87,10 @@ test('applications workspace is prominent and opening it loads a queue without d
     assert.equal(document.getElementById('view-applications').hidden, false);
     assert.equal(requests.length, 1);
     assert.match(root.textContent, /STU-001/);
-    assert.match(root.textContent, /Reviewer One/);
+    assert.doesNotMatch(root.textContent, /Atanan Personel|Atanmamış|Reviewer One/);
+    assert.equal(root.querySelectorAll('th').length, 7);
+    assert.equal(root.querySelectorAll('tbody tr:first-child > td').length, 7);
+    assert.equal([...root.querySelectorAll('td')].some((cell) => cell.dataset.label === 'Atanan Personel'), false);
     assert.ok(root.querySelector('th')?.textContent.includes('Öğrenci No'));
     assert.ok(root.querySelector('[data-action="open-detail"]'));
 
@@ -192,6 +195,7 @@ test('applications manager submits filters, changes pages, renders detail safely
     assert.match(root.textContent, /passport\.pdf/);
     assert.match(root.textContent, /Onaylandı/);
     assert.match(root.textContent, /Yüklenmemiş/);
+    assert.doesNotMatch(root.textContent, /Atanan Personel|Atanmamış|Reviewer One/);
     assert.ok(root.querySelector('[data-action="back-to-queue"]'));
     assert.equal(root.querySelectorAll('[data-action*="approve"], [data-action*="assign"], [data-action*="download"], [data-action*="preview"]').length, 0);
     root.querySelector('[data-action="back-to-queue"]').click();

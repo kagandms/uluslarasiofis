@@ -588,6 +588,31 @@ test('initial admin bootstrap requires a secret and closes after the first accou
     assert.equal((await readJson(secondResponse)).error.code, 'BOOTSTRAP_CLOSED');
 });
 
+test('staff bootstrap and login support case-insensitive usernames containing at and hash', async () => {
+    const { environment, database } = createEnvironment();
+    const username = 'Shared.Admin@Office#1';
+    const bootstrapRequest = createRequest('/api/staff/auth/bootstrap', {
+        method: 'POST',
+        body: { username, password: TEST_PASSWORD, display_name: 'Test Shared Admin' }
+    });
+    bootstrapRequest.headers.set('X-Staff-Bootstrap-Token', environment.STAFF_BOOTSTRAP_TOKEN);
+
+    const bootstrapResponse = await worker.fetch(bootstrapRequest, environment, {});
+    const storedUser = database.prepare('SELECT username, normalized_username, password_hash FROM staff_users').first();
+    assert.equal(bootstrapResponse.status, 201);
+    assert.equal(storedUser.username, username);
+    assert.equal(storedUser.normalized_username, 'shared.admin@office#1');
+    assert.notEqual(storedUser.password_hash, TEST_PASSWORD);
+
+    const loginResponse = await worker.fetch(createRequest('/api/staff/auth/login', {
+        method: 'POST',
+        body: { username: 'sHARED.aDMIN@oFFICE#1', password: TEST_PASSWORD }
+    }), environment, {});
+
+    assert.equal(loginResponse.status, 200);
+    assert.match(loginResponse.headers.get('Set-Cookie'), /^staff_session=.+; HttpOnly; Secure; SameSite=Strict;/);
+});
+
 test('initial admin bootstrap stays closed when any staff account already exists', async () => {
     const { environment, database } = createEnvironment();
     await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer', role: 'reviewer' });

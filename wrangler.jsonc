@@ -30,7 +30,7 @@
   ],
   "env": {
     "staging": {
-      "name": "uluslarasiofis-staging",
+      "name": "goc-staging",
       "vars": {
         "APP_ENV": "staging",
         "R2_BUCKET_NAME": "uluslarasiofis-documents-staging",

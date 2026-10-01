@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createD1Repositories } from '../src/server/repositories/d1/index.js';
+import { normalizeUsername } from '../src/server/repositories/d1/staffRepository.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 
@@ -44,6 +45,19 @@ function addFinalizedDocument(database, applicationId, applicationType, code, su
     `).bind(fileId, revisionId, `quarantine/${suffix}`, `${code}.pdf`).run();
     return { recordId, revisionId, fileId, storageKey: `quarantine/${suffix}` };
 }
+
+test('staff usernames normalize case and outer whitespace while accepting at and hash', () => {
+    assert.equal(normalizeUsername('  Shared.Admin@Office#1  '), 'shared.admin@office#1');
+    assert.equal(normalizeUsername('A@B#'), 'a@b#');
+});
+
+test('staff usernames reject whitespace, path separators, controls, and unexpected punctuation', () => {
+    for (const username of ['shared admin@office#1', 'shared/admin#1', 'shared\\admin#1', 'shared\u0001admin#1', 'shared.admin!#1']) {
+        assert.throws(() => normalizeUsername(username), TypeError, username);
+    }
+    assert.throws(() => normalizeUsername('ab'), TypeError);
+    assert.throws(() => normalizeUsername('a'.repeat(65)), TypeError);
+});
 
 async function changeDraftType(repositories, applicationId, applicationType, suffix) {
     return repositories.applications.updateDraft(applicationId, { applicationType }, {

@@ -7,7 +7,7 @@
 export function normalizeUsername(username) {
     if (typeof username !== 'string') throw new TypeError('Username must be text.');
     const normalizedUsername = username.trim().toLocaleLowerCase('en-US');
-    if (!/^[a-z0-9._-]{3,64}$/.test(normalizedUsername)) {
+    if (!/^[a-z0-9._@#-]{3,64}$/.test(normalizedUsername)) {
         throw new TypeError('Username format is invalid.');
     }
     return normalizedUsername;

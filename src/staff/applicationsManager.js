@@ -100,7 +100,7 @@ function createSearchForm(document, state, onSubmit) {
 function createQueueTable(document, items, onOpenDetail) {
     const table = document.createElement('table');
     table.className = 'staff-applications-table';
-    const headers = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', 'Atanan Personel', ''];
+    const headers = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
     const head = document.createElement('thead');
     const headerRow = document.createElement('tr');
     headers.forEach((header) => headerRow.append(createText(document, 'th', '', header)));
@@ -114,8 +114,7 @@ function createQueueTable(document, items, onOpenDetail) {
             item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru',
             readStatusLabel(item.status),
             formatDate(item.submitted_at),
-            formatDate(item.updated_at),
-            item.assigned_staff?.display_name || 'Atanmamış'
+            formatDate(item.updated_at)
         ];
         values.forEach((value, index) => {
             const cell = createText(document, 'td', '', displayValue(value));
@@ -198,7 +197,7 @@ function appendDetail(document, list, label, value) {
     list.append(createText(document, 'dt', '', label), createText(document, 'dd', '', displayValue(value)));
 }
 
-function createApplicationSummary(document, application, assignment) {
+function createApplicationSummary(document, application) {
     const section = document.createElement('section');
     const details = document.createElement('dl');
     const fields = [
@@ -214,8 +213,7 @@ function createApplicationSummary(document, application, assignment) {
         ['İletişim teyidi', application.contact_acknowledgement_accepted_current ? 'Onaylandı' : 'Onaylanmadı'],
         ['İletişim teyit tarihi', formatDate(application.contact_acknowledgement_accepted_at)],
         ['Oluşturulma', formatDate(application.created_at)], ['Gönderim', formatDate(application.submitted_at)],
-        ['Son güncelleme', formatDate(application.updated_at)],
-        ['Atanan personel', assignment?.display_name || 'Atanmamış']
+        ['Son güncelleme', formatDate(application.updated_at)]
     ];
     section.className = 'staff-application-summary';
     section.append(createText(document, 'h4', '', 'Başvuru ve başvuran bilgileri'));
@@ -462,7 +460,7 @@ function renderDetail(root, state, handlers) {
         panel.append(createText(document, 'p', 'staff-applications-state', message));
     } else if (state.detail) {
         panel.append(
-            createApplicationSummary(document, state.detail.application, state.detail.assignment),
+            createApplicationSummary(document, state.detail.application),
             createApplicationWorkflow(document, state.detail.application, state.detail, state, handlers),
             createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers)
         );
