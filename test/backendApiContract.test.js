@@ -41,13 +41,16 @@ function createEnvironment(options = {}) {
             }
         },
         STAFF_BOOTSTRAP_TOKEN: 'test-bootstrap-token-with-sufficient-entropy',
+        STAFF_SHARED_USERNAME: 'admin',
         APP_ENV: 'test',
         ...options
     };
     return { environment, database, storedObjects };
 }
 
-async function seedStaff(database, { id, username, role = 'reviewer', isActive = true, passwordHash = PASSWORD_HASH }) {
+async function seedStaff(environment, database, { id, username, role = 'reviewer', isActive = true, passwordHash = PASSWORD_HASH }) {
+    const existingStaff = database.prepare('SELECT id FROM staff_users LIMIT 1').first();
+    if (!existingStaff || role === 'admin') environment.STAFF_SHARED_USERNAME = username;
     await database.prepare(`
         INSERT INTO staff_users (
             id, username, normalized_username, password_hash, display_name, role, is_active
@@ -68,8 +71,9 @@ async function seedStaffSession(database, staffUserId, rawToken, { lastSeenAt, e
     ).run();
 }
 
-function createRequest(path, { method = 'GET', body, cookie, origin = 'https://portal.test' } = {}) {
-    const headers = new Headers({ Origin: origin });
+function createRequest(path, { method = 'GET', body, cookie, origin = 'https://portal.test', headers: suppliedHeaders = {} } = {}) {
+    const headers = new Headers(suppliedHeaders);
+    headers.set('Origin', origin);
     if (body !== undefined) headers.set('Content-Type', 'application/json');
     if (cookie) headers.set('Cookie', cookie);
     return new Request(`https://portal.test${path}`, {
@@ -240,7 +244,7 @@ async function seedAccessibleStaffDocument(database, storedObjects, applicationI
 
 test('staff login creates a D1-backed HttpOnly session and returns no bearer token', async () => {
     const { environment, database } = createEnvironment();
-    await seedStaff(database, { id: 'staff-admin', username: 'admin', role: 'admin' });
+    await seedStaff(environment, database, { id: 'staff-admin', username: 'admin', role: 'admin' });
 
     const response = await worker.fetch(createRequest('/api/staff/auth/login', {
         method: 'POST',
@@ -263,7 +267,7 @@ test('staff login creates a D1-backed HttpOnly session and returns no bearer tok
 
 test('staff login rejects invalid credentials with the safe error contract', async () => {
     const { environment, database } = createEnvironment();
-    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
+    await seedStaff(environment, database, { id: 'staff-reviewer', username: 'reviewer' });
 
     const response = await worker.fetch(createRequest('/api/staff/auth/login', {
         method: 'POST',
@@ -279,9 +283,41 @@ test('staff login rejects invalid credentials with the safe error contract', asy
     assert.doesNotMatch(JSON.stringify(payload), /password_hash|sqlite|pbkdf|stack/i);
 });
 
+test('only the configured shared staff account can create a session or reuse an old individual session', async () => {
+    const { environment, database } = createEnvironment();
+    const reviewerToken = 'reviewer-session-token-000000000000000000';
+    await seedStaff(environment, database, { id: 'staff-admin', username: 'admin', role: 'admin' });
+    await seedStaff(environment, database, { id: 'staff-reviewer', username: 'reviewer' });
+    await seedStaffSession(database, 'staff-reviewer', reviewerToken);
+
+    const reviewerLogin = await worker.fetch(createRequest('/api/staff/auth/login', {
+        method: 'POST', body: { username: 'reviewer', password: TEST_PASSWORD }
+    }), environment, {});
+    const reviewerSession = await worker.fetch(createRequest('/api/staff/auth/session', {
+        cookie: staffCookie(reviewerToken)
+    }), environment, {});
+
+    assert.equal(reviewerLogin.status, 401);
+    assert.equal(reviewerSession.status, 401);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM staff_sessions').first().count, 1);
+});
+
+test('staff authentication fails closed when the common account username is not configured', async () => {
+    const { environment, database } = createEnvironment();
+    await seedStaff(environment, database, { id: 'staff-admin', username: 'admin', role: 'admin' });
+    delete environment.STAFF_SHARED_USERNAME;
+
+    const response = await worker.fetch(createRequest('/api/staff/auth/login', {
+        method: 'POST', body: { username: 'admin', password: TEST_PASSWORD }
+    }), environment, {});
+
+    assert.equal(response.status, 503);
+    assert.equal((await readJson(response)).error.code, 'SERVICE_UNAVAILABLE');
+});
+
 test('disabled staff cannot create a session', async () => {
     const { environment, database } = createEnvironment();
-    await seedStaff(database, { id: 'staff-disabled', username: 'disabled', isActive: false });
+    await seedStaff(environment, database, { id: 'staff-disabled', username: 'disabled', isActive: false });
 
     const response = await worker.fetch(createRequest('/api/staff/auth/login', {
         method: 'POST',
@@ -305,28 +341,28 @@ test('staff login refuses cross-origin requests before credential checks', async
     assert.equal((await readJson(response)).error.code, 'CROSS_ORIGIN_REQUEST');
 });
 
-test('admin-only staff account APIs reject reviewers and allow admins', async () => {
+test('staff account management endpoints are unavailable in the shared-account model', async () => {
     const { environment, database } = createEnvironment();
-    const reviewerSessionToken = 'r'.repeat(43);
     const adminSessionToken = 'a'.repeat(43);
-    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
-    await seedStaff(database, { id: 'staff-admin', username: 'admin', role: 'admin' });
-    await seedStaffSession(database, 'staff-reviewer', reviewerSessionToken);
+    await seedStaff(environment, database, { id: 'staff-admin', username: 'admin', role: 'admin' });
     await seedStaffSession(database, 'staff-admin', adminSessionToken);
 
-    const reviewerResponse = await worker.fetch(createRequest('/api/staff/users', {
-        cookie: `staff_session=${reviewerSessionToken}`
-    }), environment, {});
-    const adminResponse = await worker.fetch(createRequest('/api/staff/users', {
-        cookie: `staff_session=${adminSessionToken}`
-    }), environment, {});
+    const responses = await Promise.all([
+        worker.fetch(createRequest('/api/staff/users', { cookie: staffCookie(adminSessionToken) }), environment, {}),
+        worker.fetch(createRequest('/api/staff/users', {
+            method: 'POST', cookie: staffCookie(adminSessionToken),
+            body: { username: 'new.reviewer', password: 'Another secure password 2026', display_name: 'Reviewer', role: 'reviewer' }
+        }), environment, {}),
+        worker.fetch(createRequest('/api/staff/users/staff-admin/password', {
+            method: 'PATCH', cookie: staffCookie(adminSessionToken), body: { password: 'Another secure password 2026' }
+        }), environment, {})
+    ]);
 
-    assert.equal(reviewerResponse.status, 403);
-    assert.equal((await readJson(reviewerResponse)).error.code, 'FORBIDDEN');
-    assert.equal(adminResponse.status, 200);
-    const adminPayload = await readJson(adminResponse);
-    assert.equal(adminPayload.users.length, 2);
-    assert.doesNotMatch(JSON.stringify(adminPayload), /password_hash|pbkdf/i);
+    for (const response of responses) {
+        assert.equal(response.status, 404);
+        assert.equal((await readJson(response)).error.code, 'NOT_FOUND');
+    }
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM staff_users').first().count, 1);
 });
 
 test('staff login applies a temporary D1-backed failed-attempt limit', async () => {
@@ -345,23 +381,11 @@ test('staff login applies a temporary D1-backed failed-attempt limit', async () 
     assert.equal((await readJson(blockedResponse)).error.code, 'RATE_LIMITED');
 });
 
-test('staff accounts cannot deactivate their own administrator session', async () => {
-    const { environment, database } = createEnvironment();
-    const sessionToken = 'a'.repeat(43);
-    await seedStaff(database, { id: 'staff-admin', username: 'admin', role: 'admin' });
-    await seedStaffSession(database, 'staff-admin', sessionToken);
-    const response = await worker.fetch(createRequest('/api/staff/users/staff-admin/active', {
-        method: 'PATCH', cookie: `staff_session=${sessionToken}`, body: { is_active: false }
-    }), environment, {});
-
-    assert.equal(response.status, 409);
-    assert.equal((await readJson(response)).error.code, 'CANNOT_DEACTIVATE_SELF');
-    assert.equal(database.prepare("SELECT is_active FROM staff_users WHERE id = 'staff-admin'").first().is_active, 1);
-});
-
 test('staff APIs reject requests without a D1-backed session', async () => {
     const { environment } = createEnvironment();
-    const response = await worker.fetch(createRequest('/api/staff/users'), environment, {});
+    const response = await worker.fetch(createRequest('/api/staff/applications/query', {
+        method: 'POST', body: { q: '', status: 'all', page: 1, page_size: 25 }
+    }), environment, {});
 
     assert.equal(response.status, 401);
     assert.equal((await readJson(response)).error.code, 'UNAUTHORIZED');
@@ -495,7 +519,7 @@ test('private documents require a staff session and clean finalized metadata', a
                 : null;
         }
     };
-    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
+    await seedStaff(environment, database, { id: 'staff-reviewer', username: 'reviewer' });
     await seedStaffSession(database, 'staff-reviewer', reviewerSessionToken);
     await database.prepare(`
         INSERT INTO students (id, student_number, normalized_student_number)
@@ -557,6 +581,7 @@ test('unknown API errors include a correlation id and no provider details', asyn
 test('initial admin bootstrap requires a secret and closes after the first account', async () => {
     const { environment, database } = createEnvironment();
     const body = { username: 'root-admin', password: TEST_PASSWORD, display_name: 'Root Admin' };
+    environment.STAFF_SHARED_USERNAME = body.username;
     const bootstrapRequest = (token) => createRequest('/api/staff/auth/bootstrap', {
         method: 'POST',
         body,
@@ -591,6 +616,7 @@ test('initial admin bootstrap requires a secret and closes after the first accou
 test('staff bootstrap and login support case-insensitive usernames containing at and hash', async () => {
     const { environment, database } = createEnvironment();
     const username = 'Shared.Admin@Office#1';
+    environment.STAFF_SHARED_USERNAME = username;
     const bootstrapRequest = createRequest('/api/staff/auth/bootstrap', {
         method: 'POST',
         body: { username, password: TEST_PASSWORD, display_name: 'Test Shared Admin' }
@@ -615,7 +641,7 @@ test('staff bootstrap and login support case-insensitive usernames containing at
 
 test('initial admin bootstrap stays closed when any staff account already exists', async () => {
     const { environment, database } = createEnvironment();
-    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer', role: 'reviewer' });
+    await seedStaff(environment, database, { id: 'staff-reviewer', username: 'reviewer', role: 'reviewer' });
     const request = createRequest('/api/staff/auth/bootstrap', {
         method: 'POST', body: { username: 'root-admin', password: TEST_PASSWORD, display_name: 'Root Admin' }
     });
@@ -727,7 +753,7 @@ test('ready application submits once through its owner session and returns only 
 test('staff idle timeout refreshes active sessions without touching every request', async () => {
     const { environment, database } = createEnvironment();
     const token = 'i'.repeat(43);
-    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
+    await seedStaff(environment, database, { id: 'staff-reviewer', username: 'reviewer' });
     const staleTouch = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     await seedStaffSession(database, 'staff-reviewer', token, { lastSeenAt: staleTouch });
 
@@ -748,8 +774,8 @@ test('idle-expired, absolute-expired, and disabled staff sessions are unauthoriz
     const absoluteToken = 'k'.repeat(43);
     const disabledToken = 'm'.repeat(43);
     const expiredIdleAt = new Date(Date.now() - 31 * 60 * 1000).toISOString();
-    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
-    await seedStaff(database, { id: 'staff-disabled', username: 'disabled', isActive: false });
+    await seedStaff(environment, database, { id: 'staff-reviewer', username: 'reviewer' });
+    await seedStaff(environment, database, { id: 'staff-disabled', username: 'disabled', isActive: false });
     await seedStaffSession(database, 'staff-reviewer', idleToken, { lastSeenAt: expiredIdleAt });
     await seedStaffSession(database, 'staff-reviewer', absoluteToken, { expiresAt: new Date(Date.now() - 1000).toISOString() });
     await seedStaffSession(database, 'staff-disabled', disabledToken);
@@ -767,7 +793,7 @@ test('staff logout records one safe audit event and remains idempotent for expir
     const { environment, database } = createEnvironment();
     const activeToken = 'o'.repeat(43);
     const expiredToken = 'e'.repeat(43);
-    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
+    await seedStaff(environment, database, { id: 'staff-reviewer', username: 'reviewer' });
     await seedStaffSession(database, 'staff-reviewer', activeToken);
     await seedStaffSession(database, 'staff-reviewer', expiredToken, { expiresAt: new Date(Date.now() - 1000).toISOString() });
 
@@ -788,7 +814,7 @@ test('staff logout records one safe audit event and remains idempotent for expir
 test('staff logout audit failure rolls back revocation', async () => {
     const { environment, database } = createEnvironment();
     const token = 'f'.repeat(43);
-    await seedStaff(database, { id: 'staff-reviewer', username: 'reviewer' });
+    await seedStaff(environment, database, { id: 'staff-reviewer', username: 'reviewer' });
     await seedStaffSession(database, 'staff-reviewer', token);
     database.exec(`CREATE TRIGGER reject_staff_logout_audit BEFORE INSERT ON audit_events WHEN NEW.event_type = 'staff.logout' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;`);
 
@@ -798,45 +824,20 @@ test('staff logout audit failure rolls back revocation', async () => {
     assert.equal(database.prepare('SELECT revoked_at FROM staff_sessions').first().revoked_at, null);
 });
 
-test('login, password reset, account state, and bootstrap actions leave audit evidence', async () => {
+test('staff bootstrap rejects a username different from the configured common account', async () => {
     const { environment, database } = createEnvironment();
-    const adminToken = 'z'.repeat(43);
-    const targetToken = 'y'.repeat(43);
-    await seedStaff(database, { id: 'staff-admin', username: 'admin', role: 'admin' });
-    await seedStaff(database, { id: 'staff-target', username: 'target' });
-    await seedStaffSession(database, 'staff-admin', adminToken);
-    await seedStaffSession(database, 'staff-target', targetToken);
-
-    const loginResponse = await worker.fetch(createRequest('/api/staff/auth/login', { method: 'POST', body: { username: 'admin', password: TEST_PASSWORD } }), environment, {});
-    const resetResponse = await worker.fetch(createRequest('/api/staff/users/staff-target/password', {
-        method: 'PATCH', cookie: `staff_session=${adminToken}`, body: { password: 'New secure password 2026' }
-    }), environment, {});
-    const inactiveResponse = await worker.fetch(createRequest('/api/staff/users/staff-target/active', {
-        method: 'PATCH', cookie: `staff_session=${adminToken}`, body: { is_active: false }
-    }), environment, {});
-    const activeResponse = await worker.fetch(createRequest('/api/staff/users/staff-target/active', {
-        method: 'PATCH', cookie: `staff_session=${adminToken}`, body: { is_active: true }
-    }), environment, {});
-    const createUserResponse = await worker.fetch(createRequest('/api/staff/users', {
-        method: 'POST', cookie: `staff_session=${adminToken}`,
-        body: { username: 'new.reviewer', password: 'Another secure password 2026', display_name: 'New Reviewer', role: 'reviewer' }
+    const response = await worker.fetch(createRequest('/api/staff/auth/bootstrap', {
+        method: 'POST',
+        headers: { 'X-Staff-Bootstrap-Token': environment.STAFF_BOOTSTRAP_TOKEN },
+        body: { username: 'other-account', password: TEST_PASSWORD, display_name: 'Shared staff' }
     }), environment, {});
 
-    assert.equal(loginResponse.status, 200);
-    assert.equal(resetResponse.status, 200);
-    assert.equal(inactiveResponse.status, 200);
-    assert.equal(activeResponse.status, 200);
-    assert.equal(createUserResponse.status, 201);
-    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.login'").first().count, 1);
-    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.password_reset'").first().count, 1);
-    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.user_status_changed'").first().count, 2);
-    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.user_created'").first().count, 1);
-    assert.equal(database.prepare("SELECT is_active FROM staff_users WHERE id = 'staff-target'").first().is_active, 1);
-    assert.ok(database.prepare('SELECT revoked_at FROM staff_sessions WHERE token_hash = ?').bind(await hashSessionToken(targetToken)).first().revoked_at);
-    assert.doesNotMatch(JSON.stringify(await readJson(resetResponse)), /password_hash|pbkdf|token_hash/i);
+    assert.equal(response.status, 400);
+    assert.equal((await readJson(response)).error.code, 'VALIDATION_ERROR');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM staff_users').first().count, 0);
 });
 
-test('staff application queue and detail require reviewer or admin sessions and exclude drafts', async () => {
+test('shared staff account can read application queue and detail while drafts remain excluded', async () => {
     const { environment, database } = createEnvironment();
     const draftId = await createStaffApplication(environment, database, 'STAFF-DRAFT', { status: 'draft' });
     const applicationA = await createStaffApplication(environment, database, 'STAFF-A', {
@@ -845,34 +846,35 @@ test('staff application queue and detail require reviewer or admin sessions and 
     const applicationB = await createStaffApplication(environment, database, 'STAFF-B', {
         firstName: 'Mert', lastName: 'Kaya', passportNumber: 'PASSPORT-PRIVATE-B'
     });
-    await seedStaff(database, { id: 'staff-reviewer-apps', username: 'reviewer-apps' });
-    await seedStaff(database, { id: 'staff-admin-apps', username: 'admin-apps', role: 'admin' });
-    const reviewerToken = 'reviewer-apps-session-token-000000000000000000';
-    const adminToken = 'admin-apps-session-token-00000000000000000000';
-    await seedStaffSession(database, 'staff-reviewer-apps', reviewerToken);
-    await seedStaffSession(database, 'staff-admin-apps', adminToken);
+    await seedStaff(environment, database, { id: 'staff-admin-apps', username: 'admin-apps', role: 'admin' });
+    await database.prepare(`
+        INSERT INTO assignments (id, application_id, staff_user_id, assigned_by_staff_id)
+        VALUES ('legacy-assignment', ?, 'staff-admin-apps', 'staff-admin-apps')
+    `).bind(applicationA).run();
+    const sharedToken = 'admin-apps-session-token-00000000000000000000';
+    await seedStaffSession(database, 'staff-admin-apps', sharedToken);
 
     const unauthenticatedQueue = await worker.fetch(createRequest('/api/staff/applications/query', {
         method: 'POST', body: { status: 'all' }
     }), environment, {});
     const unauthenticatedDetail = await worker.fetch(createRequest(`/api/staff/applications/${applicationA}`), environment, {});
     const wrongMethod = await worker.fetch(createRequest('/api/staff/applications/query', {
-        method: 'GET', cookie: staffCookie(reviewerToken)
+        method: 'GET', cookie: staffCookie(sharedToken)
     }), environment, {});
     const crossOrigin = await worker.fetch(createRequest('/api/staff/applications/query', {
-        method: 'POST', body: { status: 'all' }, cookie: staffCookie(reviewerToken), origin: 'https://attacker.test'
+        method: 'POST', body: { status: 'all' }, cookie: staffCookie(sharedToken), origin: 'https://attacker.test'
     }), environment, {});
     const reviewerQueue = await worker.fetch(createRequest('/api/staff/applications/query', {
-        method: 'POST', body: { status: 'all' }, cookie: staffCookie(reviewerToken)
+        method: 'POST', body: { status: 'all' }, cookie: staffCookie(sharedToken)
     }), environment, {});
     const adminDetail = await worker.fetch(createRequest(`/api/staff/applications/${applicationA}`, {
-        cookie: staffCookie(adminToken)
+        cookie: staffCookie(sharedToken)
     }), environment, {});
     const draftDetail = await worker.fetch(createRequest(`/api/staff/applications/${draftId}`, {
-        cookie: staffCookie(reviewerToken)
+        cookie: staffCookie(sharedToken)
     }), environment, {});
     const invalidDetail = await worker.fetch(createRequest('/api/staff/applications/not-a-real-id', {
-        cookie: staffCookie(reviewerToken)
+        cookie: staffCookie(sharedToken)
     }), environment, {});
     const queuePayload = await reviewerQueue.json();
     const detailPayload = await adminDetail.json();
@@ -887,6 +889,7 @@ test('staff application queue and detail require reviewer or admin sessions and 
     assert.equal(invalidDetail.status, 404);
     assert.equal(queuePayload.items.some((item) => item.id === draftId), false);
     assert.ok(queuePayload.items.some((item) => item.id === applicationA));
+    assert.doesNotMatch(JSON.stringify(queuePayload), /assigned_staff|Atanan Personel|admin-apps/);
     assert.equal(detailPayload.application.id, applicationA);
     assert.equal(detailPayload.application.student_number, 'STAFF-A');
     assert.equal(detailPayload.application.passport_number, 'PASSPORT-PRIVATE-A');
@@ -908,7 +911,7 @@ test('staff application queue maps every supported status filter and paginates d
         const id = await createStaffApplication(environment, database, `FILTER-${suffix}`, { status });
         idByStatus.set(status, id);
     }
-    await seedStaff(database, { id: 'staff-filter-reviewer', username: 'filter-reviewer' });
+    await seedStaff(environment, database, { id: 'staff-filter-reviewer', username: 'filter-reviewer' });
     const token = 'filter-reviewer-session-token-000000000000000';
     await seedStaffSession(database, 'staff-filter-reviewer', token);
     const cookie = staffCookie(token);
@@ -966,7 +969,7 @@ test('staff application search matches student number, names, and passport liter
     await createStaffApplication(environment, database, 'SEARCH-OTHER', {
         firstName: 'Other', lastName: 'Person', passportNumber: 'PASS-OTHER'
     });
-    await seedStaff(database, { id: 'staff-search-reviewer', username: 'search-reviewer' });
+    await seedStaff(environment, database, { id: 'staff-search-reviewer', username: 'search-reviewer' });
     const token = 'search-reviewer-session-token-000000000000000';
     await seedStaffSession(database, 'staff-search-reviewer', token);
     const query = async (q) => {
@@ -989,7 +992,7 @@ test('staff application search matches student number, names, and passport liter
     assert.doesNotMatch(JSON.stringify(injection.payload), /%' OR 1=1/);
 });
 
-test('staff application detail reuses policy and returns current safe document metadata and assignment', async () => {
+test('staff application detail reuses policy and excludes legacy person-assignment data', async () => {
     const { environment, database } = createEnvironment();
     const renewalId = await createStaffApplication(environment, database, 'DETAIL-RENEWAL', {
         applicationType: 'renewal', status: 'under_review'
@@ -1005,7 +1008,7 @@ test('staff application detail reuses policy and returns current safe document m
     await seedStaffDocument(database, renewalId, 'renewal', 'passport', {
         filename: 'passport-safe-name.pdf', reviewStatus: 'approved', revisionStatus: 'approved'
     });
-    await seedStaff(database, { id: 'staff-detail-reviewer', username: 'detail-reviewer' });
+    await seedStaff(environment, database, { id: 'staff-detail-reviewer', username: 'detail-reviewer' });
     const token = 'detail-reviewer-session-token-000000000000000';
     await seedStaffSession(database, 'staff-detail-reviewer', token);
     await database.prepare(`
@@ -1027,7 +1030,8 @@ test('staff application detail reuses policy and returns current safe document m
     assert.equal(renewal.status, 200);
     assert.equal(renewalPayload.application.contact_acknowledgement_accepted_current, false);
     assert.equal(renewalPayload.application.declaration_version, 'accuracy-v1');
-    assert.deepEqual(renewalPayload.assignment, { staff_id: 'staff-detail-reviewer', display_name: 'Display detail-reviewer' });
+    assert.equal(Object.hasOwn(renewalPayload, 'assignment'), false);
+    assert.doesNotMatch(JSON.stringify(renewalPayload), /staff-detail-reviewer|assigned_staff/);
     assert.ok(documents.some((document) => document.code === 'uets'));
     assert.ok(documents.some((document) => document.code === 'address_undertaking'));
     assert.ok(documents.some((document) => document.code === 'host_residence_certificate'));
@@ -1055,11 +1059,8 @@ test('staff current-document preview and download share application-scoped autho
     const document = await seedAccessibleStaffDocument(database, storedObjects, applicationA, 'initial', 'passport', {
         filename: '../passport résumé.pdf'
     });
-    await seedStaff(database, { id: 'staff-access-reviewer', username: 'access-reviewer' });
-    await seedStaff(database, { id: 'staff-access-admin', username: 'access-admin', role: 'admin' });
-    const reviewerToken = 'access-reviewer-session-token-000000000000000';
+    await seedStaff(environment, database, { id: 'staff-access-admin', username: 'access-admin', role: 'admin' });
     const adminToken = 'access-admin-session-token-0000000000000000';
-    await seedStaffSession(database, 'staff-access-reviewer', reviewerToken);
     await seedStaffSession(database, 'staff-access-admin', adminToken);
     const previewPath = `/api/staff/applications/${applicationA}/documents/passport/preview`;
     const downloadPath = `/api/staff/applications/${applicationA}/documents/passport/download`;
@@ -1067,24 +1068,24 @@ test('staff current-document preview and download share application-scoped autho
     const unauthenticatedPreview = await worker.fetch(createRequest(previewPath, { method: 'POST' }), environment, {});
     const unauthenticatedDownload = await worker.fetch(createRequest(downloadPath), environment, {});
     const wrongPreviewMethod = await worker.fetch(createRequest(previewPath, {
-        cookie: staffCookie(reviewerToken)
+        cookie: staffCookie(adminToken)
     }), environment, {});
     const crossOriginPreview = await worker.fetch(createRequest(previewPath, {
-        method: 'POST', cookie: staffCookie(reviewerToken), origin: 'https://attacker.test'
+        method: 'POST', cookie: staffCookie(adminToken), origin: 'https://attacker.test'
     }), environment, {});
-    const reviewerPreview = await worker.fetch(createRequest(previewPath, {
-        method: 'POST', cookie: staffCookie(reviewerToken)
+    const sharedStaffPreview = await worker.fetch(createRequest(previewPath, {
+        method: 'POST', cookie: staffCookie(adminToken)
     }), environment, {});
     const adminDownload = await worker.fetch(createRequest(downloadPath, {
         cookie: staffCookie(adminToken)
     }), environment, {});
     const wrongApplication = await worker.fetch(createRequest(
-        `/api/staff/applications/${applicationB}/documents/passport/download`, { cookie: staffCookie(reviewerToken) }
+        `/api/staff/applications/${applicationB}/documents/passport/download`, { cookie: staffCookie(adminToken) }
     ), environment, {});
     const detailResponse = await worker.fetch(createRequest(`/api/staff/applications/${applicationA}`, {
-        cookie: staffCookie(reviewerToken)
+        cookie: staffCookie(adminToken)
     }), environment, {});
-    const preview = await readJson(reviewerPreview);
+    const preview = await readJson(sharedStaffPreview);
     const detail = await readJson(detailResponse);
     const auditRows = database.prepare(`
         SELECT event_type, actor_staff_id, application_id, document_record_id, request_id, safe_metadata_json
@@ -1098,7 +1099,7 @@ test('staff current-document preview and download share application-scoped autho
     assert.equal(unauthenticatedDownload.status, 401);
     assert.equal(wrongPreviewMethod.status, 405);
     assert.equal(crossOriginPreview.status, 403);
-    assert.equal(reviewerPreview.status, 200);
+    assert.equal(sharedStaffPreview.status, 200);
     assert.equal(adminDownload.status, 200);
     assert.equal(wrongApplication.status, 404);
     assert.equal(detail.documents.find((item) => item.code === 'passport').access_available, true);
@@ -1107,8 +1108,8 @@ test('staff current-document preview and download share application-scoped autho
     assert.ok(Math.abs(Date.parse(preview.expires_at) - Date.now() - 120_000) < 10_000);
     assert.equal(preview.media_type, 'application/pdf');
     assert.equal(preview.filename, 'passport r_sum_.pdf');
-    assert.equal(reviewerPreview.headers.get('Cache-Control'), 'no-store');
-    assert.equal(reviewerPreview.headers.has('Set-Cookie'), false);
+    assert.equal(sharedStaffPreview.headers.get('Cache-Control'), 'no-store');
+    assert.equal(sharedStaffPreview.headers.has('Set-Cookie'), false);
     assert.doesNotMatch(JSON.stringify(preview), /file_id|revision_id|document_record_id|storage_key|NEVER-RETURN-THIS-SECRET/);
     assert.equal(adminDownload.headers.get('Content-Type'), 'application/pdf');
     assert.equal(adminDownload.headers.get('Content-Disposition'), 'attachment; filename="passport r_sum_.pdf"');
@@ -1116,11 +1117,11 @@ test('staff current-document preview and download share application-scoped autho
     assert.equal(adminDownload.headers.get('X-Content-Type-Options'), 'nosniff');
     assert.equal(await adminDownload.text(), 'private current document bytes');
     assert.ok(previewAudit && downloadAudit);
-    assert.equal(previewAudit.actor_staff_id, 'staff-access-reviewer');
+    assert.equal(previewAudit.actor_staff_id, 'staff-access-admin');
     assert.equal(downloadAudit.actor_staff_id, 'staff-access-admin');
     assert.equal(previewAudit.application_id, applicationA);
     assert.equal(previewAudit.document_record_id, document.recordId);
-    assert.equal(previewAudit.request_id, reviewerPreview.headers.get('x-request-id'));
+    assert.equal(previewAudit.request_id, sharedStaffPreview.headers.get('x-request-id'));
     assert.deepEqual(JSON.parse(previewAudit.safe_metadata_json), {
         documentCode: 'passport', revisionNumber: 1, result: 'capability_issued'
     });
@@ -1146,7 +1147,7 @@ test('staff current-document access rejects unsafe, incomplete, stale, missing, 
         .bind('undertaking', applicationId).run();
     const accessible = await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'passport');
     await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'address_rental_contract');
-    await seedStaff(database, { id: 'staff-invalid-access', username: 'invalid-access' });
+    await seedStaff(environment, database, { id: 'staff-invalid-access', username: 'invalid-access' });
     const token = 'invalid-access-session-token-0000000000000000';
     await seedStaffSession(database, 'staff-invalid-access', token);
     const requestDownload = (targetApplicationId, code = 'passport') => worker.fetch(createRequest(
@@ -1212,7 +1213,7 @@ test('staff preview signing failure returns a safe service error and issues no a
     const { environment, database, storedObjects } = createEnvironment();
     const applicationId = await createStaffApplication(environment, database, 'ACCESS-SIGNING-ERROR');
     await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'passport');
-    await seedStaff(database, { id: 'staff-signing-error', username: 'signing-error' });
+    await seedStaff(environment, database, { id: 'staff-signing-error', username: 'signing-error' });
     const token = 'signing-error-session-token-000000000000000';
     await seedStaffSession(database, 'staff-signing-error', token);
 

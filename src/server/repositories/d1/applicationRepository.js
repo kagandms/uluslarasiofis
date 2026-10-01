@@ -165,13 +165,9 @@ export function createApplicationRepository(database) {
                 database.prepare(`
                     SELECT applications.id, students.student_number, applications.first_name,
                            applications.last_name, applications.application_type, applications.status,
-                           applications.submitted_at, applications.updated_at,
-                           assigned_staff.id AS assigned_staff_id,
-                           assigned_staff.display_name AS assigned_staff_name
+                           applications.submitted_at, applications.updated_at
                     FROM applications
                     JOIN students ON students.id = applications.student_id
-                    LEFT JOIN assignments ON assignments.application_id = applications.id AND assignments.status = 'active'
-                    LEFT JOIN staff_users AS assigned_staff ON assigned_staff.id = assignments.staff_user_id
                     WHERE ${whereClause}
                     ORDER BY applications.updated_at DESC, applications.created_at DESC, applications.id DESC
                     LIMIT ? OFFSET ?

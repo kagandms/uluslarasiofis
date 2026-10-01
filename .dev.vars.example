@@ -1,5 +1,6 @@
 # Local-only Worker variables. Copy to .dev.vars; never commit actual values.
 STAFF_BOOTSTRAP_TOKEN=
+STAFF_SHARED_USERNAME=shared-staff
 APPS_SCRIPT_URL=
 APPS_SCRIPT_API_KEY=
 AZURE_VISION_ENDPOINT=

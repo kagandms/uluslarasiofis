@@ -13,6 +13,7 @@ import { initWorkspaceNavigation } from '../ui/workspaceNavigation.js';
 import { initYknManager } from '../managers/yknManager.js';
 import { initStaffAuth } from './auth.js';
 import { initializeStaffApplicationsManager } from './applicationsManager.js';
+import { initDocumentsManager } from '../ui/documents-manager.js';
 
 const staffAuthReady = document.readyState === 'loading'
     ? new Promise((resolve) => {
@@ -101,6 +102,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (applicationsRoot) initializeStaffApplicationsManager(applicationsRoot);
     } catch (error) {
         console.error('Applications workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
+    try { initDocumentsManager(); } catch (error) {
+        console.error('Documents workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
     try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
     

@@ -1,7 +1,6 @@
 import { createApplicationRepository } from './applicationRepository.js';
 import { createApplicationNoteRepository } from './applicationNoteRepository.js';
 import { createApplicationReviewRepository } from './applicationReviewRepository.js';
-import { createAssignmentRepository } from './assignmentRepository.js';
 import { createAuditRepository } from './auditRepository.js';
 import { createDocumentRepository } from './documentRepository.js';
 import { createResubmissionUploadRepository } from './resubmissionUploadRepository.js';
@@ -23,7 +22,6 @@ export function createD1Repositories(database) {
         applications: createApplicationRepository(database),
         applicationNotes,
         applicationReviews: createApplicationReviewRepository(database, applicationNotes),
-        assignments: createAssignmentRepository(database),
         audit: createAuditRepository(database),
         documents: createDocumentRepository(database),
         resubmissionUploads: createResubmissionUploadRepository(database),

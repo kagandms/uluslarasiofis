@@ -115,6 +115,10 @@
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg></span>
                         <span class="home-action-content"><strong>Tebliğ Bul</strong><small>Tebliğ ve tebligat araması</small></span>
                     </button>
+                    <button type="button" class="home-action" data-workspace-view="documents" aria-controls="view-documents">
+                        <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M8 13h8M8 17h5"></path></svg></span>
+                        <span class="home-action-content"><strong>Belgeler</strong><small>Ofis formları ve kontrol listeleri</small></span>
+                    </button>
                 </div>
             </section>
 
@@ -128,6 +132,7 @@
                     <button type="button" data-workspace-view="ykn" aria-controls="view-ykn">YKN</button>
                     <button type="button" data-workspace-view="cover" aria-controls="view-cover">Kapak Hazırla</button>
                     <button type="button" data-workspace-view="teblig" aria-controls="view-teblig">Tebliğ Bul</button>
+                    <button type="button" data-workspace-view="documents" aria-controls="view-documents">Belgeler</button>
                 </nav>
 
                 <section id="view-applications" class="view-panel" hidden aria-labelledby="applications-title">
@@ -339,6 +344,30 @@
                     </div>
                 </div>
                     </section>
+                </section>
+
+                <section id="view-documents" class="view-panel" hidden aria-labelledby="documents-title">
+                    <div class="documents-workspace card glass-card">
+                        <div class="documents-workspace-heading">
+                            <div>
+                                <p class="home-eyebrow">Ofis çalışma alanı</p>
+                                <h3 id="documents-title" tabindex="-1">Belgeler</h3>
+                            </div>
+                            <span id="documents-total-count" class="documents-total-count" aria-live="polite">0 belge</span>
+                        </div>
+                        <div class="documents-filters">
+                            <div class="form-group">
+                                <label for="documents-search-input">Belge ara</label>
+                                <input id="documents-search-input" class="glass-input" type="search" placeholder="Belge adı veya konu yazın" autocomplete="off">
+                            </div>
+                            <div class="form-group">
+                                <label for="documents-category-filter">Kategori</label>
+                                <select id="documents-category-filter" class="glass-input" aria-label="Belge kategorisi"></select>
+                            </div>
+                        </div>
+                        <p id="documents-empty-state" class="documents-empty-state" hidden>Aramanızla eşleşen belge bulunamadı.</p>
+                        <div id="documents-grid" class="documents-grid" aria-live="polite"></div>
+                    </div>
                 </section>
 
                 <section id="view-cover" class="view-panel" hidden aria-labelledby="cover-title">

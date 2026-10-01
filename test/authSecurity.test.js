@@ -13,7 +13,7 @@ const TEST_PASSWORD_HASH = await deriveStaffPasswordHash(TEST_PASSWORD);
 function createEnvironment(options = {}) {
     const database = new TestD1Database();
     database.exec(migrationSql);
-    return { DB: database, ...options };
+    return { DB: database, STAFF_SHARED_USERNAME: 'test.staff', ...options };
 }
 
 async function seedStaff(database, passwordHash = TEST_PASSWORD_HASH) {
@@ -43,7 +43,7 @@ function createRequest(path, { method = 'GET', body, cookie, authorization, orig
     });
 }
 
-test('staff login uses an individual D1 account and sets an opaque HttpOnly cookie', async () => {
+test('staff login uses the configured shared D1 account and sets an opaque HttpOnly cookie', async () => {
     const environment = createEnvironment();
     await seedStaff(environment.DB);
     const response = await worker.fetch(createRequest('/api/staff/auth/login', {

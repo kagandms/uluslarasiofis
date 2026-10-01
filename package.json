@@ -1,7 +1,7 @@
 {
   "name": "ikamet-main",
   "version": "2.2.1",
-  "description": "",
+  "description": "İstanbul Topkapı Üniversitesi Uluslararası Öğrenci İşlemleri Portalı",
   "main": "app.js",
   "scripts": {
     "test": "node --disable-warning=ExperimentalWarning --test test/**/*.test.js",
@@ -23,16 +23,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kagandms/ikamet.git"
+    "url": "git+https://github.com/kagandms/uluslarasiofis.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "bugs": {
-    "url": "https://github.com/kagandms/ikamet/issues"
+    "url": "https://github.com/kagandms/uluslarasiofis/issues"
   },
-  "homepage": "https://github.com/kagandms/ikamet#readme",
+  "homepage": "https://github.com/kagandms/uluslarasiofis#readme",
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.62.0",
     "jsdom": "^29.1.1",

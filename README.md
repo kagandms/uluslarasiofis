@@ -5,8 +5,10 @@ The repository contains the public student portal, staff workspaces, a YKN Chrom
 ## Routes
 
 - `/`, `/basvuru/`, and `/basvurum/` are public.
-- `/yetkili/` serves the staff application. Staff APIs require an individual D1 account and an opaque `staff_session` cookie.
+- `/yetkili/` serves the staff application. Staff APIs require the configured shared D1 account and an opaque `staff_session` cookie. Individual staff management and application assignment are not part of the runtime model.
 - `/api/*` is handled by the Cloudflare Worker.
+
+The authenticated staff page keeps the existing YKN, Kapak Hazırla, Tebliğ Bul, and application-review workspaces. Belgeler provides the nine static office PDFs with search, category filters, preview, and download controls.
 
 ## Local development
 
@@ -41,9 +43,10 @@ Both deploy scripts select the `staging` environment explicitly. A dry-run does 
 
 Before a staging deployment, an owner must create a bucket-scoped R2 API token with object read/write permissions, then configure the Worker secrets. Presigning uses the S3 endpoint `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`; Cloudflare's presigned URL includes signature and credential-identification query parameters, so treat the complete URL as a bearer capability. The Secret Access Key itself stays in Worker secrets and is never returned by the storage adapter. Never log or persist signed URLs.
 
-Configure only providers needed by the deployed Worker:
+Configure only providers needed by the deployed Worker. `STAFF_SHARED_USERNAME` must match the one D1 account used by all staff; login, bootstrap, and existing sessions fail closed when it is missing or does not match:
 
 ```sh
+npx wrangler secret put STAFF_SHARED_USERNAME --env staging
 npx wrangler secret put STAFF_BOOTSTRAP_TOKEN --env staging
 npx wrangler secret put R2_ACCOUNT_ID --env staging
 npx wrangler secret put R2_ACCESS_KEY_ID --env staging
@@ -55,14 +58,14 @@ npx wrangler secret put AZURE_VISION_KEY --env staging
 npx wrangler secret put GOOGLE_VISION_API_KEY --env staging
 ```
 
-After an owner-authorized deployment, create the first admin once over HTTPS using the exact Worker origin in the `Origin` header. Use a generated one-time bootstrap token and a unique password of at least 12 characters:
+After an owner-authorized deployment, create the shared staff account once over HTTPS using the exact Worker origin in the `Origin` header. The submitted username must match `STAFF_SHARED_USERNAME`. Use a generated one-time bootstrap token and a unique password of at least 12 characters:
 
 ```sh
 curl -X POST 'https://<staging-worker-origin>/api/staff/auth/bootstrap' \
   -H 'Origin: https://<staging-worker-origin>' \
   -H 'X-Staff-Bootstrap-Token: <one-time-token>' \
   -H 'Content-Type: application/json' \
-  --data '{"username":"<admin-username>","password":"<unique-password>","display_name":"<admin-name>"}'
+  --data '{"username":"<shared-username>","password":"<unique-password>","display_name":"Uluslararası Öğrenci Ofisi"}'
 npx wrangler secret delete STAFF_BOOTSTRAP_TOKEN --env staging
 ```
 
@@ -72,7 +75,8 @@ Bootstrap closes in D1 after the first admin is created, even if the secret is l
 
 Local `.dev.vars` can contain:
 
-- `STAFF_BOOTSTRAP_TOKEN` for local first-admin bootstrap.
+- `STAFF_SHARED_USERNAME` for the single common staff account; configure the matching D1 account before enabling login.
+- `STAFF_BOOTSTRAP_TOKEN` for local first-account bootstrap.
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` for server-side local R2 signing. Leave them empty when capability signing is not needed.
 - `APPS_SCRIPT_URL` and `APPS_SCRIPT_API_KEY` for the existing tebligat proxy.
 - `AZURE_VISION_ENDPOINT`, `AZURE_VISION_KEY`, and `GOOGLE_VISION_API_KEY` for the staff OCR endpoint.
@@ -81,10 +85,10 @@ Local `.dev.vars` can contain:
 
 ## Backend foundation
 
-- D1 repositories isolate student, application, document, staff, session, assignment, audit, notification, and rate-limit persistence. Application creation batches the student/application/session/audit writes. The database enforces normalized student number uniqueness, one active application per student, and the `initial`/`renewal` application types.
+- D1 repositories isolate student, application, document, staff, session, audit, notification, and rate-limit persistence. Application creation batches the student/application/session/audit writes. The database enforces normalized student number uniqueness, one active application per student, and the `initial`/`renewal` application types. The old `assignments` table remains in the existing migration history but is not queried by the runtime; schema cleanup requires a separately authorized migration.
 - Applicant drafts require a student number, email, and phone. Their sessions use hashed opaque tokens. Public application reads, updates, requirements, and document mutations use only the valid owner session. `student_number` is an identifier and grants no authorization.
 - `POST /api/public/applications/current/submit` is an owner-session and same-origin contract. It currently returns `SUBMISSION_NOT_READY` because the required-document readiness provider is not implemented. It cannot move a draft to `submitted`; Phase 7 must supply complete server-side readiness before the atomic transition and audit can run. Session 2 does not claim end-to-end submission readiness.
-- Staff roles are `admin` and `reviewer`. Staff passwords use versioned PBKDF2-HMAC-SHA-256 hashes with 600,000 iterations through Workers Web Crypto. Sessions are opaque, store only SHA-256 token hashes in D1, use `HttpOnly`, `Secure`, `SameSite=Strict` cookies, expire absolutely, and are rejected after 30 minutes idle. `last_seen_at` is touched at most every five minutes during active use. The 30-minute idle limit and touch interval live in `src/server/config/sessionPolicy.js`. Password reset and deactivation revoke prior sessions.
+- The configured `STAFF_SHARED_USERNAME` is the only account allowed to log in or reuse a staff session. There are no runtime endpoints for individual account creation, password reset, deactivation, or staff assignment; legacy rows outside the configured identity are inaccessible. The shared account uses the existing PBKDF2-HMAC-SHA-256 password hash and opaque D1-backed `staff_session` cookie. Cookies are `HttpOnly`, `Secure`, and `SameSite=Strict`, expire absolutely, and are rejected after 30 minutes idle. `last_seen_at` is touched at most every five minutes during active use. The idle limit and touch interval live in `src/server/config/sessionPolicy.js`.
 - R2 remains private. The storage provider adapter creates opaque UUID keys under `quarantine/`, performs Worker-mediated object operations, and creates method/object-bound S3 presigned PUT and GET capabilities with 30–300 second expiry. Student document upload intents are owner-session-bound; finalization checks the stored object metadata and advances a revision only after verification. New files remain `scan_status = 'pending'` until a scanner marks them clean. The adapter never creates public object URLs. Configure bucket CORS for the exact portal origins before enabling browser uploads. Presigned URLs must be treated as bearer tokens and never stored in D1 or logs.
 - API errors use `{ error: { code, message, retryable }, requestId }` and an `X-Request-Id` header. Provider and database details stay server-side.
 - Deployed Worker CPU use for the selected password KDF must be measured in staging before staff authentication is live-ready. Local tests do not certify deployed Cloudflare CPU budget.

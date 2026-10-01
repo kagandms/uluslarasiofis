@@ -10,7 +10,7 @@ import { createStaffDocumentPreview, downloadStaffApplicationDocument } from './
 import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
 import { approveStaffApplicationDocument, requestStaffDocumentResubmission, transitionStaffApplicationStatus } from './routes/staffReviewRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
-import { bootstrapStaff, createStaffUser, listStaffUsers, loginStaff, logoutStaff, readStaffSession, updateStaffAccount } from './routes/staffRoutes.js';
+import { bootstrapStaff, loginStaff, logoutStaff, readStaffSession } from './routes/staffRoutes.js';
 import { handleTebligatRequest } from './routes/tebligatRoutes.js';
 
 function apiErrorFromUnknown(error) {
@@ -33,16 +33,6 @@ function safeRouteResponse(result, requestId) {
         return jsonResponse(result.body, result.status, requestId, headers);
     }
     return jsonResponse(result ?? {}, 200, requestId);
-}
-
-async function routeStaffUsers(request, environment, requestId, pathname) {
-    if (pathname === '/api/staff/users') {
-        if (request.method === 'GET') return listStaffUsers(request, environment);
-        return createStaffUser(request, environment, requestId);
-    }
-    const accountMatch = pathname.match(/^\/api\/staff\/users\/([^/]+)\/(password|active)$/);
-    if (!accountMatch) return null;
-    return updateStaffAccount(request, environment, requestId, decodeURIComponent(accountMatch[1]), accountMatch[2]);
 }
 
 async function routeApi(request, environment, requestId) {
@@ -124,8 +114,6 @@ async function routeApi(request, environment, requestId) {
     if (pathname === '/api/public/applications/logout') return logoutApplication(request, environment);
     const documentMatch = pathname.match(/^\/api\/staff\/documents\/([^/]+)\/content$/);
     if (documentMatch) return readPrivateDocument(request, environment, decodeURIComponent(documentMatch[1]));
-    const userResult = await routeStaffUsers(request, environment, requestId, pathname);
-    if (userResult) return userResult;
     if (pathname === '/api/ocr') return recognizeDocument(request, environment);
     if (pathname.startsWith('/api/') && [
         '/api/get-all-tebligat', '/api/search-tebligat', '/api/add-tebligat',

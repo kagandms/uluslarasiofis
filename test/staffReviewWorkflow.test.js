@@ -9,7 +9,7 @@ import worker from '../src/server/worker.js';
 function createEnvironment() {
     const database = new TestD1Database();
     applyAllMigrations(database);
-    return { database, environment: { DB: database, APP_ENV: 'test' } };
+    return { database, environment: { DB: database, APP_ENV: 'test', STAFF_SHARED_USERNAME: 'reviewer-1' } };
 }
 
 function attachPrivateStorage(environment) {
@@ -41,7 +41,9 @@ function request(path, { method = 'GET', body, cookie, origin = 'https://portal.
     });
 }
 
-async function seedStaff(database, id = 'reviewer-1', token = 'reviewer-session-token-000000000000000000', role = 'reviewer') {
+async function seedStaff(environment, database, id = 'reviewer-1', token = 'reviewer-session-token-000000000000000000', role = 'reviewer') {
+    const existingStaff = database.prepare('SELECT id FROM staff_users LIMIT 1').first();
+    if (!existingStaff || role === 'admin') environment.STAFF_SHARED_USERNAME = id;
     await database.prepare(`
         INSERT INTO staff_users (id, username, normalized_username, password_hash, display_name, role)
         VALUES (?, ?, ?, 'test-hash', 'Reviewer', ?)
@@ -119,7 +121,7 @@ async function readJson(response) {
 test('staff starts review explicitly and application status updates use optimistic concurrency', async () => {
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'submitted' });
-    const cookie = await seedStaff(database);
+    const cookie = await seedStaff(environment, database);
     const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-session-under-review-0000000000000000');
     const initial = database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first();
     const detail = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment);
@@ -167,7 +169,7 @@ test('approved workflow transitions require all applicable current required docu
     const secondOwnerCookie = await seedOwnerSession(database, applicationId, 'owner-session-complete-b-00000000000000000');
     const otherApplicationId = await seedApplication(database, { studentNumber: 'STUDENT-OTHER-DONE' });
     const otherOwnerCookie = await seedOwnerSession(database, otherApplicationId, 'owner-session-other-00000000000000000000');
-    const cookie = await seedStaff(database);
+    const cookie = await seedStaff(environment, database);
     const requiredCodes = [
         'residence_application_form', 'passport', 'residence_card', 'photographs', 'health_insurance',
         'student_certificate', 'residence_permit_fee', 'address_rental_contract', 'home_utility_bill'
@@ -261,7 +263,7 @@ test('approved workflow transitions require all applicable current required docu
 test('completion succeeds when an application has no owner sessions', async () => {
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'migration_approved' });
-    const cookie = await seedStaff(database);
+    const cookie = await seedStaff(environment, database);
     const expectedUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?')
         .bind(applicationId).first().updated_at;
 
@@ -279,7 +281,7 @@ test('failed completion audit rolls back application retention and all owner-ses
     const applicationId = await seedApplication(database, { status: 'migration_approved' });
     await seedOwnerSession(database, applicationId, 'owner-session-rollback-a-00000000000000000');
     await seedOwnerSession(database, applicationId, 'owner-session-rollback-b-00000000000000000');
-    const cookie = await seedStaff(database);
+    const cookie = await seedStaff(environment, database);
     database.exec(`CREATE TRIGGER reject_completion_audit BEFORE INSERT ON audit_events
         WHEN NEW.event_type = 'staff.application_status_changed'
          AND NEW.safe_metadata_json LIKE '%"applicationStatus":"completed"%'
@@ -313,7 +315,7 @@ test('staff approves only the current clean revision and records safe audit meta
     const applicationId = await seedApplication(database);
     const { documentRecordId, revisionId } = await seedReviewableDocument(database, applicationId);
     const unrelatedDocument = await seedReviewableDocument(database, applicationId, 'address_rental_contract');
-    const cookie = await seedStaff(database);
+    const cookie = await seedStaff(environment, database);
     const path = `/api/staff/applications/${applicationId}/documents/passport/approve`;
     const unauthorized = await worker.fetch(request(path, { method: 'POST', body: { expected_revision_number: 1 } }), environment);
     const crossOrigin = await worker.fetch(request(path, {
@@ -344,8 +346,7 @@ test('staff approves only the current clean revision and records safe audit meta
 
 test('admin approval is allowed while stale, incomplete, unsafe, and cleanup-pending revisions are rejected', async () => {
     const { environment, database } = createEnvironment();
-    const reviewerCookie = await seedStaff(database);
-    const adminCookie = await seedStaff(database, 'admin-1', 'admin-session-token-000000000000000000000', 'admin');
+    const adminCookie = await seedStaff(environment, database, 'admin-1', 'admin-session-token-000000000000000000000', 'admin');
     const adminApplication = await seedApplication(database);
     await seedReviewableDocument(database, adminApplication);
     const adminApproval = await worker.fetch(request(`/api/staff/applications/${adminApplication}/documents/passport/approve`, {
@@ -361,7 +362,7 @@ test('admin approval is allowed while stale, incomplete, unsafe, and cleanup-pen
         const applicationId = await seedApplication(database, { studentNumber: `UNSAFE-${index}` });
         const { revisionId } = await seedReviewableDocument(database, applicationId, 'passport', state);
         const response = await worker.fetch(request(`/api/staff/applications/${applicationId}/documents/passport/approve`, {
-            method: 'POST', cookie: reviewerCookie, body: { expected_revision_number: 1 }
+            method: 'POST', cookie: adminCookie, body: { expected_revision_number: 1 }
         }), environment);
         assert.equal(response.status, 409);
         assert.equal((await readJson(response)).error.code, 'DOCUMENT_NOT_REVIEWABLE');
@@ -371,7 +372,7 @@ test('admin approval is allowed while stale, incomplete, unsafe, and cleanup-pen
     const staleApplication = await seedApplication(database, { studentNumber: 'STALE-REVISION' });
     const staleDocument = await seedReviewableDocument(database, staleApplication, 'passport', { revisionNumber: 2 });
     const stale = await worker.fetch(request(`/api/staff/applications/${staleApplication}/documents/passport/approve`, {
-        method: 'POST', cookie: reviewerCookie, body: { expected_revision_number: 1 }
+        method: 'POST', cookie: adminCookie, body: { expected_revision_number: 1 }
     }), environment);
     assert.equal(stale.status, 409);
     assert.equal((await readJson(stale)).error.code, 'DOCUMENT_REVIEW_CONFLICT');
@@ -381,7 +382,7 @@ test('admin approval is allowed while stale, incomplete, unsafe, and cleanup-pen
 test('staff may flag another submitted document during resubmission, but cannot resume review while any flag remains', async () => {
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'resubmission_required' });
-    const cookie = await seedStaff(database);
+    const cookie = await seedStaff(environment, database);
     const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-session-resubmission-00000000000000000');
     await seedReviewableDocument(database, applicationId, 'passport', {
         revisionStatus: 'resubmission_required', reviewStatus: 'resubmission_required'
@@ -415,7 +416,7 @@ test('resubmission reason, document note, application state, and audit are one a
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database, { studentNumber: 'STUDENT-RESUB' });
     const { documentRecordId, revisionId } = await seedReviewableDocument(database, applicationId);
-    const cookie = await seedStaff(database);
+    const cookie = await seedStaff(environment, database);
     const path = `/api/staff/applications/${applicationId}/documents/passport/request-resubmission`;
     for (const reason of [undefined, '  ', 'ab', '\u0000\u0001\u0002', 'x'.repeat(1001)]) {
         const body = { expected_revision_number: 1, ...(reason === undefined ? {} : { reason }) };
@@ -505,7 +506,7 @@ test('resubmission audit failure rolls back document, application, and student n
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database);
     const { documentRecordId, revisionId } = await seedReviewableDocument(database, applicationId);
-    const cookie = await seedStaff(database);
+    const cookie = await seedStaff(environment, database);
     database.exec(`CREATE TRIGGER reject_resubmission_audit BEFORE INSERT ON audit_events
         WHEN NEW.event_type = 'staff.document_resubmission_requested'
         BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;`);
@@ -526,7 +527,7 @@ test('staff reads, previews, downloads, and re-requests the finalized replacemen
     const objects = attachPrivateStorage(environment);
     const applicationId = await seedApplication(database, { status: 'resubmission_required', studentNumber: 'PHASE8E-STAFF' });
     const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-session-phase8e-staff-00000000000000000');
-    const staffCookie = await seedStaff(database);
+    const staffCookie = await seedStaff(environment, database);
     const { documentRecordId, revisionId, fileId } = await seedReviewableDocument(database, applicationId, 'passport', {
         revisionStatus: 'resubmission_required', reviewStatus: 'resubmission_required'
     });
@@ -611,7 +612,7 @@ test('replacing one requested document does not resume review; staff must clear 
     attachPrivateStorage(environment);
     const applicationId = await seedApplication(database, { status: 'resubmission_required', studentNumber: 'PHASE8E-REMAINING' });
     const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-session-phase8e-remain-00000000000000000');
-    const staffCookie = await seedStaff(database);
+    const staffCookie = await seedStaff(environment, database);
     const passport = await seedReviewableDocument(database, applicationId, 'passport', {
         revisionStatus: 'resubmission_required', reviewStatus: 'resubmission_required'
     });

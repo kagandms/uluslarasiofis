@@ -82,17 +82,14 @@ test('student repository finds students by normalized student number', async () 
     assert.equal(student.normalized_student_number, 'AB-123');
 });
 
-test('staff repository preserves one active administrator when deactivating the last admin', async () => {
-    const { database, repositories } = createRepositories();
-    await database.prepare(`
-        INSERT INTO staff_users (
-            id, username, normalized_username, password_hash, display_name, role
-        ) VALUES ('admin-1', 'admin', 'admin', 'test-hash', 'Admin', 'admin')
-    `).run();
-    const changed = await repositories.staff.setActive('admin-1', false, new Date().toISOString());
+test('staff repository does not expose individual account management operations', async () => {
+    const { repositories } = createRepositories();
 
-    assert.equal(changed, false);
-    assert.equal(database.prepare("SELECT is_active FROM staff_users WHERE id = 'admin-1'").first().is_active, 1);
+    assert.equal(typeof repositories.staff.createUser, 'undefined');
+    assert.equal(typeof repositories.staff.listUsers, 'undefined');
+    assert.equal(typeof repositories.staff.updatePassword, 'undefined');
+    assert.equal(typeof repositories.staff.setActive, 'undefined');
+    assert.equal(Object.hasOwn(repositories, 'assignments'), false);
 });
 
 test('application repository maps duplicate active applications to a domain conflict', async () => {

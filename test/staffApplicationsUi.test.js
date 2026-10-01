@@ -94,6 +94,27 @@ test('applications workspace is prominent and opening it loads a queue without d
     assert.ok(root.querySelector('th')?.textContent.includes('Öğrenci No'));
     assert.ok(root.querySelector('[data-action="open-detail"]'));
 
+    const documentsHomeAction = document.querySelector('.home-actions [data-workspace-view="documents"]');
+    const documentsNavigationButton = document.querySelector('.workspace-nav [data-workspace-view="documents"]');
+    assert.ok(documentsHomeAction);
+    assert.ok(documentsNavigationButton);
+    assert.ok(document.getElementById('view-documents'));
+
+    const { initDocumentsManager } = await import('../src/ui/documents-manager.js');
+    initDocumentsManager();
+    documentsHomeAction.click();
+    assert.equal(document.getElementById('workspace-title').textContent.trim(), 'Belgeler');
+    assert.equal(document.getElementById('view-documents').hidden, false);
+    assert.equal(document.querySelectorAll('#documents-grid [data-document-id]').length, 9);
+    assert.ok(document.querySelector('#documents-grid a[data-action="preview"]'));
+    assert.ok(document.querySelector('#documents-grid a[data-action="download"]'));
+
+    const searchInput = document.getElementById('documents-search-input');
+    searchInput.value = 'Taksit';
+    searchInput.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.match(document.getElementById('documents-grid').textContent, /Taksit Dilekçesi/);
+    assert.doesNotMatch(document.getElementById('documents-grid').textContent, /Başvuru Formu/);
+
     navigationButton.click();
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(document.getElementById('view-applications').hidden, false);

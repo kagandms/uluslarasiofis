@@ -2031,3 +2031,115 @@ body.dark-mode .history-badge {
         flex-wrap: wrap;
     }
 }
+
+.documents-workspace {
+    padding: clamp(1rem, 2.5vw, 2rem);
+}
+
+.documents-workspace-heading,
+.documents-card-actions {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.documents-workspace-heading {
+    margin-bottom: 1.25rem;
+}
+
+.documents-workspace-heading h3 {
+    color: var(--text-primary);
+    font: 600 1.5rem var(--font-heading);
+}
+
+.documents-total-count,
+.documents-category-tag {
+    background: rgba(139, 0, 0, 0.08);
+    border-radius: 999px;
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.4rem 0.7rem;
+    white-space: nowrap;
+}
+
+.documents-filters {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 2fr) minmax(12rem, 1fr);
+    margin-bottom: 1.25rem;
+}
+
+.documents-filters .form-group {
+    margin-bottom: 0;
+}
+
+.documents-filters label {
+    color: var(--text-secondary);
+    display: block;
+    font-size: 0.85rem;
+    margin-bottom: 0.4rem;
+}
+
+.documents-filters .glass-input {
+    width: 100%;
+}
+
+.documents-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.documents-card {
+    align-content: start;
+    display: grid;
+    gap: 0.85rem;
+    min-width: 0;
+    padding: 1rem;
+}
+
+.documents-card-title {
+    color: var(--text-primary);
+    font-size: 1rem;
+    line-height: 1.4;
+}
+
+.documents-card-badge {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.documents-card-actions {
+    justify-content: flex-start;
+    margin-top: 0.25rem;
+}
+
+.documents-card-actions .btn {
+    min-height: 2.5rem;
+    text-decoration: none;
+}
+
+.documents-empty-state {
+    color: var(--text-secondary);
+    padding: 2rem 1rem;
+    text-align: center;
+}
+
+@media (max-width: 1080px) {
+    .documents-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .documents-grid,
+    .documents-filters {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .documents-workspace-heading {
+        align-items: flex-start;
+    }
+}

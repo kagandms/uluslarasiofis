@@ -707,6 +707,7 @@ export function initYknManager() {
 
     function resetStudentActions() {
         clearOneClickTimeout();
+        documentBytesCache.clear();
         cancelButtonActions();
         oneClickWorkflow = null;
         if (pasteTimeoutTimer) {

@@ -71,16 +71,8 @@ function createQueueItemDto(application) {
         application_type: application.application_type,
         status: application.status,
         submitted_at: application.submitted_at,
-        updated_at: application.updated_at,
-        assigned_staff: application.assigned_staff_id
-            ? { staff_id: application.assigned_staff_id, display_name: application.assigned_staff_name }
-            : null
+        updated_at: application.updated_at
     };
-}
-
-function createAssignmentDto(assignment) {
-    if (!assignment) return null;
-    return { staff_id: assignment.staff_user_id, display_name: assignment.display_name };
 }
 
 function createApplicationDetailDto(application) {
@@ -221,9 +213,8 @@ export async function readStaffApplicationDetail(request, environment, applicati
     if (!application || application.status === 'draft') {
         throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     }
-    const [storedRequirements, assignment, studentMessages] = await Promise.all([
+    const [storedRequirements, studentMessages] = await Promise.all([
         repositories.documents.listStudentRequirements(application.id),
-        repositories.assignments.findCurrent(application.id),
         repositories.applicationNotes.listLatestStudentDocumentMessages(application.id)
     ]);
     const requirementsWithMessages = storedRequirements.map((requirement) => ({
@@ -232,7 +223,6 @@ export async function readStaffApplicationDetail(request, environment, applicati
     }));
     return {
         application: createApplicationDetailDto(application),
-        assignment: createAssignmentDto(assignment),
         allowed_status_transitions: readAllowedStatusTransitions(application, storedRequirements),
         documents: createDocumentDetailDtos(application, requirementsWithMessages)
     };

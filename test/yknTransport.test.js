@@ -143,3 +143,13 @@ test('portal accepts document discovery results without treating profile discove
     assert.match(manager, /DOCUMENT_BYTES_READY/);
     assert.match(manager, /extractYoksisIdFromText/);
 });
+
+test('starting a new YKN student search clears the prior student document-byte cache', async () => {
+    const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+    const resetStart = manager.indexOf('function resetStudentActions()');
+    const resetEnd = manager.indexOf('\n    function updateStudentActions', resetStart);
+    const resetBody = manager.slice(resetStart, resetEnd);
+
+    assert.ok(resetStart >= 0, 'student context reset should exist');
+    assert.match(resetBody, /documentBytesCache\.clear\(\)/);
+});

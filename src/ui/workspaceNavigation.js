@@ -2,7 +2,8 @@ const VIEW_TITLES = {
     applications: 'İkamet Başvuruları',
     ykn: 'YKN',
     cover: 'Kapak Hazırla',
-    teblig: 'Tebliğ Bul'
+    teblig: 'Tebliğ Bul',
+    documents: 'Belgeler'
 };
 
 function getWorkspaceElements() {

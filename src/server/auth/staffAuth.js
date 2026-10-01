@@ -2,6 +2,8 @@ import { ApiError, RepositoryConfigurationError } from '../domain/errors.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { getSessionCookieName, hashSessionToken, readCookie } from './sessionToken.js';
 import { STAFF_IDLE_TIMEOUT_SECONDS, STAFF_SESSION_TOUCH_INTERVAL_SECONDS } from '../config/sessionPolicy.js';
+import { readSharedStaffUsername } from '../config/sharedStaffAccount.js';
+import { normalizeUsername } from '../repositories/d1/staffRepository.js';
 
 /**
  * Requires an active D1-backed staff session and optional role allowlist.
@@ -26,6 +28,16 @@ export async function requireStaff(request, environment, roles) {
         await hashSessionToken(sessionToken), now, idleCutoff, touchCutoff
     );
     if (!session) throw new ApiError(401, 'UNAUTHORIZED', 'Yetkili oturumu gerekli.');
+    const sharedUsername = readSharedStaffUsername(environment);
+    let sessionUsername;
+    try {
+        sessionUsername = normalizeUsername(session.username);
+    } catch {
+        throw new ApiError(401, 'UNAUTHORIZED', 'Yetkili oturumu gerekli.');
+    }
+    if (sessionUsername !== sharedUsername) {
+        throw new ApiError(401, 'UNAUTHORIZED', 'Yetkili oturumu gerekli.');
+    }
     if (roles && !roles.includes(session.role)) throw new ApiError(403, 'FORBIDDEN', 'Bu işlem için yetkiniz yok.');
     return Object.freeze({
         id: session.id,

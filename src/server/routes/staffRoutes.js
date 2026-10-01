@@ -2,6 +2,7 @@ import { ApiError } from '../domain/errors.js';
 import { createOpaqueSessionToken, createSessionCookie, createExpiredSessionCookie, getSessionCookieName, hashSessionToken, readCookie } from '../auth/sessionToken.js';
 import { deriveStaffPasswordHash, verifyStaffPassword } from '../auth/passwordHash.js';
 import { requireStaff } from '../auth/staffAuth.js';
+import { readSharedStaffUsername } from '../config/sharedStaffAccount.js';
 import { STAFF_IDLE_TIMEOUT_SECONDS } from '../config/sessionPolicy.js';
 import { routeResult } from '../http/routeResult.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
@@ -54,21 +55,30 @@ function readLoginInput(body) {
     return { username, password, rememberMe: body.rememberMe === true };
 }
 
-async function authenticateStaff(repositories, request, { username, password }) {
-    const staff = await findLoginStaff(repositories, username);
+async function authenticateStaff(repositories, request, { username, password }, sharedUsername) {
+    const isSharedAccount = isConfiguredUsername(username, sharedUsername);
+    const staff = isSharedAccount ? await findLoginStaff(repositories, username) : null;
     const loginKey = await hashLoginIdentity(request, staff?.normalized_username || username.toLocaleLowerCase('en-US'));
     const nowSeconds = Math.floor(Date.now() / 1000);
     if (await repositories.sessions.isLoginBlocked(loginKey, nowSeconds)) {
         throw new ApiError(429, 'RATE_LIMITED', 'Çok fazla başarısız giriş denemesi yapıldı. Bir süre sonra tekrar deneyin.', true);
     }
     const passwordMatches = await verifyStaffPassword(password, staff?.password_hash);
-    if (!staff || !staff.is_active || !passwordMatches) {
+    if (!isSharedAccount || !staff || !staff.is_active || !passwordMatches) {
         await repositories.sessions.recordFailedLogin(loginKey, nowSeconds, {
             maxAttempts: MAX_LOGIN_ATTEMPTS, windowSeconds: LOGIN_WINDOW_SECONDS
         });
         throw new ApiError(401, 'INVALID_CREDENTIALS', 'Kullanıcı adı veya şifre hatalı. Bilgilerinizi kontrol edip tekrar deneyin.');
     }
     return { staff, loginKey };
+}
+
+function isConfiguredUsername(username, sharedUsername) {
+    try {
+        return normalizeUsername(username) === sharedUsername;
+    } catch {
+        return false;
+    }
 }
 
 async function createStaffLoginSession(repositories, staff, requestId, maxAge) {
@@ -98,8 +108,9 @@ export async function loginStaff(request, environment, requestId) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
     const credentials = readLoginInput(await readJsonBody(request));
+    const sharedUsername = readSharedStaffUsername(environment);
     const repositories = createRepositories(environment);
-    const { staff, loginKey } = await authenticateStaff(repositories, request, credentials);
+    const { staff, loginKey } = await authenticateStaff(repositories, request, credentials, sharedUsername);
     await repositories.sessions.clearLoginAttempts(loginKey);
     const maxAge = credentials.rememberMe ? REMEMBERED_SESSION_SECONDS : STAFF_SESSION_SECONDS;
     const token = await createStaffLoginSession(repositories, staff, requestId, maxAge);
@@ -157,6 +168,7 @@ export async function logoutStaff(request, environment, requestId) {
 export async function bootstrapStaff(request, environment, requestId) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
+    const sharedUsername = readSharedStaffUsername(environment);
     if (!environment.STAFF_BOOTSTRAP_TOKEN || !constantTimeEqual(request.headers.get('X-Staff-Bootstrap-Token') || '', environment.STAFF_BOOTSTRAP_TOKEN)) {
         throw new ApiError(403, 'BOOTSTRAP_TOKEN_REQUIRED', 'İlk yetkili hesabı için geçerli kurulum anahtarı gerekli.');
     }
@@ -164,6 +176,9 @@ export async function bootstrapStaff(request, environment, requestId) {
     if (await repositories.staff.hasBootstrapAdmin()) throw new ApiError(409, 'BOOTSTRAP_CLOSED', 'İlk yetkili hesabı daha önce oluşturuldu.');
     const body = await readJsonBody(request);
     const username = readUsername(body.username);
+    if (!isConfiguredUsername(username, sharedUsername)) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Kurulum kullanıcı adı yapılandırılmış ortak hesapla eşleşmelidir.');
+    }
     const passwordHash = await deriveStaffPasswordHash(validatePassword(body.password));
     const displayName = requireText(body.display_name, { field: 'Görünen ad', minLength: 1, maxLength: 120 });
     const createdAt = new Date().toISOString();
@@ -178,99 +193,6 @@ export async function bootstrapStaff(request, environment, requestId) {
         if (/unique constraint/i.test(String(error?.message))) throw new ApiError(409, 'USERNAME_UNAVAILABLE', 'Bu kullanıcı adı kullanılamıyor.');
         throw error;
     }
-}
-
-/**
- * Lists staff profiles for an administrator.
- * @param {Request} request Worker request.
- * @param {object} environment Worker bindings.
- * @returns {Promise<object>} Safe staff user list.
- * @throws {ApiError} When the caller is not an administrator.
- */
-export async function listStaffUsers(request, environment) {
-    requireMethod(request, 'GET');
-    await requireStaff(request, environment, ['admin']);
-    return { users: await createRepositories(environment).staff.listUsers() };
-}
-
-/**
- * Creates a staff account and records a safe audit event.
- * @param {Request} request Worker request.
- * @param {object} environment Worker bindings.
- * @param {string} requestId Correlation ID for the audit event.
- * @returns {Promise<object>} Route result containing the safe user profile.
- * @throws {ApiError} When the caller is not an administrator or account data is invalid.
- */
-export async function createStaffUser(request, environment, requestId) {
-    requireMethod(request, 'POST');
-    requireSameOrigin(request);
-    const actor = await requireStaff(request, environment, ['admin']);
-    const body = await readJsonBody(request);
-    const username = readUsername(body.username);
-    const displayName = requireText(body.display_name, { field: 'Görünen ad', minLength: 1, maxLength: 120 });
-    const role = body.role;
-    if (!['admin', 'reviewer'].includes(role)) throw new ApiError(400, 'VALIDATION_ERROR', 'Yetkili rolünü kontrol edip tekrar deneyin.');
-    const passwordHash = await deriveStaffPasswordHash(validatePassword(body.password));
-    const repositories = createRepositories(environment);
-    try {
-        const staff = await repositories.staff.createUser({
-            id: crypto.randomUUID(), username, passwordHash, displayName, role, createdAt: new Date().toISOString()
-        });
-        await createAuditEvent(repositories, {
-            eventType: 'staff.user_created', actorType: 'staff', actorStaffId: actor.id, requestId,
-            metadata: { role }
-        });
-        return routeResult({ user: publicStaff(staff) }, { status: 201 });
-    } catch (error) {
-        if (/unique constraint/i.test(String(error?.message))) throw new ApiError(409, 'USERNAME_UNAVAILABLE', 'Bu kullanıcı adı kullanılamıyor.');
-        throw error;
-    }
-}
-
-async function resetStaffPassword(repositories, actor, requestId, staffId, body, updatedAt) {
-    const passwordHash = await deriveStaffPasswordHash(validatePassword(body.password));
-    const changed = await repositories.staff.updatePassword(staffId, passwordHash, updatedAt);
-    if (!changed) throw new ApiError(409, 'STAFF_INACTIVE', 'Devre dışı yetkili hesabının şifresi değiştirilemez.');
-    await createAuditEvent(repositories, {
-        eventType: 'staff.password_reset', actorType: 'staff', actorStaffId: actor.id, requestId,
-        metadata: { result: 'success' }
-    });
-    return { success: true };
-}
-
-async function updateStaffActiveState(repositories, actor, requestId, staff, staffId, body, updatedAt) {
-    if (typeof body.is_active !== 'boolean') throw new ApiError(400, 'VALIDATION_ERROR', 'Hesap durumunu kontrol edip tekrar deneyin.');
-    if (staffId === actor.id && body.is_active === false) throw new ApiError(409, 'CANNOT_DEACTIVATE_SELF', 'Kendi yetkili hesabınızı devre dışı bırakamazsınız.');
-    const changed = await repositories.staff.setActive(staffId, body.is_active, updatedAt);
-    if (!changed) throw new ApiError(409, 'STAFF_STATE_CONFLICT', 'Yetkili hesabı güncellenemedi.');
-    await createAuditEvent(repositories, {
-        eventType: 'staff.user_status_changed', actorType: 'staff', actorStaffId: actor.id, requestId,
-        metadata: { active: body.is_active, role: staff.role }
-    });
-    return { success: true };
-}
-
-/**
- * Changes an existing staff password or active state.
- * @param {Request} request Fetch API request.
- * @param {object} environment Worker bindings.
- * @param {string} requestId Correlation ID for the audit event.
- * @param {string} staffId Target staff ID.
- * @param {'password'|'active'} action Account operation.
- * @returns {Promise<object>} Safe mutation result.
- * @throws {ApiError} When the caller is not an administrator or the update is invalid.
- */
-export async function updateStaffAccount(request, environment, requestId, staffId, action) {
-    requireMethod(request, 'PATCH');
-    requireSameOrigin(request);
-    const actor = await requireStaff(request, environment, ['admin']);
-    const repositories = createRepositories(environment);
-    const staff = await repositories.staff.findById(staffId);
-    if (!staff) throw new ApiError(404, 'STAFF_NOT_FOUND', 'Yetkili hesabı bulunamadı.');
-    const body = await readJsonBody(request);
-    const updatedAt = new Date().toISOString();
-    if (action === 'password') return resetStaffPassword(repositories, actor, requestId, staffId, body, updatedAt);
-    return updateStaffActiveState(repositories, actor, requestId, staff, staffId, body, updatedAt);
 }
 
 function constantTimeEqual(first, second) {

@@ -29,14 +29,6 @@ export function createStaffRepository(database) {
             return database.prepare('SELECT * FROM staff_users WHERE id = ?')
                 .bind(id).first();
         },
-        async createUser({ id, username, passwordHash, displayName, role, createdAt }) {
-            const normalizedUsername = normalizeUsername(username);
-            await database.prepare(`
-                INSERT INTO staff_users (id, username, normalized_username, password_hash, display_name, role, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).bind(id, username.trim(), normalizedUsername, passwordHash, displayName.trim(), role, createdAt, createdAt).run();
-            return this.findById(id);
-        },
         async hasBootstrapAdmin() {
             const result = await database.prepare(`
                 SELECT 1 AS configured FROM staff_bootstrap_state WHERE id = 1
@@ -70,51 +62,10 @@ export function createStaffRepository(database) {
             if (results[0]?.meta?.changes !== 1 || results[1]?.meta?.changes !== 1 || results[2]?.meta?.changes !== 1) return null;
             return this.findById(id);
         },
-        async listUsers() {
-            const result = await database.prepare(`
-                SELECT id, username, display_name, role, is_active, created_at, updated_at, last_login_at
-                FROM staff_users ORDER BY normalized_username ASC
-            `).all();
-            return result.results;
-        },
         async updateLastLogin(id, lastLoginAt) {
             await database.prepare(`
                 UPDATE staff_users SET last_login_at = ?, updated_at = ? WHERE id = ? AND is_active = 1
             `).bind(lastLoginAt, lastLoginAt, id).run();
-        },
-        async updatePassword(id, passwordHash, updatedAt) {
-            const statements = [
-                database.prepare(`
-                    UPDATE staff_users
-                    SET password_hash = ?, auth_version = auth_version + 1, updated_at = ?
-                    WHERE id = ? AND is_active = 1
-                `).bind(passwordHash, updatedAt, id),
-                database.prepare(`
-                    UPDATE staff_sessions SET revoked_at = ?
-                    WHERE staff_user_id = ? AND revoked_at IS NULL
-                `).bind(updatedAt, id)
-            ];
-            const results = await database.batch(statements);
-            return results[0].meta.changes === 1;
-        },
-        async setActive(id, isActive, updatedAt) {
-            const activeValue = isActive ? 1 : 0;
-            const results = await database.batch([
-                database.prepare(`
-                    UPDATE staff_users
-                    SET is_active = ?, auth_version = auth_version + 1, updated_at = ?
-                    WHERE id = ? AND (
-                        role <> 'admin' OR is_active = 0 OR ? = 1
-                        OR (SELECT COUNT(*) FROM staff_users WHERE role = 'admin' AND is_active = 1) > 1
-                    )
-                `).bind(activeValue, updatedAt, id, activeValue),
-                database.prepare(`
-                    UPDATE staff_sessions SET revoked_at = ?
-                    WHERE staff_user_id = ? AND revoked_at IS NULL
-                      AND EXISTS (SELECT 1 FROM staff_users WHERE id = ? AND is_active = 0)
-                `).bind(updatedAt, id, id)
-            ]);
-            return results[0]?.meta?.changes === 1;
         }
     });
 }
