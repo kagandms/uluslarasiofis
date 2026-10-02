@@ -2,47 +2,50 @@
 
 Date: 2026-10-02
 
-## Starting point and staging target
+## Starting point and staging preflight
 
-- Requested starting branch: `codex/phase9-consent-staging-acceptance`
-- Requested starting SHA: `af0854eed8915fd01a2502a2abfb4d764e8d8d19`
-- Task branch: `codex/phase9-consent-owner-session-uat`
-- The new isolated worktree started at the requested SHA without changing it.
-- `wrangler.jsonc` identified staging Worker `goc-staging`, URL `https://goc-staging.topkapiuni.workers.dev`, D1 `uluslarasiofis-staging`, and R2 `uluslarasiofis-documents-staging`.
-- Read-only `wrangler deployments list --env staging` showed existing Worker version `e40690bc-7644-488d-900c-d9f2c7320195`; `GET /` returned HTTP 200.
+- Requested source branch: `codex/phase9-consent-owner-session-uat`
+- Requested source SHA: `2c3470576d5433433d829b70bb45a4a9e616335a`
+- New task branch: `codex/phase9-consent-owner-session-uat-retry`
+- The isolated worktree was created from the requested source SHA. The source branch still points to that SHA.
+- `wrangler.jsonc` identifies staging Worker `goc-staging` at `https://goc-staging.topkapiuni.workers.dev`, with D1 `uluslarasiofis-staging` and R2 `uluslarasiofis-documents-staging`.
+- Read-only `wrangler deployments list --env staging` showed Worker version `e40690bc-7644-488d-900c-d9f2c7320195`, the expected staging version. Read-only `GET /` returned HTTP 200.
+- Static source review: `src/server/worker.js:145-146` routes consent PUT to `updateCurrentNotificationPreferences`; `src/server/routes/applicantNotificationPreferenceRoutes.js:55-74` validates owner session and same-origin request, reads/writes preference records, and returns the preference response. This path contains no provider call. Provider construction and dispatch are in the separate `scheduled()` handler at `src/server/worker.js:208-211`. No provider secret was read or listed.
 
-## Browser session and synthetic application
+## Browser session and stopping condition
 
-Yandex Browser's separate Incognito window was opened and its title visibly identified it as an Incognito window. The staging `/basvuru/` page displayed a blank new application contact form; no existing application or owner session was shown. The WhatsApp consent checkbox was unchecked on initial load.
-
-No application draft was created or persisted. Synthetic form entry was interrupted before pressing Continue, so there is no application ID to report. No real student or contact data was used. The browser control was interrupted during form entry; to avoid acting on a UI the user had taken control of, the remaining browser steps were not attempted.
+- A separate Yandex Incognito window was opened and visibly identified by its Incognito title. Its staging `/basvuru/` page showed a blank new application form and no existing owner session. No real or synthetic applicant data was entered.
+- The WhatsApp checkbox was visibly unchecked. After opening DevTools Network with Fetch/XHR selected and reloading the blank form, the visible request was `GET /api/public/applications/current` → `401 Unauthorized`; there was no consent endpoint request or consent PUT. No application creation request was sent.
+- Creating a draft requires checking the separate statement: “İletişim bilgilerimin aktif ve ulaşılabilir olduğunu, bu bilgiler üzerinden bana ulaşılamaması hâlinde sorumluluğun bana ait olduğunu kabul ediyorum.” This is a responsibility declaration with potential legal effect. I stopped before accepting it or submitting the form. Therefore, no synthetic application was created, and there is no `application_id` or owner session to verify.
+- No browser-control interruption or user activity was detected during this attempt. The stop was due to the required declaration, not a control interruption.
 
 ## Scenario results
 
-| # | Check | Result | Evidence |
+| # | Check | Result | Observed evidence |
 | --- | --- | --- | --- |
-| 1 | Consent defaults off; no opt-in PUT before selection | **PASS** | In the new Incognito session, the blank form's WhatsApp checkbox showed unchecked. The initial load was observed in the Network panel with Fetch/XHR selected; no consent endpoint request appeared before any selection. |
-| 2 | Phone persistence completes before opt-in PUT | **NOT EXECUTED** | No application draft was created and no opt-in was selected. |
-| 3 | Same owner session can GET and verify stored consent | **NOT EXECUTED** | No owner-session consent was written. |
-| 4 | Refresh/navigation preserves session and consent | **NOT EXECUTED** | No application session or consent state was created. |
-| 5 | Opt-out sends only `{ "whatsapp_opt_in": false }` and confirms same-application effective false | **NOT EXECUTED** | No opt-out action was attempted. |
-| 6 | Refresh/re-GET preserves opted-out state | **NOT EXECUTED** | No opt-out state was created. |
+| 1 | Phone record completes before opt-in PUT | **NOT EXECUTED** | No draft, phone edit, or opt-in was attempted. The checkbox was unchecked on initial load; after a clean reload, Network showed the unauthenticated current-application GET returning 401 and no consent PUT. This does not verify phone-save ordering. |
+| 2 | Opt-in GET in the same owner session confirms the same `application_id` and saved consent | **NOT EXECUTED** | No synthetic application or owner session was created; no consent was saved. |
+| 3 | Refresh or page navigation preserves owner session and consent | **NOT EXECUTED** | No owner session or consent state existed to test. |
+| 4 | Opt-out request sends only `{ "whatsapp_opt_in": false }` | **NOT EXECUTED** | No opt-out request was attempted. |
+| 5 | Opt-out response confirms the same `application_id` and both `whatsapp_opt_in` and `effective_whatsapp_opt_in` are false | **NOT EXECUTED** | No application or opt-out response existed. |
+| 6 | Refresh and repeat GET preserve opt-out state | **NOT EXECUTED** | No opt-out state existed to test. |
 
-## Change and operation boundaries
+The consent staging acceptance remains open. This run verified the expected staging version, the blank form's default-off checkbox, the absence of a consent PUT before any selection, and the source-code separation between consent persistence and provider dispatch. It did not exercise an owner-session consent flow.
+
+## Operation boundaries
 
 - Worker deployment: **not performed**.
-- D1 migration: **not performed**.
-- D1 query or mutation: **not performed**.
-- Dispatch setting, queue, and cron trigger: **not changed**.
+- Migration: **not performed**.
+- D1 direct query or mutation: **not performed**.
+- Dispatch setting, queue, or cron: **not changed or triggered**.
 - Provider secret: **not read or listed**.
-- Provider API or message: **not called or sent**.
+- Provider request or message: **not called or sent**.
 - Production: **not accessed**.
-- Application code: **not changed**.
-- Documentation: this report only.
-
-The result is partial: only the default-off / pre-selection behavior was verified. The authenticated owner-session opt-in, phone-ordering, GET, opt-out, and persistence scenarios remain unverified.
+- Applicant data: **no existing application accessed or modified; no application created**.
+- Code: **not changed**.
+- Changed file: this report only.
 
 ## Final verification
 
-- `git diff --check`: PASS after writing this report; the commit will be checked again after creation.
-- Final task branch: `codex/phase9-consent-owner-session-uat`. The pushed HEAD SHA is recorded in the delivery summary.
+- `git diff --check`: PASS before commit.
+- Commit patch whitespace check and final branch/SHA: recorded in the delivery summary after commit and push verification.
