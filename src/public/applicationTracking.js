@@ -1,5 +1,6 @@
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { initializeResubmissionUpload } from './resubmissionUpload.js';
+import { mountTrackingNotificationPreferences } from './notificationPreferences.js';
 
 function readMessages(locale) {
     const fallback = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
@@ -159,7 +160,7 @@ function createDocumentList(document, documents, messages, allowFilename, replac
     return section;
 }
 
-function renderTracking(root, state, locale, submitLookup) {
+function renderTracking(root, state, locale, submitLookup, api) {
     const document = root.ownerDocument;
     const messages = readMessages(locale);
     root.className = 'application-tracking';
@@ -184,6 +185,17 @@ function renderTracking(root, state, locale, submitLookup) {
         createDocumentList(document, state.payload.documents, messages, state.kind === 'ready',
             state.replacementDocuments, state.onReplacementComplete, state.onSessionFailure)
     );
+    if (state.kind === 'ready' && typeof api?.readCurrentNotificationPreferences === 'function') {
+        void mountTrackingNotificationPreferences(root, {
+            application: state.payload.application,
+            api,
+            locale,
+            initialPreference: state.notificationPreference,
+            onPreferenceChange: (pref) => {
+                state.notificationPreference = pref;
+            }
+        });
+    }
 }
 
 /**
@@ -194,8 +206,8 @@ function renderTracking(root, state, locale, submitLookup) {
  */
 export async function initializeApplicationTracking(root, api) {
     const document = root.ownerDocument;
-    const state = { kind: 'loading', payload: null, studentNumber: '', replacementDocuments: [] };
-    const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup);
+    const state = { kind: 'loading', payload: null, studentNumber: '', replacementDocuments: [], notificationPreference: null };
+    const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup, api);
     async function submitLookup(studentNumber) {
         state.studentNumber = studentNumber.trim();
         state.kind = 'lookupLoading';

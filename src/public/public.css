@@ -179,6 +179,92 @@ a { color: inherit; }
 .tracking-message { margin: 0; color: #59616d; overflow-wrap: anywhere; word-break: break-word; }
 .application-wizard [role="alert"] { margin: 0; color: #9b1c1c; font-weight: 650; overflow-wrap: anywhere; word-break: break-word; }
 
+.notification-preference-group {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #e0e3e8;
+    border-radius: 0.75rem;
+    background: #fafbfc;
+}
+.notification-preference-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    min-height: 2.5rem;
+    cursor: pointer;
+    color: #343943;
+    font-weight: 600;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+.notification-preference-checkbox {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-block-start: 0.2rem;
+    flex-shrink: 0;
+    accent-color: #8b0000;
+    cursor: pointer;
+}
+.notification-preference-checkbox:focus-visible {
+    outline: 2px solid #8b0000;
+    outline-offset: 2px;
+}
+.notification-preference-explanation {
+    margin: 0;
+    color: #59616d;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+.notification-preference-notice {
+    margin: 0;
+    padding: 0.6rem 0.85rem;
+    border-radius: 0.5rem;
+    background: #fff8e6;
+    color: #8c5800;
+    border: 1px solid #ffd580;
+    font-size: 0.85rem;
+    font-weight: 550;
+    line-height: 1.45;
+}
+.notification-preference-status {
+    margin: 0;
+    padding: 0.4rem 0.75rem;
+    border-radius: 0.45rem;
+    font-size: 0.84rem;
+    font-weight: 600;
+    width: fit-content;
+}
+.notification-preference-status[data-i18n="whatsappPreferenceSaved"] {
+    background: #edf7ed;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+.notification-preference-status[data-i18n="whatsappPreferenceSaving"] {
+    background: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid #e5e7eb;
+}
+.notification-preference-status[role="alert"] {
+    background: #fdf2f2;
+    color: #9b1c1c;
+    border: 1px solid #f8b4b4;
+}
+.tracking-notification-preferences {
+    display: grid;
+    gap: 0.8rem;
+    padding: 1rem;
+    border: 1px solid #e0e3e8;
+    border-radius: 0.75rem;
+    background: #fff;
+}
+.tracking-notification-status {
+    margin: 0;
+    color: #343943;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
 .public-footer { width: min(1120px, calc(100% - 2.5rem)); margin: 0 auto; padding-block: 1.25rem 2rem; border-top: 1px solid #e5e7eb; color: #68707c; font-size: 0.85rem; }
 
 html[lang="ar"] { line-height: 1.6; }
@@ -191,7 +277,9 @@ html[dir="rtl"] .application-progress, html[dir="rtl"] .application-document-car
 html[dir="rtl"] .application-upload-control, html[dir="rtl"] .application-review-section { direction: rtl; }
 html[dir="rtl"] .application-document-card progress { direction: ltr; }
 html[dir="rtl"] .application-review-section dl { direction: rtl; }
-html[dir="rtl"] .tracking-state, html[dir="rtl"] .tracking-summary, html[dir="rtl"] .tracking-document-card { direction: rtl; }
+html[dir="rtl"] .notification-preference-group { direction: rtl; }
+html[dir="rtl"] .tracking-state, html[dir="rtl"] .tracking-summary, html[dir="rtl"] .tracking-document-card,
+html[dir="rtl"] .tracking-notification-preferences { direction: rtl; }
 html[dir="rtl"] .tracking-details { direction: rtl; }
 html[dir="rtl"] .tracking-lookup-form { direction: rtl; }
 html[dir="rtl"] .resubmission-upload-control { direction: rtl; }
