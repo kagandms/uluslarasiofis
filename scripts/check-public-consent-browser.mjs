@@ -111,6 +111,7 @@ function createMockServer() {
                         } else {
                             currentPrefs.whatsapp_opt_in = false;
                             currentPrefs.effective_whatsapp_opt_in = false;
+                            currentPrefs.requires_reconsent = false;
                             currentPrefs.opted_out_at = new Date().toISOString();
                         }
                         res.writeHead(200, { 'Content-Type': 'application/json' });

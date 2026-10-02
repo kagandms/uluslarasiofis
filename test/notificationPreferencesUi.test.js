@@ -889,3 +889,408 @@ test('rapid repeated clicking does not create conflicting writes or out-of-order
     assert.equal(checkbox.disabled, false);
     assert.equal(calls.length, 1);
 });
+
+test('requires_reconsent: true ve eski kayıtlı izin varken opt-out mümkün', async () => {
+    // 1. Tracking View
+    const { root: trackRoot } = createDom();
+    const calls = { updatePrefs: [] };
+    const trackingPayload = {
+        application: { id: 'app_reconsent_1', student_number: 'STU-REC-1', status: 'submitted', application_type: 'initial' },
+        documents: []
+    };
+    const api = {
+        async readCurrentApplicationTracking() { return trackingPayload; },
+        async readCurrentNotificationPreferences() {
+            return createFullContractFixture({
+                application_id: 'app_reconsent_1',
+                whatsapp_opt_in: true,
+                consent_version: WHATSAPP_CONSENT_VERSION,
+                current_consent_version: WHATSAPP_CONSENT_VERSION,
+                effective_whatsapp_opt_in: false,
+                requires_reconsent: true,
+                can_opt_in: true
+            });
+        },
+        async updateCurrentNotificationPreferences(payload) {
+            calls.updatePrefs.push(payload);
+            return createFullContractFixture({
+                application_id: 'app_reconsent_1',
+                whatsapp_opt_in: false,
+                consent_version: null,
+                current_consent_version: WHATSAPP_CONSENT_VERSION,
+                effective_whatsapp_opt_in: false,
+                requires_reconsent: false,
+                can_opt_in: true
+            });
+        }
+    };
+
+    await initializeApplicationTracking(trackRoot, api);
+    await flushAsync();
+    await flushAsync();
+
+    const prefSection = trackRoot.querySelector('.tracking-notification-preferences');
+    const statusP = prefSection.querySelector('.tracking-notification-status');
+    const optInBtn = prefSection.querySelector('button[data-action="opt-in"]');
+    const optOutBtn = prefSection.querySelector('button[data-action="opt-out"]');
+
+    assert.match(statusP.textContent, /onayınızı yenileyin/i);
+    assert.ok(optInBtn, 'Opt-in action button must be visible for re-consent');
+    assert.ok(optOutBtn, 'Opt-out action button must also be visible to withdraw stored consent');
+
+    // Click opt-out
+    optOutBtn.click();
+    await flushAsync();
+    await flushAsync();
+
+    assert.equal(calls.updatePrefs.length, 1);
+    assert.deepEqual(calls.updatePrefs[0], { whatsapp_opt_in: false });
+    assert.match(statusP.textContent, /WhatsApp bildirim izni kapalı/i);
+
+    // 2. Wizard View
+    const { document: wizDoc, root: wizRoot } = createDom();
+    const wizCalls = [];
+    const wizField = createNotificationPreferenceField(wizDoc, {
+        application: { id: 'app_wiz_rec', status: 'draft', student_phone: '+905551112233' },
+        initialPreference: createFullContractFixture({
+            application_id: 'app_wiz_rec',
+            whatsapp_opt_in: true,
+            effective_whatsapp_opt_in: false,
+            requires_reconsent: true,
+            can_opt_in: true
+        }),
+        api: {
+            async updateCurrentNotificationPreferences(payload) {
+                wizCalls.push(payload);
+                return createFullContractFixture({
+                    application_id: 'app_wiz_rec',
+                    whatsapp_opt_in: false,
+                    effective_whatsapp_opt_in: false,
+                    requires_reconsent: false,
+                    can_opt_in: true
+                });
+            }
+        }
+    });
+    wizRoot.append(wizField);
+
+    const wizNotice = wizField.querySelector('.notification-preference-notice');
+    const wizOptOutBtn = wizField.querySelector('[data-action="preference-opt-out"]');
+    assert.match(wizNotice.textContent, /onayınızı yenileyin/i);
+    assert.ok(wizOptOutBtn);
+    assert.notEqual(wizOptOutBtn.style.display, 'none', 'Wizard must show opt-out button for stored consent requiring re-consent');
+
+    wizOptOutBtn.click();
+    await flushAsync();
+    await flushAsync();
+
+    assert.equal(wizCalls.length, 1);
+    assert.deepEqual(wizCalls[0], { whatsapp_opt_in: false });
+    const wizStatus = wizField.querySelector('.notification-preference-status');
+    assert.match(wizStatus.textContent, /kaydedildi/i);
+    assert.equal(wizOptOutBtn.style.display, 'none');
+});
+
+test('can_opt_in: false iken kayıtlı izni opt-out etmek mümkün', async () => {
+    // 1. Tracking View
+    const { root: trackRoot } = createDom();
+    const calls = [];
+    const trackingPayload = {
+        application: { id: 'app_no_phone_consent', student_number: 'STU-NO-PH', status: 'submitted', application_type: 'initial' },
+        documents: []
+    };
+    const api = {
+        async readCurrentApplicationTracking() { return trackingPayload; },
+        async readCurrentNotificationPreferences() {
+            return createFullContractFixture({
+                application_id: 'app_no_phone_consent',
+                whatsapp_opt_in: true,
+                effective_whatsapp_opt_in: false,
+                requires_reconsent: true,
+                can_opt_in: false
+            });
+        },
+        async updateCurrentNotificationPreferences(payload) {
+            calls.push(payload);
+            return createFullContractFixture({
+                application_id: 'app_no_phone_consent',
+                whatsapp_opt_in: false,
+                effective_whatsapp_opt_in: false,
+                requires_reconsent: false,
+                can_opt_in: false
+            });
+        }
+    };
+
+    await initializeApplicationTracking(trackRoot, api);
+    await flushAsync();
+    await flushAsync();
+
+    const prefSection = trackRoot.querySelector('.tracking-notification-preferences');
+    const optInBtn = prefSection.querySelector('button[data-action="opt-in"]');
+    const optOutBtn = prefSection.querySelector('button[data-action="opt-out"]');
+    assert.equal(optInBtn, null, 'Opt-in button must NOT be available when can_opt_in is false');
+    assert.ok(optOutBtn, 'Opt-out button MUST be available when stored consent exists even if can_opt_in is false');
+
+    optOutBtn.click();
+    await flushAsync();
+    await flushAsync();
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], { whatsapp_opt_in: false });
+    const feedback = prefSection.querySelector('.tracking-message');
+    assert.match(feedback.textContent, /kaydedildi/i);
+
+    // 2. Wizard View
+    const { document: wizDoc, root: wizRoot } = createDom();
+    const wizCalls = [];
+    const wizField = createNotificationPreferenceField(wizDoc, {
+        application: { id: 'app_wiz_nophone', status: 'draft', student_phone: '' },
+        initialPreference: createFullContractFixture({
+            application_id: 'app_wiz_nophone',
+            whatsapp_opt_in: true,
+            effective_whatsapp_opt_in: false,
+            requires_reconsent: true,
+            can_opt_in: false
+        }),
+        api: {
+            async updateCurrentNotificationPreferences(payload) {
+                wizCalls.push(payload);
+                return createFullContractFixture({
+                    application_id: 'app_wiz_nophone',
+                    whatsapp_opt_in: false,
+                    effective_whatsapp_opt_in: false,
+                    requires_reconsent: false,
+                    can_opt_in: false
+                });
+            }
+        }
+    });
+    wizRoot.append(wizField);
+
+    const checkbox = wizField.querySelector('#field-whatsapp-opt-in');
+    const wizOptOutBtn = wizField.querySelector('[data-action="preference-opt-out"]');
+    assert.equal(checkbox.disabled, true, 'Checkbox must be disabled when phone is missing');
+    assert.notEqual(wizOptOutBtn.style.display, 'none', 'Opt-out button must be visible to withdraw stored consent');
+
+    wizOptOutBtn.click();
+    await flushAsync();
+    await flushAsync();
+
+    assert.equal(wizCalls.length, 1);
+    assert.deepEqual(wizCalls[0], { whatsapp_opt_in: false });
+    const wizStatus = wizField.querySelector('.notification-preference-status');
+    assert.match(wizStatus.textContent, /kaydedildi/i);
+});
+
+test('Bilinmeyen izin sürümünde yeni opt-in engellenirken opt-out mümkün', async () => {
+    const { root: trackRoot } = createDom();
+    const calls = [];
+    const trackingPayload = {
+        application: { id: 'app_unknown_ver', student_number: 'STU-VER-1', status: 'submitted', application_type: 'initial' },
+        documents: []
+    };
+    const api = {
+        async readCurrentApplicationTracking() { return trackingPayload; },
+        async readCurrentNotificationPreferences() {
+            return createFullContractFixture({
+                application_id: 'app_unknown_ver',
+                whatsapp_opt_in: true,
+                consent_version: 'whatsapp-consent-v1',
+                current_consent_version: 'whatsapp-consent-v999', // Unknown version on server
+                effective_whatsapp_opt_in: false,
+                requires_reconsent: true,
+                can_opt_in: true
+            });
+        },
+        async updateCurrentNotificationPreferences(payload) {
+            calls.push(payload);
+            return createFullContractFixture({
+                application_id: 'app_unknown_ver',
+                whatsapp_opt_in: false,
+                consent_version: null,
+                current_consent_version: 'whatsapp-consent-v999', // Still unknown version on server
+                effective_whatsapp_opt_in: false,
+                requires_reconsent: false,
+                can_opt_in: true
+            });
+        }
+    };
+
+    await initializeApplicationTracking(trackRoot, api);
+    await flushAsync();
+    await flushAsync();
+
+    const prefSection = trackRoot.querySelector('.tracking-notification-preferences');
+    const optInBtn = prefSection.querySelector('button[data-action="opt-in"]');
+    const optOutBtn = prefSection.querySelector('button[data-action="opt-out"]');
+
+    assert.equal(optInBtn, null, 'New opt-in must be blocked on unknown consent version');
+    assert.ok(optOutBtn, 'Opt-out must remain possible on unknown consent version');
+
+    optOutBtn.click();
+    await flushAsync();
+    await flushAsync();
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], { whatsapp_opt_in: false });
+    const feedback = prefSection.querySelector('.tracking-message');
+    assert.match(feedback.textContent, /kaydedildi/i, 'Opt-out verification must succeed even if current_consent_version is unsupported');
+});
+
+test('Bozuk/eksik yanıt veya başka application_id için kaydedildi gösterilmiyor', async () => {
+    // 1. Mismatched application_id
+    const { root: root1 } = createDom();
+    const apiMismatch = {
+        async readCurrentApplicationTracking() {
+            return { application: { id: 'app_target', status: 'submitted' }, documents: [] };
+        },
+        async readCurrentNotificationPreferences() {
+            return createFullContractFixture({
+                application_id: 'app_target',
+                whatsapp_opt_in: true,
+                consent_version: WHATSAPP_CONSENT_VERSION,
+                effective_whatsapp_opt_in: true
+            });
+        },
+        async updateCurrentNotificationPreferences() {
+            // Returns a response for a completely DIFFERENT application_id
+            return createFullContractFixture({
+                application_id: 'app_DIFFERENT',
+                whatsapp_opt_in: false,
+                consent_version: null,
+                effective_whatsapp_opt_in: false
+            });
+        }
+    };
+
+    await initializeApplicationTracking(root1, apiMismatch);
+    await flushAsync();
+    await flushAsync();
+
+    const section1 = root1.querySelector('.tracking-notification-preferences');
+    const optOutBtn1 = section1.querySelector('button[data-action="opt-out"]');
+    optOutBtn1.click();
+    await flushAsync();
+    await flushAsync();
+
+    const feedback1 = section1.querySelector('.tracking-message');
+    assert.equal(feedback1.getAttribute('role'), 'alert');
+    assert.doesNotMatch(feedback1.textContent, /kaydedildi/i, 'Must not report saved on application_id mismatch');
+
+    // 2. Broken / incomplete response missing required fields
+    const { root: root2 } = createDom();
+    const apiBroken = {
+        async readCurrentApplicationTracking() {
+            return { application: { id: 'app_target_2', status: 'submitted' }, documents: [] };
+        },
+        async readCurrentNotificationPreferences() {
+            return createFullContractFixture({
+                application_id: 'app_target_2',
+                whatsapp_opt_in: true,
+                consent_version: WHATSAPP_CONSENT_VERSION,
+                effective_whatsapp_opt_in: true
+            });
+        },
+        async updateCurrentNotificationPreferences() {
+            // Broken payload missing metadata
+            return { ok: true, whatsapp_opt_in: false };
+        }
+    };
+
+    await initializeApplicationTracking(root2, apiBroken);
+    await flushAsync();
+    await flushAsync();
+
+    const section2 = root2.querySelector('.tracking-notification-preferences');
+    const optOutBtn2 = section2.querySelector('button[data-action="opt-out"]');
+    optOutBtn2.click();
+    await flushAsync();
+    await flushAsync();
+
+    const feedback2 = section2.querySelector('.tracking-message');
+    assert.equal(feedback2.getAttribute('role'), 'alert');
+    assert.doesNotMatch(feedback2.textContent, /kaydedildi/i, 'Must not report saved on malformed response');
+});
+
+test('Opt-out PUT yanıtı izin durumunu hâlâ etkin gösterirse başarı gösterilmiyor', async () => {
+    const { root } = createDom();
+    const api = {
+        async readCurrentApplicationTracking() {
+            return { application: { id: 'app_still_active', status: 'submitted' }, documents: [] };
+        },
+        async readCurrentNotificationPreferences() {
+            return createFullContractFixture({
+                application_id: 'app_still_active',
+                whatsapp_opt_in: true,
+                consent_version: WHATSAPP_CONSENT_VERSION,
+                effective_whatsapp_opt_in: true
+            });
+        },
+        async updateCurrentNotificationPreferences() {
+            // Server responds but still claims consent is active
+            return createFullContractFixture({
+                application_id: 'app_still_active',
+                whatsapp_opt_in: true,
+                consent_version: WHATSAPP_CONSENT_VERSION,
+                effective_whatsapp_opt_in: true
+            });
+        }
+    };
+
+    await initializeApplicationTracking(root, api);
+    await flushAsync();
+    await flushAsync();
+
+    const section = root.querySelector('.tracking-notification-preferences');
+    const optOutBtn = section.querySelector('button[data-action="opt-out"]');
+    optOutBtn.click();
+    await flushAsync();
+    await flushAsync();
+
+    const feedback = section.querySelector('.tracking-message');
+    assert.equal(feedback.getAttribute('role'), 'alert');
+    assert.doesNotMatch(feedback.textContent, /kaydedildi/i, 'Must never show success when response still indicates active consent');
+});
+
+test('Opt-out payload’ı yalnızca { whatsapp_opt_in: false } olarak kalıyor', async () => {
+    const payloads = [];
+    const { document: wizDoc, root: wizRoot } = createDom();
+    const field = createNotificationPreferenceField(wizDoc, {
+        application: { id: 'app_payload_check', status: 'draft', student_phone: '+905551234567' },
+        initialPreference: createFullContractFixture({
+            application_id: 'app_payload_check',
+            whatsapp_opt_in: true,
+            consent_version: WHATSAPP_CONSENT_VERSION,
+            effective_whatsapp_opt_in: true
+        }),
+        api: {
+            async updateCurrentNotificationPreferences(body) {
+                payloads.push(body);
+                return createFullContractFixture({
+                    application_id: 'app_payload_check',
+                    whatsapp_opt_in: false,
+                    effective_whatsapp_opt_in: false
+                });
+            }
+        }
+    });
+    wizRoot.append(field);
+
+    // Uncheck checkbox to opt out
+    const checkbox = field.querySelector('#field-whatsapp-opt-in');
+    assert.equal(checkbox.checked, true);
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new wizDoc.defaultView.Event('change', { bubbles: true }));
+
+    await flushAsync();
+    await flushAsync();
+
+    assert.equal(payloads.length, 1);
+    assert.deepEqual(payloads[0], { whatsapp_opt_in: false });
+    assert.deepEqual(Object.keys(payloads[0]), ['whatsapp_opt_in']);
+    assert.equal(payloads[0].application_id, undefined);
+    assert.equal(payloads[0].student_phone, undefined);
+    assert.equal(payloads[0].consent_version, undefined);
+    assert.equal(payloads[0].language, undefined);
+});

@@ -216,6 +216,12 @@ a { color: inherit; }
     font-size: 0.85rem;
     line-height: 1.5;
 }
+.notification-preference-opt-out-btn {
+    width: fit-content;
+    font-size: 0.875rem;
+    min-height: 2.25rem;
+    padding: 0.4rem 0.85rem;
+}
 .notification-preference-notice {
     margin: 0;
     padding: 0.6rem 0.85rem;

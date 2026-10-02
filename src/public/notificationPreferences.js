@@ -38,7 +38,8 @@ export function parseNotificationPreferences(data, expectedApplicationId = null)
             isValidContract: false,
             isApplicationIdMatch: false,
             isVersionSupported: false,
-            isVerified: false
+            isVerified: false,
+            isVerifiedOptOut: false
         };
     }
 
@@ -92,13 +93,24 @@ export function parseNotificationPreferences(data, expectedApplicationId = null)
     // Supported consent text version match: cannot opt-in to or verify unknown text version
     const isVersionSupported = (currentConsentVersion === WHATSAPP_CONSENT_VERSION);
 
-    // Coherence check: active effective opt-in requires opt-in flag, matching consent version, no re-consent, and canOptIn
+    // Coherence check:
+    // 1. active effective opt-in requires opt-in flag, matching consent version, no re-consent, and canOptIn
+    // 2. if whatsappOptIn is false, effectiveWhatsappOptIn cannot be true
     let isCoherent = true;
     if (effectiveWhatsappOptIn) {
         if (!whatsappOptIn || consentVersion !== currentConsentVersion || requiresReconsent || !canOptIn) {
             isCoherent = false;
         }
     }
+    if (!whatsappOptIn && effectiveWhatsappOptIn) {
+        isCoherent = false;
+    }
+
+    // Explicit opt-out confirmation check
+    const isOptOutConfirmed = (whatsappOptIn === false && effectiveWhatsappOptIn === false);
+    // Verified opt-out: required types, matching application ID, explicit opt-out confirmation, and coherence
+    // Note: Does NOT require isVersionSupported!
+    const isVerifiedOptOut = Boolean(hasRequiredTypes && isApplicationIdMatch && isOptOutConfirmed && isCoherent);
 
     const isValidContract = hasRequiredTypes && isCoherent && (expectedApplicationId ? isApplicationIdMatch : true);
     const isVerified = isValidContract && isApplicationIdMatch && isVersionSupported;
@@ -117,7 +129,8 @@ export function parseNotificationPreferences(data, expectedApplicationId = null)
         isValidContract,
         isApplicationIdMatch,
         isVersionSupported,
-        isVerified
+        isVerified,
+        isVerifiedOptOut
     };
 }
 
@@ -169,6 +182,13 @@ export function createNotificationPreferenceField(document, {
     const explanation = createTranslatedElement(document, 'p', 'whatsappConsentExplanation', messages.whatsappConsentExplanation);
     explanation.className = 'notification-preference-explanation';
 
+    const optOutButton = document.createElement('button');
+    optOutButton.type = 'button';
+    optOutButton.className = 'application-button application-button-secondary notification-preference-opt-out-btn';
+    optOutButton.dataset.action = 'preference-opt-out';
+    optOutButton.textContent = messages.whatsappOptOutAction;
+    optOutButton.style.display = 'none';
+
     const notice = document.createElement('p');
     notice.className = 'notification-preference-notice';
     notice.setAttribute('role', 'status');
@@ -205,10 +225,15 @@ export function createNotificationPreferenceField(document, {
         // Pre-session visitor: never restrict or disable controls
         if (!application) {
             checkbox.disabled = false;
+            optOutButton.style.display = 'none';
             notice.style.display = 'none';
             notice.textContent = '';
             return;
         }
+
+        const hasStoredConsent = Boolean(currentPreference?.whatsappOptIn === true);
+        optOutButton.textContent = activeMessages.whatsappOptOutAction;
+        optOutButton.style.display = hasStoredConsent ? '' : 'none';
 
         // Authenticated session: verify contract
         if (currentPreference && !currentPreference.isValidContract) {
@@ -216,6 +241,7 @@ export function createNotificationPreferenceField(document, {
             notice.dataset.i18n = 'whatsappPreferenceFailed';
             notice.textContent = activeMessages.whatsappPreferenceFailed;
             notice.style.display = '';
+            optOutButton.style.display = 'none';
             return;
         }
 
@@ -224,6 +250,7 @@ export function createNotificationPreferenceField(document, {
             notice.dataset.i18n = 'whatsappPreferenceVersionInvalid';
             notice.textContent = activeMessages.whatsappPreferenceVersionInvalid;
             notice.style.display = '';
+            // Note: optOutButton remains displayed if hasStoredConsent!
             return;
         }
 
@@ -232,6 +259,7 @@ export function createNotificationPreferenceField(document, {
             notice.dataset.i18n = 'whatsappPhoneRequired';
             notice.textContent = activeMessages.whatsappPhoneRequired;
             notice.style.display = '';
+            // Note: optOutButton remains displayed if hasStoredConsent!
             return;
         }
 
@@ -258,6 +286,7 @@ export function createNotificationPreferenceField(document, {
 
         // Prevent rapid conflicting clicks during in-flight operations
         checkbox.disabled = true;
+        optOutButton.disabled = true;
         status.style.display = '';
         status.removeAttribute('role');
         status.setAttribute('role', 'status');
@@ -275,6 +304,7 @@ export function createNotificationPreferenceField(document, {
                 if (!phoneResult?.success) {
                     // Phone save failed: DO NOT send opt-in PUT
                     checkbox.disabled = false;
+                    optOutButton.disabled = false;
                     status.setAttribute('role', 'alert');
                     status.dataset.i18n = 'whatsappPreferenceFailed';
                     status.textContent = activeMessages.whatsappPreferenceFailed;
@@ -286,6 +316,7 @@ export function createNotificationPreferenceField(document, {
             // STEP 2: Verify version and phone availability
             if (currentPreference && !currentPreference.isVersionSupported) {
                 checkbox.disabled = true;
+                optOutButton.disabled = false;
                 status.setAttribute('role', 'alert');
                 status.dataset.i18n = 'whatsappPreferenceVersionInvalid';
                 status.textContent = activeMessages.whatsappPreferenceVersionInvalid;
@@ -294,6 +325,7 @@ export function createNotificationPreferenceField(document, {
 
             if (!currentPhone) {
                 checkbox.disabled = true;
+                optOutButton.disabled = false;
                 status.setAttribute('role', 'alert');
                 status.dataset.i18n = 'whatsappPhoneRequired';
                 status.textContent = activeMessages.whatsappPhoneRequired;
@@ -314,6 +346,7 @@ export function createNotificationPreferenceField(document, {
             } catch (error) {
                 if (thisGen !== saveGeneration || currentPhone !== phoneAtStart) return;
                 checkbox.disabled = false;
+                optOutButton.disabled = false;
                 status.setAttribute('role', 'alert');
                 status.textContent = resolveErrorMessage(activeMessages, error);
                 return;
@@ -329,6 +362,7 @@ export function createNotificationPreferenceField(document, {
             const parsed = parseNotificationPreferences(response, application?.id);
             if (!parsed.isValidContract || !parsed.effectiveWhatsappOptIn || !parsed.isVersionSupported) {
                 checkbox.disabled = false;
+                optOutButton.disabled = false;
                 status.setAttribute('role', 'alert');
                 status.textContent = !parsed.isVersionSupported
                     ? activeMessages.whatsappPreferenceVersionInvalid
@@ -338,11 +372,14 @@ export function createNotificationPreferenceField(document, {
 
             currentPreference = parsed;
             checkbox.disabled = false;
+            optOutButton.disabled = false;
+            status.removeAttribute('role');
+            status.setAttribute('role', 'status');
             status.dataset.i18n = 'whatsappPreferenceSaved';
             status.textContent = activeMessages.whatsappPreferenceSaved;
             updateNotices();
         } else {
-            // Opt-out path: send { whatsapp_opt_in: false }
+            // Opt-out path: send strictly { whatsapp_opt_in: false }
             inFlightController?.abort();
             inFlightController = new AbortController();
             let response;
@@ -353,6 +390,7 @@ export function createNotificationPreferenceField(document, {
             } catch (error) {
                 if (thisGen !== saveGeneration) return;
                 checkbox.disabled = false;
+                optOutButton.disabled = false;
                 status.setAttribute('role', 'alert');
                 status.textContent = resolveErrorMessage(activeMessages, error);
                 return;
@@ -361,8 +399,20 @@ export function createNotificationPreferenceField(document, {
             if (thisGen !== saveGeneration) return;
 
             const parsed = parseNotificationPreferences(response, application?.id);
+            if (!parsed.isVerifiedOptOut) {
+                checkbox.disabled = false;
+                optOutButton.disabled = false;
+                status.setAttribute('role', 'alert');
+                status.textContent = activeMessages.whatsappPreferenceFailed;
+                return;
+            }
+
             currentPreference = parsed;
             checkbox.disabled = false;
+            checkbox.checked = false;
+            optOutButton.disabled = false;
+            status.removeAttribute('role');
+            status.setAttribute('role', 'status');
             status.dataset.i18n = 'whatsappPreferenceSaved';
             status.textContent = activeMessages.whatsappPreferenceSaved;
             updateNotices();
@@ -378,6 +428,20 @@ export function createNotificationPreferenceField(document, {
         if (application && api) {
             void savePreference(isChecked);
         }
+    });
+
+    optOutButton.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (optOutButton.disabled) return;
+        optOutButton.disabled = true;
+        optOutButton.setAttribute('aria-busy', 'true');
+        checkbox.checked = false;
+        onPreferenceChange?.(false);
+        if (application && api) {
+            await savePreference(false);
+        }
+        optOutButton.disabled = false;
+        optOutButton.removeAttribute('aria-busy');
     });
 
     // Helper attached to container to synchronize phone input changes
@@ -414,10 +478,11 @@ export function createNotificationPreferenceField(document, {
         const activeMessages = readMessages(document);
         textSpan.textContent = activeMessages.whatsappConsentLabel;
         explanation.textContent = activeMessages.whatsappConsentExplanation;
+        optOutButton.textContent = activeMessages.whatsappOptOutAction;
         updateNotices();
     };
 
-    container.append(label, explanation, notice, status);
+    container.append(label, explanation, optOutButton, notice, status);
     return container;
 }
 
@@ -457,7 +522,12 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
     button.className = 'application-button';
     button.style.display = 'none';
 
-    section.append(heading, statusText, button, feedback);
+    const secondaryButton = document.createElement('button');
+    secondaryButton.type = 'button';
+    secondaryButton.className = 'application-button application-button-secondary';
+    secondaryButton.style.display = 'none';
+
+    section.append(heading, statusText, button, secondaryButton, feedback);
     mountPoint.append(section);
 
     let preference = initialPreference ? parseNotificationPreferences(initialPreference, application?.id) : null;
@@ -472,6 +542,7 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
         if (!preference) {
             statusText.textContent = activeMessages.trackingLoading;
             button.style.display = 'none';
+            secondaryButton.style.display = 'none';
             return;
         }
 
@@ -479,52 +550,98 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
         if (!preference.isValidContract || !preference.isApplicationIdMatch) {
             statusText.textContent = '';
             button.style.display = 'none';
+            secondaryButton.style.display = 'none';
             feedback.style.display = '';
             feedback.setAttribute('role', 'alert');
             feedback.textContent = activeMessages.trackingLookupError;
             return;
         }
 
-        // Unsupported or outdated consent version on server
-        if (!preference.isVersionSupported) {
-            statusText.textContent = activeMessages.whatsappPreferenceVersionInvalid;
-            button.style.display = 'none';
-            feedback.style.display = '';
-            feedback.setAttribute('role', 'alert');
-            feedback.textContent = activeMessages.whatsappPreferenceVersionInvalid;
-            return;
-        }
+        const hasStoredConsent = (preference.whatsappOptIn === true);
 
-        if (preference.canOptIn === false) {
-            statusText.textContent = activeMessages.whatsappPhoneRequired;
-            button.style.display = 'none';
-            return;
-        }
-
-        if (preference.requiresReconsent) {
-            statusText.textContent = activeMessages.whatsappReconsentRequired;
-            button.className = 'application-button application-button-primary';
-            button.textContent = activeMessages.whatsappOptInAction;
-            button.style.display = '';
-            button.dataset.action = 'opt-in';
-            return;
-        }
-
-        if (preference.effectiveWhatsappOptIn) {
+        // Case 1: Active effective opt-in
+        if (preference.effectiveWhatsappOptIn && !preference.requiresReconsent) {
             statusText.textContent = activeMessages.whatsappOptInActive;
             button.className = 'application-button application-button-secondary';
             button.textContent = activeMessages.whatsappOptOutAction;
-            button.style.display = '';
             button.dataset.action = 'opt-out';
+            button.style.display = '';
+            secondaryButton.style.display = 'none';
             return;
         }
 
-        // Opted out state
+        // Case 2: Requires reconsent
+        if (preference.requiresReconsent) {
+            statusText.textContent = activeMessages.whatsappReconsentRequired;
+            if (preference.canOptIn && preference.isVersionSupported) {
+                // Can re-consent (primary action)
+                button.className = 'application-button application-button-primary';
+                button.textContent = activeMessages.whatsappOptInAction;
+                button.dataset.action = 'opt-in';
+                button.style.display = '';
+                if (hasStoredConsent) {
+                    // AND can also opt out (secondary action)
+                    secondaryButton.className = 'application-button application-button-secondary';
+                    secondaryButton.textContent = activeMessages.whatsappOptOutAction;
+                    secondaryButton.dataset.action = 'opt-out';
+                    secondaryButton.style.display = '';
+                } else {
+                    secondaryButton.style.display = 'none';
+                }
+            } else {
+                // Cannot re-consent (version invalid or phone missing), but CAN opt out if consent was stored
+                if (hasStoredConsent) {
+                    button.className = 'application-button application-button-secondary';
+                    button.textContent = activeMessages.whatsappOptOutAction;
+                    button.dataset.action = 'opt-out';
+                    button.style.display = '';
+                } else {
+                    button.style.display = 'none';
+                }
+                secondaryButton.style.display = 'none';
+            }
+            return;
+        }
+
+        // Case 3: Unsupported version on server (and not reconsent)
+        if (!preference.isVersionSupported) {
+            statusText.textContent = activeMessages.whatsappPreferenceVersionInvalid;
+            if (hasStoredConsent) {
+                // New opt-in blocked, but old consent can still be opted out!
+                button.className = 'application-button application-button-secondary';
+                button.textContent = activeMessages.whatsappOptOutAction;
+                button.dataset.action = 'opt-out';
+                button.style.display = '';
+            } else {
+                button.style.display = 'none';
+            }
+            secondaryButton.style.display = 'none';
+            return;
+        }
+
+        // Case 4: Cannot opt in (e.g. no valid phone) (and not reconsent)
+        if (preference.canOptIn === false) {
+            statusText.textContent = activeMessages.whatsappPhoneRequired;
+            if (hasStoredConsent) {
+                // Cannot opt in, but CAN opt out of stored consent!
+                button.className = 'application-button application-button-secondary';
+                button.textContent = activeMessages.whatsappOptOutAction;
+                button.dataset.action = 'opt-out';
+                button.style.display = '';
+            } else {
+                button.style.display = 'none';
+            }
+            secondaryButton.style.display = 'none';
+            return;
+        }
+
+        // Case 5: Normal opted-out state (whatsappOptIn is false)
         statusText.textContent = activeMessages.whatsappOptOutActive;
         button.className = 'application-button application-button-primary';
         button.textContent = activeMessages.whatsappOptInAction;
-        button.style.display = '';
         button.dataset.action = 'opt-in';
+        button.style.display = '';
+        secondaryButton.style.display = 'none';
     }
 
     if (preference) {
@@ -548,16 +665,18 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
         }
     }
 
-    button.addEventListener('click', async () => {
+    async function handleActionClick(clickedBtn) {
         if (isSubmitting || !preference) return;
-        const isOptIn = button.dataset.action === 'opt-in';
+        const isOptIn = clickedBtn.dataset.action === 'opt-in';
 
-        // Do not allow opt-in if server text version is not supported
-        if (isOptIn && !preference.isVersionSupported) {
+        // Do not allow opt-in if server text version is not supported or cannot opt in
+        if (isOptIn && (!preference.isVersionSupported || preference.canOptIn === false)) {
             const activeMessages = readMessages(document);
             feedback.style.display = '';
             feedback.setAttribute('role', 'alert');
-            feedback.textContent = activeMessages.whatsappPreferenceVersionInvalid;
+            feedback.textContent = !preference.isVersionSupported
+                ? activeMessages.whatsappPreferenceVersionInvalid
+                : activeMessages.whatsappPhoneRequired;
             return;
         }
 
@@ -567,7 +686,8 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
 
         isSubmitting = true;
         button.disabled = true;
-        button.setAttribute('aria-busy', 'true');
+        secondaryButton.disabled = true;
+        clickedBtn.setAttribute('aria-busy', 'true');
 
         const activeMessages = readMessages(document);
         feedback.style.display = '';
@@ -585,16 +705,28 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
             if (thisGen !== saveGeneration || !section.isConnected) return;
 
             const parsed = parseNotificationPreferences(response, application?.id);
-            if (!parsed.isValidContract || (isOptIn && !parsed.effectiveWhatsappOptIn)) {
-                feedback.setAttribute('role', 'alert');
-                feedback.textContent = !parsed.isVersionSupported
-                    ? activeMessages.whatsappPreferenceVersionInvalid
-                    : activeMessages.whatsappPreferenceFailed;
-                return;
+            if (isOptIn) {
+                if (!parsed.isValidContract || !parsed.isVerified || !parsed.effectiveWhatsappOptIn) {
+                    feedback.setAttribute('role', 'alert');
+                    feedback.textContent = !parsed.isVersionSupported
+                        ? activeMessages.whatsappPreferenceVersionInvalid
+                        : activeMessages.whatsappPreferenceFailed;
+                    return;
+                }
+            } else {
+                // Strict opt-out verification
+                if (!parsed.isVerifiedOptOut) {
+                    feedback.setAttribute('role', 'alert');
+                    feedback.textContent = activeMessages.whatsappPreferenceFailed;
+                    return;
+                }
             }
 
             preference = parsed;
             onPreferenceChange?.(preference);
+            feedback.removeAttribute('role');
+            feedback.setAttribute('role', 'status');
+            feedback.dataset.i18n = 'whatsappPreferenceSaved';
             feedback.textContent = activeMessages.whatsappPreferenceSaved;
             renderState();
         } catch (error) {
@@ -606,10 +738,14 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
                 isSubmitting = false;
                 inFlightController = null;
                 button.disabled = false;
-                button.setAttribute('aria-busy', 'false');
+                secondaryButton.disabled = false;
+                clickedBtn.removeAttribute('aria-busy');
             }
         }
-    });
+    }
+
+    button.addEventListener('click', () => void handleActionClick(button));
+    secondaryButton.addEventListener('click', () => void handleActionClick(secondaryButton));
 
     const localeListener = () => {
         if (!section.isConnected) {
