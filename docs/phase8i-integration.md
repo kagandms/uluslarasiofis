@@ -15,7 +15,7 @@
 
 - Arşiv kuyruğundaki terminal başvuru satırı ve salt okunur terminal detay görünümü **Belgeleri ZIP indir** eylemini mevcut `src/staff/applicationArchive.js` modülüne bağlar. API çağrıları seçilen `applicationId` değerini kullanır; ZIP başvuru veya belge durumunu değiştirmez.
 - ZIP adları sıralı sabit belge kodlarından üretilir; kaynak dosya adları ve storage key / signed R2 URL istemci manifestine girmez. Sıkıştırmasız ZIP yazımı, tüm dosyaların tamamlanması ve writer `close()` başarıyla sonuçlanması sonrasında başarı mesajı verir.
-- Manifest ve her dosya aktarımında güncel revizyon/nesne kimliği doğrulanır. Uygun policy, finalized yükleme, `clean` tarama, completed upload intent ve cleanup/private R2 kontrolleri korunur. Bir dosya erişilemiyorsa işlem tümden kesilir; eksik içerik tam ZIP olarak sunulmaz.
+- Başlangıç manifestinde her güncel revizyon/R2 nesnesi doğrulanır. Her dosya isteği de akış başlamadan `resolveArchiveFile` ile başvuruyu, güncel revizyonu ve nesne kimliğini doğrular. Akış EOF’a ulaştığında `guardArchiveStream` aynı çözümlemeyi yeniden çağırır ve kimliği karşılaştırır. Bu ikinci kontrol EOF’ta yapılır; periyodik veya her chunk’ta kontrol değildir. Uygun policy, finalized yükleme, `clean` tarama, completed upload intent ve cleanup/private R2 kontrolleri korunur. Bir dosya erişilemiyorsa işlem tümden kesilir; eksik içerik tam ZIP olarak sunulmaz.
 - Akışlı kayıt için 150 MiB, Blob fallback için 32 MiB gerçek kaynak byte sınırları korunur. 33 MiB akış testi parçaları tüketildikçe atar; testi bellekte biriktirmez. Fazla/eksik byte, limit aşımı, iptal ve `close()` hataları başarısız sonuç verir.
 - Arşiv satırı veya detayından ZIP seçildiğinde, kullanıcı etkinliği hâlâ geçerliyken dosya seçici açılır. Ardından salt okunur detayla pending/unsafe/failed engeli kontrol edilir. Pending için “Belge güvenlik kontrolü bekleniyor.”, unsafe ve failed için farklı açıklama gösterilir; kalan erişim engelleri genel mesajda kalır.
 - Temiz malware taraması personel inceleme onayı değildir. ZIP için ek `review_status = approved` şartı getirilmedi; uygulamanın mevcut revizyon/erişim kuralları kullanılır.
@@ -24,11 +24,12 @@
 ## Yerel doğrulama
 
 - İlk birleşik baseline: `node --test test/applicationArchive.test.js test/staffArchiveWorkspace.test.js` — **15/15** geçti.
-- Entegrasyon kapsamı: `node --test test/applicationArchive.test.js test/staffArchiveWorkspace.test.js test/staffApplicationsUi.test.js test/backendApiContract.test.js` — **77/77** geçti.
+- Entegrasyon kapsamı: `node --test test/applicationArchive.test.js test/staffArchiveWorkspace.test.js test/staffApplicationsUi.test.js test/backendApiContract.test.js` — **78/78** geçti.
 - ZIP okuyucu doğrulaması: ZIP testi gerçek `@zip.js/zip.js` `ZipReader` ile girdileri açar, entry adını, STORE yöntemini ve içeriği kontrol eder.
+- `writable.close()` hata senaryosu hem ZIP modülünde hem arşiv UI’sinde sınandı: işlem başarısız görünür, “ZIP indirme tamamlandı” mesajı gösterilmez.
 - Backend senaryoları shared-staff yetkilendirmesi, başvuru/dosya eşleşmesi, yanlış başvuru, eski revizyon/nesne kimliği, eski/superseded revizyonun dışlanması, pending/unsafe/cleanup engelleri ve akış sırasında revizyon değişikliğini kapsar.
-- `npm test` — **388/388** geçti. Tam desenin içinde hem `test/applicationArchive.test.js` hem `test/staffArchiveWorkspace.test.js` çalıştı.
-- `npm run test` — **388/388** geçti. Bu komut aynı `test` scriptini yeniden çalıştırır; ikinci bağımsız test kapsamı olarak sayılmamıştır.
+- `npm test` — **389/389** geçti. Tam desenin içinde hem `test/applicationArchive.test.js` hem `test/staffArchiveWorkspace.test.js` çalıştı.
+- `npm run test` — **389/389** geçti. Bu komut aynı `test` scriptini yeniden çalıştırır; ikinci bağımsız test kapsamı olarak sayılmamıştır.
 - `npm run build` — başarılı. Vite, `ocrService.js` için önceden var olan `INEFFECTIVE_DYNAMIC_IMPORT` uyarısını yazdı; build başarısız olmadı.
 - `git diff --check` — temiz.
 

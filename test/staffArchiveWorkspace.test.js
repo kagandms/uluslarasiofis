@@ -532,6 +532,33 @@ test('archive ZIP actions from queue and detail cancel the correct application s
     assert.match(archiveRoot.textContent, /eksik arşiv sunulmadı/);
 });
 
+test('archive ZIP close failure never displays the completed-download message', async (context) => {
+    const { document, archiveRoot } = createStaffDom();
+    installDocument(context, document);
+    const writable = new WritableStream({ write() {}, close() { throw new Error('disk close failed'); } });
+    document.defaultView.showSaveFilePicker = async () => ({ async createWritable() { return writable; } });
+    document.defaultView.isSecureContext = true;
+    const api = {
+        async queryApplications() { return createQueuePayload([COMPLETED_ITEM]); },
+        async readApplicationDetail() { return { application: COMPLETED_ITEM, documents: [] }; },
+        async createArchiveManifest() {
+            return { total_source_bytes: 5, files: [{ code: 'passport', expected_revision_number: 1,
+                object_identity: 'a'.repeat(64), media_type: 'application/pdf', byte_size: 5, entry_name: '01-passport.pdf' }] };
+        },
+        async readArchiveFile() { return new Response(new Uint8Array([1, 2, 3, 4, 5])); }
+    };
+
+    initWorkspaceNavigation();
+    initializeStaffArchiveManager(archiveRoot, api);
+    document.querySelector('.home-actions [data-workspace-view="archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="download-application-archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.doesNotMatch(archiveRoot.textContent, /ZIP indirme tamamlandı\./);
+    assert.match(archiveRoot.textContent, /ZIP hazırlanamadı/);
+});
+
 test('archive ZIP reports pending safety review clearly without requesting or skipping documents', async (context) => {
     const { document, archiveRoot } = createStaffDom();
     installDocument(context, document);
