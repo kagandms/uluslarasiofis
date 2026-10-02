@@ -1,4 +1,12 @@
 import { putStudentDocumentDirect } from './applicationApi.js';
+import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
+
+function readMessages(document) {
+    const locale = document?.documentElement?.lang || 'tr';
+    const closeoutMessages = SESSION3_MESSAGES[locale] || SESSION3_MESSAGES.tr;
+    const publicMessages = PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr;
+    return { ...closeoutMessages, ...publicMessages };
+}
 
 function setStatus(status, message) {
     status.textContent = message;
@@ -36,8 +44,9 @@ function isSessionFailure(error) {
  */
 export function initializeResubmissionUpload(card, requirement, api, options = {}) {
     const document = card.ownerDocument;
-    const messages = options.messages;
+    const messages = options.messages || readMessages(document);
     const section = document.createElement('section');
+    const label = document.createElement('label');
     const fileInput = document.createElement('input');
     const button = document.createElement('button');
     const status = document.createElement('p');
@@ -46,29 +55,47 @@ export function initializeResubmissionUpload(card, requirement, api, options = {
 
     section.className = 'resubmission-upload-control';
     fileInput.type = 'file';
+    fileInput.id = `resubmission-file-${requirement.code}`;
     fileInput.accept = requirement.accepted_media_types.join(',');
     fileInput.setAttribute('aria-label', messages.resubmissionUploadChooseFile);
+    label.htmlFor = fileInput.id;
+    label.className = 'resubmission-upload-label';
+    label.textContent = messages.resubmissionFileLabel || messages.resubmissionUploadChooseFile;
     button.type = 'button';
     button.className = 'application-button application-button-primary';
     button.disabled = true;
+    button.setAttribute('aria-busy', 'false');
     button.textContent = messages.resubmissionUploadAction;
+    status.id = `resubmission-status-${requirement.code}`;
     status.className = 'tracking-message';
     status.setAttribute('aria-live', 'polite');
+    status.setAttribute('role', 'status');
+    fileInput.setAttribute('aria-describedby', status.id);
     fileInput.addEventListener('change', () => {
-        button.disabled = !isAllowedFile(fileInput.files?.[0], requirement) || hasSessionFailure;
-        if (fileInput.files?.length && !isAllowedFile(fileInput.files[0], requirement)) {
+        const isFileValid = isAllowedFile(fileInput.files?.[0], requirement);
+        button.disabled = !isFileValid || hasSessionFailure;
+        fileInput.setAttribute('aria-invalid', fileInput.files?.length && !isFileValid ? 'true' : 'false');
+        if (fileInput.files?.length && !isFileValid) {
+            status.setAttribute('role', 'alert');
             setStatus(status, messages.resubmissionUploadInvalidFile);
+        } else {
+            status.setAttribute('role', 'status');
         }
     });
     button.addEventListener('click', async () => {
         const file = fileInput.files?.[0];
         if (!isAllowedFile(file, requirement) || hasSessionFailure) {
+            status.setAttribute('role', 'alert');
+            fileInput.setAttribute('aria-invalid', 'true');
             setStatus(status, messages.resubmissionUploadInvalidFile);
             return;
         }
+        fileInput.setAttribute('aria-invalid', 'false');
         activeController = new AbortController();
         const currentController = activeController;
         button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        status.setAttribute('role', 'status');
         setStatus(status, messages.resubmissionUploadPreparing);
         try {
             const { upload } = await api.createResubmissionUploadIntent(requirement.code, file);
@@ -80,6 +107,7 @@ export function initializeResubmissionUpload(card, requirement, api, options = {
             });
             setStatus(status, messages.resubmissionUploadVerifying);
             await api.finalizeResubmissionUpload(upload.intent_id);
+            button.setAttribute('aria-busy', 'false');
             setStatus(status, messages.resubmissionUploadComplete);
             try {
                 await options.onComplete?.();
@@ -87,6 +115,9 @@ export function initializeResubmissionUpload(card, requirement, api, options = {
                 if (isSessionFailure(error)) throw error;
             }
         } catch (error) {
+            button.setAttribute('aria-busy', 'false');
+            status.setAttribute('role', 'alert');
+            fileInput.setAttribute('aria-invalid', 'true');
             if (isSessionFailure(error)) {
                 hasSessionFailure = true;
                 currentController.abort();
@@ -103,7 +134,7 @@ export function initializeResubmissionUpload(card, requirement, api, options = {
             if (activeController === currentController) activeController = null;
         }
     });
-    section.append(fileInput, button, status);
+    section.append(label, fileInput, button, status);
     card.append(section);
     return { fileInput, button, status };
 }

@@ -50,12 +50,16 @@ function createLookupForm(document, state, messages, submitLookup) {
     input.value = state.studentNumber;
     input.id = 'tracking-student-number';
     input.setAttribute('aria-label', messages.trackingLookupStudentNumberLabel);
+    input.addEventListener('input', () => {
+        state.studentNumber = input.value;
+    });
     const label = createTextElement(document, 'label', '', messages.trackingLookupStudentNumberLabel);
     label.htmlFor = input.id;
     const button = document.createElement('button');
     button.type = 'submit';
     button.className = 'application-button application-button-primary';
     button.disabled = isSubmitting;
+    button.setAttribute('aria-busy', isSubmitting ? 'true' : 'false');
     button.textContent = isSubmitting ? messages.trackingLoading : messages.trackingLookupSubmit;
     form.append(label, input, button);
     return form;
@@ -73,7 +77,12 @@ function renderLookup(root, state, messages, submitLookup) {
     const feedbackKey = state.kind === 'notFound' ? 'trackingLookupNotFound'
         : state.kind === 'rateLimited' ? 'trackingLookupRateLimited'
             : state.kind === 'lookupError' ? 'trackingLookupError' : null;
-    if (feedbackKey) panel.append(createTextElement(document, 'p', 'tracking-message', messages[feedbackKey]));
+    if (feedbackKey) {
+        const feedback = createTextElement(document, 'p', 'tracking-message tracking-feedback', messages[feedbackKey]);
+        feedback.setAttribute('role', 'alert');
+        feedback.dataset.feedbackType = state.kind === 'notFound' ? 'warning' : 'error';
+        panel.append(feedback);
+    }
     root.replaceChildren(panel);
 }
 
