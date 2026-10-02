@@ -287,3 +287,54 @@ The required presence-only check found that one or both of `PH8H_STAFF_USERNAME`
 - No applicant data, D1, R2, Worker, or production resource was changed. No tests or builds were run because there were no source changes.
 
 Phase 8H remains **NOT COMPLETE**. The immediate blocker is that both owner-supplied staging credentials must be available through the designated environment variables for a later continuation. No Phase 8I work was started.
+
+## 19. Continuation pass — shared staff bootstrap and staging UAT (2026-10-02)
+
+This continuation supersedes the credential-stop in §18. The required presence-only check found both `PH8H_STAFF_USERNAME` and `PH8H_STAFF_PASSWORD` non-empty. Their values were never printed, logged, or written to this report.
+
+### Starting state and target verification
+
+- Continued on `codex/phase8h-live-staging-uat` at the expected starting SHA `0ce5ed95f892e36a53aa0e07f9e546fd7d629247`; the tracked worktree was clean before report changes.
+- Wrangler configuration resolved staging to Worker `goc-staging`, hostname `https://goc-staging.topkapiuni.workers.dev`, D1 `uluslarasiofis-staging`, and R2 `uluslarasiofis-documents-staging`. The origin returned HTTP 200.
+- Wrangler confirmed the configured staging D1/R2 resources exist, no D1 migrations are pending, R2 `r2.dev` access is disabled, and no custom domain is connected. Worker `goc-staging-staging` does not exist. No production command or resource was used.
+- Before bootstrap, safe aggregate D1 counts were 0 staff, 0 active staff, and 0 bootstrap-state rows. Only the previously documented sole submitted synthetic UAT application was selected; unrelated student rows were not inspected.
+- The staging secret-name list included `STAFF_SHARED_USERNAME` and `STAFF_BOOTSTRAP_TOKEN`; Apps Script secrets `APPS_SCRIPT_URL` and `APPS_SCRIPT_API_KEY` remain absent.
+
+### Bootstrap token diagnosis and account creation
+
+- In one controlled Node process, a 32-byte cryptographically random token was kept in memory, sent without a newline through `printf '%s'` to `wrangler secret put STAFF_BOOTSTRAP_TOKEN --env staging`, and then sent in the bootstrap header to the exact staging hostname. The secret-change version was verified active before the HTTP request. No token value was printed, persisted, or manually copied.
+- The first same-process request reached username validation and returned HTTP 400 `VALIDATION_ERROR` (`req_b4506c83-733d-4c83-8f58-7c649bbeece0`). This proves the token check passed; the configured `STAFF_SHARED_USERNAME` did not match the supplied environment username, so password derivation did not run. That attempt's active secret-change Worker version was `60c25583-5651-4703-9fe6-ac613786a822`.
+- The staging `STAFF_SHARED_USERNAME` secret was then set from `PH8H_STAFF_USERNAME` without displaying its value. After that change became active as version `98682dce-4cef-4e5e-9b7a-8f0e05a2853f`, a fresh random bootstrap token was provisioned and verified active as version `9340564d-6bcf-4565-ac26-cf5655645a1a`. The same in-memory token and environment credentials produced HTTP 201 (`req_05ed9ad4-3daf-4040-b73c-e839df493c57`). No source code, password hash, or D1 credential row was manually seeded.
+- The successful 201 proves the deployed Worker executed the new-password PBKDF2-HMAC-SHA-256 path at 100,000 iterations. The KDF was not lowered.
+- Post-bootstrap aggregate checks found exactly 1 staff row, 1 active staff row, 1 bootstrap row, and 1 admin. One stored value matched the structured `pbkdf2_sha256`/`100000` hash metadata and none were empty. No username, password, hash, salt, or derived key was output.
+- The bootstrap token was rotated once more to a fresh random secret. Its active secret-change version was `7baed542-0e47-4353-9e7a-9770edb77037`. A follow-up request authenticated with that in-memory token returned HTTP 409 `BOOTSTRAP_CLOSED` (`req_0c74e4c6-4f41-49c6-a334-75fe6039cffe`); the token was discarded when the process ended. This is the current active staging Worker version. No source-code deployment occurred.
+
+### Login, session, queue, and detail UAT
+
+- Anonymous staff session, queue, and detail requests returned 401. Correct shared-account login returned 200 with role `admin` and a session cookie carrying `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/`, and a 12-hour max age.
+- Wrong password, wrong username, and a distinct arbitrary second username each returned 401 `INVALID_CREDENTIALS` with the same generic message. Session reads using the issued cookie returned 200 on repeated requests. Logout returned 200, expired the cookie, and reuse of the revoked cookie returned 401.
+- The existing submitted synthetic application appeared in the staff queue. The `new` filter included it, a search by its student number found it, and the `under_review` filter excluded it. Detail returned 200 with the expected core fields and 9 document requirements. No student values were included in this report.
+- API-level session persistence was verified with repeated same-cookie requests. Browser refresh after login was **NOT EXECUTED**: the Yandex browser loaded `/yetkili/` and displayed the sign-in form, but no authenticated browser session was established.
+- The staff queue/detail API exposes no assignee field. Source inspection found no assignment, `Atanan Personel`, person-queue, or individual-account-management UI markers in the staff modules. Post-login browser presentation was not live-verified.
+
+### Pending scan boundary and review chain
+
+- A safe aggregate query for the submitted synthetic application found 9 current documents grouped as `revision_status=submitted`, `scan_status=pending`, and `review_status=pending`. Detail reported zero documents with safe access, zero approvable documents, and zero documents eligible for a resubmission request.
+- Anonymous preview returned 401. Authenticated preview and download both returned 404 `DOCUMENT_NOT_AVAILABLE`; no document content or storage capability was exposed. R2 remains private.
+- The application detail lists `under_review` as an allowed application-level transition, but no transition was made. Document approval and resubmission remain blocked while scans are pending. No document status was changed, and no review, resubmission, replacement upload, or second review was attempted.
+- **Malware/document scanning is now the next legitimate Phase 8H blocker.** The review chain stops here until the existing synthetic files receive a legitimate scanner result.
+
+### Security and legacy workspace checks
+
+- The earlier two-owner synthetic IDOR check remains the latest IDOR evidence: cross-owner finalize returned 404. This continuation did not inspect unrelated applicant records or submit an XSS payload. Persisted-field XSS rendering remains **NOT EXECUTED** because the submitted record has no safe editable field path without crossing the pending-scan review boundary.
+- A staging build completed for bundle inspection. A marker scan of 15 text files under `dist/client` found no occurrences of the checked credential/secret names or private-key markers; no actual credential values were printed or compared.
+- R2 public `r2.dev` access is disabled and there are no bucket custom domains. The private pending-scan documents could not be previewed or downloaded through the staff routes.
+- The live `/yetkili/` sign-in shell loaded in the browser. Authenticated Belgeler preview/download, Kapak Hazırla, staff OCR, YKN, Tebliğ, and extension UI actions were **NOT EXECUTED** in the browser. Static staff entry points still import the application manager, documents manager, and OCR modules. YKN/Tebliğ external calls remain **NOT EXECUTED — external integration configuration unavailable** because Apps Script secrets are absent. No YÖKSİS or real university records were accessed or changed.
+
+### Code, validation, and phase status
+
+- No source-code defect was proven and no source file, schema, or migration was changed. The only staging configuration adjustment was aligning `STAFF_SHARED_USERNAME` with the owner-supplied environment value.
+- `npm run build:staging` passed and produced the client bundle used for the secret-marker scan; the existing Vite `INEFFECTIVE_DYNAMIC_IMPORT` warning for `src/services/ocrService.js` remains. Test suites, deployment dry-run, `npm audit`, and source deployment were not run because no source change was made.
+- `git diff --check` passed after the report update.
+
+Phase 8H remains **NOT COMPLETE**. Production is untouched, no pending scan state was bypassed, and Phase 8I was not started. The next recommendation is to complete the legitimate staging document-scanning path, then resume the blocked document review/resubmission UAT and the still-unverified browser-refresh and authenticated legacy-workspace checks.
