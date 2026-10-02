@@ -41,6 +41,36 @@ const QUEUE_ITEM = {
     assigned_staff: { staff_id: 'staff-001', display_name: 'Reviewer One' }
 };
 
+for (const scanStatus of ['unsafe', 'failed']) {
+    test(`staff can request ${scanStatus} replacement without preview, download or approve actions`, async (context) => {
+        const { document, root } = createStaffDom();
+        installDocument(context, document);
+        const actions = [];
+        const api = {
+            async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+            async readApplicationDetail() { return { application: QUEUE_ITEM, documents: [{
+                code: 'passport', label_key: 'documentPassport', revision_number: 1, revision_status: 'submitted',
+                upload_status: 'finalized', scan_status: scanStatus, access_available: false,
+                can_approve: false, can_request_resubmission: true }] }; },
+            async requestDocumentResubmission(...arguments_) { actions.push(arguments_); }
+        };
+        initWorkspaceNavigation();
+        initializeStaffApplicationsManager(root, api);
+        document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+        await new Promise((resolve) => setImmediate(resolve));
+        root.querySelector('[data-action="open-detail"]').click();
+        await new Promise((resolve) => setImmediate(resolve));
+
+        assert.equal(root.querySelectorAll('[data-action="preview-document"], [data-action="download-document"], [data-action="approve-document"]').length, 0);
+        assert.ok(root.querySelector('[data-action="request-document-resubmission"]'));
+        root.querySelector('[data-action="request-document-resubmission"]').click();
+        root.querySelector('textarea').value = 'Yeni açılabilir dosya gönderin.';
+        root.querySelector('.staff-resubmission-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(actions, [['app-001', 'passport', 1, 'Yeni açılabilir dosya gönderin.']]);
+    });
+}
+
 test('applications workspace is prominent and opening it loads a queue without disturbing existing views', async (context) => {
     const { dom, document, root } = createStaffDom();
     installDocument(context, document);

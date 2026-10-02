@@ -1,0 +1,35 @@
+{
+  "baseline_HEAD": "f2d50eb32b7f8d3612bc89cdc0e2f58b64c956f4",
+  "branch": "codex/pilot-integration-review",
+  "PM_input_SHA256": "4019d05537ece7dd6d4a4d60f2be91857d93f368a632bcb258b59c50483e4d8b",
+  "preserved_f2d50eb_ZIP_SHA256": "e5ffbd66fa1f1d5762f785de91525f7f031d40cd1bc0e31e6e3f47c440a03868",
+  "product_file_count": 127,
+  "product_digest_SHA256": "bda4db701c0369fa8f41d6a49133c785ff5cd04e4712a6c7fbc137c163169f49",
+  "digest_format": "sorted product path + NUL + file SHA256 hex + LF; UTF8; prefixes src/, scripts/scanner/, scripts/pilot/, migrations/ plus package.json, package-lock.json, wrangler.jsonc",
+  "R01": "closed; current completed unsafe/failed may request reasoned replacement; clean file read/approve unchanged",
+  "RED": {
+    "initial_unsafe_failed_DTO": [
+      false,
+      false
+    ],
+    "request_API_before_fix": 409,
+    "unsafe_audit_case_before_fix": 409,
+    "staff_UI_request_action_before_fix": "absent"
+  },
+  "GREEN": {
+    "focused_tests": 93,
+    "initial_unsafe_failed_request_HTTP": 200,
+    "pending_HTTP": 409,
+    "scanner_status_changed_at_commit_HTTP": 409,
+    "terminal_or_stale_current_at_commit_HTTP": 409,
+    "audit_failure_rollback": true,
+    "other_approved_document_preserved": true
+  },
+  "OP01": "local read-only lookup + existing staff reset API verified; no SQL credentials/sessions; stable reference and old code/cookies rejected",
+  "remote_UAT": "NOT EXECUTED",
+  "Windows_backup": "NOT EXECUTED; separate work, not mandatory MacBook pilot gate",
+  "open_local_P0_P1": 0,
+  "remote_mutations": false,
+  "push_main_merge": false,
+  "continuous_runner": false
+}

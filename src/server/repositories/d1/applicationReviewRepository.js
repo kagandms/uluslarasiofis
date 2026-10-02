@@ -1,4 +1,5 @@
 import { OFFICIAL_APPLICATION_RETENTION_DAYS } from '../../../config/constants.js';
+import { findCurrentResubmissionTarget } from './resubmission-review-target.js';
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -16,6 +17,9 @@ function addUtcDays(timestamp, days) {
  */
 export function createApplicationReviewRepository(database, notes) {
     return Object.freeze({
+        async findCurrentDocumentForResubmission(applicationId, code) {
+            return findCurrentResubmissionTarget(database, { applicationId, code });
+        },
         async transitionApplicationStatus({ applicationId, currentStatus, expectedUpdatedAt, targetStatus, staffId, now, requestId, auditId }) {
             const isCompleted = targetStatus === 'completed';
             const terminalAt = isCompleted ? now : null;
@@ -88,7 +92,7 @@ export function createApplicationReviewRepository(database, notes) {
             ]);
             return results.every((result) => result?.meta?.changes === 1);
         },
-        async requestCurrentDocumentResubmission({ applicationId, documentRecordId, revisionId, revisionNumber, code, staffId, reason, now, requestId, auditId, noteId }) {
+        async requestCurrentDocumentResubmission({ applicationId, documentRecordId, revisionId, revisionNumber, expectedScanStatus, code, staffId, reason, now, requestId, auditId, noteId }) {
             const results = await database.batch([
                 database.prepare(`
                     UPDATE document_revisions
@@ -105,10 +109,11 @@ export function createApplicationReviewRepository(database, notes) {
                           AND records.application_id = ? AND records.review_status IN ('pending', 'under_review')
                           AND applications.status IN ('under_review', 'resubmission_required')
                           AND requirements.is_active = 1 AND files.upload_status = 'finalized'
-                          AND files.scan_status = 'clean' AND files.cleanup_status = 'none'
+                          AND files.scan_status IN ('clean', 'unsafe', 'failed') AND files.scan_status = ?
+                          AND files.cleanup_status = 'none'
                           AND intents.status = 'completed'
                       )
-                `).bind(now, staffId, revisionId, documentRecordId, revisionNumber, applicationId),
+                `).bind(now, staffId, revisionId, documentRecordId, revisionNumber, applicationId, expectedScanStatus),
                 database.prepare(`
                     UPDATE document_records SET review_status = 'resubmission_required', updated_at = ?
                     WHERE id = ? AND application_id = ? AND review_status IN ('pending', 'under_review')

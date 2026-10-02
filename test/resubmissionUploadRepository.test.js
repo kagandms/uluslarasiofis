@@ -108,6 +108,21 @@ test('allows a first replacement only for the exact current persisted resubmissi
     assert.deepEqual(result, { allowed: true, mode: 'first_replacement' });
 });
 
+test('reasoned first replacement accepts completed unsafe/failed files but rejects pending or incomplete intent', () => {
+    for (const scanStatus of ['unsafe', 'failed']) {
+        const input = validFirstReplacement();
+        input.currentRevision.file.scanStatus = scanStatus;
+
+        assert.deepEqual(evaluateResubmissionEligibility(input), { allowed: true, mode: 'first_replacement' });
+    }
+    for (const change of [{ scanStatus: 'pending' }, { intentStatus: 'pending' }, { intentStatus: null }]) {
+        const input = validFirstReplacement();
+        Object.assign(input.currentRevision.file, change);
+
+        assert.deepEqual(evaluateResubmissionEligibility(input), { allowed: false, mode: null });
+    }
+});
+
 test('does not let a student-visible message alone authorize replacement', () => {
     const messageOnly = {
         ...validFirstReplacement(),

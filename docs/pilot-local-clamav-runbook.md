@@ -132,6 +132,8 @@ Rotation: eski runner'ı durdurun; yeni private dosyada yeni 256 bit credential 
 
 ## Windows / Linux'a taşıma
 
+Windows yedeğinin gerçek clean/EICAR acceptance testi ayrı, **NOT EXECUTED** bir iştir. Doğrulanmış MacBook ile sınırlı pilotun zorunlu Windows bağımlılığı değildir; Mac kesilirse işler durable backlog'da/pending kalır, dosyalar clean varsayılmaz. Güncel pilot işletim/kurtarma ve rollback kararları için [entegrasyon staging planı](pilot-integration-staging-plan.md) esas alınır.
+
 Python 3.12+ venv, `requirements.txt`, güncel resmi ClamAV/freshclam ve official CVD certificate dizini gerekir. Homebrew yolları yerine `SCANNER_CLAMSCAN`, `SCANNER_FRESHCLAM`, `SCANNER_CERTS_DIR` ayarlanır; Windows executable adları `.exe` olabilir. State/private secret Windows'ta yalnız servis kullanıcısı ACL'siyle korunmalıdır (POSIX mode kontrolü Windows'ta uygulanmaz). Normal kullanıcı, outbound HTTPS ve imza mirror erişimi yeterli; R2 anahtarı/staff cookie/tünel gerekmez. Freshclam conf yeni host'taki database/user/cert yollarına uyarlanır.
 
 Windows Task Scheduler veya Linux user service aynı foreground runner'ı çalıştırabilir; service kurulumu bu görevde yapılmadı. Önce eski host durdurulur, yeni host heartbeat ve gerçek sentetik scan kanıtlanır. Paralel iki host için lease davranışı testlerde doğrulandı; gerçek Windows/Linux çalıştırması ve iki fiziksel host testi **NOT EXECUTED**.

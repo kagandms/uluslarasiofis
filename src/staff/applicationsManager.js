@@ -237,45 +237,51 @@ function createApplicationSummary(document, application) {
     return section;
 }
 
-function createDocumentAccessActions(document, applicationId, item, handlers, isPending) {
-    const actions = document.createElement('div');
-    actions.className = 'staff-application-document-actions';
-    if (item.can_approve === true) {
-        const approve = document.createElement('button');
-        approve.type = 'button';
-        approve.className = 'btn btn-primary';
-        approve.dataset.action = 'approve-document';
-        approve.disabled = isPending;
-        approve.textContent = isPending ? 'İşleniyor…' : 'Onayla';
-        approve.addEventListener('click', () => handlers.onApprove(item));
-        actions.append(approve);
-    }
-    if (item.can_request_resubmission === true) {
-        const request = document.createElement('button');
-        request.type = 'button';
-        request.className = 'btn btn-outline';
-        request.dataset.action = 'request-document-resubmission';
-        request.disabled = isPending;
-        request.textContent = 'Yeniden Yükleme İste';
-        request.addEventListener('click', () => handlers.onOpenResubmission(item));
-        actions.append(request);
-    }
+function createResubmissionButton(document, item, options) {
+    const request = document.createElement('button');
+    request.type = 'button';
+    request.className = 'btn btn-outline';
+    request.dataset.action = 'request-document-resubmission';
+    request.disabled = options.isPending;
+    request.textContent = 'Yeniden Yükleme İste';
+    request.addEventListener('click', () => options.handlers.onOpenResubmission(item));
+    return request;
+}
+
+function createDocumentReadActions(document, item, options) {
     const preview = document.createElement('button');
     preview.type = 'button';
     preview.className = 'btn btn-outline';
     preview.dataset.action = 'preview-document';
     preview.dataset.documentCode = item.code;
-    preview.disabled = isPending;
+    preview.disabled = options.isPending;
     preview.textContent = 'Önizle';
-    preview.addEventListener('click', () => handlers.onPreview(item));
+    preview.addEventListener('click', () => options.handlers.onPreview(item));
     const download = document.createElement('a');
     download.className = 'btn btn-outline';
     download.dataset.action = 'download-document';
-    download.href = APPLICATION_DOCUMENT_ROUTE(applicationId, item.code, 'download');
+    download.href = APPLICATION_DOCUMENT_ROUTE(options.applicationId, item.code, 'download');
     download.download = item.filename || 'belge';
-    if (isPending) download.setAttribute('aria-disabled', 'true');
+    if (options.isPending) download.setAttribute('aria-disabled', 'true');
     download.textContent = 'İndir';
-    actions.append(preview, download);
+    return [preview, download];
+}
+
+function createDocumentAccessActions(document, item, options) {
+    const actions = document.createElement('div');
+    actions.className = 'staff-application-document-actions';
+    if (item.access_available === true && item.can_approve === true) {
+        const approve = document.createElement('button');
+        approve.type = 'button';
+        approve.className = 'btn btn-primary';
+        approve.dataset.action = 'approve-document';
+        approve.disabled = options.isPending;
+        approve.textContent = options.isPending ? 'İşleniyor…' : 'Onayla';
+        approve.addEventListener('click', () => options.handlers.onApprove(item));
+        actions.append(approve);
+    }
+    if (item.can_request_resubmission === true) actions.append(createResubmissionButton(document, item, options));
+    if (item.access_available === true) actions.append(...createDocumentReadActions(document, item, options));
     return actions;
 }
 
@@ -351,8 +357,11 @@ function createDocumentSection(document, applicationId, documents, state, handle
         details.className = 'staff-application-details-grid';
         fields.forEach(([fieldLabel, value]) => appendDetail(document, details, fieldLabel, value));
         card.append(details, item.access_available === true
-            ? createDocumentAccessActions(document, applicationId, item, handlers, Boolean(state.actionPending))
+            ? createDocumentAccessActions(document, item, { applicationId, handlers, isPending: Boolean(state.actionPending) })
             : createUnavailableDocumentState(document, item));
+        if (item.access_available !== true && item.can_request_resubmission === true) {
+            card.append(createDocumentAccessActions(document, item, { applicationId, handlers, isPending: Boolean(state.actionPending) }));
+        }
         if (item.student_message) {
             card.append(createText(document, 'p', 'staff-application-student-message', `Öğrenciye iletilen neden: ${item.student_message}`));
         }

@@ -4,7 +4,7 @@ function readModeGuard(mode) {
     if (mode === 'first_replacement') {
         return `records.review_status = 'resubmission_required'
             AND current_revision.status = 'resubmission_required'
-            AND current_file.scan_status = 'clean'`;
+            AND current_file.scan_status IN ('clean', 'unsafe', 'failed')`;
     }
     if (mode === 'unsafe_scan_retry') {
         return `records.review_status = 'pending'

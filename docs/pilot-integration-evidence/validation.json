@@ -1,11 +1,11 @@
 {
   "node": {
     "exit_code": 0,
-    "total": 522,
-    "pass": 521,
+    "total": 547,
+    "pass": 546,
     "fail": 0,
     "skip": 1,
-    "duration_ms": 18331.615125
+    "duration_ms": 18842.656667
   },
   "python": {
     "exit_code": 0,
@@ -14,14 +14,19 @@
   },
   "real_clamav": {
     "exit_code": 0,
+    "total": 1,
     "pass": 1,
+    "fail": 0,
     "skip": 0,
-    "duration_ms": 57332.432709
+    "duration_ms": 89122.991916
   },
   "native_acceptance": {
     "exit_code": 0,
     "status": "PASS",
-    "native_local_migrations": "0001-0009"
+    "native_local_migrations": "0001-0009",
+    "staff_bootstrap_login": "supported local APIs",
+    "initial_unsafe_and_terminal_failed_recovery": "PASS",
+    "lost_draft_lookup_API_reset": "PASS"
   },
   "build_staging": {
     "exit_code": 0,
@@ -66,5 +71,13 @@
       "same-type-fields"
     ],
     "persisted_fields_and_remaps_unchanged": true
+  },
+  "focused": {
+    "exit_code": 0,
+    "total": 93,
+    "pass": 93,
+    "fail": 0,
+    "skip": 0,
+    "duration_ms": 3008.979042
   }
 }

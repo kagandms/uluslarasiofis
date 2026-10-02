@@ -17,7 +17,8 @@ function isFirstReplacement(input) {
         && input.documentRecord.reviewStatus === 'resubmission_required'
         && input.currentRevision.status === 'resubmission_required'
         && input.currentRevision.file?.uploadStatus === 'finalized'
-        && input.currentRevision.file?.scanStatus === 'clean';
+        && input.currentRevision.file?.intentStatus === 'completed'
+        && ['clean', 'unsafe', 'failed'].includes(input.currentRevision.file?.scanStatus);
 }
 
 function isUnsafeScanRetry(input) {

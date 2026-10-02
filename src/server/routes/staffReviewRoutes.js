@@ -68,6 +68,24 @@ function reviewConflict() {
     return new ApiError(409, 'DOCUMENT_REVIEW_CONFLICT', 'Belge başka bir işlem nedeniyle değişti. Güncel durumu yeniden yükleyin.');
 }
 
+async function resolveResubmissionTarget({ repositories, applicationId, code, revisionNumber }) {
+    const application = await repositories.applications.findById(applicationId);
+    requireApplication(application);
+    const policy = readDocumentPolicy(code, application.application_type, application.is_under_18 === 1,
+        application.address_evidence_type ?? null);
+    if (!policy) throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya yenilemeye uygun değil.');
+    const document = await repositories.applicationReviews.findCurrentDocumentForResubmission(applicationId, code);
+    if (!document) throw new ApiError(409, 'DOCUMENT_NOT_REVIEWABLE', 'Belge güncel ve yenilemeye uygun değil.');
+    if (document.revision_number !== revisionNumber || document.revision_status !== 'submitted') {
+        throw reviewConflict();
+    }
+    if (!['pending', 'under_review'].includes(document.review_status)
+        || !policy.accepted_media_types.includes(document.media_type)) {
+        throw new ApiError(409, 'DOCUMENT_NOT_REVIEWABLE', 'Belge güncel ve yenilemeye uygun değil.');
+    }
+    return document;
+}
+
 /**
  * Approves a safe, current application document revision for an authenticated reviewer.
  * @param {{request: Request, environment: object, applicationId: string, code: string, requestId: string}} input Staff route context.
@@ -92,7 +110,7 @@ export async function approveStaffApplicationDocument({ request, environment, ap
 }
 
 /**
- * Requests replacement of a safe, current document and stores its student-visible reason atomically.
+ * Requests replacement of a finalized current document without opening it; stores the reason atomically.
  * @param {{request: Request, environment: object, applicationId: string, code: string, requestId: string}} input Staff route context.
  * @returns {Promise<object>} Safe mutation result.
  */
@@ -105,11 +123,11 @@ export async function requestStaffDocumentResubmission({ request, environment, a
     const revisionNumber = readExpectedRevisionNumber(body.expected_revision_number);
     const reason = readResubmissionReason(body.reason);
     const repositories = createD1Repositories(environment.DB);
-    const { document } = await resolveReviewTarget(repositories, applicationId, code, revisionNumber);
+    const document = await resolveResubmissionTarget({ repositories, applicationId, code, revisionNumber });
     const now = new Date().toISOString();
     const updated = await repositories.applicationReviews.requestCurrentDocumentResubmission({
         applicationId, documentRecordId: document.document_record_id, revisionId: document.revision_id,
-        revisionNumber, code, staffId: staff.id, reason, now, requestId,
+        revisionNumber, expectedScanStatus: document.scan_status, code, staffId: staff.id, reason, now, requestId,
         auditId: crypto.randomUUID(), noteId: crypto.randomUUID()
     });
     if (!updated) throw reviewConflict();

@@ -1,67 +1,34 @@
-Node
-✔ Türkmenistan için veren makam fallback değeri SMST olarak korunur (1.138708ms)
-✔ YKN waits for Apply document discovery before acceptance-code automation (0.890917ms)
-✔ portal accepts document discovery results without treating profile discovery as complete (0.920542ms)
-✔ starting a new YKN student search clears the prior student document-byte cache (0.923208ms)
-ℹ tests 522
-ℹ suites 0
-ℹ pass 521
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 1
-ℹ todo 0
-ℹ duration_ms 18331.615125
-
-Python
-scan_failed code=scan_timeout
-ok
-test_private_files_are_removed_after_an_engine_error (test_runner.RunnerFailureTests.test_private_files_are_removed_after_an_engine_error) ... ok
-test_update_failure_is_retried_before_claim_when_heartbeat_also_fails (test_runner.RunnerFailureTests.test_update_failure_is_retried_before_claim_when_heartbeat_also_fails) ... runner_iteration_failed; lease_retry_remains_in_D1
-runner_iteration_failed; lease_retry_remains_in_D1
-ok
-test_partial_signature_database_is_not_ready_even_when_version_command_succeeds (test_runner.SignatureCompletenessTests.test_partial_signature_database_is_not_ready_even_when_version_command_succeeds) ... ok
-
-----------------------------------------------------------------------
-Ran 13 tests in 0.015s
-
-OK
-
-Real ClamAV
-✔ real MacBook ClamAV scans via HTTPS job protocol and preserves staff/review/ZIP/replacement gates (56890.311834ms)
-ℹ Real HTTPS + MacBook ClamAV: clean PDF/PNG/JPEG/WebP, EICAR unsafe, encrypted/broken non-clean, replacement, restart and real engine timeout.
-ℹ tests 1
-ℹ suites 0
-ℹ pass 1
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 57332.432709
-
-Build staging
-dist/client/assets/pdf.worker.min-BmVo14Nb.mjs                                  1,317.03 kB
-dist/client/assets/main-xSsSSDip.css                                               19.70 kB │ gzip:   4.14 kB
-dist/client/assets/staff-D3E9svbH.css                                              37.15 kB │ gzip:   7.12 kB
-dist/client/assets/rolldown-runtime-DK3Fl9T5.js                                     0.15 kB │ gzip:   0.15 kB
-dist/client/assets/main-Bhl69Ha0.js                                                72.34 kB │ gzip:  18.22 kB
-dist/client/assets/messages-CafSt5zM.js                                           107.89 kB │ gzip:  28.40 kB
-dist/client/assets/staff-BQZQWSTI.js                                              374.82 kB │ gzip: 131.56 kB
-dist/client/assets/pdfjs-bootstrap-C1sYUuCy.js                                    488.15 kB │ gzip: 148.57 kB
-
-[INEFFECTIVE_DYNAMIC_IMPORT] src/services/ocrService.js is dynamically imported by src/managers/yknManager.js but also statically imported by src/staff/main.js?v=2.3.5, dynamic import will not move module into another chunk.
-
-✓ built in 253ms
-
-Focused regressions
+PM closure validation on final product source (local only).
+{
+  "node": {
+    "exit_code": 0,
+    "total": 547,
+    "pass": 546,
+    "fail": 0,
+    "skip": 1,
+    "duration_ms": 18842.656667
+  },
+  "focused": {
+    "exit_code": 0,
+    "total": 93,
+    "pass": 93,
+    "fail": 0,
+    "skip": 0,
+    "duration_ms": 3008.979042
+  },
+  "real": {
+    "exit_code": 0,
+    "total": 1,
+    "pass": 1,
+    "fail": 0,
+    "skip": 0,
+    "duration_ms": 89122.991916
+  }
 }
-✔ resubmission audit failure rolls back document, application, and student note changes (6.175167ms)
-✔ staff reads, previews, downloads, and re-requests the finalized replacement current revision (16.020792ms)
-✔ replacing one requested document does not resume review; staff must clear remaining requests explicitly (12.5805ms)
-ℹ tests 146
-ℹ suites 0
-ℹ pass 146
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 2181.62325
+Python: 13/13 PASS, exit 0. Native: supported staff bootstrap/login, lost draft recovery and initial unsafe/terminal failed recovery PASS, exit 0.
+Staging build: PASS, pre-existing INEFFECTIVE_DYNAMIC_IMPORT ocrService warning. npm audit: 0 vulnerabilities. git diff --check PASS.
+Actual HTTPS/ClamAV: PDF/PNG/JPEG/WebP clean; EICAR unsafe; encrypted/broken non-clean; timeout 3 attempts failed; initial recovery old lease/result denial.
+Native: local workerd/D1/R2; CLI object PUT; synthetic institutional identity; local queue clock acceleration; other submit files pending.
+Remote migration/deploy/secrets/browser/CORS/physical two-device/campus NAT/identity/reset UAT: NOT EXECUTED. Windows: separate NOT EXECUTED work.
+Owned ephemeral Worker/credentials/D1/R2/fixtures removed; scanner tmp empty; continuous runner inactive.
+Product digest SHA256: bda4db701c0369fa8f41d6a49133c785ff5cd04e4712a6c7fbc137c163169f49

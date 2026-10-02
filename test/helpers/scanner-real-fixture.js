@@ -4,6 +4,8 @@ import { TestD1Database } from './d1-test-binding.js';
 import { applyAllMigrations } from './apply-migrations.js';
 import { hashSessionToken } from '../../src/server/auth/sessionToken.js';
 import worker from '../../src/server/worker.js';
+import { listDocumentPolicies } from '../../src/server/domain/documentPolicy.js';
+import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../src/config/constants.js';
 
 function createBucket(objects) {
     function objectFor(key) {
@@ -43,7 +45,7 @@ export async function createRealScannerFixture() {
 export function portalRequest(context,path,options={}) {
     context.requestCount = (context.requestCount || 0) + 1;
     const headers = { Origin:'https://portal.test', 'CF-Connecting-IP':`198.51.100.${context.requestCount}`,  ...(options.cookie?{Cookie:options.cookie}:{}),
-        ...(options.body?{'Content-Type':'application/json'}:{}) };
+        ...(options.body?{'Content-Type':'application/json'}:{}), ...options.headers };
     return worker.fetch(new Request(`https://portal.test${path}`,{ method:options.method||'GET',headers,
         ...(options.body?{body:JSON.stringify(options.body)}:{}) }),context.environment);
 }
@@ -53,14 +55,15 @@ export async function createSyntheticDraft(context) {
         student_number:crypto.randomUUID().slice(0,12),application_type:'initial',email:'synthetic@example.invalid',phone:'+905551112233' }});
     assert.equal(response.status,201);
     const cookie=response.headers.get('Set-Cookie').split(';')[0];
+    const credentials=await response.json();
     const application=context.database.prepare('SELECT id FROM applications ORDER BY rowid DESC LIMIT 1').first();
-    return { cookie,applicationId:application.id };
+    return { cookie,applicationId:application.id,reference:credentials.reference_number,code:credentials.access_code };
 }
 
-export async function finalizeSyntheticFile({context,app,bytes,mediaType='application/pdf',replacement=false}) {
+export async function finalizeSyntheticFile({context,app,bytes,mediaType='application/pdf',replacement=false,code='passport'}) {
     const base='/api/public/applications/current/documents';
     const response=await portalRequest(context,`${base}/${replacement?'resubmission-upload-intent':'upload-intent'}`,{
-        cookie:app.cookie,method:'POST',body:{code:'passport',filename:'synthetic-document',media_type:mediaType,byte_size:bytes.length}});
+        cookie:app.cookie,method:'POST',body:{code,filename:'synthetic-document',media_type:mediaType,byte_size:bytes.length}});
     assert.equal(response.status,201,await response.clone().text());
     const {upload}=await response.json();
     assert.equal(upload.required_headers['if-none-match'],'*');
@@ -74,6 +77,46 @@ export async function finalizeSyntheticFile({context,app,bytes,mediaType='applic
     assert.equal(file.scan_status,'pending');
     assert.equal(job.status,'queued');
     return {file,job};
+}
+
+/**
+ * Populates a synthetic owner's fields/acknowledgements through the product APIs.
+ * @param {object} context Local test bindings.
+ * @param {object} app Synthetic owner authority.
+ * @returns {Promise<void>} Resolves after valid acknowledgements.
+ * @throws {Error} On unexpected API status.
+ */
+export async function completeSyntheticFields(context, app) {
+    const current=await portalRequest(context,'/api/public/applications/current',{cookie:app.cookie});
+    const updated=await portalRequest(context,'/api/public/applications/current',{cookie:app.cookie,method:'PATCH',body:{
+        lock_version:(await current.json()).application.lock_version,first_name:'Synthetic',last_name:'Student',
+        passport_number:'SYNTHETIC',nationality:'Turkish',date_of_birth:'2000-01-01',is_under_18:false,
+        address_evidence_type:'rental_contract',fingerprint_status:'registered',fingerprint_code:'SYNTHETIC-FP' }});
+    assert.equal(updated.status,200,await updated.clone().text());
+    for (const [path,version] of [['contact-acknowledgement',CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION],
+        ['declaration','student-information-accuracy-v1']]) {
+        const accepted=await portalRequest(context,`/api/public/applications/current/${path}`,{
+            cookie:app.cookie,method:'POST',body:{accepted:true,version}});
+        assert.equal(accepted.status,200);
+    }
+}
+
+/**
+ * Submits real API-finalized synthetic objects while all remaining scans are pending.
+ * @param {object} context Local test bindings.
+ * @param {object} app Synthetic owner authority.
+ * @param {Uint8Array} bytes Synthetic PDF fixture bytes.
+ * @returns {Promise<void>} Resolves only after submitted state.
+ * @throws {Error} On unexpected upload/submit status.
+ */
+export async function submitSyntheticApplication(context, app, bytes) {
+    await completeSyntheticFields(context,app);
+    const remaining=listDocumentPolicies('initial',false,'rental_contract').filter((policy)=>policy.required&&policy.code!=='passport');
+    await Promise.all(remaining.map(({code})=>finalizeSyntheticFile({context,app,bytes,code})));
+    const submitted=await portalRequest(context,'/api/public/applications/current/submit',{
+        cookie:app.cookie,method:'POST',body:{}});
+    assert.equal(submitted.status,200,await submitted.clone().text());
+    assert.equal((await submitted.json()).application.status,'submitted');
 }
 
 export function advanceSyntheticQueueClock(context, jobId) {

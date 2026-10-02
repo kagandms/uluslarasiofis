@@ -23,10 +23,12 @@ def write_configuration(repository: Path, directory: Path) -> None:
     configuration['d1_databases'][0]['migrations_dir'] = str(repository / 'migrations')
     (directory / 'wrangler.json').write_text(json.dumps(configuration))
     secret = secrets.token_urlsafe(32)
+    bootstrap_token = secrets.token_urlsafe(32)
     (directory / 'secret').write_text(secret)
+    (directory / 'staff-bootstrap-token').write_text(bootstrap_token)
     (directory / '.dev.vars').write_text('SCANNER_SECRET=' + secret + '\nR2_ACCOUNT_ID=' + 'a' * 32
         + '\nR2_ACCESS_KEY_ID=synthetic-native-key\nR2_SECRET_ACCESS_KEY=synthetic-native-secret\n'
-        + 'STAFF_SHARED_USERNAME=integration-native-reviewer\n')
+        + 'STAFF_SHARED_USERNAME=integration-native-reviewer\nSTAFF_BOOTSTRAP_TOKEN=' + bootstrap_token + '\n')
 
 
 def create_certificate(directory: Path) -> None:

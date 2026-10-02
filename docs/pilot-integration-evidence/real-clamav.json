@@ -12,7 +12,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T19:22:33.808Z"
+      "scanned_at": "2026-10-02T20:30:36.994Z"
     },
     {
       "status": "complete",
@@ -22,7 +22,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T19:22:39.672Z"
+      "scanned_at": "2026-10-02T20:30:42.759Z"
     },
     {
       "status": "complete",
@@ -32,7 +32,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T19:22:45.246Z"
+      "scanned_at": "2026-10-02T20:30:48.313Z"
     },
     {
       "status": "queued",
@@ -42,7 +42,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T19:22:50.797Z"
+      "scanned_at": "2026-10-02T20:30:53.864Z"
     },
     {
       "status": "queued",
@@ -52,7 +52,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T19:22:56.330Z"
+      "scanned_at": "2026-10-02T20:30:59.419Z"
     },
     {
       "status": "complete",
@@ -62,7 +62,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T19:23:02.146Z"
+      "scanned_at": "2026-10-02T20:31:05.194Z"
     },
     {
       "status": "complete",
@@ -72,7 +72,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T19:23:07.833Z"
+      "scanned_at": "2026-10-02T20:31:10.879Z"
     },
     {
       "status": "complete",
@@ -82,7 +82,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T19:23:13.521Z"
+      "scanned_at": "2026-10-02T20:31:16.586Z"
     },
     {
       "status": "complete",
@@ -92,7 +92,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T19:23:19.567Z"
+      "scanned_at": "2026-10-02T20:31:22.355Z"
     },
     {
       "status": "failed",
@@ -102,7 +102,218 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T19:23:22.970Z"
+      "scanned_at": "2026-10-02T20:31:25.735Z"
+    },
+    {
+      "status": "complete",
+      "attempts": 1,
+      "outcome": "unsafe",
+      "result_code": "malware",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T20:31:31.345Z"
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "complete",
+      "attempts": 1,
+      "outcome": "clean",
+      "result_code": "scanned",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T20:31:37.076Z"
+    },
+    {
+      "status": "failed",
+      "attempts": 3,
+      "outcome": "failed",
+      "result_code": "policy_blocked",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T20:31:53.934Z"
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "queued",
+      "attempts": 0,
+      "outcome": null,
+      "result_code": null,
+      "engine_version": null,
+      "signature_version": null,
+      "signature_updated_at": null,
+      "scanned_at": null
+    },
+    {
+      "status": "complete",
+      "attempts": 1,
+      "outcome": "clean",
+      "result_code": "scanned",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T20:31:59.686Z"
     }
-  ]
+  ],
+  "initial_recovery": [
+    "unsafe",
+    "terminal-failed"
+  ],
+  "owner_submit_and_staff_start_review": "actual product APIs",
+  "new_owner_cookie": true,
+  "only_requested_code": true,
+  "old_verdict_preserved": true,
+  "old_lease_result_denied": true,
+  "ZIP_blocked_for_other_pending_documents": true,
+  "remaining_submit_fixtures": "pending; not scanned in this scenario"
 }

@@ -1,7 +1,6 @@
 """Opt-in native workerd/local D1/R2 acceptance; refuses remote targets and emits no credentials."""
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -55,6 +54,14 @@ class Application:
     cookie: str
 
 
+@dataclass(frozen=True)
+class Revision:
+    """Local synthetic file/job identity, never an authorization token."""
+    file_identifier: str
+    revision_identifier: str
+    job_identifier: str
+
+
 class RejectRedirects(HTTPRedirectHandler):
     """Prevent synthetic owner cookies from leaving the explicitly local origin."""
 
@@ -89,6 +96,7 @@ def send(settings: Settings, path: str, options: dict[str, object] | None = None
     """Call only configured loopback HTTPS; HTTP failures return safe status for assertions."""
     options = options or {}
     headers = {'Origin': settings.origin, 'CF-Connecting-IP': '198.51.100.75'}
+    headers.update(options.get('headers', {}))
     if options.get('cookie'):
         headers['Cookie'] = str(options['cookie'])
     body = options.get('body')
@@ -127,10 +135,10 @@ def expect(reply: Reply, status: int, label: str) -> None:
     assert reply.status == status, f'{label}: expected {status}, received {reply.status}'
 
 
-def create_application(settings: Settings) -> Application:
+def create_application(settings: Settings, student_number: str | None = None) -> Application:
     """Create one synthetic draft using the real API and capture owner authority in memory."""
     reply = send(settings, '/api/public/applications', {'method': 'POST', 'body': {
-        'student_number': 'NATIVE-' + secrets.token_hex(4), 'application_type': 'initial',
+        'student_number': student_number or 'NATIVE-' + secrets.token_hex(4), 'application_type': 'initial',
         'email': 'synthetic@example.invalid', 'phone': '+905551112233'}})
     expect(reply, 201, 'create')
     credentials = reply.decode()
@@ -198,24 +206,28 @@ def prove_campus_usage(settings: Settings) -> None:
     expect(duplicate, 409, 'single active campus draft')
 
 
-def seed_staff(settings: Settings) -> str:
-    """Seed an ephemeral LOCAL test session, without claiming bootstrap/browser UAT."""
-    token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    query(settings, "INSERT INTO staff_users(id,username,normalized_username,password_hash,display_name,role) "
-        "VALUES('native-staff','integration-native-reviewer','integration-native-reviewer','synthetic-only','Synthetic Reviewer','reviewer'); "
-        "INSERT INTO staff_sessions(id,staff_user_id,token_hash,expires_at) "
-        f"VALUES('native-staff-session','native-staff','{token_hash}','2999-01-01T00:00:00.000Z')")
-    return 'staff_session=' + token
+def authenticate_staff(settings: Settings) -> str:
+    """Bootstrap/login a synthetic LOCAL admin through supported APIs; never SQL credentials."""
+    password = secrets.token_urlsafe(24)
+    token = (settings.configuration.parent / 'staff-bootstrap-token').read_text()
+    credentials = {'username': 'integration-native-reviewer', 'password': password}
+    bootstrap = send(settings, '/api/staff/auth/bootstrap', {'method': 'POST',
+        'headers': {'X-Staff-Bootstrap-Token': token},
+        'body': {**credentials, 'display_name': 'Synthetic Local Admin'}})
+    expect(bootstrap, 201, 'local staff bootstrap')
+    authenticated = send(settings, '/api/staff/auth/login', {'method': 'POST', 'body': credentials})
+    expect(authenticated, 200, 'local staff login')
+    assert authenticated.cookie
+    return authenticated.cookie
 
 
-def finalize_file(settings: Settings, application: Application, options: dict[str, str]) -> None:
+def finalize_file(settings: Settings, application: Application, options: dict[str, str]) -> Revision:
     """Use real upload-intent/finalize API with CLI local R2 bytes; no browser PUT claim."""
     fixture = settings.fixtures / options['fixture']
     replacement = options.get('kind') == 'replacement'
     prefix = '/api/public/applications/current/documents/'
     reply = send(settings, prefix + ('resubmission-upload-intent' if replacement else 'upload-intent'), {
-        'method': 'POST', 'cookie': application.cookie, 'body': {'code': 'passport', 'filename': 'synthetic-document',
+        'method': 'POST', 'cookie': application.cookie, 'body': {'code': options.get('code', 'passport'), 'filename': 'synthetic-document',
             'media_type': options['media_type'], 'byte_size': fixture.stat().st_size}})
     expect(reply, 201, 'intent')
     upload = reply.decode()['upload']
@@ -226,9 +238,14 @@ def finalize_file(settings: Settings, application: Application, options: dict[st
     finalized = send(settings, prefix + ('resubmission-finalize' if replacement else 'finalize'), {
         'method': 'POST', 'cookie': application.cookie, 'body': {'intent_id': upload['intent_id']}})
     expect(finalized, 200, 'finalize')
-    pending = query(settings, f"SELECT scan_status FROM document_revision_files WHERE storage_key='{key}'")
+    pending = query(settings, "SELECT files.id, files.revision_id, files.scan_status, jobs.id AS job_id "
+        "FROM document_revision_files AS files JOIN document_scan_jobs AS jobs ON jobs.file_id=files.id "
+        f"WHERE files.storage_key='{key}'")
     assert pending[0]['scan_status'] == 'pending'
-    query(settings, "UPDATE document_scan_jobs SET available_at='2026-01-01T00:00:00.000Z' WHERE status='queued'")
+    if options.get('queue') != 'deferred':
+        query(settings, "UPDATE document_scan_jobs SET available_at='2026-01-01T00:00:00.000Z' "
+            f"WHERE id='{pending[0]['job_id']}' AND status='queued'")
+    return Revision(str(pending[0]['id']), str(pending[0]['revision_id']), str(pending[0]['job_id']))
 
 
 def run_scanner(settings: Settings, expected: str) -> None:
@@ -254,13 +271,15 @@ def check_gates(settings: Settings, application: Application, options: dict[str,
     expect(send(settings, base + '/passport/preview', {'method': 'POST', 'cookie': cookie, 'body': {}}),
         200 if is_clean else 404, 'preview gate')
     manifest = send(settings, base + '/archive-manifest', {'method': 'POST', 'cookie': cookie, 'body': {}})
-    expect(manifest, 200 if is_clean else 404, 'archive gate')
+    expect(manifest, 200 if is_clean and options.get('archive') != 'blocked' else 404, 'archive gate')
     if not is_clean:
         expect(send(settings, base + '/passport/approve', {'method': 'POST', 'cookie': cookie,
             'body': {'expected_revision_number': options['revision']}}), 409, 'review gate')
         return
     expected_bytes = (settings.fixtures / 'clean.pdf').read_bytes()
     assert download.content == expected_bytes
+    if options.get('archive') == 'blocked':
+        return
     file = manifest.decode()['files'][0]
     archive_path = base + '/passport/archive-file?' + urlencode({
         'revision': file['expected_revision_number'], 'identity': file['object_identity']})
@@ -324,6 +343,149 @@ def prove_reset(settings: Settings, application: Application, cookies: tuple[str
     assert not terminal.cookie
 
 
+def read_support_candidates(settings: Settings, lookup: dict[str, str]) -> list[dict[str, object]]:
+    """Exercise the operator's SELECT generator and explicit LOCAL D1 lookup; never reset in SQL."""
+    prepared = settings.configuration.parent / ('lookup-' + secrets.token_hex(4) + '.sql')
+    try:
+        completed = subprocess.run(['node', 'scripts/pilot/draft-support-query.mjs', str(prepared)],
+            input=json.dumps(lookup), capture_output=True, text=True, timeout=30, check=False)
+        assert completed.returncode == 0, 'support query preparation'
+        assert prepared.stat().st_mode & 0o077 == 0, 'support query permissions'
+        return query(settings, prepared.read_text())
+    finally:
+        prepared.unlink(missing_ok=True)
+
+
+def prove_lost_draft(settings: Settings, staff_cookie: str) -> None:
+    """Simulate institutional verification, then discover/reset a nameless draft through supported authority."""
+    student_number = 'LOST-' + secrets.token_hex(4)
+    application = create_application(settings, student_number)
+    for lookup in ({'kind': 'reference', 'value': application.reference},
+                   {'kind': 'student-number', 'value': student_number}):
+        candidates = read_support_candidates(settings, lookup)
+        assert len(candidates) == 1 and candidates[0]['application_id'] == application.identifier
+        assert set(candidates[0]) == {'application_id', 'reference_number', 'status'}
+        assert candidates[0]['status'] == 'draft'
+    listed = send(settings, '/api/staff/applications/query', {'method': 'POST',
+        'cookie': staff_cookie, 'body': {'q': student_number}})
+    expect(listed, 200, 'draft query')
+    assert listed.decode()['items'] == []
+    expect(send(settings, f'/api/staff/applications/{application.identifier}', {'cookie': staff_cookie}), 404, 'draft hidden')
+    expect(send(settings, '/api/public/applications', {'method': 'POST', 'body': {
+        'student_number': student_number, 'application_type': 'initial',
+        'email': 'synthetic@example.invalid', 'phone': '+905551112233'}}), 409, 'lost draft duplicate')
+    second = login(settings, application, application.code)
+    expect(second, 200, 'lost draft second owner')
+    reset = send(settings, f'/api/staff/applications/{application.identifier}/reset-access-code',
+        {'method': 'POST', 'cookie': staff_cookie, 'body': {}})
+    expect(reset, 200, 'lost draft reset')
+    assert reset.decode()['reference_number'] == application.reference
+    for cookie in (application.cookie, second.cookie):
+        expect(send(settings, '/api/public/applications/current', {'cookie': cookie}), 401, 'lost draft revoked owner')
+    expect(login(settings, application, application.code), 401, 'lost draft old code')
+    expect(login(settings, application, str(reset.decode()['access_code'])), 200, 'lost draft new code')
+
+
+def complete_fields(settings: Settings, application: Application) -> None:
+    """Populate synthetic fields and acknowledgements using owner APIs; no SQL workflow bypass."""
+    current = send(settings, '/api/public/applications/current', {'cookie': application.cookie})
+    updated = send(settings, '/api/public/applications/current', {'method': 'PATCH', 'cookie': application.cookie,
+        'body': {'lock_version': current.decode()['application']['lock_version'], 'first_name': 'Synthetic',
+        'last_name': 'Student', 'passport_number': 'SYNTHETIC', 'nationality': 'Turkish',
+        'date_of_birth': '2000-01-01', 'is_under_18': False, 'address_evidence_type': 'rental_contract',
+        'fingerprint_status': 'registered', 'fingerprint_code': 'SYNTHETIC-FP'}})
+    expect(updated, 200, 'synthetic fields')
+    for path, version in (('contact-acknowledgement', 'contact-reachability-v1'),
+                          ('declaration', 'student-information-accuracy-v1')):
+        expect(send(settings, '/api/public/applications/current/' + path, {'method': 'POST',
+            'cookie': application.cookie, 'body': {'accepted': True, 'version': version}}), 200, path)
+
+
+def submit_pending_application(settings: Settings, application: Application) -> None:
+    """Finalize actual local objects for all required policies and submit while their scans remain pending."""
+    complete_fields(settings, application)
+    expression = ("import {listDocumentPolicies} from './src/server/domain/documentPolicy.js';"
+        "process.stdout.write(JSON.stringify(listDocumentPolicies('initial',false,'rental_contract')"
+        ".filter(p=>p.required&&p.code!=='passport').map(p=>p.code)));")
+    completed = subprocess.run(['node', '--input-type=module', '-e', expression],
+        capture_output=True, text=True, timeout=30, check=False)
+    assert completed.returncode == 0, 'required policy lookup'
+    for code in json.loads(completed.stdout):
+        finalize_file(settings, application, {'fixture': 'clean.pdf', 'media_type': 'application/pdf',
+            'code': code, 'queue': 'deferred'})
+    submitted = send(settings, '/api/public/applications/current/submit',
+        {'method': 'POST', 'cookie': application.cookie, 'body': {}})
+    expect(submitted, 200, 'pending submit')
+    assert submitted.decode()['application']['status'] == 'submitted'
+
+
+def start_review(settings: Settings, application: Application, staff_cookie: str) -> None:
+    """Use the existing Start Review transition before initial non-clean recovery."""
+    detail = send(settings, f'/api/staff/applications/{application.identifier}', {'cookie': staff_cookie})
+    expect(detail, 200, 'submitted detail')
+    expect(send(settings, f'/api/staff/applications/{application.identifier}/status', {'method': 'POST',
+        'cookie': staff_cookie, 'body': {'target_status': 'under_review',
+            'expected_updated_at': detail.decode()['application']['updated_at']}}), 200, 'start review')
+
+
+def replace_from_second_owner(settings: Settings, application: Application) -> Revision:
+    """Use new-device owner authority and reject replacement of an unrequested code."""
+    second = login(settings, application, application.code)
+    expect(second, 200, 'recovery second device')
+    assert second.cookie and second.cookie != application.cookie
+    remote_owner = Application(application.identifier, application.reference, application.code, second.cookie)
+    eligibility = send(settings, '/api/public/applications/current/documents/resubmission-eligibility',
+        {'cookie': second.cookie})
+    expect(eligibility, 200, 'recovery eligibility')
+    assert [(row['code'], row['mode']) for row in eligibility.decode()['documents']] == [('passport', 'first_replacement')]
+    expect(send(settings, '/api/public/applications/current/documents/resubmission-upload-intent', {
+        'method': 'POST', 'cookie': second.cookie, 'body': {'code': 'student_certificate',
+        'filename': 'synthetic', 'media_type': 'application/pdf', 'byte_size': 20}}), 409, 'unrequested replacement')
+    return finalize_file(settings, remote_owner, {'fixture': 'clean.pdf', 'media_type': 'application/pdf', 'kind': 'replacement'})
+
+
+def prove_initial_recovery(settings: Settings, staff_cookie: str, scenario: dict[str, object]) -> None:
+    """Prove actual initial unsafe/terminal failed → reasoned replacement → actual clean/approval."""
+    application = create_application(settings)
+    initial = finalize_file(settings, application, {'fixture': str(scenario['fixture']), 'media_type': str(scenario['media_type'])})
+    submit_pending_application(settings, application)
+    for _attempt in range(int(scenario['attempts'])):
+        query(settings, "UPDATE document_scan_jobs SET available_at='2026-01-01T00:00:00.000Z' "
+            f"WHERE id='{initial.job_identifier}' AND status='queued'")
+        run_scanner(settings, str(scenario['outcome']))
+    result = query(settings, f"SELECT status, attempts FROM document_scan_jobs WHERE id='{initial.job_identifier}'")[0]
+    assert result['attempts'] == scenario['attempts'] and result['status'] == scenario['job_status']
+    start_review(settings, application, staff_cookie)
+    gates = {'cookie': staff_cookie, 'revision': 1, 'outcome': scenario['outcome']}
+    check_gates(settings, application, gates)
+    request_replacement(settings, application, {'cookie': staff_cookie, 'revision': 1})
+    replacement = replace_from_second_owner(settings, application)
+    assert replacement.job_identifier != initial.job_identifier and replacement.revision_identifier != initial.revision_identifier
+    check_gates(settings, application, {**gates, 'revision': 2, 'outcome': 'pending'})
+    run_scanner(settings, 'clean')
+    check_gates(settings, application, {**gates, 'revision': 2, 'outcome': 'clean', 'archive': 'blocked'})
+    expect(send(settings, f'/api/staff/applications/{application.identifier}/documents/passport/approve', {
+        'method': 'POST', 'cookie': staff_cookie, 'body': {'expected_revision_number': 2}}), 200, 'recovered approval')
+    assert query(settings, f"SELECT scan_status FROM document_revision_files WHERE id='{initial.file_identifier}'")[0]['scan_status'] == scenario['outcome']
+
+
+def write_safe_evidence(settings: Settings, runtime: dict[str, object]) -> None:
+    """Write only assertion labels and safe engine/runtime metadata after the whole run passes."""
+    evidence = {'status': 'PASS', 'runtime': runtime, 'scans': query(settings,
+            'SELECT status,attempts,outcome,result_code,engine_version,signature_version,signature_updated_at,scanned_at FROM document_scan_jobs ORDER BY rowid'),
+            'checks': ['20-shared-IP-drafts-and-public-lookups', 'single-active-campus-draft', 'staff-detail-reference-without-code-hash',
+                'distinct-owner-sessions', '65-valid-same-NAT-logins', 'invalid-and-reference-only-denial',
+                'PATCH-conflict', 'initial-clean', 'replacement-clean', 'replacement-EICAR-unsafe', 'pending-unsafe-staff-gates',
+                'exact-download-archive-bytes', 'scanner-auth-denial', 'staff-reset-revocation', 'owner-regeneration', 'terminal-denial', 'tmp-empty',
+                'supported-local-staff-bootstrap-login', 'lost-draft-private-read-only-lookup-api-reset',
+                'lost-draft-old-code-cookies-rejected-stable-reference', 'pending-owner-submit-and-staff-start-review',
+                'initial-unsafe-recovery', 'initial-terminal-failed-recovery', 'distinct-owner-requested-replacement-only',
+                'new-current-pending-job-real-clean-access-approval-old-verdict-preserved', 'ZIP-blocked-while-other-documents-pending'],
+            'limitations': ['synthetic-local-identity-check', 'local-R2-CLI-PUT', 'legacy-synthetic-review-state',
+                'synthetic-queue-clock', 'other-required-submit-files-remain-pending', 'no-physical-browser-or-remote-UAT']}
+    settings.output.write_text(json.dumps(evidence, indent=2) + '\n')
+
+
 def main() -> int:
     """Run local acceptance and write only safe engine/runtime/result metadata."""
     logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
@@ -335,17 +497,15 @@ def main() -> int:
         second_cookie = prove_access(settings, application)
         prove_conflict(settings, application, second_cookie)
         prove_campus_usage(settings)
-        staff_cookie = seed_staff(settings)
+        staff_cookie = authenticate_staff(settings)
         prove_scanning(settings, application, staff_cookie)
         prove_reset(settings, application, (staff_cookie, second_cookie))
-        evidence = {'status': 'PASS', 'runtime': runtime, 'scans': query(settings,
-            'SELECT status,attempts,outcome,result_code,engine_version,signature_version,signature_updated_at,scanned_at FROM document_scan_jobs ORDER BY rowid'),
-            'checks': ['20-shared-IP-drafts-and-public-lookups', 'single-active-campus-draft', 'staff-detail-reference-without-code-hash',
-                'distinct-owner-sessions', '65-valid-same-NAT-logins', 'invalid-and-reference-only-denial',
-                'PATCH-conflict', 'initial-clean', 'replacement-clean', 'replacement-EICAR-unsafe', 'pending-unsafe-staff-gates',
-                'exact-download-archive-bytes', 'scanner-auth-denial', 'staff-reset-revocation', 'owner-regeneration', 'terminal-denial', 'tmp-empty'],
-            'limitations': ['synthetic-local-staff-session', 'local-R2-CLI-PUT', 'synthetic-review-state', 'synthetic-queue-clock', 'no-physical-browser-or-remote-UAT']}
-        settings.output.write_text(json.dumps(evidence, indent=2) + '\n')
+        prove_lost_draft(settings, staff_cookie)
+        prove_initial_recovery(settings, staff_cookie, {'fixture': 'eicar.png', 'media_type': 'image/png',
+            'outcome': 'unsafe', 'attempts': 1, 'job_status': 'complete'})
+        prove_initial_recovery(settings, staff_cookie, {'fixture': 'encrypted.pdf', 'media_type': 'application/pdf',
+            'outcome': 'failed', 'attempts': 3, 'job_status': 'failed'})
+        write_safe_evidence(settings, runtime)
         LOGGER.info('native_acceptance PASS; safe evidence saved')
         return 0
     except Exception as error:

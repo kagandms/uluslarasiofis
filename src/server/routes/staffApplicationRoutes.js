@@ -119,12 +119,12 @@ function createDocumentDetailDtos(application, storedRequirements) {
         application.address_evidence_type ?? null
     ).map((policy) => {
         const requirement = requirementsByCode.get(policy.code) || {};
-        const hasSafeCurrentDocument = READABLE_REVISION_STATUSES.has(requirement.revision_status)
+        const hasFinalizedCurrentDocument = READABLE_REVISION_STATUSES.has(requirement.revision_status)
             && requirement.upload_status === 'finalized'
-            && requirement.scan_status === 'clean'
             && requirement.current_cleanup_status === 'none'
             && requirement.upload_intent_status === 'completed'
             && policy.accepted_media_types.includes(requirement.media_type);
+        const hasSafeCurrentDocument = hasFinalizedCurrentDocument && requirement.scan_status === 'clean';
         return {
             code: policy.code,
             label_key: policy.label_key,
@@ -133,7 +133,8 @@ function createDocumentDetailDtos(application, storedRequirements) {
             can_approve: hasSafeCurrentDocument && requirement.revision_status === 'submitted'
                 && ['pending', 'under_review'].includes(requirement.review_status)
                 && ['under_review', 'resubmission_required'].includes(application.status),
-            can_request_resubmission: hasSafeCurrentDocument && requirement.revision_status === 'submitted'
+            can_request_resubmission: hasFinalizedCurrentDocument
+                && ['clean', 'unsafe', 'failed'].includes(requirement.scan_status) && requirement.revision_status === 'submitted'
                 && ['pending', 'under_review'].includes(requirement.review_status)
                 && ['under_review', 'resubmission_required'].includes(application.status),
             revision_number: requirement.revision_number ?? null,
