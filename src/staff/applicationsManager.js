@@ -1,6 +1,7 @@
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive } from './applicationArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
+import { createNotificationApi, createNotificationManager } from './notificationManager.js';
 
 const STATUS_LABELS = Object.freeze({
     submitted: 'Gönderildi', under_review: 'İncelemede', resubmission_required: 'Yeniden yükleme gerekli',
@@ -470,7 +471,8 @@ function renderDetail(root, state, handlers) {
         panel.append(
             createApplicationSummary(document, state.detail.application),
             createApplicationWorkflow(document, state.detail.application, state.detail, state, handlers),
-            createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers)
+            createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers),
+            handlers.createNotificationPanel()
         );
     }
     const previewPanel = createPreviewPanel(document, state.preview, handlers);
@@ -532,7 +534,8 @@ function createStaffApplicationsApi() {
             return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/status`, {
                 target_status: targetStatus, expected_updated_at: updatedAt
             });
-        }
+        },
+        notifications: createNotificationApi()
     };
 }
 
@@ -544,6 +547,7 @@ function createStaffApplicationsApi() {
  */
 export function initializeStaffApplicationsManager(root, api = createStaffApplicationsApi()) {
     const document = root.ownerDocument;
+    const notificationManager = createNotificationManager(api.notifications);
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
         actionPending: null, actionError: null, resubmissionDocument: null,
@@ -568,7 +572,9 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onOpenResubmission: openResubmission,
             onCancelResubmission: cancelResubmission,
             onRequestResubmission: requestResubmission,
-            onTransition: transitionApplication
+            onTransition: transitionApplication,
+            createNotificationPanel: () => notificationManager.createPanel(document,
+                state.detail.application, render)
         });
         else renderQueue(root, state, {
             onSearch: submitSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,

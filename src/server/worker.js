@@ -13,6 +13,9 @@ import { approveStaffApplicationDocument, requestStaffDocumentResubmission, tran
 import { recognizeDocument } from './routes/ocrRoute.js';
 import { bootstrapStaff, loginStaff, logoutStaff, readStaffSession } from './routes/staffRoutes.js';
 import { handleTebligatRequest } from './routes/tebligatRoutes.js';
+import { readCurrentNotificationPreferences, updateCurrentNotificationPreferences } from './routes/applicantNotificationPreferenceRoutes.js';
+import { enqueueStaffNotification, previewStaffNotification, readStaffNotificationHistory,
+    retryStaffNotification } from './routes/staffNotificationRoutes.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -54,6 +57,27 @@ async function routeApi(request, environment, requestId) {
             documentCode = decodeURIComponent(archiveFileMatch[2]);
         } catch { throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya erişilemiyor.'); }
         return streamStaffApplicationArchiveFile({ request, environment, applicationId, code: documentCode, requestId });
+    }
+    const notificationRetryMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/notifications\/([^/]+)\/retry$/);
+    if (notificationRetryMatch) {
+        let applicationId;
+        let notificationId;
+        try {
+            applicationId = decodeURIComponent(notificationRetryMatch[1]);
+            notificationId = decodeURIComponent(notificationRetryMatch[2]);
+        } catch { throw new ApiError(404, 'NOTIFICATION_NOT_FOUND', 'Bildirim kaydı bulunamadı.'); }
+        return retryStaffNotification({ request, environment, applicationId, notificationId, requestId });
+    }
+    const staffNotificationMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/notifications(?:\/(preview))?$/);
+    if (staffNotificationMatch) {
+        let applicationId;
+        try { applicationId = decodeURIComponent(staffNotificationMatch[1]); }
+        catch { throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.'); }
+        if (staffNotificationMatch[2]) {
+            return previewStaffNotification({ request, environment, applicationId, requestId });
+        }
+        if (request.method === 'GET') return readStaffNotificationHistory({ request, environment, applicationId });
+        return enqueueStaffNotification({ request, environment, applicationId, requestId });
     }
     if (pathname === '/api/staff/auth/login' || pathname === '/api/login') return loginStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/session' || pathname === '/api/session') return readStaffSession(request, environment);
@@ -104,6 +128,10 @@ async function routeApi(request, environment, requestId) {
     if (pathname === '/api/public/applications') return createApplicationDraft(request, environment, requestId);
     if (pathname === '/api/public/applications/current/status') return readCurrentApplicationStatus(request, environment);
     if (pathname === '/api/public/applications/current/tracking') return readCurrentApplicationTracking(request, environment);
+    if (pathname === '/api/public/applications/current/notification-preferences') {
+        if (request.method === 'PUT') return updateCurrentNotificationPreferences(request, environment, requestId);
+        return readCurrentNotificationPreferences(request, environment);
+    }
     if (pathname === '/api/public/applications/tracking-lookup') return lookupApplicationTracking(request, environment);
     if (pathname === '/api/public/applications/current/submit') return submitCurrentApplication(request, environment, requestId);
     if (pathname === '/api/public/applications/current/declaration') return acceptCurrentApplicationDeclaration(request, environment, requestId);
