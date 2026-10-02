@@ -240,3 +240,23 @@ export function putStudentDocumentDirect(upload, file, {
 export async function deleteStudentDocument(code) {
     return requestJson(`/api/public/applications/current/documents/${encodeURIComponent(code)}`, { method: 'DELETE' });
 }
+
+/**
+ * Reads notification preferences through the current applicant session.
+ * @returns {Promise<object>} Notification preference state.
+ */
+export async function readCurrentNotificationPreferences() {
+    return requestJson('/api/public/applications/current/notification-preferences');
+}
+
+/**
+ * Updates notification preferences through the current applicant session.
+ * @param {object} payload Preference update payload.
+ * @returns {Promise<object>} Updated preference state.
+ */
+export async function updateCurrentNotificationPreferences(payload) {
+    return requestJson('/api/public/applications/current/notification-preferences', {
+        method: 'PUT',
+        body: payload
+    });
+}

@@ -1,6 +1,7 @@
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { createDraftAutosave } from './draftAutosave.js';
 import { isValidPhoneNumber } from '../shared/phoneNumber.js';
+import { createNotificationPreferenceField, parseNotificationPreferences, WHATSAPP_CONSENT_VERSION } from './notificationPreferences.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
@@ -154,7 +155,7 @@ function updateContactContinueButton(root) {
     button.disabled = !canContinueContactStep(form);
 }
 
-function createContactStep(document, application, formValues) {
+function createContactStep(document, application, formValues, state, api) {
     const messages = readMessages(document);
     const fields = { ...application, ...formValues };
     const form = createWizardForm(document);
@@ -170,6 +171,32 @@ function createContactStep(document, application, formValues) {
     const isContactAcknowledgementAccepted = application?.contact_acknowledgement?.accepted_current === true
         || fields.contact_acknowledgement_accepted === true;
     form.append(createContactAcknowledgement(document, messages, isContactAcknowledgementAccepted));
+    const preferenceField = createNotificationPreferenceField(document, {
+        application,
+        initialPreference: state?.notificationPreference,
+        formValues,
+        api: api || state?.api,
+        persistPhone: async () => {
+            const currentFields = readVisibleFields(form, state?.application || {});
+            if (state?.autosave) {
+                state.formValues = currentFields;
+                state.autosave.schedule(buildAutosaveValues(currentFields));
+                const saved = await state.autosave.flush();
+                if (!saved) return { success: false, error: new Error('Autosave failed') };
+            } else if (api?.updateCurrentApplication || api?.updateCurrentApplicationDraft) {
+                const saveFn = api.updateCurrentApplication || api.updateCurrentApplicationDraft;
+                state.application = await saveFn(buildAutosaveValues(currentFields));
+            }
+            return { success: true, application: state?.application };
+        },
+        onPreferenceChange: (checked) => {
+            if (state) {
+                if (!state.formValues) state.formValues = readVisibleFields(form, application || {});
+                state.formValues.whatsapp_opt_in = checked;
+            }
+        }
+    });
+    form.append(preferenceField);
     const continueButton = createContinueButton(document, messages);
     form.append(continueButton);
     setContactPhoneValidity(form);
@@ -604,6 +631,28 @@ function createProgress(document, step) {
     return list;
 }
 
+function createPreferenceWarningBanner(document, state, messages) {
+    const banner = document.createElement('div');
+    banner.className = 'application-notification-preference-banner';
+    banner.setAttribute('role', state.preferenceWarning.status === 'failed' ? 'alert' : 'status');
+    banner.setAttribute('aria-live', 'polite');
+    if (state.preferenceWarning.status === 'failed') {
+        const text = createTranslatedElement(document, 'p', 'whatsappDraftSavedPreferenceFailed', messages.whatsappDraftSavedPreferenceFailed);
+        const retryBtn = createButton(
+            document,
+            messages,
+            'whatsappRetryPreferenceAction',
+            'preference-retry',
+            'application-button application-button-secondary'
+        );
+        banner.append(text, retryBtn);
+    } else if (state.preferenceWarning.status === 'saved') {
+        const text = createTranslatedElement(document, 'p', 'whatsappPreferenceSaved', messages.whatsappPreferenceSaved);
+        banner.append(text);
+    }
+    return banner;
+}
+
 function renderWizard(root, state) {
     const document = root.ownerDocument;
     const messages = readMessages(document);
@@ -614,6 +663,9 @@ function renderWizard(root, state) {
     heading.tabIndex = -1;
     panel.append(createProgress(document, state.step), heading);
     panel.append(createSaveStatus(document, state));
+    if (state.preferenceWarning) {
+        panel.append(createPreferenceWarningBanner(document, state, messages));
+    }
     let errorElement = null;
     if (state.errorKey) {
         errorElement = createTranslatedElement(document, 'p', state.errorKey, messages[state.errorKey]);
@@ -621,7 +673,7 @@ function renderWizard(root, state) {
         errorElement.tabIndex = -1;
         panel.append(errorElement);
     }
-    if (state.step === 0) stage.append(createContactStep(document, state.application, state.formValues));
+    if (state.step === 0) stage.append(createContactStep(document, state.application, state.formValues, state, state.api));
     if (state.step === 1) stage.append(createResidenceStep(document, state.application, state.formValues));
     if (state.step === 2) stage.append(createDocumentsStep(document, state));
     if (state.step === 3) stage.append(createDeclarationStep(document, state.application));
@@ -889,6 +941,7 @@ async function saveStep(root, state, api) {
     state.errorKey = null;
     state.isAdvancing = true;
     try {
+        const isInitialDraftCreation = (state.step === 0 && !state.application);
         if (state.step === 0 && !state.application) {
             state.application = await api.createApplicationDraft(createContactDraft(fields));
             state.autosave = createAutosave(state, api, root);
@@ -902,6 +955,25 @@ async function saveStep(root, state, api) {
             state.application = await api.acceptCurrentContactAcknowledgement(version);
             if (!state.application.contact_acknowledgement?.accepted_current) {
                 throw Object.assign(new Error('Contact acknowledgement was not confirmed.'), { code: 'CONTACT_ACKNOWLEDGEMENT_REQUIRED' });
+            }
+        }
+        if (state.step === 0 && isInitialDraftCreation && fields.whatsapp_opt_in === true && typeof api.updateCurrentNotificationPreferences === 'function') {
+            try {
+                const locale = root.ownerDocument?.documentElement?.lang || 'tr';
+                const response = await api.updateCurrentNotificationPreferences({
+                    whatsapp_opt_in: true,
+                    consent_version: WHATSAPP_CONSENT_VERSION,
+                    language: locale
+                });
+                const parsed = parseNotificationPreferences(response, state.application?.id);
+                if (parsed.isValidContract && parsed.isVerified && parsed.effectiveWhatsappOptIn) {
+                    state.notificationPreference = parsed;
+                    state.preferenceWarning = null;
+                } else {
+                    state.preferenceWarning = { status: 'failed' };
+                }
+            } catch {
+                state.preferenceWarning = { status: 'failed' };
             }
         }
         if (state.step === 1 && !canContinueResidenceStep(form, state.application)) {
@@ -959,12 +1031,41 @@ async function handlePrevious(root, state) {
     renderWizard(root, state);
 }
 
+async function retryNotificationPreference(root, state, api) {
+    if (!api?.updateCurrentNotificationPreferences || !state.application) return;
+    const button = root.querySelector('[data-action="preference-retry"]');
+    if (button) {
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+    }
+    try {
+        const locale = root.ownerDocument?.documentElement?.lang || 'tr';
+        const response = await api.updateCurrentNotificationPreferences({
+            whatsapp_opt_in: true,
+            consent_version: WHATSAPP_CONSENT_VERSION,
+            language: locale
+        });
+        const parsed = parseNotificationPreferences(response, state.application?.id);
+        if (parsed.isValidContract && parsed.isVerified && parsed.effectiveWhatsappOptIn) {
+            state.notificationPreference = parsed;
+            state.preferenceWarning = { status: 'saved' };
+        } else {
+            state.preferenceWarning = { status: 'failed' };
+        }
+    } catch {
+        state.preferenceWarning = { status: 'failed' };
+    } finally {
+        renderWizard(root, state);
+    }
+}
+
 async function handleWizardClick(root, state, api, event) {
     const button = event.target.closest('[data-action]');
     if (!button) return;
     const code = button.closest('[data-document-code]')?.dataset.documentCode;
     if (button.dataset.action === 'previous') await handlePrevious(root, state);
     if (button.dataset.action === 'submit-application') await submitApplication(root, state, api);
+    if (button.dataset.action === 'preference-retry') await retryNotificationPreference(root, state, api);
     if (button.dataset.action === 'document-retry' && code) await runUploadTask(code, state.uploads[code], state, api, root, { isRetry: true });
     if (button.dataset.action === 'document-delete' && code) await handleDelete(root, state, api, code);
     if (button.dataset.action === 'document-cancel' && code) state.uploads[code]?.abortController?.abort();
@@ -1000,6 +1101,10 @@ function handleWizardInput(root, state) {
         state.formValues = readVisibleFields(root, state.application || {});
         if (state.application && state.autosave) scheduleCurrentFields(root, state);
         updateContactContinueButton(root);
+        const prefField = root.querySelector('.notification-preference-group');
+        if (prefField && typeof prefField.syncPhone === 'function') {
+            prefField.syncPhone(state.formValues.student_phone);
+        }
         return;
     }
     if (state.application && state.step <= 1 && state.autosave) scheduleCurrentFields(root, state);
@@ -1037,7 +1142,20 @@ function handleWizardChange(root, state, api, event) {
  */
 export async function initializeApplicationWizard(root, api) {
     if (!root || !root.ownerDocument) throw new TypeError('An application wizard root is required.');
-    const state = { application: null, requirements: [], step: 0, errorKey: null, saveStatus: 'saved', isAdvancing: false, isSubmitting: false, formValues: null, uploads: {}, deleting: {} };
+    const state = {
+        application: null,
+        requirements: [],
+        step: 0,
+        errorKey: null,
+        saveStatus: 'saved',
+        isAdvancing: false,
+        isSubmitting: false,
+        formValues: null,
+        uploads: {},
+        deleting: {},
+        notificationPreference: null,
+        api
+    };
     root.addEventListener('submit', (event) => {
         if (event.target.id !== 'application-step-form') return;
         event.preventDefault();
@@ -1052,6 +1170,13 @@ export async function initializeApplicationWizard(root, api) {
         state.step = state.application.status === 'submitted' ? 4
             : (state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0);
         state.autosave = createAutosave(state, api, root);
+        if (typeof api.readCurrentNotificationPreferences === 'function') {
+            try {
+                state.notificationPreference = await api.readCurrentNotificationPreferences();
+            } catch {
+                // Non-fatal if preference read fails
+            }
+        }
         await refreshRequirements(state, api);
     } catch (error) {
         state.errorKey = error.code === 'APPLICATION_SESSION_REQUIRED' ? null : 'applicationLoadFailed';
