@@ -14,6 +14,7 @@ const UPLOAD_ERROR_KEYS = Object.freeze({
     APPLICATION_SESSION_REQUIRED: 'sessionExpired', APPLICATION_NOT_EDITABLE: 'applicationNoLongerEditable',
     DOCUMENT_NOT_EDITABLE: 'applicationNoLongerEditable', DECLARATION_VERSION_CONFLICT: 'declarationVersionChanged',
     APPLICATION_TYPE_CHANGE_BLOCKED: 'applicationTypeChangeBlocked',
+    APPLICATION_UPDATE_CONFLICT: 'applicationUpdateConflict',
     CONTACT_ACKNOWLEDGEMENT_REQUIRED: 'contactAcknowledgementRequired',
     CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT: 'contactAcknowledgementVersionChanged',
     CONTACT_INFORMATION_INCOMPLETE: 'contactInformationIncomplete',
@@ -540,19 +541,31 @@ function createApplicantReview(document, application) {
     return section;
 }
 
-function createSubmissionConfirmation(document, application, messages) {
+export function createSubmissionConfirmation(document, application, messages) {
     const confirmation = document.createElement('section');
     confirmation.className = 'application-submission-confirmation';
     confirmation.setAttribute('role', 'status');
     confirmation.setAttribute('aria-live', 'polite');
     confirmation.append(createTranslatedElement(document, 'h3', 'submissionSuccessHeading', messages.submissionSuccessHeading));
     confirmation.append(createTranslatedElement(document, 'p', 'submissionStatusSubmitted', messages.submissionStatusSubmitted));
+    if (application.reference_number) {
+        const refElement = document.createElement('p');
+        refElement.className = 'submission-reference-number';
+        refElement.append(
+            createTranslatedElement(document, 'strong', 'accessReferenceNumberLabel', messages.accessReferenceNumberLabel),
+            document.createTextNode(`: ${application.reference_number}`)
+        );
+        confirmation.append(refElement);
+    }
     const studentNumber = document.createElement('p');
     studentNumber.append(
         createTranslatedElement(document, 'span', 'submissionStudentNumber', messages.submissionStudentNumber),
         document.createTextNode(` ${application.student_number || ''}`)
     );
     confirmation.append(studentNumber);
+    const reminder = createTranslatedElement(document, 'p', 'submissionCredentialsReminder', messages.submissionCredentialsReminder);
+    reminder.className = 'submission-credentials-reminder';
+    confirmation.append(reminder);
     confirmation.append(createTranslatedElement(document, 'p', 'submissionTracking', messages.submissionTracking));
     if (application.submitted_at) confirmation.append(createSubmissionTime(document, application.submitted_at, messages));
     const trackingLink = document.createElement('a');
@@ -562,6 +575,231 @@ function createSubmissionConfirmation(document, application, messages) {
     trackingLink.textContent = messages.trackingViewAction;
     confirmation.append(trackingLink);
     return confirmation;
+}
+
+function createAccessCredentialsCard(document, state, messages) {
+    const creds = state.newDraftCredentials;
+    if (!creds || !creds.reference_number || !creds.access_code) return null;
+
+    const card = document.createElement('aside');
+    card.className = 'application-credentials-card';
+    card.setAttribute('role', 'region');
+    card.setAttribute('aria-label', messages.accessCredentialsHeading);
+
+    const title = createTranslatedElement(document, 'h3', 'accessCredentialsHeading', messages.accessCredentialsHeading);
+    const notice = createTranslatedElement(document, 'p', 'accessCredentialsDraftNotice', messages.accessCredentialsDraftNotice);
+    notice.className = 'credentials-draft-notice';
+
+    const warning = createTranslatedElement(document, 'p', 'accessCredentialsWarning', messages.accessCredentialsWarning);
+    warning.className = 'credentials-warning';
+
+    const grid = document.createElement('div');
+    grid.className = 'credentials-grid';
+
+    // Reference number row
+    const refGroup = document.createElement('div');
+    refGroup.className = 'credential-field-group';
+    const refLabel = createTranslatedElement(document, 'span', 'accessReferenceNumberLabel', messages.accessReferenceNumberLabel);
+    const refVal = document.createElement('code');
+    refVal.className = 'credential-value credential-reference';
+    refVal.textContent = creds.reference_number;
+    const refCopy = createButton(document, messages, 'copyAction', 'copy-reference', 'application-button application-button-secondary');
+    refCopy.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(creds.reference_number);
+            refCopy.textContent = messages.copySuccess;
+            setTimeout(() => { refCopy.textContent = messages.copyAction; }, 2000);
+        } catch {
+            // fallback
+        }
+    });
+    refGroup.append(refLabel, refVal, refCopy);
+
+    // Access code row
+    const codeGroup = document.createElement('div');
+    codeGroup.className = 'credential-field-group';
+    const codeLabel = createTranslatedElement(document, 'span', 'accessCodeLabel', messages.accessCodeLabel);
+    const codeVal = document.createElement('code');
+    codeVal.className = 'credential-value credential-code';
+    codeVal.textContent = creds.access_code;
+    const codeCopy = createButton(document, messages, 'copyAction', 'copy-code', 'application-button application-button-secondary');
+    codeCopy.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(creds.access_code);
+            codeCopy.textContent = messages.copySuccess;
+            setTimeout(() => { codeCopy.textContent = messages.copyAction; }, 2000);
+        } catch {
+            // fallback
+        }
+    });
+    codeGroup.append(codeLabel, codeVal, codeCopy);
+
+    grid.append(refGroup, codeGroup);
+
+    // Download button
+    const downloadBtn = createButton(document, messages, 'downloadCredentialsAction', 'download-credentials', 'application-button application-button-primary');
+    downloadBtn.addEventListener('click', () => {
+        const content = `${messages.homeUniversityName || 'İstanbul Topkapı Üniversitesi'} - ${messages.portalTitle || 'Uluslararası Öğrenci Portalı'}\n` +
+            `--------------------------------------------------\n` +
+            `${messages.accessReferenceNumberLabel}: ${creds.reference_number}\n` +
+            `${messages.accessCodeLabel}: ${creds.access_code}\n` +
+            `--------------------------------------------------\n` +
+            `${messages.accessCredentialsWarning}\n`;
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `basvuru-${creds.reference_number.toLowerCase()}.txt`;
+        document.body.append(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    });
+
+    // Regenerate code button
+    const regenerateBtn = createButton(document, messages, 'regenerateCodeAction', 'regenerate-code', 'application-button application-button-secondary');
+    regenerateBtn.addEventListener('click', async () => {
+        regenerateBtn.disabled = true;
+        try {
+            const res = await (state.api?.regenerateCurrentAccessCode ? state.api.regenerateCurrentAccessCode() : regenerateCurrentAccessCode());
+            state.newDraftCredentials = {
+                reference_number: res.reference_number,
+                access_code: res.access_code
+            };
+            state.regenerateSuccess = true;
+            renderWizard(state.root || document.querySelector('#application-wizard') || document.body, state);
+        } catch {
+            regenerateBtn.disabled = false;
+        }
+    });
+
+    const actions = document.createElement('div');
+    actions.className = 'credentials-actions';
+    actions.append(downloadBtn, regenerateBtn);
+
+    card.append(title, notice, warning, grid, actions);
+
+    if (state.regenerateSuccess) {
+        const successMsg = createTranslatedElement(document, 'p', 'regenerateCodeSuccess', messages.regenerateCodeSuccess);
+        successMsg.className = 'credentials-regenerate-success';
+        card.append(successMsg);
+    }
+
+    return card;
+}
+
+function createCodeRegenerationBanner(document, state, messages) {
+    const banner = document.createElement('aside');
+    banner.className = 'application-credentials-banner';
+    banner.setAttribute('role', 'region');
+    banner.setAttribute('aria-label', messages.accessCredentialsHeading);
+
+    const refText = document.createElement('p');
+    refText.className = 'credentials-banner-text';
+    refText.append(
+        createTranslatedElement(document, 'strong', 'accessReferenceNumberLabel', messages.accessReferenceNumberLabel),
+        document.createTextNode(`: ${state.application.reference_number}`)
+    );
+
+    const regenerateBtn = createButton(document, messages, 'regenerateCodeAction', 'regenerate-code', 'application-button application-button-secondary');
+    regenerateBtn.addEventListener('click', async () => {
+        regenerateBtn.disabled = true;
+        try {
+            const res = await (state.api?.regenerateCurrentAccessCode ? state.api.regenerateCurrentAccessCode() : regenerateCurrentAccessCode());
+            state.newDraftCredentials = {
+                reference_number: res.reference_number,
+                access_code: res.access_code
+            };
+            state.regenerateSuccess = true;
+            renderWizard(state.root || document.querySelector('#application-wizard') || document.body, state);
+        } catch {
+            regenerateBtn.disabled = false;
+        }
+    });
+
+    banner.append(refText, regenerateBtn);
+    return banner;
+}
+
+function createResumeWithCredentialsSection(document, state, messages) {
+    const card = document.createElement('section');
+    card.className = 'application-resume-card';
+    card.setAttribute('aria-label', messages.accessDeviceHeading);
+
+    const title = createTranslatedElement(document, 'h3', 'accessDeviceHeading', messages.accessDeviceHeading);
+    const explanation = createTranslatedElement(document, 'p', 'accessDeviceExplanation', messages.accessDeviceExplanation);
+
+    const form = document.createElement('form');
+    form.id = 'resume-application-form';
+    form.className = 'application-form';
+
+    const refLabel = document.createElement('label');
+    refLabel.className = 'application-form-field';
+    refLabel.append(createTranslatedElement(document, 'span', 'applicationReferenceNumber', messages.applicationReferenceNumber));
+    const refInput = document.createElement('input');
+    refInput.type = 'text';
+    refInput.name = 'resume_reference_number';
+    refInput.placeholder = 'ITU-XXXX-XXXX';
+    refInput.maxLength = 32;
+    refInput.required = true;
+    refInput.autocomplete = 'off';
+    refLabel.append(refInput);
+
+    const codeLabel = document.createElement('label');
+    codeLabel.className = 'application-form-field';
+    codeLabel.append(createTranslatedElement(document, 'span', 'accessCodeLabel', messages.accessCodeLabel));
+    const codeInput = document.createElement('input');
+    codeInput.type = 'text';
+    codeInput.name = 'resume_access_code';
+    codeInput.maxLength = 64;
+    codeInput.required = true;
+    codeInput.autocomplete = 'off';
+    codeLabel.append(codeInput);
+
+    const submitBtn = createButton(document, messages, 'accessDeviceSubmit', 'resume-submit', 'application-button application-button-secondary');
+    submitBtn.type = 'submit';
+
+    const feedback = document.createElement('p');
+    feedback.className = 'application-message resume-feedback';
+    feedback.setAttribute('role', 'alert');
+
+    form.append(refLabel, codeLabel, submitBtn, feedback);
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const ref = refInput.value.trim();
+        const code = codeInput.value.trim();
+        if (!ref || !code) return;
+        submitBtn.disabled = true;
+        feedback.textContent = '';
+        try {
+            if (typeof state.api.accessApplicationWithCode !== 'function') {
+                throw new Error('accessApplicationWithCode not supported');
+            }
+            await state.api.accessApplicationWithCode({
+                reference_number: ref,
+                access_code: code
+            });
+            state.application = await state.api.readCurrentApplication();
+            state.step = state.application.status === 'submitted' ? 4
+                : (state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0);
+            state.autosave = createAutosave(state, state.api, state.root || document.querySelector('#application-wizard') || document.body);
+            await refreshRequirements(state, state.api);
+            renderWizard(state.root || document.querySelector('#application-wizard') || document.body, state);
+        } catch (error) {
+            submitBtn.disabled = false;
+            if (error?.status === 429 || error?.code === 'RATE_LIMITED') {
+                feedback.textContent = messages.trackingLookupRateLimited;
+            } else if (error?.status === 401 || error?.status === 404 || error?.code === 'INVALID_ACCESS_CREDENTIALS') {
+                feedback.textContent = messages.accessInvalidCredentials;
+            } else {
+                feedback.textContent = messages.applicationLoadFailed;
+            }
+        }
+    });
+
+    card.append(title, explanation, form);
+    return card;
 }
 
 function createSubmissionTime(document, submittedAt, messages) {
@@ -666,6 +904,13 @@ function renderWizard(root, state) {
     heading.tabIndex = -1;
     panel.append(createProgress(document, state.step), heading);
     panel.append(createSaveStatus(document, state));
+    if (state.newDraftCredentials) {
+        const credentialsCard = createAccessCredentialsCard(document, state, messages);
+        if (credentialsCard) panel.append(credentialsCard);
+    } else if (state.application && state.application.status === 'draft' && state.application.reference_number) {
+        const credentialsBanner = createCodeRegenerationBanner(document, state, messages);
+        if (credentialsBanner) panel.append(credentialsBanner);
+    }
     if (state.preferenceWarning) {
         panel.append(createPreferenceWarningBanner(document, state, messages));
     }
@@ -676,7 +921,13 @@ function renderWizard(root, state) {
         errorElement.tabIndex = -1;
         panel.append(errorElement);
     }
-    if (state.step === 0) stage.append(createContactStep(document, state.application, state.formValues, state, state.api));
+    state.root = root;
+    if (state.step === 0) {
+        stage.append(createContactStep(document, state.application, state.formValues, state, state.api));
+        if (!state.application) {
+            stage.append(createResumeWithCredentialsSection(document, state, messages));
+        }
+    }
     if (state.step === 1) stage.append(createResidenceStep(document, state.application, state.formValues));
     if (state.step === 2) stage.append(createDocumentsStep(document, state));
     if (state.step === 3) stage.append(createDeclarationStep(document, state.application));
@@ -774,7 +1025,14 @@ function createAutosaveValuesFromApplication(application) {
 }
 
 function createAutosave(state, api, root) {
-    const save = api.autosaveCurrentApplication || api.updateCurrentApplication;
+    const save = async (patch) => {
+        const payload = {
+            ...patch,
+            lock_version: state.application?.lock_version
+        };
+        const saveFn = api.autosaveCurrentApplication || api.updateCurrentApplication;
+        return saveFn(payload);
+    };
     return createDraftAutosave({
         initialValues: createAutosaveValuesFromApplication(state.application),
         save,
@@ -795,6 +1053,11 @@ function createAutosave(state, api, root) {
         },
         onError: (error) => {
             if (error.code === 'APPLICATION_SESSION_REQUIRED') state.sessionExpired = true;
+            if (error.code === 'APPLICATION_UPDATE_CONFLICT') {
+                state.errorKey = 'applicationUpdateConflict';
+                state._focusError = true;
+                renderWizard(root, state);
+            }
         }
     });
 }
@@ -947,6 +1210,9 @@ async function saveStep(root, state, api) {
         const isInitialDraftCreation = (state.step === 0 && !state.application);
         if (state.step === 0 && !state.application) {
             state.application = await api.createApplicationDraft(createContactDraft(fields));
+            if (state.application?.access_credentials) {
+                state.newDraftCredentials = state.application.access_credentials;
+            }
             state.autosave = createAutosave(state, api, root);
         } else if (state.application && state.step <= 1) {
             state.autosave.schedule(buildAutosaveValues(fields));
@@ -1157,6 +1423,7 @@ export async function initializeApplicationWizard(root, api) {
         uploads: {},
         deleting: {},
         notificationPreference: null,
+        newDraftCredentials: null,
         api
     };
     root.addEventListener('submit', (event) => {

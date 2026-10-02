@@ -2,6 +2,7 @@ import { ApplicationConflictError, ApplicationTypeChangeBlockedError } from '../
 import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../../config/constants.js';
 import { normalizeStudentNumber } from './studentRepository.js';
 import { mapDocumentRequirementCodeForTypeSwitch } from '../../domain/documentPolicy.js';
+import { generateApplicationReference } from '../../auth/applicationAccessCode.js';
 
 const PUBLIC_APPLICATION_FIELDS = Object.freeze({
     applicationType: 'application_type',
@@ -22,6 +23,10 @@ const PUBLIC_APPLICATION_FIELDS = Object.freeze({
 
 function isActiveApplicationConflict(error) {
     return /unique constraint failed: applications\.student_id/i.test(String(error?.message));
+}
+
+function isReferenceConflict(error) {
+    return /unique constraint failed: (applications\.)?reference_number/i.test(String(error?.message));
 }
 
 /**
@@ -58,42 +63,108 @@ export function createApplicationRepository(database) {
 
             return this.findById(applicationId);
         },
-        async createDraftWithSession({ applicationId, studentId, studentNumber, applicationType, studentEmail, studentPhone, sessionId, tokenHash, expiresAt, createdAt, auditEventId, requestId }) {
+        async createDraftWithSession({
+            applicationId, studentId, studentNumber, applicationType, studentEmail, studentPhone,
+            sessionId, tokenHash, expiresAt, createdAt, auditEventId, requestId,
+            referenceNumber = null, accessCodeHash = null
+        }) {
             const normalizedStudentNumber = normalizeStudentNumber(studentNumber);
+            const maxRetries = referenceNumber ? 1 : 5;
+
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                const finalReference = referenceNumber || generateApplicationReference();
+                const statements = [
+                    database.prepare(`
+                        INSERT INTO students (id, student_number, normalized_student_number)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(normalized_student_number) DO NOTHING
+                    `).bind(studentId, studentNumber.trim(), normalizedStudentNumber),
+                    database.prepare(`
+                        INSERT INTO applications (
+                            id, student_id, reference_number, access_code_hash, access_code_created_at,
+                            access_code_version, lock_version, application_type, student_email, student_phone, retention_due_at
+                        )
+                        SELECT ?, id, ?, ?, ?, 1, 1, ?, ?, ?, datetime(?, '+30 days')
+                        FROM students WHERE normalized_student_number = ?
+                    `).bind(applicationId, finalReference, accessCodeHash, createdAt, applicationType, studentEmail, studentPhone, createdAt, normalizedStudentNumber),
+                    database.prepare(`
+                        INSERT INTO application_sessions (id, application_id, token_hash, expires_at, created_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    `).bind(sessionId, applicationId, tokenHash, expiresAt, createdAt),
+                    database.prepare(`
+                        INSERT INTO audit_events (id, event_type, actor_type, application_id, request_id, safe_metadata_json)
+                        SELECT ?, 'application.draft_created', 'student', ?, ?, '{}'
+                        WHERE EXISTS (SELECT 1 FROM applications WHERE id = ?)
+                    `).bind(auditEventId, applicationId, requestId, applicationId)
+                ];
+
+                try {
+                    const results = await database.batch(statements);
+                    if (results[1]?.meta?.changes !== 1 || results[2]?.meta?.changes !== 1 || results[3]?.meta?.changes !== 1) {
+                        throw new Error('Application, session, and audit transaction did not complete.');
+                    }
+                    return this.findById(applicationId);
+                } catch (error) {
+                    if (isActiveApplicationConflict(error)) throw new ApplicationConflictError();
+                    if (isReferenceConflict(error) && !referenceNumber && attempt < maxRetries - 1) {
+                        continue;
+                    }
+                    throw error;
+                }
+            }
+        },
+        async findByReferenceNumber(referenceNumber) {
+            if (!referenceNumber) return null;
+            const normalizedRef = referenceNumber.trim().toUpperCase();
+            return database.prepare(`
+                SELECT applications.*, students.student_number,
+                    EXISTS (
+                        SELECT 1 FROM audit_events
+                        WHERE audit_events.application_id = applications.id
+                          AND audit_events.event_type = 'application.contact_responsibility_accepted'
+                          AND json_extract(audit_events.safe_metadata_json, '$.version') = ?
+                    ) AS contact_acknowledgement_accepted_current,
+                    (
+                        SELECT audit_events.created_at FROM audit_events
+                        WHERE audit_events.application_id = applications.id
+                          AND audit_events.event_type = 'application.contact_responsibility_accepted'
+                          AND json_extract(audit_events.safe_metadata_json, '$.version') = ?
+                        ORDER BY audit_events.created_at DESC LIMIT 1
+                    ) AS contact_acknowledgement_accepted_at
+                FROM applications
+                JOIN students ON students.id = applications.student_id
+                WHERE UPPER(applications.reference_number) = ?
+            `).bind(CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION,
+                CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION, normalizedRef).first();
+        },
+        async updateAccessCode({ applicationId, accessCodeHash, accessCodeCreatedAt, auditEventId, requestId, revokeSessions = false, actorType = 'student', actorStaffId = null }) {
             const statements = [
                 database.prepare(`
-                    INSERT INTO students (id, student_number, normalized_student_number)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(normalized_student_number) DO NOTHING
-                `).bind(studentId, studentNumber.trim(), normalizedStudentNumber),
+                    UPDATE applications
+                    SET access_code_hash = ?, access_code_created_at = ?,
+                        access_code_version = COALESCE(access_code_version, 1) + 1,
+                        updated_at = ?, last_activity_at = ?
+                    WHERE id = ? AND status NOT IN ('completed', 'cancelled', 'rejected')
+                `).bind(accessCodeHash, accessCodeCreatedAt, accessCodeCreatedAt, accessCodeCreatedAt, applicationId),
                 database.prepare(`
-                    INSERT INTO applications (
-                        id, student_id, application_type, student_email, student_phone, retention_due_at
-                    )
-                    SELECT ?, id, ?, ?, ?, datetime(?, '+30 days')
-                    FROM students WHERE normalized_student_number = ?
-                `).bind(applicationId, applicationType, studentEmail, studentPhone, createdAt, normalizedStudentNumber),
-                database.prepare(`
-                    INSERT INTO application_sessions (id, application_id, token_hash, expires_at, created_at)
-                    VALUES (?, ?, ?, ?, ?)
-                `).bind(sessionId, applicationId, tokenHash, expiresAt, createdAt),
-                database.prepare(`
-                    INSERT INTO audit_events (id, event_type, actor_type, application_id, request_id, safe_metadata_json)
-                    SELECT ?, 'application.draft_created', 'student', ?, ?, '{}'
-                    WHERE EXISTS (SELECT 1 FROM applications WHERE id = ?)
-                `).bind(auditEventId, applicationId, requestId, applicationId)
+                    INSERT INTO audit_events (
+                        id, event_type, actor_type, actor_staff_id, application_id, request_id, safe_metadata_json, created_at
+                    ) SELECT ?, ?, ?, ?, ?, ?, '{"accessCodeRotated":true}', ?
+                    WHERE changes() = 1
+                `).bind(
+                    auditEventId,
+                    actorType === 'staff' ? 'staff.application_access_code_reset' : 'application.access_code_regenerated',
+                    actorType, actorStaffId, applicationId, requestId, accessCodeCreatedAt
+                )
             ];
-
-            try {
-                const results = await database.batch(statements);
-                if (results[1]?.meta?.changes !== 1 || results[2]?.meta?.changes !== 1 || results[3]?.meta?.changes !== 1) {
-                    throw new Error('Application, session, and audit transaction did not complete.');
-                }
-            } catch (error) {
-                if (isActiveApplicationConflict(error)) throw new ApplicationConflictError();
-                throw error;
+            if (revokeSessions) {
+                statements.push(database.prepare(`
+                    UPDATE application_sessions SET revoked_at = ?
+                    WHERE application_id = ? AND revoked_at IS NULL
+                `).bind(accessCodeCreatedAt, applicationId));
             }
-
+            const results = await database.batch(statements);
+            if (results[0]?.meta?.changes !== 1) return null;
             return this.findById(applicationId);
         },
         async findById(applicationId) {
@@ -252,23 +323,27 @@ export function createApplicationRepository(database) {
                 LIMIT 1
             `).bind(normalizedStudentNumber).first();
         },
-        async updateDraft(applicationId, changes, auditContext = null) {
+        async updateDraft(applicationId, changes, auditContext = null, expectedLockVersion = null) {
             const fields = Object.entries(changes)
                 .filter(([key]) => Object.hasOwn(PUBLIC_APPLICATION_FIELDS, key));
             if (fields.length === 0) return this.findById(applicationId);
 
             const requestedType = changes.applicationType;
-            if (requestedType === undefined) return this.updateDraftFields(applicationId, fields);
+            if (requestedType === undefined) return this.updateDraftFields(applicationId, fields, expectedLockVersion);
 
             const currentApplication = await this.findById(applicationId);
             if (!currentApplication || currentApplication.status !== 'draft') return null;
+            if (expectedLockVersion !== null && expectedLockVersion !== undefined && currentApplication.lock_version !== expectedLockVersion) {
+                throw new ApplicationConflictError('APPLICATION_UPDATE_CONFLICT');
+            }
             if (requestedType === currentApplication.application_type) {
-                return this.updateDraftFields(applicationId, fields.filter(([key]) => key !== 'applicationType'));
+                return this.updateDraftFields(applicationId, fields.filter(([key]) => key !== 'applicationType'), expectedLockVersion);
             }
             if (!auditContext?.auditEventId || !auditContext?.requestId) throw new TypeError('Application type changes require audit context.');
 
             const remaps = await this.readDocumentRequirementRemaps(applicationId, requestedType);
             const assignments = fields.map(([key]) => `${PUBLIC_APPLICATION_FIELDS[key]} = ?`);
+            assignments.push('lock_version = lock_version + 1');
             const values = fields.map(([, value]) => value);
             const applicationUpdateIndex = remaps.length + 1;
             const statements = [database.prepare('PRAGMA defer_foreign_keys = ON')];
@@ -317,18 +392,28 @@ export function createApplicationRepository(database) {
             if (results[applicationUpdateIndex + 1]?.meta?.changes !== 1) throw new Error('Application type change audit did not complete.');
             return this.findById(applicationId);
         },
-        async updateDraftFields(applicationId, fields) {
+        async updateDraftFields(applicationId, fields, expectedLockVersion = null) {
             if (fields.length === 0) return this.findById(applicationId);
 
             const assignments = fields.map(([key]) => `${PUBLIC_APPLICATION_FIELDS[key]} = ?`);
+            assignments.push('lock_version = lock_version + 1');
             const values = fields.map(([, value]) => value);
+            let whereClause = "id = ? AND status = 'draft'";
+            const whereValues = [applicationId];
+            if (expectedLockVersion !== null && expectedLockVersion !== undefined) {
+                whereClause += ' AND lock_version = ?';
+                whereValues.push(expectedLockVersion);
+            }
             const result = await database.prepare(`
                 UPDATE applications
                 SET ${assignments.join(', ')}, updated_at = CURRENT_TIMESTAMP,
                     last_activity_at = CURRENT_TIMESTAMP,
                     retention_due_at = datetime('now', '+30 days')
-                WHERE id = ? AND status = 'draft'
-            `).bind(...values, applicationId).run();
+                WHERE ${whereClause}
+            `).bind(...values, ...whereValues).run();
+            if (result.meta.changes === 0 && expectedLockVersion !== null && expectedLockVersion !== undefined) {
+                throw new ApplicationConflictError('APPLICATION_UPDATE_CONFLICT');
+            }
             return result.meta.changes === 1 ? this.findById(applicationId) : null;
         },
         async readDocumentRequirementRemaps(applicationId, targetApplicationType) {

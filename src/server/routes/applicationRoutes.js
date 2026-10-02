@@ -2,6 +2,9 @@ import { ApiError, ApplicationConflictError } from '../domain/errors.js';
 import { APPLICATION_OWNER_SESSION_DAYS, CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../config/constants.js';
 import { createOpaqueSessionToken, createSessionCookie, createExpiredSessionCookie, getSessionCookieName, hashSessionToken, readCookie } from '../auth/sessionToken.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
+import { requireStaff } from '../auth/staffAuth.js';
+import { generateAccessCode, hashAccessCode, isValidAccessCodeFormat, isValidApplicationReference, normalizeApplicationReference, verifyAccessCode } from '../auth/applicationAccessCode.js';
+import { consumePublicRateLimit } from '../security/requestRateLimit.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { isValidPhoneNumber } from '../../shared/phoneNumber.js';
 import { readJsonBody } from '../http/requestBody.js';
@@ -39,6 +42,8 @@ function readDeclarationVersion(environment) {
 function createApplicationDto(application, environment) {
     const currentDeclarationVersion = readDeclarationVersion(environment);
     return {
+        reference_number: application.reference_number ?? null,
+        lock_version: application.lock_version ?? 1,
         status: application.status,
         submitted_at: application.submitted_at ?? null,
         application_type: application.application_type,
@@ -83,6 +88,8 @@ function readNewDraft(body) {
 
 async function persistDraftWithSession(repositories, draft, requestId) {
     const token = createOpaqueSessionToken();
+    const accessCode = generateAccessCode();
+    const accessCodeHash = await hashAccessCode(accessCode);
     const createdAt = new Date().toISOString();
     try {
         const application = await repositories.applications.createDraftWithSession({
@@ -92,11 +99,12 @@ async function persistDraftWithSession(repositories, draft, requestId) {
             sessionId: crypto.randomUUID(),
             auditEventId: crypto.randomUUID(),
             requestId,
+            accessCodeHash,
             tokenHash: await hashSessionToken(token),
             expiresAt: new Date(Date.parse(createdAt) + APPLICATION_SESSION_SECONDS * 1000).toISOString(),
             createdAt
         });
-        return { application, token };
+        return { application, token, accessCode };
     } catch (error) {
         if (error instanceof ApplicationConflictError) throw new ApiError(409, error.code, 'Bu öğrenci için zaten etkin bir başvuru bulunuyor.');
         throw error;
@@ -177,8 +185,12 @@ export async function createApplicationDraft(request, environment, requestId) {
     const draft = readNewDraft(await readJsonBody(request));
     const repositories = createRepositories(environment);
     await enforceRateLimit(repositories, request, { endpoint: 'application-create', maxRequests: 5, windowSeconds: 900 });
-    const { application, token } = await persistDraftWithSession(repositories, draft, requestId);
-    return routeResult({ application: createApplicationDto(application, environment) }, {
+    const { application, token, accessCode } = await persistDraftWithSession(repositories, draft, requestId);
+    return routeResult({
+        application: createApplicationDto(application, environment),
+        reference_number: application.reference_number,
+        access_code: accessCode
+    }, {
         status: 201, cookie: createSessionCookie('application', token, APPLICATION_SESSION_SECONDS)
     });
 }
@@ -213,15 +225,20 @@ async function updateCurrentApplicationFields(request, environment, requestId, {
     const repositories = createRepositories(environment);
     const currentApplication = await repositories.applications.findById(session.application_id);
     if (!currentApplication) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
-    const changes = readDraftChanges(await readJsonBody(request), currentApplication, { allowIncomplete });
+    const body = await readJsonBody(request);
+    const expectedLockVersion = typeof body.lock_version === 'number' ? body.lock_version : null;
+    const changes = readDraftChanges(body, currentApplication, { allowIncomplete });
     let application;
     try {
         application = await repositories.applications.updateDraft(session.application_id, changes, {
             auditEventId: crypto.randomUUID(), requestId
-        });
+        }, expectedLockVersion);
     } catch (error) {
         if (error.code === 'APPLICATION_TYPE_CHANGE_BLOCKED') {
             throw new ApiError(409, error.code, 'Başvuru türü, mevcut belge geçmişi güvenle korunamadığı için değiştirilemedi.');
+        }
+        if (error.code === 'APPLICATION_UPDATE_CONFLICT') {
+            throw new ApiError(409, error.code, 'Başvurunuz başka bir cihaz veya sekmede güncellendi. Lütfen sayfayı yenileyip en güncel bilgileri kontrol edin.');
         }
         throw error;
     }
@@ -410,4 +427,179 @@ export async function submitCurrentApplication(request, environment, requestId) 
     });
     if (!submitted) throw new ApiError(409, 'APPLICATION_NOT_SUBMITTABLE', 'Bu başvuru gönderim için uygun durumda değil.');
     return { application: createApplicationDto(submitted, environment) };
+}
+
+/**
+ * Verifies application reference and secret access code, issuing a new owner session for another device.
+ * Enforces rate limiting on both IP level (broad NAT tolerance) and reference level (strict anti-brute-force).
+ * @param {Request} request Public JSON POST request.
+ * @param {object} environment Cloudflare Worker bindings.
+ * @param {string} requestId Correlation identifier.
+ * @returns {Promise<object>} Route result with student-safe DTO and new session cookie.
+ * @throws {ApiError} When input, rate limit, reference, or access code is invalid.
+ */
+export async function accessApplicationWithCode(request, environment, requestId) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const body = await readJsonBody(request);
+    const rawRef = body.reference_number;
+    const rawCode = body.access_code;
+
+    if (!rawRef || typeof rawRef !== 'string' || !rawCode || typeof rawCode !== 'string') {
+        throw new ApiError(400, 'INVALID_INPUT', 'Başvuru numarası ve erişim kodu zorunludur.');
+    }
+
+    const repositories = createRepositories(environment);
+
+    // 1. IP rate limit: high ceiling for shared campus/NAT networks
+    await enforceRateLimit(repositories, request, {
+        endpoint: 'application-access-ip', maxRequests: 60, windowSeconds: 900
+    });
+
+    const referenceNumber = normalizeApplicationReference(rawRef);
+
+    // 2. Reference rate limit: strict per-application attempt limit (e.g. 5 attempts / 15 min window)
+    if (isValidApplicationReference(referenceNumber)) {
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        const refAllowed = await consumePublicRateLimit(repositories.rateLimits, {
+            endpoint: 'application-access-ref', identity: referenceNumber, nowSeconds, maxRequests: 5, windowSeconds: 900
+        });
+        if (!refAllowed) {
+            throw new ApiError(429, 'RATE_LIMITED', 'Bu başvuru için çok fazla hatalı deneme yapıldı. Lütfen 15 dakika sonra tekrar deneyin.', true);
+        }
+    }
+
+    if (!isValidApplicationReference(referenceNumber) || !isValidAccessCodeFormat(rawCode)) {
+        throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya erişim kodu hatalı.');
+    }
+
+    const application = await repositories.applications.findByReferenceNumber(referenceNumber);
+    if (!application || !application.access_code_hash) {
+        // Constant-time dummy verify to mitigate timing attacks
+        await verifyAccessCode(rawCode, '0000000000000000000000000000000000000000000000000000000000000000');
+        throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya erişim kodu hatalı.');
+    }
+
+    const isValid = await verifyAccessCode(rawCode, application.access_code_hash);
+    if (!isValid) {
+        throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya erişim kodu hatalı.');
+    }
+
+    // Success: create a fresh opaque session token for this device, guarded against concurrent code reset
+    const token = createOpaqueSessionToken();
+    const createdAt = new Date().toISOString();
+    const sessionCreated = await repositories.sessions.createApplicationSessionGuarded({
+        id: crypto.randomUUID(),
+        applicationId: application.id,
+        tokenHash: await hashSessionToken(token),
+        expiresAt: new Date(Date.parse(createdAt) + APPLICATION_SESSION_SECONDS * 1000).toISOString(),
+        createdAt,
+        expectedAccessCodeVersion: application.access_code_version
+    });
+
+    if (!sessionCreated) {
+        throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya erişim kodu hatalı.');
+    }
+
+    await createAuditEvent(repositories, {
+        eventType: 'application.cross_device_access',
+        actorType: 'student',
+        applicationId: application.id,
+        requestId,
+        metadata: { referenceNumber: application.reference_number }
+    });
+
+    return routeResult({
+        success: true,
+        application: createApplicationDto(application, environment)
+    }, {
+        status: 200,
+        cookie: createSessionCookie('application', token, APPLICATION_SESSION_SECONDS)
+    });
+}
+
+/**
+ * Regenerates the secret access code from an authenticated owner session.
+ * Used when network drops prevented saving the code on initial creation or when rotating.
+ * Terminal applications cannot regenerate code.
+ * @param {Request} request Authenticated owner-session request.
+ * @param {object} environment Worker bindings.
+ * @param {string} requestId Correlation identifier.
+ * @returns {Promise<object>} Safe response with new plaintext access code.
+ * @throws {ApiError} When origin, session, state, or rate limit fails.
+ */
+export async function regenerateCurrentAccessCode(request, environment, requestId) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const session = await requireApplicationSession(request, environment);
+    if (['completed', 'cancelled', 'rejected'].includes(session.status)) {
+        throw new ApiError(409, 'APPLICATION_TERMINAL', 'Sonuçlanmış başvurularda erişim kodu yenilenemez.');
+    }
+
+    const repositories = createRepositories(environment);
+    await enforceRateLimit(repositories, request, {
+        endpoint: 'application-regenerate-code', maxRequests: 3, windowSeconds: 900
+    });
+
+    const newCode = generateAccessCode();
+    const newHash = await hashAccessCode(newCode);
+    const now = new Date().toISOString();
+
+    const updated = await repositories.applications.updateAccessCode({
+        applicationId: session.application_id,
+        accessCodeHash: newHash,
+        accessCodeCreatedAt: now,
+        auditEventId: crypto.randomUUID(),
+        requestId,
+        revokeSessions: false,
+        actorType: 'student'
+    });
+
+    if (!updated) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Erişim kodu güncellenemedi.');
+
+    return {
+        success: true,
+        reference_number: updated.reference_number,
+        access_code: newCode
+    };
+}
+
+/**
+ * Controlled staff endpoint to reset a student's access code after in-person/verified identity check.
+ * Revokes all previous owner sessions for safety. Reference number remains unchanged.
+ * @param {object} options Route context.
+ * @returns {Promise<object>} New code for staff to communicate to the student.
+ * @throws {ApiError} When staff auth, origin, or application lookup fails.
+ */
+export async function resetStaffApplicationAccessCode({ request, environment, applicationId, requestId }) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const staff = await requireStaff(request, environment, ['admin', 'reviewer']);
+    const repositories = createRepositories(environment);
+
+    const application = await repositories.applications.findById(applicationId);
+    if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+
+    const newCode = generateAccessCode();
+    const newHash = await hashAccessCode(newCode);
+    const now = new Date().toISOString();
+
+    const updated = await repositories.applications.updateAccessCode({
+        applicationId,
+        accessCodeHash: newHash,
+        accessCodeCreatedAt: now,
+        auditEventId: crypto.randomUUID(),
+        requestId,
+        revokeSessions: true,
+        actorType: 'staff',
+        actorStaffId: staff.id
+    });
+
+    if (!updated) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+
+    return {
+        success: true,
+        reference_number: updated.reference_number,
+        access_code: newCode
+    };
 }

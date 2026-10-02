@@ -1,8 +1,8 @@
 export class ApplicationConflictError extends Error {
-    constructor() {
-        super('An active application already exists for this student.');
+    constructor(code = 'APPLICATION_ALREADY_ACTIVE', message = 'An active application already exists for this student.') {
+        super(message);
         this.name = 'ApplicationConflictError';
-        this.code = 'APPLICATION_ALREADY_ACTIVE';
+        this.code = code;
     }
 }
 

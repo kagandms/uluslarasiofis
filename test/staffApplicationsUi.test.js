@@ -571,4 +571,90 @@ test('approved documents and terminal applications remain read-only while previe
     assert.equal(root.querySelector('[data-action="application-status-transition"]'), null);
     assert.ok(root.querySelector('[data-action="preview-document"]'));
     assert.ok(root.querySelector('[data-action="download-document"]'));
+    assert.equal(root.querySelector('[data-action="staff-reset-access-code"]'), null);
+});
+
+test('staff reset access code workflow requires physical ID check confirmation and presents new code with copy', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let resetCalledWith = null;
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: {
+                    ...QUEUE_ITEM,
+                    reference_number: 'ITU-7K9M-4X2P',
+                    status: 'under_review'
+                },
+                assignment: null,
+                allowed_status_transitions: ['approved', 'rejected'],
+                documents: []
+            };
+        },
+        async resetAccessCode(id) {
+            resetCalledWith = id;
+            return {
+                success: true,
+                reference_number: 'ITU-7K9M-4X2P',
+                access_code: 'K7M9X-4P2WR-8T5NV-3Y6BQ-9D2FAL'
+            };
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // Summary displays reference number
+    assert.match(root.textContent, /ITU-7K9M-4X2P/);
+
+    // Reset button is present
+    const resetBtn = root.querySelector('[data-action="staff-reset-access-code"]');
+    assert.ok(resetBtn);
+    assert.equal(resetBtn.textContent, 'Erişim Kodunu Sıfırla');
+
+    // Click to open confirmation modal
+    resetBtn.click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const modal = root.querySelector('#staff-reset-code-modal');
+    assert.ok(modal);
+    assert.equal(modal.getAttribute('role'), 'dialog');
+    assert.match(modal.textContent, /fiziken ofiste bulunup kimliği doğrulandığında/);
+
+    // Confirm button is initially disabled
+    const confirmBtn = modal.querySelector('[data-action="confirm-reset-code"]');
+    assert.ok(confirmBtn);
+    assert.equal(confirmBtn.disabled, true);
+
+    // Checking the physical ID check box enables the confirm button
+    const checkbox = modal.querySelector('#confirm-physical-id-check');
+    assert.ok(checkbox);
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new document.defaultView.Event('change'));
+    assert.equal(confirmBtn.disabled, false);
+
+    // Execute reset
+    confirmBtn.click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(resetCalledWith, QUEUE_ITEM.id);
+
+    // Success dialog presents new code and copy button
+    const successModal = root.querySelector('#staff-reset-code-modal');
+    assert.ok(successModal);
+    assert.match(successModal.textContent, /Yeni Erişim Kodu Üretildi/);
+    assert.match(successModal.textContent, /K7M9X-4P2WR-8T5NV-3Y6BQ-9D2FAL/);
+    assert.ok(successModal.querySelector('[data-action="copy-new-access-code"]'));
+
+    // Close button dismisses modal
+    const closeBtn = successModal.querySelector('[data-action="close-reset-code-modal"]');
+    assert.ok(closeBtn);
+    closeBtn.click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(root.querySelector('#staff-reset-code-modal'), null);
 });

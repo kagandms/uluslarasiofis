@@ -3,7 +3,7 @@ import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
 import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
 import { isRouteResult } from './http/routeResult.js';
 import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument, finalizeCurrentStudentDocument, readCurrentStudentDocumentRequirements } from './routes/applicationDocumentRoutes.js';
-import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
+import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, accessApplicationWithCode, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, regenerateCurrentAccessCode, resetStaffApplicationAccessCode, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
 import { lookupApplicationTracking, readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
 import { createCurrentResubmissionUploadIntent, finalizeCurrentResubmissionUpload, readCurrentResubmissionEligibility } from './routes/resubmissionUploadRoutes.js';
@@ -132,6 +132,16 @@ async function routeApi(request, environment, requestId) {
         }
         return requestStaffDocumentResubmission({ request, environment, applicationId, code: documentCode, requestId });
     }
+    const staffResetMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/reset-access-code$/);
+    if (staffResetMatch) {
+        let applicationId;
+        try {
+            applicationId = decodeURIComponent(staffResetMatch[1]);
+        } catch {
+            throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+        }
+        return resetStaffApplicationAccessCode({ request, environment, applicationId, requestId });
+    }
     const staffApplicationMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)$/);
     if (staffApplicationMatch) {
         let applicationId;
@@ -142,6 +152,8 @@ async function routeApi(request, environment, requestId) {
         }
         return readStaffApplicationDetail(request, environment, applicationId);
     }
+    if (pathname === '/api/public/applications/access') return accessApplicationWithCode(request, environment, requestId);
+    if (pathname === '/api/public/applications/current/regenerate-access-code') return regenerateCurrentAccessCode(request, environment, requestId);
     if (pathname === '/api/public/applications') return createApplicationDraft(request, environment, requestId);
     if (pathname === '/api/public/applications/current/status') return readCurrentApplicationStatus(request, environment);
     if (pathname === '/api/public/applications/current/tracking') return readCurrentApplicationTracking(request, environment);

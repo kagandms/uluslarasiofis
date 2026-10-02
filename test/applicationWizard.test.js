@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
-import { JSDOM } from 'jsdom';
 import { test } from 'node:test';
-import { initializeApplicationWizard, renderFingerprintSection, renderStudentDocumentRequirements } from '../src/public/applicationWizard.js';
+import { JSDOM } from 'jsdom';
+import {
+    createSubmissionConfirmation,
+    initializeApplicationWizard,
+    renderFingerprintSection,
+    renderStudentDocumentRequirements
+} from '../src/public/applicationWizard.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
 
 function createRoot() {
@@ -814,4 +819,100 @@ test('unsafe and failed scans show translated error states instead of upload suc
         assert.ok(SESSION3_MESSAGES[locale].documentScanFailed);
     }
     document.defaultView.close();
+});
+
+test('new draft creation presents credentials card with reference, code, and working regeneration action', async () => {
+    const { document, root } = createRoot();
+    let regenCalls = 0;
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('no session'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async createApplicationDraft() {
+            return {
+                id: 'draft-id-123',
+                reference_number: 'ITU-7K9M-4X2P',
+                lock_version: 1,
+                status: 'draft',
+                access_credentials: {
+                    reference_number: 'ITU-7K9M-4X2P',
+                    access_code: 'K7M9X-4P2WR-8T5NV-3Y6BQ-9D2FAL'
+                },
+                contact_acknowledgement: { current_version: 'v1', accepted_current: true }
+            };
+        },
+        async regenerateCurrentAccessCode() {
+            regenCalls += 1;
+            return {
+                reference_number: 'ITU-7K9M-4X2P',
+                access_code: 'NEWCD-NEWCD-NEWCD-NEWCD-NEWCD1'
+            };
+        },
+        async readCurrentStudentDocumentRequirements() { return { requirements: [] }; }
+    };
+    const state = await initializeApplicationWizard(root, api);
+    root.querySelector('[name="student_number"]').value = 'STU-NEW-1';
+    root.querySelector('[name="application_type"]').value = 'initial';
+    root.querySelector('[name="student_email"]').value = 'stu@example.edu';
+    root.querySelector('[name="student_phone"]').value = '+905551234567';
+    root.querySelector('[name="contact_acknowledgement_accepted"]').checked = true;
+    root.querySelector('[name="student_phone"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    await submitWizard(root);
+
+    // Credentials card should be present
+    assert.match(root.textContent, /ITU-7K9M-4X2P/);
+    assert.match(root.textContent, /K7M9X-4P2WR-8T5NV-3Y6BQ-9D2FAL/);
+
+    const regenBtn = root.querySelector('[data-action="regenerate-code"]');
+    assert.ok(regenBtn);
+
+    // Click regenerate
+    regenBtn.click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(regenCalls, 1);
+    assert.match(root.textContent, /NEWCD-NEWCD-NEWCD-NEWCD-NEWCD1/);
+    assert.match(root.textContent, /Yeni erişim kodunuz üretildi/);
+    document.defaultView.close();
+});
+
+test('optimistic locking conflict during autosave surfaces localized conflict alert', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    api.updateCurrentApplication = async () => {
+        throw Object.assign(new Error('conflict'), { code: 'APPLICATION_UPDATE_CONFLICT' });
+    };
+
+    root.querySelector('[name="first_name"]').value = 'ChangedName';
+    root.querySelector('[name="first_name"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    await state.autosave.flush();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(state.errorKey, 'applicationUpdateConflict');
+    const alert = root.querySelector('[role="alert"]');
+    assert.ok(alert);
+    assert.match(alert.textContent, /başka bir cihaz veya sekmede güncellendi/i);
+    document.defaultView.close();
+});
+
+test('submission confirmation displays reference number and access credentials reminder across all supported languages', () => {
+    for (const locale of SUPPORTED_LOCALES) {
+        const dom = new JSDOM(`<!doctype html><html lang="${locale}"><body><section></section></body></html>`);
+        const doc = dom.window.document;
+        const messages = { ...(SESSION3_MESSAGES[locale] || SESSION3_MESSAGES.tr), ...(PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr) };
+        const app = {
+            reference_number: 'ITU-7K9M-4X2P',
+            student_number: 'STU-LANG-1',
+            status: 'submitted',
+            submitted_at: '2026-10-02T12:00:00.000Z'
+        };
+
+        const root = doc.querySelector('section');
+        const confirmation = createSubmissionConfirmation(doc, app, messages);
+        root.append(confirmation);
+
+        assert.match(root.textContent, /ITU-7K9M-4X2P/);
+        assert.match(root.textContent, new RegExp(messages.accessReferenceNumberLabel));
+        assert.match(root.textContent, new RegExp(messages.submissionCredentialsReminder.slice(0, 20)));
+        dom.window.close();
+    }
 });

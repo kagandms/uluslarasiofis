@@ -214,6 +214,7 @@ function createApplicationSummary(document, application) {
     const section = document.createElement('section');
     const details = document.createElement('dl');
     const fields = [
+        ['Başvuru Referansı', application.reference_number || '-'],
         ['Başvuru No', application.id], ['Öğrenci No', application.student_number],
         ['Durum', readStatusLabel(application.status)],
         ['Başvuru türü', application.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'],
@@ -382,6 +383,16 @@ function createApplicationWorkflow(document, application, detail, state, handler
         action.addEventListener('click', () => handlers.onTransition(targetStatus));
         section.append(action);
     }
+    if (!['completed', 'cancelled', 'rejected'].includes(application.status)) {
+        const resetAction = document.createElement('button');
+        resetAction.type = 'button';
+        resetAction.className = 'btn btn-outline';
+        resetAction.dataset.action = 'staff-reset-access-code';
+        resetAction.disabled = Boolean(state.actionPending);
+        resetAction.textContent = 'Erişim Kodunu Sıfırla';
+        resetAction.addEventListener('click', handlers.onOpenResetCodeModal);
+        section.append(resetAction);
+    }
     if (state.actionError && !state.resubmissionDocument) {
         const error = createText(document, 'p', 'staff-application-state', state.actionError);
         error.setAttribute('role', 'alert');
@@ -449,6 +460,129 @@ function createPreviewPanel(document, preview, handlers) {
     return panel;
 }
 
+function createResetCodeModal(document, modalState, handlers) {
+    if (!modalState) return null;
+    const modal = document.createElement('section');
+    modal.id = 'staff-reset-code-modal';
+    modal.className = 'staff-reset-code-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'reset-code-modal-title');
+
+    modal.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') handlers.onCloseResetCodeModal();
+    });
+
+    if (modalState.step === 'confirm') {
+        const title = createText(document, 'h4', '', 'Erişim Kodunu Sıfırla');
+        title.id = 'reset-code-modal-title';
+
+        const warning = createText(
+            document,
+            'p',
+            'staff-application-state',
+            'Dikkat: Erişim kodu sıfırlandığında öğrencinin tüm açık oturumları derhal kapatılır. Bu işlem yalnızca öğrenci fiziken ofiste bulunup kimliği doğrulandığında yapılmalıdır.'
+        );
+
+        const checkGroup = document.createElement('div');
+        checkGroup.className = 'staff-modal-checkbox-group';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = 'confirm-physical-id-check';
+        const label = document.createElement('label');
+        label.htmlFor = 'confirm-physical-id-check';
+        label.textContent = 'Öğrencinin kimliğini (pasaport veya kimlik kartı) fiziken teyit ettim.';
+        checkGroup.append(checkbox, label);
+
+        const actions = document.createElement('div');
+        actions.className = 'staff-modal-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn btn-outline';
+        cancelBtn.dataset.action = 'cancel-reset-code';
+        cancelBtn.textContent = 'İptal';
+        cancelBtn.addEventListener('click', handlers.onCloseResetCodeModal);
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = 'btn btn-primary';
+        confirmBtn.dataset.action = 'confirm-reset-code';
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Sıfırla ve Yeni Kod Üret';
+
+        checkbox.addEventListener('change', () => {
+            confirmBtn.disabled = !checkbox.checked;
+        });
+
+        confirmBtn.addEventListener('click', () => {
+            if (!checkbox.checked) return;
+            handlers.onExecuteResetCode();
+        });
+
+        actions.append(cancelBtn, confirmBtn);
+        modal.append(title, warning, checkGroup, actions);
+    } else if (modalState.step === 'success') {
+        const title = createText(document, 'h4', '', 'Yeni Erişim Kodu Üretildi');
+        title.id = 'reset-code-modal-title';
+
+        const notice = createText(
+            document,
+            'p',
+            'staff-application-state',
+            'Yeni erişim kodu başarıyla oluşturuldu. Bu kod öğrencinin başvuruyu farklı cihazlardan açabilmesini sağlar. Pencere kapatıldıktan sonra kod tekrar görüntülenemez.'
+        );
+
+        const credsBox = document.createElement('div');
+        credsBox.className = 'staff-credentials-box';
+
+        const refLine = document.createElement('p');
+        refLine.append(
+            createText(document, 'strong', '', 'Başvuru Referansı: '),
+            createText(document, 'code', 'credential-ref-code', modalState.referenceNumber)
+        );
+
+        const codeLine = document.createElement('p');
+        codeLine.append(
+            createText(document, 'strong', '', 'Yeni Erişim Kodu: '),
+            createText(document, 'code', 'credential-access-code', modalState.accessCode)
+        );
+
+        credsBox.append(refLine, codeLine);
+
+        const actions = document.createElement('div');
+        actions.className = 'staff-modal-actions';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'btn btn-secondary';
+        copyBtn.dataset.action = 'copy-new-access-code';
+        copyBtn.textContent = 'Kodu Kopyala';
+        copyBtn.addEventListener('click', async () => {
+            try {
+                if (document.defaultView?.navigator?.clipboard) {
+                    await document.defaultView.navigator.clipboard.writeText(modalState.accessCode);
+                }
+                copyBtn.textContent = 'Kopyalandı!';
+                setTimeout(() => { copyBtn.textContent = 'Kodu Kopyala'; }, 2000);
+            } catch {
+                // Clipboard fallback
+            }
+        });
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'btn btn-primary';
+        closeBtn.dataset.action = 'close-reset-code-modal';
+        closeBtn.textContent = 'Kapat';
+        closeBtn.addEventListener('click', handlers.onCloseResetCodeModal);
+
+        actions.append(copyBtn, closeBtn);
+        modal.append(title, notice, credsBox, actions);
+    }
+    return modal;
+}
+
 function renderDetail(root, state, handlers) {
     const document = root.ownerDocument;
     const panel = document.createElement('div');
@@ -477,6 +611,8 @@ function renderDetail(root, state, handlers) {
     }
     const previewPanel = createPreviewPanel(document, state.preview, handlers);
     if (previewPanel) panel.append(previewPanel);
+    const resetModal = createResetCodeModal(document, state.resetCodeModal, handlers);
+    if (resetModal) panel.append(resetModal);
     root.replaceChildren(panel);
 }
 
@@ -535,6 +671,9 @@ function createStaffApplicationsApi() {
                 target_status: targetStatus, expected_updated_at: updatedAt
             });
         },
+        resetAccessCode(applicationId) {
+            return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/reset-access-code`, {});
+        },
         notifications: createNotificationApi()
     };
 }
@@ -552,7 +691,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
         actionPending: null, actionError: null, resubmissionDocument: null,
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
-        archiveError: null, archiveMessage: null,
+        archiveError: null, archiveMessage: null, resetCodeModal: null,
         query: { q: '', status: 'all', page: 1, page_size: 25 }
     };
     let previewTimer = null;
@@ -573,6 +712,33 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onCancelResubmission: cancelResubmission,
             onRequestResubmission: requestResubmission,
             onTransition: transitionApplication,
+            onOpenResetCodeModal: () => {
+                state.resetCodeModal = { step: 'confirm' };
+                render();
+            },
+            onCloseResetCodeModal: () => {
+                state.resetCodeModal = null;
+                render();
+            },
+            onExecuteResetCode: async () => {
+                state.actionPending = 'reset-access-code';
+                state.actionError = null;
+                render();
+                try {
+                    const result = await api.resetAccessCode(state.detail.application.id);
+                    state.resetCodeModal = {
+                        step: 'success',
+                        referenceNumber: result.reference_number,
+                        accessCode: result.access_code
+                    };
+                } catch {
+                    state.resetCodeModal = null;
+                    state.actionError = 'Erişim kodu sıfırlanamadı. Lütfen tekrar deneyin.';
+                } finally {
+                    state.actionPending = null;
+                    render();
+                }
+            },
             createNotificationPanel: () => notificationManager.createPanel(document,
                 state.detail.application, render)
         });

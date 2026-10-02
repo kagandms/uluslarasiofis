@@ -17,6 +17,15 @@ export function createSessionRepository(database) {
                 VALUES (?, ?, ?, ?, ?)
             `).bind(id, applicationId, tokenHash, expiresAt, createdAt).run();
         },
+        async createApplicationSessionGuarded({ id, applicationId, tokenHash, expiresAt, createdAt, expectedAccessCodeVersion }) {
+            const result = await database.prepare(`
+                INSERT INTO application_sessions (id, application_id, token_hash, expires_at, created_at)
+                SELECT ?, ?, ?, ?, ?
+                FROM applications
+                WHERE id = ? AND access_code_version = ?
+            `).bind(id, applicationId, tokenHash, expiresAt, createdAt, applicationId, expectedAccessCodeVersion).run();
+            return (result?.meta?.changes ?? 0) > 0;
+        },
         async findApplicationSession(tokenHash, now) {
             return database.prepare(`
                 SELECT sessions.id AS session_id, sessions.expires_at,
@@ -40,6 +49,12 @@ export function createSessionRepository(database) {
                 UPDATE application_sessions SET revoked_at = ?
                 WHERE token_hash = ? AND revoked_at IS NULL
             `).bind(revokedAt, tokenHash).run();
+        },
+        async revokeAllApplicationSessions(applicationId, revokedAt) {
+            await database.prepare(`
+                UPDATE application_sessions SET revoked_at = ?
+                WHERE application_id = ? AND revoked_at IS NULL
+            `).bind(revokedAt, applicationId).run();
         },
         async findStaffSession(tokenHash, now, idleCutoff, touchCutoff) {
             await database.prepare(`

@@ -38,7 +38,36 @@ export async function readCurrentApplication() {
  */
 export async function createApplicationDraft(fields) {
     const payload = await requestJson('/api/public/applications', { method: 'POST', body: fields });
+    if (payload.application && (payload.reference_number || payload.access_code)) {
+        payload.application.access_credentials = {
+            reference_number: payload.reference_number,
+            access_code: payload.access_code
+        };
+    }
     return payload.application;
+}
+
+/**
+ * Accesses an existing application from another device using reference and secret code.
+ * @param {{reference_number: string, access_code: string}} credentials Access credentials.
+ * @returns {Promise<object>} Student-safe application object.
+ */
+export async function accessApplicationWithCode(credentials) {
+    const payload = await requestJson('/api/public/applications/access', {
+        method: 'POST',
+        body: credentials
+    });
+    return payload.application;
+}
+
+/**
+ * Regenerates the secret access code for the current authenticated application.
+ * @returns {Promise<{reference_number: string, access_code: string}>} New code.
+ */
+export async function regenerateCurrentAccessCode() {
+    return requestJson('/api/public/applications/current/regenerate-access-code', {
+        method: 'POST'
+    });
 }
 
 /**
