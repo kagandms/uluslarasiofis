@@ -21,6 +21,7 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="/src/index.css">
+    <link rel="stylesheet" href="/src/staff/archive.css">
 
     <!-- CDNs -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
@@ -103,6 +104,10 @@
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M8 9h8M8 13h8M8 17h5"></path></svg></span>
                         <span class="home-action-content"><strong>İkamet Başvuruları</strong><small>Başvuru kuyruğu ve belge durumları</small></span>
                     </button>
+                    <button type="button" class="home-action" data-workspace-view="archive" aria-controls="view-archive">
+                        <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="m9 10 3 3 3-3"></path><path d="M12 4v9"></path><path d="M7 17h10"></path></svg></span>
+                        <span class="home-action-content"><strong>Arşiv</strong><small>Tamamlanan, iptal edilen ve reddedilen başvurular</small></span>
+                    </button>
                     <button type="button" class="home-action" data-workspace-view="ykn" aria-controls="view-ykn">
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4h16v16"></path><path d="M8 8h8M8 12h8M8 16h5"></path></svg></span>
                         <span class="home-action-content"><strong>YKN</strong><small>Öğrenci sorgulama ve aktarım</small></span>
@@ -129,6 +134,7 @@
                 </div>
                 <nav class="workspace-nav" aria-label="Çalışma alanları">
                     <button type="button" data-workspace-view="applications" aria-controls="view-applications">İkamet Başvuruları</button>
+                    <button type="button" data-workspace-view="archive" aria-controls="view-archive">Arşiv</button>
                     <button type="button" data-workspace-view="ykn" aria-controls="view-ykn">YKN</button>
                     <button type="button" data-workspace-view="cover" aria-controls="view-cover">Kapak Hazırla</button>
                     <button type="button" data-workspace-view="teblig" aria-controls="view-teblig">Tebliğ Bul</button>
@@ -138,6 +144,11 @@
                 <section id="view-applications" class="view-panel" hidden aria-labelledby="applications-title">
                     <h3 id="applications-title" class="sr-only" tabindex="-1">İkamet Başvuruları</h3>
                     <div id="staff-applications-manager"></div>
+                </section>
+
+                <section id="view-archive" class="view-panel" hidden aria-labelledby="archive-title">
+                    <h3 id="archive-title" class="sr-only" tabindex="-1">Arşiv</h3>
+                    <div id="staff-archive-manager"></div>
                 </section>
 
                 <section id="view-ykn" class="view-panel" hidden aria-labelledby="ykn-title">

@@ -15,7 +15,9 @@ const APPLICATION_STATUS_FILTERS = Object.freeze({
     approved: Object.freeze(['approved_for_processing']),
     migration: Object.freeze(['sent_to_migration', 'migration_approved']),
     completed: Object.freeze(['completed']),
-    terminal: Object.freeze(['completed', 'cancelled', 'rejected'])
+    terminal: Object.freeze(['completed', 'cancelled', 'rejected']),
+    cancelled: Object.freeze(['cancelled']),
+    rejected: Object.freeze(['rejected'])
 });
 const MAX_PAGE_SIZE = 100;
 const MAX_SEARCH_LENGTH = 120;
