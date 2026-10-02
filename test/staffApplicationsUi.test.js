@@ -265,7 +265,7 @@ test('document preview is lazy, closable, expires safely, and downloads use appl
     assert.doesNotMatch(download.href, /private-file-id|file_id/);
     assert.equal(root.querySelectorAll('[data-action="preview-document"]').length, 2);
     assert.equal(root.querySelectorAll('[data-action="download-document"]').length, 2);
-    assert.match(root.textContent, /Belge güvenlik kontrolünden geçmedi/);
+    assert.match(root.textContent, /Belge güvenlik kontrolü bekleniyor\./);
     assert.doesNotMatch(root.innerHTML, /private-file-id|unavailable-file-id|X-Amz-Signature|private\.r2\.example/);
     const actionLabels = [...root.querySelectorAll('button, a')].map((element) => element.textContent.trim());
     assert.equal(actionLabels.includes('Onayla'), false);

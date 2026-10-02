@@ -2,11 +2,20 @@ import assert from 'node:assert/strict';
 import { BlobReader, ZipReader, Uint8ArrayWriter } from '@zip.js/zip.js';
 import { test } from 'node:test';
 import { downloadApplicationArchive, ARCHIVE_LIMITS } from '../src/staff/applicationArchive.js';
+import { readDocumentAccessMessage } from '../src/staff/documentAccessMessages.js';
 
 function createManifest(size = 5) {
     return { total_source_bytes: size, files: [{ code: 'passport', expected_revision_number: 4,
         object_identity: 'a'.repeat(64), media_type: 'application/pdf', byte_size: size, entry_name: '01-passport.pdf' }] };
 }
+
+test('document access explanations distinguish pending, unsafe, failed and other access gates', () => {
+    assert.equal(readDocumentAccessMessage({ scan_status: 'pending' }), 'Belge güvenlik kontrolü bekleniyor.');
+    assert.equal(readDocumentAccessMessage({ scan_status: 'unsafe' }), 'Belge güvenli bulunmadı ve erişime kapatıldı.');
+    assert.equal(readDocumentAccessMessage({ scan_status: 'failed' }), 'Belge güvenlik kontrolü tamamlanamadı.');
+    assert.equal(readDocumentAccessMessage({ scan_status: 'clean', cleanup_status: 'pending' }), 'Belge güvenli erişime uygun değil.');
+    assert.equal(readDocumentAccessMessage({ scan_status: null }), 'Belge güvenli erişime uygun değil.');
+});
 
 test('fallback archive is a valid STORE zip with stable code names and no source filenames', async () => {
     const downloads = [];
@@ -43,24 +52,50 @@ test('fallback refuses totals above its limit before requesting file bytes', asy
     assert.equal(requested, false);
 });
 
-test('streaming picker is invoked during the click path and accepts the larger stream limit', async () => {
-    const chunks = [];
+test('streaming picker saves a real source above the Blob limit without accumulating source bytes', async () => {
     const order = [];
-    const writable = new WritableStream({ write(chunk) { chunks.push(chunk); } });
+    let closed = false;
+    let consumed = 0;
+    const sourceSize = ARCHIVE_LIMITS.blobBytes + 1024 * 1024;
+    const chunkSize = 256 * 1024;
+    const writable = new WritableStream({ write() {}, close() { closed = true; } });
     const window = { isSecureContext: true, showSaveFilePicker() {
         order.push('picker');
         return Promise.resolve({ async createWritable() { return writable; } });
     } };
-    const manifest = createManifest(ARCHIVE_LIMITS.blobBytes + 1);
-    manifest.files[0].byte_size = 0;
-    manifest.total_source_bytes = 0;
-    manifest.files[0].entry_name = '01-passport.pdf';
+    const manifest = createManifest(sourceSize);
+    const response = new Response(new ReadableStream({
+        pull(controller) {
+            if (consumed >= sourceSize) {
+                controller.close();
+                return;
+            }
+            const nextSize = Math.min(chunkSize, sourceSize - consumed);
+            consumed += nextSize;
+            controller.enqueue(new Uint8Array(nextSize));
+        }
+    }));
     await downloadApplicationArchive({ applicationId: 'app-1', window,
         async getManifest() { order.push('manifest'); return manifest; },
-        async fetchFile() { return new Response(new Uint8Array()); } });
+        async fetchFile() { return response; } });
 
     assert.deepEqual(order, ['picker', 'manifest']);
-    assert.ok(chunks.length > 0);
+    assert.equal(consumed, sourceSize);
+    assert.equal(closed, true);
+    assert.ok(sourceSize > ARCHIVE_LIMITS.blobBytes);
+});
+
+test('streaming mode rejects a manifest above its source limit before requesting file bytes', async () => {
+    let requested = false;
+    let createdWritable = false;
+    const window = { isSecureContext: true, showSaveFilePicker: async () => ({
+        async createWritable() { createdWritable = true; return new WritableStream(); }
+    }) };
+    await assert.rejects(downloadApplicationArchive({ applicationId: 'app-1', window,
+        manifest: createManifest(ARCHIVE_LIMITS.streamedBytes + 1),
+        fetchFile: async () => { requested = true; return new Response(); } }), /tek tek/i);
+    assert.equal(requested, false);
+    assert.equal(createdWritable, false);
 });
 
 test('streaming failure aborts the file save and never reports success', async () => {
@@ -72,6 +107,37 @@ test('streaming failure aborts the file save and never reports success', async (
         fetchFile: async () => new Response(new Uint8Array([1])) }));
     assert.equal(aborted, true);
     assert.equal(saved, false);
+});
+
+test('streaming mode treats writable close failure as failure and never reports success', async () => {
+    let closeAttempted = false;
+    const writable = new WritableStream({
+        write() {},
+        close() { closeAttempted = true; throw new Error('disk close failed'); }
+    });
+    const window = { isSecureContext: true, showSaveFilePicker: async () => ({ async createWritable() { return writable; } }) };
+    await assert.rejects(downloadApplicationArchive({ applicationId: 'app-1', window, manifest: createManifest(),
+        fetchFile: async () => new Response(new Uint8Array([1, 2, 3, 4, 5])) }), /close failed/i);
+    assert.equal(closeAttempted, true);
+});
+
+test('streaming mode rejects excess source bytes before closing or saving the ZIP', async () => {
+    let closed = false;
+    let aborted = false;
+    const writable = new WritableStream({ write() {}, close() { closed = true; }, abort() { aborted = true; } });
+    const window = { isSecureContext: true, showSaveFilePicker: async () => ({ async createWritable() { return writable; } }) };
+    await assert.rejects(downloadApplicationArchive({ applicationId: 'app-1', window, manifest: createManifest(4),
+        fetchFile: async () => new Response(new Uint8Array([1, 2, 3, 4, 5])) }), /sınırı aştı/i);
+    assert.equal(closed, false);
+    assert.equal(aborted, true);
+});
+
+test('an empty current-document manifest reports that no secure current files are available', async () => {
+    let requested = false;
+    const window = { document: { createElement() { throw new Error('unexpected download'); } } };
+    await assert.rejects(downloadApplicationArchive({ applicationId: 'app-1', window,
+        manifest: { total_source_bytes: 0, files: [] }, fetchFile: async () => { requested = true; } }), /güvenli güncel belge bulunamadı/i);
+    assert.equal(requested, false);
 });
 
 test('user cancellation at the file picker requests no manifest and creates no archive', async () => {

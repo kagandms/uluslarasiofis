@@ -298,8 +298,7 @@ test('stale late requests do not overwrite newer search results', async (context
     resolvers[1].resolve(createQueuePayload([CANCELLED_ITEM]));
     await new Promise((resolve) => setImmediate(resolve));
     assert.match(archiveRoot.textContent, /STU-002/);
-    assert.match(archiveRoot.textContent, /Murat Çelik/);
-    assert.doesNotMatch(archiveRoot.textContent, /Zeynep Demir/);
+    assert.doesNotMatch(archiveRoot.textContent, /STU-001/);
 
     // Slow first request finally finishes later with older data
     resolvers[0].resolve(createQueuePayload([COMPLETED_ITEM]));
@@ -307,8 +306,253 @@ test('stale late requests do not overwrite newer search results', async (context
 
     // The newer result must NOT be overwritten by the stale result
     assert.match(archiveRoot.textContent, /STU-002/);
-    assert.match(archiveRoot.textContent, /Murat Çelik/);
-    assert.doesNotMatch(archiveRoot.textContent, /Zeynep Demir/);
+    assert.doesNotMatch(archiveRoot.textContent, /STU-001/);
+});
+
+test('late detail responses cannot replace the current archive view or another application', async (context) => {
+    const { document, archiveRoot } = createStaffDom();
+    installDocument(context, document);
+    const detailResolvers = [];
+    const api = {
+        async queryApplications() { return createQueuePayload([COMPLETED_ITEM, CANCELLED_ITEM]); },
+        readApplicationDetail(applicationId) {
+            return new Promise((resolve) => detailResolvers.push({ applicationId, resolve }));
+        }
+    };
+
+    initWorkspaceNavigation();
+    initializeStaffArchiveManager(archiveRoot, api);
+    document.querySelector('.home-actions [data-workspace-view="archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    archiveRoot.querySelector('[data-action="open-detail"]').click();
+    archiveRoot.querySelector('[data-action="back-to-queue"]').click();
+    assert.ok(archiveRoot.querySelector('[data-action="open-detail"]'));
+    detailResolvers[0].resolve({ application: COMPLETED_ITEM, documents: [] });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(archiveRoot.querySelector('[data-action="open-detail"]'), 'late detail must not replace the queue');
+
+    archiveRoot.querySelectorAll('[data-action="open-detail"]')[0].click();
+    archiveRoot.querySelector('[data-action="back-to-queue"]').click();
+    archiveRoot.querySelectorAll('[data-action="open-detail"]')[1].click();
+    detailResolvers[2].resolve({ application: CANCELLED_ITEM, documents: [] });
+    await new Promise((resolve) => setImmediate(resolve));
+    detailResolvers[1].resolve({ application: COMPLETED_ITEM, documents: [] });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.match(archiveRoot.textContent, /STU-002/);
+    assert.doesNotMatch(archiveRoot.textContent, /STU-001/);
+});
+
+test('late query and preview responses cannot update an exited or newly queried workspace', async (context) => {
+    const { document, archiveRoot } = createStaffDom();
+    installDocument(context, document);
+    let releaseQueue;
+    let releasePreview;
+    const queries = [];
+    const api = {
+        queryApplications(query) {
+            queries.push(query);
+            if (!releaseQueue) return new Promise((resolve) => { releaseQueue = resolve; });
+            return Promise.resolve(createQueuePayload([COMPLETED_ITEM]));
+        },
+        async readApplicationDetail() {
+            return { application: COMPLETED_ITEM, documents: [{
+                code: 'passport', label_key: 'documentPassport', revision_number: 1,
+                review_status: 'pending', revision_status: 'submitted', upload_status: 'finalized',
+                scan_status: 'clean', cleanup_status: 'none', filename: 'passport.pdf', access_available: true
+            }] };
+        },
+        createPreviewCapability() { return new Promise((resolve) => { releasePreview = resolve; }); }
+    };
+
+    initWorkspaceNavigation();
+    initializeStaffArchiveManager(archiveRoot, api);
+    document.querySelector('.home-actions [data-workspace-view="archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    document.querySelector('.workspace-nav [data-workspace-view="applications"]').click();
+    releaseQueue(createQueuePayload([COMPLETED_ITEM]));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.doesNotMatch(archiveRoot.textContent, /STU-001/);
+
+    document.querySelector('.workspace-nav [data-workspace-view="archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="preview-document"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="back-to-queue"]').click();
+    const search = archiveRoot.querySelector('[name="q"]');
+    search.value = 'latest';
+    archiveRoot.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    releasePreview({
+        method: 'GET', url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?fixture=synthetic',
+        expires_at: new Date(Date.now() + 60_000).toISOString(), media_type: 'application/pdf', filename: 'passport.pdf'
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(archiveRoot.querySelector('#staff-document-preview'), null);
+    assert.equal(queries.at(-1).q, 'latest');
+});
+
+test('late detail and preview responses are discarded when leaving the archive workspace', async (context) => {
+    const { document, archiveRoot } = createStaffDom();
+    installDocument(context, document);
+    let releaseFirstDetail;
+    let releasePreview;
+    let detailCalls = 0;
+    const detail = { application: COMPLETED_ITEM, documents: [{
+        code: 'passport', label_key: 'documentPassport', revision_number: 1,
+        review_status: 'pending', revision_status: 'submitted', upload_status: 'finalized',
+        scan_status: 'clean', cleanup_status: 'none', filename: 'passport.pdf', access_available: true
+    }] };
+    const api = {
+        async queryApplications() { return createQueuePayload([COMPLETED_ITEM]); },
+        readApplicationDetail() {
+            detailCalls += 1;
+            if (detailCalls === 1) return new Promise((resolve) => { releaseFirstDetail = resolve; });
+            return Promise.resolve(detail);
+        },
+        createPreviewCapability() { return new Promise((resolve) => { releasePreview = resolve; }); }
+    };
+
+    initWorkspaceNavigation();
+    initializeStaffArchiveManager(archiveRoot, api);
+    document.querySelector('.home-actions [data-workspace-view="archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="open-detail"]').click();
+    document.querySelector('.workspace-nav [data-workspace-view="applications"]').click();
+    releaseFirstDetail(detail);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(archiveRoot.querySelector('[data-action="open-detail"]'));
+    assert.equal(archiveRoot.querySelector('.staff-archive-summary'), null);
+
+    document.querySelector('.workspace-nav [data-workspace-view="archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="preview-document"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    document.querySelector('.workspace-nav [data-workspace-view="applications"]').click();
+    releasePreview({
+        method: 'GET', url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?fixture=synthetic',
+        expires_at: new Date(Date.now() + 60_000).toISOString(), media_type: 'application/pdf', filename: 'passport.pdf'
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(archiveRoot.querySelector('#staff-document-preview'), null);
+    assert.ok(archiveRoot.querySelector('[data-action="open-detail"]'));
+    assert.equal(archiveRoot.querySelector('.staff-archive-summary'), null);
+});
+
+test('archive queue and detail expose one read-only ZIP action using the selected application id', async (context) => {
+    const { document, archiveRoot } = createStaffDom();
+    installDocument(context, document);
+    const manifestRequests = [];
+    const order = [];
+    document.defaultView.showSaveFilePicker = () => {
+        order.push('picker');
+        return Promise.resolve({ async createWritable() { return new WritableStream(); } });
+    };
+    const api = {
+        async queryApplications() { return createQueuePayload([COMPLETED_ITEM]); },
+        async readApplicationDetail() { order.push('detail'); return { application: COMPLETED_ITEM, documents: [] }; },
+        async createArchiveManifest(applicationId) {
+            order.push('manifest');
+            manifestRequests.push(applicationId);
+            return { total_source_bytes: 0, files: [] };
+        },
+        async readArchiveFile() { throw new Error('not used for empty manifest'); }
+    };
+
+    initWorkspaceNavigation();
+    initializeStaffArchiveManager(archiveRoot, api);
+    document.querySelector('.home-actions [data-workspace-view="archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    const queueZip = archiveRoot.querySelector('[data-action="download-application-archive"]');
+    assert.ok(queueZip, 'queue row must offer ZIP download');
+    assert.equal(queueZip.textContent, 'Belgeleri ZIP indir');
+    queueZip.click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(manifestRequests, [COMPLETED_ITEM.id]);
+    assert.deepEqual(order, ['picker', 'detail', 'manifest'], 'save picker must open synchronously in the click path');
+    assert.match(archiveRoot.textContent, /güvenli güncel belge bulunamadı/i);
+
+    archiveRoot.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    const detailZip = archiveRoot.querySelector('[data-action="download-application-archive"]');
+    assert.ok(detailZip, 'terminal detail must offer ZIP download');
+    detailZip.click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(manifestRequests, [COMPLETED_ITEM.id, COMPLETED_ITEM.id]);
+    assert.deepEqual(order, ['picker', 'detail', 'manifest', 'detail', 'picker', 'manifest']);
+    assert.match(archiveRoot.textContent, /güvenli güncel belge bulunamadı/i);
+    assert.equal(archiveRoot.querySelector('[data-action="application-status-transition"]'), null);
+    assert.equal(archiveRoot.querySelector('[data-action="approve-document"]'), null);
+});
+
+test('archive ZIP actions from queue and detail cancel the correct application stream', async (context) => {
+    const { document, archiveRoot } = createStaffDom();
+    installDocument(context, document);
+    const applicationIds = [];
+    let abortCount = 0;
+    const manifest = { total_source_bytes: 5, files: [{ code: 'passport', expected_revision_number: 1,
+        object_identity: 'a'.repeat(64), media_type: 'application/pdf', byte_size: 5, entry_name: '01-passport.pdf' }] };
+    const api = {
+        async queryApplications() { return createQueuePayload([COMPLETED_ITEM]); },
+        async readApplicationDetail() { return { application: COMPLETED_ITEM, documents: [] }; },
+        async createArchiveManifest(applicationId) { applicationIds.push(applicationId); return manifest; },
+        readArchiveFile(applicationId, _file, signal) {
+            applicationIds.push(applicationId);
+            return new Promise((_resolve, reject) => signal.addEventListener('abort', () => {
+                abortCount += 1;
+                reject(new DOMException('Canceled', 'AbortError'));
+            }, { once: true }));
+        }
+    };
+
+    initWorkspaceNavigation();
+    initializeStaffArchiveManager(archiveRoot, api);
+    document.querySelector('.home-actions [data-workspace-view="archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="download-application-archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    const queueCancel = archiveRoot.querySelector('[data-action="download-application-archive"]');
+    assert.equal(queueCancel.textContent, 'ZIP’i iptal et');
+    queueCancel.click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.match(archiveRoot.textContent, /eksik arşiv sunulmadı/);
+
+    archiveRoot.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="download-application-archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="download-application-archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(applicationIds, [COMPLETED_ITEM.id, COMPLETED_ITEM.id, COMPLETED_ITEM.id, COMPLETED_ITEM.id]);
+    assert.equal(abortCount, 2);
+    assert.match(archiveRoot.textContent, /eksik arşiv sunulmadı/);
+});
+
+test('archive ZIP reports pending safety review clearly without requesting or skipping documents', async (context) => {
+    const { document, archiveRoot } = createStaffDom();
+    installDocument(context, document);
+    let manifestRequested = false;
+    const api = {
+        async queryApplications() { return createQueuePayload([COMPLETED_ITEM]); },
+        async readApplicationDetail() { return { application: COMPLETED_ITEM, documents: [{
+            code: 'passport', revision_number: 1, scan_status: 'pending', access_available: false
+        }] }; },
+        async createArchiveManifest() { manifestRequested = true; return { total_source_bytes: 0, files: [] }; },
+        async readArchiveFile() { throw new Error('must not download a pending document'); }
+    };
+
+    initWorkspaceNavigation();
+    initializeStaffArchiveManager(archiveRoot, api);
+    document.querySelector('.home-actions [data-workspace-view="archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    archiveRoot.querySelector('[data-action="download-application-archive"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.match(archiveRoot.textContent, /Belge güvenlik kontrolü bekleniyor\./);
+    assert.equal(manifestRequested, false);
 });
 
 test('user fields and search input render safely as text and never execute HTML/XSS or leak into URL/localStorage/console', async (context) => {
@@ -551,7 +795,7 @@ test('archive application detail is strictly read-only with no approval, resubmi
     assert.equal(new URL(downloadLink.href).pathname, '/api/staff/applications/app-completed-001/documents/passport/download');
 
     // Inaccessible document shows explanation and NO access controls
-    assert.match(archiveRoot.textContent, /Belge güvenlik kontrolünden geçmedi/);
+    assert.match(archiveRoot.textContent, /Belge güvenlik kontrolü bekleniyor\./);
 
     // Document preview modal test
     archiveRoot.querySelector('[data-action="preview-document"]').click();
@@ -561,7 +805,7 @@ test('archive application detail is strictly read-only with no approval, resubmi
 
     releasePreview({
         method: 'GET',
-        url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?sig=abc',
+        url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?fixture=synthetic',
         expires_at: new Date(Date.now() + 60_000).toISOString(),
         media_type: 'application/pdf',
         filename: 'passport.pdf'

@@ -51,6 +51,7 @@
   - Yalnızca `access_available: true` olan belgeler için mevcut yetkili uç noktaları (`preview` capability ve `/download`) üzerinden önizleme ve indirme sunulur.
   - `pending`, `unsafe` veya temizlik aşamasındaki belgeler için açıklayıcı durum metni gösterilir; indirme veya önizleme linki sunulmaz.
   - R2 object key, secret, kalıcı erişim URL'si veya public bucket erişimi oluşturulmaz; önizleme yetenekleri doğrulanır (`validatePreviewCapability`) ve sandboxed iframe / img içinde referrer sızdırmadan gösterilir.
+- **Tarama ve Personel İncelemesi Ayrıdır:** Belge ZIP/önizleme/indirmeye ancak mevcut erişim politikası izin veriyorsa girer: uygulanabilir güncel revizyon, kabul edilen yükleme ve revizyon durumu, finalized upload, `clean` tarama, tamamlanmış upload intent, temizleme engeli olmaması ve doğrulanmış private R2 nesnesi. Bu kurallar `review_status = approved` şartı değildir. Temiz tarama personel inceleme onayı anlamına gelmez; `submitted`, `approved` ve `resubmission_required` revizyon durumları için erişim politikası kendi koşullarıyla uygulanır.
 - **XSS ve Gizlilik Koruması:**
   - Tüm öğrenci alanları `textContent` / `createText` ile render edilir; HTML injection engellenmiştir.
   - Arama metni ve öğrenci kişisel bilgileri URL'ye, `console`'a veya `localStorage`'a yazılmaz.
@@ -111,18 +112,17 @@
 
 ---
 
-## 7. Codex ZIP Çalışmasıyla Sonraki Entegrasyon İhtiyaçları
+## 7. ZIP Entegrasyonu
 
-1. **ZIP İndirme Aksiyonunun Arşiv Detayına Eklenmesi:**
-   Codex'in geliştirdiği başvuru belgeleri ZIP indirme modülü tamamlandığında, arşiv detay ekranındaki belge listesi üzerine "Tüm Belgeleri ZIP Olarak İndir" butonu eklenecektir.
-2. **ZIP Erişim Yetkisi ve Güvenlik:**
-   Arşivdeki ZIP indirme aksiyonu da aynı şekilde yalnızca güvenli/temizlenmiş belgeleri kapsayacak ve salt okunur personel yetkisiyle sınırlı kalacaktır.
-3. **Dal Birleştirme:**
-   `antigravity/phase8i-archive-workspace` ile `codex/phase8i-current-documents-zip` dalları tamamlandıktan sonra entegrasyon dalında birleştirilip uçtan uca UAT yapılacaktır.
+- Arşiv satırındaki ve salt okunur terminal başvuru detayındaki **Belgeleri ZIP indir** aksiyonu mevcut `src/staff/applicationArchive.js` modülünü kullanır.
+- ZIP, yalnızca backend manifestinin döndürdüğü tüm geçerli güncel belgeleri kapsar. Güvenlik, revizyon, upload-intent, cleanup veya nesne doğrulamasından biri geçmezse işlem kesilir; güvensiz/eksik dosyalar atlanıp tam arşivmiş gibi sunulmaz.
+- Arşivde ZIP için başvuru/belge durumunu değiştiren bir API veya kontrol yoktur. Ayrıntı görünümü terminal başvuru durumları için salt okunur kalır.
+- Belge tarama durumu ve personel inceleme kararı farklı alanlardır; ZIP için ayrıca `review_status = approved` şartı getirilmemiştir.
+- Dal birleştirme ve yerel kontrollerin ayrıntıları [entegrasyon raporunda](phase8i-integration.md) tutulur. Canlı scanner UAT’si ertelenmiş durumdadır.
 
 ---
 
 ## 8. Teslimat Durumu
 
-- Çalışmalar `antigravity/phase8i-archive-workspace` dalına commit ve push edilecektir.
-- Phase 8H veya projenin bütünü canlıya hazır olarak ilan edilmemiştir.
+- Arşiv alanı ve ZIP entegrasyonu ayrı `codex/phase8i-zip-archive-integration` dalında birleştirilmiştir.
+- Phase 8H tam kabulü veya projenin bütünü canlıya hazır olarak ilan edilmemiştir.

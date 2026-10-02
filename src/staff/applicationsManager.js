@@ -1,5 +1,6 @@
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive } from './applicationArchive.js';
+import { readDocumentAccessMessage } from './documentAccessMessages.js';
 
 const STATUS_LABELS = Object.freeze({
     submitted: 'Gönderildi', under_review: 'İncelemede', resubmission_required: 'Yeniden yükleme gerekli',
@@ -277,11 +278,7 @@ function createDocumentAccessActions(document, applicationId, item, handlers, is
 }
 
 function createUnavailableDocumentState(document, item) {
-    const state = createText(document, 'p', 'staff-application-document-unavailable', 'Belge güvenli erişime uygun değil.');
-    if (!item.upload_status) state.textContent = 'Belge henüz yüklenmedi.';
-    else if (item.scan_status && item.scan_status !== 'clean') state.textContent = 'Belge güvenlik kontrolünden geçmedi.';
-    else if (item.cleanup_status === 'pending') state.textContent = 'Belge temizleme işlemi nedeniyle erişilemiyor.';
-    return state;
+    return createText(document, 'p', 'staff-application-document-unavailable', readDocumentAccessMessage(item));
 }
 
 function createResubmissionForm(document, item, state, handlers) {

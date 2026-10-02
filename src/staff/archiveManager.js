@@ -1,4 +1,6 @@
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
+import { downloadApplicationArchive } from './applicationArchive.js';
+import { readDocumentAccessMessage } from './documentAccessMessages.js';
 
 const STATUS_LABELS = Object.freeze({
     completed: 'Tamamlandı',
@@ -91,7 +93,19 @@ function createSearchForm(document, state, onSubmit) {
     return form;
 }
 
-function createQueueTable(document, items, onOpenDetail) {
+function createArchiveButton(document, state, applicationId, onDownload) {
+    const button = document.createElement('button');
+    const isActive = state.archiveApplicationId === applicationId;
+    button.type = 'button';
+    button.className = 'btn btn-outline';
+    button.dataset.action = 'download-application-archive';
+    button.textContent = isActive ? 'ZIP’i iptal et' : 'Belgeleri ZIP indir';
+    button.setAttribute('aria-label', isActive ? 'ZIP indirmeyi iptal et' : 'Belgeleri ZIP indir');
+    button.addEventListener('click', () => onDownload(applicationId));
+    return button;
+}
+
+function createQueueTable(document, items, state, handlers) {
     const table = document.createElement('table');
     table.className = 'staff-archive-table';
     const headers = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
@@ -122,8 +136,8 @@ function createQueueTable(document, items, onOpenDetail) {
         action.className = 'btn btn-outline';
         action.dataset.action = 'open-detail';
         action.textContent = 'Detay';
-        action.addEventListener('click', () => onOpenDetail(item.id));
-        actionCell.append(action);
+        action.addEventListener('click', () => handlers.onOpenDetail(item.id));
+        actionCell.append(action, createArchiveButton(document, state, item.id, handlers.onDownloadArchive));
         row.append(actionCell);
         body.append(row);
     });
@@ -187,9 +201,10 @@ function renderQueue(root, state, handlers) {
     } else if (state.result?.items.length === 0) {
         panel.append(createText(document, 'p', 'staff-archive-state', 'Görüntülenecek arşiv kaydı bulunamadı.'));
     } else if (state.result) {
-        panel.append(createQueueTable(document, state.result.items, handlers.onOpenDetail));
+        panel.append(createQueueTable(document, state.result.items, state, handlers));
         panel.append(createPagination(document, state.result.pagination, handlers.onPageChange));
     }
+    if (state.archiveNotice) panel.append(createText(document, 'p', 'staff-archive-state', state.archiveNotice));
     root.replaceChildren(panel);
 }
 
@@ -246,11 +261,7 @@ function createDocumentAccessActions(document, applicationId, item, handlers, is
 }
 
 function createUnavailableDocumentState(document, item) {
-    const state = createText(document, 'p', 'staff-archive-document-unavailable', 'Belge güvenli erişime uygun değil.');
-    if (!item.upload_status) state.textContent = 'Belge henüz yüklenmedi.';
-    else if (item.scan_status && item.scan_status !== 'clean') state.textContent = 'Belge güvenlik kontrolünden geçmedi.';
-    else if (item.cleanup_status === 'pending') state.textContent = 'Belge temizleme işlemi nedeniyle erişilemiyor.';
-    return state;
+    return createText(document, 'p', 'staff-archive-document-unavailable', readDocumentAccessMessage(item));
 }
 
 function createDocumentSection(document, applicationId, documents, state, handlers) {
@@ -363,11 +374,15 @@ function renderDetail(root, state, handlers) {
             : 'Başvuru ayrıntıları yüklenemedi. Lütfen tekrar deneyin.';
         panel.append(createText(document, 'p', 'staff-archive-state', message));
     } else if (state.detail) {
+        if (['completed', 'cancelled', 'rejected'].includes(state.detail.application.status)) {
+            panel.append(createArchiveButton(document, state, state.detail.application.id, handlers.onDownloadArchive));
+        }
         panel.append(
             createApplicationSummary(document, state.detail.application),
             createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers)
         );
     }
+    if (state.archiveNotice) panel.append(createText(document, 'p', 'staff-archive-state', state.archiveNotice));
     const previewPanel = createPreviewPanel(document, state.preview, handlers);
     if (previewPanel) panel.append(previewPanel);
     root.replaceChildren(panel);
@@ -393,11 +408,21 @@ function createStaffArchiveApi() {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(query)
             });
         },
-        readApplicationDetail(applicationId) {
-            return request(`/api/staff/applications/${encodeURIComponent(applicationId)}`);
+        readApplicationDetail(applicationId, signal) {
+            return request(`/api/staff/applications/${encodeURIComponent(applicationId)}`, { signal });
         },
         createPreviewCapability(applicationId, code) {
             return request(APPLICATION_DOCUMENT_ROUTE(applicationId, code, 'preview'), { method: 'POST' });
+        },
+        createArchiveManifest(applicationId, signal) {
+            return request(`/api/staff/applications/${encodeURIComponent(applicationId)}/documents/archive-manifest`, {
+                method: 'POST', signal
+            });
+        },
+        readArchiveFile(applicationId, file, signal) {
+            const route = APPLICATION_DOCUMENT_ROUTE(applicationId, file.code, 'archive-file');
+            const query = new URLSearchParams({ revision: String(file.expected_revision_number), identity: file.object_identity });
+            return fetch(`${route}?${query}`, { credentials: 'same-origin', signal });
         }
     };
 }
@@ -412,9 +437,13 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
     const document = root.ownerDocument;
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
-        preview: null, result: null, query: { q: '', status: 'terminal', page: 1, page_size: 25 }
+        preview: null, result: null, archiveApplicationId: null, archiveNotice: null,
+        query: { q: '', status: 'terminal', page: 1, page_size: 25 }
     };
     let queryRequestId = 0;
+    let detailRequestId = 0;
+    let archiveRequestId = 0;
+    let archiveController = null;
     let previewTimer = null;
     let previewRequestId = 0;
     let previewTriggerCode = null;
@@ -430,11 +459,13 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
                 onBack: returnToQueue,
                 onPreview: openPreview,
                 onClose: closePreview,
-                onRetry: () => openPreview(state.preview?.document)
+                onRetry: () => openPreview(state.preview?.document),
+                onDownloadArchive: downloadArchive
             });
         } else {
             renderQueue(root, state, {
-                onSearch: submitSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail
+                onSearch: submitSearch, onRetry: loadQueue, onPageChange: changePage,
+                onOpenDetail: openDetail, onDownloadArchive: downloadArchive
             });
         }
     };
@@ -444,6 +475,70 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         clearPreviewTimer();
         state.preview = null;
         previewTriggerCode = null;
+    }
+
+    function cancelArchive(showNotice = false) {
+        if (!archiveController) return;
+        archiveRequestId += 1;
+        archiveController.abort();
+        archiveController = null;
+        state.archiveApplicationId = null;
+        state.archiveNotice = showNotice ? 'ZIP indirme iptal edildi; eksik arşiv sunulmadı.' : null;
+    }
+
+    async function readArchiveManifest(applicationId, signal) {
+        const detail = state.detail?.application.id === applicationId
+            ? state.detail
+            : await api.readApplicationDetail(applicationId, signal);
+        if (signal.aborted) throw new DOMException('Canceled', 'AbortError');
+        const blockedDocument = detail.documents.find((item) => item.revision_number
+            && ['pending', 'unsafe', 'failed'].includes(item.scan_status));
+        if (blockedDocument) {
+            const code = `DOCUMENT_SCAN_${blockedDocument.scan_status.toUpperCase()}`;
+            throw Object.assign(new Error(readDocumentAccessMessage(blockedDocument)), { code });
+        }
+        return api.createArchiveManifest(applicationId, signal);
+    }
+
+    function readArchiveFailureMessage(error) {
+        if (error?.name === 'AbortError') return 'ZIP indirme iptal edildi; eksik arşiv sunulmadı.';
+        if (error?.code === 'DOCUMENT_SCAN_PENDING') return 'Belge güvenlik kontrolü bekleniyor.';
+        if (error?.code === 'DOCUMENT_SCAN_UNSAFE') return 'Belge güvenli bulunmadı ve erişime kapatıldı.';
+        if (error?.code === 'DOCUMENT_SCAN_FAILED') return 'Belge güvenlik kontrolü tamamlanamadı.';
+        if (error instanceof Error && /Belge|ZIP/i.test(error.message)) return error.message;
+        return 'ZIP hazırlanamadı. Belgeleri tek tek indirebilirsiniz.';
+    }
+
+    async function downloadArchive(applicationId) {
+        if (state.archiveApplicationId === applicationId) {
+            cancelArchive(true);
+            render();
+            return;
+        }
+        if (archiveController) return;
+        const requestId = ++archiveRequestId;
+        const controller = new AbortController();
+        archiveController = controller;
+        state.archiveApplicationId = applicationId;
+        state.archiveNotice = null;
+        render();
+        try {
+            await downloadApplicationArchive({
+                applicationId, window: document.defaultView, signal: controller.signal,
+                getManifest: (signal) => readArchiveManifest(applicationId, signal),
+                fetchFile: (id, file, signal) => api.readArchiveFile(id, file, signal)
+            });
+            if (requestId === archiveRequestId) state.archiveNotice = 'ZIP indirme tamamlandı.';
+        } catch (error) {
+            if (requestId !== archiveRequestId) return;
+            state.archiveNotice = readArchiveFailureMessage(error);
+        } finally {
+            if (requestId === archiveRequestId) {
+                archiveController = null;
+                state.archiveApplicationId = null;
+                render();
+            }
+        }
     }
 
     function closePreview() {
@@ -456,7 +551,19 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
 
     function closePreviewOnWorkspaceExit() {
         discardPreview();
+        state.view = 'queue';
+        state.detail = null;
+        state.archiveNotice = null;
+        state.loading = false;
+        state.error = false;
         render();
+    }
+
+    function leaveWorkspace() {
+        queryRequestId += 1;
+        detailRequestId += 1;
+        cancelArchive();
+        closePreviewOnWorkspaceExit();
     }
 
     async function openPreview(documentItem) {
@@ -522,35 +629,53 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
     }
 
     async function submitSearch({ q, status }) {
+        cancelArchive();
+        detailRequestId += 1;
+        discardPreview();
         state.query = { ...state.query, q, status, page: 1 };
         await loadQueue();
     }
 
     async function changePage(page) {
+        cancelArchive();
+        detailRequestId += 1;
+        discardPreview();
         state.query = { ...state.query, page };
         await loadQueue();
     }
 
     async function openDetail(applicationId) {
+        cancelArchive();
+        queryRequestId += 1;
+        const requestId = ++detailRequestId;
         discardPreview();
+        state.archiveNotice = null;
         state.view = 'detail';
         state.loading = true;
         state.error = false;
         state.detail = null;
         render();
         try {
-            state.detail = await api.readApplicationDetail(applicationId);
+            const detail = await api.readApplicationDetail(applicationId);
+            if (requestId !== detailRequestId || state.view !== 'detail') return;
+            state.detail = detail;
         } catch (error) {
+            if (requestId !== detailRequestId || state.view !== 'detail') return;
             state.error = true;
             state.errorStatus = error?.status ?? null;
         }
+        if (requestId !== detailRequestId || state.view !== 'detail') return;
         state.loading = false;
         render();
     }
 
     function returnToQueue() {
+        detailRequestId += 1;
+        cancelArchive();
         discardPreview();
         state.view = 'queue';
+        state.detail = null;
+        state.archiveNotice = null;
         state.error = false;
         state.loading = false;
         render();
@@ -558,14 +683,16 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
 
     document.addEventListener('workspace:view-changed', (event) => {
         if (event.detail?.viewName !== 'archive') {
-            closePreviewOnWorkspaceExit();
+            leaveWorkspace();
             return;
         }
+        detailRequestId += 1;
+        cancelArchive();
         discardPreview();
         state.view = 'queue';
         void loadQueue();
     });
-    document.getElementById('btn-workspace-home')?.addEventListener('click', closePreviewOnWorkspaceExit);
-    document.getElementById('btn-go-home-global')?.addEventListener('click', closePreviewOnWorkspaceExit);
+    document.getElementById('btn-workspace-home')?.addEventListener('click', leaveWorkspace);
+    document.getElementById('btn-go-home-global')?.addEventListener('click', leaveWorkspace);
     render();
 }
