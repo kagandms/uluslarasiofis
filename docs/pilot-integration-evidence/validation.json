@@ -1,0 +1,49 @@
+{
+  "node": {
+    "exit_code": 0,
+    "total": 517,
+    "pass": 516,
+    "fail": 0,
+    "skip": 1,
+    "duration_ms": 18452.5365
+  },
+  "python": {
+    "exit_code": 0,
+    "pass": 13,
+    "fail": 0
+  },
+  "real_clamav": {
+    "exit_code": 0,
+    "pass": 1,
+    "skip": 0,
+    "duration_ms": 59157.309583
+  },
+  "native_acceptance": {
+    "exit_code": 0,
+    "status": "PASS",
+    "native_local_migrations": "0001-0009"
+  },
+  "build_staging": {
+    "exit_code": 0,
+    "warning": "pre-existing INEFFECTIVE_DYNAMIC_IMPORT ocrService"
+  },
+  "npm_audit": {
+    "exit_code": 0,
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  },
+  "diff_check": {
+    "exit_code": 0
+  },
+  "native_harness_guards": {
+    "tests": 3,
+    "status": "PASS",
+    "remote_authority_rejected": true
+  }
+}

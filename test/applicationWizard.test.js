@@ -877,7 +877,9 @@ test('new draft creation presents credentials card with reference, code, and wor
 
 test('optimistic locking conflict during autosave surfaces localized conflict alert', async () => {
     const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    let saveAttempts = 0;
     api.updateCurrentApplication = async () => {
+        saveAttempts += 1;
         throw Object.assign(new Error('conflict'), { code: 'APPLICATION_UPDATE_CONFLICT' });
     };
 
@@ -891,6 +893,8 @@ test('optimistic locking conflict during autosave surfaces localized conflict al
     const alert = root.querySelector('[role="alert"]');
     assert.ok(alert);
     assert.match(alert.textContent, /başka bir cihaz veya sekmede güncellendi/i);
+    assert.equal(root.querySelector('[name="first_name"]').value, 'ChangedName');
+    assert.equal(saveAttempts, 1);
     document.defaultView.close();
 });
 
@@ -915,4 +919,34 @@ test('submission confirmation displays reference number and access credentials r
         assert.match(root.textContent, new RegExp(messages.submissionCredentialsReminder.slice(0, 20)));
         dom.window.close();
     }
+});
+
+test('typing during an in-flight autosave advances the version without replacing newer form values', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    state.application.lock_version = 1;
+    const firstResponse = Promise.withResolvers();
+    const requestedVersions = [];
+    let serverVersion = 1;
+    api.updateCurrentApplication = async (patch) => {
+        requestedVersions.push(patch.lock_version);
+        if (requestedVersions.length === 1) await firstResponse.promise;
+        if (patch.lock_version !== serverVersion) throw Object.assign(new Error('conflict'), { code: 'APPLICATION_UPDATE_CONFLICT' });
+        serverVersion += 1;
+        return { ...state.application, ...patch, lock_version: serverVersion };
+    };
+    const name = root.querySelector('[name="first_name"]');
+    name.value = 'First edit';
+    name.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    const saving = state.autosave.flush();
+    name.value = 'Newer edit';
+    name.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    firstResponse.resolve();
+    const completed = await saving;
+
+    assert.equal(completed, true);
+    assert.deepEqual(requestedVersions, [1, 2]);
+    assert.equal(name.value, 'Newer edit');
+    assert.equal(state.application.lock_version, 3);
+    document.defaultView.close();
 });

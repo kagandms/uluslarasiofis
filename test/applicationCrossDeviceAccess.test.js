@@ -81,7 +81,7 @@ async function createDraftApplication(environment, studentNumber = 'STUDENT-CD-1
     return { response, data, cookie };
 }
 
-test('draft creation generates 128-bit access code, unique reference number, and stores only sha-256 hash', async () => {
+test('draft creation generates 130-bit access code, unique reference number, and stores only sha-256 hash', async () => {
     const { environment, database } = createEnvironment();
     const { response, data, cookie } = await createDraftApplication(environment, 'STUDENT-ENTROPY-1');
 
@@ -551,7 +551,7 @@ test('backward compatibility: migration 0008 backfills reference_number for lega
     assert.equal(references.size, 5); // All unique
 });
 
-test('login vs reset race condition: login attempting session creation after concurrent reset is rejected', async () => {
+test('old access code is rejected after a completed staff reset', async () => {
     const { environment, database } = createEnvironment();
     const { data: draftData } = await createDraftApplication(environment, 'STUDENT-RACE-1');
     const referenceNumber = draftData.reference_number;
@@ -561,8 +561,7 @@ test('login vs reset race condition: login attempting session creation after con
         .bind(referenceNumber).first();
     const applicationId = appRow.id;
 
-    // Simulate Device 2 starting login: it reads the valid reference and code.
-    // Concurrently, staff resets the access code before session insertion commits.
+    // This sequence covers old credentials after reset; the integration suite covers interleaving at INSERT.
     const staffCookie = await seedStaffUser(database, environment, { id: 'staff-admin-race', role: 'admin' });
     const staffResetResp = await worker.fetch(createRequest(`/api/staff/applications/${applicationId}/reset-access-code`, {
         method: 'POST',
@@ -656,4 +655,3 @@ test('concurrent edits across two devices: second save with stale lock_version r
     assert.equal(device2Final.lock_version, 3);
     assert.equal(device2Final.first_name, 'Device2NameResolved');
 });
-

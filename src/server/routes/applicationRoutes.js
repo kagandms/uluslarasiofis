@@ -226,7 +226,10 @@ async function updateCurrentApplicationFields(request, environment, requestId, {
     const currentApplication = await repositories.applications.findById(session.application_id);
     if (!currentApplication) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     const body = await readJsonBody(request);
-    const expectedLockVersion = typeof body.lock_version === 'number' ? body.lock_version : null;
+    if (!Number.isSafeInteger(body.lock_version) || body.lock_version < 1) {
+        throw new ApiError(400, 'LOCK_VERSION_REQUIRED', 'Güncel başvuru sürümü gerekli. Sayfayı yenileyip tekrar deneyin.');
+    }
+    const expectedLockVersion = body.lock_version;
     const changes = readDraftChanges(body, currentApplication, { allowIncomplete });
     let application;
     try {
@@ -429,6 +432,21 @@ export async function submitCurrentApplication(request, environment, requestId) 
     return { application: createApplicationDto(submitted, environment) };
 }
 
+/** @param {object} input Failed credential request context. @returns {Promise<never>} Rejects without locking valid owners. @throws {ApiError} Invalid credentials or failed-attempt quota. */
+async function rejectAccessCredentials({ repositories, request, referenceNumber }) {
+    await enforceRateLimit(repositories, request, {
+        endpoint: 'application-access-ip', maxRequests: 60, windowSeconds: 900
+    });
+    if (isValidApplicationReference(referenceNumber)) {
+        const allowed = await consumePublicRateLimit(repositories.rateLimits, {
+            endpoint: 'application-access-ref', identity: referenceNumber,
+            nowSeconds: Math.floor(Date.now() / 1000), maxRequests: 5, windowSeconds: 900
+        });
+        if (!allowed) throw new ApiError(429, 'RATE_LIMITED', 'Çok fazla hatalı deneme yapıldı. Daha sonra tekrar deneyin.', true);
+    }
+    throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya erişim kodu hatalı.');
+}
+
 /**
  * Verifies application reference and secret access code, issuing a new owner session for another device.
  * Enforces rate limiting on both IP level (broad NAT tolerance) and reference level (strict anti-brute-force).
@@ -451,38 +469,22 @@ export async function accessApplicationWithCode(request, environment, requestId)
 
     const repositories = createRepositories(environment);
 
-    // 1. IP rate limit: high ceiling for shared campus/NAT networks
-    await enforceRateLimit(repositories, request, {
-        endpoint: 'application-access-ip', maxRequests: 60, windowSeconds: 900
-    });
-
     const referenceNumber = normalizeApplicationReference(rawRef);
 
-    // 2. Reference rate limit: strict per-application attempt limit (e.g. 5 attempts / 15 min window)
-    if (isValidApplicationReference(referenceNumber)) {
-        const nowSeconds = Math.floor(Date.now() / 1000);
-        const refAllowed = await consumePublicRateLimit(repositories.rateLimits, {
-            endpoint: 'application-access-ref', identity: referenceNumber, nowSeconds, maxRequests: 5, windowSeconds: 900
-        });
-        if (!refAllowed) {
-            throw new ApiError(429, 'RATE_LIMITED', 'Bu başvuru için çok fazla hatalı deneme yapıldı. Lütfen 15 dakika sonra tekrar deneyin.', true);
-        }
-    }
-
     if (!isValidApplicationReference(referenceNumber) || !isValidAccessCodeFormat(rawCode)) {
-        throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya erişim kodu hatalı.');
+        return rejectAccessCredentials({ repositories, request, referenceNumber });
     }
 
     const application = await repositories.applications.findByReferenceNumber(referenceNumber);
-    if (!application || !application.access_code_hash) {
+    if (!application || !application.access_code_hash || ['completed','cancelled','rejected'].includes(application.status)) {
         // Constant-time dummy verify to mitigate timing attacks
         await verifyAccessCode(rawCode, '0000000000000000000000000000000000000000000000000000000000000000');
-        throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya erişim kodu hatalı.');
+        return rejectAccessCredentials({ repositories, request, referenceNumber });
     }
 
     const isValid = await verifyAccessCode(rawCode, application.access_code_hash);
     if (!isValid) {
-        throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya erişim kodu hatalı.');
+        return rejectAccessCredentials({ repositories, request, referenceNumber });
     }
 
     // Success: create a fresh opaque session token for this device, guarded against concurrent code reset
@@ -498,7 +500,7 @@ export async function accessApplicationWithCode(request, environment, requestId)
     });
 
     if (!sessionCreated) {
-        throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya erişim kodu hatalı.');
+        return rejectAccessCredentials({ repositories, request, referenceNumber });
     }
 
     await createAuditEvent(repositories, {
@@ -551,7 +553,8 @@ export async function regenerateCurrentAccessCode(request, environment, requestI
         accessCodeCreatedAt: now,
         auditEventId: crypto.randomUUID(),
         requestId,
-        revokeSessions: false,
+        expectedAccessCodeVersion: session.access_code_version,
+        ownerSessionId: session.session_id,
         actorType: 'student'
     });
 
@@ -590,12 +593,12 @@ export async function resetStaffApplicationAccessCode({ request, environment, ap
         accessCodeCreatedAt: now,
         auditEventId: crypto.randomUUID(),
         requestId,
-        revokeSessions: true,
+        expectedAccessCodeVersion: application.access_code_version,
         actorType: 'staff',
         actorStaffId: staff.id
     });
 
-    if (!updated) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+    if (!updated) throw new ApiError(409, 'ACCESS_CODE_ROTATION_CONFLICT', 'Başvuru veya erişim kodu değişti. Güncel durumu yeniden kontrol edin.');
 
     return {
         success: true,

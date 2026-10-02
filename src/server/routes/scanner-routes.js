@@ -93,7 +93,13 @@ async function heartbeat(request, repository, now) {
     for (const value of [body.engine_version,body.signature_version]) {
         if (value!==null && !(typeof value==='string' && /^[\w.+-]{1,64}$/.test(value))) throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
     }
-    if (body.signature_updated_at!==null && !/^\d{4}-\d{2}-\d{2}T.*Z$/.test(body.signature_updated_at)) throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
+    const signatureTime = typeof body.signature_updated_at === 'string' && body.signature_updated_at.length <= 32
+        && /^\d{4}-\d{2}-\d{2}T.*Z$/.test(body.signature_updated_at) ? Date.parse(body.signature_updated_at) : NaN;
+    if (body.signature_updated_at!==null && !Number.isFinite(signatureTime)) throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
+    if (body.health==='ready' && (!body.engine_version || !body.signature_version
+        || !Number.isFinite(signatureTime) || signatureTime>Date.parse(now)+30_000 || signatureTime<Date.parse(now)-86_400_000)) {
+        throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
+    }
     await repository.heartbeat({ ...body,now });
     await repository.reconcile(now);
     return { recorded:true };

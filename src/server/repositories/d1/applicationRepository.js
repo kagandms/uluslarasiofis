@@ -2,6 +2,7 @@ import { ApplicationConflictError, ApplicationTypeChangeBlockedError } from '../
 import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../../config/constants.js';
 import { normalizeStudentNumber } from './studentRepository.js';
 import { mapDocumentRequirementCodeForTypeSwitch } from '../../domain/documentPolicy.js';
+import { createAccessCodeRotationStatements } from './application-access-statements.js';
 import { generateApplicationReference } from '../../auth/applicationAccessCode.js';
 
 const PUBLIC_APPLICATION_FIELDS = Object.freeze({
@@ -137,35 +138,10 @@ export function createApplicationRepository(database) {
             `).bind(CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION,
                 CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION, normalizedRef).first();
         },
-        async updateAccessCode({ applicationId, accessCodeHash, accessCodeCreatedAt, auditEventId, requestId, revokeSessions = false, actorType = 'student', actorStaffId = null }) {
-            const statements = [
-                database.prepare(`
-                    UPDATE applications
-                    SET access_code_hash = ?, access_code_created_at = ?,
-                        access_code_version = COALESCE(access_code_version, 1) + 1,
-                        updated_at = ?, last_activity_at = ?
-                    WHERE id = ? AND status NOT IN ('completed', 'cancelled', 'rejected')
-                `).bind(accessCodeHash, accessCodeCreatedAt, accessCodeCreatedAt, accessCodeCreatedAt, applicationId),
-                database.prepare(`
-                    INSERT INTO audit_events (
-                        id, event_type, actor_type, actor_staff_id, application_id, request_id, safe_metadata_json, created_at
-                    ) SELECT ?, ?, ?, ?, ?, ?, '{"accessCodeRotated":true}', ?
-                    WHERE changes() = 1
-                `).bind(
-                    auditEventId,
-                    actorType === 'staff' ? 'staff.application_access_code_reset' : 'application.access_code_regenerated',
-                    actorType, actorStaffId, applicationId, requestId, accessCodeCreatedAt
-                )
-            ];
-            if (revokeSessions) {
-                statements.push(database.prepare(`
-                    UPDATE application_sessions SET revoked_at = ?
-                    WHERE application_id = ? AND revoked_at IS NULL
-                `).bind(accessCodeCreatedAt, applicationId));
-            }
-            const results = await database.batch(statements);
+        async updateAccessCode(input) {
+            const results = await database.batch(createAccessCodeRotationStatements(database, input));
             if (results[0]?.meta?.changes !== 1) return null;
-            return this.findById(applicationId);
+            return this.findById(input.applicationId);
         },
         async findById(applicationId) {
             return database.prepare(`
@@ -352,9 +328,11 @@ export function createApplicationRepository(database) {
                 SET requirement_id = ?, application_type = ?
                 WHERE id = ? AND application_id = ?
                   AND requirement_id = ? AND application_type = ?
+                  AND EXISTS (SELECT 1 FROM applications WHERE id=? AND status='draft'
+                    AND (? IS NULL OR lock_version=?))
             `).bind(
                 remap.targetRequirementId, requestedType, remap.recordId, applicationId,
-                remap.currentRequirementId, currentApplication.application_type
+                remap.currentRequirementId, currentApplication.application_type, applicationId, expectedLockVersion, expectedLockVersion
             )));
             statements.push(database.prepare(`
                 UPDATE applications
@@ -362,6 +340,7 @@ export function createApplicationRepository(database) {
                     last_activity_at = CURRENT_TIMESTAMP,
                     retention_due_at = datetime('now', '+30 days')
                 WHERE id = ? AND status = 'draft' AND application_type = ?
+                  AND (? IS NULL OR lock_version=?)
                   AND (SELECT COUNT(*) FROM document_records WHERE application_id = ?) = ?
                   AND NOT EXISTS (
                       SELECT 1 FROM document_records AS records
@@ -370,7 +349,7 @@ export function createApplicationRepository(database) {
                         AND (records.application_type <> ? OR requirements.application_type <> ?)
                   )
             `).bind(
-                ...values, applicationId, currentApplication.application_type,
+                ...values, applicationId, currentApplication.application_type, expectedLockVersion, expectedLockVersion,
                 applicationId, remaps.length, applicationId, requestedType, requestedType
             ));
             statements.push(database.prepare(`
@@ -388,6 +367,9 @@ export function createApplicationRepository(database) {
                 })
             ));
             const results = await database.batch(statements);
+            if (results[applicationUpdateIndex]?.meta?.changes !== 1 && expectedLockVersion !== null) {
+                throw new ApplicationConflictError('APPLICATION_UPDATE_CONFLICT');
+            }
             if (results[applicationUpdateIndex]?.meta?.changes !== 1) return null;
             if (results[applicationUpdateIndex + 1]?.meta?.changes !== 1) throw new Error('Application type change audit did not complete.');
             return this.findById(applicationId);

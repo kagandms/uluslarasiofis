@@ -1,3 +1,4 @@
+import { readApplicationVersion } from './helpers/owner-version.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createR2DocumentStorage } from '../src/server/storage/r2DocumentStorage.js';
@@ -1267,7 +1268,7 @@ test('application draft updates ignore fields outside the public allowlist', asy
     }), environment, {});
     const cookie = created.headers.get('Set-Cookie').split(';')[0];
     const response = await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie, body: {
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie),
             student_email: 'updated@example.edu', status: 'submitted', student_number: '2026999999',
             storage_key: 'quarantine/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', staff_note: 'private'
         }
@@ -1295,14 +1296,14 @@ test('owner session can change draft application type and reload preserves it', 
 
     const initialRequirements = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {});
     const changed = await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie, body: { application_type: 'renewal' }
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), application_type: 'renewal' }
     }), environment, {});
     const changedPayload = await readJson(changed);
     const resumed = await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {});
     const resumedPayload = await readJson(resumed);
     const renewalRequirements = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {});
     const changedBack = await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie, body: { application_type: 'initial' }
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), application_type: 'initial' }
     }), environment, {});
     const initialAgain = await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {});
     const initialAgainPayload = await readJson(initialAgain);
@@ -1326,7 +1327,7 @@ test('owner session can change draft application type and reload preserves it', 
 
     database.prepare("UPDATE applications SET status = 'submitted'").run();
     const rejected = await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie, body: { application_type: 'renewal' }
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), application_type: 'renewal' }
     }), environment, {});
     assert.equal(rejected.status, 409);
     assert.equal((await readJson(rejected)).error.code, 'APPLICATION_NOT_EDITABLE');
@@ -1341,10 +1342,10 @@ test('draft address evidence is server-validated and restored after reload', asy
     const cookie = created.headers.get('Set-Cookie').split(';')[0];
 
     const invalid = await worker.fetch(createRequest('/api/public/applications/current/autosave', {
-        method: 'PATCH', cookie, body: { address_evidence_type: 'all_documents' }
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), address_evidence_type: 'all_documents' }
     }), environment, {});
     const saved = await worker.fetch(createRequest('/api/public/applications/current/autosave', {
-        method: 'PATCH', cookie, body: { address_evidence_type: 'undertaking' }
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), address_evidence_type: 'undertaking' }
     }), environment, {});
     const current = await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {});
 

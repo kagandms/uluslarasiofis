@@ -22,7 +22,7 @@ export function createSessionRepository(database) {
                 INSERT INTO application_sessions (id, application_id, token_hash, expires_at, created_at)
                 SELECT ?, ?, ?, ?, ?
                 FROM applications
-                WHERE id = ? AND access_code_version = ?
+                WHERE id = ? AND access_code_version = ? AND status NOT IN ('completed','cancelled','rejected')
             `).bind(id, applicationId, tokenHash, expiresAt, createdAt, applicationId, expectedAccessCodeVersion).run();
             return (result?.meta?.changes ?? 0) > 0;
         },
@@ -30,7 +30,7 @@ export function createSessionRepository(database) {
             return database.prepare(`
                 SELECT sessions.id AS session_id, sessions.expires_at,
                        applications.id AS application_id, applications.status,
-                       applications.application_type, applications.student_email,
+                       applications.application_type, applications.access_code_version, applications.student_email,
                        applications.student_phone, applications.first_name,
                        applications.last_name, applications.passport_number,
                        applications.nationality, applications.date_of_birth,

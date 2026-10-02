@@ -1,0 +1,20 @@
+{
+  "name": "goc-staging",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "uluslarasiofis-staging",
+      "database_id": "8f034e90-17fc-43d7-aa5d-125571019612",
+      "migrations_dir": "../../migrations",
+      "remote": false
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DOCUMENTS",
+      "bucket_name": "uluslarasiofis-documents-staging",
+      "remote": false
+    }
+  ],
+  "read_only_validation": true
+}

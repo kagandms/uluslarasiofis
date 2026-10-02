@@ -118,6 +118,22 @@ async function readJson(response) {
     return response.json();
 }
 
+test('staff identity-check detail includes the stable reference without exposing access credentials', async () => {
+    const { environment, database } = createEnvironment();
+    const applicationId = await seedApplication(database);
+    database.prepare("UPDATE applications SET reference_number='ITU-2345-6789',access_code_hash=? WHERE id=?")
+        .bind('a'.repeat(64), applicationId).run();
+    const cookie = await seedStaff(environment, database);
+
+    const response = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment);
+
+    assert.equal(response.status, 200);
+    const { application } = await response.json();
+    assert.equal(application.reference_number, 'ITU-2345-6789');
+    assert.equal(application.access_code_hash, undefined);
+    assert.equal(application.access_code, undefined);
+});
+
 test('staff starts review explicitly and application status updates use optimistic concurrency', async () => {
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'submitted' });

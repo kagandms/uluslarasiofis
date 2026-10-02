@@ -187,7 +187,7 @@ function createContactStep(document, application, formValues, state, api) {
                 if (!saved) return { success: false, error: new Error('Autosave failed') };
             } else if (api?.updateCurrentApplication || api?.updateCurrentApplicationDraft) {
                 const saveFn = api.updateCurrentApplication || api.updateCurrentApplicationDraft;
-                state.application = await saveFn(buildAutosaveValues(currentFields));
+                state.application = await saveFn({ ...buildAutosaveValues(currentFields), lock_version: state.application?.lock_version });
             }
             return { success: true, application: state?.application };
         },
@@ -1031,7 +1031,9 @@ function createAutosave(state, api, root) {
             lock_version: state.application?.lock_version
         };
         const saveFn = api.autosaveCurrentApplication || api.updateCurrentApplication;
-        return saveFn(payload);
+        const application = await saveFn(payload);
+        state.application = { ...state.application, lock_version: application.lock_version };
+        return application;
     };
     return createDraftAutosave({
         initialValues: createAutosaveValuesFromApplication(state.application),

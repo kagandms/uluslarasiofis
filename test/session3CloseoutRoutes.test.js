@@ -1,3 +1,4 @@
+import { readApplicationVersion } from './helpers/owner-version.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import worker from '../src/server/worker.js';
@@ -110,10 +111,10 @@ test('autosave permits incomplete edits but remains owner-scoped and same-origin
     const studentB = await createApplicant(environment, 'S3-AUTOSAVE-B');
     const path = '/api/public/applications/current/autosave';
     const saved = await worker.fetch(request(path, {
-        method: 'PATCH', cookie: studentA.cookie, body: { first_name: 'A', student_email: 'draft-in-progress@' }
+        method: 'PATCH', cookie: studentA.cookie, body: { lock_version: await readApplicationVersion(environment, studentA.cookie), first_name: 'A', student_email: 'draft-in-progress@' }
     }), environment, {});
     const crossOrigin = await worker.fetch(request(path, {
-        method: 'PATCH', cookie: studentA.cookie, origin: 'https://attacker.test', body: { first_name: 'Injected' }
+        method: 'PATCH', cookie: studentA.cookie, origin: 'https://attacker.test', body: { lock_version: await readApplicationVersion(environment, studentA.cookie), first_name: 'Injected' }
     }), environment, {});
     const rows = database.prepare(`
         SELECT students.student_number, applications.first_name, applications.student_email

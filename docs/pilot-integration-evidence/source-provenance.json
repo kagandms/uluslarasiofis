@@ -1,0 +1,16 @@
+{
+  "ancestor": "a9304568d7484244f05ad65101086d5c7bfdfbaf",
+  "scanner": "9864c33dabf0ad3ea0ccaaa7175c2a90612b0ebc",
+  "access_snapshot": "pilot-access-review.zip",
+  "access_sha256": "ff5550003ff4b1f3f73988f5cb186539f5fe67c44c031e26100fffe6bbbe5f3b",
+  "access_files": 15,
+  "tracked_files_reproduced_from_patch": 11,
+  "new_files": 4,
+  "manifest_hashes_verified": 18,
+  "import_commit": "94259e49c34e399d57932e4cbb14d3d4a5ee705f",
+  "source_access_uncommitted": true,
+  "branch": "codex/pilot-integration-review",
+  "source_branches_modified": false,
+  "push": false,
+  "remote_deploy_migration": false
+}

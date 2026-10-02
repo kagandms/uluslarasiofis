@@ -1,0 +1,108 @@
+{
+  "status": "PASS",
+  "real_engine": true,
+  "HTTPS": true,
+  "D1_R2": "SQLite/R2 adapters",
+  "scan_rows": [
+    {
+      "status": "complete",
+      "attempts": 1,
+      "outcome": "clean",
+      "result_code": "scanned",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T18:57:35.998Z"
+    },
+    {
+      "status": "complete",
+      "attempts": 1,
+      "outcome": "clean",
+      "result_code": "scanned",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T18:57:41.747Z"
+    },
+    {
+      "status": "complete",
+      "attempts": 1,
+      "outcome": "unsafe",
+      "result_code": "malware",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T18:57:47.277Z"
+    },
+    {
+      "status": "queued",
+      "attempts": 1,
+      "outcome": "failed",
+      "result_code": "policy_blocked",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T18:57:52.795Z"
+    },
+    {
+      "status": "queued",
+      "attempts": 1,
+      "outcome": "failed",
+      "result_code": "policy_blocked",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T18:57:58.683Z"
+    },
+    {
+      "status": "complete",
+      "attempts": 1,
+      "outcome": "clean",
+      "result_code": "scanned",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T18:58:04.974Z"
+    },
+    {
+      "status": "complete",
+      "attempts": 1,
+      "outcome": "clean",
+      "result_code": "scanned",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T18:58:12.226Z"
+    },
+    {
+      "status": "complete",
+      "attempts": 1,
+      "outcome": "clean",
+      "result_code": "scanned",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T18:58:18.299Z"
+    },
+    {
+      "status": "complete",
+      "attempts": 1,
+      "outcome": "clean",
+      "result_code": "scanned",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T18:58:24.296Z"
+    },
+    {
+      "status": "failed",
+      "attempts": 3,
+      "outcome": "failed",
+      "result_code": "scan_timeout",
+      "engine_version": "1.5.4",
+      "signature_version": "28141",
+      "signature_updated_at": "2026-10-02T06:26:12.000Z",
+      "scanned_at": "2026-10-02T18:58:27.725Z"
+    }
+  ]
+}

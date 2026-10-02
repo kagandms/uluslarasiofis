@@ -80,6 +80,7 @@ function createQueueItemDto(application) {
 function createApplicationDetailDto(application) {
     return {
         id: application.id,
+        reference_number: application.reference_number ?? null,
         student_number: application.student_number,
         status: application.status,
         application_type: application.application_type,

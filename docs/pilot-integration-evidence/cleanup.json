@@ -1,0 +1,9 @@
+{
+  "owned_native_worker_stopped": true,
+  "owned_harness_and_D1_R2_namespaces_removed": true,
+  "temporary_job_directories": 0,
+  "continuous_runner_active": false,
+  "clamav_signatures_venv_retained": true,
+  "global_sleep_settings_changed": false,
+  "public_clamd_port_opened": false
+}

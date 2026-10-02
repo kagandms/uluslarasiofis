@@ -133,3 +133,17 @@ test('a lease that expires during result I/O is rejected at the database commit 
     assert.equal(response.status, 409);
     assert.equal(database.prepare("SELECT scan_status FROM document_revision_files WHERE id='f'").first().scan_status, 'pending');
 });
+
+test('ready heartbeat requires real, fresh signature time and complete engine metadata', async () => {
+    const { environment, database } = fixture();
+    const ready = { runner_id: 'mac', health: 'ready', engine_version: '1.5.4', signature_version: '28141',
+        signature_updated_at: new Date().toISOString() };
+
+    for (const change of [{ signature_updated_at: '2026-99-99TinvalidZ' }, { signature_updated_at: '2026-01-01T00:00:00.000Z' }, { engine_version: null }]) {
+        const response = await request(environment, 'heartbeat', { body: { ...ready, ...change } });
+        assert.equal(response.status, 400);
+    }
+
+    assert.equal(database.prepare('SELECT count(*) AS count FROM scanner_heartbeats').first().count, 0);
+    assert.equal((await request(environment, 'heartbeat', { body: ready })).status, 200);
+});

@@ -1,3 +1,4 @@
+import { readApplicationVersion } from './helpers/owner-version.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { hashSessionToken } from '../src/server/auth/sessionToken.js';
@@ -71,7 +72,7 @@ async function createDraft(environment, studentNumber) {
 
 async function setFingerprintRegistration(environment, cookie, status, code = null) {
     return worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie, body: { fingerprint_status: status, fingerprint_code: code }
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), fingerprint_status: status, fingerprint_code: code }
     }), environment, {});
 }
 
@@ -133,7 +134,7 @@ test('contact acknowledgement rejects a malformed persisted phone without record
     const created = await createDraft(environment, '2026123898');
     const applicationId = database.prepare('SELECT id FROM applications').first().id;
     const invalidPhone = await worker.fetch(createRequest('/api/public/applications/current/autosave', {
-        method: 'PATCH', cookie: created.cookie, body: { student_phone: 'not a phone' }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), student_phone: 'not a phone' }
     }), environment, {});
     const response = await worker.fetch(createRequest('/api/public/applications/current/contact-acknowledgement', {
         method: 'POST', cookie: created.cookie,
@@ -155,7 +156,7 @@ test('registered fingerprint status persists a trimmed code without adding autho
     const created = await createDraft(environment, '2026123902');
     const response = await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie: created.cookie,
-        body: { fingerprint_status: 'registered', fingerprint_code: '  FP-A/42 x  ' }
+        body: { lock_version: await readApplicationVersion(environment, created.cookie), fingerprint_status: 'registered', fingerprint_code: '  FP-A/42 x  ' }
     }), environment, {});
     const payload = await response.json();
     const row = database.prepare('SELECT fingerprint_status, fingerprint_code FROM applications').first();
@@ -175,12 +176,12 @@ test('not-registered status clears an earlier fingerprint code and remains outst
     const created = await createDraft(environment, '2026123903');
     await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie: created.cookie,
-        body: { fingerprint_status: 'registered', fingerprint_code: 'FP-123' }
+        body: { lock_version: await readApplicationVersion(environment, created.cookie), fingerprint_status: 'registered', fingerprint_code: 'FP-123' }
     }), environment, {});
 
     const response = await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie: created.cookie,
-        body: { fingerprint_status: 'not_registered', fingerprint_code: 'FP-123' }
+        body: { lock_version: await readApplicationVersion(environment, created.cookie), fingerprint_status: 'not_registered', fingerprint_code: 'FP-123' }
     }), environment, {});
     const payload = await response.json();
 
@@ -196,11 +197,11 @@ test('fingerprint state rejects undocumented statuses and overlong codes', async
     const { environment } = createEnvironment();
     const created = await createDraft(environment, '2026123904');
     const invalidStatus = await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { fingerprint_status: 'maybe' }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), fingerprint_status: 'maybe' }
     }), environment, {});
     const longCode = await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie: created.cookie,
-        body: { fingerprint_status: 'registered', fingerprint_code: 'x'.repeat(129) }
+        body: { lock_version: await readApplicationVersion(environment, created.cookie), fingerprint_status: 'registered', fingerprint_code: 'x'.repeat(129) }
     }), environment, {});
 
     assert.equal(invalidStatus.status, 400);
@@ -210,8 +211,8 @@ test('fingerprint state rejects undocumented statuses and overlong codes', async
 test('switching from not registered to registered leaves a missing code incomplete', async () => {
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123916');
-    const update = (body) => worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body
+    const update = async (body) => worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie: created.cookie, body: { ...body, lock_version: await readApplicationVersion(environment, created.cookie) }
     }), environment, {});
     await update({ fingerprint_status: 'not_registered' });
     const response = await update({ fingerprint_status: 'registered' });
@@ -232,11 +233,11 @@ test('fingerprint updates are owner-session and same-origin protected', async ()
     const otherStudentRead = await worker.fetch(createRequest('/api/public/applications/current', { cookie: studentA.cookie }), environment, {});
     const crossOriginUpdate = await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie: studentA.cookie, origin: 'https://attacker.test',
-        body: { fingerprint_status: 'registered', fingerprint_code: 'FP-A' }
+        body: { lock_version: await readApplicationVersion(environment, studentA.cookie), fingerprint_status: 'registered', fingerprint_code: 'FP-A' }
     }), environment, {});
     const ownerUpdate = await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie: studentB.cookie,
-        body: { fingerprint_status: 'not_registered' }
+        body: { lock_version: await readApplicationVersion(environment, studentB.cookie), fingerprint_status: 'not_registered' }
     }), environment, {});
 
     assert.equal(otherStudentRead.status, 200);
@@ -260,7 +261,7 @@ test('student number and fingerprint code do not authorize cross-application acc
     `).first().id;
     await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie: studentB.cookie,
-        body: { fingerprint_status: 'registered', fingerprint_code: 'B-SECRET-CODE' }
+        body: { lock_version: await readApplicationVersion(environment, studentB.cookie), fingerprint_status: 'registered', fingerprint_code: 'B-SECRET-CODE' }
     }), environment, {});
 
     const readWithIdentifier = await worker.fetch(createRequest(`/api/public/applications/current?application_id=${studentBId}&student_number=2026123918`, {
@@ -268,7 +269,7 @@ test('student number and fingerprint code do not authorize cross-application acc
     }), environment, {});
     const patchWithOtherApplicationId = await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie: studentA.cookie,
-        body: { application_id: studentBId, fingerprint_status: 'not_registered', fingerprint_code: 'B-SECRET-CODE' }
+        body: { lock_version: await readApplicationVersion(environment, studentA.cookie), application_id: studentBId, fingerprint_status: 'not_registered', fingerprint_code: 'B-SECRET-CODE' }
     }), environment, {});
     const readA = await readWithIdentifier.json();
     const rowB = database.prepare(`
@@ -292,7 +293,7 @@ test('expired application sessions cannot change fingerprint state', async () =>
         .bind(new Date(Date.now() - 1000).toISOString(), await hashSessionToken(token)).run();
 
     const response = await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { fingerprint_status: 'registered' }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: 1, fingerprint_status: 'registered' }
     }), environment, {});
 
     assert.equal(response.status, 401);
@@ -303,7 +304,7 @@ test('server-calculated document requirements change with the saved under-18 sta
     const { environment, database } = createEnvironment();
     const adult = await createDraft(environment, '2026123908');
     const updateAge = async (cookie, isUnder18) => worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie, body: { is_under_18: isUnder18 }
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), is_under_18: isUnder18 }
     }), environment, {});
     const listRequirements = async (cookie) => worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {});
 
@@ -327,8 +328,8 @@ test('server-calculated document requirements change with the saved under-18 sta
 test('address evidence choices select one server-enforced branch and branch changes preserve an uploaded object', async () => {
     const { environment, database, storedObjects } = createEnvironment();
     const created = await createDraft(environment, '2026123990');
-    const updateAddress = (addressEvidenceType) => worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { address_evidence_type: addressEvidenceType }
+    const updateAddress = async (addressEvidenceType) => worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), address_evidence_type: addressEvidenceType }
     }), environment, {});
     const readRequirements = async () => {
         const response = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie: created.cookie }), environment, {});
@@ -406,7 +407,7 @@ test('adult sessions cannot create a birth certificate upload intent by supplyin
     const { environment } = createEnvironment();
     const adult = await createDraft(environment, '2026123909');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: adult.cookie, body: { is_under_18: false }
+        method: 'PATCH', cookie: adult.cookie, body: { lock_version: await readApplicationVersion(environment, adult.cookie), is_under_18: false }
     }), environment, {});
 
     const response = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
@@ -447,7 +448,7 @@ test('student document requirements and upload intents are scoped to the current
     const studentA = await createDraft(environment, '2026123910');
     const studentB = await createDraft(environment, '2026123911');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: studentB.cookie, body: { is_under_18: true }
+        method: 'PATCH', cookie: studentB.cookie, body: { lock_version: await readApplicationVersion(environment, studentB.cookie), is_under_18: true }
     }), environment, {});
 
     const studentARequirements = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie: studentA.cookie }), environment, {});
@@ -585,7 +586,7 @@ test('draft application-type changes preserve finalized document metadata and th
     }), environment, {});
 
     const typeChange = await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { application_type: 'renewal' }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), application_type: 'renewal' }
     }), environment, {});
     const file = database.prepare(`
         SELECT records.id AS record_id, records.application_type, requirements.code,
@@ -611,7 +612,7 @@ test('host residence certificate accepts PDF only', async () => {
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123951');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { address_evidence_type: 'undertaking' }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), address_evidence_type: 'undertaking' }
     }), environment, {});
     const imageIntent = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
@@ -645,7 +646,7 @@ test('birth certificate uploaded by an under-18 student cannot be finalized afte
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123915');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { is_under_18: true }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), is_under_18: true }
     }), environment, {});
     const intentResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
@@ -654,7 +655,7 @@ test('birth certificate uploaded by an under-18 student cannot be finalized afte
     const intent = await intentResponse.json();
     await putSignedFile(environment, intent.upload.url, 'application/pdf');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { is_under_18: false }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), is_under_18: false }
     }), environment, {});
     const finalizeResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/finalize', {
         method: 'POST', cookie: created.cookie, body: { intent_id: intent.upload.intent_id }
