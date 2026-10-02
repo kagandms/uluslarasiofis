@@ -176,6 +176,7 @@ function createContactStep(document, application, formValues, state, api) {
         initialPreference: state?.notificationPreference,
         formValues,
         api: api || state?.api,
+        phoneInput: form.querySelector('[name="student_phone"]'),
         persistPhone: async () => {
             const currentFields = readVisibleFields(form, state?.application || {});
             if (state?.autosave) {

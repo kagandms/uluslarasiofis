@@ -59,7 +59,7 @@
 ## 4. Test ve Doğrulama Kanıtları
 
 ### 1. Odaklı UI Test Paketi (`test/notificationPreferencesUi.test.js`)
-Toplam **23 test senaryosu** başarıyla çalıştırıldı (0 hata):
+Toplam **25 test senaryosu** başarıyla çalıştırıldı (0 hata):
 1. `parseNotificationPreferences`: Eksik veya eski API yanıtlarında iznin doğrulanmış sayılmaması.
 2. `application_id`: Eksik veya farklı kimlikte takip ekranında ve sihirbazda kontrollerin engellenmesi.
 3. Bilinmeyen izin sürümünde opt-in işleminin engellenmesi.
@@ -83,6 +83,8 @@ Toplam **23 test senaryosu** başarıyla çalıştırıldı (0 hata):
 21. **(Yeni)** Bozuk/eksik yanıt veya başka `application_id` için “kaydedildi” gösterilmiyor.
 22. **(Yeni)** Opt-out PUT yanıtı izin durumunu hâlâ etkin gösterirse başarı gösterilmiyor.
 23. **(Yeni)** Opt-out payload’ı yalnızca `{ "whatsapp_opt_in": false }` olarak kalıyor.
+24. **(Yeni)** Consent PUT sırasında telefon alanı kilitli (`disabled`, `aria-disabled="true"`); yanıt gelince tekrar düzenlenebilir.
+25. **(Yeni)** Autosave sırasında telefon değişirse consent PUT hiç gönderilmiyor.
 
 ### 2. Başsız Tarayıcı Doğrulaması (`scripts/check-public-consent-browser.mjs`)
 - **Çalıştırma:**
@@ -95,13 +97,31 @@ Toplam **23 test senaryosu** başarıyla çalıştırıldı (0 hata):
 - *Not:* Otomatik kontroller WCAG 2.1 AA manuel denetim yerine geçmez.
 
 ### 3. Genel Test Paketi ve Derleme Doğrulaması
-- `npm test`: **460 testin tamamı başarılı** (0 hata).
+- `npm test`: **462 testin tamamı başarılı** (0 hata).
 - `npm run build:staging`: Temiz Vite derlemesi (305ms).
 - `git diff --check`: 0 boşluk / biçimlendirme hatası.
 
 ---
 
-## 5. Canlı Staging ve Entegrasyon Bekleyen Kontroller
+## 5. Telefon Kilidi Koruma Kapsamı ve Sınırları
+
+### Korunan Senaryo
+Başvuru sihirbazında öğrenci "WhatsApp bildirimi al" onay kutusunu işaretlediğinde:
+1. Önce telefon otomatik kaydı (`persistPhone` / autosave) çalışır.
+2. Autosave sırasında telefon değişirse nesil denetimi (`saveGeneration`) consent PUT'u engeller ve kilit hiç etkinleşmez.
+3. Autosave başarıyla tamamlandıktan sonra telefon alanı `disabled` + `aria-disabled="true"` ile kilitlenir.
+4. Consent PUT yanıtı gelene kadar (başarı, doğrulama hatası, ağ hatası) alan kilitli kalır.
+5. `try/finally` bloğu sayesinde her çıkış yolunda alan güvenli biçimde açılır.
+6. Opt-out akışında telefon kilidi **uygulanmaz**; yalnızca opt-in PUT'unda etkindir.
+
+### Sınırlar
+- Bu koruma **istemci tarafı form sıralaması** güvencesidir; Cloudflare Workers, D1 veya dağıtık eşzamanlılık katmanında yarış testi yapmaz.
+- Telefon alanının `disabled` durumda tarayıcı `input` olayı üretmemesine dayanır; özel/programatik müdahale (devtools konsolundan `.value` yazma) dışarıda bırakılır.
+- Ağ yanıtı belirsiz kalırsa consent "kaydedildi" mesajı gösterilmez; kullanıcıya güvenli bir hata durumu sunulur.
+
+---
+
+## 6. Canlı Staging ve Entegrasyon Bekleyen Kontroller
 
 1. Gerçek Cloudflare D1 üzerinde `GET /api/public/applications/current/notification-preferences` endpoint'inden dönen metadata'nın canlı staging ortamında uçtan uca doğrulanması.
 2. WhatsApp Business API / Meta Cloud API kimlik bilgileri (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`) sağlandığında gerçek şablon dağıtımı.

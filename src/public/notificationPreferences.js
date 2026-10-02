@@ -159,7 +159,9 @@ export function createNotificationPreferenceField(document, {
     formValues = null,
     api = null,
     onPreferenceChange = null,
-    persistPhone = null
+    persistPhone = null,
+    phoneInput = null,
+    onPhoneLockChange = null
 } = {}) {
     const messages = readMessages(document);
     const container = document.createElement('div');
@@ -206,6 +208,23 @@ export function createNotificationPreferenceField(document, {
     let userReconsentedPhone = null;
     let saveGeneration = 0;
     let inFlightController = null;
+
+    // Phone lock helpers: prevent autosave race during in-flight consent PUT
+    function resolvePhoneInput() {
+        if (phoneInput && phoneInput.nodeType) return phoneInput;
+        return container.closest('form')?.querySelector('[name="student_phone"]')
+            || container.ownerDocument?.querySelector('[name="student_phone"]')
+            || null;
+    }
+
+    function setPhoneLocked(locked) {
+        onPhoneLockChange?.(locked);
+        const input = resolvePhoneInput();
+        if (!input) return;
+        input.disabled = locked;
+        if (locked) input.setAttribute('aria-disabled', 'true');
+        else input.removeAttribute('aria-disabled');
+    }
 
     // Determine initial checked state:
     // 1. Unauthenticated visitor: temporary intent (default unchecked unless formValues.whatsapp_opt_in is set)
@@ -313,6 +332,10 @@ export function createNotificationPreferenceField(document, {
                 if (phoneResult.application) application = phoneResult.application;
             }
 
+            // Lock phone input to prevent autosave race during consent PUT
+            setPhoneLocked(true);
+            try {
+
             // STEP 2: Verify version and phone availability
             if (currentPreference && !currentPreference.isVersionSupported) {
                 checkbox.disabled = true;
@@ -378,6 +401,9 @@ export function createNotificationPreferenceField(document, {
             status.dataset.i18n = 'whatsappPreferenceSaved';
             status.textContent = activeMessages.whatsappPreferenceSaved;
             updateNotices();
+            } finally {
+                setPhoneLocked(false);
+            }
         } else {
             // Opt-out path: send strictly { whatsapp_opt_in: false }
             inFlightController?.abort();

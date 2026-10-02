@@ -1294,3 +1294,119 @@ test('Opt-out payload’ı yalnızca { whatsapp_opt_in: false } olarak kalıyor'
     assert.equal(payloads[0].consent_version, undefined);
     assert.equal(payloads[0].language, undefined);
 });
+test('consent PUT locks phone input until response settles; field re-enables on completion', async () => {
+    const { document, root } = createDom();
+    let resolveConsentPut;
+    const phoneLockEvents = [];
+    const phoneInput = document.createElement('input');
+    phoneInput.type = 'tel';
+    phoneInput.name = 'student_phone';
+    phoneInput.value = '+905551234567';
+    root.append(phoneInput);
+
+    const field = createNotificationPreferenceField(document, {
+        application: { id: 'app_lock_test', status: 'draft', student_phone: '+905551234567' },
+        initialPreference: createFullContractFixture({ application_id: 'app_lock_test' }),
+        api: {
+            async updateCurrentNotificationPreferences(payload) {
+                phoneLockEvents.push({ event: 'put_called', disabled: phoneInput.disabled });
+                return new Promise((resolve) => {
+                    resolveConsentPut = () => resolve(createFullContractFixture({
+                        application_id: 'app_lock_test',
+                        whatsapp_opt_in: true,
+                        consent_version: WHATSAPP_CONSENT_VERSION,
+                        effective_whatsapp_opt_in: true
+                    }));
+                });
+            }
+        },
+        phoneInput,
+        persistPhone: async () => ({ success: true }),
+        onPhoneLockChange: (locked) => { phoneLockEvents.push({ event: locked ? 'locked' : 'unlocked' }); }
+    });
+    root.append(field);
+
+    assert.equal(phoneInput.disabled, false, 'Phone starts unlocked');
+
+    const checkbox = field.querySelector('#field-whatsapp-opt-in');
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await flushAsync();
+
+    // Phone must be disabled while consent PUT is in flight
+    assert.equal(phoneInput.disabled, true, 'Phone input must be disabled during in-flight consent PUT');
+    assert.equal(phoneInput.getAttribute('aria-disabled'), 'true');
+
+    // Verify lock was set before PUT was called
+    const lockIdx = phoneLockEvents.findIndex(e => e.event === 'locked');
+    const putIdx = phoneLockEvents.findIndex(e => e.event === 'put_called');
+    assert.ok(lockIdx >= 0, 'Lock event must have been emitted');
+    assert.ok(putIdx >= 0, 'PUT must have been called');
+    assert.ok(lockIdx < putIdx, 'Lock must precede PUT call');
+    assert.equal(phoneLockEvents[putIdx].disabled, true, 'Phone must be disabled when PUT is dispatched');
+
+    // Resolve consent PUT
+    resolveConsentPut();
+    await flushAsync();
+    await flushAsync();
+
+    // Phone must be re-enabled after PUT settles
+    assert.equal(phoneInput.disabled, false, 'Phone input must be re-enabled after consent PUT settles');
+    assert.equal(phoneInput.getAttribute('aria-disabled'), null);
+    assert.ok(phoneLockEvents.some(e => e.event === 'unlocked'), 'Unlock event must have been emitted');
+});
+
+test('phone change during autosave aborts workflow; consent PUT is never sent', async () => {
+    const { document, root } = createDom();
+    const calls = { persistPhone: 0, updatePrefs: 0 };
+    let resolvePersistPhone;
+    const phoneInput = document.createElement('input');
+    phoneInput.type = 'tel';
+    phoneInput.name = 'student_phone';
+    phoneInput.value = '+905551234567';
+    root.append(phoneInput);
+
+    const field = createNotificationPreferenceField(document, {
+        application: { id: 'app_race_test', status: 'draft', student_phone: '+905551234567' },
+        initialPreference: createFullContractFixture({ application_id: 'app_race_test' }),
+        api: {
+            async updateCurrentNotificationPreferences() {
+                calls.updatePrefs++;
+                return createFullContractFixture({
+                    application_id: 'app_race_test',
+                    whatsapp_opt_in: true,
+                    consent_version: WHATSAPP_CONSENT_VERSION,
+                    effective_whatsapp_opt_in: true
+                });
+            }
+        },
+        phoneInput,
+        persistPhone: async () => {
+            calls.persistPhone++;
+            return new Promise((resolve) => {
+                resolvePersistPhone = () => resolve({ success: true });
+            });
+        }
+    });
+    root.append(field);
+
+    const checkbox = field.querySelector('#field-whatsapp-opt-in');
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await flushAsync();
+    assert.equal(calls.persistPhone, 1, 'persistPhone must have been called');
+
+    // While persistPhone is in flight, user changes phone number
+    field.syncPhone('+905559998877');
+
+    // Resolve persistPhone
+    resolvePersistPhone();
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    // Consent PUT must NOT have been called because phone changed during autosave
+    assert.equal(calls.updatePrefs, 0, 'Consent PUT must never be sent when phone changed during autosave');
+    // Phone must NOT remain locked
+    assert.equal(phoneInput.disabled, false, 'Phone must not remain locked after aborted workflow');
+});
