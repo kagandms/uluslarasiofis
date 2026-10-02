@@ -394,3 +394,46 @@ Phase 8H remains **NOT COMPLETE**. Production is untouched, no pending scan stat
 - `git diff --check` passed after this report update. No test suites, deployment, dry-run, audit, migrations, D1 writes, R2 object operations, secret writes, or Worker changes were made in this pass. The build generated only ignored local output; the report is the only tracked change. Production remains untouched, and Phase 8I was not started.
 
 Phase 8H remains **NOT COMPLETE**. The next legitimate blocker is implementation and approved operation of a real scanner result path. After that, complete browser-based document review, resubmission, replacement upload, and second review, plus the still-unverified authenticated refresh and legacy workspace checks.
+
+## 21. Continuation pass — independent browser UAT (2026-10-02)
+
+This pass continued only the browser UAT on the expected staging branch. It supersedes the browser-specific NOT EXECUTED results in §20 where new live browser evidence is recorded below. Scanner implementation/diagnosis and all server-side integration work were outside this pass.
+
+### Browser session and application queue
+
+- Before browser work, the local branch, upstream, and `git ls-remote` all matched `codex/phase8h-live-staging-uat` at `a38ec60e98e8e3405e9c1241610b23d617dbf805`; the worktree was clean. The controlled browser was Yandex window 2 at `https://goc-staging.topkapiuni.workers.dev/yetkili/`.
+- The authenticated staff workspace appeared with its five work-area tiles and `Çıkış` control. Reloading the page kept the staff workspace open. Navigation among the queue, detail, Belgeler, Kapak Hazırla, YKN, and Tebliğ Bul kept the authenticated shell available.
+- Queue search by the known synthetic UAT application identifier returned its sole row; the row was labeled `UAT SYNTHETIC`. Selecting the `Yeni` status filter retained that row, whose displayed application status was `Gönderildi`.
+- Detail showed the synthetic application fields and 9 document requirements. Each document showed scan `İnceleme bekliyor` and the message `Belge güvenlik kontrolünden geçmedi.` No document preview/download action was exposed in these cards. The application-level `İncelemeye Başla` control remained visible; it was not activated because that could change workflow state. Its visibility is consistent with the application-level `submitted -> under_review` transition being allowed; pending scans do not by themselves make that transition a security defect. The browser action/result remains **NOT EXECUTED**. No scan or review state was changed.
+- The visible home/workspace navigation, queue columns, and detail view contained no assignment, `Atanan Personel`, person-queue, or individual-account-management controls.
+
+### Legacy workspace results
+
+| Scenario | Result | Browser evidence / limitation |
+|---|---|---|
+| Belgeler search and filter | **PASS** | Search for `Boş Dilekçe` returned one document; category filter `Dilekçeler` retained the matching result. |
+| General-office PDF preview and download | **PASS** | `Boş Dilekçe` opened as a one-page PDF in the browser viewer; `bos_dilekce_formu.pdf` completed download to the local Downloads folder. |
+| Kapak Hazırla with synthetic data | **PASS** | Manual form accepted synthetic-only data; its numeric application-number mask rendered the test value as `2026-88`. It generated/downloaded `ONBILGI_SYNTHETIC_UAT.pdf` and showed one local history entry. `E-Tabloya Ekle` was not used. |
+| OCR sample | **NOT EXECUTED** | The photo-upload picker opened, but no file was selected and no OCR request ran. The native picker interaction did not reliably target the intended synthetic file, so the attempt was cancelled. |
+| YKN / extension | **PARTIAL** | YKN entry point and local extension check rendered. The UI reported that the YKN extension is not installed, including after `Tekrar Kontrol Et`. No extension was downloaded or installed; no passport/student lookup was made. |
+| Tebliğ Bul | **PARTIAL** | Search form rendered for year 2026; the UI said cloud data had not yet been updated. No person search or cloud sync was run. |
+| YKN/Tebliğ external integrations | **NOT EXECUTED** | No YÖKSİS, Apply, Apps Script, or university-record call was made. Integration configuration was not rechecked during this browser-only pass. |
+
+### Read-only source clarification
+
+- `src/server/domain/applicationStateMachine.js:1-2,17-27` allows `submitted -> under_review`; this transition is not guarded by scan state. The distinct transition to `approved_for_processing` is guarded by all required documents being approved, finalized, scan-clean, free of pending cleanup, and backed by completed upload intents (`src/server/routes/staffApplicationRoutes.js:148-168`; `src/server/routes/staffReviewRoutes.js:146-163`). Therefore the visible application-review control is not itself a security defect and does not establish that documents are safe to access or that the application is approved.
+- **Private document access gate:** access resolves only a finalized current document with a clean scan and no pending cleanup, with intent completed (`src/server/repositories/d1/documentRepository.js:345-368`; `src/server/routes/staffDocumentAccessRoutes.js:21-39`). **Document approval gate:** review/approval also requires finalized upload, completed intent, clean scan, and eligible application/revision state (`src/server/routes/staffReviewRoutes.js:41-64`; `src/server/repositories/d1/applicationReviewRepository.js:47-89`). **Final application approval gate:** every required document must meet its approved/finalized/clean/cleanup-free/completed conditions (`src/server/routes/staffApplicationRoutes.js:148-153`; `src/server/routes/staffReviewRoutes.js:146-163`). These gates were source-inspected only; this pass did not activate review or approval actions.
+- **Unresolved UI-copy defect:** `createUnavailableDocumentState` in `src/staff/applicationsManager.js:268-273` maps every non-clean `scan_status` to `Belge güvenlik kontrolünden geçmedi.`, conflating pending, unsafe, and failed scan states. The pending scan shown in this browser run therefore received wording that does not distinguish those states. Record this as a UI-copy defect; source was not changed in this documentation task.
+
+### Logout and protected access
+
+- Clicking `Çıkış` redirected the browser to the public portal. Following `Yetkili girişi` back to `/yetkili/` displayed the login form, confirming protected staff UI access was denied after logout.
+- A protected API endpoint was not opened in the browser after logout; API denial remains **NOT EXECUTED** in this pass.
+
+### Scope and final state
+
+- No real student/university record was searched or changed. No applicant document was previewed or downloaded, no file was uploaded, and no scan state was changed. OCR/YKN/Tebliğ external calls were not executed.
+- Source was inspected read-only to clarify workflow and safety gates. No application source, schema, migration, Worker, secret, D1, or R2 change was made. No deployment, bootstrap, scanner operation, or production operation occurred. The two downloaded PDFs are local synthetic/general-office UAT artifacts only.
+- No test/build suite was run. The report was the only intended tracked change; `git diff --check` was the documentation validation for the browser-UAT pass. At the end of that browser session, no commit or push had been made.
+
+Phase 8H remains **NOT COMPLETE**. Real scanning, safe document preview/review, resubmission, replacement upload, second review, authenticated OCR, external integration availability, and protected API denial after browser logout remain outstanding or unverified.
