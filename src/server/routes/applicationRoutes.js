@@ -5,6 +5,7 @@ import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { requireStaff } from '../auth/staffAuth.js';
 import { generateAccessCode, hashAccessCode, isValidAccessCodeFormat, isValidApplicationReference, normalizeApplicationReference, verifyAccessCode } from '../auth/applicationAccessCode.js';
 import { consumePublicRateLimit } from '../security/requestRateLimit.js';
+import { APPLICATION_CREATE_RATE_LIMIT } from '../security/application-rate-limits.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { isValidPhoneNumber } from '../../shared/phoneNumber.js';
 import { readJsonBody } from '../http/requestBody.js';
@@ -184,7 +185,7 @@ export async function createApplicationDraft(request, environment, requestId) {
     requireSameOrigin(request);
     const draft = readNewDraft(await readJsonBody(request));
     const repositories = createRepositories(environment);
-    await enforceRateLimit(repositories, request, { endpoint: 'application-create', maxRequests: 5, windowSeconds: 900 });
+    await enforceRateLimit(repositories, request, APPLICATION_CREATE_RATE_LIMIT);
     const { application, token, accessCode } = await persistDraftWithSession(repositories, draft, requestId);
     return routeResult({
         application: createApplicationDto(application, environment),
@@ -234,7 +235,7 @@ async function updateCurrentApplicationFields(request, environment, requestId, {
     let application;
     try {
         application = await repositories.applications.updateDraft(session.application_id, changes, {
-            auditEventId: crypto.randomUUID(), requestId
+            auditEventId: crypto.randomUUID(), requestId, ownerSessionId: session.session_id
         }, expectedLockVersion);
     } catch (error) {
         if (error.code === 'APPLICATION_TYPE_CHANGE_BLOCKED') {

@@ -14,3 +14,5 @@ Workspace: separate managed worktree `/Users/kagansmtdms/.codex/worktrees/pilot-
 6. Deliver prioritized findings/validation report, staging target/config/rotation/rollback/UAT plan, local final commit and secret-free ZIP/patch with source hashes. Remove owned temporary credentials/test resources and report service states.
 
 No source reviewed yet is called fully VERIFIED solely from an earlier branch's test summary. Historical phase8h Queue/Oracle suggestions are superseded by the user's current MacBook/D1 pull design; current rules and source control the review.
+
+Follow-up: continue from clean `d4b7356114998934805c14808e05d4b612b681e0`, same branch/worktree. Reverify identical access ZIP/manifest/ancestor; preserve previous fixes and existing staff DTO contract. Apply independent review's extra task: campus create 120/900s and public tracking 300/900s with 20-student/excess/window/duplicate tests; fence revoked owner draft SQL; rerun combined Node/Python/build/actual ClamAV/native proofs. Independent A-only 490 PASS remains attributed to its report, not used as combined validation. Update evidence/report/package, no remote action.

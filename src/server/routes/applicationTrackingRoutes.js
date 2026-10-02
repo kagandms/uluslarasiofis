@@ -5,6 +5,7 @@ import { createD1Repositories } from '../repositories/d1/index.js';
 import { normalizeStudentNumber } from '../repositories/d1/studentRepository.js';
 import { enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
 import { readJsonBody } from '../http/requestBody.js';
+import { APPLICATION_TRACKING_RATE_LIMIT } from '../security/application-rate-limits.js';
 
 function isStudentVisibleFile(requirement) {
     return requirement?.upload_status === 'finalized'
@@ -114,9 +115,7 @@ export async function lookupApplicationTracking(request, environment) {
     }
 
     const repositories = createD1Repositories(environment.DB);
-    await enforceRateLimit(repositories, request, {
-        endpoint: 'application-tracking-lookup', maxRequests: 10, windowSeconds: 900
-    });
+    await enforceRateLimit(repositories, request, APPLICATION_TRACKING_RATE_LIMIT);
     const application = await repositories.applications.findTrackableByStudentNumber(studentNumber);
     if (!application) return { found: false, application: null, documents: [] };
 

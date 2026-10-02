@@ -179,6 +179,25 @@ def prove_conflict(settings: Settings, application: Application, second_cookie: 
     assert current.decode()['application']['first_name'] == 'Synthetic Fresh'
 
 
+def prove_campus_usage(settings: Settings) -> None:
+    """Verify 20 distinct native draft creates/lookups on one IP and active-student denial."""
+    prefix = 'CAMPUS-' + secrets.token_hex(4)
+    for index in range(20):
+        student_number = prefix + '-' + str(index)
+        created = send(settings, '/api/public/applications', {'method': 'POST', 'body': {
+            'student_number': student_number, 'application_type': 'initial',
+            'email': 'synthetic@example.invalid', 'phone': '+905551112233'}})
+        expect(created, 201, 'campus draft')
+        status = send(settings, '/api/public/applications/tracking-lookup', {'method': 'POST',
+            'body': {'student_number': student_number}})
+        expect(status, 200, 'campus public lookup')
+        assert status.decode()['found'] is False and not status.cookie
+    duplicate = send(settings, '/api/public/applications', {'method': 'POST', 'body': {
+        'student_number': prefix + '-0', 'application_type': 'initial',
+        'email': 'synthetic@example.invalid', 'phone': '+905551112233'}})
+    expect(duplicate, 409, 'single active campus draft')
+
+
 def seed_staff(settings: Settings) -> str:
     """Seed an ephemeral LOCAL test session, without claiming bootstrap/browser UAT."""
     token = secrets.token_urlsafe(32)
@@ -261,6 +280,10 @@ def prove_scanning(settings: Settings, application: Application, staff_cookie: s
     """Prove initial/replacement clean and EICAR unsafe through native Worker bindings."""
     finalize_file(settings, application, {'fixture': 'clean.pdf', 'media_type': 'application/pdf'})
     query(settings, f"UPDATE applications SET status='under_review' WHERE id='{application.identifier}'")
+    detail = send(settings, f'/api/staff/applications/{application.identifier}', {'cookie': staff_cookie})
+    expect(detail, 200, 'staff detail')
+    assert detail.decode()['application']['reference_number'] == application.reference
+    assert 'access_code' not in detail.decode()['application'] and 'access_code_hash' not in detail.decode()['application']
     gates = {'cookie': staff_cookie, 'revision': 1, 'outcome': 'pending'}
     check_gates(settings, application, gates)
     run_scanner(settings, 'clean')
@@ -311,12 +334,14 @@ def main() -> int:
         application = create_application(settings)
         second_cookie = prove_access(settings, application)
         prove_conflict(settings, application, second_cookie)
+        prove_campus_usage(settings)
         staff_cookie = seed_staff(settings)
         prove_scanning(settings, application, staff_cookie)
         prove_reset(settings, application, (staff_cookie, second_cookie))
         evidence = {'status': 'PASS', 'runtime': runtime, 'scans': query(settings,
             'SELECT status,attempts,outcome,result_code,engine_version,signature_version,signature_updated_at,scanned_at FROM document_scan_jobs ORDER BY rowid'),
-            'checks': ['distinct-owner-sessions', '65-valid-same-NAT-logins', 'invalid-and-reference-only-denial',
+            'checks': ['20-shared-IP-drafts-and-public-lookups', 'single-active-campus-draft', 'staff-detail-reference-without-code-hash',
+                'distinct-owner-sessions', '65-valid-same-NAT-logins', 'invalid-and-reference-only-denial',
                 'PATCH-conflict', 'initial-clean', 'replacement-clean', 'replacement-EICAR-unsafe', 'pending-unsafe-staff-gates',
                 'exact-download-archive-bytes', 'scanner-auth-denial', 'staff-reset-revocation', 'owner-regeneration', 'terminal-denial', 'tmp-empty'],
             'limitations': ['synthetic-local-staff-session', 'local-R2-CLI-PUT', 'synthetic-review-state', 'synthetic-queue-clock', 'no-physical-browser-or-remote-UAT']}

@@ -380,14 +380,14 @@ test('public lookup does not grant owner-session mutations or private document a
     assert.deepEqual(responses.map((response) => response.status), [401, 401, 401, 401, 401, 401, 401]);
 });
 
-test('public tracking lookup rate-limits the eleventh valid attempt in its address window', async () => {
+test('public tracking lookup rate-limits the 301st valid attempt in its campus address window', async () => {
     const { environment } = createEnvironment();
     const responses = [];
-    for (let attempt = 0; attempt < 11; attempt += 1) {
+    for (let attempt = 0; attempt < 301; attempt += 1) {
         responses.push(await lookupTracking(environment, `LOOKUP-RATE-${attempt}`, { address: '198.51.100.47' }));
     }
 
-    assert.ok(responses.slice(0, 10).every((response) => response.status === 200));
-    assert.equal(responses[10].status, 429);
-    assert.equal((await responses[10].json()).error.code, 'RATE_LIMITED');
+    assert.ok(responses.slice(0, 300).every((response) => response.status === 200));
+    assert.equal(responses[300].status, 429);
+    assert.equal((await responses[300].json()).error.code, 'RATE_LIMITED');
 });

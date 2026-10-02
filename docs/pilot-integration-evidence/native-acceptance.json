@@ -14,7 +14,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T18:58:53.997Z"
+      "scanned_at": "2026-10-02T19:24:40.185Z"
     },
     {
       "status": "complete",
@@ -24,7 +24,7 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T18:59:03.275Z"
+      "scanned_at": "2026-10-02T19:24:48.583Z"
     },
     {
       "status": "complete",
@@ -34,10 +34,13 @@
       "engine_version": "1.5.4",
       "signature_version": "28141",
       "signature_updated_at": "2026-10-02T06:26:12.000Z",
-      "scanned_at": "2026-10-02T18:59:12.153Z"
+      "scanned_at": "2026-10-02T19:24:56.662Z"
     }
   ],
   "checks": [
+    "20-shared-IP-drafts-and-public-lookups",
+    "single-active-campus-draft",
+    "staff-detail-reference-without-code-hash",
     "distinct-owner-sessions",
     "65-valid-same-NAT-logins",
     "invalid-and-reference-only-denial",

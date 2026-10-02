@@ -1,0 +1,14 @@
+{
+  "starting_candidate": "d4b7356114998934805c14808e05d4b612b681e0",
+  "starting_branch": "codex/pilot-integration-review",
+  "starting_worktree_clean": true,
+  "source_zip_sha256": "ff5550003ff4b1f3f73988f5cb186539f5fe67c44c031e26100fffe6bbbe5f3b",
+  "manifest_hashes_reverified": 18,
+  "ancestor_patch_files_reproduced": 11,
+  "new_source_files": 4,
+  "exact_same_source_as_prior_package": true,
+  "independent_review_sha256": "b38c6c604d96d10d779be4f1b37d8916e7e04100a44e1a51a56977535625b745",
+  "independent_A_only_tests": 490,
+  "independent_A_only_tests_executed_by_this_followup": false,
+  "remote_mutation": false
+}

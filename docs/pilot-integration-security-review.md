@@ -18,7 +18,7 @@ Eski Phase 8H scanner tasarımı kanonik `uluslarasiofis-phase8h-live-staging-ua
 
 ## Kanıtlanan bulgular ve düzeltmeler
 
-P0 bulunmadı. Bu, incelenmeyen uzak ortamın güvenli olduğu iddiası değildir. Aşağıdaki 5 P1 ve 4 P2 bulgu yalnız entegrasyon worktree'sinde düzeltildi.
+P0 bulunmadı. Bu, incelenmeyen uzak ortamın güvenli olduğu iddiası değildir. Önceki 5 P1 ve 4 P2 düzeltme korunuyor; bağımsız raporun ek göreviyle aşağıda iki P1 daha kapandı. İncelenen yerel adayda açık P0/P1 yok; uzak kabul kapıları henüz açık.
 
 | Kimlik | Öncelik / teslim | Somut tetikleyici ve etki | Kaynak / düzeltme | Kanıt / kalan etki |
 | --- | --- | --- | --- | --- |
@@ -33,6 +33,19 @@ P0 bulunmadı. Bu, incelenmeyen uzak ortamın güvenli olduğu iddiası değildi
 | B-01 | P2 / B | Invalid/stale signature timestamp veya eksik engine metadata ile `ready` heartbeat 200 kabul edilir; operasyon ekranı yanlış hazır görünebilir. | `scanner-routes.heartbeat`: parse edilen UTC timestamp; ready için engine/signature zorunlu, en fazla 24 saat yaş / 30 saniye ileri sınırı. | RED 200→GREEN 400 regresyonları; gerçek runner ready heartbeat native 200. Belge clean result kapısı zaten ayrıca katıydı; false-clean açığı gözlenmedi. |
 
 İlk RED turları erişim/race/type/NAT/terminal, eksik sürüm/in-flight UI, heartbeat ve staff DTO kusurlarını üretti. Login/reset teslim testinin eski hali reset sonra login sıralı senaryoydu; isim/yorum düzeltildi ve hash doğrulama ile INSERT arasına reset enjekte eden gerçek interleaving testi eklendi. Zaman geciktirme ile race düzeltilmedi; güvenlik kararları DB commit sınırındadır.
+
+### Bağımsız raporun ek görevi — mevcut adaydan devam
+
+Devamın başlangıcı `codex/pilot-integration-review`, HEAD `d4b7356114998934805c14808e05d4b612b681e0`, temiz çalışma ağacı. Yeni worktree/import açılmadı. Antigravity ZIP'i önceki paketteki input ile birebir aynı; 18 manifest hash'i ve ancestor patch'inin 11 tracked dosyayı yeniden üretmesi tekrar doğrulandı. Dört yeni dosyanın kapsamı korunuyor. Bağımsız rapordaki **490 PASS**, yalnız sabit A ZIP'i için rapor sahibinin sonucudur; birleşik adayın sonucu aşağıdaki taze koşudur.
+
+| Kimlik | Öncelik | Tetikleyici / kaynak | Düzeltme ve kanıt |
+| --- | --- | --- | --- |
+| A-09 | P1 | Ortak IP'de create altıncı farklı öğrencide 429; public tracking on birinci öğrencide 429. `createApplicationDraft`, `lookupApplicationTracking`. | Mevcut D1 hashed-IP limiter korunarak merkezi `application-rate-limits.js` politikasında create **120/900 saniye**, tracking **300/900 saniye**. Dört yeni RED test eski sınırda başarısız; GREEN 20 farklı geçerli öğrenci create/known-status lookup, 121. create ve 301. lookup 429, başka IP bağımsız ve expired-window tekrar kabul. Duplicate öğrenci 409 `APPLICATION_ALREADY_ACTIVE`, app sayısı değişmez. |
+| A-10 | P1 | Owner auth'tan sonra staff reset oturumu iptal ederken mevcut version ile draft alanı 200 yazılabiliyordu. `updateCurrentApplicationFields` → `updateDraft`/`updateDraftFields`. | Server-authenticated session ID SQL'e taşınır; uygulamaya bağlı, unrevoked, unexpired session koşulu alan UPDATE, type-remap ve type UPDATE içinde kontrol edilir. Version guard aynı yerde kalır. SQL sınırına reset enjekte eden test fields/phone/address/type/same-type için **200 RED → 409 GREEN**, alan/version/remap değişmez. |
+
+Kota varsayımı: ortak üniversite NAT'ından 15 dakikada en fazla 120 yeni öğrenci girişi; her öğrenci iki manuel public takip sorgusu + 60 sorgu payı. Bunlar ölçülmüş fiziksel kapasite değil, sınırlı pilot için belgelenmiş tasarım değerleridir. Başarılı create ve tekrarlanan/duplicate denemeler aynı IP kotasını tüketir; tracking limiter mevcut public bilgi toplamayı sınırlamaya devam eder. Body/origin doğrulaması, finite 429, failed access-code limitleri ve tek aktif başvuru DB kısıtı korunur. Kota dolarsa o NAT'taki yeni istekler pencere bitene kadar reddedilebilir; gerçek kampüs yükü uzak UAT'de ölçülmeli.
+
+A-08 staff referans düzeltmesi zaten `d4b7356`'da vardı; yeniden uygulanmadı. Gerçek Worker sözleşme testi tekrar geçti ve yeni native staff detay yanıtı `reference_number` içerirken plaintext/hash içermez. Draft edit/phone/type/address/under-18/fingerprint aynı sürümlü writer'dan geçer; eksik sürüm 400, stale sürüm 409, iptal edilmiş owner commit'te etkisiz. Declaration/contact policy version'ları ve belge replacement revision guards ayrı mevcut sözleşmelerdir; `lock_version` zorunluluğu bu uçlara yeni politika olarak eklenmedi. Autosave yönteminin gerçek değeri aşağıda ve UAT'de **PATCH** olarak korunuyor.
 
 ## Bulgusuz yerel kontroller ve sınırlar
 
@@ -52,29 +65,29 @@ MacBook portable foreground runner, özel 0700 state / 0600 credential ve geçic
 
 ## Son doğrulama
 
-Eski branch PASS sayıları birleşik aday için kullanılmadı. Scanner-only baseline 477 PASS/1 SKIP; frozen A+B ilk import 503 PASS/1 SKIP idi. Aşağıdaki sonuçlar birleşik düzeltmeler üzerindedir; sonraki test yorum/ad düzeltmeleri ayrıca focused 22/22 geçti.
+Eski branch PASS sayıları birleşik aday için kullanılmadı. Scanner-only baseline 477 PASS/1 SKIP; frozen A+B ilk import 503 PASS/1 SKIP; önceki aday 516 PASS/1 SKIP idi. Aşağıdaki sonuçlar ek görev düzeltmelerini içeren güncel birleşik kaynak üzerindedir; ilgili focused regresyonlar 146/146 geçti.
 
 | Kontrol | Sonuç / exit code |
 | --- | --- |
-| `npm test` | **516 PASS, 0 FAIL, 1 SKIP / toplam 517**, 18.45 s, exit 0 |
+| `npm test` | **521 PASS, 0 FAIL, 1 SKIP / toplam 522**, 18.33 s, exit 0 |
 | Python unittest discovery | **13/13**, exit 0 |
 | `npm audit --json` | **0** info/low/moderate/high/critical, exit 0; bağımlılık kodunun eksiksiz güvenlik denetimi değildir |
 | `npm run build:staging` | PASS, exit 0; önceden var olan `ocrService` static/dynamic import chunk uyarısı |
 | `git diff --check` | PASS, exit 0 |
 | Fresh local D1 | Native Wrangler **0001–0009** PASS, exit 0 |
 | Upgrade / fresh regression | 0001–0007 legacy session + finalized pending fixture → 0008/0009: referans backfill, hash null, session korunur, job queued/pending; FK clean. 2/2 PASS |
-| Ayrı opt-in gerçek ClamAV | **1/1 PASS**, 59.16 s, exit 0; aynı test varsayılan Node koşusunda SKIP |
+| Ayrı opt-in gerçek ClamAV | **1/1 PASS**, 57.33 s, exit 0; aynı test varsayılan Node koşusunda SKIP |
 | Native acceptance | **PASS**, exit 0; native workerd + local D1/R2 + gerçek MacBook ClamAV |
 
 Atlanan testin tam adı: `real MacBook ClamAV scans via HTTPS job protocol and preserves staff/review/ZIP/replacement gates` (`test/scannerReal.test.js`). Ayrı `RUN_REAL_CLAMAV=1` koşusunda hiçbir skip yok. Gerçek HTTPS/ClamAV var; bu testin D1/R2'si SQLite/R2 adaptörüdür. PDF/PNG/JPEG/WebP clean; EICAR unsafe; encrypted/broken non-clean; initial/replacement, restart/outage, gerçek 1 saniye timeout üç deneme sonra failed ve ZIP içeriği doğrulanır.
 
-Native `test/scanner/native-acceptance.py` ayrıca gerçek workerd/D1/R2 üzerinde çalıştırıldı: 65 geçerli ortak NAT girişi, bağımsız owner cookies, wrong/reference-only denial, PATCH 409, staff reset/revocation, owner regenerate, terminal denial, scanner-auth denial; **initial PDF clean, replacement PDF clean, replacement EICAR unsafe**. Pending/unsafe download/preview/archive 404, approve 409; clean download/archive-file exact bytes. ClamAV **1.5.4**, daily **28141**, build time **2026-10-02T06:26:12Z**; gerçek scan timestamps [native evidence](pilot-integration-evidence/native-acceptance.json) içinde.
+Native `test/scanner/native-acceptance.py` güncel kaynakta ayrıca gerçek workerd/D1/R2 üzerinde çalıştırıldı: **20 farklı öğrenci aynı IP'den create/public lookup**, duplicate active draft 409, staff detail güvenli referans, 65 geçerli ortak NAT girişi, bağımsız owner cookies, wrong/reference-only denial, PATCH 409, staff reset/revocation, owner regenerate, terminal denial, scanner-auth denial; **initial PDF clean, replacement PDF clean, replacement EICAR unsafe**. Native public lookup'ta taslak gizliliği nedeniyle found=false normal; 20 gerçek trackable student sonucu Node/SQLite testindedir. Pending/unsafe download/preview/archive 404, approve 409; clean download/archive-file exact bytes. ClamAV **1.5.4**, daily **28141**, build time **2026-10-02T06:26:12Z**; gerçek scan timestamps [native evidence](pilot-integration-evidence/native-acceptance.json) içinde.
 
 Native harness local R2 CLI PUT, sentetik staff session ve under_review fixture, yalnız queue available_at hızlandırması kullanır. Scan verdict elle atanmaz. Fiziksel browser PUT/CORS, gerçek staff bootstrap/identity check, public submit tam zinciri ve uzak servis değildir. Sır değerleri/body/cookies kayıtlı kanıta konmadı. [Validation](pilot-integration-evidence/validation.json), [son çıktı özetleri](pilot-integration-evidence/test-summary.txt), [gerçek engine sonuçları](pilot-integration-evidence/real-clamav.json), [source provenance](pilot-integration-evidence/source-provenance.json).
 
 ## Teslim ve kalan kapılar
 
-Review ZIP: tam tracked candidate source, combined/corrections patch, bu rapor, staging/UAT planı, sırsız evidence, frozen A kaynak ZIP ve checksum manifesti. `.git`, `.wrangler`, `.dev.vars`, node_modules/dist, venv/signature database, özel cert/key/secret veya test belge fixture dosyaları içermez. Commit/hash pakette kayıtlıdır; source ZIP'in daha sonra değişen worktree dosyaları alınmaz.
+Review ZIP: scanner dahil tam tracked candidate source, ancestor'dan combined patch, import'tan corrections patch, `d4b7356`'dan followup patch, bu rapor, staging/UAT planı, sırsız evidence, frozen A kaynak ZIP, bağımsız raporun sabit kopyası ve checksum manifesti. `.git`, `.wrangler`, `.dev.vars`, node_modules/dist, venv/signature database, özel cert/key/secret veya test belge fixture dosyaları içermez. Commit/hash pakette kayıtlıdır; source ZIP'in daha sonra değişen worktree dosyaları alınmaz. Girdi doğrulaması [ek görev provenance](pilot-integration-evidence/followup-source-verification.json) içinde.
 
 Yerel geçici HTTPS Worker, runner, clamscan ve test server süreçleri durduruldu. Owned private harness credentials, yerel D1/R2 test namespace'leri ve EICAR/sentetik fixture dosyaları temizlendi; scanner tmp boş. ClamAV, official signatures ve venv kurulu, sürekli runner etkin değil. Kaynak scanner/access worktree'leri korunur.
 

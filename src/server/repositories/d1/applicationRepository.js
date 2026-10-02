@@ -3,6 +3,7 @@ import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../../config/
 import { normalizeStudentNumber } from './studentRepository.js';
 import { mapDocumentRequirementCodeForTypeSwitch } from '../../domain/documentPolicy.js';
 import { createAccessCodeRotationStatements } from './application-access-statements.js';
+import { APPLICATION_OWNER_GUARD } from './application-owner-guard.js';
 import { generateApplicationReference } from '../../auth/applicationAccessCode.js';
 
 const PUBLIC_APPLICATION_FIELDS = Object.freeze({
@@ -305,7 +306,9 @@ export function createApplicationRepository(database) {
             if (fields.length === 0) return this.findById(applicationId);
 
             const requestedType = changes.applicationType;
-            if (requestedType === undefined) return this.updateDraftFields(applicationId, fields, expectedLockVersion);
+            const ownerSessionId = auditContext?.ownerSessionId || null;
+            const writeAuthority = { expectedLockVersion, ownerSessionId };
+            if (requestedType === undefined) return this.updateDraftFields(applicationId, fields, writeAuthority);
 
             const currentApplication = await this.findById(applicationId);
             if (!currentApplication || currentApplication.status !== 'draft') return null;
@@ -313,7 +316,7 @@ export function createApplicationRepository(database) {
                 throw new ApplicationConflictError('APPLICATION_UPDATE_CONFLICT');
             }
             if (requestedType === currentApplication.application_type) {
-                return this.updateDraftFields(applicationId, fields.filter(([key]) => key !== 'applicationType'), expectedLockVersion);
+                return this.updateDraftFields(applicationId, fields.filter(([key]) => key !== 'applicationType'), writeAuthority);
             }
             if (!auditContext?.auditEventId || !auditContext?.requestId) throw new TypeError('Application type changes require audit context.');
 
@@ -329,10 +332,11 @@ export function createApplicationRepository(database) {
                 WHERE id = ? AND application_id = ?
                   AND requirement_id = ? AND application_type = ?
                   AND EXISTS (SELECT 1 FROM applications WHERE id=? AND status='draft'
-                    AND (? IS NULL OR lock_version=?))
+                    AND (? IS NULL OR lock_version=?) AND ${APPLICATION_OWNER_GUARD})
             `).bind(
                 remap.targetRequirementId, requestedType, remap.recordId, applicationId,
-                remap.currentRequirementId, currentApplication.application_type, applicationId, expectedLockVersion, expectedLockVersion
+                remap.currentRequirementId, currentApplication.application_type, applicationId, expectedLockVersion, expectedLockVersion,
+                ownerSessionId, ownerSessionId
             )));
             statements.push(database.prepare(`
                 UPDATE applications
@@ -341,6 +345,7 @@ export function createApplicationRepository(database) {
                     retention_due_at = datetime('now', '+30 days')
                 WHERE id = ? AND status = 'draft' AND application_type = ?
                   AND (? IS NULL OR lock_version=?)
+                  AND ${APPLICATION_OWNER_GUARD}
                   AND (SELECT COUNT(*) FROM document_records WHERE application_id = ?) = ?
                   AND NOT EXISTS (
                       SELECT 1 FROM document_records AS records
@@ -350,6 +355,7 @@ export function createApplicationRepository(database) {
                   )
             `).bind(
                 ...values, applicationId, currentApplication.application_type, expectedLockVersion, expectedLockVersion,
+                ownerSessionId, ownerSessionId,
                 applicationId, remaps.length, applicationId, requestedType, requestedType
             ));
             statements.push(database.prepare(`
@@ -374,14 +380,14 @@ export function createApplicationRepository(database) {
             if (results[applicationUpdateIndex + 1]?.meta?.changes !== 1) throw new Error('Application type change audit did not complete.');
             return this.findById(applicationId);
         },
-        async updateDraftFields(applicationId, fields, expectedLockVersion = null) {
+        async updateDraftFields(applicationId, fields, { expectedLockVersion = null, ownerSessionId = null } = {}) {
             if (fields.length === 0) return this.findById(applicationId);
 
             const assignments = fields.map(([key]) => `${PUBLIC_APPLICATION_FIELDS[key]} = ?`);
             assignments.push('lock_version = lock_version + 1');
             const values = fields.map(([, value]) => value);
-            let whereClause = "id = ? AND status = 'draft'";
-            const whereValues = [applicationId];
+            let whereClause = `id = ? AND status = 'draft' AND ${APPLICATION_OWNER_GUARD}`;
+            const whereValues = [applicationId, ownerSessionId, ownerSessionId];
             if (expectedLockVersion !== null && expectedLockVersion !== undefined) {
                 whereClause += ' AND lock_version = ?';
                 whereValues.push(expectedLockVersion);

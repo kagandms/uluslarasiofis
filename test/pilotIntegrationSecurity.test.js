@@ -158,3 +158,35 @@ test('public draft updates require a positive integer observed version and canno
     assert.equal(database.prepare('SELECT first_name FROM applications').first().first_name, null);
     assert.equal(database.prepare('SELECT lock_version FROM applications').first().lock_version, 1);
 });
+
+function revokeOwnerBeforeUpdate(database) {
+    const prepareStatement = database.prepare.bind(database);
+    database.prepare = (sql) => {
+        if (/UPDATE applications\s+SET/.test(sql)) {
+            database.prepare = prepareStatement;
+            database.exec("UPDATE applications SET access_code_version=2; UPDATE application_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')");
+        }
+        return prepareStatement(sql);
+    };
+}
+
+test('draft field, phone, address and type writes authenticated before reset cannot mutate with the revoked owner at SQL commit', async () => {
+    for (const patch of [{ first_name: 'Revoked stale edit' }, { student_phone: '+905559998877' },
+        { address_evidence_type: 'residence_certificate' }, { application_type: 'renewal' },
+        { application_type: 'initial', first_name: 'Revoked same-type edit' }]) {
+        const { database, environment, application, cookie } = await createFixture();
+        database.prepare("INSERT INTO document_records(id,application_id,requirement_id,application_type) VALUES('revoked-record',?,'req-initial-passport','initial')")
+            .bind(application.id).run();
+        revokeOwnerBeforeUpdate(database);
+
+        const response = await send(environment, '/api/public/applications/current/autosave', { method: 'PATCH', cookie,
+            body: { ...patch, lock_version: 1 } });
+
+        assert.equal(response.status, 409);
+        const persisted = database.prepare('SELECT first_name,student_phone,address_evidence_type,application_type,lock_version FROM applications').first();
+        assert.deepEqual({ ...persisted }, { first_name: application.first_name, student_phone: application.student_phone,
+            address_evidence_type: application.address_evidence_type, application_type: 'initial', lock_version: 1 });
+        assert.equal(database.prepare("SELECT application_type FROM document_records WHERE id='revoked-record'").first().application_type, 'initial');
+        database.database.close();
+    }
+});

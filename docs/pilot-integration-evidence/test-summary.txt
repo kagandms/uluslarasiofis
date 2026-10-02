@@ -1,16 +1,16 @@
 Node
-✔ Türkmenistan için veren makam fallback değeri SMST olarak korunur (1.110916ms)
-✔ YKN waits for Apply document discovery before acceptance-code automation (0.778458ms)
-✔ portal accepts document discovery results without treating profile discovery as complete (0.535334ms)
-✔ starting a new YKN student search clears the prior student document-byte cache (0.900833ms)
-ℹ tests 517
+✔ Türkmenistan için veren makam fallback değeri SMST olarak korunur (1.138708ms)
+✔ YKN waits for Apply document discovery before acceptance-code automation (0.890917ms)
+✔ portal accepts document discovery results without treating profile discovery as complete (0.920542ms)
+✔ starting a new YKN student search clears the prior student document-byte cache (0.923208ms)
+ℹ tests 522
 ℹ suites 0
-ℹ pass 516
+ℹ pass 521
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 1
 ℹ todo 0
-ℹ duration_ms 18452.5365
+ℹ duration_ms 18331.615125
 
 Python
 scan_failed code=scan_timeout
@@ -22,12 +22,12 @@ ok
 test_partial_signature_database_is_not_ready_even_when_version_command_succeeds (test_runner.SignatureCompletenessTests.test_partial_signature_database_is_not_ready_even_when_version_command_succeeds) ... ok
 
 ----------------------------------------------------------------------
-Ran 13 tests in 0.013s
+Ran 13 tests in 0.015s
 
 OK
 
 Real ClamAV
-✔ real MacBook ClamAV scans via HTTPS job protocol and preserves staff/review/ZIP/replacement gates (58755.046334ms)
+✔ real MacBook ClamAV scans via HTTPS job protocol and preserves staff/review/ZIP/replacement gates (56890.311834ms)
 ℹ Real HTTPS + MacBook ClamAV: clean PDF/PNG/JPEG/WebP, EICAR unsafe, encrypted/broken non-clean, replacement, restart and real engine timeout.
 ℹ tests 1
 ℹ suites 0
@@ -36,7 +36,7 @@ Real ClamAV
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 59157.309583
+ℹ duration_ms 57332.432709
 
 Build staging
 dist/client/assets/pdf.worker.min-BmVo14Nb.mjs                                  1,317.03 kB
@@ -50,18 +50,18 @@ dist/client/assets/pdfjs-bootstrap-C1sYUuCy.js                                  
 
 [INEFFECTIVE_DYNAMIC_IMPORT] src/services/ocrService.js is dynamically imported by src/managers/yknManager.js but also statically imported by src/staff/main.js?v=2.3.5, dynamic import will not move module into another chunk.
 
-✓ built in 266ms
+✓ built in 253ms
 
-Final focused access checks
-✔ application type switch is fenced at commit when another device changes fields after its version precheck (8.192167ms)
-✔ successful credential logins from campus NAT and a guessed-reference flood cannot lock out a valid owner (29.386667ms)
-✔ failed reset audit rolls back hash, version and every session revocation (5.979542ms)
-✔ public draft updates require a positive integer observed version and cannot bypass stale-write protection (6.789625ms)
-ℹ tests 22
+Focused regressions
+}
+✔ resubmission audit failure rolls back document, application, and student note changes (6.175167ms)
+✔ staff reads, previews, downloads, and re-requests the finalized replacement current revision (16.020792ms)
+✔ replacing one requested document does not resume review; staff must clear remaining requests explicitly (12.5805ms)
+ℹ tests 146
 ℹ suites 0
-ℹ pass 22
+ℹ pass 146
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 213.772084
+ℹ duration_ms 2181.62325
