@@ -17,42 +17,107 @@ function createTranslatedElement(document, tag, key, text) {
 }
 
 /**
- * Normalizes notification preferences response from either baseline (c59e56c) or extended contract.
+ * Normalizes and strictly verifies notification preferences response against the API contract.
  * @param {object|null} data Raw API response object.
- * @returns {object} Normalized preference descriptor.
+ * @param {string|null} expectedApplicationId Expected application ID to match against.
+ * @returns {object} Normalized preference descriptor with verification flags.
  */
-export function parseNotificationPreferences(data) {
+export function parseNotificationPreferences(data, expectedApplicationId = null) {
     if (!data || typeof data !== 'object') {
         return {
             applicationId: null,
             whatsappOptIn: false,
             consentVersion: null,
             language: null,
-            currentConsentVersion: WHATSAPP_CONSENT_VERSION,
+            optedInAt: null,
+            optedOutAt: null,
+            currentConsentVersion: null,
             effectiveWhatsappOptIn: false,
             requiresReconsent: false,
-            canOptIn: true
+            canOptIn: false,
+            isValidContract: false,
+            isApplicationIdMatch: false,
+            isVersionSupported: false,
+            isVerified: false
         };
     }
-    const consentVersion = data.consent_version ?? null;
-    const currentConsentVersion = data.current_consent_version || WHATSAPP_CONSENT_VERSION;
+
+    const applicationId = typeof data.application_id === 'string' && data.application_id.trim().length > 0
+        ? data.application_id.trim()
+        : null;
+    const currentConsentVersion = typeof data.current_consent_version === 'string' && data.current_consent_version.trim().length > 0
+        ? data.current_consent_version.trim()
+        : null;
     const effectiveWhatsappOptIn = typeof data.effective_whatsapp_opt_in === 'boolean'
         ? data.effective_whatsapp_opt_in
-        : Boolean(data.whatsapp_opt_in && consentVersion === WHATSAPP_CONSENT_VERSION);
+        : false;
     const requiresReconsent = typeof data.requires_reconsent === 'boolean'
         ? data.requires_reconsent
-        : Boolean(data.whatsapp_opt_in && consentVersion && consentVersion !== WHATSAPP_CONSENT_VERSION);
-    const canOptIn = typeof data.can_opt_in === 'boolean' ? data.can_opt_in : true;
+        : false;
+    const canOptIn = typeof data.can_opt_in === 'boolean'
+        ? data.can_opt_in
+        : false;
+    const whatsappOptIn = typeof data.whatsapp_opt_in === 'boolean'
+        ? data.whatsapp_opt_in
+        : false;
+    const consentVersion = typeof data.consent_version === 'string' && data.consent_version.trim().length > 0
+        ? data.consent_version.trim()
+        : null;
+    const language = typeof data.language === 'string' && data.language.trim().length > 0
+        ? data.language.trim()
+        : null;
+    const optedInAt = typeof data.opted_in_at === 'string' && data.opted_in_at.trim().length > 0
+        ? data.opted_in_at.trim()
+        : null;
+    const optedOutAt = typeof data.opted_out_at === 'string' && data.opted_out_at.trim().length > 0
+        ? data.opted_out_at.trim()
+        : null;
+
+    // Strict contract completeness: all backend-added fields must be present and correctly typed
+    const hasRequiredTypes = applicationId !== null
+        && currentConsentVersion !== null
+        && typeof data.effective_whatsapp_opt_in === 'boolean'
+        && typeof data.requires_reconsent === 'boolean'
+        && typeof data.can_opt_in === 'boolean'
+        && typeof data.whatsapp_opt_in === 'boolean';
+
+    // Application ID validation: missing ID or mismatch is a verification failure
+    let isApplicationIdMatch = false;
+    if (expectedApplicationId !== null && expectedApplicationId !== undefined) {
+        isApplicationIdMatch = Boolean(applicationId && applicationId === expectedApplicationId);
+    } else {
+        isApplicationIdMatch = Boolean(applicationId);
+    }
+
+    // Supported consent text version match: cannot opt-in to or verify unknown text version
+    const isVersionSupported = (currentConsentVersion === WHATSAPP_CONSENT_VERSION);
+
+    // Coherence check: active effective opt-in requires opt-in flag, matching consent version, no re-consent, and canOptIn
+    let isCoherent = true;
+    if (effectiveWhatsappOptIn) {
+        if (!whatsappOptIn || consentVersion !== currentConsentVersion || requiresReconsent || !canOptIn) {
+            isCoherent = false;
+        }
+    }
+
+    const isValidContract = hasRequiredTypes && isCoherent && (expectedApplicationId ? isApplicationIdMatch : true);
+    const isVerified = isValidContract && isApplicationIdMatch && isVersionSupported;
 
     return {
-        applicationId: data.application_id ?? null,
-        whatsappOptIn: Boolean(data.whatsapp_opt_in),
+        applicationId,
+        whatsappOptIn,
         consentVersion,
-        language: data.language ?? null,
+        language,
+        optedInAt,
+        optedOutAt,
         currentConsentVersion,
-        effectiveWhatsappOptIn,
+        effectiveWhatsappOptIn: isVerified ? effectiveWhatsappOptIn : false,
         requiresReconsent,
-        canOptIn
+        canOptIn,
+        isValidContract,
+        isApplicationIdMatch,
+        isVersionSupported,
+        isVerified
     };
 }
 
@@ -72,7 +137,7 @@ function resolveErrorMessage(messages, error) {
 /**
  * Creates the optional WhatsApp notification preference field for Contact step.
  * @param {Document} document DOM Document.
- * @param {object} options Configuration and initial values.
+ * @param {object} options Configuration, initial values, and callbacks.
  * @returns {HTMLElement} Container with preference checkbox and accessible guidance.
  */
 export function createNotificationPreferenceField(document, {
@@ -80,7 +145,8 @@ export function createNotificationPreferenceField(document, {
     initialPreference = null,
     formValues = null,
     api = null,
-    onPreferenceChange = null
+    onPreferenceChange = null,
+    persistPhone = null
 } = {}) {
     const messages = readMessages(document);
     const container = document.createElement('div');
@@ -114,18 +180,21 @@ export function createNotificationPreferenceField(document, {
     status.setAttribute('aria-live', 'polite');
     status.style.display = 'none';
 
-    let currentPreference = parseNotificationPreferences(initialPreference);
-    let isSaving = false;
+    let currentPreference = initialPreference ? parseNotificationPreferences(initialPreference, application?.id) : null;
+    let currentPhone = (application?.student_phone || formValues?.student_phone || '').trim();
+    let lastSyncedPhone = currentPhone;
+    let userReconsentedPhone = null;
+    let saveGeneration = 0;
     let inFlightController = null;
-    let initialPhone = application?.student_phone || '';
 
     // Determine initial checked state:
-    // 1. Form values explicitly set by user in current wizard session takes precedence
-    // 2. Otherwise use effective preference from server if valid and not requiring reconsent
-    // 3. Otherwise default unchecked
-    if (formValues && typeof formValues.whatsapp_opt_in === 'boolean') {
+    // 1. Unauthenticated visitor: temporary intent (default unchecked unless formValues.whatsapp_opt_in is set)
+    // 2. Authenticated draft: use explicit formValues if set, otherwise verified effective preference without reconsent
+    if (!application) {
+        checkbox.checked = Boolean(formValues && formValues.whatsapp_opt_in === true);
+    } else if (formValues && typeof formValues.whatsapp_opt_in === 'boolean') {
         checkbox.checked = formValues.whatsapp_opt_in;
-    } else if (currentPreference.effectiveWhatsappOptIn && !currentPreference.requiresReconsent) {
+    } else if (currentPreference?.isVerified && currentPreference.effectiveWhatsappOptIn && !currentPreference.requiresReconsent) {
         checkbox.checked = true;
     } else {
         checkbox.checked = false;
@@ -133,15 +202,41 @@ export function createNotificationPreferenceField(document, {
 
     function updateNotices() {
         const activeMessages = readMessages(document);
-        if (currentPreference.canOptIn === false) {
+        // Pre-session visitor: never restrict or disable controls
+        if (!application) {
+            checkbox.disabled = false;
+            notice.style.display = 'none';
+            notice.textContent = '';
+            return;
+        }
+
+        // Authenticated session: verify contract
+        if (currentPreference && !currentPreference.isValidContract) {
+            checkbox.disabled = true;
+            notice.dataset.i18n = 'whatsappPreferenceFailed';
+            notice.textContent = activeMessages.whatsappPreferenceFailed;
+            notice.style.display = '';
+            return;
+        }
+
+        if (currentPreference && !currentPreference.isVersionSupported) {
+            checkbox.disabled = true;
+            notice.dataset.i18n = 'whatsappPreferenceVersionInvalid';
+            notice.textContent = activeMessages.whatsappPreferenceVersionInvalid;
+            notice.style.display = '';
+            return;
+        }
+
+        if (currentPreference && currentPreference.canOptIn === false) {
             checkbox.disabled = true;
             notice.dataset.i18n = 'whatsappPhoneRequired';
             notice.textContent = activeMessages.whatsappPhoneRequired;
             notice.style.display = '';
             return;
         }
+
         checkbox.disabled = false;
-        if (currentPreference.requiresReconsent) {
+        if (currentPreference && currentPreference.requiresReconsent) {
             notice.dataset.i18n = 'whatsappReconsentRequired';
             notice.textContent = activeMessages.whatsappReconsentRequired;
             notice.style.display = '';
@@ -157,70 +252,164 @@ export function createNotificationPreferenceField(document, {
         if (!api || typeof api.updateCurrentNotificationPreferences !== 'function') return;
         if (!application || application.status !== 'draft') return;
 
-        inFlightController?.abort();
-        inFlightController = new AbortController();
-        const currentController = inFlightController;
-
-        isSaving = true;
-        checkbox.disabled = true;
+        const thisGen = ++saveGeneration;
+        const phoneAtStart = currentPhone;
         const activeMessages = readMessages(document);
+
+        // Prevent rapid conflicting clicks during in-flight operations
+        checkbox.disabled = true;
         status.style.display = '';
         status.removeAttribute('role');
         status.setAttribute('role', 'status');
         status.dataset.i18n = 'whatsappPreferenceSaving';
         status.textContent = activeMessages.whatsappPreferenceSaving;
 
-        try {
-            const locale = document.documentElement.lang || 'tr';
-            const payload = optIn
-                ? { whatsapp_opt_in: true, consent_version: WHATSAPP_CONSENT_VERSION, language: locale }
-                : { whatsapp_opt_in: false };
+        if (optIn) {
+            // STEP 1: Persist phone changes first so server application has the updated phone
+            if (typeof persistPhone === 'function') {
+                const phoneResult = await persistPhone();
+                if (thisGen !== saveGeneration || currentPhone !== phoneAtStart) {
+                    // Phone was modified again during persist; abort this stale save
+                    return;
+                }
+                if (!phoneResult?.success) {
+                    // Phone save failed: DO NOT send opt-in PUT
+                    checkbox.disabled = false;
+                    status.setAttribute('role', 'alert');
+                    status.dataset.i18n = 'whatsappPreferenceFailed';
+                    status.textContent = activeMessages.whatsappPreferenceFailed;
+                    return;
+                }
+                if (phoneResult.application) application = phoneResult.application;
+            }
 
-            const response = await api.updateCurrentNotificationPreferences(payload);
-            if (currentController.signal.aborted) return;
+            // STEP 2: Verify version and phone availability
+            if (currentPreference && !currentPreference.isVersionSupported) {
+                checkbox.disabled = true;
+                status.setAttribute('role', 'alert');
+                status.dataset.i18n = 'whatsappPreferenceVersionInvalid';
+                status.textContent = activeMessages.whatsappPreferenceVersionInvalid;
+                return;
+            }
 
-            currentPreference = parseNotificationPreferences(response);
+            if (!currentPhone) {
+                checkbox.disabled = true;
+                status.setAttribute('role', 'alert');
+                status.dataset.i18n = 'whatsappPhoneRequired';
+                status.textContent = activeMessages.whatsappPhoneRequired;
+                return;
+            }
+
+            // STEP 3: Send preference opt-in PUT
+            inFlightController?.abort();
+            inFlightController = new AbortController();
+            let response;
+            try {
+                const activeLocale = document.documentElement.lang || 'tr';
+                response = await api.updateCurrentNotificationPreferences({
+                    whatsapp_opt_in: true,
+                    consent_version: WHATSAPP_CONSENT_VERSION,
+                    language: activeLocale
+                });
+            } catch (error) {
+                if (thisGen !== saveGeneration || currentPhone !== phoneAtStart) return;
+                checkbox.disabled = false;
+                status.setAttribute('role', 'alert');
+                status.textContent = resolveErrorMessage(activeMessages, error);
+                return;
+            }
+
+            // STEP 4: Guard against phone change while request was in-flight
+            if (thisGen !== saveGeneration || currentPhone !== phoneAtStart) {
+                // Phone changed while PUT was in flight: discard response!
+                return;
+            }
+
+            // STEP 5: Validate response contract before declaring success
+            const parsed = parseNotificationPreferences(response, application?.id);
+            if (!parsed.isValidContract || !parsed.effectiveWhatsappOptIn || !parsed.isVersionSupported) {
+                checkbox.disabled = false;
+                status.setAttribute('role', 'alert');
+                status.textContent = !parsed.isVersionSupported
+                    ? activeMessages.whatsappPreferenceVersionInvalid
+                    : activeMessages.whatsappPreferenceFailed;
+                return;
+            }
+
+            currentPreference = parsed;
+            checkbox.disabled = false;
             status.dataset.i18n = 'whatsappPreferenceSaved';
             status.textContent = activeMessages.whatsappPreferenceSaved;
             updateNotices();
-        } catch (error) {
-            if (currentController.signal.aborted) return;
-            status.setAttribute('role', 'alert');
-            status.textContent = resolveErrorMessage(activeMessages, error);
-            // On save failure, keep user's checked selection intact as per specification
-        } finally {
-            if (inFlightController === currentController) {
-                isSaving = false;
-                inFlightController = null;
-                if (currentPreference.canOptIn !== false) checkbox.disabled = false;
+        } else {
+            // Opt-out path: send { whatsapp_opt_in: false }
+            inFlightController?.abort();
+            inFlightController = new AbortController();
+            let response;
+            try {
+                response = await api.updateCurrentNotificationPreferences({
+                    whatsapp_opt_in: false
+                });
+            } catch (error) {
+                if (thisGen !== saveGeneration) return;
+                checkbox.disabled = false;
+                status.setAttribute('role', 'alert');
+                status.textContent = resolveErrorMessage(activeMessages, error);
+                return;
             }
+
+            if (thisGen !== saveGeneration) return;
+
+            const parsed = parseNotificationPreferences(response, application?.id);
+            currentPreference = parsed;
+            checkbox.disabled = false;
+            status.dataset.i18n = 'whatsappPreferenceSaved';
+            status.textContent = activeMessages.whatsappPreferenceSaved;
+            updateNotices();
         }
     }
 
     checkbox.addEventListener('change', () => {
-        onPreferenceChange?.(checkbox.checked);
-        // Only trigger immediate API save if an application draft session already exists
+        const isChecked = checkbox.checked;
+        if (isChecked) {
+            userReconsentedPhone = currentPhone;
+        }
+        onPreferenceChange?.(isChecked);
         if (application && api) {
-            void savePreference(checkbox.checked);
+            void savePreference(isChecked);
         }
     });
 
-    // Helper attached to container to allow caller to synchronize phone changes
+    // Helper attached to container to synchronize phone input changes
     container.syncPhone = (newPhone) => {
         const trimmed = (newPhone || '').trim();
-        if (application && initialPhone && trimmed !== initialPhone) {
-            // Phone changed: old consent cannot carry over automatically
-            currentPreference.requiresReconsent = true;
-            checkbox.checked = false;
-            updateNotices();
-            onPreferenceChange?.(false);
+        if (trimmed === lastSyncedPhone) return;
+        lastSyncedPhone = trimmed;
+        currentPhone = trimmed;
+
+        // Invalidate in-flight save operations
+        saveGeneration++;
+
+        if (application) {
+            const savedPhone = (application.student_phone || '').trim();
+            if (trimmed !== savedPhone) {
+                // Phone differs from confirmed server record: invalidate old consent
+                if (currentPreference) {
+                    currentPreference.requiresReconsent = true;
+                }
+                checkbox.checked = false;
+                userReconsentedPhone = null;
+                updateNotices();
+                onPreferenceChange?.(false);
+            } else {
+                // Phone reverted to saved phone
+                updateNotices();
+            }
         }
     };
 
-    // Helper to get pending user preference for when draft is saved
     container.getUserPreference = () => checkbox.checked;
 
-    // Helper to refresh on locale change without calling PUT
     container.refreshLocale = () => {
         const activeMessages = readMessages(document);
         textSpan.textContent = activeMessages.whatsappConsentLabel;
@@ -234,7 +423,7 @@ export function createNotificationPreferenceField(document, {
 
 /**
  * Mounts the notification preference management card in the applicant tracking view (/basvurum).
- * Only renders controls for the authenticated owner session; validates application ID.
+ * Only renders controls for the authenticated owner session; validates application ID and contract.
  * @param {HTMLElement} mountPoint Mount container.
  * @param {object} options Application context, API and callbacks.
  * @returns {Promise<HTMLElement|null>} Rendered card or null if not applicable.
@@ -271,8 +460,9 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
     section.append(heading, statusText, button, feedback);
     mountPoint.append(section);
 
-    let preference = initialPreference ? parseNotificationPreferences(initialPreference) : null;
+    let preference = initialPreference ? parseNotificationPreferences(initialPreference, application?.id) : null;
     let isSubmitting = false;
+    let saveGeneration = 0;
     let inFlightController = null;
 
     function renderState() {
@@ -285,13 +475,23 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
             return;
         }
 
-        // Application ID mismatch check: do not expose management controls if IDs conflict
-        if (preference.applicationId && application.id && preference.applicationId !== application.id) {
+        // Contract and application ID verification: missing ID, mismatch, or broken contract blocks management
+        if (!preference.isValidContract || !preference.isApplicationIdMatch) {
             statusText.textContent = '';
             button.style.display = 'none';
             feedback.style.display = '';
             feedback.setAttribute('role', 'alert');
             feedback.textContent = activeMessages.trackingLookupError;
+            return;
+        }
+
+        // Unsupported or outdated consent version on server
+        if (!preference.isVersionSupported) {
+            statusText.textContent = activeMessages.whatsappPreferenceVersionInvalid;
+            button.style.display = 'none';
+            feedback.style.display = '';
+            feedback.setAttribute('role', 'alert');
+            feedback.textContent = activeMessages.whatsappPreferenceVersionInvalid;
             return;
         }
 
@@ -319,7 +519,7 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
             return;
         }
 
-        // Opted out
+        // Opted out state
         statusText.textContent = activeMessages.whatsappOptOutActive;
         button.className = 'application-button application-button-primary';
         button.textContent = activeMessages.whatsappOptInAction;
@@ -335,7 +535,7 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
         try {
             const raw = await api.readCurrentNotificationPreferences();
             if (!section.isConnected) return;
-            preference = parseNotificationPreferences(raw);
+            preference = parseNotificationPreferences(raw, application?.id);
             onPreferenceChange?.(preference);
             renderState();
         } catch (error) {
@@ -352,9 +552,18 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
         if (isSubmitting || !preference) return;
         const isOptIn = button.dataset.action === 'opt-in';
 
+        // Do not allow opt-in if server text version is not supported
+        if (isOptIn && !preference.isVersionSupported) {
+            const activeMessages = readMessages(document);
+            feedback.style.display = '';
+            feedback.setAttribute('role', 'alert');
+            feedback.textContent = activeMessages.whatsappPreferenceVersionInvalid;
+            return;
+        }
+
+        const thisGen = ++saveGeneration;
         inFlightController?.abort();
         inFlightController = new AbortController();
-        const currentController = inFlightController;
 
         isSubmitting = true;
         button.disabled = true;
@@ -373,18 +582,27 @@ export async function mountTrackingNotificationPreferences(mountPoint, {
                 : { whatsapp_opt_in: false };
 
             const response = await api.updateCurrentNotificationPreferences(payload);
-            if (currentController.signal.aborted || !section.isConnected) return;
+            if (thisGen !== saveGeneration || !section.isConnected) return;
 
-            preference = parseNotificationPreferences(response);
+            const parsed = parseNotificationPreferences(response, application?.id);
+            if (!parsed.isValidContract || (isOptIn && !parsed.effectiveWhatsappOptIn)) {
+                feedback.setAttribute('role', 'alert');
+                feedback.textContent = !parsed.isVersionSupported
+                    ? activeMessages.whatsappPreferenceVersionInvalid
+                    : activeMessages.whatsappPreferenceFailed;
+                return;
+            }
+
+            preference = parsed;
             onPreferenceChange?.(preference);
             feedback.textContent = activeMessages.whatsappPreferenceSaved;
             renderState();
         } catch (error) {
-            if (currentController.signal.aborted || !section.isConnected) return;
+            if (thisGen !== saveGeneration || !section.isConnected) return;
             feedback.setAttribute('role', 'alert');
             feedback.textContent = resolveErrorMessage(activeMessages, error);
         } finally {
-            if (inFlightController === currentController) {
+            if (thisGen === saveGeneration) {
                 isSubmitting = false;
                 inFlightController = null;
                 button.disabled = false;

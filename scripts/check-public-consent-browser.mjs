@@ -7,9 +7,22 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 
-// Dynamically import puppeteer
-const puppeteerModule = await import('puppeteer');
-const puppeteer = puppeteerModule.default || puppeteerModule;
+// Dynamically import puppeteer with clear guidance if missing
+let puppeteer;
+try {
+    const puppeteerModule = await import('puppeteer');
+    puppeteer = puppeteerModule.default || puppeteerModule;
+} catch (err) {
+    console.error(`
+[Puppeteer Not Found]
+scripts/check-public-consent-browser.mjs requires Puppeteer to execute headless Chromium verification.
+To run without modifying package.json or package-lock.json:
+  npx --yes puppeteer@24.4.0 node scripts/check-public-consent-browser.mjs
+or configure an isolated global/tool environment.
+Error: ${err.message}
+`);
+    process.exit(1);
+}
 
 const VIEWPORTS = [
     { width: 320, height: 600, label: '320px (Mobile S)' },
@@ -20,16 +33,19 @@ const VIEWPORTS = [
 
 const LOCALES = ['tr', 'en', 'ru', 'tk', 'ar'];
 
-// Mock state
+// Mock state with complete API contract fields
 let currentSessionMode = 'owner'; // 'owner' | 'none'
 let currentPrefs = {
     application_id: 'app_browser_test_1',
+    current_consent_version: 'whatsapp-consent-v1',
+    effective_whatsapp_opt_in: false,
+    requires_reconsent: false,
+    can_opt_in: true,
     whatsapp_opt_in: false,
     consent_version: null,
     language: 'tr',
-    effective_whatsapp_opt_in: false,
-    requires_reconsent: false,
-    can_opt_in: true
+    opted_in_at: null,
+    opted_out_at: null
 };
 
 function createMockServer() {
@@ -86,12 +102,16 @@ function createMockServer() {
                         if (parsed.whatsapp_opt_in) {
                             currentPrefs.whatsapp_opt_in = true;
                             currentPrefs.consent_version = parsed.consent_version || 'whatsapp-consent-v1';
+                            currentPrefs.current_consent_version = 'whatsapp-consent-v1';
                             currentPrefs.language = parsed.language || 'tr';
                             currentPrefs.effective_whatsapp_opt_in = true;
                             currentPrefs.requires_reconsent = false;
+                            currentPrefs.can_opt_in = true;
+                            currentPrefs.opted_in_at = new Date().toISOString();
                         } else {
                             currentPrefs.whatsapp_opt_in = false;
                             currentPrefs.effective_whatsapp_opt_in = false;
+                            currentPrefs.opted_out_at = new Date().toISOString();
                         }
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify(currentPrefs));
@@ -388,7 +408,9 @@ async function runBrowserChecks() {
             console.log(`  ✔ Home page [${vp.label}] - overflow: OK`);
         }
 
-        console.log('\n=== All Real Browser Checks Passed Successfully! ===\n');
+        console.log('\n=== All Real Browser Checks Passed Successfully! ===');
+        console.log('Notice: Automated browser checks verify responsive layout, touch target minimums, and contract state machines.');
+        console.log('They provide automated evidence and do not constitute an official manual WCAG certification.\n');
     } finally {
         await browser.close();
         await new Promise((resolve) => server.close(resolve));

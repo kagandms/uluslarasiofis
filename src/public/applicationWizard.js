@@ -1,7 +1,7 @@
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { createDraftAutosave } from './draftAutosave.js';
 import { isValidPhoneNumber } from '../shared/phoneNumber.js';
-import { createNotificationPreferenceField, WHATSAPP_CONSENT_VERSION } from './notificationPreferences.js';
+import { createNotificationPreferenceField, parseNotificationPreferences, WHATSAPP_CONSENT_VERSION } from './notificationPreferences.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
@@ -176,6 +176,19 @@ function createContactStep(document, application, formValues, state, api) {
         initialPreference: state?.notificationPreference,
         formValues,
         api: api || state?.api,
+        persistPhone: async () => {
+            const currentFields = readVisibleFields(form, state?.application || {});
+            if (state?.autosave) {
+                state.formValues = currentFields;
+                state.autosave.schedule(buildAutosaveValues(currentFields));
+                const saved = await state.autosave.flush();
+                if (!saved) return { success: false, error: new Error('Autosave failed') };
+            } else if (api?.updateCurrentApplication || api?.updateCurrentApplicationDraft) {
+                const saveFn = api.updateCurrentApplication || api.updateCurrentApplicationDraft;
+                state.application = await saveFn(buildAutosaveValues(currentFields));
+            }
+            return { success: true, application: state?.application };
+        },
         onPreferenceChange: (checked) => {
             if (state) {
                 if (!state.formValues) state.formValues = readVisibleFields(form, application || {});
@@ -618,6 +631,28 @@ function createProgress(document, step) {
     return list;
 }
 
+function createPreferenceWarningBanner(document, state, messages) {
+    const banner = document.createElement('div');
+    banner.className = 'application-notification-preference-banner';
+    banner.setAttribute('role', state.preferenceWarning.status === 'failed' ? 'alert' : 'status');
+    banner.setAttribute('aria-live', 'polite');
+    if (state.preferenceWarning.status === 'failed') {
+        const text = createTranslatedElement(document, 'p', 'whatsappDraftSavedPreferenceFailed', messages.whatsappDraftSavedPreferenceFailed);
+        const retryBtn = createButton(
+            document,
+            messages,
+            'whatsappRetryPreferenceAction',
+            'preference-retry',
+            'application-button application-button-secondary'
+        );
+        banner.append(text, retryBtn);
+    } else if (state.preferenceWarning.status === 'saved') {
+        const text = createTranslatedElement(document, 'p', 'whatsappPreferenceSaved', messages.whatsappPreferenceSaved);
+        banner.append(text);
+    }
+    return banner;
+}
+
 function renderWizard(root, state) {
     const document = root.ownerDocument;
     const messages = readMessages(document);
@@ -628,6 +663,9 @@ function renderWizard(root, state) {
     heading.tabIndex = -1;
     panel.append(createProgress(document, state.step), heading);
     panel.append(createSaveStatus(document, state));
+    if (state.preferenceWarning) {
+        panel.append(createPreferenceWarningBanner(document, state, messages));
+    }
     let errorElement = null;
     if (state.errorKey) {
         errorElement = createTranslatedElement(document, 'p', state.errorKey, messages[state.errorKey]);
@@ -922,13 +960,20 @@ async function saveStep(root, state, api) {
         if (state.step === 0 && isInitialDraftCreation && fields.whatsapp_opt_in === true && typeof api.updateCurrentNotificationPreferences === 'function') {
             try {
                 const locale = root.ownerDocument?.documentElement?.lang || 'tr';
-                state.notificationPreference = await api.updateCurrentNotificationPreferences({
+                const response = await api.updateCurrentNotificationPreferences({
                     whatsapp_opt_in: true,
                     consent_version: WHATSAPP_CONSENT_VERSION,
                     language: locale
                 });
+                const parsed = parseNotificationPreferences(response, state.application?.id);
+                if (parsed.isValidContract && parsed.isVerified && parsed.effectiveWhatsappOptIn) {
+                    state.notificationPreference = parsed;
+                    state.preferenceWarning = null;
+                } else {
+                    state.preferenceWarning = { status: 'failed' };
+                }
             } catch {
-                // Non-blocking preference error
+                state.preferenceWarning = { status: 'failed' };
             }
         }
         if (state.step === 1 && !canContinueResidenceStep(form, state.application)) {
@@ -986,12 +1031,41 @@ async function handlePrevious(root, state) {
     renderWizard(root, state);
 }
 
+async function retryNotificationPreference(root, state, api) {
+    if (!api?.updateCurrentNotificationPreferences || !state.application) return;
+    const button = root.querySelector('[data-action="preference-retry"]');
+    if (button) {
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+    }
+    try {
+        const locale = root.ownerDocument?.documentElement?.lang || 'tr';
+        const response = await api.updateCurrentNotificationPreferences({
+            whatsapp_opt_in: true,
+            consent_version: WHATSAPP_CONSENT_VERSION,
+            language: locale
+        });
+        const parsed = parseNotificationPreferences(response, state.application?.id);
+        if (parsed.isValidContract && parsed.isVerified && parsed.effectiveWhatsappOptIn) {
+            state.notificationPreference = parsed;
+            state.preferenceWarning = { status: 'saved' };
+        } else {
+            state.preferenceWarning = { status: 'failed' };
+        }
+    } catch {
+        state.preferenceWarning = { status: 'failed' };
+    } finally {
+        renderWizard(root, state);
+    }
+}
+
 async function handleWizardClick(root, state, api, event) {
     const button = event.target.closest('[data-action]');
     if (!button) return;
     const code = button.closest('[data-document-code]')?.dataset.documentCode;
     if (button.dataset.action === 'previous') await handlePrevious(root, state);
     if (button.dataset.action === 'submit-application') await submitApplication(root, state, api);
+    if (button.dataset.action === 'preference-retry') await retryNotificationPreference(root, state, api);
     if (button.dataset.action === 'document-retry' && code) await runUploadTask(code, state.uploads[code], state, api, root, { isRetry: true });
     if (button.dataset.action === 'document-delete' && code) await handleDelete(root, state, api, code);
     if (button.dataset.action === 'document-cancel' && code) state.uploads[code]?.abortController?.abort();

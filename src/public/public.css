@@ -265,6 +265,39 @@ a { color: inherit; }
     line-height: 1.5;
 }
 
+.application-notification-preference-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.65rem;
+    background: #fff8e6;
+    border: 1px solid #ffd580;
+    color: #8c5800;
+    font-size: 0.9rem;
+    font-weight: 550;
+    line-height: 1.45;
+}
+.application-notification-preference-banner[role="alert"] {
+    background: #fdf2f2;
+    border-color: #f8b4b4;
+    color: #9b1c1c;
+}
+.application-notification-preference-banner p {
+    margin: 0;
+    flex: 1 1 200px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+.application-notification-preference-banner button {
+    flex-shrink: 0;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.85rem;
+    min-height: 2.5rem;
+}
+
 .public-footer { width: min(1120px, calc(100% - 2.5rem)); margin: 0 auto; padding-block: 1.25rem 2rem; border-top: 1px solid #e5e7eb; color: #68707c; font-size: 0.85rem; }
 
 html[lang="ar"] { line-height: 1.6; }
@@ -278,6 +311,7 @@ html[dir="rtl"] .application-upload-control, html[dir="rtl"] .application-review
 html[dir="rtl"] .application-document-card progress { direction: ltr; }
 html[dir="rtl"] .application-review-section dl { direction: rtl; }
 html[dir="rtl"] .notification-preference-group { direction: rtl; }
+html[dir="rtl"] .application-notification-preference-banner { direction: rtl; }
 html[dir="rtl"] .tracking-state, html[dir="rtl"] .tracking-summary, html[dir="rtl"] .tracking-document-card,
 html[dir="rtl"] .tracking-notification-preferences { direction: rtl; }
 html[dir="rtl"] .tracking-details { direction: rtl; }

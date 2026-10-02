@@ -1,144 +1,136 @@
-# Phase 9: Public Öğrenci Portalı WhatsApp Bildirim İzni ve UX Doğrulama Raporu
+# Phase 9: Public Öğrenci Portalı WhatsApp Bildirim İzni ve Doğrulama Raporu (Harden & Contract Alignment)
 
 ## 1. Kapsam ve Başlangıç İzolasyonu
 
+- **Başlangıç Commit:** `469fe1b94cfe8f687cf74beff9098c138f2e86f4` (`antigravity/phase9-public-consent`)
 - **Temel Backend Commit:** `c59e56ccc68cb9680fa764b0213b83703bb4aac8` (`codex/phase9-notifications-core`)
-- **Birleştirilen Public UX Commit:** `617e4f0281c0ee2b6b4d177631fc921ecd083c4d` (`antigravity/phase10-public-ux-i18n`)
 - **İzole Worktree:** `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-phase9-public-consent`
 - **Hedef Çalışma Dalı:** `antigravity/phase9-public-consent`
-- **Kapsam:** `/`, `/basvuru` (İletişim Adımı 0) ve `/basvurum` (Başvuru Sahibi Oturumu) sayfalarında WhatsApp bildirim izni tercihi arayüzü; 5 dil (`tr`, `en`, `ru`, `tk`, `ar` RTL), responsive (320px, 390px, 768px, 1440px), WCAG 2.1 AA erişilebilirlik ve entegrasyon testleri.
+- **Görev Amacı:** Yeni özellik ekleme değil; API sözleşmesi, telefon kaydı sırası, yarış koşulu (race condition) koruması, ilk taslak hata görünürlüğü ve kullanıcıya sunulan kayıt sonucunun sıkılaştırılması.
 - **İzolasyon Kuralları:**
   - Başlangıç dizini ve untracked `docs/phase8h-scanner-design.md` dosyası korunmuştur.
-  - Codex'in `codex/phase9-notifications-core` worktree'sine veya dallarına müdahale edilmemiştir.
-  - `src/server/**`, `migrations/**`, `src/staff/**`, `yetkili/**`, `package.json`, `package-lock.json`, Vite ve Wrangler yapılandırmaları değiştirilmemiştir.
-  - Bağımlılıklar izole `npm ci` ile kurulmuş, başka klasörden `node_modules` kopyalanmamıştır.
+  - Codex'in `codex/phase9-notifications-core` veya diğer worktree/dallarına müdahale edilmemiştir.
+  - `src/server/**`, `migrations/**`, `src/staff/**`, `yetkili/**`, `package.json`, `package-lock.json`, Vite ve Wrangler yapılandırmalarına dokunulmamıştır.
+  - Bağımlılıklar izole ortamda kullanılmış, `package.json` değiştirilmemiştir.
 
 ---
 
-## 2. API Sözleşmesi ve Güvenlik Sınırları
+## 2. API Sözleşmesi ve Sıkı Doğrulama Kuralları
 
 ### Sabit Endpoint Sözleşmesi
 - `GET /api/public/applications/current/notification-preferences`
 - `PUT /api/public/applications/current/notification-preferences`
 
-### İstek Yükü (Payload) Sınırları
-- **Opt-in PUT:**
-  ```json
-  {
-    "whatsapp_opt_in": true,
-    "consent_version": "whatsapp-consent-v1",
-    "language": "tr|en|ru|tk|ar"
-  }
-  ```
-- **Opt-out PUT:**
-  ```json
-  {
-    "whatsapp_opt_in": false
-  }
-  ```
+### Backend Alanları ve Doğrulama Politikası
+Mevcut Alanlar:
+- `whatsapp_opt_in`: boolean
+- `consent_version`: string
+- `language`: 'tr' | 'en' | 'ru' | 'tk' | 'ar'
+- `opted_in_at`: ISO string | null
+- `opted_out_at`: ISO string | null
 
-### Güvenlik ve Kimlik Doğrulama Semantiği
-1. **İstemci Tarafından Gönderilmeyen Alanlar:** İstemci kesinlikle `application_id`, telefon numarası, zaman damgası veya hash göndermez. Başvuru sahibi kimliği sunucu tarafında HTTP-only `applicant_session` çerezi üzerinden doğrulanır.
-2. **Fazla Alan Engeli:** PUT isteklerine fazladan alan eklenmesi sunucu tarafında 400 `VALIDATION_ERROR` döndüreceği için yük kesin sınırlarla korunur.
-3. **Geriye Dönük Uyumluluk (Contract Normalization):**
-   - Mevcut `c59e56c` backend şeması (`whatsapp_opt_in`, `consent_version`, `language`, `opted_in_at`, `opted_out_at`) ile Codex'in ekleyeceği yeni alanlar (`effective_whatsapp_opt_in`, `requires_reconsent`, `can_opt_in`, `application_id`, `current_consent_version`) `src/public/notificationPreferences.js` içindeki `parseNotificationPreferences` fonksiyonu ile normalleştirilmiştir.
-   - Yeni alanlar gelmediğinde bile `c59e56c` verisiyle tutarlı çalışır; başarı varsayımı yapılmaz.
-4. **Uyuşmazlık Koruması (Application ID Mismatch Guard):** Takip ekranında GET ile dönen `application_id` mevcut görüntülenen başvuru ID'si ile eşleşmezse tercih kontrolleri gizlenir ve güvenli hata uyarısı verilir.
+Genişletilmiş Sözleşme Alanları (Codex backend entegrasyonu ile):
+- `application_id`: string
+- `current_consent_version`: string ("whatsapp-consent-v1")
+- `effective_whatsapp_opt_in`: boolean
+- `requires_reconsent`: boolean
+- `can_opt_in`: boolean
+
+### Sıkı Ayrıştırma (`parseNotificationPreferences`) Kuralları:
+1. **Eksik veya Eski API Verisinde İzin Varsaymama:**
+   - `current_consent_version` eksikse kesinlikle varsayılan `"whatsapp-consent-v1"` atanmaz.
+   - `effective_whatsapp_opt_in` eksikse eski `whatsapp_opt_in` alanından etkin izin çıkarılmaz.
+   - `can_opt_in` eksikse `true` varsayılmaz.
+   - Sözleşme eksik veya geçersizse `isVerified = false` ve `effectiveWhatsappOptIn = false` döndürülür.
+2. **Kimlik Doğrulama (`application_id` Kontrolü):**
+   - Hem takip ekranında hem de sihirbazda dönen `application_id` mevcut aktif başvuru kimliğiyle birebir eşleşmelidir.
+   - Eksik kimlik bir doğrulama başarısızlığıdır (`isApplicationIdMatch: false`).
+   - Kimlik uyuşmazlığında veya eksikliğinde yönetim kontrolleri gizlenir ve güvenli hata mesajı verilir.
+3. **Sürüm Uyum Kontrolü:**
+   - İstemci yalnızca gösterdiği metin sürümü olan `"whatsapp-consent-v1"` için açık rıza toplayabilir.
+   - Sunucunun `current_consent_version` değeri bu sürümle eşleşmezse veya bilinmeyen bir sürüm dönerse, otomatik onaylama engellenir ve opt-in butonları devre dışı bırakılır.
+4. **Oturumsuz Ziyaretçi:**
+   - Taslağı henüz oluşmamış ziyaretçi onay kutusunu seçebilir; erken PUT isteği gönderilmez. Niyet yerel durumda tutulur.
 
 ---
 
-## 3. Mimari ve Uygulama Detayları
+## 3. Mimari Düzeltmeler ve Güvenlik Mekanizmaları
 
-### A. Modüler Tercih Yönetimi (`src/public/notificationPreferences.js`)
-- `applicationWizard.js` içine büyük bir state machine yığmak yerine, bağımsız ve odaklanmış bir `notificationPreferences.js` modülü geliştirildi.
-- **İçerik:**
-  - `parseNotificationPreferences`: Gelen API yanıtını güvenle ayrıştırır, boolean ve string dönüşümlerini doğrular.
-  - `createNotificationPreferenceField`: Adım 0 formuna monte edilen onay kutusu bileşeni.
-    - Başlangıçta varsayılan olarak **işaretsizdir**.
-    - Seçim yapılmaması başvuru akışını, devam butonunu veya submit işlemini **kesinlikle engellemez**.
-    - Henüz taslak oturumu oluşmamış ziyaretçilerde erken PUT isteği atmaz; yerel durumu günceller.
-    - Taslak oluşturulduğunda (`saveStep`), kullanıcı işaretlemişse PUT isteği tetiklenir; işaretlememişse hiçbir istek atılmaz.
-    - Mevcut taslak oturumu olan başvurularda işaretleme/kaldırma anında `AbortController` ve debounce ile API'ye kaydedilir.
-    - Telefon numarası değiştiğinde `syncPhone` ile durum sıfırlanır, `requires_reconsent` uyarısı gösterilir.
-  - `mountTrackingNotificationPreferences`: Takip ekranı kartı (`/basvurum`).
-    - Yalnızca doğrulanmış başvuru sahibi oturumunda (`state.kind === 'ready'`) görünür.
-    - Öğrenci numarasıyla genel sorgulamada (`state.kind === 'publicReady'`) **kesinlikle gösterilmez**; API çağrısı yapılmaz ve veri sızdırılmaz.
-    - Açık "Bildirimleri Kapat" ve "Bildirimleri Aç" butonları sunar.
-    - Telefon numarası kayıtlı değilse (`can_opt_in: false`), butonu gizler ve iletişim bilgilerini güncelleme rehberi sunar.
+### A. Telefon Kaydı Sırası (Phone Persistence Sequencing)
+- Kullanıcı onay kutusunu işaretlediğinde:
+  1. Önce telefon alanındaki değişiklik sunucuya kaydedilir (`persistPhone` -> `state.autosave.flush()` veya `updateCurrentApplication`).
+  2. Başvuru ve telefon kaydının başarıyla sunucuya ulaştığı doğrulanır.
+  3. Ardından tercih PUT isteği gönderilir.
+  4. Sunucu yanıtı doğrulanmadan arayüzde "Kaydedildi" bilgisi verilmez.
+- Telefon kaydı başarısız olursa:
+  - Opt-in PUT isteği durdurulur.
+  - Kullanıcının formdaki seçimi ve girdiği telefon değeri silinmez, korunur.
+  - Kullanıcıya tekrar deneme yolu ve hata mesajı gösterilir.
 
-### B. Başvuru Sihirbazı Entegrasyonu (`src/public/applicationWizard.js`)
-- Tercih alanı Adım 0'da zorunlu iletişim sorumluluğu onay kutusunun (`contact_acknowledgement_accepted`) hemen altına yerleştirildi.
-- Zorunlu iletişim onayı ile isteğe bağlı WhatsApp bildirimi açıkça birbirinden ayrıldı.
-- Telefon alanındaki canlı girişler `prefField.syncPhone(value)` ile dinlendi.
-- Adım kaydetme sürecinde (`saveStep`) draft id alındıktan sonra opt-in kaydı tamamlandı.
+### B. Yarış Koşulu (Race Condition) ve İstek Üretim Sayacı (`saveGeneration`)
+- Tercih PUT isteği ağda ilerlerken kullanıcının telefon numarasını değiştirmesi durumunda:
+  - `saveGeneration` sayacı hem `savePreference` hem de `syncPhone` çağrılarında artırılır.
+  - Dönen yanıtın nesil numarası mevcut nesil numarasıyla eşleşmiyorsa eski yanıt çöpe atılır.
+  - Eski telefona ait onay yeni yazılan telefona asla geçerli izin olarak uygulanmaz.
+- `syncPhone`, onay kutusunu yalnızca telefon değeri sunucuda doğrulanmış numaradan farklı bir değere değiştiğinde sıfırlar. Aynı telefon üzerinde gerçekleşen sonraki `input` veya `change` olaylarında kullanıcının verdiği açık yeniden onay silinmez.
 
-### C. Takip Sayfası Entegrasyonu (`src/public/applicationTracking.js`)
-- `renderTracking` içinde başvuru durum özetinin altına özel bir `tracking-notification-preferences` kartı eklendi.
-- Başvuru kimliği uyuşmazlığı, 401 oturum sonlanması, 400 sürüm uyuşmazlığı ve 409 alıcı uyumsuzluğu durumları kullanıcı dostu yerelleştirilmiş mesajlarla ele alındı.
+### C. İlk Taslak Kaydı Hata Görünürlüğü ve Yeniden Deneme (Draft Preference Warning Banner)
+- Adım 0'dan Adım 1'e geçerken ilk taslak oluşturulması sırasında:
+  - Boş `catch` bloğu kaldırılmıştır.
+  - Taslak oluşturma başarılı olup tercih PUT isteği başarısız olursa başvuru akışı bloke edilmez (öğrencinin taslağı kaybolmaz).
+  - Ancak bu hata gizlenmez; formun üstünde kalıcı bir uyarı kutusu (`.application-notification-preference-banner`) gösterilir.
+  - Uyarı kutusu içinde "Tekrar dene" (`data-action="preference-retry"`) butonu sunulur.
+  - Tekrar dene butonu yeni bir taslak oluşturmaz; yalnızca mevcut taslak üzerinde tercih PUT isteğini tekrarlar.
+  - Doğrulanmış başarılı yanıt alındığında uyarı kutusu yeşil başarı mesajına dönüşür ve temizlenir.
 
-### D. 5 Dilde Mesaj Anahtarları (`src/public/i18n/messages.js`)
-Her dilde 15 yeni anahtar eksiksiz eklendi (toplam 196 anahtar / dil simetrisi korundu):
-- `whatsappPreferencesHeading`
-- `whatsappConsentLabel`
-- `whatsappConsentExplanation`
-- `whatsappOptInActive`
-- `whatsappOptOutActive`
-- `whatsappReconsentRequired`
-- `whatsappOptOutAction`
-- `whatsappOptInAction`
-- `whatsappPhoneRequired`
-- `whatsappPreferenceSaving`
-- `whatsappPreferenceSaved`
-- `whatsappPreferenceFailed`
-- `whatsappPreferenceSessionExpired`
-- `whatsappPreferenceVersionInvalid`
-
-### E. Responsive ve RTL Tasarım (`src/public/public.css`)
-- Onay kutusu ve butonlar 44px+ dokunma hedefi standartlarına uygun hale getirildi.
-- `.notification-preference-group` ve `.tracking-notification-preferences` bileşenleri için `html[dir="rtl"]` altında sağa hizalama ve kenarlık kuralları uygulandı.
+### D. 5 Dilde Mesaj Bütünlüğü (`src/public/i18n/messages.js`)
+Tüm dillerde (`tr`, `en`, `ru`, `tk`, `ar`) 204 anahtarın tamamı simetrik olarak yer alır:
+- `whatsappDraftSavedPreferenceFailed`
+- `whatsappRetryPreferenceAction`
+(Önceki 15 WhatsApp anahtarına ek olarak).
 
 ---
 
 ## 4. Test ve Doğrulama Kanıtları
 
-### 1. Hedefli Birim ve UI Testleri (`test/notificationPreferencesUi.test.js`)
-Toplam 13 test senaryosu çalıştırıldı ve tamamı başarıyla geçti:
-1. `parseNotificationPreferences`: Temel ve genişletilmiş şema ayrıştırma.
-2. İletişim adımı: Varsayılan işaretsiz durum ve devam butonunun bloklanmaması.
-3. Oturumu olmayan ziyaretçi: Tıklamada erken PUT atılmaması; Adım 0 kaydedilince opt-in PUT gönderimi.
-4. Oturumu olmayan ziyaretçi: İşaretlenmediğinde taslak kaydında PUT isteği atılmaması.
-5. Taslak kaydı başarısız olduğunda PUT atılmaması.
-6. Mevcut taslak oturumu: Onay kutusu değişiminde anında PUT ve durum mesajı.
-7. Telefon numarası değişimi: Onay kutusunun sıfırlanması ve yeniden onay uyarısı gösterimi.
-8. Dil değişimi: 5 dilde UI güncellemesi yapılması ve gereksiz PUT atılmaması.
-9. Takip ekranı: Oturum sahibi tarafından opt-out ve opt-in geçişleri.
-10. Genel sorgulama izolasyonu: Öğrenci numarası sorgulamasında tercih UI'ının ve API çağrısının engellenmesi.
-11. Güvenlik: Başvuru ID uyuşmazlığında butonların gizlenmesi ve hata uyarısı.
-12. Eksik telefon (`can_opt_in: false`): Butonların gizlenmesi ve bilgilendirme metni.
-13. API hata yönetimi: 401 oturum sonlanması, 400 sürüm hatası ve 409 alıcı hatası.
+### 1. Odaklı UI Test Paketi (`test/notificationPreferencesUi.test.js`)
+Toplam **17 test senaryosu** başarıyla çalıştırıldı (0 hata):
+1. `parseNotificationPreferences`: Eksik veya eski API yanıtlarında iznin doğrulanmış sayılmaması.
+2. `application_id`: Eksik veya farklı kimlikte takip ekranında ve sihirbazda kontrollerin engellenmesi.
+3. Bilinmeyen izin sürümünde opt-in işleminin engellenmesi.
+4. İletişim adımı: Varsayılan işaretsiz durum ve devam butonunun bloklanmaması.
+5. Oturumsuz ziyaretçi: Tıklamada erken PUT atılmaması; Adım 0 kaydedilince opt-in PUT gönderimi.
+6. Oturumsuz ziyaretçi: İşaretlenmediğinde taslak kaydında PUT isteği atılmaması.
+7. Bekleyen telefon kaydı: Mevcut taslakta önce telefonun sunucuya kaydedilmesi, sonra tercih PUT atılması.
+8. Başarısız telefon kaydı: Tercih PUT'un durdurulması, kullanıcının seçiminin korunması ve tekrar deneme imkanı.
+9. Ağda PUT varken telefon değişimi: Eski yanıtın yeni telefona izin olarak yansıtılmaması.
+10. Telefon kaydı sonrası açık yeniden onay verilmesi ve doğrulanmış durumun korunması.
+11. İlk taslak oluşturma hatası: Akışın bloke edilmemesi, kalıcı uyarı kutusu ve taslak yaratmadan tekrar deneme.
+12. Dil değişimi: 5 dilde UI güncellemesi yapılması ve gereksiz PUT atılmaması.
+13. Takip ekranı: Oturum sahibi tarafından opt-out ve opt-in geçişleri.
+14. Genel sorgulama izolasyonu: Öğrenci numarası sorgulamasında tercih UI'ının ve API çağrısının engellenmesi.
+15. Eksik telefon (`can_opt_in: false`): Butonların gizlenmesi ve bilgilendirme metni.
+16. API hata yönetimi: 401 oturum sonlanması, 400 sürüm hatası ve 409 alıcı hatası.
+17. Hızlı ardışık tıklamalar: Buton kilitleme ile yarış ve sıra dışı durum oluşumunun engellenmesi.
 
-### 2. Gerçek Başsız Tarayıcı Kontrolleri (`scripts/check-public-consent-browser.mjs`)
-Puppeteer (Headless Chromium) ile yerel izole sunucu üzerinde test yapılmıştır:
-- **Genişlikler:** 320px, 390px, 768px, 1440px.
-- **Diller:** `tr`, `en`, `ru`, `tk`, `ar` (toplam 20 responsive kombinasyon).
+### 2. Başsız Tarayıcı Doğrulaması (`scripts/check-public-consent-browser.mjs`)
+- **Bağımlılık Yöntemi:** `package.json` ve `package-lock.json` dosyalarına dokunulmadan, izole `npx --yes puppeteer@24.4.0` veya yerel kurulum desteğiyle çalıştırılabilir.
+- **Mock Sözleşmesi:** Mock sunucu eksiksiz sözleşme alanlarıyla (`application_id`, `current_consent_version: "whatsapp-consent-v1"`, `effective_whatsapp_opt_in`, `can_opt_in`, `requires_reconsent`) yapılandırılmıştır.
 - **Sonuçlar:**
-  - 320px mobil ekran dahil hiçbir dilde yatay taşma (0px overflow) oluşmamıştır.
-  - Arapça dilinde `dir="rtl"` kuralı ve tipografi doğrulanmıştır.
-  - Onay kutusu ve buton dokunma hedefleri minimum 44px kuralını sağlamıştır.
-  - İletişim adımında etkileşimli opt-in ve opt-out kaydı canlı DOM'da doğrulanmıştır.
-  - Telefon değişikliğinde yeniden onay uyarısı tetiklenmesi canlı DOM'da doğrulanmıştır.
-  - Takip ekranında oturum sahibi kontrolleri ve genel sorgulama izolasyonu doğrulanmıştır.
-  - Ana sayfa (`/`) duyarlı düzeni tüm genişliklerde doğrulanmıştır.
+  - 320px, 390px, 768px, 1440px ve 5 dilde (`tr`, `en`, `ru`, `tk`, `ar`) 20 kombinasyonun tamamında 0px taşma.
+  - Canlı DOM üzerinde opt-in/opt-out, telefon değişikliğinde yeniden onay bildirimi ve takip ekranı kontrolleri doğrulandı.
+  - *Uyarı / Not:* Otomatik tarayıcı kontrolleri duyarlı düzen, dokunma hedefi boyutu (44px+) ve RTL semantiğini doğrular; tam insan destekli teknoloji (WCAG 2.1 AA manuel denetim) sertifikasyonu yerine geçmez.
 
-### 3. Mevcut Test Paketi ve Derleme Doğrulaması
-- `npm test`: 417 testin tamamı başarılı (0 hata).
-- `npm run build:staging`: Temiz Vite derlemesi (~350ms).
-- `git diff --check`: 0 biçimlendirme / boşluk hatası.
+### 3. Genel Paket ve Derleme Doğrulaması
+- `npm test`: **434 testin tamamı başarılı** (0 hata).
+- `npm run build:staging`: Temiz Vite derlemesi (345ms).
+- `git diff --check`: 0 boşluk / biçimlendirme hatası.
 
 ---
 
-## 5. Kapsam Dışı ve Bilinen Sınırlar
+## 5. Codex Backend Birleşimi Bekleyen Maddeler
 
-1. **Canlı WhatsApp Gönderimi:** Bu aşama yalnızca onay/red tercihinin alınması ve API ile senkronizasyonunu kapsar. Canlı Meta/WhatsApp Business API çağrısı veya arka plan bildirim dağıtımı bu çalışmanın kapsamında değildir (mock/contract ile doğrulanmıştır).
-2. **Bildirim Teslim Güvencesi:** Bildirim tercihi ekranı yalnızca öğrencinin iletişim tercihini kaydeder; mesajın ulaştığı veya iletileceği yönünde kesin garanti sunmaz.
-3. **Proje Durumu:** Phase 9 veya projenin bütünü tamamlandı olarak işaretlenmemiştir.
+Aşağıdaki unsurlar public arayüz tarafında kontrat ve mock seviyesinde doğrulanmış olup, Codex'in backend çalışması tamamlandığında entegrasyonu teyit edilecektir:
+1. `GET /api/public/applications/current/notification-preferences` endpoint'inin canlı D1 veritabanından `application_id`, `current_consent_version`, `effective_whatsapp_opt_in`, `requires_reconsent` ve `can_opt_in` alanlarını dönmesi.
+2. Canlı WhatsApp sağlayıcı adapter'ı ve gerçek şablon dağıtım servisinin entegrasyonu.
+3. Personel bildirim logları ve bildirim geçmişinin canlı staging ortamında görüntülenmesi.
