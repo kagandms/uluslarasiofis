@@ -275,3 +275,15 @@ The owner explicitly chose Workers Free operation and a 100,000-round PBKDF2-SHA
 | `git diff --check` | Passed. |
 
 Phase 8H remains **NOT COMPLETE**: PBKDF2 100k has not run in the Worker because the one-time bootstrap token is rejected before password derivation, leaving staff authentication and the staff-side review/resubmission/second-review chain blocked. No Worker CPU limit was raised, no further KDF reduction was made, no production resources or schema were changed, and Phase 8I was not started.
+
+## 18. Continuation pass — credential availability stop (2026-10-02)
+
+The required presence-only check found that one or both of `PH8H_STAFF_USERNAME` and `PH8H_STAFF_PASSWORD` were unavailable in this execution environment. Their values were not inspected or printed. Per the bootstrap procedure, provisioning and credential-dependent staging work stopped before any remote mutation.
+
+- The single-process bootstrap-token round trip was **NOT EXECUTED**. No token was generated, `STAFF_BOOTSTRAP_TOKEN` was not changed, and no bootstrap HTTP request was sent.
+- The pre-mutation remote target checks were not run because this pass stopped at the missing-credentials gate. This report makes no new claim about current Worker deployment, staging secret, D1 counts, or R2 state; the prior section remains the last recorded staging evidence.
+- No PBKDF2 operation ran in the Worker. The 100,000-iteration runtime result remains **UNVERIFIED**; no KDF or source changes were made.
+- Staff account creation, login/session UAT, queue/detail, private document access, review/resubmission, second review, security checks, and authenticated legacy-workspace smoke tests were **NOT EXECUTED** in this pass.
+- No applicant data, D1, R2, Worker, or production resource was changed. No tests or builds were run because there were no source changes.
+
+Phase 8H remains **NOT COMPLETE**. The immediate blocker is that both owner-supplied staging credentials must be available through the designated environment variables for a later continuation. No Phase 8I work was started.
