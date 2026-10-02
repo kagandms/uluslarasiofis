@@ -6,7 +6,8 @@ import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgemen
 import { lookupApplicationTracking, readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
 import { createCurrentResubmissionUploadIntent, finalizeCurrentResubmissionUpload, readCurrentResubmissionEligibility } from './routes/resubmissionUploadRoutes.js';
-import { createStaffDocumentPreview, downloadStaffApplicationDocument } from './routes/staffDocumentAccessRoutes.js';
+import { createStaffDocumentPreview, createStaffApplicationArchiveManifest, downloadStaffApplicationDocument,
+    streamStaffApplicationArchiveFile } from './routes/staffDocumentAccessRoutes.js';
 import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
 import { approveStaffApplicationDocument, requestStaffDocumentResubmission, transitionStaffApplicationStatus } from './routes/staffReviewRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
@@ -37,6 +38,23 @@ function safeRouteResponse(result, requestId) {
 
 async function routeApi(request, environment, requestId) {
     const { pathname } = new URL(request.url);
+    const archiveManifestMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/archive-manifest$/);
+    if (archiveManifestMatch) {
+        let applicationId;
+        try { applicationId = decodeURIComponent(archiveManifestMatch[1]); }
+        catch { throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.'); }
+        return createStaffApplicationArchiveManifest({ request, environment, applicationId, requestId });
+    }
+    const archiveFileMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/archive-file$/);
+    if (archiveFileMatch) {
+        let applicationId;
+        let documentCode;
+        try {
+            applicationId = decodeURIComponent(archiveFileMatch[1]);
+            documentCode = decodeURIComponent(archiveFileMatch[2]);
+        } catch { throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya erişilemiyor.'); }
+        return streamStaffApplicationArchiveFile({ request, environment, applicationId, code: documentCode, requestId });
+    }
     if (pathname === '/api/staff/auth/login' || pathname === '/api/login') return loginStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/session' || pathname === '/api/session') return readStaffSession(request, environment);
     if (pathname === '/api/staff/auth/logout' || pathname === '/api/logout') return logoutStaff(request, environment, requestId);

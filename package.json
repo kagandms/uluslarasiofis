@@ -44,6 +44,7 @@
     "undici": "7.30.0"
   },
   "dependencies": {
+    "@zip.js/zip.js": "2.22.0",
     "aws4fetch": "^1.0.20"
   }
 }

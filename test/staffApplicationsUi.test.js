@@ -93,6 +93,7 @@ test('applications workspace is prominent and opening it loads a queue without d
     assert.equal([...root.querySelectorAll('td')].some((cell) => cell.dataset.label === 'Atanan Personel'), false);
     assert.ok(root.querySelector('th')?.textContent.includes('Öğrenci No'));
     assert.ok(root.querySelector('[data-action="open-detail"]'));
+    assert.ok(root.querySelector('[data-action="download-application-archive"]'));
 
     const documentsHomeAction = document.querySelector('.home-actions [data-workspace-view="documents"]');
     const documentsNavigationButton = document.querySelector('.workspace-nav [data-workspace-view="documents"]');

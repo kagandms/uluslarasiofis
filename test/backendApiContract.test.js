@@ -16,17 +16,30 @@ function createEnvironment(options = {}) {
     const database = new TestD1Database();
     applyAllMigrations(database);
     const storedObjects = new Map();
+    async function readObjectMetadata(key) {
+        const body = storedObjects.get(key);
+        if (body === undefined) return null;
+        const bytes = new TextEncoder().encode(String(body));
+        const hash = await crypto.subtle.digest('SHA-256', bytes);
+        const etag = [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+        return { body, bytes, etag: `"${etag}"` };
+    }
     const bucket = {
         async put(key, body) {
             storedObjects.set(key, body);
             return { key };
         },
-        async get(key) {
-            const body = storedObjects.get(key);
-            return body ? { key, body: new Response(body).body, httpMetadata: { contentType: 'application/pdf' } } : null;
+        async get(key, options = {}) {
+            const object = await readObjectMetadata(key);
+            if (!object) return null;
+            const body = options.onlyIf?.etagMatches && options.onlyIf.etagMatches !== object.etag
+                ? undefined : new Response(object.bytes).body;
+            return { key, size: object.bytes.byteLength, etag: object.etag, body,
+                httpMetadata: { contentType: 'application/pdf' } };
         },
         async head(key) {
-            return storedObjects.has(key) ? { key } : null;
+            const object = await readObjectMetadata(key);
+            return object ? { key, size: object.bytes.byteLength, etag: object.etag } : null;
         },
         async delete(key) {
             storedObjects.delete(key);
@@ -1356,4 +1369,116 @@ test('non-draft applications cannot enter the submit path', async () => {
     assert.equal((await readJson(response)).error.code, 'APPLICATION_NOT_SUBMITTABLE');
     assert.equal(database.prepare('SELECT status FROM applications').first().status, 'under_review');
     assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.submitted'").first().count, 0);
+});
+
+test('archive manifest and pinned file stream require shared staff and reject revision or object changes', async () => {
+    const { environment, database, storedObjects } = createEnvironment();
+    const appA = await createStaffApplication(environment, database, 'ZIP-A');
+    const appB = await createStaffApplication(environment, database, 'ZIP-B');
+    const current = await seedAccessibleStaffDocument(database, storedObjects, appA, 'initial', 'passport');
+    await database.prepare('UPDATE document_revisions SET revision_number = 2 WHERE id = ?').bind(current.revisionId).run();
+    const oldRevisionId = crypto.randomUUID();
+    const oldFileId = crypto.randomUUID();
+    const oldIntentId = crypto.randomUUID();
+    const oldStorageKey = `quarantine/${crypto.randomUUID()}`;
+    await database.prepare(`INSERT INTO document_revisions (id, document_record_id, revision_number, status, is_current, submitted_by_type)
+        VALUES (?, ?, 1, 'superseded', 0, 'student')`).bind(oldRevisionId, current.recordId).run();
+    await database.prepare(`INSERT INTO document_revision_files (id, revision_id, page_order, storage_key, original_filename,
+        media_type, byte_size, upload_status, scan_status, cleanup_status)
+        VALUES (?, ?, 0, ?, 'old-private-name.pdf', 'application/pdf', 3, 'finalized', 'clean', 'none')`)
+        .bind(oldFileId, oldRevisionId, oldStorageKey).run();
+    await database.prepare(`INSERT INTO upload_intents (id, revision_file_id, idempotency_key, expires_at, status)
+        VALUES (?, ?, ?, '2026-10-01T00:00:00.000Z', 'completed')`)
+        .bind(oldIntentId, oldFileId, `old-${oldIntentId}`).run();
+    storedObjects.set(oldStorageKey, 'old');
+    await seedStaff(environment, database, { id: 'zip-staff', username: 'zip-admin', role: 'admin' });
+    const token = 'zip-admin-session-token-0000000000000000000';
+    await seedStaffSession(database, 'zip-staff', token);
+    const manifestPath = `/api/staff/applications/${appA}/documents/archive-manifest`;
+    const manifestDenied = await worker.fetch(createRequest(manifestPath, { method: 'POST' }), environment, {});
+    const crossOriginManifest = await worker.fetch(createRequest(manifestPath, {
+        method: 'POST', cookie: staffCookie(token), origin: 'https://attacker.test'
+    }), environment, {});
+    const manifestResponse = await worker.fetch(createRequest(manifestPath, {
+        method: 'POST', cookie: staffCookie(token)
+    }), environment, {});
+    const manifest = await readJson(manifestResponse);
+    const filePath = `/api/staff/applications/${appA}/documents/passport/archive-file`;
+    const item = manifest.files[0];
+    const fileUrl = (applicationId, revision = item.expected_revision_number, identity = item.object_identity) =>
+        `/api/staff/applications/${applicationId}/documents/passport/archive-file?revision=${revision}&identity=${identity}`;
+    const denied = await worker.fetch(createRequest(fileUrl(appA), {}), environment, {});
+    const crossOriginFile = await worker.fetch(createRequest(fileUrl(appA), {
+        cookie: staffCookie(token), origin: 'https://attacker.test'
+    }), environment, {});
+    const wrongApplication = await worker.fetch(createRequest(fileUrl(appB), { cookie: staffCookie(token) }), environment, {});
+    const staleRevision = await worker.fetch(createRequest(fileUrl(appA, item.expected_revision_number + 1), {
+        cookie: staffCookie(token)
+    }), environment, {});
+    const authorized = await worker.fetch(createRequest(fileUrl(appA), { cookie: staffCookie(token) }), environment, {});
+
+    assert.equal(manifestDenied.status, 401);
+    assert.equal(crossOriginManifest.status, 403);
+    assert.equal(manifestResponse.status, 200);
+    assert.equal(manifest.files.length, 1);
+    assert.equal(item.entry_name, '01-passport.pdf');
+    assert.equal(item.expected_revision_number, 2);
+    assert.doesNotMatch(JSON.stringify(manifest), /storage_key|quarantine\/|signed|filename|file_id|revision_id/i);
+    assert.equal(denied.status, 401);
+    assert.equal(crossOriginFile.status, 403);
+    assert.equal(wrongApplication.status, 404);
+    assert.equal(staleRevision.status, 409);
+    assert.equal(authorized.status, 200);
+    assert.equal(await authorized.text(), 'private current document bytes');
+    storedObjects.set(current.storageKey, 'replacement bytes of different identity');
+    const changed = await worker.fetch(createRequest(filePath + `?revision=${item.expected_revision_number}&identity=${item.object_identity}`, {
+        cookie: staffCookie(token)
+    }), environment, {});
+    assert.ok([404, 409].includes(changed.status));
+    const audit = database.prepare("SELECT event_type FROM audit_events WHERE event_type LIKE 'staff.application_archive_%'").all().results;
+    assert.deepEqual(audit.map((row) => row.event_type).sort(), [
+        'staff.application_archive_document_stream_authorized', 'staff.application_archive_requested'
+    ]);
+});
+
+test('archive manifest blocks pending, unsafe, cleanup-pending and missing private objects', async () => {
+    for (const options of [
+        { scanStatus: 'pending' }, { scanStatus: 'unsafe' }, { cleanupStatus: 'pending' }, { objectExists: false }
+    ]) {
+        const { environment, database, storedObjects } = createEnvironment();
+        const applicationId = await createStaffApplication(environment, database, `ZIP-GATE-${crypto.randomUUID()}`);
+        await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'passport', options);
+        await seedStaff(environment, database, { id: 'zip-gate-staff', username: 'zip-gate-admin', role: 'admin' });
+        const token = 'zip-gate-admin-session-token-0000000000000000';
+        await seedStaffSession(database, 'zip-gate-staff', token);
+        const response = await worker.fetch(createRequest(
+            `/api/staff/applications/${applicationId}/documents/archive-manifest`,
+            { method: 'POST', cookie: staffCookie(token) }
+        ), environment, {});
+        assert.equal(response.status, 404, JSON.stringify(options));
+    }
+});
+
+test('archive body fails closed if its revision changes before the private stream completes', async () => {
+    const { environment, database, storedObjects } = createEnvironment();
+    const applicationId = await createStaffApplication(environment, database, 'ZIP-RACE');
+    const document = await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'passport');
+    await seedStaff(environment, database, { id: 'zip-race-staff', username: 'zip-race-admin', role: 'admin' });
+    const token = 'zip-race-admin-session-token-0000000000000000';
+    await seedStaffSession(database, 'zip-race-staff', token);
+    const manifestResponse = await worker.fetch(createRequest(
+        `/api/staff/applications/${applicationId}/documents/archive-manifest`,
+        { method: 'POST', cookie: staffCookie(token) }
+    ), environment, {});
+    const { files: [file] } = await readJson(manifestResponse);
+    const response = await worker.fetch(createRequest(
+        `/api/staff/applications/${applicationId}/documents/passport/archive-file?revision=${file.expected_revision_number}&identity=${file.object_identity}`,
+        { cookie: staffCookie(token) }
+    ), environment, {});
+
+    await database.prepare("UPDATE document_revisions SET is_current = 0, status = 'superseded' WHERE id = ?")
+        .bind(document.revisionId).run();
+    assert.equal(response.status, 200);
+    await assert.rejects(response.text());
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type LIKE '%archive%completed%'").first().count, 0);
 });
