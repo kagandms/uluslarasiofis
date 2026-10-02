@@ -105,7 +105,7 @@ Entegrasyon dalında toplam **27 test senaryosu** başarıyla çalıştırıldı
 - `npm test`: **464/464 başarılı** (tam repo test glob'u; focused UI testleri bu paketin içinde).
 - `npm run build:staging`: başarılı; mevcut `INEFFECTIVE_DYNAMIC_IMPORT` uyarısı `src/staff/main.js` ve `src/managers/yknManager.js` import yapısından geliyor.
 - `node scripts/check-public-consent-browser.mjs`: başarılı; yalnızca yerel mock-sunucu headless tarayıcı kanıtı.
-- `git diff --check`: entegrasyon commit'i öncesi tekrar doğrulanacak.
+- `git diff --check`: **PASS**; entegrasyon commit'i `b29f1d5a6fb848912decf3b5f3d9fe3fae1c911c` sonrasında yeniden çalıştırıldığı bildirildi.
 
 ---
 
