@@ -1,0 +1,41 @@
+# Phase 9 Consent UAT — Test Path Review
+
+Date: 2026-10-02
+
+Source: `codex/phase9-consent-owner-session-uat-retry` at `453adc3addd59d5fb81e003d1ea0a029b974e534`
+Review branch: `codex/phase9-consent-uat-test-path-review`
+
+## Decision
+
+Do not bypass or pre-accept the contact responsibility acknowledgement. Keep live owner-session UAT open/blocked until the Office/project owner approves a test path and its data/dispatch boundaries. Preferred path after approval: a supervised test by an explicitly authorized test responsible person using their own controlled, reachable test contact details, and personally making each acknowledgement and WhatsApp consent choice. This exercises the real UI and owner session without representing an acknowledgement as accepted on someone else’s behalf. This review makes no determination about the acknowledgement’s legal validity.
+
+## What the code enforces
+
+- **Text and placement.** The Turkish statement is defined in `src/public/i18n/messages.js:874`; the English equivalent is at `:917`. The contact step renders it as a checkbox named `contact_acknowledgement_accepted`, with `required=true`, at `src/public/applicationWizard.js:121-133`. For an unaccepted acknowledgement, it is initially unchecked (`:171-173`).
+- **Normal browser flow.** `canContinueContactStep()` requires both native form validity and a checked acknowledgement (`src/public/applicationWizard.js:136-140`); the Continue button uses that result (`:151-156`, `:201-204`). `saveStep()` returns before making a request unless the contact step passes this check, then creates the draft (`:934-948`). So the ordinary UI does not let the tester reach draft creation without checking it.
+- **Draft API and owner session.** The browser’s `createContactDraft()` sends only student number, application type, email, and phone (`src/public/applicationWizard.js:800-802`). Server `readNewDraft()` validates those fields and does not read or require the acknowledgement (`src/server/routes/applicationRoutes.js:75-82`). `createApplicationDraft()` persists the draft and returns an owner-session cookie (`:174-183`; session creation is `:84-99`). The browser then posts the separate acknowledgement after draft/session creation (`src/public/applicationWizard.js:953-959`); that endpoint requires a same-origin owner session, `accepted: true`, the current version, and valid email and phone (`src/server/routes/applicationRoutes.js:302-336`).
+- **Conclusion on necessity.** The acknowledgement is a normal-UI prerequisite to creating a draft, but the draft API does not enforce it server-side; the API creates the draft and owner session before the separate acknowledgement call. This is a code-path distinction, not an invitation to call the API directly. No API, cookie, D1, or alternate-route bypass was attempted or used in this review.
+- **Consent provider boundary.** The Worker routes consent PUT to `updateCurrentNotificationPreferences` (`src/server/worker.js:145-147`). That handler checks same-origin and owner session, validates consent, and persists the preference (`src/server/routes/applicantNotificationPreferenceRoutes.js:55-74`); it does not invoke the provider. Provider creation and dispatch occur in the separate scheduled handler (`src/server/worker.js:208-211`). No secret was inspected.
+
+## Previous staging UAT evidence
+
+The following are observations recorded in `docs/phase9-consent-owner-session-uat.md` on the source branch; this review did not revisit staging:
+
+- A separate Yandex Incognito window showed a blank `/basvuru/` form and an unchecked WhatsApp checkbox. After reload, the Fetch/XHR panel showed `GET /api/public/applications/current` → `401 Unauthorized`; no consent PUT or application-creation request was observed.
+- No synthetic application or owner session was created. The run stopped at the required contact responsibility statement. No real applicant data was used.
+- The previous report marks all six owner-session scenarios **NOT EXECUTED**: phone-save-before-opt-in ordering; same-session consent GET and application ID; persistence across reload/navigation; exact opt-out body; same-application false response; and opt-out persistence after reload/re-GET. The unchecked default and no pre-selection PUT observation do not establish those scenarios.
+- The previous report records the staging Worker version as `e40690bc-7644-488d-900c-d9f2c7320195` and a read-only root `GET` of HTTP 200. Those are prior-run results, not fresh checks in this review.
+
+## Candidate test paths
+
+| Path | Required approval and safeguards | Main risk | Evidence still unavailable / assessment |
+| --- | --- | --- | --- |
+| **1. Supervised, truthful test acknowledgement — preferred after approval** | Office/project owner authorizes a named test responsible person and this staging test purpose. The person controls the test email/phone, confirms those details are reachable, and personally checks the responsibility acknowledgement and the separate WhatsApp opt-in/opt-out controls. Agree a synthetic-data retention/cleanup window. Confirm scheduled dispatch cannot send to test records; keep provider calls/messages outside the test. | Staging stores the test contact details and acknowledgement/audit state. The person’s assertion must be true for the controlled contact; the test must not be framed as an applicant’s acknowledgement. | Can exercise the real browser draft, owner cookie, consent PUT/GET, reload, and opt-out flow once approved. It does not settle the legal validity or intended scope of the wording; the Office/project owner must decide those product questions. Narrowest path that tests the real UI without bypassing its gate. |
+| **2. Separate staging-only test application path — design only** | Office/project owner and security/engineering owners approve a distinct QA flow. Require a server-side staging identity/guard that fails closed outside the staging account; exclude the route and enabling configuration from production artifacts and verify production returns no such route. Restrict access to named testers, rate-limit and audit it as a test path, create only marked synthetic records and owner sessions, leave acknowledgement state explicitly unaccepted, define cleanup, and ensure marked records cannot enter dispatch. Do not mark or audit the acknowledgement as accepted. | A test exception can leak into production or be misused to manufacture owner sessions or falsify acknowledgement state. It also adds code, config, deployment-pipeline, access-control, and test scope. | Could test owner-session consent with a synthetic draft while preserving “acknowledgement not accepted”; it would not prove that a real user can or should pass the ordinary contact-step acknowledgement. This is broader than needed and must not be implemented without explicit product/security approval. |
+| **3. Keep live UAT open/blocked; use existing local evidence meanwhile** | No additional staging authorization is needed. Project owner acknowledges that local tests are code-level evidence only and records a later decision on path 1 or 2. | No live deployment/browser/cookie behavior is proven; acceptance remains incomplete. | Existing source tests cover the contact-step gate (`test/applicationWizard.test.js:67-126`), opt-in behavior and phone-save ordering (`test/notificationPreferencesUi.test.js:216-287, 329-410`), and owner-session consent API contract (`test/notificationApi.test.js:19-50`). These test files were inspected but not run in this review, so no test pass is claimed. This is the safe interim status, not a closure path. |
+
+## Product-owner decision needed
+
+The Office/project owner must decide whether an expressly assigned internal test responsible person may make this statement about their own controlled, reachable test contact for staging QA, and approve the test-data/retention and no-dispatch boundaries. If not, the owner must explicitly authorize a staging-only test path and its security constraints. This review does not determine whether the wording is legally valid, sufficient, or appropriate for that use.
+
+Until one path is approved, record live consent owner-session UAT as **OPEN / BLOCKED**. Do not convert the six **NOT EXECUTED** controls to PASS based on source review or existing test source.
