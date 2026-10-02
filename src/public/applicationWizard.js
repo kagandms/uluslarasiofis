@@ -49,9 +49,20 @@ function createTextField(document, { key, name, value, type = 'text', required =
     const label = document.createElement('label');
     const input = document.createElement('input');
     label.className = 'application-form-field';
-    label.append(createTranslatedElement(document, 'span', key, messages[key]));
+    const span = createTranslatedElement(document, 'span', key, messages[key]);
+    label.append(span);
+    if (required) {
+        const mark = document.createElement('span');
+        mark.className = 'field-required-mark';
+        mark.setAttribute('aria-hidden', 'true');
+        mark.textContent = ' *';
+        label.append(mark);
+        input.setAttribute('aria-required', 'true');
+    }
     input.type = type;
     input.name = name;
+    input.id = `field-${name}`;
+    label.htmlFor = input.id;
     input.value = value ?? '';
     input.required = required;
     if (type !== 'date') input.maxLength = maxLength;
@@ -64,8 +75,19 @@ function createSelectField(document, { key, name, value, options, required = fal
     const label = document.createElement('label');
     const select = document.createElement('select');
     label.className = 'application-form-field';
-    label.append(createTranslatedElement(document, 'span', key, messages[key]));
+    const span = createTranslatedElement(document, 'span', key, messages[key]);
+    label.append(span);
+    if (required) {
+        const mark = document.createElement('span');
+        mark.className = 'field-required-mark';
+        mark.setAttribute('aria-hidden', 'true');
+        mark.textContent = ' *';
+        label.append(mark);
+        select.setAttribute('aria-required', 'true');
+    }
     select.name = name;
+    select.id = `field-${name}`;
+    label.htmlFor = select.id;
     select.required = required;
     options.forEach(({ value: optionValue, key: optionKey, disabled = false }) => {
         const option = document.createElement('option');
@@ -100,8 +122,11 @@ function createContactAcknowledgement(document, messages, isAccepted) {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.name = 'contact_acknowledgement_accepted';
+    checkbox.id = 'field-contact-acknowledgement';
     checkbox.required = true;
+    checkbox.setAttribute('aria-required', 'true');
     checkbox.checked = isAccepted;
+    label.htmlFor = checkbox.id;
     label.className = 'contact-acknowledgement';
     label.append(checkbox, createTranslatedElement(document, 'span', 'contactResponsibilityAcknowledgement', messages.contactResponsibilityAcknowledgement));
     return label;
@@ -117,7 +142,9 @@ function setContactPhoneValidity(form) {
     const phone = form?.querySelector('[name="student_phone"]');
     if (!phone) return;
     const messages = readMessages(form.ownerDocument);
-    phone.setCustomValidity(phone.value.trim() && !isValidPhoneNumber(phone.value) ? messages.contactPhoneInvalid : '');
+    const isInvalid = Boolean(phone.value.trim() && !isValidPhoneNumber(phone.value));
+    phone.setCustomValidity(isInvalid ? messages.contactPhoneInvalid : '');
+    phone.setAttribute('aria-invalid', isInvalid ? 'true' : 'false');
 }
 
 function updateContactContinueButton(root) {
@@ -155,6 +182,8 @@ function createFingerprintChoice(document, value, key, selected, messages) {
     const input = document.createElement('input');
     input.type = 'radio';
     input.name = 'fingerprint_status';
+    input.id = `fingerprint-status-${value}`;
+    label.htmlFor = input.id;
     input.value = value;
     input.checked = selected === value;
     input.required = true;
@@ -194,6 +223,8 @@ function appendFingerprintCode(document, fieldset, application, messages) {
     const input = document.createElement('input');
     input.type = 'text';
     input.name = 'fingerprint_code';
+    input.id = 'field-fingerprint-code';
+    label.htmlFor = input.id;
     input.maxLength = 128;
     input.required = true;
     input.autocomplete = 'off';
@@ -242,6 +273,8 @@ function createAddressEvidenceChoices(document, fields, messages, isDisabled) {
         const input = document.createElement('input');
         input.type = 'radio';
         input.name = 'address_evidence_type';
+        input.id = `address-evidence-${value}`;
+        label.htmlFor = input.id;
         input.value = value;
         input.required = true;
         input.disabled = isDisabled;
@@ -308,10 +341,14 @@ function createFileInput(document, requirement, task, messages) {
     const input = document.createElement('input');
     const help = document.createElement('small');
     input.type = 'file';
+    input.id = `upload-${requirement.code}`;
     input.accept = requirement.accepted_media_types.join(',');
     input.dataset.documentCode = requirement.code;
     input.disabled = ['preparing', 'uploading', 'verifying'].includes(task?.state);
+    help.id = `upload-help-${requirement.code}`;
     help.textContent = createFilePolicyText(document, requirement, messages);
+    input.setAttribute('aria-describedby', help.id);
+    label.htmlFor = input.id;
     label.className = 'application-upload-control';
     label.append(text, input, help);
     return label;
@@ -349,7 +386,11 @@ function createDocumentCard(document, requirement, state, { allowUpload }) {
     const statusTone = getDocumentStatusTone(requirement, task, statusKey, Boolean(state.deleting[requirement.code]));
     status.dataset.status = statusTone;
     if (statusTone !== 'pending') status.classList.add(`is-${statusTone}`);
-    status.setAttribute('aria-live', 'polite');
+    if (statusTone === 'error') {
+        status.setAttribute('role', 'alert');
+    } else {
+        status.setAttribute('aria-live', 'polite');
+    }
     card.append(title, description, createRequirementBadge(document, requirement.required ?? requirement.is_required, messages), status);
     if (requirement.filename) appendFilename(document, card, `${messages.currentFile}: ${requirement.filename}`);
     if (task?.file && task.state !== 'complete') appendFilename(document, card, `${messages.selectedReplacement}: ${task.file.name}`);
@@ -427,9 +468,14 @@ function createDeclarationStep(document, application) {
     const declaration = application.declaration || {};
     const label = document.createElement('label');
     const checkbox = document.createElement('input');
+    label.className = 'declaration-label';
+    checkbox.className = 'declaration-checkbox';
     checkbox.type = 'checkbox';
     checkbox.name = 'declaration_accepted';
+    checkbox.id = 'field-declaration-accepted';
+    label.htmlFor = checkbox.id;
     checkbox.required = true;
+    checkbox.setAttribute('aria-required', 'true');
     checkbox.checked = declaration.accepted_current === true;
     label.append(checkbox, createTranslatedElement(document, 'span', declaration.content_key || 'studentInformationAcknowledgement', messages[declaration.content_key] || messages.studentInformationAcknowledgement));
     form.append(label, createContinueButton(document, messages));
@@ -544,10 +590,14 @@ function createSaveStatus(document, state) {
 function createProgress(document, step) {
     const list = document.createElement('ol');
     list.className = 'application-progress';
+    const messages = readMessages(document);
+    list.setAttribute('aria-label', messages.stepperAriaLabel || 'Başvuru Adımları');
     STEP_KEYS.forEach((key, index) => {
         const item = document.createElement('li');
-        const messages = readMessages(document);
         item.className = index === step ? 'is-current' : (index < step ? 'is-complete' : '');
+        if (index === step) {
+            item.setAttribute('aria-current', 'step');
+        }
         item.append(createTranslatedElement(document, 'span', key, messages[key]));
         list.append(item);
     });
@@ -560,12 +610,16 @@ function renderWizard(root, state) {
     const panel = document.createElement('div');
     const stage = document.createElement('section');
     panel.className = 'application-wizard';
-    panel.append(createProgress(document, state.step), createTranslatedElement(document, 'h2', STEP_KEYS[state.step], messages[STEP_KEYS[state.step]]));
+    const heading = createTranslatedElement(document, 'h2', STEP_KEYS[state.step], messages[STEP_KEYS[state.step]]);
+    heading.tabIndex = -1;
+    panel.append(createProgress(document, state.step), heading);
     panel.append(createSaveStatus(document, state));
+    let errorElement = null;
     if (state.errorKey) {
-        const error = createTranslatedElement(document, 'p', state.errorKey, messages[state.errorKey]);
-        error.setAttribute('role', 'alert');
-        panel.append(error);
+        errorElement = createTranslatedElement(document, 'p', state.errorKey, messages[state.errorKey]);
+        errorElement.setAttribute('role', 'alert');
+        errorElement.tabIndex = -1;
+        panel.append(errorElement);
     }
     if (state.step === 0) stage.append(createContactStep(document, state.application, state.formValues));
     if (state.step === 1) stage.append(createResidenceStep(document, state.application, state.formValues));
@@ -575,6 +629,13 @@ function renderWizard(root, state) {
     if (state.step > 0 && state.application?.status !== 'submitted') panel.append(createButton(document, messages, 'previous', 'previous'));
     panel.append(stage);
     root.replaceChildren(panel);
+    if (state._focusError && errorElement) {
+        errorElement.focus();
+        state._focusError = false;
+    } else if (state._focusStepHeading) {
+        heading.focus();
+        state._focusStepHeading = false;
+    }
 }
 
 function updateDocumentCard(root, state, code) {
@@ -858,8 +919,10 @@ async function saveStep(root, state, api) {
         }
         state.step = Math.min(state.step + 1, STEP_KEYS.length - 1);
         state.formValues = null;
+        state._focusStepHeading = true;
     } catch (error) {
         state.errorKey = createErrorKey(error, error.code === 'DECLARATION_ACCEPTANCE_REQUIRED' ? 'declarationAcceptanceFailed' : 'applicationSaveFailed');
+        state._focusError = true;
         if (error.code === 'DECLARATION_VERSION_CONFLICT') {
             try {
                 state.application = await api.readCurrentApplication();
@@ -884,6 +947,7 @@ async function handlePrevious(root, state) {
         state.isAdvancing = false;
         if (!saved) {
             state.errorKey = 'autosaveFailed';
+            state._focusError = true;
             renderWizard(root, state);
             return;
         }
@@ -891,6 +955,7 @@ async function handlePrevious(root, state) {
     state.formValues = readVisibleFields(root, state.application || {});
     state.step -= 1;
     state.errorKey = null;
+    state._focusStepHeading = true;
     renderWizard(root, state);
 }
 
@@ -906,6 +971,7 @@ async function handleWizardClick(root, state, api, event) {
     if (button.dataset.action === 'autosave-retry' && state.autosave) {
         const saved = await state.autosave.flush();
         state.errorKey = saved ? null : 'autosaveFailed';
+        if (!saved) state._focusError = true;
         renderWizard(root, state);
     }
 }
@@ -918,8 +984,10 @@ async function submitApplication(root, state, api) {
     try {
         state.application = await api.submitCurrentApplication();
         state.errorKey = null;
+        state._focusStepHeading = true;
     } catch (error) {
         state.errorKey = createErrorKey(error, 'applicationSubmitFailed');
+        state._focusError = true;
         if (error.code === 'APPLICATION_SESSION_REQUIRED') state.saveStatus = 'session_expired';
     } finally {
         state.isSubmitting = false;
