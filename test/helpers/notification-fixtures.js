@@ -29,9 +29,9 @@ export async function createNotificationFixture(options = {}) {
         staffCookie: `staff_session=${TEST_STAFF_TOKEN}` };
 }
 
-export function notificationRequest(path, { method = 'GET', body, cookie, origin = 'https://portal.test', headers = {} } = {}) {
+export function notificationRequest(path, { method = 'GET', body, cookie, origin = 'https://portal.test', omitOrigin = false, headers = {} } = {}) {
     const requestHeaders = new Headers(headers);
-    requestHeaders.set('Origin', origin);
+    if (!omitOrigin) requestHeaders.set('Origin', origin);
     if (body !== undefined) requestHeaders.set('Content-Type', 'application/json');
     if (cookie) requestHeaders.set('Cookie', cookie);
     return new Request(`https://portal.test${path}`, { method, headers: requestHeaders,

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dispatchNextNotification } from '../src/server/services/notificationDispatcher.js';
+import { dispatchNextNotification, runNotificationDispatchBatch } from '../src/server/services/notificationDispatcher.js';
 import { callWorker, createNotificationFixture, enqueueTestNotification } from './helpers/notification-fixtures.js';
+import worker from '../src/server/worker.js';
 
 const TEST_NOW = '2026-10-01T10:00:00.000Z';
 
@@ -15,6 +16,26 @@ test('dispatcher remains inactive without an explicitly injected provider', asyn
     const result = await dispatchNextNotification({ database: fixture.database });
     assert.deepEqual(result, { status: 'provider_not_configured' });
     assert.equal(fixture.database.prepare('SELECT status FROM notification_outbox').first().status, 'pending');
+});
+
+test('background consumer is disabled by default and caps each enabled batch at five', async () => {
+    const fixture = await createNotificationFixture();
+    await enqueueTestNotification(fixture);
+    const disabled = await runNotificationDispatchBatch({ database: fixture.database,
+        provider: { async dispatch() { assert.fail('disabled consumer must not dispatch'); } } });
+    assert.deepEqual(disabled, { status: 'disabled', processed: 0 });
+    assert.deepEqual(await worker.scheduled({}, fixture.environment), { status: 'disabled', processed: 0 });
+    assert.deepEqual(await worker.scheduled({}, { ...fixture.environment, NOTIFICATION_DISPATCH_ENABLED: 'true' }),
+        { status: 'provider_not_configured', processed: 0 });
+    assert.equal(fixture.database.prepare('SELECT status FROM notification_outbox').first().status, 'pending');
+
+    for (let index = 0; index < 5; index += 1) await enqueueTestNotification(fixture);
+    fixture.database.prepare('UPDATE notification_outbox SET next_attempt_at = ?').bind(TEST_NOW).run();
+    const enabled = await runNotificationDispatchBatch({ database: fixture.database,
+        provider: { async dispatch() { return { status: 'accepted', messageId: `wamid.batch-${crypto.randomUUID()}` }; } },
+        isEnabled: true, now: TEST_NOW });
+    assert.deepEqual(enabled, { status: 'complete', processed: 5 });
+    assert.equal(fixture.database.prepare("SELECT COUNT(*) AS count FROM notification_outbox WHERE status = 'pending'").first().count, 1);
 });
 
 test('dispatcher distinguishes provider acceptance from confirmed send', async () => {
@@ -58,6 +79,20 @@ test('dispatch rechecks WhatsApp consent and the current phone before calling a 
     assert.equal(providerCalls, 0);
     assert.equal(fixture.database.prepare('SELECT last_error_code FROM notifications').first().last_error_code,
         'consent_or_phone_changed');
+});
+
+test('dispatch blocks an outbox item when the applicant consent version becomes stale', async () => {
+    const fixture = await createNotificationFixture();
+    await enqueueTestNotification(fixture);
+    makeOutboxDue(fixture);
+    fixture.database.prepare("UPDATE notification_preferences SET whatsapp_consent_version = 'old-version' WHERE application_id = ?")
+        .bind(fixture.applicationId).run();
+    let providerCalls = 0;
+    const result = await dispatchNextNotification({ database: fixture.database,
+        provider: { async dispatch() { providerCalls += 1; return { status: 'accepted' }; } }, now: TEST_NOW });
+    assert.equal(result.status, 'failed');
+    assert.equal(providerCalls, 0);
+    assert.equal(fixture.database.prepare('SELECT provider_status FROM notifications').first().provider_status, 'failed');
 });
 
 test('ambiguous provider results become unknown and are dead-lettered without blind retry', async () => {

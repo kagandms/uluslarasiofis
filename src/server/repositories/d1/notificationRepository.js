@@ -53,6 +53,46 @@ function makeAuditStatement(database, event) {
         event.requestId, JSON.stringify(event.metadata));
 }
 
+function createProviderEventInsert(database, input) {
+    return database.prepare(`
+        INSERT OR IGNORE INTO notification_provider_webhook_events (
+            id, notification_id, provider_message_id, provider_status, provider_timestamp, received_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(input.eventId, input.notificationId, input.providerMessageId,
+        input.providerStatus, input.providerTimestamp, input.receivedAt);
+}
+
+function createProviderNotificationUpdate(database, input) {
+    const statusRank = `CASE provider_status WHEN 'read' THEN 4 WHEN 'delivered' THEN 3
+        WHEN 'failed' THEN 3 WHEN 'sent' THEN 2 WHEN 'accepted' THEN 1 ELSE 0 END`;
+    const incomingRank = `CASE ? WHEN 'read' THEN 4 WHEN 'delivered' THEN 3
+        WHEN 'failed' THEN 3 WHEN 'sent' THEN 2 ELSE 0 END`;
+    return database.prepare(`
+        UPDATE notifications SET
+            provider_status = ?, status = ?,
+            sent_at = CASE WHEN ? = 'sent' THEN COALESCE(sent_at, ?) ELSE sent_at END,
+            delivered_at = CASE WHEN ? = 'delivered' THEN COALESCE(delivered_at, ?) ELSE delivered_at END,
+            read_at = CASE WHEN ? = 'read' THEN COALESCE(read_at, ?) ELSE read_at END,
+            failed_at = CASE WHEN ? = 'failed' THEN COALESCE(failed_at, ?) ELSE failed_at END,
+            last_error_code = CASE WHEN ? = 'failed' THEN 'provider_delivery_failed' ELSE last_error_code END
+        WHERE id = ? AND provider_status <> 'failed'
+            AND ${statusRank} < ${incomingRank}
+    `).bind(input.providerStatus, input.providerStatus, input.providerStatus, input.providerTimestamp,
+        input.providerStatus, input.providerTimestamp, input.providerStatus, input.providerTimestamp,
+        input.providerStatus, input.providerTimestamp, input.providerStatus, input.notificationId,
+        input.providerStatus);
+}
+
+function createProviderStatusAudit(database, input) {
+    return database.prepare(`
+        INSERT INTO audit_events (
+            id, event_type, actor_type, application_id, request_id, safe_metadata_json
+        ) SELECT ?, 'system.notification_provider_status_received', 'system', application_id, ?, ?
+        FROM notifications WHERE id = ? AND changes() = 1
+    `).bind(input.eventId, input.requestId,
+        JSON.stringify({ providerStatus: input.providerStatus }), input.notificationId);
+}
+
 async function enqueueOnce(database, input) {
     const expiresAt = new Date(Date.parse(input.createdAt) + 365 * 24 * 60 * 60 * 1000).toISOString();
     await database.batch([
@@ -198,6 +238,19 @@ export function createNotificationRepository(database) {
                 FROM notifications WHERE application_id = ? AND id = ?
             `).bind(applicationId, notificationId).first();
         },
+        async findByProviderMessageId(providerMessageId) {
+            const row = await database.prepare(`
+                SELECT id FROM notifications WHERE channel = 'whatsapp' AND provider_message_id = ?
+            `).bind(providerMessageId).first();
+            return row?.id || null;
+        },
+        async recordProviderStatusEvent(input) {
+            await database.batch([
+                createProviderEventInsert(database, input),
+                createProviderNotificationUpdate(database, input),
+                createProviderStatusAudit(database, input)
+            ]);
+        },
         async expediteRetry(input) {
             const results = await database.batch([database.prepare(`
                 UPDATE notification_outbox
@@ -285,7 +338,8 @@ export function createNotificationRepository(database) {
                 SELECT n.id, n.application_id, n.channel, n.template_key, n.language,
                     n.rendered_message, a.status AS application_status, a.student_phone, a.student_email,
                     COALESCE(p.whatsapp_opt_in, 0) AS whatsapp_opt_in,
-                    p.whatsapp_phone_hash, o.id AS outbox_id, o.attempt_count, o.lease_token
+                    p.whatsapp_phone_hash, p.whatsapp_consent_version,
+                    o.id AS outbox_id, o.attempt_count, o.lease_token
                 FROM notifications n
                 JOIN applications a ON a.id = n.application_id
                 JOIN notification_outbox o ON o.notification_id = n.id

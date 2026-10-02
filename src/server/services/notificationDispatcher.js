@@ -1,9 +1,10 @@
 import { canUseNotificationTemplate } from '../domain/notificationTemplates.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { hashNotificationPhone, maskNotificationEmail, MAX_NOTIFICATION_ATTEMPTS,
-    normalizeE164Phone } from './notificationService.js';
+    normalizeE164Phone, WHATSAPP_CONSENT_VERSION } from './notificationService.js';
 
 const LEASE_SECONDS = 300;
+export const MAX_NOTIFICATION_DISPATCH_BATCH = 5;
 const RETRY_DELAYS_SECONDS = Object.freeze([30, 120, 600, 1800]);
 const REQUEST_ID = 'notification-dispatcher';
 
@@ -38,7 +39,8 @@ async function recordFailure(repositories, input, classification) {
 async function readCurrentSafeRecipient(envelope) {
     if (envelope.channel === 'whatsapp') {
         const phone = normalizeE164Phone(envelope.student_phone);
-        if (!phone || envelope.whatsapp_opt_in !== 1) return null;
+        if (!phone || envelope.whatsapp_opt_in !== 1
+            || envelope.whatsapp_consent_version !== WHATSAPP_CONSENT_VERSION) return null;
         const phoneHash = await hashNotificationPhone(phone);
         return phoneHash === envelope.whatsapp_phone_hash ? phone : null;
     }
@@ -91,4 +93,18 @@ export async function dispatchNextNotification({ database, provider, now = new D
         const failure = readFailure(error);
         return buildDispatchResult(await recordFailure(repositories, input, failure), claimed);
     }
+}
+
+/** Runs the explicitly enabled, bounded background notification consumer. */
+export async function runNotificationDispatchBatch({ database, provider, isEnabled, now = new Date().toISOString() }) {
+    if (isEnabled !== true) return { status: 'disabled', processed: 0 };
+    if (!database || typeof provider?.dispatch !== 'function' || provider.isConfigured === false) {
+        return { status: 'provider_not_configured', processed: 0 };
+    }
+    let processed = 0;
+    for (; processed < MAX_NOTIFICATION_DISPATCH_BATCH; processed += 1) {
+        const result = await dispatchNextNotification({ database, provider, now });
+        if (result.status === 'empty' || result.status === 'provider_not_configured') break;
+    }
+    return { status: 'complete', processed };
 }

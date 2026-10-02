@@ -10,10 +10,30 @@ import { requireMethod, requireSameOrigin } from './shared.js';
 export async function readCurrentNotificationPreferences(request, environment) {
     requireMethod(request, 'GET');
     const session = await requireApplicationSession(request, environment);
-    const preferences = await createD1Repositories(environment.DB).notifications.readPreferences(session.application_id);
+    const repositories = createD1Repositories(environment.DB).notifications;
+    const [preferences, application] = await Promise.all([
+        repositories.readPreferences(session.application_id),
+        repositories.readApplicationContext(session.application_id)
+    ]);
+    if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+    return buildPreferenceResponse(session.application_id, preferences, application);
+}
+
+async function buildPreferenceResponse(applicationId, preferences, application) {
+    const currentPhoneHash = await hashNotificationPhone(application.student_phone);
+    const hasCurrentPhone = Boolean(currentPhoneHash);
+    const isStoredConsent = preferences.whatsapp_opt_in === true;
+    const isConsentVersionCurrent = preferences.whatsapp_consent_version === WHATSAPP_CONSENT_VERSION;
+    const isConsentPhoneCurrent = hasCurrentPhone && currentPhoneHash === preferences.whatsapp_phone_hash;
+    const requiresReconsent = isStoredConsent && (!isConsentVersionCurrent || !isConsentPhoneCurrent);
     return {
+        application_id: applicationId,
         whatsapp_opt_in: preferences.whatsapp_opt_in,
         consent_version: preferences.whatsapp_consent_version,
+        current_consent_version: WHATSAPP_CONSENT_VERSION,
+        effective_whatsapp_opt_in: isStoredConsent && !requiresReconsent,
+        requires_reconsent: requiresReconsent,
+        can_opt_in: hasCurrentPhone,
         language: preferences.whatsapp_consent_language,
         opted_in_at: preferences.whatsapp_opt_in_at,
         opted_out_at: preferences.whatsapp_opt_out_at
@@ -51,11 +71,5 @@ export async function updateCurrentNotificationPreferences(request, environment,
         optedInAt: selected.isOptedIn ? now : null, optedOutAt: selected.isOptedIn ? null : now,
         updatedAt: now, requestId, auditEventId: crypto.randomUUID()
     });
-    return {
-        whatsapp_opt_in: saved.whatsapp_opt_in,
-        consent_version: saved.whatsapp_consent_version,
-        language: saved.whatsapp_consent_language,
-        opted_in_at: saved.whatsapp_opt_in_at,
-        opted_out_at: saved.whatsapp_opt_out_at
-    };
+    return buildPreferenceResponse(session.application_id, saved, application);
 }

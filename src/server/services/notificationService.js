@@ -45,7 +45,8 @@ export function isNotificationProviderConfigured(environment, channel) {
     return provider?.isConfigured === true && typeof provider.dispatch === 'function';
 }
 
-function readBlockedReasons({ application, channel, templateKey, language, context, preferences, phoneHash, isProviderConfigured }) {
+function readBlockedReasons({ application, channel, templateKey, language, context, preferences, phoneHash,
+    isProviderConfigured, isTemplateConfigured }) {
     const reasons = [];
     if (!application) return ['APPLICATION_NOT_FOUND'];
     if (!SUPPORTED_CHANNELS.has(channel)) return ['CHANNEL_UNAVAILABLE'];
@@ -55,6 +56,9 @@ function readBlockedReasons({ application, channel, templateKey, language, conte
     if (!canUseNotificationTemplate(templateKey, application.status)) reasons.push('TEMPLATE_STATUS_MISMATCH');
     if (channel === 'whatsapp') {
         if (!preferences.whatsapp_opt_in) reasons.push('WHATSAPP_CONSENT_REQUIRED');
+        if (preferences.whatsapp_opt_in && preferences.whatsapp_consent_version !== WHATSAPP_CONSENT_VERSION) {
+            reasons.push('WHATSAPP_CONSENT_VERSION_STALE');
+        }
         if (!phoneHash) reasons.push('RECIPIENT_PHONE_UNAVAILABLE');
         if (preferences.whatsapp_opt_in && phoneHash !== preferences.whatsapp_phone_hash) {
             reasons.push('WHATSAPP_CONSENT_PHONE_CHANGED');
@@ -62,6 +66,9 @@ function readBlockedReasons({ application, channel, templateKey, language, conte
         if (!context.student_phone) reasons.push('RECIPIENT_PHONE_UNAVAILABLE');
     }
     if (!isProviderConfigured) reasons.push(channel === 'email' ? 'EMAIL_PROVIDER_NOT_CONFIGURED' : 'WHATSAPP_PROVIDER_NOT_CONFIGURED');
+    if (channel === 'whatsapp' && isProviderConfigured && !isTemplateConfigured) {
+        reasons.push('WHATSAPP_TEMPLATE_NOT_APPROVED');
+    }
     if (channel === 'email' && !maskNotificationEmail(context.student_email)) {
         reasons.push('RECIPIENT_EMAIL_UNAVAILABLE');
     }
@@ -74,8 +81,12 @@ export async function prepareNotificationPreview({ repositories, environment, ap
     if (!context || context.status === 'draft') throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     const preferences = await repositories.notifications.readPreferences(applicationId);
     const phoneHash = channel === 'whatsapp' ? await hashNotificationPhone(context.student_phone) : null;
+    const provider = environment?.NOTIFICATION_PROVIDERS?.[channel];
+    const isProviderConfigured = isNotificationProviderConfigured(environment, channel);
+    const isTemplateConfigured = typeof provider?.isTemplateConfigured !== 'function'
+        || provider.isTemplateConfigured(templateKey, language) === true;
     const blockedReasons = readBlockedReasons({ application: context, channel, templateKey, language,
-        context, preferences, phoneHash, isProviderConfigured: isNotificationProviderConfigured(environment, channel) });
+        context, preferences, phoneHash, isProviderConfigured, isTemplateConfigured });
     let message = null;
     if (Object.hasOwn(NOTIFICATION_TEMPLATES, templateKey) && NOTIFICATION_LANGUAGES.includes(language)) {
         message = buildNotificationMessage({ templateKey, language, origin });
@@ -102,7 +113,9 @@ export function readEnqueueBlockedError(reason) {
     const errors = {
         WHATSAPP_CONSENT_REQUIRED: ['WHATSAPP_CONSENT_REQUIRED', 'Öğrencinin WhatsApp izni yok. Gönderim engellendi.'],
         WHATSAPP_CONSENT_PHONE_CHANGED: ['WHATSAPP_CONSENT_PHONE_CHANGED', 'Telefon değiştiği için yeni öğrenci izni gerekiyor.'],
+        WHATSAPP_CONSENT_VERSION_STALE: ['WHATSAPP_CONSENT_REQUIRED', 'İzin metni güncellendiği için öğrenciden yeniden izin gerekiyor.'],
         WHATSAPP_PROVIDER_NOT_CONFIGURED: ['PROVIDER_NOT_CONFIGURED', 'WhatsApp sağlayıcısı yapılandırılmadı; gönderim devre dışı.'],
+        WHATSAPP_TEMPLATE_NOT_APPROVED: ['TEMPLATE_NOT_AVAILABLE', 'Seçilen Meta şablonu bu dil için kurum tarafından onaylanmadı.'],
         EMAIL_PROVIDER_NOT_CONFIGURED: ['PROVIDER_NOT_CONFIGURED', 'E-posta sağlayıcısı yapılandırılmadı; gönderim devre dışı.'],
         RECIPIENT_PHONE_UNAVAILABLE: ['RECIPIENT_UNAVAILABLE', 'Başvuruda geçerli bir uluslararası telefon numarası yok.'],
         RECIPIENT_EMAIL_UNAVAILABLE: ['RECIPIENT_UNAVAILABLE', 'Başvuruda geçerli bir e-posta adresi yok.'],

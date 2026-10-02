@@ -9,7 +9,9 @@ const CHANNELS = Object.freeze([['whatsapp', 'WhatsApp'], ['email', 'E-posta']])
 const REASONS = Object.freeze({
     WHATSAPP_CONSENT_REQUIRED: 'Öğrencinin WhatsApp izni yok.',
     WHATSAPP_CONSENT_PHONE_CHANGED: 'Telefon değişti; öğrencinin yeniden izin vermesi gerekiyor.',
+    WHATSAPP_CONSENT_VERSION_STALE: 'İzin metni güncellendi; öğrencinin yeniden izin vermesi gerekiyor.',
     WHATSAPP_PROVIDER_NOT_CONFIGURED: 'WhatsApp sağlayıcısı yapılandırılmadı.',
+    WHATSAPP_TEMPLATE_NOT_APPROVED: 'Bu şablon ve dil için kurum onaylı Meta eşlemesi yok.',
     EMAIL_PROVIDER_NOT_CONFIGURED: 'E-posta sağlayıcısı yapılandırılmadı.',
     RECIPIENT_PHONE_UNAVAILABLE: 'Başvuruda geçerli uluslararası telefon numarası yok.',
     RECIPIENT_EMAIL_UNAVAILABLE: 'Başvuruda geçerli bir e-posta adresi yok.',
@@ -100,8 +102,8 @@ export function createNotificationManager(api) {
     const states = new Map();
     function stateFor(applicationId) {
         if (!states.has(applicationId)) states.set(applicationId, { channel: 'whatsapp', template_key: 'status_updated',
-            language: 'tr', preview: null, history: [], historyLoaded: false, loading: false,
-            message: '', error: '', idempotencyKey: null });
+            language: 'tr', preview: null, history: [], historyLoaded: false, historyLoading: false,
+            loading: false, selectionVersion: 0, message: '', error: '', historyError: '', idempotencyKey: null });
         return states.get(applicationId);
     }
     function createPanel(document, application, onChange) {
@@ -117,22 +119,30 @@ export function createNotificationManager(api) {
         panel.className = 'staff-notification-panel';
         panel.append(createText(document, 'h3', '', 'Öğrenci bildirimi'));
         const updateSelection = (key, value) => {
-            state[key] = value; state.preview = null; state.idempotencyKey = null; state.message = ''; state.error = '';
+            state[key] = value; state.selectionVersion += 1; state.preview = null;
+            state.idempotencyKey = null; state.message = ''; state.error = '';
             onChange();
         };
         const channel = createSelect(document, 'Kanal', 'channel', CHANNELS, state.channel, (value) => updateSelection('channel', value));
         const template = createSelect(document, 'Şablon', 'template', TEMPLATES, state.template_key, (value) => updateSelection('template_key', value));
         const language = createSelect(document, 'Dil', 'language', LANGUAGES, state.language, (value) => updateSelection('language', value));
+        channel.disabled = state.loading; template.disabled = state.loading; language.disabled = state.loading;
         panel.append(channel.parentElement, template.parentElement, language.parentElement);
         const previewButton = document.createElement('button');
         previewButton.type = 'button'; previewButton.className = 'btn btn-outline'; previewButton.textContent = 'Önizle';
         previewButton.disabled = state.loading;
+        previewButton.dataset.action = 'notification-preview';
         previewButton.addEventListener('click', async () => {
+            if (state.loading) return;
+            const selectionVersion = state.selectionVersion;
+            const selection = { channel: state.channel, template_key: state.template_key, language: state.language };
             state.loading = true; state.error = ''; state.message = ''; onChange();
-            try { state.preview = await api.preview(application.id, { channel: state.channel,
-                template_key: state.template_key, language: state.language }); }
-            catch (error) { state.error = error.message; }
-            state.loading = false; onChange();
+            try {
+                const preview = await api.preview(application.id, selection);
+                if (selectionVersion === state.selectionVersion) state.preview = preview;
+            } catch (error) {
+                if (selectionVersion === state.selectionVersion) state.error = error.message;
+            } finally { state.loading = false; onChange(); }
         });
         panel.append(previewButton);
         if (state.preview) {
@@ -144,42 +154,71 @@ export function createNotificationManager(api) {
             const send = document.createElement('button');
             send.type = 'button'; send.className = 'btn btn-primary'; send.textContent = 'Gönder';
             send.disabled = state.loading || !state.preview.can_send;
+            send.dataset.action = 'notification-send';
             send.addEventListener('click', async () => {
+                if (state.loading || !state.preview?.can_send) return;
                 state.idempotencyKey ||= crypto.randomUUID();
+                const selection = { channel: state.channel, template_key: state.template_key, language: state.language };
                 state.loading = true; state.error = ''; onChange();
                 try {
-                    await api.enqueue(application.id, { channel: state.channel, template_key: state.template_key,
-                        language: state.language }, state.idempotencyKey);
+                    await api.enqueue(application.id, selection, state.idempotencyKey);
                     state.idempotencyKey = null;
                     state.message = 'Kuyruğa alındı; sağlayıcıya veya öğrenciye iletildiği doğrulanmış değildir.';
-                    state.history = (await api.history(application.id)).notifications;
+                    state.preview = null;
+                    state.error = '';
                 } catch (error) {
                     state.error = error.code === 'PROVIDER_NOT_CONFIGURED'
                         ? 'Sağlayıcı yapılandırılmadı; gönderim devre dışı.'
                         : 'Sonuç doğrulanamadı. Güvenli tekrar için aynı istek anahtarı kullanılacak.';
                 }
                 state.loading = false; onChange();
+                if (!state.error) await refreshHistory(api, application.id, state, onChange);
             });
             panel.append(send);
         }
         if (state.message) panel.append(createText(document, 'p', 'staff-notification-status', state.message));
         if (state.error) panel.append(createText(document, 'p', 'staff-notification-error', state.error));
+        if (state.historyError) {
+            panel.append(createText(document, 'p', 'staff-notification-error', state.historyError));
+            const retryHistory = document.createElement('button');
+            retryHistory.type = 'button'; retryHistory.className = 'btn btn-outline';
+            retryHistory.textContent = 'Geçmişi yenile'; retryHistory.dataset.action = 'notification-history-retry';
+            retryHistory.disabled = state.historyLoading;
+            retryHistory.addEventListener('click', () => refreshHistory(api, application.id, state, onChange));
+            panel.append(retryHistory);
+        }
         panel.append(createHistory(document, state.history, async (notificationId) => {
+            if (state.loading) return;
             state.loading = true; state.error = ''; onChange();
             try {
                 await api.retry(application.id, notificationId);
                 state.message = 'Tekrar deneme kuyruğa alındı; gönderim veya teslim doğrulanmış değildir.';
-                state.history = (await api.history(application.id)).notifications;
             } catch (error) { state.error = error.message; }
             state.loading = false; onChange();
+            if (!state.error) await refreshHistory(api, application.id, state, onChange);
         }));
-        if (!state.historyLoaded && !state.loading) {
-            state.historyLoaded = true; state.loading = true;
-            api.history(application.id).then((result) => { state.history = result.notifications; })
-                .catch(() => { state.error = 'Bildirim geçmişi yüklenemedi.'; })
-                .finally(() => { state.loading = false; onChange(); });
+        if (!state.historyLoaded && !state.historyLoading) {
+            state.historyLoaded = true;
+            void refreshHistory(api, application.id, state, onChange);
         }
         return panel;
     }
     return Object.freeze({ createPanel });
+}
+
+async function refreshHistory(api, applicationId, state, onChange) {
+    if (state.historyLoading) return;
+    state.historyLoading = true;
+    state.historyError = '';
+    onChange();
+    try {
+        state.history = (await api.history(applicationId)).notifications;
+    } catch {
+        state.historyError = state.message.includes('Kuyruğa alındı')
+            ? 'Bildirim kuyruğa alındı ancak geçmiş yenilenemedi.'
+            : 'Bildirim geçmişi yüklenemedi.';
+    } finally {
+        state.historyLoading = false;
+        onChange();
+    }
 }

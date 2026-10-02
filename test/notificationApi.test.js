@@ -22,11 +22,21 @@ test('owner session controls WhatsApp consent and consent responses do not expos
     const preferences = await before.json();
     assert.equal(before.status, 200);
     assert.equal(preferences.whatsapp_opt_in, false);
+    assert.equal(preferences.application_id, fixture.applicationId);
+    assert.equal(preferences.current_consent_version, 'whatsapp-consent-v1');
+    assert.equal(preferences.effective_whatsapp_opt_in, false);
+    assert.equal(preferences.requires_reconsent, false);
+    assert.equal(preferences.can_opt_in, true);
     const saved = await saveConsent(fixture);
     const response = await saved.json();
     assert.equal(saved.status, 200);
     assert.equal(response.whatsapp_opt_in, true);
     assert.equal(response.consent_version, 'whatsapp-consent-v1');
+    assert.equal(response.application_id, fixture.applicationId);
+    assert.equal(response.current_consent_version, 'whatsapp-consent-v1');
+    assert.equal(response.effective_whatsapp_opt_in, true);
+    assert.equal(response.requires_reconsent, false);
+    assert.equal(response.can_opt_in, true);
     assert.doesNotMatch(JSON.stringify(response), /phone_hash|19995550123|student@example/);
 
     const staffAttempt = await callWorker(fixture.environment, '/api/public/applications/current/notification-preferences', {
@@ -37,6 +47,69 @@ test('owner session controls WhatsApp consent and consent responses do not expos
         method: 'PUT', cookie: fixture.ownerCookie, origin: 'https://attacker.test', body: { whatsapp_opt_in: false }
     });
     assert.equal(crossOrigin.status, 403);
+});
+
+test('staff notification history GET accepts an authenticated browser request without Origin', async () => {
+    const fixture = await createNotificationFixture();
+    const response = await callWorker(fixture.environment, staffPath(fixture), {
+        cookie: fixture.staffCookie, omitOrigin: true
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).notifications, []);
+});
+
+test('preference response flags stale consent and an invalid current phone without exposing its hash', async () => {
+    const fixture = await createNotificationFixture();
+    await saveConsent(fixture);
+    fixture.database.prepare("UPDATE applications SET student_phone = 'invalid' WHERE id = ?")
+        .bind(fixture.applicationId).run();
+    const response = await callWorker(fixture.environment, '/api/public/applications/current/notification-preferences', {
+        cookie: fixture.ownerCookie
+    });
+    const preferences = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(preferences.whatsapp_opt_in, true);
+    assert.equal(preferences.effective_whatsapp_opt_in, false);
+    assert.equal(preferences.requires_reconsent, true);
+    assert.equal(preferences.can_opt_in, false);
+    assert.doesNotMatch(JSON.stringify(preferences), /phone_hash/);
+});
+
+test('preference response requires new consent when its version is stale but the phone remains valid', async () => {
+    const fixture = await createNotificationFixture();
+    await saveConsent(fixture);
+    fixture.database.prepare("UPDATE notification_preferences SET whatsapp_consent_version = 'old-version' WHERE application_id = ?")
+        .bind(fixture.applicationId).run();
+    const response = await callWorker(fixture.environment, '/api/public/applications/current/notification-preferences', {
+        cookie: fixture.ownerCookie
+    });
+    const preferences = await response.json();
+    assert.equal(preferences.effective_whatsapp_opt_in, false);
+    assert.equal(preferences.requires_reconsent, true);
+    assert.equal(preferences.can_opt_in, true);
+    const preview = await callWorker(fixture.environment, staffPath(fixture, '/preview'), {
+        method: 'POST', cookie: fixture.staffCookie, body: selection
+    });
+    assert.ok((await preview.json()).blocked_reasons.includes('WHATSAPP_CONSENT_VERSION_STALE'));
+});
+
+test('Meta template configuration gates staff preview and enqueue per language', async () => {
+    const fixture = await createNotificationFixture({
+        WHATSAPP_ACCESS_TOKEN: 'test-only-token', WHATSAPP_PHONE_NUMBER_ID: '1234567890123',
+        WHATSAPP_CLOUD_API_VERSION: 'v24.0',
+        WHATSAPP_APPROVED_TEMPLATES: { application_received: { tr: { name: 'application_received_tr', languageCode: 'tr' } } }
+    });
+    await saveConsent(fixture);
+    const preview = await callWorker(fixture.environment, staffPath(fixture, '/preview'), {
+        method: 'POST', cookie: fixture.staffCookie, body: selection
+    });
+    assert.ok((await preview.json()).blocked_reasons.includes('WHATSAPP_TEMPLATE_NOT_APPROVED'));
+    const enqueue = await callWorker(fixture.environment, staffPath(fixture), {
+        method: 'POST', cookie: fixture.staffCookie, headers: { 'Idempotency-Key': 'notification-key-0004' }, body: selection
+    });
+    assert.equal(enqueue.status, 409);
+    assert.equal((await enqueue.json()).error.code, 'TEMPLATE_NOT_AVAILABLE');
+    assert.equal(fixture.database.prepare('SELECT COUNT(*) AS count FROM notifications').first().count, 0);
 });
 
 test('staff preview and enqueue require owner consent and a configured provider', async () => {

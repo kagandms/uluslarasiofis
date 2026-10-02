@@ -35,7 +35,6 @@ function readIdempotencyKey(request) {
 }
 
 async function prepareStaffContext(request, environment) {
-    requireSameOrigin(request);
     const staff = await requireStaff(request, environment, STAFF_ROLES);
     return { staff, repositories: createD1Repositories(environment.DB) };
 }
@@ -43,6 +42,7 @@ async function prepareStaffContext(request, environment) {
 /** Records and returns a staff preview without exposing recipient details. */
 export async function previewStaffNotification({ request, environment, applicationId, requestId }) {
     requireMethod(request, 'POST');
+    requireSameOrigin(request);
     const { staff, repositories } = await prepareStaffContext(request, environment);
     const selection = readSelection(await readJsonBody(request));
     const preview = await prepareNotificationPreview({ repositories, environment, applicationId,
@@ -68,6 +68,7 @@ export async function readStaffNotificationHistory({ request, environment, appli
 /** Enqueues an explicitly requested notification after rechecking current recipient and consent. */
 export async function enqueueStaffNotification({ request, environment, applicationId, requestId }) {
     requireMethod(request, 'POST');
+    requireSameOrigin(request);
     const { staff, repositories } = await prepareStaffContext(request, environment);
     const selection = readSelection(await readJsonBody(request));
     const idempotencyKey = readIdempotencyKey(request);

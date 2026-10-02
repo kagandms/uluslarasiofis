@@ -16,6 +16,9 @@ import { handleTebligatRequest } from './routes/tebligatRoutes.js';
 import { readCurrentNotificationPreferences, updateCurrentNotificationPreferences } from './routes/applicantNotificationPreferenceRoutes.js';
 import { enqueueStaffNotification, previewStaffNotification, readStaffNotificationHistory,
     retryStaffNotification } from './routes/staffNotificationRoutes.js';
+import { handleMetaWhatsAppWebhook } from './services/metaWhatsAppWebhook.js';
+import { createMetaWhatsAppProvider } from './services/metaWhatsAppProvider.js';
+import { runNotificationDispatchBatch } from './services/notificationDispatcher.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -39,8 +42,19 @@ function safeRouteResponse(result, requestId) {
     return jsonResponse(result ?? {}, 200, requestId);
 }
 
+function withMetaWhatsAppProvider(environment) {
+    if (environment.NOTIFICATION_PROVIDERS?.whatsapp) return environment;
+    return { ...environment, NOTIFICATION_PROVIDERS: {
+        ...environment.NOTIFICATION_PROVIDERS,
+        whatsapp: createMetaWhatsAppProvider(environment)
+    } };
+}
+
 async function routeApi(request, environment, requestId) {
     const { pathname } = new URL(request.url);
+    if (pathname === '/api/webhooks/whatsapp') {
+        return handleMetaWhatsAppWebhook(request, environment, requestId);
+    }
     const archiveManifestMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/archive-manifest$/);
     if (archiveManifestMatch) {
         let applicationId;
@@ -74,10 +88,10 @@ async function routeApi(request, environment, requestId) {
         try { applicationId = decodeURIComponent(staffNotificationMatch[1]); }
         catch { throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.'); }
         if (staffNotificationMatch[2]) {
-            return previewStaffNotification({ request, environment, applicationId, requestId });
+            return previewStaffNotification({ request, environment: withMetaWhatsAppProvider(environment), applicationId, requestId });
         }
         if (request.method === 'GET') return readStaffNotificationHistory({ request, environment, applicationId });
-        return enqueueStaffNotification({ request, environment, applicationId, requestId });
+        return enqueueStaffNotification({ request, environment: withMetaWhatsAppProvider(environment), applicationId, requestId });
     }
     if (pathname === '/api/staff/auth/login' || pathname === '/api/login') return loginStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/session' || pathname === '/api/session') return readStaffSession(request, environment);
@@ -190,6 +204,11 @@ const worker = {
             }
             return errorResponse(requestId, apiError.status, apiError.code, apiError.message, apiError.retryable);
         }
+    },
+    async scheduled(_controller, environment) {
+        const provider = createMetaWhatsAppProvider(environment);
+        return runNotificationDispatchBatch({ database: environment.DB, provider,
+            isEnabled: environment.NOTIFICATION_DISPATCH_ENABLED === 'true' });
     }
 };
 
