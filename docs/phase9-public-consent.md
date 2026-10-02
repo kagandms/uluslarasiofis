@@ -59,7 +59,7 @@
 ## 4. Test ve Doğrulama Kanıtları
 
 ### 1. Odaklı UI Test Paketi (`test/notificationPreferencesUi.test.js`)
-Toplam **25 test senaryosu** başarıyla çalıştırıldı (0 hata):
+Entegrasyon dalında toplam **27 test senaryosu** başarıyla çalıştırıldı (0 hata):
 1. `parseNotificationPreferences`: Eksik veya eski API yanıtlarında iznin doğrulanmış sayılmaması.
 2. `application_id`: Eksik veya farklı kimlikte takip ekranında ve sihirbazda kontrollerin engellenmesi.
 3. Bilinmeyen izin sürümünde opt-in işleminin engellenmesi.
@@ -83,23 +83,29 @@ Toplam **25 test senaryosu** başarıyla çalıştırıldı (0 hata):
 21. **(Yeni)** Bozuk/eksik yanıt veya başka `application_id` için “kaydedildi” gösterilmiyor.
 22. **(Yeni)** Opt-out PUT yanıtı izin durumunu hâlâ etkin gösterirse başarı gösterilmiyor.
 23. **(Yeni)** Opt-out payload’ı yalnızca `{ "whatsapp_opt_in": false }` olarak kalıyor.
-24. **(Yeni)** Consent PUT sırasında telefon alanı kilitli (`disabled`, `aria-disabled="true"`); yanıt gelince tekrar düzenlenebilir.
+24. **(Yeni)** Consent PUT sırasında telefon alanı kilitli (`disabled`, `aria-disabled="true"`); başarılı yanıtla tekrar düzenlenebilir.
 25. **(Yeni)** Autosave sırasında telefon değişirse consent PUT hiç gönderilmiyor.
+26. **(Entegrasyon)** Consent PUT reddedilince telefon alanı açılıyor ve hata görünür kalıyor.
+27. **(Entegrasyon)** Opt-out PUT telefon alanını kilitlemiyor.
 
-### 2. Başsız Tarayıcı Doğrulaması (`scripts/check-public-consent-browser.mjs`)
+### 2. Yerel Mock Sunuculu Başsız Tarayıcı Kontrolü (`scripts/check-public-consent-browser.mjs`)
 - **Çalıştırma:**
   ```bash
   node scripts/check-public-consent-browser.mjs
   # veya
   npx --yes puppeteer@24.4.0 node scripts/check-public-consent-browser.mjs
   ```
-- **Sonuçlar:** 4 ekran genişliği (320px, 390px, 768px, 1440px) ve 5 dilde (TR, EN, RU, TK, AR) 20 kombinasyon 0px yatay taşma ile başarılı oldu; etkileşimli opt-in, opt-out, telefon değişikliği uyarısı ve takip kontrolleri canlı DOM'da doğrulandı.
+- **Sonuçlar:** 4 ekran genişliği (320px, 390px, 768px, 1440px) ve 5 dilde (TR, EN, RU, TK, AR) 20 kombinasyon 0px yatay taşma ile başarılı oldu; etkileşimli opt-in, opt-out, telefon değişikliği uyarısı, owner tracking ve public lookup izolasyonu yerel mock API ile doğrulandı.
+- Bu kontrol yerel Puppeteer/Chromium ve mock API kullanır; canlı Cloudflare staging UAT'si değildir.
 - *Not:* Otomatik kontroller WCAG 2.1 AA manuel denetim yerine geçmez.
 
-### 3. Genel Test Paketi ve Derleme Doğrulaması
-- `npm test`: **462 testin tamamı başarılı** (0 hata).
-- `npm run build:staging`: Temiz Vite derlemesi (305ms).
-- `git diff --check`: 0 boşluk / biçimlendirme hatası.
+### 3. Entegrasyon Test Paketi ve Derleme Doğrulaması
+- `node --test test/notificationPreferencesUi.test.js`: **27/27 başarılı** (yalnız consent UI testleri).
+- `npm run test:backend`: **162/162 başarılı** (backend test dosyaları; consent API sözleşme testleri dahil, public UI dosyası dahil değil).
+- `npm test`: **464/464 başarılı** (tam repo test glob'u; focused UI testleri bu paketin içinde).
+- `npm run build:staging`: başarılı; mevcut `INEFFECTIVE_DYNAMIC_IMPORT` uyarısı `src/staff/main.js` ve `src/managers/yknManager.js` import yapısından geliyor.
+- `node scripts/check-public-consent-browser.mjs`: başarılı; yalnızca yerel mock-sunucu headless tarayıcı kanıtı.
+- `git diff --check`: entegrasyon commit'i öncesi tekrar doğrulanacak.
 
 ---
 
@@ -126,3 +132,12 @@ Başvuru sihirbazında öğrenci "WhatsApp bildirimi al" onay kutusunu işaretle
 1. Gerçek Cloudflare D1 üzerinde `GET /api/public/applications/current/notification-preferences` endpoint'inden dönen metadata'nın canlı staging ortamında uçtan uca doğrulanması.
 2. WhatsApp Business API / Meta Cloud API kimlik bilgileri (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`) sağlandığında gerçek şablon dağıtımı.
 3. Personel panelindeki bildirim geçmişi ve loglarının canlı staging ortamında izlenmesi.
+
+## 7. Codex Phase 9–10 Entegrasyon İncelemesi — 2026-10-02
+
+- Entegrasyon tabanı `fba153c1f34d76555b76bdef920fc9ce26a07f46`; Antigravity consent commit'i `3ffb734ee9387601a34cf26b5a6f2b18948cecf3` bu tabandan türemiştir ve yeni izole entegrasyon dalına birleştirilmiştir.
+- `applicantNotificationPreferenceRoutes.js` GET/PUT sözleşmesi arayüzün beklediği `application_id`, `current_consent_version`, `effective_whatsapp_opt_in`, `requires_reconsent` ve `can_opt_in` alanlarını döndürür. İstek başvuru kimliğini istemciden almaz; `requireApplicationSession` ile sahip oturumunun `application_id` değerine bağlanır.
+- Opt-out `{ "whatsapp_opt_in": false }` gönderir; yalnızca zorunlu alan tipleri, aynı başvuru kimliği ve iki açık `false` durumunu doğrulayan yanıt başarı sayılır. Sürümü bilinmeyen yanıt yeni opt-in'i engellerken kayıtlı izin geri çekilebilir.
+- Eksik metadata doğrulanmış izin veya başarıya dönüştürülmez. İlk taslak opt-in PUT hatası görünür uyarı ve aynı taslak üzerinde tekrar deneme sağlar. Öğrenci numarasıyla public lookup tercih API'sini çağırmaz.
+- Telefon autosave'i PUT öncesinde tamamlanır; autosave sürerken değişiklik algılanırsa PUT gönderilmez. Telefon kilidi yalnızca consent opt-in PUT süresince çalışan istemci tarafı sıralama korumasıdır; Worker/D1 dağıtık eşzamanlılık garantisi değildir. Opt-out kilit uygulamaz.
+- Bağımsız kaynak incelemesinde uygulama kodu düzeltmesi gerektiren somut kusur bulunmadı; entegrasyonun doğrulanabilirlik açığı için iki UI regresyon testi eklendi (PUT reddinde unlock ve opt-out sırasında unlocked).

@@ -44,3 +44,17 @@ Wrangler `4.143.0` was run with separate temporary local D1 persistence director
 - Map each enabled internal template and language to a reviewed, approved Meta template; confirm remote wording and locale match the staff preview before enabling dispatch. Email remains disabled.
 - Configure the Meta webhook subscription and callback after deployment, then run a controlled live send and verify signed delivery/read callbacks. Enable the dispatch flag and any trigger only after that institutional review.
 - Deployments, staging/production migrations, secrets, provider sends, live D1/R2 changes, scanner state, and browser acceptance were not performed. Phase 8H scanner-dependent acceptance remains pending.
+
+## Public WhatsApp consent integration — 2026-10-02
+
+- New integration branch: `codex/phase9-10-consent-integration`, created at exact base `fba153c1f34d76555b76bdef920fc9ce26a07f46`.
+- Merged source: `antigravity/phase9-public-consent-hardening` at `3ffb734ee9387601a34cf26b5a6f2b18948cecf3`; `git merge-base` equals the base SHA. Both source branches and their clean worktrees were left unchanged.
+- Consent API contract review: owner-session GET/PUT uses the current session application ID; response metadata matches the UI contract. Missing/broken metadata never establishes effective opt-in or success. Unsupported current text blocks new opt-in while a stored opt-in remains revocable. Opt-out sends only `{ "whatsapp_opt_in": false }` and requires matching application identity plus explicit false stored/effective values before success.
+- Public student-number lookup does not call the preference endpoint. Initial-draft preference failure stays visible and its retry reuses the existing application. Phone persistence completes before an opt-in PUT; a detected phone edit during autosave prevents the PUT. The temporary phone lock is client-side ordering only, not a distributed Worker/D1 concurrency guarantee; opt-out leaves the field unlocked.
+- Added two UI regression cases for phone unlock after rejected consent PUT and no phone lock during opt-out. No production application source correction was indicated by the review.
+- `node --test test/notificationPreferencesUi.test.js`: PASS, **27/27** consent UI cases.
+- `npm run test:backend`: PASS, **162/162** backend cases, including `notificationApi.test.js`; this command does not include the browser UI test file.
+- `npm test`: PASS, **464/464** across the full repository test glob, including the consent UI tests.
+- `node scripts/check-public-consent-browser.mjs`: PASS on a local headless Puppeteer/Chromium browser backed by a local mock API (20 viewport/locale combinations plus opt-in/opt-out, tracking, public lookup, and home-page checks). This is not live Cloudflare acceptance.
+- `npm run build:staging`: PASS; the existing `INEFFECTIVE_DYNAMIC_IMPORT` warning remains for `src/services/ocrService.js`.
+- These checks do not perform a real WhatsApp send or live Cloudflare test. Live staging consent GET/PUT, approved-template configuration, provider/webhook delivery, and owner-reviewed acceptance remain outstanding. No deploy, migration, secret change, production access, real WhatsApp message, or scanner-state mutation was performed.

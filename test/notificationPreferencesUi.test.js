@@ -1410,3 +1410,81 @@ test('phone change during autosave aborts workflow; consent PUT is never sent', 
     // Phone must NOT remain locked
     assert.equal(phoneInput.disabled, false, 'Phone must not remain locked after aborted workflow');
 });
+
+test('consent PUT rejection unlocks the phone field and keeps failure visible', async () => {
+    const { document, root } = createDom();
+    const phoneInput = document.createElement('input');
+    phoneInput.type = 'tel';
+    phoneInput.name = 'student_phone';
+    phoneInput.value = '+905551234567';
+    root.append(phoneInput);
+    let rejectConsentPut;
+
+    const field = createNotificationPreferenceField(document, {
+        application: { id: 'app_lock_error', status: 'draft', student_phone: phoneInput.value },
+        initialPreference: createFullContractFixture({ application_id: 'app_lock_error' }),
+        api: {
+            async updateCurrentNotificationPreferences() {
+                return new Promise((resolve, reject) => { rejectConsentPut = reject; });
+            }
+        },
+        phoneInput,
+        persistPhone: async () => ({ success: true })
+    });
+    root.append(field);
+
+    const checkbox = field.querySelector('#field-whatsapp-opt-in');
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await flushAsync();
+    assert.equal(phoneInput.disabled, true, 'Phone must remain locked while PUT is pending');
+    rejectConsentPut(Object.assign(new Error('Unavailable'), { code: 'NETWORK_ERROR' }));
+    await flushAsync();
+
+    assert.equal(phoneInput.disabled, false, 'Phone must unlock after a rejected PUT');
+    assert.equal(phoneInput.getAttribute('aria-disabled'), null);
+    assert.equal(field.querySelector('.notification-preference-status').getAttribute('role'), 'alert');
+    assert.match(field.querySelector('.notification-preference-status').textContent, /kaydedilemedi/i);
+});
+
+test('opt-out PUT does not lock the phone field', async () => {
+    const { document, root } = createDom();
+    const phoneInput = document.createElement('input');
+    phoneInput.type = 'tel';
+    phoneInput.name = 'student_phone';
+    phoneInput.value = '+905551234567';
+    root.append(phoneInput);
+    let resolveOptOut;
+
+    const field = createNotificationPreferenceField(document, {
+        application: { id: 'app_opt_out_unlocked', status: 'draft', student_phone: phoneInput.value },
+        initialPreference: createFullContractFixture({
+            application_id: 'app_opt_out_unlocked',
+            whatsapp_opt_in: true,
+            consent_version: WHATSAPP_CONSENT_VERSION,
+            effective_whatsapp_opt_in: true
+        }),
+        api: {
+            async updateCurrentNotificationPreferences() {
+                return new Promise((resolve) => { resolveOptOut = resolve; });
+            }
+        },
+        phoneInput
+    });
+    root.append(field);
+
+    field.querySelector('[data-action="preference-opt-out"]').click();
+    await flushAsync();
+
+    assert.equal(phoneInput.disabled, false, 'Opt-out must leave the phone field editable');
+    assert.equal(phoneInput.getAttribute('aria-disabled'), null);
+
+    resolveOptOut(createFullContractFixture({
+        application_id: 'app_opt_out_unlocked',
+        whatsapp_opt_in: false,
+        effective_whatsapp_opt_in: false
+    }));
+    await flushAsync();
+    await flushAsync();
+    assert.equal(phoneInput.disabled, false);
+});
