@@ -13,6 +13,7 @@ import { initWorkspaceNavigation } from '../ui/workspaceNavigation.js';
 import { initYknManager } from '../managers/yknManager.js';
 import { initStaffAuth } from './auth.js';
 import { initializeStaffApplicationsManager } from './applicationsManager.js';
+import { initializeStaffArchiveManager } from './archiveManager.js';
 import { initDocumentsManager } from '../ui/documents-manager.js';
 
 const staffAuthReady = document.readyState === 'loading'
@@ -102,6 +103,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (applicationsRoot) initializeStaffApplicationsManager(applicationsRoot);
     } catch (error) {
         console.error('Applications workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
+    try {
+        const archiveRoot = document.getElementById('staff-archive-manager');
+        if (archiveRoot) initializeStaffArchiveManager(archiveRoot);
+    } catch (error) {
+        console.error('Archive workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
     try { initDocumentsManager(); } catch (error) {
         console.error('Documents workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });

@@ -1,0 +1,207 @@
+.staff-archive-queue,
+.staff-archive-detail-view {
+    color: var(--text-primary);
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.staff-archive-filters {
+    align-items: end;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: minmax(220px, 2fr) minmax(180px, 1fr) auto;
+}
+
+.staff-archive-filters label,
+.staff-archive-details-grid dt {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.staff-archive-filters .glass-input {
+    margin-top: 0.3rem;
+    width: 100%;
+}
+
+.staff-archive-table {
+    border-collapse: collapse;
+    min-width: 0;
+    table-layout: auto;
+    width: 100%;
+}
+
+.staff-archive-table th,
+.staff-archive-table td {
+    border-bottom: 1px solid var(--card-border);
+    padding: 0.75rem 0.55rem;
+    text-align: left;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+}
+
+.staff-archive-table th {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.staff-archive-table td {
+    color: var(--text-primary);
+    font-size: 0.88rem;
+}
+
+.staff-archive-pagination {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.staff-archive-pagination p,
+.staff-archive-state {
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.staff-archive-summary,
+.staff-archive-documents {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    color: var(--text-primary);
+    min-width: 0;
+    padding: 1rem;
+}
+
+.staff-archive-summary h4,
+.staff-archive-documents h4 {
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.staff-archive-details-grid {
+    display: grid;
+    gap: 0.8rem 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.staff-archive-details-grid dt,
+.staff-archive-details-grid dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.staff-archive-details-grid dd {
+    color: var(--text-primary);
+    margin-top: 0.2rem;
+}
+
+.staff-archive-document-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.staff-archive-document-card {
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    min-width: 0;
+    padding: 0.85rem;
+}
+
+.staff-archive-document-card h5 {
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+}
+
+.staff-archive-document-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+}
+
+.staff-archive-document-actions .btn {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.staff-archive-student-message {
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.staff-archive-document-unavailable {
+    color: var(--text-secondary);
+    margin-top: 0.85rem;
+}
+
+@media (max-width: 900px) {
+    .staff-archive-table thead {
+        position: absolute;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        width: 1px;
+    }
+
+    .staff-archive-table,
+    .staff-archive-table tbody,
+    .staff-archive-table tr,
+    .staff-archive-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .staff-archive-table tr {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        margin-bottom: 0.75rem;
+        padding: 0.35rem 0.75rem;
+    }
+
+    .staff-archive-table td {
+        align-items: baseline;
+        border-bottom: 1px solid var(--card-border);
+        display: flex;
+        gap: 0.75rem;
+        justify-content: space-between;
+        padding: 0.55rem 0;
+        text-align: right;
+    }
+
+    .staff-archive-table td::before {
+        color: var(--text-secondary);
+        content: attr(data-label);
+        flex: 0 0 38%;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-align: left;
+    }
+
+    .staff-archive-table td:last-child {
+        border-bottom: 0;
+    }
+}
+
+@media (max-width: 600px) {
+    .staff-archive-filters,
+    .staff-archive-details-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .staff-archive-filters .btn {
+        width: 100%;
+    }
+
+    .staff-archive-pagination {
+        flex-wrap: wrap;
+    }
+}

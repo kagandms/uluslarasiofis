@@ -1,5 +1,6 @@
 const VIEW_TITLES = {
     applications: 'İkamet Başvuruları',
+    archive: 'Arşiv',
     ykn: 'YKN',
     cover: 'Kapak Hazırla',
     teblig: 'Tebliğ Bul',
@@ -26,7 +27,11 @@ function getViewPanel(viewName) {
 function focusView(viewName) {
     const targetId = viewName === 'teblig'
         ? 'tebligat-search-input'
-        : (viewName === 'ykn' ? 'ykn-passport-input' : `${viewName}-title`);
+        : (viewName === 'ykn'
+            ? 'ykn-passport-input'
+            : (viewName === 'archive'
+                ? (document.getElementById('staff-archive-search') ? 'staff-archive-search' : 'archive-title')
+                : `${viewName}-title`));
     document.getElementById(targetId)?.focus();
 }
 
