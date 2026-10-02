@@ -1,3 +1,4 @@
+import { initializeScannerManager } from './scanner-manager.js';
 import { initTheme } from '../ui/themeManager.js';
 import { setActiveStep, STEP_IDS } from '../ui/stepWizard.js';
 import { renderStudentForms, getAllFormsData, populateFormNode } from '../ui/formManager.js';
@@ -100,7 +101,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { initWorkspaceNavigation(); } catch (e) { console.error('initWorkspaceNavigation error:', e); }
     try {
         const applicationsRoot = document.getElementById('staff-applications-manager');
-        if (applicationsRoot) initializeStaffApplicationsManager(applicationsRoot);
+        if (applicationsRoot) {
+            const scannerPanel = document.createElement('section');
+            scannerPanel.setAttribute('aria-label', 'Belge güvenlik taraması durumu');
+            applicationsRoot.before(scannerPanel);
+            initializeScannerManager(scannerPanel);
+            initializeStaffApplicationsManager(applicationsRoot);
+        }
     } catch (error) {
         console.error('Applications workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }

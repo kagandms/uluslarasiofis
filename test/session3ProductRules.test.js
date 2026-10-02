@@ -557,6 +557,7 @@ test('passport uploads use direct R2 capabilities and replacement creates a new 
     assert.equal(firstIntentResponse.status, 201);
     assert.equal(firstIntent.upload.method, 'PUT');
     assert.equal(firstIntent.upload.required_headers['content-type'], 'application/pdf');
+    assert.equal(firstIntent.upload.required_headers['if-none-match'], '*');
     assert.equal(Object.hasOwn(firstIntent.upload, 'storage_key'), false);
     assert.equal(firstFinalizeResponse.status, 200);
     assert.equal(secondFinalizeResponse.status, 200);

@@ -6,3 +6,6 @@ dist
 !.dev.vars.example
 .wrangler
 /public/downloads/*
+
+/scripts/scanner/__pycache__/
+/test/scanner/__pycache__/

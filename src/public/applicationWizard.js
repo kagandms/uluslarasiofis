@@ -316,6 +316,8 @@ function createAddressEvidenceChoices(document, fields, messages, isDisabled) {
 function getDocumentStatusKey(requirement, task) {
     if (task?.state && task.state !== 'complete') return `uploadState_${task.state}`;
     if (requirement.cleanup_status === 'pending') return 'deleteCleanupPending';
+    if (requirement.scan_status === 'unsafe') return 'documentScanUnsafe';
+    if (requirement.scan_status === 'failed') return 'documentScanFailed';
     if (requirement.review_status === 'approved' || requirement.revision_status === 'approved') return 'documentApproved';
     if (requirement.review_status === 'under_review') return 'documentStaffReview';
     if (requirement.review_status === 'resubmission_required' || requirement.revision_status === 'resubmission_required') return 'documentNeedsReplacement';
@@ -326,7 +328,7 @@ function getDocumentStatusKey(requirement, task) {
 
 function getDocumentStatusTone(requirement, task, statusKey, isDeleting) {
     if (isDeleting) return 'pending';
-    if (statusKey === 'deleteCleanupPending' || statusKey === 'documentNeedsReplacement') return 'error';
+    if (['deleteCleanupPending', 'documentNeedsReplacement', 'documentScanUnsafe', 'documentScanFailed'].includes(statusKey)) return 'error';
     if (['failed_upload', 'failed_finalize', 'unknown_finalize_result'].includes(task?.state)) return 'error';
     if (task?.state === 'complete' || requirement.upload_status === 'finalized'
         || requirement.review_status === 'approved' || requirement.revision_status === 'approved') return 'success';

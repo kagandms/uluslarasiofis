@@ -793,3 +793,25 @@ test('readiness rejection stays on Review and shows the localized actionable err
     assert.equal(root.querySelector('[data-i18n="submissionSuccessHeading"]'), null);
     document.defaultView.close();
 });
+
+test('unsafe and failed scans show translated error states instead of upload success', () => {
+    const { document, root } = createRoot();
+    for (const scanStatus of ['unsafe', 'failed']) {
+        renderStudentDocumentRequirements(root, [{
+            code: 'passport', required: true, label_key: 'documentPassport', description_key: 'documentPassportHelp',
+            accepted_media_types: ['application/pdf'], max_byte_size: 1024, filename: 'synthetic.pdf',
+            upload_status: 'finalized', scan_status: scanStatus
+        }]);
+
+        const status = root.querySelector('.document-upload-status');
+
+        assert.equal(status.dataset.status, 'error');
+        assert.equal(status.getAttribute('role'), 'alert');
+        assert.equal(status.dataset.i18n, scanStatus === 'unsafe' ? 'documentScanUnsafe' : 'documentScanFailed');
+    }
+    for (const locale of SUPPORTED_LOCALES) {
+        assert.ok(SESSION3_MESSAGES[locale].documentScanUnsafe);
+        assert.ok(SESSION3_MESSAGES[locale].documentScanFailed);
+    }
+    document.defaultView.close();
+});

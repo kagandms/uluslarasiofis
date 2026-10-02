@@ -1,0 +1,19 @@
+test_clean_requires_complete_summary_and_errors_never_become_clean (test_runner.RunnerContractTests.test_clean_requires_complete_summary_and_errors_never_become_clean) ... ok
+test_config_rejects_http_and_secrets_cannot_enter_error_output (test_runner.RunnerContractTests.test_config_rejects_http_and_secrets_cannot_enter_error_output) ... ok
+test_download_requires_exact_size_and_expected_hash (test_runner.RunnerContractTests.test_download_requires_exact_size_and_expected_hash) ... ok
+test_runner_module_exists (test_runner.RunnerContractTests.test_runner_module_exists) ... ok
+test_signature_freshness_uses_build_time_not_touch_time (test_runner.RunnerContractTests.test_signature_freshness_uses_build_time_not_touch_time) ... ok
+test_crash_cleanup_removes_only_old_job_directories (test_runner.RunnerFailureTests.test_crash_cleanup_removes_only_old_job_directories) ... ok
+test_engine_missing_and_timeout_cannot_return_clean (test_runner.RunnerFailureTests.test_engine_missing_and_timeout_cannot_return_clean) ... scan_failed code=engine_unavailable
+scan_failed code=scan_timeout
+ok
+test_private_files_are_removed_after_an_engine_error (test_runner.RunnerFailureTests.test_private_files_are_removed_after_an_engine_error) ... ok
+test_update_failure_is_retried_before_claim_when_heartbeat_also_fails (test_runner.RunnerFailureTests.test_update_failure_is_retried_before_claim_when_heartbeat_also_fails) ... runner_iteration_failed; lease_retry_remains_in_D1
+runner_iteration_failed; lease_retry_remains_in_D1
+ok
+test_partial_signature_database_is_not_ready_even_when_version_command_succeeds (test_runner.SignatureCompletenessTests.test_partial_signature_database_is_not_ready_even_when_version_command_succeeds) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.046s
+
+OK

@@ -1,0 +1,31 @@
+/tmp/pilot-clamav-synthetic/clean.pdf: OK
+
+----------- SCAN SUMMARY -----------
+Known viruses: 3628114
+Engine version: 1.5.4
+Scanned directories: 0
+Scanned files: 1
+Infected files: 0
+Data scanned: 469 B
+Data read: 469 B (ratio 1.00:1)
+Time: 5.943 sec (0 m 5 s)
+Start Date: 2026:10:02 20:22:18
+End Date:   2026:10:02 20:22:24
+        5.97 real         5.41 user         0.39 sys
+          1590345728  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              144488  page reclaims
+                 281  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                  10  voluntary context switches
+                3950  involuntary context switches
+         51589738387  instructions retired
+         19530924543  cycles elapsed
+          1679361680  peak memory footprint

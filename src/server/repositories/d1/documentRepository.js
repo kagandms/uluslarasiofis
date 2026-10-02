@@ -1,3 +1,5 @@
+import { createScanJobStatement } from './scanner-job-statement.js';
+
 const ADDRESS_EVIDENCE_CONDITIONS = Object.freeze({
     'address_evidence:rental_contract': "AND applications.address_evidence_type = 'rental_contract'",
     'address_evidence:residence_certificate': "AND applications.address_evidence_type = 'residence_certificate'",
@@ -258,9 +260,10 @@ export function createDocumentRepository(database) {
                     UPDATE upload_intents SET status = 'completed', completed_at = ?
                     WHERE id = ? AND status = 'pending' AND revision_file_id = ?
                       AND EXISTS (SELECT 1 FROM document_revisions WHERE id = ? AND is_current = 1)
-                `).bind(finalizedAt, intentId, fileId, revisionId)
+                `).bind(finalizedAt, intentId, fileId, revisionId),
+                createScanJobStatement(database, { fileId, finalizedAt })
             ]);
-            return results[4]?.meta?.changes === 1;
+            return results[4]?.meta?.changes === 1 && results[5]?.meta?.changes === 1;
         },
         async beginStudentDocumentDelete({ applicationId, code, requestedAt }) {
             const record = await database.prepare(`

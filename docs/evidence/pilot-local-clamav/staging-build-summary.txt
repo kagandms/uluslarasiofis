@@ -1,0 +1,12 @@
+dist/client/assets/pdf.worker.min-BmVo14Nb.mjs                                  1,317.03 kB
+dist/client/assets/main-xSsSSDip.css                                               19.70 kB │ gzip:   4.14 kB
+dist/client/assets/staff-D3E9svbH.css                                              37.15 kB │ gzip:   7.12 kB
+dist/client/assets/rolldown-runtime-DK3Fl9T5.js                                     0.15 kB │ gzip:   0.15 kB
+dist/client/assets/main-BnI7S7ow.js                                                64.76 kB │ gzip:  16.46 kB
+dist/client/assets/messages-DcvNnPez.js                                            99.70 kB │ gzip:  26.44 kB
+dist/client/assets/staff-DJklnKNW.js                                              370.86 kB │ gzip: 130.62 kB
+dist/client/assets/pdfjs-bootstrap-BbxMWT-f.js                                    488.15 kB │ gzip: 148.57 kB
+
+[INEFFECTIVE_DYNAMIC_IMPORT] src/services/ocrService.js is dynamically imported by src/managers/yknManager.js but also statically imported by src/staff/main.js?v=2.3.5, dynamic import will not move module into another chunk.
+
+✓ built in 352ms

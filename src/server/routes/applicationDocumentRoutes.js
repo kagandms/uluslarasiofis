@@ -138,7 +138,7 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
     const intentId = crypto.randomUUID();
     let capability;
     try {
-        capability = await storage.createUploadCapability(storageKey, {
+        capability = await storage.createWriteOnceUploadCapability(storageKey, {
             contentType: metadata.mediaType,
             expiresInSeconds: 300
         });

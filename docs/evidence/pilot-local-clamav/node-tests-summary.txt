@@ -1,0 +1,12 @@
+✔ Türkmenistan için veren makam fallback değeri SMST olarak korunur (2.155208ms)
+✔ YKN waits for Apply document discovery before acceptance-code automation (2.102416ms)
+✔ portal accepts document discovery results without treating profile discovery as complete (1.125625ms)
+✔ starting a new YKN student search clears the prior student document-byte cache (0.872666ms)
+ℹ tests 478
+ℹ suites 0
+ℹ pass 477
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 19723.726917

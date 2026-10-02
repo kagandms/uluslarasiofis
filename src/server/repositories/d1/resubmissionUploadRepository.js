@@ -1,3 +1,5 @@
+import { createScanJobStatement } from './scanner-job-statement.js';
+
 function readModeGuard(mode) {
     if (mode === 'first_replacement') {
         return `records.review_status = 'resubmission_required'
@@ -192,7 +194,8 @@ function readFinalizeStatements(database, input) {
             )
         `).bind(input.auditId, input.applicationId, input.requestId,
             JSON.stringify({ documentCode: input.code, revisionNumber: input.revisionNumber,
-                documentStatus: 'submitted', result: 'success' }), input.finalizedAt)
+                documentStatus: 'submitted', result: 'success' }), input.finalizedAt),
+        createScanJobStatement(database, { fileId: input.replacementFileId, finalizedAt: input.finalizedAt })
     ];
 }
 

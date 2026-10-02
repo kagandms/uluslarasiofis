@@ -9,3 +9,6 @@ GOOGLE_VISION_API_KEY=
 R2_ACCOUNT_ID=
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
+
+# Dedicated machine credential; provision privately, never share with staff browsers.
+SCANNER_SECRET=

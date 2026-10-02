@@ -1,0 +1,24 @@
+│ 0009_document_scanner.sql                            │ 🕒️    │
+└──────────────────────────────────────────────────────┴────────┘
+🌀 Executing on local database uluslarasiofis-local (00000000-0000-0000-0000-000000000000) from .wrangler/scanner-final/v3/d1:
+🌀 To execute on your remote database, add a --remote flag to your wrangler command.
+🚣 6 commands executed successfully.
+┌──────────────────────────────────────────────────────┬────────┐
+│ name                                                 │ status │
+├──────────────────────────────────────────────────────┼────────┤
+│ 0001_backend_foundation.sql                          │ ✅     │
+├──────────────────────────────────────────────────────┼────────┤
+│ 0002_session3_fingerprint_and_birth_certificate.sql  │ ✅     │
+├──────────────────────────────────────────────────────┼────────┤
+│ 0003_session3_document_cleanup.sql                   │ ✅     │
+├──────────────────────────────────────────────────────┼────────┤
+│ 0004_public_portal_document_policy.sql               │ ✅     │
+├──────────────────────────────────────────────────────┼────────┤
+│ 0005_document_scoped_application_notes.sql           │ ✅     │
+├──────────────────────────────────────────────────────┼────────┤
+│ 0006_notification_preferences_and_delivery_state.sql │ ✅     │
+├──────────────────────────────────────────────────────┼────────┤
+│ 0007_notification_provider_webhook_events.sql        │ ✅     │
+├──────────────────────────────────────────────────────┼────────┤
+│ 0009_document_scanner.sql                            │ ✅     │
+└──────────────────────────────────────────────────────┴────────┘

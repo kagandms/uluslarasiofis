@@ -1,3 +1,4 @@
+import { handleScannerRequest, handleStaffScannerRequest } from './routes/scanner-routes.js';
 import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
 import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
 import { isRouteResult } from './http/routeResult.js';
@@ -52,6 +53,8 @@ function withMetaWhatsAppProvider(environment) {
 
 async function routeApi(request, environment, requestId) {
     const { pathname } = new URL(request.url);
+    if (pathname.startsWith('/api/scanner/')) return handleScannerRequest(request, environment);
+    if (['/api/staff/scanner/status', '/api/staff/scanner/retry'].includes(pathname)) return handleStaffScannerRequest(request, environment, requestId);
     if (pathname === '/api/webhooks/whatsapp') {
         return handleMetaWhatsAppWebhook(request, environment, requestId);
     }
