@@ -1,7 +1,10 @@
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { createDraftAutosave } from './draftAutosave.js';
-import { isValidPhoneNumber } from '../shared/phoneNumber.js';
 import { createNotificationPreferenceField, parseNotificationPreferences, WHATSAPP_CONSENT_VERSION } from './notificationPreferences.js';
+import { createPhoneField } from './phoneField.js';
+import { createNationalityField } from './nationalityField.js';
+import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
+import { isValidPhoneNumber } from '../shared/phoneNumber.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
@@ -26,7 +29,7 @@ function readMessages(document) {
     const locale = document.documentElement.lang;
     const closeoutMessages = SESSION3_MESSAGES[locale] || SESSION3_MESSAGES.tr;
     const publicMessages = PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr;
-    return { ...closeoutMessages, ...publicMessages };
+    return { ...closeoutMessages, ...publicMessages, ...PILOT_UX_MESSAGES[locale] };
 }
 
 function createTranslatedElement(document, tag, key, text) {
@@ -141,10 +144,11 @@ function canContinueContactStep(form) {
 }
 
 function setContactPhoneValidity(form) {
-    const phone = form?.querySelector('[name="student_phone"]');
+    const phone = form?.querySelector('[data-phone-visible]');
+    const canonical = form?.querySelector('[name="student_phone"]');
     if (!phone) return;
     const messages = readMessages(form.ownerDocument);
-    const isInvalid = Boolean(phone.value.trim() && !isValidPhoneNumber(phone.value));
+    const isInvalid = !phone.value.trim() || canonical?.dataset.phonePossible !== 'true';
     phone.setCustomValidity(isInvalid ? messages.contactPhoneInvalid : '');
     phone.setAttribute('aria-invalid', isInvalid ? 'true' : 'false');
 }
@@ -162,7 +166,10 @@ function createContactStep(document, application, formValues, state, api) {
     const form = createWizardForm(document);
     form.append(createTextField(document, { key: 'studentNumber', name: 'student_number', value: fields.student_number, required: true, maxLength: 64 }));
     form.append(createTextField(document, { key: 'email', name: 'student_email', type: 'email', value: fields.student_email, required: true, maxLength: 254 }));
-    form.append(createTextField(document, { key: 'phone', name: 'student_phone', type: 'tel', value: fields.student_phone, required: true, maxLength: 40 }));
+    const phoneField = createPhoneField(document, {
+        value: fields.student_phone || '', locale: document.documentElement.lang, messages, country: fields.phone_country || ''
+    });
+    form.append(phoneField);
     form.append(createSelectField(document, {
         key: 'applicationType', name: 'application_type', value: fields.application_type, required: true,
         options: [{ value: '', key: 'applicationType' }, { value: 'initial', key: 'initialApplication' }, { value: 'renewal', key: 'renewalApplication' }]
@@ -178,6 +185,10 @@ function createContactStep(document, application, formValues, state, api) {
         formValues,
         api: api || state?.api,
         phoneInput: form.querySelector('[name="student_phone"]'),
+        onPhoneLockChange: (isLocked) => {
+            phoneField.querySelector('[data-phone-visible]').disabled = isLocked;
+            phoneField.querySelector('[name="phone_country"]').disabled = isLocked;
+        },
         persistPhone: async () => {
             const currentFields = readVisibleFields(form, state?.application || {});
             if (state?.autosave) {
@@ -268,6 +279,12 @@ function createResidenceStep(document, application, formValues) {
     const fields = { ...application, ...formValues };
     const form = createWizardForm(document);
     RESIDENCE_FIELDS.forEach((field) => {
+        if (field === 'nationality') {
+            form.append(createNationalityField(document, {
+                value: fields[field], locale: document.documentElement.lang, messages
+            }));
+            return;
+        }
         const key = ({ first_name: 'firstName', last_name: 'lastName', passport_number: 'passportNumber', nationality: 'nationality', date_of_birth: 'dateOfBirth' })[field];
         form.append(createTextField(document, { key, name: field, value: fields[field], type: field === 'date_of_birth' ? 'date' : 'text', required: true }));
     });
@@ -408,10 +425,12 @@ function createDocumentCard(document, requirement, state, { allowUpload }) {
     const task = state.uploads[requirement.code];
     const card = document.createElement('article');
     const title = createTranslatedElement(document, 'h3', requirement.label_key, messages[requirement.label_key] || messages.documentNotUploaded);
+    title.tabIndex = -1;
     const description = createTranslatedElement(document, 'p', requirement.description_key, messages[requirement.description_key] || '');
     const statusKey = state.deleting[requirement.code] ? 'deleteInProgress' : (task?.errorKey || getDocumentStatusKey(requirement, task));
     const status = createTranslatedElement(document, 'p', statusKey, messages[statusKey] || messages.documentNotUploaded);
     card.className = 'application-document-card';
+    card.id = `document-${requirement.code}`;
     card.dataset.documentCode = requirement.code;
     status.className = 'document-upload-status';
     const statusTone = getDocumentStatusTone(requirement, task, statusKey, Boolean(state.deleting[requirement.code]));
@@ -464,6 +483,68 @@ function createDocumentList(document, requirements, state, { allowUpload }) {
     return list;
 }
 
+function isRequiredRequirement(requirement) {
+    return requirement.required === true || requirement.required === 1
+        || requirement.is_required === true || requirement.is_required === 1;
+}
+
+function isUploadInFlight(task) {
+    return ['selected', 'preparing', 'uploading', 'verifying', 'failed_upload', 'failed_finalize', 'unknown_finalize_result'].includes(task?.state);
+}
+
+function isFinalizedRequirementReady(requirement) {
+    return requirement.upload_status === 'finalized'
+        && Number.isInteger(requirement.revision_number)
+        && ['submitted', 'approved'].includes(requirement.revision_status)
+        && ['pending', 'clean'].includes(requirement.scan_status)
+        && requirement.scan_status !== 'unsafe'
+        && requirement.scan_status !== 'failed'
+        && requirement.cleanup_status !== 'pending';
+}
+
+/** @param {Array<object>} requirements Current server document policy rows. @param {object} uploads Local upload tasks. @param {object} deleting Local delete operations. @returns {{requiredCount: number, uploadedCount: number, pending: Array<object>, canContinue: boolean}} */
+export function calculateDocumentReadiness(requirements, uploads = {}, deleting = {}) {
+    const required = requirements.filter(isRequiredRequirement);
+    const pending = required.filter((requirement) => !isFinalizedRequirementReady(requirement)
+        || isUploadInFlight(uploads[requirement.code]) || deleting[requirement.code] === true);
+    return {
+        requiredCount: required.length,
+        uploadedCount: required.length - pending.length,
+        pending,
+        canContinue: pending.length === 0
+    };
+}
+
+function renderDocumentReadiness(document, state) {
+    const messages = readMessages(document);
+    const readiness = calculateDocumentReadiness(state.requirements, state.uploads, state.deleting);
+    const section = document.createElement('section');
+    const summary = document.createElement('p');
+    section.className = 'document-readiness-summary';
+    section.dataset.documentReadiness = 'true';
+    summary.textContent = messages.requiredDocumentProgress
+        .replace('{required}', String(readiness.requiredCount))
+        .replace('{uploaded}', String(readiness.uploadedCount));
+    section.append(summary);
+    if (readiness.pending.length) {
+        section.append(createTranslatedElement(document, 'p', 'documentContinueBlocked', messages.documentContinueBlocked));
+        const missing = document.createElement('ul');
+        missing.setAttribute('aria-label', messages.missingRequiredDocuments);
+        readiness.pending.forEach((requirement) => {
+            const item = document.createElement('li');
+            const link = document.createElement('a');
+            link.href = `#document-${requirement.code}`;
+            link.dataset.action = 'focus-document';
+            link.dataset.targetDocument = requirement.code;
+            link.textContent = messages[requirement.label_key] || requirement.code;
+            item.append(link);
+            missing.append(item);
+        });
+        section.append(missing);
+    }
+    return { section, readiness };
+}
+
 /**
  * Renders server-provided safe requirement policy without a client policy map.
  * @param {HTMLElement} root Requirement list mount element.
@@ -493,7 +574,7 @@ function createFingerprintReview(document, application) {
     return section;
 }
 
-function createDeclarationStep(document, application) {
+function createDeclarationStep(document, application, state) {
     const messages = readMessages(document);
     const form = createWizardForm(document);
     const declaration = application.declaration || {};
@@ -509,7 +590,9 @@ function createDeclarationStep(document, application) {
     checkbox.setAttribute('aria-required', 'true');
     checkbox.checked = declaration.accepted_current === true;
     label.append(checkbox, createTranslatedElement(document, 'span', declaration.content_key || 'studentInformationAcknowledgement', messages[declaration.content_key] || messages.studentInformationAcknowledgement));
-    form.append(label, createContinueButton(document, messages));
+    const continueButton = createContinueButton(document, messages);
+    continueButton.disabled = state.isAdvancing || !checkbox.checked;
+    form.append(label, continueButton);
     if (declaration.accepted_current && declaration.accepted_at) {
         form.append(createTranslatedElement(document, 'p', 'declarationAccepted', messages.declarationAccepted));
     }
@@ -602,18 +685,13 @@ function createAccessCredentialsCard(document, state, messages) {
     const refLabel = createTranslatedElement(document, 'span', 'accessReferenceNumberLabel', messages.accessReferenceNumberLabel);
     const refVal = document.createElement('code');
     refVal.className = 'credential-value credential-reference';
+    refVal.tabIndex = 0;
     refVal.textContent = creds.reference_number;
     const refCopy = createButton(document, messages, 'copyAction', 'copy-reference', 'application-button application-button-secondary');
     refCopy.addEventListener('click', async () => {
-        try {
-            await navigator.clipboard.writeText(creds.reference_number);
-            refCopy.textContent = messages.copySuccess;
-            setTimeout(() => { refCopy.textContent = messages.copyAction; }, 2000);
-        } catch {
-            // fallback
-        }
+        await copyCredentialValue(document, refVal, refCopy, creds.reference_number, messages);
     });
-    refGroup.append(refLabel, refVal, refCopy);
+    refGroup.append(refLabel, refVal, refCopy, createCredentialCopyStatus(document));
 
     // Access code row
     const codeGroup = document.createElement('div');
@@ -621,18 +699,13 @@ function createAccessCredentialsCard(document, state, messages) {
     const codeLabel = createTranslatedElement(document, 'span', 'accessCodeLabel', messages.accessCodeLabel);
     const codeVal = document.createElement('code');
     codeVal.className = 'credential-value credential-code';
+    codeVal.tabIndex = 0;
     codeVal.textContent = creds.access_code;
     const codeCopy = createButton(document, messages, 'copyAction', 'copy-code', 'application-button application-button-secondary');
     codeCopy.addEventListener('click', async () => {
-        try {
-            await navigator.clipboard.writeText(creds.access_code);
-            codeCopy.textContent = messages.copySuccess;
-            setTimeout(() => { codeCopy.textContent = messages.copyAction; }, 2000);
-        } catch {
-            // fallback
-        }
+        await copyCredentialValue(document, codeVal, codeCopy, creds.access_code, messages);
     });
-    codeGroup.append(codeLabel, codeVal, codeCopy);
+    codeGroup.append(codeLabel, codeVal, codeCopy, createCredentialCopyStatus(document));
 
     grid.append(refGroup, codeGroup);
 
@@ -688,6 +761,30 @@ function createAccessCredentialsCard(document, state, messages) {
     return card;
 }
 
+function createCredentialCopyStatus(document) {
+    const status = document.createElement('p');
+    status.className = 'credential-copy-status';
+    status.dataset.copyStatus = 'true';
+    status.hidden = true;
+    status.setAttribute('role', 'status');
+    return status;
+}
+
+async function copyCredentialValue(document, valueElement, button, value, messages) {
+    const status = button.parentElement.querySelector('[data-copy-status]');
+    try {
+        await document.defaultView.navigator.clipboard.writeText(value);
+        status.textContent = messages.copySuccess;
+        button.textContent = messages.copySuccess;
+    } catch {
+        const selection = document.defaultView.getSelection();
+        valueElement.focus();
+        selection?.selectAllChildren(valueElement);
+        status.textContent = messages.clipboardCopyFailed;
+    }
+    status.hidden = false;
+}
+
 function createCodeRegenerationBanner(document, state, messages) {
     const banner = document.createElement('aside');
     banner.className = 'application-credentials-banner';
@@ -735,24 +832,30 @@ function createResumeWithCredentialsSection(document, state, messages) {
 
     const refLabel = document.createElement('label');
     refLabel.className = 'application-form-field';
+    refLabel.htmlFor = 'resume-reference-number';
     refLabel.append(createTranslatedElement(document, 'span', 'applicationReferenceNumber', messages.applicationReferenceNumber));
     const refInput = document.createElement('input');
     refInput.type = 'text';
+    refInput.id = 'resume-reference-number';
     refInput.name = 'resume_reference_number';
     refInput.placeholder = 'ITU-XXXX-XXXX';
     refInput.maxLength = 32;
     refInput.required = true;
+    refInput.setAttribute('aria-required', 'true');
     refInput.autocomplete = 'off';
     refLabel.append(refInput);
 
     const codeLabel = document.createElement('label');
     codeLabel.className = 'application-form-field';
+    codeLabel.htmlFor = 'resume-access-code';
     codeLabel.append(createTranslatedElement(document, 'span', 'accessCodeLabel', messages.accessCodeLabel));
     const codeInput = document.createElement('input');
     codeInput.type = 'text';
+    codeInput.id = 'resume-access-code';
     codeInput.name = 'resume_access_code';
     codeInput.maxLength = 64;
     codeInput.required = true;
+    codeInput.setAttribute('aria-required', 'true');
     codeInput.autocomplete = 'off';
     codeLabel.append(codeInput);
 
@@ -831,6 +934,8 @@ function createReviewStep(document, state) {
         review.append(createSubmissionConfirmation(document, application, messages));
         return review;
     }
+    const readiness = renderReviewReadiness(document, state);
+    review.append(readiness.section);
     const submitButton = createButton(
         document,
         messages,
@@ -838,9 +943,77 @@ function createReviewStep(document, state) {
         'submit-application',
         'application-button application-button-primary'
     );
-    submitButton.disabled = state.isSubmitting;
+    submitButton.disabled = state.isSubmitting || !readiness.canSubmit;
     review.append(submitButton);
     return review;
+}
+
+function isReviewFieldValid(field, application) {
+    const value = application[field];
+    if (field === 'application_type') return ['initial', 'renewal'].includes(value);
+    if (field === 'student_email') return typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value.trim());
+    if (field === 'student_phone') return isValidPhoneNumber(value) && value.trim().length <= 40;
+    if (field === 'address_evidence_type') return ['rental_contract', 'residence_certificate', 'undertaking'].includes(value);
+    if (field === 'date_of_birth') {
+        if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+        const date = new Date(`${value}T00:00:00.000Z`);
+        return Number.isFinite(date.valueOf()) && date.toISOString().slice(0, 10) === value && date.valueOf() <= Date.now();
+    }
+    if (field === 'student_number') return typeof value === 'string' && value.trim().length > 0 && value.length <= 64;
+    return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 255;
+}
+
+/** @param {object} application Current owner application. @param {Array<object>} requirements Current server document requirements. @param {object} uploads Local upload tasks. @param {object} deleting Local delete operations. @returns {{canSubmit: boolean, issues: Array<{kind: string, step: number, code: string|null, messageKey: string|null}>}} */
+export function getReviewReadiness(application, requirements, uploads = {}, deleting = {}) {
+    const fields = [
+        ['student_number', 'studentNumber', 0], ['student_email', 'email', 0], ['student_phone', 'phone', 0],
+        ['application_type', 'applicationType', 0], ['address_evidence_type', 'addressEvidenceQuestion', 1],
+        ['first_name', 'firstName', 1], ['last_name', 'lastName', 1], ['passport_number', 'passportNumber', 1],
+        ['nationality', 'nationality', 1], ['date_of_birth', 'dateOfBirth', 1]
+    ];
+    const issues = fields.filter(([field]) => !isReviewFieldValid(field, application))
+        .map(([, messageKey, step]) => ({ kind: 'field', step, code: null, messageKey }));
+    if (!isFingerprintUploadEligible(application)) {
+        issues.push({ kind: 'field', step: 1, code: null, messageKey: 'fingerprintQuestion' });
+    }
+    if (![0, 1, true, false].includes(application.is_under_18)) {
+        issues.push({ kind: 'field', step: 1, code: null, messageKey: 'under18Question' });
+    }
+    if (application.contact_acknowledgement?.accepted_current !== true) {
+        issues.push({ kind: 'field', step: 0, code: null, messageKey: 'contactResponsibilityAcknowledgement' });
+    }
+    if (!application.declaration?.accepted_current) issues.push({ kind: 'declaration', step: 3, code: null, messageKey: null });
+    const documents = calculateDocumentReadiness(requirements, uploads, deleting);
+    documents.pending.forEach((requirement) => issues.push({ kind: 'document', step: 2, code: requirement.code, messageKey: requirement.label_key }));
+    return { canSubmit: issues.length === 0, issues };
+}
+
+function renderReviewReadiness(document, state) {
+    const messages = readMessages(document);
+    const readiness = getReviewReadiness(state.application, state.requirements, state.uploads, state.deleting);
+    const section = document.createElement('section');
+    section.className = 'review-readiness-summary';
+    section.append(createTranslatedElement(document, 'h3', 'reviewReadinessHeading', messages.reviewReadinessHeading));
+    if (!readiness.issues.length) {
+        section.append(createTranslatedElement(document, 'p', 'reviewReady', messages.reviewReady));
+        return { section, canSubmit: true };
+    }
+    const list = document.createElement('ul');
+    readiness.issues.forEach((issue) => {
+        const item = document.createElement('li');
+        const link = document.createElement('button');
+        link.type = 'button';
+        link.className = 'review-readiness-link';
+        link.dataset.action = 'go-step';
+        link.dataset.step = String(issue.step);
+        link.textContent = issue.kind === 'declaration' ? messages.reviewMissingDeclaration
+            : issue.kind === 'document' ? `${messages[issue.messageKey] || issue.code} — ${messages.reviewDocumentsPending}`
+                : messages.reviewMissingField.replace('{field}', messages[issue.messageKey] || issue.messageKey);
+        item.append(link);
+        list.append(item);
+    });
+    section.append(list);
+    return { section, canSubmit: false };
 }
 
 function createSaveStatus(document, state) {
@@ -900,6 +1073,10 @@ function renderWizard(root, state) {
     const panel = document.createElement('div');
     const stage = document.createElement('section');
     panel.className = 'application-wizard';
+    if (state._animateNextRender) {
+        panel.dataset.animate = 'true';
+        state._animateNextRender = false;
+    }
     const heading = createTranslatedElement(document, 'h2', STEP_KEYS[state.step], messages[STEP_KEYS[state.step]]);
     heading.tabIndex = -1;
     panel.append(createProgress(document, state.step), heading);
@@ -930,7 +1107,7 @@ function renderWizard(root, state) {
     }
     if (state.step === 1) stage.append(createResidenceStep(document, state.application, state.formValues));
     if (state.step === 2) stage.append(createDocumentsStep(document, state));
-    if (state.step === 3) stage.append(createDeclarationStep(document, state.application));
+    if (state.step === 3) stage.append(createDeclarationStep(document, state.application, state));
     if (state.step === 4) stage.append(createReviewStep(document, state));
     if (state.step > 0 && state.application?.status !== 'submitted') panel.append(createButton(document, messages, 'previous', 'previous'));
     panel.append(stage);
@@ -959,10 +1136,38 @@ function updateDocumentCard(root, state, code) {
         : null;
     const replacement = createDocumentCard(document, requirement, state, { allowUpload: true });
     existing.replaceWith(replacement);
+    updateDocumentReadiness(root, state);
     if (action) replacement.querySelector(action)?.focus({ preventScroll: true });
 }
 
-function updateProgress(root, code, task) {
+function hasInFlightUpload(state) {
+    return Object.values(state.uploads).some((task) => ['selected', 'preparing', 'uploading', 'verifying'].includes(task?.state));
+}
+
+async function handleReturnHome(event, root, state) {
+    const link = event.target.closest('[data-action="return-home"]');
+    if (!link) return;
+    event.preventDefault();
+    if (state.homeNavigationPending) return;
+    if (hasInFlightUpload(state)) {
+        state.errorKey = 'publicHomeNavigationBlocked';
+        state._focusError = true;
+        renderWizard(root, state);
+        return;
+    }
+    state.homeNavigationPending = true;
+    if (state.autosave && ((state.step <= 1 && root.querySelector('#application-step-form')))) scheduleCurrentFields(root, state);
+    if (state.autosave && !await state.autosave.flush()) {
+        state.homeNavigationPending = false;
+        state.errorKey = 'autosaveFailed';
+        state._focusError = true;
+        renderWizard(root, state);
+        return;
+    }
+    state.navigateHome('/');
+}
+
+function updateProgress(root, code, task, state) {
     const card = [...root.querySelectorAll('.application-document-card')]
         .find((entry) => entry.dataset.documentCode === code);
     const progress = card?.querySelector('progress');
@@ -975,14 +1180,28 @@ function updateProgress(root, code, task) {
     progress.setAttribute('aria-label', label);
     const progressLabel = card.querySelector('[data-progress-label]');
     if (progressLabel) progressLabel.textContent = label;
+    updateDocumentReadiness(root, state);
 }
 
 function createDocumentsStep(document, state) {
     const messages = readMessages(document);
     const form = createWizardForm(document);
+    const { section: readiness, readiness: status } = renderDocumentReadiness(document, state);
+    const continueButton = createContinueButton(document, messages);
+    continueButton.disabled = !status.canContinue;
+    form.append(readiness);
     form.append(createDocumentList(document, state.requirements, state, { allowUpload: true }));
-    form.append(createContinueButton(document, messages));
+    form.append(continueButton);
     return form;
+}
+
+function updateDocumentReadiness(root, state) {
+    const current = root.querySelector('[data-document-readiness]');
+    if (!current) return;
+    const { section, readiness } = renderDocumentReadiness(root.ownerDocument, state);
+    current.replaceWith(section);
+    const button = root.querySelector('#application-step-form button[type="submit"]');
+    if (button) button.disabled = !readiness.canContinue;
 }
 
 function readVisibleFields(root, application = {}) {
@@ -1156,7 +1375,7 @@ async function runUploadTask(code, task, state, api, root, { isRetry = false } =
             signal: task.abortController.signal,
             onProgress: (progress) => {
                 task.progress = progress;
-                updateProgress(root, code, task);
+                updateProgress(root, code, task, state);
             }
         });
     } catch (error) {
@@ -1205,6 +1424,13 @@ async function saveStep(root, state, api) {
     if (form && !form.reportValidity()) return;
     const fields = readVisibleFields(root, state.application || {});
     if (state.step === 0 && !canContinueContactStep(form)) return;
+    if (state.step === 3 && fields.declaration_accepted !== true) return;
+    if (state.step === 2 && !calculateDocumentReadiness(state.requirements, state.uploads, state.deleting).canContinue) {
+        state.errorKey = 'documentContinueBlocked';
+        state._focusError = true;
+        renderWizard(root, state);
+        return;
+    }
     state.formValues = fields;
     state.errorKey = null;
     state.isAdvancing = true;
@@ -1261,6 +1487,8 @@ async function saveStep(root, state, api) {
             }
         }
         state.step = Math.min(state.step + 1, STEP_KEYS.length - 1);
+        state._animateNextRender = true;
+        state.hasUnsubmittedFieldChanges = false;
         state.formValues = null;
         state._focusStepHeading = true;
     } catch (error) {
@@ -1297,6 +1525,7 @@ async function handlePrevious(root, state) {
     }
     state.formValues = readVisibleFields(root, state.application || {});
     state.step -= 1;
+    state._animateNextRender = true;
     state.errorKey = null;
     state._focusStepHeading = true;
     renderWizard(root, state);
@@ -1333,8 +1562,22 @@ async function retryNotificationPreference(root, state, api) {
 async function handleWizardClick(root, state, api, event) {
     const button = event.target.closest('[data-action]');
     if (!button) return;
-    const code = button.closest('[data-document-code]')?.dataset.documentCode;
+    const code = button.closest('[data-document-code]')?.dataset.documentCode || button.dataset.targetDocument;
     if (button.dataset.action === 'previous') await handlePrevious(root, state);
+    if (button.dataset.action === 'focus-document' && code) {
+        const card = [...root.querySelectorAll('.application-document-card')]
+            .find((entry) => entry.dataset.documentCode === code);
+        card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card?.querySelector('h3')?.focus({ preventScroll: true });
+    }
+    if (button.dataset.action === 'go-step') {
+        state.formValues = readVisibleFields(root, state.application || {});
+        state.step = Number(button.dataset.step);
+        state.errorKey = null;
+        state._animateNextRender = true;
+        state._focusStepHeading = true;
+        renderWizard(root, state);
+    }
     if (button.dataset.action === 'submit-application') await submitApplication(root, state, api);
     if (button.dataset.action === 'preference-retry') await retryNotificationPreference(root, state, api);
     if (button.dataset.action === 'document-retry' && code) await runUploadTask(code, state.uploads[code], state, api, root, { isRetry: true });
@@ -1350,6 +1593,7 @@ async function handleWizardClick(root, state, api, event) {
 
 async function submitApplication(root, state, api) {
     if (state.isSubmitting || state.application?.status !== 'draft') return;
+    if (!getReviewReadiness(state.application, state.requirements, state.uploads, state.deleting).canSubmit) return;
     state.isSubmitting = true;
     state.errorKey = null;
     renderWizard(root, state);
@@ -1368,6 +1612,7 @@ async function submitApplication(root, state, api) {
 }
 
 function handleWizardInput(root, state) {
+    state.hasUnsubmittedFieldChanges = true;
     if (state.step === 0) {
         state.formValues = readVisibleFields(root, state.application || {});
         if (state.application && state.autosave) scheduleCurrentFields(root, state);
@@ -1380,6 +1625,11 @@ function handleWizardInput(root, state) {
     }
     if (state.application && state.step <= 1 && state.autosave) scheduleCurrentFields(root, state);
     if (state.step === 1) updateResidenceContinueButton(root, readVisibleFields(root, state.application || {}));
+    if (state.step === 3) {
+        const checkbox = root.querySelector('[name="declaration_accepted"]');
+        const button = root.querySelector('#application-step-form button[type="submit"]');
+        if (button) button.disabled = state.isAdvancing || checkbox?.checked !== true;
+    }
 }
 
 function handleWizardChange(root, state, api, event) {
@@ -1389,6 +1639,7 @@ function handleWizardChange(root, state, api, event) {
         return;
     }
     if (input.name === 'fingerprint_status') {
+        state.hasUnsubmittedFieldChanges = true;
         scheduleCurrentFields(root, state);
         const fields = readVisibleFields(root, state.application || {});
         fields.fingerprint_code = fields.fingerprint_status === 'registered' ? fields.fingerprint_code || null : null;
@@ -1422,10 +1673,13 @@ export async function initializeApplicationWizard(root, api) {
         isAdvancing: false,
         isSubmitting: false,
         formValues: null,
+        hasUnsubmittedFieldChanges: false,
         uploads: {},
         deleting: {},
         notificationPreference: null,
         newDraftCredentials: null,
+        _animateNextRender: true,
+        navigateHome: (path) => root.ownerDocument.defaultView.location.assign(path),
         api
     };
     root.addEventListener('submit', (event) => {
@@ -1436,7 +1690,22 @@ export async function initializeApplicationWizard(root, api) {
     root.addEventListener('input', () => handleWizardInput(root, state));
     root.addEventListener('change', (event) => handleWizardChange(root, state, api, event));
     root.addEventListener('click', (event) => { void handleWizardClick(root, state, api, event); });
-    root.ownerDocument.addEventListener('public:locale-changed', () => renderWizard(root, state));
+    root.ownerDocument.addEventListener('public:locale-changed', () => {
+        const active = root.ownerDocument.activeElement;
+        const activeName = root.contains(active) ? active.name : null;
+        const selection = activeName && Number.isInteger(active.selectionStart)
+            ? { start: active.selectionStart, end: active.selectionEnd } : null;
+        if (state.hasUnsubmittedFieldChanges && (state.step === 0 || state.step === 1)) {
+            state.formValues = readVisibleFields(root, state.application || {});
+        }
+        renderWizard(root, state);
+        if (activeName) {
+            const replacement = [...root.querySelectorAll('[name]')].find((element) => element.name === activeName);
+            replacement?.focus({ preventScroll: true });
+            if (selection && replacement?.setSelectionRange) replacement.setSelectionRange(selection.start, selection.end);
+        }
+    });
+    root.ownerDocument.addEventListener('click', (event) => { void handleReturnHome(event, root, state); });
     try {
         state.application = await api.readCurrentApplication();
         state.step = state.application.status === 'submitted' ? 4

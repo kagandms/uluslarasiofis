@@ -3,6 +3,7 @@ import { initializeApplicationWizard } from './applicationWizard.js';
 import { initializeApplicationTracking } from './applicationTracking.js';
 import * as applicationApi from './applicationApi.js';
 import { renderPublicDocumentOverview } from './home.js';
+import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 
 const LOCALE_STORAGE_KEY = 'portal_ui_locale';
 const FALLBACK_LOCALE = 'tr';
@@ -17,8 +18,10 @@ function readSavedLocale() {
 }
 
 function getMessage(locale, key) {
-    return SESSION3_MESSAGES[locale]?.[key]
+    return PILOT_UX_MESSAGES[locale]?.[key]
+        ?? SESSION3_MESSAGES[locale]?.[key]
         ?? PUBLIC_MESSAGES[locale]?.[key]
+        ?? PILOT_UX_MESSAGES[FALLBACK_LOCALE][key]
         ?? SESSION3_MESSAGES[FALLBACK_LOCALE][key]
         ?? PUBLIC_MESSAGES[FALLBACK_LOCALE][key]
         ?? key;

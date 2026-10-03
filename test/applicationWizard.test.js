@@ -49,7 +49,12 @@ async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null
                 ? application.fingerprint_code.trim() || null : null;
             return { ...application };
         },
-        async readCurrentStudentDocumentRequirements() { return { requirements: createFingerprintRequirements() }; }
+        async readCurrentStudentDocumentRequirements() {
+            return { requirements: createFingerprintRequirements().map((requirement) => ({
+                ...requirement, revision_number: 1, revision_status: 'submitted', filename: `${requirement.code}.pdf`,
+                upload_status: 'finalized', scan_status: 'pending'
+            })) };
+        }
     };
     const state = await initializeApplicationWizard(root, api);
     return { document, root, state, api, savedPatches };
@@ -92,7 +97,7 @@ test('contact step keeps Continue disabled until valid contact fields and the se
     root.querySelector('[name="student_number"]').value = 'S3-CONTACT-1';
     root.querySelector('[name="application_type"]').value = 'initial';
     const email = root.querySelector('[name="student_email"]');
-    const phone = root.querySelector('[name="student_phone"]');
+    const phone = root.querySelector('[data-phone-visible]');
     const acknowledgement = root.querySelector('[name="contact_acknowledgement_accepted"]');
 
     assert.equal(root.querySelector('h2')?.textContent, 'İletişim Bilgileri');
@@ -102,6 +107,7 @@ test('contact step keeps Continue disabled until valid contact fields and the se
 
     email.value = 'student@example.edu';
     phone.value = '+905551112233';
+    phone.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
     email.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
     assert.equal(continueButton.disabled, true);
 
@@ -335,6 +341,84 @@ test('registered fingerprint with a non-empty code can Continue to passport and 
     document.defaultView.close();
 });
 
+test('required documents block Continue until the current server revision is finalized', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    api.readCurrentStudentDocumentRequirements = async () => ({ requirements: [{
+        code: 'passport', required: true, label_key: 'documentPassport', description_key: 'documentPassportHelp',
+        accepted_media_types: ['application/pdf'], max_byte_size: 1024, revision_number: null,
+        revision_status: null, upload_status: null, scan_status: null, cleanup_status: null, filename: null
+    }] });
+
+    await submitWizard(root);
+
+    const continueButton = root.querySelector('#application-step-form button[type="submit"]');
+    assert.equal(state.step, 2);
+    assert.equal(continueButton.disabled, true);
+    assert.match(root.querySelector('[data-document-readiness]').textContent, /0’si yüklendi/u);
+    await submitWizard(root);
+    assert.equal(state.step, 2);
+    assert.match(root.querySelector('[role="alert"]').textContent, /sunucuda doğrulanana kadar/u);
+    document.defaultView.close();
+});
+
+test('declaration Continue uses native disabled state and rejects programmatic unchecked submit', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    let acceptedVersion = null;
+    api.acceptCurrentApplicationDeclaration = async (version) => { acceptedVersion = version; return state.application; };
+    await submitWizard(root);
+    await submitWizard(root);
+
+    const checkbox = root.querySelector('[name="declaration_accepted"]');
+    const continueButton = root.querySelector('#application-step-form button[type="submit"]');
+    assert.equal(state.step, 3);
+    assert.equal(continueButton.disabled, true);
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(continueButton.disabled, false);
+    checkbox.checked = false;
+    checkbox.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    assert.equal(continueButton.disabled, true);
+    await submitWizard(root);
+    assert.equal(acceptedVersion, null);
+    assert.equal(state.step, 3);
+
+    state.application.declaration = { ...state.application.declaration, accepted_current: true, accepted_at: '2026-10-03T00:00:00Z' };
+    document.dispatchEvent(new document.defaultView.CustomEvent('public:locale-changed'));
+    assert.equal(root.querySelector('[name="declaration_accepted"]').checked, true);
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, false);
+    document.defaultView.close();
+});
+
+test('public home navigation flushes autosave and retains fields when the save fails', async () => {
+    const { document, root, state, api, savedPatches } = await createFingerprintWizard('registered', 'FP-A/42');
+    const firstName = root.querySelector('[name="first_name"]');
+    firstName.value = 'Unsaved name';
+    firstName.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    const link = document.createElement('a');
+    link.href = '/';
+    link.dataset.action = 'return-home';
+    document.body.append(link);
+    let destination = null;
+    state.navigateHome = (path) => { destination = path; };
+    link.dispatchEvent(new document.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(destination, '/');
+    assert.equal(savedPatches.at(-1).first_name, 'Unsaved name');
+
+    state.homeNavigationPending = false;
+    state.navigateHome = () => { destination = '/unexpected'; };
+    state.autosave = { schedule() {}, async flush() { return false; } };
+    root.querySelector('[name="first_name"]').value = 'Keep this value';
+    link.dispatchEvent(new document.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(destination, '/');
+    assert.equal(root.querySelector('[name="first_name"]').value, 'Keep this value');
+    assert.equal(root.querySelector('[role="alert"]').textContent, 'Kaydedilemedi. Bilgileriniz bu ekranda korunuyor; yeniden deneyin.');
+    document.defaultView.close();
+});
+
 test('not-registered fingerprint status blocks progression without adding a fingerprint document', async () => {
     const { document, root, state } = await createFingerprintWizard('not_registered');
     state.step = 2;
@@ -367,7 +451,7 @@ test('finalized upload status is a success while non-finalized pending status st
     const requirement = {
         code: 'passport', required: true, label_key: 'documentPassport', description_key: 'documentPassportHelp',
         accepted_media_types: ['application/pdf'], max_byte_size: 1024, filename: 'passport.pdf',
-        upload_status: 'finalized', scan_status: 'pending'
+        revision_number: 1, revision_status: 'submitted', upload_status: 'finalized', scan_status: 'pending'
     };
     renderStudentDocumentRequirements(root, [requirement]);
     let status = root.querySelector('.document-upload-status');
@@ -503,7 +587,8 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
     let acceptedVersion = null;
     const policy = {
         code: 'passport', required: true, label_key: 'documentPassport', description_key: 'documentPassportHelp',
-        accepted_media_types: ['application/pdf'], max_byte_size: 1024
+        accepted_media_types: ['application/pdf'], max_byte_size: 1024, filename: 'passport.pdf',
+        revision_number: 1, revision_status: 'submitted', upload_status: 'finalized', scan_status: 'pending'
     };
     const api = {
         async readCurrentApplication() { return { ...saved }; },
@@ -852,15 +937,20 @@ test('new draft creation presents credentials card with reference, code, and wor
     root.querySelector('[name="student_number"]').value = 'STU-NEW-1';
     root.querySelector('[name="application_type"]').value = 'initial';
     root.querySelector('[name="student_email"]').value = 'stu@example.edu';
-    root.querySelector('[name="student_phone"]').value = '+905551234567';
+    root.querySelector('[data-phone-visible]').value = '05551234567';
     root.querySelector('[name="contact_acknowledgement_accepted"]').checked = true;
-    root.querySelector('[name="student_phone"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    root.querySelector('[data-phone-visible]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
 
     await submitWizard(root);
 
     // Credentials card should be present
     assert.match(root.textContent, /ITU-7K9M-4X2P/);
     assert.match(root.textContent, /K7M9X-4P2WR-8T5NV-3Y6BQ-9D2FAL/);
+
+    root.querySelector('[data-action="copy-code"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.match(root.querySelector('.credential-code').parentElement.querySelector('[data-copy-status]').textContent, /Kopyalama izni yok/u);
+    assert.equal(document.getSelection().toString(), root.querySelector('.credential-code').textContent);
 
     const regenBtn = root.querySelector('[data-action="regenerate-code"]');
     assert.ok(regenBtn);

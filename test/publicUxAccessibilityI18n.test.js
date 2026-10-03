@@ -80,6 +80,10 @@ test('application tracking lookup preserves student number input across language
     };
     await initializeApplicationTracking(root, api);
 
+    const ownerAccess = root.querySelector('.tracking-owner-access-link');
+    assert.equal(ownerAccess?.getAttribute('href'), '/basvuru/#resume-application-form');
+    assert.match(root.querySelector('.tracking-owner-access-note')?.textContent || '', /yalnızca takip sağlar/u);
+
     const input = root.querySelector('#tracking-student-number');
     assert.ok(input, 'Tracking student number input must exist');
     input.value = 'STU-998877';

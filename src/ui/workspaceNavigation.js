@@ -62,6 +62,7 @@ function showWorkspaceView(viewName) {
     workspaceContent.hidden = false;
     workspaceTitle.textContent = VIEW_TITLES[viewName];
     updateActiveView(viewName);
+    animateWorkspaceView(workspaceContent);
     if (viewName === 'teblig') openTebligatSearch();
     const event = new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName } });
     document.dispatchEvent(event);
@@ -72,6 +73,12 @@ function showHomeScreen() {
     const { homeScreen, workspaceContent } = getWorkspaceElements();
     workspaceContent.hidden = true;
     homeScreen.hidden = false;
+    animateWorkspaceView(homeScreen);
+}
+
+function animateWorkspaceView(element) {
+    element.classList.add('is-view-entering');
+    element.addEventListener('animationend', () => element.classList.remove('is-view-entering'), { once: true });
 }
 
 function focusHomeScreen() {
@@ -89,5 +96,9 @@ export function initWorkspaceNavigation() {
     });
     homeButton.addEventListener('click', focusHomeScreen);
     document.getElementById('btn-go-home-global')?.addEventListener('click', focusHomeScreen);
+    document.getElementById('staff-home-link')?.addEventListener('click', (event) => {
+        event.preventDefault();
+        focusHomeScreen();
+    });
     showHomeScreen();
 }

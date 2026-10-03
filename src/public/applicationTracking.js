@@ -1,10 +1,11 @@
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { initializeResubmissionUpload } from './resubmissionUpload.js';
 import { mountTrackingNotificationPreferences } from './notificationPreferences.js';
+import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 
 function readMessages(locale) {
-    const fallback = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
-    const selected = { ...SESSION3_MESSAGES[locale], ...PUBLIC_MESSAGES[locale] };
+    const fallback = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr, ...PILOT_UX_MESSAGES.tr };
+    const selected = { ...SESSION3_MESSAGES[locale], ...PUBLIC_MESSAGES[locale], ...PILOT_UX_MESSAGES[locale] };
     return { ...fallback, ...selected };
 }
 
@@ -73,6 +74,8 @@ function renderLookup(root, state, messages, submitLookup) {
     panel.append(
         createTextElement(document, 'h2', '', messages.trackingLookupHeading),
         createTextElement(document, 'p', '', messages.trackingLookupExplanation),
+        createTextElement(document, 'p', 'tracking-owner-access-note', messages.trackingOwnerAccess),
+        createLink(document, '/basvuru/#resume-application-form', messages.trackingOwnerAccessLink, 'tracking-owner-access-link'),
         createLookupForm(document, state, messages, submitLookup)
     );
     const feedbackKey = state.kind === 'notFound' ? 'trackingLookupNotFound'

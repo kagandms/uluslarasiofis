@@ -4,8 +4,8 @@
     --card-border: #e0e4e8;
     --text-primary: #1a1a24;
     --text-secondary: #5c6c7c;
-    --accent: #8b0000;
-    --accent-hover: #660000;
+    --accent: #7e1830;
+    --accent-hover: #641126;
     --accent-secondary: #000000;
     --accent-secondary-hover: #333333;
     --danger: #dc3545;
@@ -2142,4 +2142,13 @@ body.dark-mode .history-badge {
     .documents-workspace-heading {
         align-items: flex-start;
     }
+}
+
+.staff-idle-help { max-width: 26rem; margin: -0.8rem auto 1.2rem; color: var(--text-secondary); font-size: 0.88rem; line-height: 1.55; }
+#staff-home-link:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 0.35rem; }
+.home-action { transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+.is-view-entering { animation: staff-view-enter 180ms ease-out both; }
+@keyframes staff-view-enter { from { opacity: 0.86; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

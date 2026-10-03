@@ -23,6 +23,12 @@ function flushAsync() {
     return new Promise((resolve) => setImmediate(resolve));
 }
 
+function enterPhone(root, value) {
+    const input = root.querySelector('[data-phone-visible]');
+    input.value = value;
+    input.dispatchEvent(new root.ownerDocument.defaultView.Event('input', { bubbles: true }));
+}
+
 function createFullContractFixture(overrides = {}) {
     return {
         application_id: 'app_test_full',
@@ -193,7 +199,7 @@ test('Contact step renders WhatsApp preference checkbox unchecked by default and
     // Fill valid contact fields and check acknowledgement
     root.querySelector('[name="student_number"]').value = 'STU-1001';
     root.querySelector('[name="student_email"]').value = 'student@example.edu';
-    root.querySelector('[name="student_phone"]').value = '+905551112233';
+    enterPhone(root, '+905551112233');
     root.querySelector('[name="application_type"]').value = 'initial';
     acknowledgement.checked = true;
 
@@ -257,7 +263,7 @@ test('pre-session visitor: toggling preference does not call PUT; calls PUT only
 
     root.querySelector('[name="student_number"]').value = 'STU-OPT-IN';
     root.querySelector('[name="student_email"]').value = 'visitor@example.edu';
-    root.querySelector('[name="student_phone"]').value = '+905551112233';
+    enterPhone(root, '+905551112233');
     root.querySelector('[name="application_type"]').value = 'initial';
     root.querySelector('#field-contact-acknowledgement').checked = true;
 
@@ -313,7 +319,7 @@ test('pre-session visitor: if WhatsApp preference is left unchecked, PUT is neve
 
     root.querySelector('[name="student_number"]').value = 'STU-UNCHECKED';
     root.querySelector('[name="student_email"]').value = 'visitor2@example.edu';
-    root.querySelector('[name="student_phone"]').value = '+905551112233';
+    enterPhone(root, '+905551112233');
     root.querySelector('[name="application_type"]').value = 'initial';
     root.querySelector('#field-contact-acknowledgement').checked = true;
 
@@ -369,6 +375,37 @@ test('pending phone save: phone is persisted before preference PUT is sent in ex
     await flushAsync();
 
     assert.deepEqual(sequence, ['save_phone', 'save_preference'], 'Phone save must strictly precede preference PUT');
+});
+
+test('changing the international calling prefix invalidates the previous WhatsApp consent', async () => {
+    const { document, root } = createDom();
+    const application = {
+        id: 'draft_prefix_change', status: 'draft', student_number: 'SYN-PHONE-1',
+        student_phone: '+905551112233', contact_acknowledgement: { current_version: 'v1', accepted_current: false }
+    };
+    const api = {
+        async readCurrentApplication() { return { ...application }; },
+        async readCurrentNotificationPreferences() {
+            return createFullContractFixture({
+                application_id: application.id, whatsapp_opt_in: true, consent_version: WHATSAPP_CONSENT_VERSION,
+                effective_whatsapp_opt_in: true, can_opt_in: true
+            });
+        },
+        async readCurrentStudentDocumentRequirements() { return { requirements: [] }; }
+    };
+    const state = await initializeApplicationWizard(root, api);
+    const checkbox = root.querySelector('#field-whatsapp-opt-in');
+    const phone = root.querySelector('[data-phone-visible]');
+
+    assert.equal(checkbox.checked, true);
+    phone.value = '+1 202 555 0123';
+    phone.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.equal(root.querySelector('[name="phone_country"]').value, 'US');
+    assert.equal(root.querySelector('[name="student_phone"]').value, '+12025550123');
+    assert.equal(checkbox.checked, false);
+    assert.equal(state.formValues.whatsapp_opt_in, false);
+    assert.match(root.querySelector('.notification-preference-notice').textContent, /yenileyin/i);
 });
 
 test('failed phone save prevents preference PUT; preserves user selection and shows retry option', async () => {
@@ -576,7 +613,7 @@ test('initial draft creation: preference PUT failure allows wizard to advance, d
 
     root.querySelector('[name="student_number"]').value = 'STU-RETRY';
     root.querySelector('[name="student_email"]').value = 'retry@example.edu';
-    root.querySelector('[name="student_phone"]').value = '+905551112233';
+    enterPhone(root, '+905551112233');
     root.querySelector('[name="application_type"]').value = 'initial';
     root.querySelector('#field-contact-acknowledgement').checked = true;
     root.querySelector('#field-whatsapp-opt-in').checked = true;

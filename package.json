@@ -45,6 +45,8 @@
   },
   "dependencies": {
     "@zip.js/zip.js": "2.22.0",
-    "aws4fetch": "^1.0.20"
+    "aws4fetch": "^1.0.20",
+    "i18n-iso-countries": "7.14.0",
+    "libphonenumber-js": "1.13.14"
   }
 }
