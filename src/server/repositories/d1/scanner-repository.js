@@ -18,6 +18,7 @@ const RECONCILE_INSERT = `INSERT OR IGNORE INTO document_scan_jobs
     WHERE files.upload_status='finalized' AND files.scan_status='pending'
       AND files.cleanup_status='none' AND revisions.is_current=1
       AND NOT EXISTS (SELECT 1 FROM document_scan_jobs WHERE file_id=files.id)`;
+const NON_RETRYABLE_FAILURE_CODES = new Set(['unsupported_content', 'policy_blocked']);
 
 /** @param {D1Database} database Binding. @param {string} now UTC time. @returns {Promise<void>} Repairs queue state without assigning clean. */
 async function reconcile(database, now) {
@@ -49,7 +50,7 @@ async function retry(database, input) {
     const results = await database.batch([
         database.prepare(`UPDATE document_scan_jobs SET status='queued',attempts=0,available_at=?,updated_at=?,
             lease_token_hash=NULL,content_sha256=NULL,object_etag=NULL,outcome=NULL,result_code='operator_retry'
-            WHERE id=? AND status='failed' AND EXISTS (
+            WHERE id=? AND status='failed' AND result_code NOT IN ('unsupported_content','policy_blocked') AND EXISTS (
                 SELECT 1 FROM document_revision_files AS files JOIN document_revisions AS revisions ON revisions.id=files.revision_id
                 WHERE files.id=document_scan_jobs.file_id AND files.scan_status='failed'
                   AND files.upload_status='finalized' AND files.cleanup_status='none' AND revisions.is_current=1)`)
@@ -66,7 +67,8 @@ async function retry(database, input) {
 /** @param {D1Database} database Binding. @param {object} input Exact leased job evidence. @returns {Promise<boolean>} Durable result CAS. */
 async function persistResult(database, input) {
     const { job, result, now, tokenHash } = input;
-    const isRetry = result.outcome === 'failed' && job.attempts < 3;
+    const isRetry = result.outcome === 'failed' && job.attempts < 3
+        && !NON_RETRYABLE_FAILURE_CODES.has(result.result_code);
     const availableAt = new Date(new Date(now).valueOf() + job.attempts * 60_000).toISOString();
     const results = await database.batch([
         database.prepare(`UPDATE document_scan_jobs SET status=?,outcome=?,result_code=?,engine_version=?,signature_version=?,

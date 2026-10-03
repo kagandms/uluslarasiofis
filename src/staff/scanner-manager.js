@@ -32,7 +32,14 @@ function appendStatus(root, status, retryJob) {
     root.append(summary);
     status.failed_jobs.forEach((job) => {
         const row = document.createElement('p');
-        row.textContent = `Tamamlanamayan tarama (${job.result_code}); ${job.attempts} deneme. `;
+        const requiresReplacement = ['unsupported_content', 'policy_blocked'].includes(job.result_code);
+        row.textContent = requiresReplacement
+            ? `Belge bu tarama politikasıyla doğrulanamadı (${job.result_code}). Başvuru sahibi desteklenen dosyayı replacement akışından yüklemeli; aynı dosyayı yeniden taramayın.`
+            : `Tamamlanamayan tarama (${job.result_code}); ${job.attempts} deneme. `;
+        if (requiresReplacement) {
+            root.append(row);
+            return;
+        }
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset.action = 'retry-scan';

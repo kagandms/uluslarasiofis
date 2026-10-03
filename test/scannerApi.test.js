@@ -117,6 +117,29 @@ test('unsafe result blocks file; engine failure retries then persists failed wit
     assert.equal((await createScannerRepository(database).readStatus()).failed_jobs.length, 1);
 });
 
+test('unsupported content is terminal for the current revision and cannot be operator-retried', async () => {
+    const { environment, database } = fixture();
+    const job = await lease(environment);
+    const body = await resultBody(environment, job);
+    body.outcome = 'failed';
+    body.result_code = 'unsupported_content';
+    body.full_scan = false;
+
+    const response = await request(environment, `jobs/${job.id}/result`, { body, token: job.lease_token });
+
+    assert.equal(response.status, 200);
+    const storedJob = database.prepare('SELECT status,attempts,outcome,result_code FROM document_scan_jobs').first();
+    assert.equal(storedJob.status, 'failed');
+    assert.equal(storedJob.attempts, 1);
+    assert.equal(storedJob.outcome, 'failed');
+    assert.equal(storedJob.result_code, 'unsupported_content');
+    assert.equal(database.prepare("SELECT scan_status FROM document_revision_files WHERE id='f'").first().scan_status, 'failed');
+    assert.equal(await createScannerRepository(database).retry({
+        jobId: job.id, now: new Date().toISOString(), staffId: 'staff-reviewer', requestId: 'req-test'
+    }), false);
+    assert.equal(database.prepare('SELECT attempts FROM document_scan_jobs').first().attempts, 1);
+});
+
 test('a lease that expires during result I/O is rejected at the database commit boundary', async () => {
     const { environment, database } = fixture();
     const job = await lease(environment);
