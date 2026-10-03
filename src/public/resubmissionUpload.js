@@ -106,11 +106,11 @@ export function initializeResubmissionUpload(card, requirement, api, options = {
                 onProgress: (percent) => setStatus(status, `${messages.resubmissionUploadProgress} ${percent}%`)
             });
             setStatus(status, messages.resubmissionUploadVerifying);
-            await api.finalizeResubmissionUpload(upload.intent_id);
+            const finalizeResult = await api.finalizeResubmissionUpload(upload.intent_id);
             button.setAttribute('aria-busy', 'false');
             setStatus(status, messages.resubmissionUploadComplete);
             try {
-                await options.onComplete?.();
+                await options.onComplete?.(requirement.code, finalizeResult?.document || finalizeResult);
             } catch (error) {
                 if (isSessionFailure(error)) throw error;
             }

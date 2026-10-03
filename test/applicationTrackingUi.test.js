@@ -207,6 +207,12 @@ test('finalize refreshes owner tracking to waiting review while application stay
     assert.equal(trackingReads, 2);
     assert.match(root.textContent, /Belge yeniden gönderilmeli/);
     assert.match(root.textContent, /İnceleme bekliyor/);
+    assert.ok(root.querySelector('.tracking-success-banner'), 'Persistent replacement success banner must be present after finalize');
+    assert.match(root.querySelector('.tracking-success-banner').textContent, /Belge yüklendi ve inceleme bekliyor/);
+    assert.ok(root.querySelector('.tracking-card-success'), 'Persistent replacement success banner inside card must be present');
+    assert.match(root.querySelector('.tracking-card-success-title').textContent, /Belge başarıyla yüklendi/);
+    assert.match(root.querySelector('.tracking-card-scan-status').textContent, /Güncel tarama durumu/);
+    assert.match(root.querySelector('.tracking-card-scan-status').textContent, /Güvenlik taraması bekleniyor/);
     assert.equal(root.querySelector('input[type="file"]'), null);
     document.defaultView.close();
 });
