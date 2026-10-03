@@ -1040,3 +1040,84 @@ test('typing during an in-flight autosave advances the version without replacing
     assert.equal(state.application.lock_version, 3);
     document.defaultView.close();
 });
+
+test('an existing resubmission owner session opens the owner tracking replacement flow', async () => {
+    const { document, root } = createRoot();
+    const destinations = [];
+    let requirementReads = 0;
+    const api = {
+        async readCurrentApplication() { return { status: 'resubmission_required' }; },
+        async readCurrentStudentDocumentRequirements() { requirementReads += 1; return { requirements: createFingerprintRequirements() }; },
+        navigateToTracking(path) { destinations.push(path); }
+    };
+
+    const state = await initializeApplicationWizard(root, api);
+
+    assert.equal(state.application.status, 'resubmission_required');
+    assert.deepEqual(destinations, ['/basvurum/']);
+    assert.equal(requirementReads, 0);
+    assert.equal(root.querySelector('input[type="file"]'), null);
+    assert.equal(root.querySelector('[data-action="document-delete"]'), null);
+    assert.equal(root.querySelector('a[href="/basvurum/"]')?.textContent, 'Başvurumu görüntüle');
+    document.defaultView.close();
+});
+
+test('access-code login routes a resubmission application to owner tracking', async () => {
+    const { document, root } = createRoot();
+    const destinations = [];
+    let currentReads = 0;
+    const api = {
+        async readCurrentApplication() {
+            currentReads += 1;
+            if (currentReads === 1) throw Object.assign(new Error('no session'), { code: 'APPLICATION_SESSION_REQUIRED' });
+            return { status: 'resubmission_required' };
+        },
+        async accessApplicationWithCode() { return {}; },
+        navigateToTracking(path) { destinations.push(path); }
+    };
+    const state = await initializeApplicationWizard(root, api);
+    root.querySelector('[name="resume_reference_number"]').value = 'ITU-TEST-1234';
+    root.querySelector('[name="resume_access_code"]').value = 'SECRET-ACCESS-CODE';
+    root.querySelector('#resume-application-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(destinations, ['/basvurum/']);
+    assert.equal(root.querySelector('input[type="file"]'), null);
+    assert.equal(root.querySelector('[data-action="document-delete"]'), null);
+    assert.equal(root.querySelector('a[href="/basvurum/"]')?.textContent, 'Başvurumu görüntüle');
+    document.defaultView.close();
+});
+
+test('draft-only document controls stay hidden and inert for non-draft applications', async () => {
+    const { document, root } = createRoot();
+    let uploadCalls = 0;
+    let deleteCalls = 0;
+    const api = {
+        async readCurrentApplication() { return { status: 'submitted' }; },
+        async readCurrentStudentDocumentRequirements() { return { requirements: createFingerprintRequirements() }; },
+        async createStudentDocumentUploadIntent() { uploadCalls += 1; },
+        async deleteStudentDocument() { deleteCalls += 1; }
+    };
+    const state = await initializeApplicationWizard(root, api);
+    state.step = 2;
+    document.dispatchEvent(new document.defaultView.Event('public:locale-changed'));
+
+    assert.equal(root.querySelector('input[type="file"]'), null);
+    assert.equal(root.querySelector('[data-action="document-delete"]'), null);
+    const forgedDelete = document.createElement('button');
+    forgedDelete.dataset.action = 'document-delete';
+    forgedDelete.dataset.documentCode = 'passport';
+    root.append(forgedDelete);
+    const forgedUpload = document.createElement('input');
+    forgedUpload.type = 'file';
+    forgedUpload.dataset.documentCode = 'passport';
+    Object.defineProperty(forgedUpload, 'files', { configurable: true, value: [{ name: 'passport.pdf', type: 'application/pdf', size: 10 }] });
+    root.append(forgedUpload);
+    forgedDelete.click();
+    forgedUpload.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(uploadCalls, 0);
+    assert.equal(deleteCalls, 0);
+    document.defaultView.close();
+});

@@ -884,6 +884,12 @@ function createResumeWithCredentialsSection(document, state, messages) {
                 access_code: code
             });
             state.application = await state.api.readCurrentApplication();
+            if (state.application.status === 'resubmission_required') {
+                state.redirectingToTracking = true;
+                state.navigateToTracking('/basvurum/');
+                renderWizard(state.root || document.querySelector('#application-wizard') || document.body, state);
+                return;
+            }
             state.step = state.application.status === 'submitted' ? 4
                 : (state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0);
             state.autosave = createAutosave(state, state.api, state.root || document.querySelector('#application-wizard') || document.body);
@@ -1073,6 +1079,20 @@ function renderWizard(root, state) {
     const panel = document.createElement('div');
     const stage = document.createElement('section');
     panel.className = 'application-wizard';
+    if (state.redirectingToTracking) {
+        const destination = document.createElement('section');
+        const trackingLink = document.createElement('a');
+        destination.className = 'application-tracking-redirect';
+        trackingLink.href = '/basvurum/';
+        trackingLink.className = 'application-button application-button-primary';
+        trackingLink.textContent = messages.trackingViewAction;
+        destination.append(
+            createTranslatedElement(document, 'h2', 'trackingViewAction', messages.trackingViewAction),
+            trackingLink
+        );
+        root.replaceChildren(destination);
+        return;
+    }
     if (state._animateNextRender) {
         panel.dataset.animate = 'true';
         state._animateNextRender = false;
@@ -1190,7 +1210,9 @@ function createDocumentsStep(document, state) {
     const continueButton = createContinueButton(document, messages);
     continueButton.disabled = !status.canContinue;
     form.append(readiness);
-    form.append(createDocumentList(document, state.requirements, state, { allowUpload: true }));
+    form.append(createDocumentList(document, state.requirements, state, {
+        allowUpload: state.application?.status === 'draft'
+    }));
     form.append(continueButton);
     return form;
 }
@@ -1394,6 +1416,7 @@ async function runUploadTask(code, task, state, api, root, { isRetry = false } =
 }
 
 async function handleFileSelection(root, state, api, input) {
+    if (state.application?.status !== 'draft') return;
     const file = input.files?.[0];
     if (!file) return;
     const code = input.dataset.documentCode;
@@ -1403,6 +1426,7 @@ async function handleFileSelection(root, state, api, input) {
 }
 
 async function handleDelete(root, state, api, code) {
+    if (state.application?.status !== 'draft') return;
     state.deleting[code] = true;
     updateDocumentCard(root, state, code);
     try {
@@ -1680,6 +1704,9 @@ export async function initializeApplicationWizard(root, api) {
         newDraftCredentials: null,
         _animateNextRender: true,
         navigateHome: (path) => root.ownerDocument.defaultView.location.assign(path),
+        navigateToTracking: typeof api.navigateToTracking === 'function'
+            ? api.navigateToTracking
+            : (path) => root.ownerDocument.defaultView.location.assign(path),
         api
     };
     root.addEventListener('submit', (event) => {
@@ -1708,6 +1735,12 @@ export async function initializeApplicationWizard(root, api) {
     root.ownerDocument.addEventListener('click', (event) => { void handleReturnHome(event, root, state); });
     try {
         state.application = await api.readCurrentApplication();
+        if (state.application.status === 'resubmission_required') {
+            state.redirectingToTracking = true;
+            state.navigateToTracking('/basvurum/');
+            renderWizard(root, state);
+            return state;
+        }
         state.step = state.application.status === 'submitted' ? 4
             : (state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0);
         state.autosave = createAutosave(state, api, root);
