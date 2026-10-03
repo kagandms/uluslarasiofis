@@ -58,6 +58,58 @@ class RunnerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'content_mismatch'):
             verify_download(b'xxxx', 4, expected_hash)
 
+    def test_transport_identifies_api_and_leased_download_at_opener_boundary(self) -> None:
+        import hashlib
+        import io
+        from unittest.mock import patch
+        from scanner_config import ScannerConfig
+        from scanner_job import ScanJob
+        from scanner_transport import NoRedirect, ScannerTransport
+
+        class Response:
+            def __init__(self, content: bytes, headers: dict[str, str]) -> None:
+                self.content = io.BytesIO(content)
+                self.headers = headers
+            def __enter__(self) -> Response:
+                return self
+            def __exit__(self, *_args: object) -> None:
+                return None
+            def read(self, size: int = -1) -> bytes:
+                return self.content.read(size)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = ScannerConfig('https://scanner.example', 's' * 43, 'mac', root, root, root,
+                                   'clamscan', 'freshclam', root / 'freshclam.conf', None, 120)
+            transport = ScannerTransport(config)
+            file_bytes = b'file'
+            job = ScanJob('job_1', 'file_1', 'revision_1', 'quarantine/' + '0' * 36,
+                          len(file_bytes), 'application/pdf', '2999-01-01T00:00:00Z', 'l' * 64)
+            responses = [Response(b'{}', {}), Response(file_bytes, {
+                'Content-Length': '4', 'X-Content-SHA256': hashlib.sha256(file_bytes).hexdigest(),
+                'X-Object-ETag': 'etag-1'})]
+            observed: list[tuple[object, float]] = []
+
+            def open_request(request: object, timeout: float) -> Response:
+                observed.append((request, timeout))
+                return responses.pop(0)
+
+            with patch.object(transport.opener, 'open', side_effect=open_request):
+                transport.request('heartbeat', {'health': 'ready'})
+                transport.download(job)
+
+            self.assertEqual(len(observed), 2)
+            for request, timeout in observed:
+                self.assertEqual(request.get_header('User-agent'), 'UluslararasiOfisScanner/1.0')
+                self.assertTrue(request.full_url.startswith(config.origin + '/api/scanner/'))
+                self.assertEqual(request.get_header('Authorization'), 'Bearer ' + config.secret)
+                self.assertEqual(timeout, 30)
+            self.assertEqual(observed[1][0].get_header('X-scan-lease'), job.lease_token)
+            self.assertTrue(any(isinstance(handler, NoRedirect) for handler in transport.opener.handlers))
+            https_handler = next(handler for handler in transport.opener.handlers if hasattr(handler, '_context'))
+            self.assertTrue(https_handler._context.check_hostname)
+            self.assertEqual(https_handler._context.verify_mode, 2)
+
 class RunnerFailureTests(unittest.TestCase):
     def test_update_failure_is_retried_before_claim_when_heartbeat_also_fails(self) -> None:
         from unittest.mock import Mock, patch

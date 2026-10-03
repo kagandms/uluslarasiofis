@@ -40,7 +40,8 @@ class ScannerTransport:
 
     def request(self, path: str, body: Mapping[str, object] | None = None, token: str | None = None) -> object:
         """Make one bounded authenticated HTTPS call; callers redact network exceptions."""
-        headers = {'Authorization': f'Bearer {self.config.secret}', 'Content-Type': 'application/json'}
+        headers = {'Authorization': f'Bearer {self.config.secret}', 'Content-Type': 'application/json',
+                   'User-Agent': 'UluslararasiOfisScanner/1.0'}
         if token:
             headers['X-Scan-Lease'] = token
         request = Request(self.config.origin + '/api/scanner/' + path,
@@ -56,7 +57,8 @@ class ScannerTransport:
         expected_size = job.byte_size
         if not isinstance(expected_size, int) or not 0 < expected_size <= MAX_BYTES:
             raise ValueError('content_mismatch')
-        headers = {'Authorization': f'Bearer {self.config.secret}', 'X-Scan-Lease': str(job.lease_token)}
+        headers = {'Authorization': f'Bearer {self.config.secret}', 'X-Scan-Lease': str(job.lease_token),
+                   'User-Agent': 'UluslararasiOfisScanner/1.0'}
         request = Request(self.config.origin + f"/api/scanner/jobs/{job.id}/content", headers=headers)
         with self.opener.open(request, timeout=30) as response:
             if response.headers.get('Content-Length') != str(expected_size):
