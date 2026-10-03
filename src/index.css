@@ -204,6 +204,7 @@ h1 {
     align-items: center;
     background: var(--card-bg);
     border: 1px solid var(--card-border);
+    border-inline-start: 4px solid var(--accent);
     border-radius: 12px;
     color: var(--text-primary);
     cursor: pointer;
@@ -218,7 +219,8 @@ h1 {
 .home-action:hover,
 .home-action:focus-visible {
     border-color: var(--accent);
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+    border-inline-start-color: var(--accent-hover);
+    box-shadow: 0 8px 18px rgba(126, 24, 48, 0.12);
     outline: none;
     transform: translateY(-2px);
 }
@@ -1810,6 +1812,69 @@ body.dark-mode .history-badge {
     font-size: 0.88rem;
 }
 
+.staff-applications-table td[data-label="Detay"] {
+    white-space: nowrap;
+}
+
+.staff-applications-table td[data-label="Detay"] .btn,
+.staff-applications-table td[data-label="Detay"] button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 86px;
+    min-width: 86px;
+    min-height: 38px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.84rem;
+    font-weight: 600;
+    background: var(--accent);
+    color: #ffffff;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    margin-inline-end: 11px;
+    vertical-align: middle;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.staff-applications-table td[data-label="Detay"] .btn:last-child,
+.staff-applications-table td[data-label="Detay"] button:last-child {
+    margin-inline-end: 0;
+}
+
+.staff-applications-table td[data-label="Detay"] .btn:hover:not(:disabled),
+.staff-applications-table td[data-label="Detay"] button:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(126, 24, 48, 0.35);
+    transform: translateY(-1px);
+}
+
+.staff-applications-table td[data-label="Detay"] .btn:focus-visible,
+.staff-applications-table td[data-label="Detay"] button:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(126, 24, 48, 0.55);
+}
+
+.staff-applications-table td[data-label="Detay"] .btn:active:not(:disabled),
+.staff-applications-table td[data-label="Detay"] button:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(126, 24, 48, 0.25);
+}
+
+.staff-applications-table td[data-label="Detay"] .btn:disabled,
+.staff-applications-table td[data-label="Detay"] button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    pointer-events: none;
+    transform: none;
+    box-shadow: none;
+}
+
 .staff-applications-pagination {
     align-items: center;
     display: flex;
@@ -2015,6 +2080,23 @@ body.dark-mode .history-badge {
     .staff-applications-table td:last-child {
         border-bottom: 0;
     }
+
+    .staff-applications-table td[data-label="Detay"] {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 11px;
+    }
+
+    .staff-applications-table td[data-label="Detay"] .btn,
+    .staff-applications-table td[data-label="Detay"] button {
+        margin-inline-end: 0;
+        min-height: 44px;
+        min-width: 88px;
+        width: 88px;
+        padding: 0.5rem 0.85rem;
+        font-size: 0.88rem;
+    }
 }
 
 @media (max-width: 600px) {
@@ -2147,8 +2229,20 @@ body.dark-mode .history-badge {
 .staff-idle-help { max-width: 26rem; margin: -0.8rem auto 1.2rem; color: var(--text-secondary); font-size: 0.88rem; line-height: 1.55; }
 #staff-home-link:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 0.35rem; }
 .home-action { transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
-.is-view-entering { animation: staff-view-enter 180ms ease-out both; }
-@keyframes staff-view-enter { from { opacity: 0.86; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+.is-view-entering,
+.workspace-content section[id^="view-"]:not([hidden]) {
+    animation: staff-view-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes staff-view-enter {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

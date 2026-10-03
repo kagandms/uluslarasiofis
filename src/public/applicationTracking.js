@@ -129,7 +129,7 @@ function createApplicationSummary(document, application, messages, locale) {
     return section;
 }
 
-function createDocumentList(document, documents, messages, allowFilename, replacementDocuments, onReplacementComplete, onSessionFailure) {
+function createDocumentList(document, documents, messages, allowFilename, replacementDocuments, onReplacementComplete, onSessionFailure, replacementCompleted) {
     const section = document.createElement('section');
     const list = document.createElement('ul');
     section.className = 'tracking-documents-section';
@@ -149,6 +149,29 @@ function createDocumentList(document, documents, messages, allowFilename, replac
                 createTextElement(document, 'strong', 'tracking-document-message-label', messages.trackingDocumentMessageLabel),
                 createTextElement(document, 'p', 'tracking-document-message', item.student_message)
             );
+        }
+        const replacementInfo = replacementCompleted?.[item.code];
+        if (replacementInfo) {
+            const successNotice = document.createElement('div');
+            successNotice.className = 'tracking-card-success';
+            successNotice.setAttribute('role', 'status');
+            successNotice.setAttribute('aria-live', 'polite');
+            const successTitle = createTextElement(
+                document,
+                'p',
+                'tracking-card-success-title',
+                messages.replacementSuccessUploaded || 'Belge başarıyla yüklendi.'
+            );
+            const scanStatusLabel = messages.replacementScanStatusLabel || 'Güncel tarama durumu';
+            const scanStatusWaiting = messages.replacementScanStatusWaiting || 'Güvenlik taraması bekleniyor (İnceleme bekliyor)';
+            const scanStatusP = createTextElement(
+                document,
+                'p',
+                'tracking-card-scan-status',
+                `${scanStatusLabel}: ${scanStatusWaiting}`
+            );
+            successNotice.append(successTitle, scanStatusP);
+            card.append(successNotice);
         }
         const replacement = replacementDocuments?.find((entry) => entry.code === item.code);
         if (allowFilename && replacement) {
@@ -183,11 +206,20 @@ function renderTracking(root, state, locale, submitLookup, api) {
         renderDraft(root, messages);
         return;
     }
-    root.replaceChildren(
-        createApplicationSummary(document, state.payload.application, messages, locale),
-        createDocumentList(document, state.payload.documents, messages, state.kind === 'ready',
-            state.replacementDocuments, state.onReplacementComplete, state.onSessionFailure)
-    );
+    const summary = createApplicationSummary(document, state.payload.application, messages, locale);
+    const documentList = createDocumentList(document, state.payload.documents, messages, state.kind === 'ready',
+        state.replacementDocuments, state.onReplacementComplete, state.onSessionFailure, state.replacementCompleted);
+    if (state.replacementSuccess) {
+        const successNotice = document.createElement('div');
+        successNotice.className = 'tracking-success-banner';
+        successNotice.setAttribute('role', 'status');
+        successNotice.setAttribute('aria-live', 'polite');
+        const successText = createTextElement(document, 'p', 'tracking-message tracking-message-success', messages.resubmissionUploadComplete);
+        successNotice.append(successText);
+        root.replaceChildren(successNotice, summary, documentList);
+    } else {
+        root.replaceChildren(summary, documentList);
+    }
     if (state.kind === 'ready' && typeof api?.readCurrentNotificationPreferences === 'function') {
         void mountTrackingNotificationPreferences(root, {
             application: state.payload.application,
@@ -209,7 +241,7 @@ function renderTracking(root, state, locale, submitLookup, api) {
  */
 export async function initializeApplicationTracking(root, api) {
     const document = root.ownerDocument;
-    const state = { kind: 'loading', payload: null, studentNumber: '', replacementDocuments: [], notificationPreference: null };
+    const state = { kind: 'loading', payload: null, studentNumber: '', replacementDocuments: [], notificationPreference: null, replacementSuccess: false, replacementCompleted: {} };
     const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup, api);
     async function submitLookup(studentNumber) {
         state.studentNumber = studentNumber.trim();
@@ -233,9 +265,17 @@ export async function initializeApplicationTracking(root, api) {
             try {
                 const eligibility = await api.readCurrentResubmissionEligibility();
                 state.replacementDocuments = (eligibility.documents || []).map((requirement) => ({ ...requirement, api }));
-                state.onReplacementComplete = async () => {
+                state.onReplacementComplete = async (code, meta) => {
+                    state.replacementCompleted = state.replacementCompleted || {};
+                    const targetCode = code || (state.replacementDocuments?.length === 1 ? state.replacementDocuments[0].code : null);
+                    if (targetCode) {
+                        state.replacementCompleted[targetCode] = {
+                            scan_status: meta?.scan_status || 'pending'
+                        };
+                    }
                     state.payload = await api.readCurrentApplicationTracking();
                     state.replacementDocuments = [];
+                    state.replacementSuccess = true;
                     if (state.payload.application.status === 'resubmission_required') {
                         const refreshed = await api.readCurrentResubmissionEligibility();
                         state.replacementDocuments = (refreshed.documents || []).map((requirement) => ({ ...requirement, api }));
@@ -246,6 +286,7 @@ export async function initializeApplicationTracking(root, api) {
                     state.kind = 'lookup';
                     state.payload = null;
                     state.replacementDocuments = [];
+                    state.replacementCompleted = {};
                     render();
                 };
             } catch (error) {

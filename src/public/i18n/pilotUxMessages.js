@@ -14,6 +14,9 @@ export const PILOT_UX_MESSAGES = Object.freeze({
         reviewDocumentsPending: 'Zorunlu belgeleri tamamlayın veya yükleme sonucunu doğrulayın.', goToResidence: 'Bilgileri tamamla', goToDeclaration: 'Beyan adımına git',
         clipboardCopyFailed: 'Kopyalama izni yok. Değeri aşağıdan seçip elle kopyalayabilirsiniz.',
         nationalitySuggestions: 'Ülke önerileri',
+        replacementSuccessUploaded: 'Belge başarıyla yüklendi.',
+        replacementScanStatusLabel: 'Güncel tarama durumu',
+        replacementScanStatusWaiting: 'Güvenlik taraması bekleniyor (İnceleme bekliyor)'
     }),
     en: Object.freeze({
         publicReturnHome: 'Return to home page', publicHomeNavigationBlocked: 'Wait for the document upload to finish before leaving this page.',
@@ -28,7 +31,10 @@ export const PILOT_UX_MESSAGES = Object.freeze({
         reviewReadinessHeading: 'Items to complete before submission', reviewReady: 'Required fields and documents are ready.',
         reviewMissingDeclaration: 'Accept the current declaration.', reviewMissingField: 'Complete {field}.',
         reviewDocumentsPending: 'Complete required documents or confirm their upload result.', goToResidence: 'Complete application details', goToDeclaration: 'Go to declaration',
-        clipboardCopyFailed: 'Clipboard access is unavailable. Select the value below and copy it manually.', nationalitySuggestions: 'Country suggestions'
+        clipboardCopyFailed: 'Clipboard access is unavailable. Select the value below and copy it manually.', nationalitySuggestions: 'Country suggestions',
+        replacementSuccessUploaded: 'Document uploaded successfully.',
+        replacementScanStatusLabel: 'Current scan status',
+        replacementScanStatusWaiting: 'Security scan pending (Waiting for review)'
     }),
     ru: Object.freeze({
         publicReturnHome: 'Вернуться на главную', publicHomeNavigationBlocked: 'Дождитесь завершения загрузки документа, прежде чем покинуть страницу.',
@@ -43,7 +49,10 @@ export const PILOT_UX_MESSAGES = Object.freeze({
         reviewReadinessHeading: 'Что нужно завершить перед отправкой', reviewReady: 'Обязательные поля и документы готовы.',
         reviewMissingDeclaration: 'Примите актуальное заявление.', reviewMissingField: 'Заполните поле «{field}».',
         reviewDocumentsPending: 'Загрузите обязательные документы или дождитесь подтверждения загрузки.', goToResidence: 'Заполнить сведения', goToDeclaration: 'К заявлению',
-        clipboardCopyFailed: 'Нет доступа к буферу обмена. Выберите значение ниже и скопируйте его вручную.', nationalitySuggestions: 'Варианты стран'
+        clipboardCopyFailed: 'Нет доступа к буферу обмена. Выберите значение ниже и скопируйте его вручную.', nationalitySuggestions: 'Варианты стран',
+        replacementSuccessUploaded: 'Документ успешно загружен.',
+        replacementScanStatusLabel: 'Текущий статус проверки',
+        replacementScanStatusWaiting: 'Ожидает проверки безопасности (Ожидает проверки)'
     }),
     tk: Object.freeze({
         publicReturnHome: 'Baş sahypa dolan', publicHomeNavigationBlocked: 'Sahypadan çykmazdan ozal resminamanyň ýüklenmeginiň tamamlanmagyna garaşyň.',
@@ -58,7 +67,10 @@ export const PILOT_UX_MESSAGES = Object.freeze({
         reviewReadinessHeading: 'Ibermezden öň tamamlanmaly zatlar', reviewReady: 'Hökmany meýdanlar we resminamalar taýýar.',
         reviewMissingDeclaration: 'Häzirki beýanaty kabul ediň.', reviewMissingField: '{field} meýdanyny dolduryň.',
         reviewDocumentsPending: 'Hökmany resminamalary ýükläň ýa-da ýükleme netijesini tassyklaň.', goToResidence: 'Arza maglumatlaryny doldur', goToDeclaration: 'Beýanata geç',
-        clipboardCopyFailed: 'Bufer rugsady ýok. Aşakdaky bahany saýlap, el bilen göçüriň.', nationalitySuggestions: 'Ýurt teklipleri'
+        clipboardCopyFailed: 'Bufer rugsady ýok. Aşakdaky bahany saýlap, el bilen göçüriň.', nationalitySuggestions: 'Ýurt teklipleri',
+        replacementSuccessUploaded: 'Resminama üstünlikli ýüklendi.',
+        replacementScanStatusLabel: 'Häzirki barlag ýagdaýy',
+        replacementScanStatusWaiting: 'Howpsuzlyk barlagy garaşylýar (Barlaga garaşýar)'
     }),
     ar: Object.freeze({
         publicReturnHome: 'العودة إلى الصفحة الرئيسية', publicHomeNavigationBlocked: 'انتظر اكتمال رفع المستند قبل مغادرة الصفحة.',
@@ -73,6 +85,9 @@ export const PILOT_UX_MESSAGES = Object.freeze({
         reviewReadinessHeading: 'ما يجب إكماله قبل الإرسال', reviewReady: 'الحقول والمستندات المطلوبة جاهزة.',
         reviewMissingDeclaration: 'وافق على الإقرار الحالي.', reviewMissingField: 'أكمل حقل {field}.',
         reviewDocumentsPending: 'أكمل المستندات المطلوبة أو تحقق من نتيجة رفعها.', goToResidence: 'أكمل تفاصيل الطلب', goToDeclaration: 'انتقل إلى الإقرار',
-        clipboardCopyFailed: 'الوصول إلى الحافظة غير متاح. حدد القيمة أدناه وانسخها يدوياً.', nationalitySuggestions: 'اقتراحات البلدان'
+        clipboardCopyFailed: 'الوصول إلى الحافظة غير متاح. حدد القيمة أدناه وانسخها يدوياً.', nationalitySuggestions: 'اقتراحات البلدان',
+        replacementSuccessUploaded: 'تم تحميل المستند بنجاح.',
+        replacementScanStatusLabel: 'حالة الفحص الحالية',
+        replacementScanStatusWaiting: 'بانتظار الفحص الأمني (بانتظار المراجعة)'
     })
 });
