@@ -27,6 +27,7 @@ export function createDocumentRepository(database) {
                        records.id AS document_record_id,
                        records.review_status, revisions.revision_number, revisions.status AS revision_status,
                        files.upload_status, files.scan_status, files.original_filename, files.media_type,
+                       files.id AS file_id,
                        files.cleanup_status AS current_cleanup_status, intents.status AS upload_intent_status,
                        CASE
                          WHEN EXISTS (

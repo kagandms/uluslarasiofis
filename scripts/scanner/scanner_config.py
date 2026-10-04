@@ -55,5 +55,6 @@ def load_config(settings: Mapping[str, str]) -> ScannerConfig:
     secret = read_secret(Path(settings['SCANNER_SECRET_FILE']))
     return ScannerConfig(origin.rstrip('/'), secret, runner_id, state,
         Path(settings.get('SCANNER_DATABASE_DIR', str(state / 'signatures'))),
-        Path(settings['SCANNER_CERTS_DIR']), settings.get('SCANNER_CLAMSCAN', 'clamscan'),
+        Path(settings.get('SCANNER_CERTS_DIR', str(Path(__file__).parent / 'certs'))),
+        settings.get('SCANNER_CLAMSCAN', 'clamscan'),
         settings.get('SCANNER_FRESHCLAM', 'freshclam'), state / 'freshclam.conf', settings.get('SCANNER_CA_FILE'), timeout)

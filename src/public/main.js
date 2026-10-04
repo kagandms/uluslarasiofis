@@ -80,12 +80,65 @@ function initPublicPortal() {
     applyLocale(readSavedLocale());
     if (document.body.dataset.page === 'application') {
         const wizardRoot = document.getElementById('application-wizard');
-        if (wizardRoot) void initializeApplicationWizard(wizardRoot, applicationApi);
+        const startNewApplication = new URL(window.location.href).searchParams.get('new') === '1';
+        if (wizardRoot) void initializeApplicationWizard(wizardRoot, applicationApi, { startNewApplication });
     }
     if (document.body.dataset.page === 'tracking') {
         const trackingRoot = document.getElementById('application-tracking');
         if (trackingRoot) void initializeApplicationTracking(trackingRoot, applicationApi);
     }
+    if (document.body.dataset.page === 'home') {
+        initScrollReveal();
+    }
+}
+
+function initScrollReveal() {
+    if (document.body?.dataset?.page !== 'home') return;
+    if (typeof window === 'undefined') return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const hasNativeScrollDriven = typeof CSS !== 'undefined' &&
+        CSS.supports &&
+        CSS.supports('(animation-timeline: view()) and (animation-range: entry)');
+
+    if (hasNativeScrollDriven) return;
+
+    if (typeof IntersectionObserver === 'undefined') return;
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-revealed');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, {
+        threshold: 0.1,
+        rootMargin: '0px 0px -20px 0px'
+    });
+
+    const registerElements = () => {
+        const elements = document.querySelectorAll(
+            '.public-section, .process-overview li, .public-document-card, .status-timeline-step'
+        );
+        elements.forEach((el) => {
+            if (!el.classList.contains('scroll-reveal-item')) {
+                el.classList.add('scroll-reveal-item');
+                const rect = el.getBoundingClientRect();
+                if (rect.top < window.innerHeight && rect.bottom > 0) {
+                    el.classList.add('is-revealed');
+                } else {
+                    observer.observe(el);
+                }
+            }
+        });
+    };
+
+    registerElements();
+    document.addEventListener('public:locale-changed', () => {
+        setTimeout(registerElements, 60);
+    });
 }
 
 initPublicPortal();
+

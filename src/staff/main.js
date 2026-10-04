@@ -107,6 +107,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             applicationsRoot.before(scannerPanel);
             initializeScannerManager(scannerPanel);
             initializeStaffApplicationsManager(applicationsRoot);
+            document.addEventListener('staff-applications:view-changed', (event) => {
+                scannerPanel.hidden = event.detail?.view === 'detail';
+            });
         }
     } catch (error) {
         console.error('Applications workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });

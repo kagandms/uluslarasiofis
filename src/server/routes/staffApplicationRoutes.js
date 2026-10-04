@@ -17,7 +17,9 @@ const APPLICATION_STATUS_FILTERS = Object.freeze({
     completed: Object.freeze(['completed']),
     terminal: Object.freeze(['completed', 'cancelled', 'rejected']),
     cancelled: Object.freeze(['cancelled']),
-    rejected: Object.freeze(['rejected'])
+    rejected: Object.freeze(['rejected']),
+    archive_all: Object.freeze(['completed', 'cancelled', 'rejected']),
+    deleted: Object.freeze([])
 });
 const MAX_PAGE_SIZE = 100;
 const MAX_SEARCH_LENGTH = 120;
@@ -59,6 +61,8 @@ function readApplicationQuery(body) {
     return {
         searchTerm: readSearchTerm(body.q),
         statuses: APPLICATION_STATUS_FILTERS[statusFilter],
+        isDeleted: statusFilter === 'deleted',
+        includeDeleted: statusFilter === 'archive_all',
         page: readPageNumber(body.page, 1, maximumPage),
         pageSize
     };
@@ -73,7 +77,8 @@ function createQueueItemDto(application) {
         application_type: application.application_type,
         status: application.status,
         submitted_at: application.submitted_at,
-        updated_at: application.updated_at
+        updated_at: application.updated_at,
+        deletion_state: application.deletion_state ?? null
     };
 }
 
@@ -133,6 +138,9 @@ function createDocumentDetailDtos(application, storedRequirements) {
             can_approve: hasSafeCurrentDocument && requirement.revision_status === 'submitted'
                 && ['pending', 'under_review'].includes(requirement.review_status)
                 && ['under_review', 'resubmission_required'].includes(application.status),
+            can_unapprove: hasSafeCurrentDocument && requirement.revision_status === 'approved'
+                && requirement.review_status === 'approved'
+                && ['under_review', 'resubmission_required'].includes(application.status),
             can_request_resubmission: hasFinalizedCurrentDocument
                 && ['clean', 'unsafe', 'failed'].includes(requirement.scan_status) && requirement.revision_status === 'submitted'
                 && ['pending', 'under_review'].includes(requirement.review_status)
@@ -144,6 +152,8 @@ function createDocumentDetailDtos(application, storedRequirements) {
             scan_status: requirement.scan_status ?? null,
             cleanup_status: requirement.cleanup_status ?? null,
             filename: readSafeFilename(requirement.original_filename),
+            ...(requirement.scan_status === 'pending' && typeof requirement.file_id === 'string'
+                ? { file_id: requirement.file_id } : {}),
             ...(typeof requirement.student_message === 'string' ? { student_message: requirement.student_message } : {})
         };
     });
@@ -186,6 +196,8 @@ export async function queryStaffApplications(request, environment) {
     const offset = (query.page - 1) * query.pageSize;
     const result = await createD1Repositories(environment.DB).applications.queryStaffApplications({
         statuses: query.statuses,
+        isDeleted: query.isDeleted,
+        includeDeleted: query.includeDeleted,
         searchPattern: query.searchTerm ? escapeLikeTerm(query.searchTerm) : null,
         pageSize: query.pageSize,
         offset
@@ -215,6 +227,11 @@ export async function readStaffApplicationDetail(request, environment, applicati
     const repositories = createD1Repositories(environment.DB);
     const application = await repositories.applications.findById(applicationId);
     if (!application || application.status === 'draft') {
+        throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+    }
+    const deletion = await environment.DB.prepare(`SELECT state FROM application_deletions WHERE application_id=?`)
+        .bind(applicationId).first();
+    if (deletion?.state === 'purge_pending') {
         throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     }
     const [storedRequirements, studentMessages] = await Promise.all([

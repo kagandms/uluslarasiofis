@@ -1,6 +1,5 @@
 const REFERENCE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 const REFERENCE_PATTERN = /^ITU-[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}$/i;
-const ACCESS_CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 const encoder = new TextEncoder();
 
 /**
@@ -54,65 +53,6 @@ export function generateApplicationReference() {
 }
 
 /**
- * Generates a cryptographically secure access code with 130 bits of true entropy (>= 128 bits).
- * Format: 26 unconfusable characters grouped into 5 chunks (5-5-5-5-6).
- * Alphabet: 32 unconfusable characters (excludes 0, 1, I, O).
- * Masking: byte & 0x1f provides strictly uniform distribution with zero modulo bias
- * because 256 is an exact integer multiple of 32 (256 / 32 = 8).
- * Entropy: 26 * log2(32) = 26 * 5 = 130 bits.
- * @returns {string} Plaintext access code, e.g. "K7M9X-4P2WR-8T5NV-3Y6BQ-9D2FAL".
- */
-export function generateAccessCode() {
-    const bytes = crypto.getRandomValues(new Uint8Array(26));
-    const chars = [];
-    for (let i = 0; i < 26; i++) {
-        chars.push(ACCESS_CODE_ALPHABET[bytes[i] & 0x1f]);
-    }
-    return [
-        chars.slice(0, 5).join(''),
-        chars.slice(5, 10).join(''),
-        chars.slice(10, 15).join(''),
-        chars.slice(15, 20).join(''),
-        chars.slice(20, 26).join('')
-    ].join('-');
-}
-
-/**
- * Normalizes an access code by trimming whitespace and converting to uppercase.
- * Removes hyphens and non-alphabet characters for robust comparison.
- * @param {string} code Raw input code.
- * @returns {string} Normalized code without hyphens.
- */
-export function normalizeAccessCode(code) {
-    if (typeof code !== 'string') return '';
-    return code.trim().toUpperCase().replace(/[^2-9A-HJ-NP-Z]/g, '');
-}
-
-/**
- * Checks if a candidate access code has valid length and character content.
- * Standard access code has 26 normalized characters.
- * @param {string} code Candidate access code.
- * @returns {boolean} True if length and charset are valid.
- */
-export function isValidAccessCodeFormat(code) {
-    if (typeof code !== 'string') return false;
-    const normalized = normalizeAccessCode(code);
-    return normalized.length === 26 && /^[2-9A-HJ-NP-Z]{26}$/.test(normalized);
-}
-
-/**
- * Computes the SHA-256 hex digest of a normalized access code.
- * Only this hash is stored on the server.
- * @param {string} code Plaintext access code.
- * @returns {Promise<string>} 64-char lowercase hex digest.
- */
-export async function hashAccessCode(code) {
-    const normalized = normalizeAccessCode(code);
-    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(normalized)));
-    return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-/**
  * Performs a constant-time comparison of two hex hashes to prevent timing attacks.
  * @param {string} hashA First hex string.
  * @param {string} hashB Second hex string.
@@ -133,12 +73,40 @@ export function constantTimeCompare(hashA, hashB) {
     return mismatch === 0;
 }
 
-/**
- * Verifies a submitted access code against a stored SHA-256 hash.
- * @param {string} submittedCode Plaintext code submitted by user.
- * @param {string} storedHash SHA-256 hex hash from database.
- * @returns {Promise<boolean>} True if match.
- */
+const ACCESS_CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+export function generateAccessCode() {
+    const bytes = crypto.getRandomValues(new Uint8Array(26));
+    const chars = [];
+    for (let i = 0; i < 26; i++) {
+        chars.push(ACCESS_CODE_ALPHABET[bytes[i] & 0x1f]);
+    }
+    return [
+        chars.slice(0, 5).join(''),
+        chars.slice(5, 10).join(''),
+        chars.slice(10, 15).join(''),
+        chars.slice(15, 20).join(''),
+        chars.slice(20, 26).join('')
+    ].join('-');
+}
+
+export function normalizeAccessCode(code) {
+    if (typeof code !== 'string') return '';
+    return code.trim().toUpperCase().replace(/[^2-9A-HJ-NP-Z]/g, '');
+}
+
+export function isValidAccessCodeFormat(code) {
+    if (typeof code !== 'string') return false;
+    const normalized = normalizeAccessCode(code);
+    return normalized.length === 26 && /^[2-9A-HJ-NP-Z]{26}$/.test(normalized);
+}
+
+export async function hashAccessCode(code) {
+    const normalized = normalizeAccessCode(code);
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(normalized)));
+    return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export async function verifyAccessCode(submittedCode, storedHash) {
     if (!submittedCode || !storedHash) return false;
     const submittedHash = await hashAccessCode(submittedCode);

@@ -116,7 +116,7 @@ test('archive workspace is accessible in navigation without disturbing active ap
     assert.equal(document.getElementById('view-archive').hidden, false);
     assert.equal(document.getElementById('view-applications').hidden, true);
     assert.equal(archiveQueries.length, 1);
-    assert.equal(archiveQueries[0].status, 'terminal', 'Archive queries start with terminal filter');
+    assert.equal(archiveQueries[0].status, 'archive_all', 'Archive queries start with terminal filter');
     assert.match(archiveRoot.textContent, /STU-001/);
     assert.match(archiveRoot.textContent, /STU-002/);
 
@@ -138,14 +138,16 @@ test('archive workspace is accessible in navigation without disturbing active ap
     assert.equal(document.getElementById('view-archive').hidden, false);
 });
 
-test('archive queries only terminal statuses and provides only Tümü, Tamamlandı, İptal edildi, Reddedildi filters', async (context) => {
+test('archive keeps terminal filters and adds the Silinen view', async (context) => {
     const { document, archiveRoot } = createStaffDom();
     installDocument(context, document);
     const queries = [];
     const api = {
         async queryApplications(query) {
             queries.push(query);
-            return createQueuePayload([COMPLETED_ITEM]);
+            return createQueuePayload(query.status === 'deleted'
+                ? [{ ...COMPLETED_ITEM, status: 'deleted', deletion_state: 'soft_deleted' }]
+                : [COMPLETED_ITEM]);
         },
         async readApplicationDetail() { throw new Error('not used'); }
     };
@@ -158,7 +160,7 @@ test('archive queries only terminal statuses and provides only Tümü, Tamamland
 
     // Verify initial query is terminal
     assert.equal(queries.length, 1);
-    assert.equal(queries[0].status, 'terminal');
+    assert.equal(queries[0].status, 'archive_all');
     assert.equal(queries[0].page, 1);
 
     // Check filter options
@@ -166,11 +168,17 @@ test('archive queries only terminal statuses and provides only Tümü, Tamamland
     assert.ok(statusSelect, 'Status select must exist');
     const options = [...statusSelect.querySelectorAll('option')].map((opt) => [opt.value, opt.textContent.trim()]);
     assert.deepEqual(options, [
-        ['terminal', 'Tümü'],
+        ['archive_all', 'Tümü'],
+        ['deleted', 'Silinen'],
         ['completed', 'Tamamlandı'],
         ['cancelled', 'İptal edildi'],
         ['rejected', 'Reddedildi']
     ]);
+    statusSelect.value = 'deleted';
+    statusSelect.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(queries.at(-1).status, 'deleted', 'changing the filter immediately requests deleted applications');
+    assert.match(archiveRoot.textContent, /Silinen/);
 
     // Active statuses must NOT be present
     const disallowedValues = ['all', 'new', 'under_review', 'resubmission_required', 'approved', 'migration', 'submitted'];
@@ -201,8 +209,8 @@ test('archive queries only terminal statuses and provides only Tümü, Tamamland
     assert.equal(queries.at(-1).page, 1);
 
     // Filter back to Tümü
-    await submitFilter('terminal');
-    assert.equal(queries.at(-1).status, 'terminal');
+    await submitFilter('archive_all');
+    assert.equal(queries.at(-1).status, 'archive_all');
     assert.equal(queries.at(-1).page, 1);
 });
 
@@ -473,7 +481,7 @@ test('archive queue and detail expose one read-only ZIP action using the selecte
     queueZip.click();
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(manifestRequests, [COMPLETED_ITEM.id]);
-    assert.deepEqual(order, ['picker', 'detail', 'manifest'], 'save picker must open synchronously in the click path');
+    assert.deepEqual(order, ['detail', 'manifest'], 'manifest must be validated before opening save picker');
     assert.match(archiveRoot.textContent, /güvenli güncel belge bulunamadı/i);
 
     archiveRoot.querySelector('[data-action="open-detail"]').click();
@@ -483,7 +491,7 @@ test('archive queue and detail expose one read-only ZIP action using the selecte
     detailZip.click();
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(manifestRequests, [COMPLETED_ITEM.id, COMPLETED_ITEM.id]);
-    assert.deepEqual(order, ['picker', 'detail', 'manifest', 'detail', 'picker', 'manifest']);
+    assert.deepEqual(order, ['detail', 'manifest', 'detail', 'manifest']);
     assert.match(archiveRoot.textContent, /güvenli güncel belge bulunamadı/i);
     assert.equal(archiveRoot.querySelector('[data-action="application-status-transition"]'), null);
     assert.equal(archiveRoot.querySelector('[data-action="approve-document"]'), null);
@@ -557,6 +565,7 @@ test('archive ZIP close failure never displays the completed-download message', 
     await new Promise((resolve) => setImmediate(resolve));
     assert.doesNotMatch(archiveRoot.textContent, /ZIP indirme tamamlandı\./);
     assert.match(archiveRoot.textContent, /ZIP hazırlanamadı/);
+    assert.doesNotMatch(archiveRoot.textContent, /tek tek indirebilirsiniz/);
 });
 
 test('archive ZIP reports pending safety review clearly without requesting or skipping documents', async (context) => {
@@ -815,11 +824,10 @@ test('archive application detail is strictly read-only with no approval, resubmi
     assert.match(archiveRoot.textContent, /old-card\.jpg/);
     assert.match(archiveRoot.textContent, /Öğrenciye iletilen neden: Lütfen güncel kartınızı yükleyin\./);
 
-    // Accessible document has preview & download
+    // Archive documents remain previewable; bulk ZIP is the only download action.
     assert.equal(archiveRoot.querySelectorAll('[data-action="preview-document"]').length, 1);
-    assert.equal(archiveRoot.querySelectorAll('[data-action="download-document"]').length, 1);
-    const downloadLink = archiveRoot.querySelector('[data-action="download-document"]');
-    assert.equal(new URL(downloadLink.href).pathname, '/api/staff/applications/app-completed-001/documents/passport/download');
+    assert.equal(archiveRoot.querySelectorAll('[data-action="download-document"]').length, 0);
+    assert.equal(archiveRoot.querySelector('[data-action="download-application-archive"]')?.textContent, 'Belgeleri ZIP indir');
 
     // Inaccessible document shows explanation and NO access controls
     assert.match(archiveRoot.textContent, /Belge güvenlik kontrolü bekleniyor\./);
@@ -924,16 +932,16 @@ test('backend route accepts cancelled and rejected status filters and preserves 
     const unauth = await worker.fetch(new Request('https://portal.test/api/staff/applications/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Origin: 'https://portal.test' },
-        body: JSON.stringify({ status: 'terminal' })
+        body: JSON.stringify({ status: 'archive_all' })
     }), environment, {});
     assert.equal(unauth.status, 401);
 
     // Cross-origin request rejected
-    const crossOrigin = await query({ status: 'terminal' }, { Origin: 'https://evil.test' });
+    const crossOrigin = await query({ status: 'archive_all' }, { Origin: 'https://evil.test' });
     assert.equal(crossOrigin.status, 403);
 
     // Terminal query returns completed, cancelled, rejected (excludes draft & active under_review)
-    const terminalRes = await query({ status: 'terminal' });
+    const terminalRes = await query({ status: 'archive_all' });
     assert.equal(terminalRes.status, 200);
     const terminalPayload = await terminalRes.json();
     assert.equal(terminalPayload.pagination.total_items, 3);
@@ -960,4 +968,25 @@ test('backend route accepts cancelled and rejected status filters and preserves 
     assert.equal(invalidStatus.status, 400);
     const invalidPayload = await invalidStatus.json();
     assert.equal(invalidPayload.error.code, 'VALIDATION_ERROR');
+
+    // Add a soft-deleted application and verify archive_all includes it
+    await insertApp('app-soft-deleted', 'submitted');
+    await database.prepare(`
+        INSERT INTO application_deletions (application_id, previous_status, state, deleted_by_staff_id, deleted_at)
+        VALUES ('app-soft-deleted', 'submitted', 'soft_deleted', 'staff-shared', '2026-09-02T00:00:00.000Z')
+    `).run();
+
+    const archiveAllWithDeleted = await query({ status: 'archive_all' });
+    assert.equal(archiveAllWithDeleted.status, 200);
+    const allPayload = await archiveAllWithDeleted.json();
+    assert.equal(allPayload.pagination.total_items, 4);
+    assert.deepEqual(allPayload.items.map((i) => i.id).sort(), ['app-cancelled', 'app-completed', 'app-rejected', 'app-soft-deleted']);
+    const deletedItem = allPayload.items.find((i) => i.id === 'app-soft-deleted');
+    assert.equal(deletedItem.deletion_state, 'soft_deleted');
+
+    const deletedOnlyRes = await query({ status: 'deleted' });
+    assert.equal(deletedOnlyRes.status, 200);
+    const deletedOnlyPayload = await deletedOnlyRes.json();
+    assert.equal(deletedOnlyPayload.pagination.total_items, 1);
+    assert.equal(deletedOnlyPayload.items[0].id, 'app-soft-deleted');
 });

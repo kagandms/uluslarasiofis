@@ -249,12 +249,13 @@ test('applications manager submits filters, changes pages, renders detail safely
     assert.match(root.textContent, /Yüklenmemiş/);
     assert.doesNotMatch(root.textContent, /Atanan Personel|Atanmamış|Reviewer One/);
     assert.ok(root.querySelector('[data-action="back-to-queue"]'));
-    assert.equal(root.querySelectorAll('[data-action*="approve"], [data-action*="assign"], [data-action*="download"], [data-action*="preview"]').length, 0);
+    assert.equal(root.querySelectorAll('[data-action*="approve"], [data-action*="assign"], [data-action="download-document"], [data-action*="preview"]').length, 0);
+    assert.equal(root.querySelector('[data-action="download-application-archive"]')?.textContent, 'Belgeleri ZIP indir');
     root.querySelector('[data-action="back-to-queue"]').click();
     assert.ok(root.querySelector('[data-action="open-detail"]'));
 });
 
-test('document preview is lazy, closable, expires safely, and downloads use application plus policy code', async (context) => {
+test('document preview is lazy and closable while unsafe direct downloads are replaced by a gated ZIP action', async (context) => {
     const { document, root } = createStaffDom();
     installDocument(context, document);
     const previewRequests = [];
@@ -289,12 +290,9 @@ test('document preview is lazy, closable, expires safely, and downloads use appl
     root.querySelector('[data-action="open-detail"]').click();
     await new Promise((resolve) => setImmediate(resolve));
 
-    const download = root.querySelector('[data-action="download-document"]');
-    assert.ok(download);
-    assert.equal(new URL(download.href).pathname, '/api/staff/applications/app-001/documents/passport/download');
-    assert.doesNotMatch(download.href, /private-file-id|file_id/);
+    assert.equal(root.querySelector('[data-action="download-document"]'), null);
+    assert.equal(root.querySelector('[data-action="download-application-archive"]')?.textContent, 'Belgeleri ZIP indir');
     assert.equal(root.querySelectorAll('[data-action="preview-document"]').length, 2);
-    assert.equal(root.querySelectorAll('[data-action="download-document"]').length, 2);
     assert.match(root.textContent, /Belge güvenlik kontrolü bekleniyor\./);
     assert.doesNotMatch(root.innerHTML, /private-file-id|unavailable-file-id|X-Amz-Signature|private\.r2\.example/);
     const actionLabels = [...root.querySelectorAll('button, a')].map((element) => element.textContent.trim());
@@ -570,7 +568,91 @@ test('document approval disables repeat action and refreshes detail after a conf
     assert.doesNotMatch(root.textContent, /stale/);
 });
 
-test('approved documents and terminal applications remain read-only while preview and download stay available', async (context) => {
+test('manual scan queues the selected file and reports when the PC ClamAV runner is offline', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let scanRequests = 0;
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM, status: 'under_review' }, assignment: null,
+                allowed_status_transitions: [],
+                documents: [{ code: 'passport', label_key: 'documentPassport', required: true,
+                    revision_number: 1, revision_status: 'submitted', review_status: 'pending',
+                    upload_status: 'finalized', scan_status: 'pending', cleanup_status: 'none',
+                    filename: 'passport.pdf', file_id: 'safe-test-file-id', access_available: false }]
+            };
+        },
+        async prioritizeDocumentScan(applicationId, code) {
+            scanRequests += 1;
+            assert.equal(applicationId, QUEUE_ITEM.id);
+            assert.equal(code, 'passport');
+        },
+        async readScannerStatus() { return { runners: [] }; }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    root.querySelector('[data-action="scan-document"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(scanRequests, 1);
+    assert.match(root.textContent, /PC’deki ClamAV çalıştırıcısı çevrimdışı/);
+    const passportCard = root.querySelector('.staff-application-document-card');
+    assert.match(passportCard?.textContent, /PC’deki ClamAV çalıştırıcısı çevrimdışı/);
+    assert.equal(root.querySelector('.staff-application-documents > .staff-application-notice'), null);
+    assert.equal(root.querySelector('[data-action="scan-document"]')?.textContent, 'Taramayı yeniden sırala');
+    assert.match(root.textContent, /İnceleme bekliyor/);
+});
+
+test('document approval announces success and exposes a guarded undo action', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let reviewStatus = 'pending';
+    let revisionStatus = 'submitted';
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM, status: 'under_review' }, assignment: null,
+                allowed_status_transitions: [],
+                documents: [{ code: 'passport', label_key: 'documentPassport', revision_number: 1,
+                    revision_status: revisionStatus, review_status: reviewStatus, upload_status: 'finalized',
+                    scan_status: 'clean', cleanup_status: 'none', filename: 'passport.pdf', access_available: true,
+                    can_approve: ['pending', 'under_review'].includes(reviewStatus), can_unapprove: reviewStatus === 'approved' }]
+            };
+        },
+        async approveDocument() { reviewStatus = 'approved'; revisionStatus = 'approved'; },
+        async unapproveDocument() { reviewStatus = 'under_review'; revisionStatus = 'submitted'; }
+    };
+    document.defaultView.scrollTo = () => {};
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    root.querySelector('[data-action="approve-document"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.match(root.textContent, /Belge onaylandı\./);
+    assert.equal(root.querySelector('[data-action="approve-document"]'), null);
+    root.querySelector('[data-action="unapprove-document"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.match(root.textContent, /Belge onayı kaldırıldı/);
+    assert.ok(root.querySelector('[data-action="approve-document"]'));
+});
+
+test('approved documents and terminal applications remain read-only with preview and a scan-gated ZIP action', async (context) => {
     const { document, root } = createStaffDom();
     installDocument(context, document);
     const api = {
@@ -600,11 +682,12 @@ test('approved documents and terminal applications remain read-only while previe
     assert.equal(root.querySelector('[data-action="request-document-resubmission"]'), null);
     assert.equal(root.querySelector('[data-action="application-status-transition"]'), null);
     assert.ok(root.querySelector('[data-action="preview-document"]'));
-    assert.ok(root.querySelector('[data-action="download-document"]'));
+    assert.equal(root.querySelector('[data-action="download-document"]'), null);
+    assert.equal(root.querySelector('[data-action="download-application-archive"]')?.textContent, 'Belgeleri ZIP indir');
     assert.equal(root.querySelector('[data-action="staff-reset-access-code"]'), null);
 });
 
-test('staff reset access code workflow requires physical ID check confirmation and presents new code with copy', async (context) => {
+test('staff application review does not expose an access-code reset action', async (context) => {
     const { document, root } = createStaffDom();
     installDocument(context, document);
     let resetCalledWith = null;
@@ -641,50 +724,7 @@ test('staff reset access code workflow requires physical ID check confirmation a
     // Summary displays reference number
     assert.match(root.textContent, /ITU-7K9M-4X2P/);
 
-    // Reset button is present
-    const resetBtn = root.querySelector('[data-action="staff-reset-access-code"]');
-    assert.ok(resetBtn);
-    assert.equal(resetBtn.textContent, 'Erişim Kodunu Sıfırla');
-
-    // Click to open confirmation modal
-    resetBtn.click();
-    await new Promise((resolve) => setImmediate(resolve));
-
-    const modal = root.querySelector('#staff-reset-code-modal');
-    assert.ok(modal);
-    assert.equal(modal.getAttribute('role'), 'dialog');
-    assert.match(modal.textContent, /fiziken ofiste bulunup kimliği doğrulandığında/);
-
-    // Confirm button is initially disabled
-    const confirmBtn = modal.querySelector('[data-action="confirm-reset-code"]');
-    assert.ok(confirmBtn);
-    assert.equal(confirmBtn.disabled, true);
-
-    // Checking the physical ID check box enables the confirm button
-    const checkbox = modal.querySelector('#confirm-physical-id-check');
-    assert.ok(checkbox);
-    checkbox.checked = true;
-    checkbox.dispatchEvent(new document.defaultView.Event('change'));
-    assert.equal(confirmBtn.disabled, false);
-
-    // Execute reset
-    confirmBtn.click();
-    await new Promise((resolve) => setImmediate(resolve));
-
-    assert.equal(resetCalledWith, QUEUE_ITEM.id);
-
-    // Success dialog presents new code and copy button
-    const successModal = root.querySelector('#staff-reset-code-modal');
-    assert.ok(successModal);
-    assert.match(successModal.textContent, /Yeni Erişim Kodu Üretildi/);
-    assert.match(successModal.textContent, /K7M9X-4P2WR-8T5NV-3Y6BQ-9D2FAL/);
-    assert.ok(successModal.querySelector('[data-action="copy-new-access-code"]'));
-
-    // Close button dismisses modal
-    const closeBtn = successModal.querySelector('[data-action="close-reset-code-modal"]');
-    assert.ok(closeBtn);
-    closeBtn.click();
-    await new Promise((resolve) => setImmediate(resolve));
-
+    assert.equal(root.querySelector('[data-action="staff-reset-access-code"]'), null);
     assert.equal(root.querySelector('#staff-reset-code-modal'), null);
+    assert.equal(resetCalledWith, null);
 });

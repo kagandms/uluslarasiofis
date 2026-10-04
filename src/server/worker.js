@@ -1,16 +1,16 @@
-import { handleScannerRequest, handleStaffScannerRequest } from './routes/scanner-routes.js';
+import { handleScannerRequest, handleStaffScannerRequest, prioritizeStaffDocumentScan } from './routes/scanner-routes.js';
 import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
 import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
 import { isRouteResult } from './http/routeResult.js';
 import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument, finalizeCurrentStudentDocument, readCurrentStudentDocumentRequirements } from './routes/applicationDocumentRoutes.js';
-import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, accessApplicationWithCode, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, regenerateCurrentAccessCode, resetStaffApplicationAccessCode, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
+import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, accessApplicationWithReference, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readCurrentApplication, readCurrentApplicationStatus, regenerateCurrentAccessCode, resetStaffApplicationAccessCode, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
 import { lookupApplicationTracking, readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
 import { createCurrentResubmissionUploadIntent, finalizeCurrentResubmissionUpload, readCurrentResubmissionEligibility } from './routes/resubmissionUploadRoutes.js';
 import { createStaffDocumentPreview, createStaffApplicationArchiveManifest, downloadStaffApplicationDocument,
     streamStaffApplicationArchiveFile } from './routes/staffDocumentAccessRoutes.js';
 import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
-import { approveStaffApplicationDocument, requestStaffDocumentResubmission, transitionStaffApplicationStatus } from './routes/staffReviewRoutes.js';
+import { approveStaffApplicationDocument, unapproveStaffApplicationDocument, requestStaffDocumentResubmission, transitionStaffApplicationStatus } from './routes/staffReviewRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
 import { bootstrapStaff, loginStaff, logoutStaff, readStaffSession } from './routes/staffRoutes.js';
 import { handleTebligatRequest } from './routes/tebligatRoutes.js';
@@ -20,6 +20,7 @@ import { enqueueStaffNotification, previewStaffNotification, readStaffNotificati
 import { handleMetaWhatsAppWebhook } from './services/metaWhatsAppWebhook.js';
 import { createMetaWhatsAppProvider } from './services/metaWhatsAppProvider.js';
 import { runNotificationDispatchBatch } from './services/notificationDispatcher.js';
+import { handleStaffApplicationDeletion } from './routes/staffApplicationDeletionRoutes.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -54,7 +55,26 @@ function withMetaWhatsAppProvider(environment) {
 async function routeApi(request, environment, requestId) {
     const { pathname } = new URL(request.url);
     if (pathname.startsWith('/api/scanner/')) return handleScannerRequest(request, environment);
+    const documentScanMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/scan$/);
+    if (documentScanMatch) {
+        let applicationId;
+        let documentCode;
+        try {
+            applicationId = decodeURIComponent(documentScanMatch[1]);
+            documentCode = decodeURIComponent(documentScanMatch[2]);
+        } catch {
+            throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya erişilemiyor.');
+        }
+        return prioritizeStaffDocumentScan(request, environment, applicationId, documentCode, requestId);
+    }
     if (['/api/staff/scanner/status', '/api/staff/scanner/retry'].includes(pathname)) return handleStaffScannerRequest(request, environment, requestId);
+    const deletionMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/(archive|restore|purge)$/);
+    if (deletionMatch) {
+        let applicationId;
+        try { applicationId = decodeURIComponent(deletionMatch[1]); }
+        catch { throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.'); }
+        return handleStaffApplicationDeletion(request, environment, applicationId, deletionMatch[2], requestId);
+    }
     if (pathname === '/api/webhooks/whatsapp') {
         return handleMetaWhatsAppWebhook(request, environment, requestId);
     }
@@ -111,7 +131,7 @@ async function routeApi(request, environment, requestId) {
         }
         return transitionStaffApplicationStatus({ request, environment, applicationId, requestId });
     }
-    const staffDocumentMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/(preview|download|approve|request-resubmission)$/);
+    const staffDocumentMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/(preview|download|approve|unapprove|request-resubmission)$/);
     if (staffDocumentMatch) {
         let applicationId;
         let documentCode;
@@ -129,6 +149,9 @@ async function routeApi(request, environment, requestId) {
         }
         if (staffDocumentMatch[3] === 'approve') {
             return approveStaffApplicationDocument({ request, environment, applicationId, code: documentCode, requestId });
+        }
+        if (staffDocumentMatch[3] === 'unapprove') {
+            return unapproveStaffApplicationDocument({ request, environment, applicationId, code: documentCode, requestId });
         }
         return requestStaffDocumentResubmission({ request, environment, applicationId, code: documentCode, requestId });
     }
@@ -152,7 +175,7 @@ async function routeApi(request, environment, requestId) {
         }
         return readStaffApplicationDetail(request, environment, applicationId);
     }
-    if (pathname === '/api/public/applications/access') return accessApplicationWithCode(request, environment, requestId);
+    if (pathname === '/api/public/applications/access') return accessApplicationWithReference(request, environment, requestId);
     if (pathname === '/api/public/applications/current/regenerate-access-code') return regenerateCurrentAccessCode(request, environment, requestId);
     if (pathname === '/api/public/applications') return createApplicationDraft(request, environment, requestId);
     if (pathname === '/api/public/applications/current/status') return readCurrentApplicationStatus(request, environment);

@@ -64,6 +64,38 @@ async function retry(database, input) {
     return results[0].meta.changes === 1;
 }
 
+async function prioritizePendingDocument(database, input) {
+    const result = await database.batch([
+        database.prepare(`UPDATE document_scan_jobs SET available_at=?,updated_at=?,result_code='staff_scan_requested'
+            WHERE file_id=(SELECT files.id FROM applications
+                JOIN document_records AS records ON records.application_id=applications.id
+                JOIN document_requirements AS requirements ON requirements.id=records.requirement_id
+                JOIN document_revisions AS revisions ON revisions.document_record_id=records.id AND revisions.is_current=1
+                JOIN document_revision_files AS files ON files.revision_id=revisions.id AND files.page_order=0
+                JOIN upload_intents AS intents ON intents.revision_file_id=files.id AND intents.status='completed'
+                WHERE applications.id=? AND requirements.code=? AND applications.status<>'draft'
+                  AND revisions.status='submitted' AND files.upload_status='finalized'
+                  AND files.scan_status='pending' AND files.cleanup_status='none' LIMIT 1)
+              AND status='queued'`)
+            .bind(input.now,input.now,input.applicationId,input.code),
+        database.prepare(`INSERT INTO audit_events(id,event_type,actor_type,actor_staff_id,document_record_id,
+            request_id,safe_metadata_json,created_at)
+            SELECT ?, 'scanner.manual_scan_requested','staff',?,records.id,?,'{}',?
+            FROM document_scan_jobs AS jobs
+            JOIN document_revisions AS revisions ON revisions.id=jobs.revision_id
+            JOIN document_records AS records ON records.id=revisions.document_record_id
+            WHERE jobs.file_id=(SELECT files.id FROM applications
+                JOIN document_records AS matching_records ON matching_records.application_id=applications.id
+                JOIN document_requirements AS requirements ON requirements.id=matching_records.requirement_id
+                JOIN document_revisions AS current_revisions ON current_revisions.document_record_id=matching_records.id AND current_revisions.is_current=1
+                JOIN document_revision_files AS files ON files.revision_id=current_revisions.id AND files.page_order=0
+                WHERE applications.id=? AND requirements.code=? LIMIT 1)
+              AND changes()=1`)
+            .bind(crypto.randomUUID(),input.staffId,input.requestId,input.now,input.applicationId,input.code)
+    ]);
+    return result[0]?.meta?.changes === 1;
+}
+
 /** @param {D1Database} database Binding. @param {object} input Exact leased job evidence. @returns {Promise<boolean>} Durable result CAS. */
 async function persistResult(database, input) {
     const { job, result, now, tokenHash } = input;
@@ -123,6 +155,7 @@ export function createScannerRepository(database) {
         reconcile: (now) => reconcile(database, now),
         claim: (input) => claim(database, input),
         retry: (input) => retry(database, input),
+        prioritizePendingDocument: (input) => prioritizePendingDocument(database, input),
         persistResult: (input) => persistResult(database, input),
         findLease: ({ jobId, tokenHash, now }) => database.prepare(`SELECT * FROM document_scan_jobs
             WHERE id=? AND status='leased' AND lease_token_hash=? AND lease_until>? AND ${CURRENT_JOB}`)

@@ -27,11 +27,37 @@ function createTrackingDto(overrides = {}) {
     };
 }
 
+async function initializeAndLookup(document, root, api) {
+    let lookupPayload = null;
+    const wrappedApi = {
+        ...api,
+        async readCurrentApplicationTracking() {
+            if (lookupPayload) {
+                const cachedPayload = lookupPayload;
+                lookupPayload = null;
+                return cachedPayload;
+            }
+            return api.readCurrentApplicationTracking();
+        },
+        async lookupApplicationTracking(studentNumber) {
+            if (api.lookupApplicationTracking) return api.lookupApplicationTracking(studentNumber);
+            lookupPayload = await api.readCurrentApplicationTracking();
+            return { found: true, ...lookupPayload };
+        }
+    };
+    const result = await initializeApplicationTracking(root, wrappedApi);
+    const input = root.querySelector('input[name="student_number"]');
+    input.value = 'TRACK-STUDENT-1';
+    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    return result;
+}
+
 test('submitted owner session renders localized application and current document statuses safely', async () => {
     const { document, root } = createTrackingRoot();
     const api = { async readCurrentApplicationTracking() { return createTrackingDto(); } };
 
-    const result = await initializeApplicationTracking(root, api);
+    const result = await initializeAndLookup(document, root, api);
 
     assert.equal(result.kind, 'ready');
     assert.match(root.textContent, /TRACK-STUDENT-1/);
@@ -63,7 +89,7 @@ test('student tracking renders document-specific office messages as plain text',
         }
     };
 
-    await initializeApplicationTracking(root, api);
+    await initializeAndLookup(document, root, api);
 
     assert.match(root.textContent, /Ofis açıklaması/);
     assert.match(root.textContent, new RegExp(studentMessage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -77,7 +103,7 @@ test('draft owner session links back to the existing application wizard', async 
     const { document, root } = createTrackingRoot();
     const api = { async readCurrentApplicationTracking() { return createTrackingDto({ application: { status: 'draft' } }); } };
 
-    const result = await initializeApplicationTracking(root, api);
+    const result = await initializeAndLookup(document, root, api);
 
     assert.equal(result.kind, 'draft');
     assert.match(root.textContent, /henüz taslak/i);
@@ -162,7 +188,7 @@ test('owner resubmission view mounts controls only for server-eligible codes and
         async createResubmissionUploadIntent() { intentCalls += 1; }
     };
 
-    await initializeApplicationTracking(root, api);
+    await initializeAndLookup(document, root, api);
 
     assert.match(root.textContent, new RegExp(officeMessage));
     assert.equal(root.querySelectorAll('input[type="file"]').length, 1);
@@ -197,7 +223,7 @@ test('finalize refreshes owner tracking to waiting review while application stay
         async finalizeResubmissionUpload() { return { scan_status: 'pending' }; }
     };
     api.putStudentDocumentDirect = async () => {};
-    await initializeApplicationTracking(root, api);
+    await initializeAndLookup(document, root, api);
     const input = root.querySelector('input[type="file"]');
     Object.defineProperty(input, 'files', { configurable: true, value: [{ name: 'passport.pdf', type: 'application/pdf', size: 10 }] });
     input.dispatchEvent(new document.defaultView.Event('change'));
@@ -278,7 +304,7 @@ test('tracking supports all locales and the public main entry keeps Arabic right
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(document.documentElement.lang, 'ar');
         assert.equal(document.documentElement.dir, 'rtl');
-        assert.match(document.querySelector('#application-tracking').textContent, /تم الإرسال/);
+        assert.match(document.querySelector('#application-tracking').textContent, /رقم الطالب/);
     } finally {
         if (previousDocument === undefined) delete globalThis.document;
         else globalThis.document = previousDocument;

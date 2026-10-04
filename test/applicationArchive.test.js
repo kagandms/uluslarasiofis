@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { BlobReader, ZipReader, Uint8ArrayWriter } from '@zip.js/zip.js';
 import { test } from 'node:test';
-import { downloadApplicationArchive, ARCHIVE_LIMITS } from '../src/staff/applicationArchive.js';
+import { downloadApplicationArchive, createArchiveFilename, ARCHIVE_LIMITS } from '../src/staff/applicationArchive.js';
 import { readDocumentAccessMessage } from '../src/staff/documentAccessMessages.js';
 
 function createManifest(size = 5) {
@@ -48,7 +48,7 @@ test('fallback refuses totals above its limit before requesting file bytes', asy
     let requested = false;
     const window = { document: { createElement() { throw new Error('unexpected download'); } } };
     await assert.rejects(downloadApplicationArchive({ applicationId: 'app-1', window,
-        manifest: createManifest(ARCHIVE_LIMITS.blobBytes + 1), fetchFile: async () => { requested = true; } }), /tek tek/i);
+        manifest: createManifest(ARCHIVE_LIMITS.blobBytes + 1), fetchFile: async () => { requested = true; } }), /ofis bilgisayarından/i);
     assert.equal(requested, false);
 });
 
@@ -79,7 +79,7 @@ test('streaming picker saves a real source above the Blob limit without accumula
         async getManifest() { order.push('manifest'); return manifest; },
         async fetchFile() { return response; } });
 
-    assert.deepEqual(order, ['picker', 'manifest']);
+    assert.deepEqual(order, ['manifest', 'picker']);
     assert.equal(consumed, sourceSize);
     assert.equal(closed, true);
     assert.ok(sourceSize > ARCHIVE_LIMITS.blobBytes);
@@ -93,7 +93,7 @@ test('streaming mode rejects a manifest above its source limit before requesting
     }) };
     await assert.rejects(downloadApplicationArchive({ applicationId: 'app-1', window,
         manifest: createManifest(ARCHIVE_LIMITS.streamedBytes + 1),
-        fetchFile: async () => { requested = true; return new Response(); } }), /tek tek/i);
+        fetchFile: async () => { requested = true; return new Response(); } }), /ofis bilgisayarından/i);
     assert.equal(requested, false);
     assert.equal(createdWritable, false);
 });
@@ -140,14 +140,24 @@ test('an empty current-document manifest reports that no secure current files ar
     assert.equal(requested, false);
 });
 
-test('user cancellation at the file picker requests no manifest and creates no archive', async () => {
-    let requested = false;
+test('manifest security error rejects before opening file picker and touches no disk file', async () => {
+    let pickerCalled = false;
+    const window = { isSecureContext: true,
+        showSaveFilePicker: async () => { pickerCalled = true; throw new Error('should not call'); } };
+    await assert.rejects(downloadApplicationArchive({
+        applicationId: 'app-1', window,
+        getManifest: async () => { throw new Error('Belge güvenlik kontrolü bekleniyor.'); },
+        fetchFile: async () => new Response()
+    }), /güvenlik kontrolü/);
+    assert.equal(pickerCalled, false);
+});
+
+test('user cancellation at the file picker creates no archive', async () => {
     const window = { isSecureContext: true,
         showSaveFilePicker: async () => { throw new DOMException('Canceled', 'AbortError'); } };
     await assert.rejects(downloadApplicationArchive({ applicationId: 'app-1', window,
-        getManifest: async () => { requested = true; return createManifest(0); }, fetchFile: async () => new Response() }),
+        manifest: createManifest(5), fetchFile: async () => new Response() }),
     { name: 'AbortError' });
-    assert.equal(requested, false);
 });
 
 test('in-progress cancellation aborts the private-file request and emits no downloadable ZIP', async () => {
@@ -163,4 +173,13 @@ test('in-progress cancellation aborts the private-file request and emits no down
     controller.abort();
     await assert.rejects(pending, { name: 'AbortError' });
     assert.equal(created, false);
+});
+
+test('createArchiveFilename formats student names and fallback values safely', () => {
+    assert.equal(createArchiveFilename({ firstName: 'Maxim', lastName: 'Durmusov' }), 'maxim_durmusov.zip');
+    assert.equal(createArchiveFilename({ firstName: 'Ahmet', lastName: 'Çelik' }), 'ahmet_celik.zip');
+    assert.equal(createArchiveFilename({ firstName: 'Özlem', lastName: 'Şahin' }), 'ozlem_sahin.zip');
+    assert.equal(createArchiveFilename({ studentNumber: '21010101' }), '21010101.zip');
+    assert.equal(createArchiveFilename({}), 'basvuru-belgeleri.zip');
+    assert.equal(createArchiveFilename(), 'basvuru-belgeleri.zip');
 });

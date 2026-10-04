@@ -40,7 +40,7 @@ test('public route contains no staff workspace and links to the planned student 
     const trackingHtml = await readRepositoryFile('basvurum/index.html');
     const staffPage = new JSDOM(staffHtml).window.document;
     assert.equal(staffPage.querySelector('#staff-home-link')?.getAttribute('href'), '/yetkili/#home-screen');
-    assert.match(staffHtml, /30 dakika işlem yapılmazsa yeniden giriş gerekir\. Beni hatırla bu güvenlik süresini kaldırmaz\./u);
+    assert.match(staffHtml, /60 dakika işlem yapılmazsa yeniden giriş gerekir\. Beni hatırla bu güvenlik süresini kaldırmaz\./u);
     assert.doesNotMatch(applicationHtml + trackingHtml, /<form\b|type="file"|\/api\//i);
     assert.ok(new JSDOM(applicationHtml).window.document.querySelector('[data-action="return-home"][data-i18n="publicReturnHome"]'));
     assert.ok(new JSDOM(trackingHtml).window.document.querySelector('.public-home-link[data-i18n="publicReturnHome"]'));

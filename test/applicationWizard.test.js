@@ -163,7 +163,8 @@ test('new application is never marked saved before a server draft exists and war
     acknowledgement.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     root.querySelector('[name="student_number"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
 
-    assert.match(root.querySelector('[data-save-status]').textContent, /henüz.*kaydedilmedi/i);
+    assert.equal(root.querySelector('[data-save-status]').dataset.i18n, 'autosave_saving');
+    assert.match(root.querySelector('[data-save-status]').textContent, /kaydediliyor/i);
     await submitWizard(root);
 
     assert.equal(state.application, null);
@@ -173,6 +174,46 @@ test('new application is never marked saved before a server draft exists and war
     const navigation = new document.defaultView.Event('beforeunload', { cancelable: true });
     document.defaultView.dispatchEvent(navigation);
     assert.equal(navigation.defaultPrevented, true);
+    document.defaultView.close();
+});
+
+test('valid contact details create a server draft and survive a wizard refresh without Continue', async () => {
+    const { document, root } = createRoot();
+    let createCalls = 0;
+    let savedPhone = '';
+    let application = null;
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async createApplicationDraft(fields) {
+            createCalls += 1;
+            application = {
+                id: 'draft-autosave-1', status: 'draft', student_number: fields.student_number,
+                application_type: fields.application_type, email: fields.email, phone: fields.phone,
+                contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: false },
+                access_credentials: { reference_number: 'IT-TEST-1', access_code: 'TEST-CODE-1' }
+            };
+            return { ...application };
+        },
+        async autosaveCurrentApplication(fields) {
+            savedPhone = fields.student_phone;
+            application = { ...application, ...fields };
+            return { ...application };
+        }
+    };
+    const state = await initializeApplicationWizard(root, api);
+    root.querySelector('[name="student_number"]').value = 'SYN-CONTACT-KEEP';
+    root.querySelector('[name="application_type"]').value = 'initial';
+    root.querySelector('[name="student_email"]').value = 'synthetic@example.edu';
+    root.querySelector('[data-phone-visible]').value = '+905551112233';
+    root.querySelector('[data-phone-visible]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(createCalls, 1);
+    assert.equal(state.application.id, 'draft-autosave-1');
+    assert.equal(savedPhone, '+905551112233');
+    assert.equal(root.querySelector('[name="student_number"]').value, 'SYN-CONTACT-KEEP');
+    assert.match(root.textContent, /IT-TEST-1/);
     document.defaultView.close();
 });
 
@@ -505,7 +546,7 @@ test('finalized upload status is a success while non-finalized pending status st
     document.defaultView.close();
 });
 
-test('under-18 select keeps its translated question separate from the required yes/no answers', async () => {
+test('under-18 answer is derived from the birth date and cannot be manually changed', async () => {
     const { document, root, state } = await createFingerprintWizard('registered', 'FP-A/42');
     state.application.is_under_18 = null;
     document.dispatchEvent(new document.defaultView.CustomEvent('public:locale-changed'));
@@ -518,23 +559,20 @@ test('under-18 select keeps its translated question separate from the required y
     assert.equal(options[0].textContent, 'Seçmek için tıklayınız');
     assert.equal(options[0].value, '');
     assert.equal(options[0].disabled, true);
-    assert.equal(select.value, '');
-    assert.equal(select.required, true);
-    assert.equal(select.validity.valueMissing, true);
-    assert.equal(continueButton.disabled, true);
+    assert.equal(select.value, 'false');
+    assert.equal(select.required, false);
+    assert.equal(select.disabled, true);
+    assert.equal(continueButton.disabled, false);
     assert.equal(options.some(({ textContent }) => textContent === question.textContent), false);
     assert.deepEqual(options.slice(1).map(({ value, textContent }) => ({ value, textContent })), [
         { value: 'true', textContent: 'Evet' }, { value: 'false', textContent: 'Hayır' }
     ]);
 
-    select.value = 'true';
-    select.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    root.querySelector('[name="date_of_birth"]').value = '2010-10-04';
+    root.querySelector('[name="date_of_birth"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
     await state.autosave.flush();
+    assert.equal(select.value, 'true');
     assert.equal(state.application.is_under_18, true);
-    select.value = 'false';
-    select.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
-    await state.autosave.flush();
-    assert.equal(state.application.is_under_18, false);
     document.defaultView.close();
 });
 
@@ -591,14 +629,17 @@ test('wizard saves under-18 and fingerprint state before loading the server requ
 
     const state = await initializeApplicationWizard(root, api);
     fillRequiredResidenceFields(root);
+    const birthDate = root.querySelector('[name="date_of_birth"]');
+    birthDate.value = '2010-10-04';
+    birthDate.dispatchEvent(new window.Event('input', { bubbles: true }));
     const ageChoice = root.querySelector('select[name="is_under_18"]');
-    ageChoice.value = 'true';
+    assert.equal(ageChoice.disabled, true);
+    assert.equal(ageChoice.value, 'true');
     const registeredChoice = root.querySelector('input[name="fingerprint_status"][value="registered"]');
     registeredChoice.checked = true;
     registeredChoice.dispatchEvent(new window.Event('change', { bubbles: true }));
     const codeInput = root.querySelector('input[name="fingerprint_code"]');
     codeInput.value = 'AB/FP-7';
-    ageChoice.value = 'true';
     root.querySelector('#application-step-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -892,6 +933,8 @@ test('Review submits once, keeps five steps, and shows student-safe confirmation
     assert.equal(state.step, 4);
     assert.match(root.textContent, /Başvurunuz gönderildi/);
     assert.match(root.textContent, /S3-FP-1/);
+    assert.doesNotMatch(root.textContent, /2026-09-30T10:00:00\.000Z/);
+    assert.match(root.querySelector('[data-i18n="submissionNewStudentApplicationAction"]')?.textContent || '', /Farklı öğrenci için/);
     assert.equal(root.querySelector('a[data-i18n="trackingViewAction"]')?.getAttribute('href'), '/basvurum/');
     assert.match(root.textContent, /öğrenci numaranızla \/basvurum\//i);
     assert.equal(root.querySelector('[data-action="submit-application"]'), null);
@@ -944,9 +987,8 @@ test('unsafe and failed scans show translated error states instead of upload suc
     document.defaultView.close();
 });
 
-test('new draft creation presents credentials card with reference, code, and working regeneration action', async () => {
+test('new draft creation presents credentials banner with reference number and copy action', async () => {
     const { document, root } = createRoot();
-    let regenCalls = 0;
     const api = {
         async readCurrentApplication() { throw Object.assign(new Error('no session'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
         async createApplicationDraft() {
@@ -956,17 +998,9 @@ test('new draft creation presents credentials card with reference, code, and wor
                 lock_version: 1,
                 status: 'draft',
                 access_credentials: {
-                    reference_number: 'ITU-7K9M-4X2P',
-                    access_code: 'K7M9X-4P2WR-8T5NV-3Y6BQ-9D2FAL'
+                    reference_number: 'ITU-7K9M-4X2P'
                 },
                 contact_acknowledgement: { current_version: 'v1', accepted_current: true }
-            };
-        },
-        async regenerateCurrentAccessCode() {
-            regenCalls += 1;
-            return {
-                reference_number: 'ITU-7K9M-4X2P',
-                access_code: 'NEWCD-NEWCD-NEWCD-NEWCD-NEWCD1'
             };
         },
         async readCurrentStudentDocumentRequirements() { return { requirements: [] }; }
@@ -981,25 +1015,17 @@ test('new draft creation presents credentials card with reference, code, and wor
 
     await submitWizard(root);
 
-    // Credentials card should be present
+    // Reference banner should be present with reference number
     assert.match(root.textContent, /ITU-7K9M-4X2P/);
-    assert.match(root.textContent, /K7M9X-4P2WR-8T5NV-3Y6BQ-9D2FAL/);
+    assert.equal(root.querySelector('[data-action="regenerate-code"]'), null);
+    assert.equal(root.querySelector('[data-action="copy-code"]'), null);
 
-    root.querySelector('[data-action="copy-code"]').click();
+    const copyBtn = root.querySelector('[data-action="copy-reference"]');
+    assert.ok(copyBtn);
+    copyBtn.click();
     await new Promise((resolve) => setImmediate(resolve));
-    assert.match(root.querySelector('.credential-code').parentElement.querySelector('[data-copy-status]').textContent, /Kopyalama izni yok/u);
-    assert.equal(document.getSelection().toString(), root.querySelector('.credential-code').textContent);
-
-    const regenBtn = root.querySelector('[data-action="regenerate-code"]');
-    assert.ok(regenBtn);
-
-    // Click regenerate
-    regenBtn.click();
-    await new Promise((resolve) => setImmediate(resolve));
-
-    assert.equal(regenCalls, 1);
-    assert.match(root.textContent, /NEWCD-NEWCD-NEWCD-NEWCD-NEWCD1/);
-    assert.match(root.textContent, /Yeni erişim kodunuz üretildi/);
+    assert.match(root.querySelector('.credential-reference').parentElement.parentElement.querySelector('[data-copy-status]').textContent, /Kopyalama izni yok/u);
+    assert.equal(document.getSelection().toString(), root.querySelector('.credential-reference').textContent);
     document.defaultView.close();
 });
 
@@ -1045,6 +1071,8 @@ test('submission confirmation displays reference number and access credentials r
         assert.match(root.textContent, /ITU-7K9M-4X2P/);
         assert.match(root.textContent, new RegExp(messages.accessReferenceNumberLabel));
         assert.match(root.textContent, new RegExp(messages.submissionCredentialsReminder.slice(0, 20)));
+        assert.ok(root.querySelector('[data-i18n="submissionNewStudentApplicationAction"]'));
+        assert.doesNotMatch(root.textContent, /2026-10-02T12:00:00\.000Z/);
         dom.window.close();
     }
 });
@@ -1100,7 +1128,7 @@ test('an existing resubmission owner session opens the owner tracking replacemen
     document.defaultView.close();
 });
 
-test('access-code login routes a resubmission application to owner tracking', async () => {
+test('reference and student number login routes a resubmission application to owner tracking', async () => {
     const { document, root } = createRoot();
     const destinations = [];
     let currentReads = 0;
@@ -1110,12 +1138,12 @@ test('access-code login routes a resubmission application to owner tracking', as
             if (currentReads === 1) throw Object.assign(new Error('no session'), { code: 'APPLICATION_SESSION_REQUIRED' });
             return { status: 'resubmission_required' };
         },
-        async accessApplicationWithCode() { return {}; },
+        async accessApplicationWithReference() { return {}; },
         navigateToTracking(path) { destinations.push(path); }
     };
     const state = await initializeApplicationWizard(root, api);
     root.querySelector('[name="resume_reference_number"]').value = 'ITU-TEST-1234';
-    root.querySelector('[name="resume_access_code"]').value = 'SECRET-ACCESS-CODE';
+    root.querySelector('[name="resume_student_number"]').value = 'STU-12345';
     root.querySelector('#resume-application-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -1157,5 +1185,79 @@ test('draft-only document controls stay hidden and inert for non-draft applicati
 
     assert.equal(uploadCalls, 0);
     assert.equal(deleteCalls, 0);
+    document.defaultView.close();
+});
+
+test('step 0 contact inputs persist to storage across reloads and clear on new application', async () => {
+    const { document, root } = createRoot();
+    const storageMap = new Map();
+    const mockStorage = {
+        getItem: (k) => storageMap.get(k) ?? null,
+        setItem: (k, v) => storageMap.set(k, String(v)),
+        removeItem: (k) => storageMap.delete(k)
+    };
+    Object.defineProperty(document.defaultView, 'localStorage', { value: mockStorage, configurable: true });
+    const api = {
+        async readCurrentApplication() {
+            throw Object.assign(new Error('session required'), { code: 'APPLICATION_SESSION_REQUIRED' });
+        }
+    };
+    await initializeApplicationWizard(root, api);
+    const studentNumInput = root.querySelector('[name="student_number"]');
+    const emailInput = root.querySelector('[name="student_email"]');
+    studentNumInput.value = '20231010';
+    emailInput.value = 'test@topkapi.edu.tr';
+    studentNumInput.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    emailInput.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.ok(storageMap.has('portal_draft_contact_fields'));
+    const saved = JSON.parse(storageMap.get('portal_draft_contact_fields'));
+    assert.equal(saved.student_number, '20231010');
+    assert.equal(saved.student_email, 'test@topkapi.edu.tr');
+
+    const { document: doc2, root: root2 } = createRoot();
+    Object.defineProperty(doc2.defaultView, 'localStorage', { value: mockStorage, configurable: true });
+    await initializeApplicationWizard(root2, api);
+    assert.equal(root2.querySelector('[name="student_number"]')?.value, '20231010');
+    assert.equal(root2.querySelector('[name="student_email"]')?.value, 'test@topkapi.edu.tr');
+
+    const { document: doc3, root: root3 } = createRoot();
+    Object.defineProperty(doc3.defaultView, 'localStorage', { value: mockStorage, configurable: true });
+    await initializeApplicationWizard(root3, api, { startNewApplication: true });
+    assert.equal(storageMap.has('portal_draft_contact_fields'), false);
+    assert.equal(root3.querySelector('[name="student_number"]')?.value, '');
+
+    document.defaultView.close();
+    doc2.defaultView.close();
+    doc3.defaultView.close();
+});
+
+test('step 0 contact inputs display autosave_saving and autosave_saved status indicators', async () => {
+    const { document, root } = createRoot();
+    const storageMap = new Map();
+    const mockStorage = {
+        getItem: (k) => storageMap.get(k) ?? null,
+        setItem: (k, v) => storageMap.set(k, String(v)),
+        removeItem: (k) => storageMap.delete(k)
+    };
+    Object.defineProperty(document.defaultView, 'localStorage', { value: mockStorage, configurable: true });
+    const api = {
+        async readCurrentApplication() {
+            throw Object.assign(new Error('session required'), { code: 'APPLICATION_SESSION_REQUIRED' });
+        }
+    };
+    await initializeApplicationWizard(root, api);
+    const studentNumInput = root.querySelector('[name="student_number"]');
+    studentNumInput.value = '20231010';
+    studentNumInput.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    const statusNode = root.querySelector('[data-save-status]');
+    assert.equal(statusNode.dataset.i18n, 'autosave_saving');
+    assert.match(statusNode.textContent, /Kaydediliyor/);
+
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    assert.equal(statusNode.dataset.i18n, 'autosave_saved');
+    assert.match(statusNode.textContent, /Tüm değişiklikler kaydedildi/);
+
     document.defaultView.close();
 });

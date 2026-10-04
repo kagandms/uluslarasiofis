@@ -360,9 +360,38 @@ test('staff approves only the current clean revision and records safe audit meta
     assert.doesNotMatch(audit.safe_metadata_json, /passport-private|quarantine|storage_key|https?:\/\//i);
 });
 
+test('reviewer can safely undo a current document approval and the action is audited', async () => {
+    const { environment, database } = createEnvironment();
+    const applicationId = await seedApplication(database);
+    const { documentRecordId, revisionId } = await seedReviewableDocument(database, applicationId);
+    const cookie = await seedStaff(environment, database);
+    const approvalPath = `/api/staff/applications/${applicationId}/documents/passport/approve`;
+    const undoPath = `/api/staff/applications/${applicationId}/documents/passport/unapprove`;
+    const approved = await worker.fetch(request(approvalPath, {
+        method: 'POST', cookie, body: { expected_revision_number: 1 }
+    }), environment);
+    const unapproved = await worker.fetch(request(undoPath, {
+        method: 'POST', cookie, body: { expected_revision_number: 1 }
+    }), environment);
+    const repeated = await worker.fetch(request(undoPath, {
+        method: 'POST', cookie, body: { expected_revision_number: 1 }
+    }), environment);
+
+    assert.equal(approved.status, 200);
+    assert.equal(unapproved.status, 200);
+    assert.equal((await readJson(unapproved)).document_status, 'under_review');
+    assert.equal(repeated.status, 409);
+    assert.equal(database.prepare('SELECT status, reviewed_at, reviewed_by_staff_id FROM document_revisions WHERE id = ?')
+        .bind(revisionId).first().status, 'submitted');
+    const reviewStatus = database.prepare('SELECT review_status FROM document_records WHERE id = ?')
+        .bind(documentRecordId).first().review_status;
+    assert.equal(reviewStatus, 'under_review');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='staff.document_unapproved'").first().count, 1);
+});
+
 test('admin approval is allowed while stale, incomplete, unsafe, and cleanup-pending revisions are rejected', async () => {
     const { environment, database } = createEnvironment();
-    const adminCookie = await seedStaff(environment, database, 'admin-1', 'admin-session-token-000000000000000000000', 'admin');
+    const adminCookie = await seedStaff(environment, database, 'admin-1', 'admin-session-token-00000000000000000000000', 'admin');
     const adminApplication = await seedApplication(database);
     await seedReviewableDocument(database, adminApplication);
     const adminApproval = await worker.fetch(request(`/api/staff/applications/${adminApplication}/documents/passport/approve`, {
@@ -702,4 +731,116 @@ test('replacing one requested document does not resume review; staff must clear 
     }), environment);
     assert.equal(explicitResume.status, 200);
     assert.equal((await readJson(explicitResume)).application_status, 'under_review');
+});
+
+test('staff soft-delete hides an application, revokes its applicant session, and restore returns the prior status', async () => {
+    const { database, environment } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'under_review' });
+    const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-before-delete-000000000000000000');
+    const staffCookie = await seedStaff(environment, database);
+
+    const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
+        method: 'POST', cookie: staffCookie, body: {}
+    }), environment);
+    assert.equal(archived.status, 200);
+    assert.equal(database.prepare('SELECT state FROM application_deletions WHERE application_id=?').bind(applicationId).first().state, 'soft_deleted');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_sessions WHERE application_id=?').bind(applicationId).first().count, 0);
+    assert.equal((await worker.fetch(request('/api/public/applications/current', { cookie: ownerCookie }), environment)).status, 401);
+
+    const activeQueue = await worker.fetch(request('/api/staff/applications/query', {
+        method: 'POST', cookie: staffCookie, body: { status: 'all', page: 1, page_size: 25 }
+    }), environment);
+    assert.equal((await readJson(activeQueue)).items.some((item) => item.id === applicationId), false);
+    const deletedQueue = await worker.fetch(request('/api/staff/applications/query', {
+        method: 'POST', cookie: staffCookie, body: { status: 'deleted', page: 1, page_size: 25 }
+    }), environment);
+    assert.equal((await readJson(deletedQueue)).items[0].deletion_state, 'soft_deleted');
+
+    const restored = await worker.fetch(request(`/api/staff/applications/${applicationId}/restore`, {
+        method: 'POST', cookie: staffCookie, body: {}
+    }), environment);
+    assert.equal(restored.status, 200);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id=?').bind(applicationId).first().status, 'under_review');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_deletions WHERE application_id=?').bind(applicationId).first().count, 0);
+});
+
+test('permanent purge is administrator-only and keeps only a non-identifying audit record', async () => {
+    const { database, environment } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'completed' });
+    const reviewerCookie = await seedStaff(environment, database, 'reviewer-1', 'reviewer-session-token-000000000000000000', 'reviewer');
+    const adminCookie = await seedStaff(environment, database, 'admin-1', 'admin-session-token-00000000000000000000', 'admin');
+    environment.STAFF_SHARED_USERNAME = 'reviewer-1';
+    const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
+        method: 'POST', cookie: reviewerCookie, body: {}
+    }), environment);
+    assert.equal(archived.status, 200);
+
+    environment.STAFF_SHARED_USERNAME = 'reviewer-1';
+    const forbidden = await worker.fetch(request(`/api/staff/applications/${applicationId}/purge`, {
+        method: 'POST', cookie: reviewerCookie, body: {}
+    }), environment);
+    assert.equal(forbidden.status, 403);
+    environment.STAFF_SHARED_USERNAME = 'admin-1';
+    const purged = await worker.fetch(request(`/api/staff/applications/${applicationId}/purge`, {
+        method: 'POST', cookie: adminCookie, body: {}
+    }), environment);
+    assert.equal(purged.status, 200);
+    assert.equal(database.prepare('SELECT id FROM applications WHERE id=?').bind(applicationId).first(), null);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM students WHERE id=?').bind(`student-${applicationId}`).first().count, 0);
+    const audit = database.prepare("SELECT * FROM audit_events WHERE event_type='application.permanently_purged'").first();
+    assert.equal(audit.application_id, null);
+    assert.equal(audit.document_record_id, null);
+    assert.equal(audit.safe_metadata_json.includes(applicationId), false);
+});
+
+test('failed object removal leaves purge pending, blocks restore, and retries safely', async () => {
+    const { database, environment } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'rejected' });
+    const { fileId } = await seedReviewableDocument(database, applicationId);
+    const storageKey = database.prepare('SELECT storage_key FROM document_revision_files WHERE id=?').bind(fileId).first().storage_key;
+    const staffCookie = await seedStaff(environment, database, 'admin-1', 'admin-session-token-00000000000000000000', 'admin');
+    let shouldFail = true;
+    environment.DOCUMENTS = {
+        async delete() { if (shouldFail) throw new Error('temporary object store failure'); }
+    };
+    const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
+        method: 'POST', cookie: staffCookie, body: {}
+    }), environment);
+    assert.equal(archived.status, 200);
+
+    const failedPurge = await worker.fetch(request(`/api/staff/applications/${applicationId}/purge`, {
+        method: 'POST', cookie: staffCookie, body: {}
+    }), environment);
+    assert.equal(failedPurge.status, 503);
+    assert.equal(database.prepare('SELECT state FROM application_deletions WHERE application_id=?').bind(applicationId).first().state, 'purge_pending');
+    const blockedRestore = await worker.fetch(request(`/api/staff/applications/${applicationId}/restore`, {
+        method: 'POST', cookie: staffCookie, body: {}
+    }), environment);
+    assert.equal(blockedRestore.status, 409);
+
+    shouldFail = false;
+    const retried = await worker.fetch(request(`/api/staff/applications/${applicationId}/purge`, {
+        method: 'POST', cookie: staffCookie, body: {}
+    }), environment);
+    assert.equal(retried.status, 200);
+    assert.equal(database.prepare('SELECT id FROM applications WHERE id=?').bind(applicationId).first(), null);
+    assert.equal(storageKey.startsWith('quarantine/'), true);
+});
+
+test('staff scan action expedites the current pending document for the PC ClamAV runner', async () => {
+    const { database, environment } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'under_review' });
+    const { fileId } = await seedReviewableDocument(database, applicationId, 'passport', { scanStatus: 'pending' });
+    const staffCookie = await seedStaff(environment, database);
+
+    const response = await worker.fetch(request(`/api/staff/applications/${applicationId}/documents/passport/scan`, {
+        method: 'POST', cookie: staffCookie, body: {}
+    }), environment);
+    assert.equal(response.status, 200);
+    assert.equal((await readJson(response)).queued, true);
+    const job = database.prepare('SELECT status,available_at,result_code FROM document_scan_jobs WHERE file_id=?').bind(fileId).first();
+    assert.equal(job.status, 'queued');
+    assert.equal(job.result_code, 'staff_scan_requested');
+    assert.ok(Date.parse(job.available_at) <= Date.now() + 1000);
+    assert.equal(database.prepare('SELECT scan_status FROM document_revision_files WHERE id=?').bind(fileId).first().scan_status, 'pending');
 });

@@ -241,7 +241,7 @@ function renderTracking(root, state, locale, submitLookup, api) {
  */
 export async function initializeApplicationTracking(root, api) {
     const document = root.ownerDocument;
-    const state = { kind: 'loading', payload: null, studentNumber: '', replacementDocuments: [], notificationPreference: null, replacementSuccess: false, replacementCompleted: {} };
+    const state = { kind: 'lookup', payload: null, studentNumber: '', replacementDocuments: [], notificationPreference: null, replacementSuccess: false, replacementCompleted: {} };
     const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup, api);
     async function submitLookup(studentNumber) {
         state.studentNumber = studentNumber.trim();
@@ -250,6 +250,9 @@ export async function initializeApplicationTracking(root, api) {
         try {
             state.payload = await api.lookupApplicationTracking(state.studentNumber);
             state.kind = state.payload.found ? 'publicReady' : 'notFound';
+            if (state.payload.found && typeof api.readCurrentApplicationTracking === 'function') {
+                await attachMatchingOwnerSession(state, api, state.studentNumber, render);
+            }
         } catch (error) {
             state.kind = error?.code === 'RATE_LIMITED' ? 'rateLimited' : 'lookupError';
         }
@@ -257,49 +260,46 @@ export async function initializeApplicationTracking(root, api) {
     }
     document.addEventListener('public:locale-changed', render);
     render();
+    return { get kind() { return state.kind; } };
+}
+
+async function attachMatchingOwnerSession(state, api, studentNumber, render) {
     try {
-        state.payload = await api.readCurrentApplicationTracking();
-        state.kind = state.payload.application.status === 'draft' ? 'draft' : 'ready';
-        if (state.payload.application.status === 'resubmission_required'
-            && typeof api.readCurrentResubmissionEligibility === 'function') {
-            try {
-                const eligibility = await api.readCurrentResubmissionEligibility();
-                state.replacementDocuments = (eligibility.documents || []).map((requirement) => ({ ...requirement, api }));
-                state.onReplacementComplete = async (code, meta) => {
-                    state.replacementCompleted = state.replacementCompleted || {};
-                    const targetCode = code || (state.replacementDocuments?.length === 1 ? state.replacementDocuments[0].code : null);
-                    if (targetCode) {
-                        state.replacementCompleted[targetCode] = {
-                            scan_status: meta?.scan_status || 'pending'
-                        };
-                    }
-                    state.payload = await api.readCurrentApplicationTracking();
-                    state.replacementDocuments = [];
-                    state.replacementSuccess = true;
-                    if (state.payload.application.status === 'resubmission_required') {
-                        const refreshed = await api.readCurrentResubmissionEligibility();
-                        state.replacementDocuments = (refreshed.documents || []).map((requirement) => ({ ...requirement, api }));
-                    }
-                    render();
-                };
-                state.onSessionFailure = () => {
-                    state.kind = 'lookup';
-                    state.payload = null;
-                    state.replacementDocuments = [];
-                    state.replacementCompleted = {};
-                    render();
-                };
-            } catch (error) {
-                if (error?.status === 401 || error?.code === 'APPLICATION_SESSION_REQUIRED') {
-                    state.kind = 'lookup';
-                    state.payload = null;
-                }
+        const ownerPayload = await api.readCurrentApplicationTracking();
+        if (normalizeStudentNumber(ownerPayload.application?.student_number) !== normalizeStudentNumber(studentNumber)) return;
+        state.payload = ownerPayload;
+        state.kind = ownerPayload.application.status === 'draft' ? 'draft' : 'ready';
+        if (ownerPayload.application.status !== 'resubmission_required'
+            || typeof api.readCurrentResubmissionEligibility !== 'function') return;
+        const eligibility = await api.readCurrentResubmissionEligibility();
+        state.replacementDocuments = (eligibility.documents || []).map((requirement) => ({ ...requirement, api }));
+        state.onReplacementComplete = async (code, meta) => {
+            state.replacementCompleted = state.replacementCompleted || {};
+            const targetCode = code || (state.replacementDocuments?.length === 1 ? state.replacementDocuments[0].code : null);
+            if (targetCode) {
+                state.replacementCompleted[targetCode] = { scan_status: meta?.scan_status || 'pending' };
             }
-        }
-    } catch (error) {
-        state.kind = error?.code === 'APPLICATION_SESSION_REQUIRED' || error?.status === 401
-            ? 'lookup' : 'error';
+            state.payload = await api.readCurrentApplicationTracking();
+            state.replacementDocuments = [];
+            state.replacementSuccess = true;
+            if (state.payload.application.status === 'resubmission_required') {
+                const refreshed = await api.readCurrentResubmissionEligibility();
+                state.replacementDocuments = (refreshed.documents || []).map((requirement) => ({ ...requirement, api }));
+            }
+            render();
+        };
+        state.onSessionFailure = () => {
+            state.kind = 'lookup';
+            state.payload = null;
+            state.replacementDocuments = [];
+            state.replacementCompleted = {};
+            render();
+        };
+    } catch {
+        return;
     }
-    render();
-    return { kind: state.kind };
+}
+
+function normalizeStudentNumber(value) {
+    return typeof value === 'string' ? value.trim().toLocaleUpperCase('en-US') : '';
 }

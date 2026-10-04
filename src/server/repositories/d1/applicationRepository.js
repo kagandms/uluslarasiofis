@@ -174,6 +174,10 @@ export function createApplicationRepository(database) {
                 JOIN students ON students.id = applications.student_id
                 WHERE students.normalized_student_number = ?
                   AND applications.status <> 'draft'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM application_deletions
+                      WHERE application_deletions.application_id = applications.id
+                  )
                 ORDER BY
                     CASE WHEN applications.status IN ('completed', 'cancelled', 'rejected') THEN 1 ELSE 0 END,
                     applications.updated_at DESC,
@@ -184,10 +188,20 @@ export function createApplicationRepository(database) {
             if (!selected) return null;
             return this.findById(selected.id);
         },
-        async queryStaffApplications({ statuses, searchPattern, pageSize, offset }) {
+        async queryStaffApplications({ statuses, isDeleted = false, includeDeleted = false, searchPattern, pageSize, offset }) {
             const conditions = ["applications.status <> 'draft'"];
             const queryValues = [];
-            if (statuses) {
+            const deletedClause = "EXISTS (SELECT 1 FROM application_deletions WHERE application_id=applications.id AND state IN ('soft_deleted','purge_pending'))";
+            if (includeDeleted && statuses?.length) {
+                // Archive "all" view: terminal applications plus every soft-deleted one.
+                conditions.push(`((applications.status IN (${statuses.map(() => '?').join(', ')}) AND NOT EXISTS (SELECT 1 FROM application_deletions WHERE application_id=applications.id)) OR ${deletedClause})`);
+                queryValues.push(...statuses);
+            } else if (isDeleted) {
+                conditions.push(deletedClause);
+            } else {
+                conditions.push('NOT EXISTS (SELECT 1 FROM application_deletions WHERE application_id=applications.id)');
+            }
+            if (statuses?.length && !includeDeleted) {
                 conditions.push(`applications.status IN (${statuses.map(() => '?').join(', ')})`);
                 queryValues.push(...statuses);
             }
@@ -213,9 +227,11 @@ export function createApplicationRepository(database) {
                 database.prepare(`
                     SELECT applications.id, students.student_number, applications.first_name,
                            applications.last_name, applications.application_type, applications.status,
-                           applications.submitted_at, applications.updated_at
+                           applications.submitted_at, applications.updated_at,
+                           application_deletions.state AS deletion_state
                     FROM applications
                     JOIN students ON students.id = applications.student_id
+                    LEFT JOIN application_deletions ON application_deletions.application_id=applications.id
                     WHERE ${whereClause}
                     ORDER BY applications.updated_at DESC, applications.created_at DESC, applications.id DESC
                     LIMIT ? OFFSET ?
@@ -403,6 +419,58 @@ export function createApplicationRepository(database) {
                 throw new ApplicationConflictError('APPLICATION_UPDATE_CONFLICT');
             }
             return result.meta.changes === 1 ? this.findById(applicationId) : null;
+        },
+        async changeDraftStudentNumber({ applicationId, studentId, studentNumber, expectedLockVersion = null, ownerSessionId = null }) {
+            const normalizedStudentNumber = normalizeStudentNumber(studentNumber);
+            const current = await this.findById(applicationId);
+            if (!current || current.status !== 'draft') return null;
+            if (expectedLockVersion !== null && expectedLockVersion !== undefined && current.lock_version !== expectedLockVersion) {
+                throw new ApplicationConflictError('APPLICATION_UPDATE_CONFLICT');
+            }
+            const oldStudent = await database.prepare('SELECT id FROM students WHERE id = (SELECT student_id FROM applications WHERE id = ?)')
+                .bind(applicationId).first();
+            let lockClause = '';
+            const lockValues = [];
+            if (expectedLockVersion !== null && expectedLockVersion !== undefined) {
+                lockClause = ' AND lock_version = ?';
+                lockValues.push(expectedLockVersion);
+            }
+            const statements = [
+                database.prepare(`
+                    INSERT INTO students (id, student_number, normalized_student_number)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(normalized_student_number) DO NOTHING
+                `).bind(studentId, studentNumber.trim(), normalizedStudentNumber),
+                database.prepare(`
+                    UPDATE applications
+                    SET student_id = (SELECT id FROM students WHERE normalized_student_number = ?),
+                        lock_version = lock_version + 1, updated_at = CURRENT_TIMESTAMP,
+                        last_activity_at = CURRENT_TIMESTAMP,
+                        retention_due_at = datetime('now', '+30 days')
+                    WHERE id = ? AND status = 'draft'${lockClause} AND ${APPLICATION_OWNER_GUARD}
+                `).bind(normalizedStudentNumber, applicationId, ...lockValues, ownerSessionId, ownerSessionId)
+            ];
+            if (oldStudent?.id) {
+                // Remove the mistyped student record once nothing references it anymore.
+                statements.push(database.prepare(`
+                    DELETE FROM students
+                    WHERE id = ? AND NOT EXISTS (SELECT 1 FROM applications WHERE student_id = students.id)
+                `).bind(oldStudent.id));
+            }
+            let results;
+            try {
+                results = await database.batch(statements);
+            } catch (error) {
+                if (isActiveApplicationConflict(error)) throw new ApplicationConflictError();
+                throw error;
+            }
+            if (results[1]?.meta?.changes !== 1) {
+                if (expectedLockVersion !== null && expectedLockVersion !== undefined) {
+                    throw new ApplicationConflictError('APPLICATION_UPDATE_CONFLICT');
+                }
+                return null;
+            }
+            return this.findById(applicationId);
         },
         async readDocumentRequirementRemaps(applicationId, targetApplicationType) {
             const records = await database.prepare(`

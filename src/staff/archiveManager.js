@@ -1,11 +1,12 @@
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
-import { downloadApplicationArchive } from './applicationArchive.js';
+import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 
 const STATUS_LABELS = Object.freeze({
     completed: 'Tamamlandı',
     cancelled: 'İptal edildi',
-    rejected: 'Reddedildi'
+    rejected: 'Reddedildi',
+    deleted: 'Silinen'
 });
 const DOCUMENT_STATE_LABELS = Object.freeze({
     pending: 'İnceleme bekliyor', under_review: 'İnceleniyor', approved: 'Onaylandı',
@@ -14,15 +15,13 @@ const DOCUMENT_STATE_LABELS = Object.freeze({
     complete: 'Tamamlandı'
 });
 const ARCHIVE_STATUS_FILTERS = Object.freeze([
-    ['terminal', 'Tümü'],
+    ['archive_all', 'Tümü'],
+    ['deleted', 'Silinen'],
     ['completed', 'Tamamlandı'],
     ['cancelled', 'İptal edildi'],
     ['rejected', 'Reddedildi']
 ]);
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
-const APPLICATION_DOCUMENT_ROUTE = (applicationId, code, action) =>
-    `/api/staff/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(code)}/${action}`;
-
 function createText(document, tag, className, value) {
     const element = document.createElement(tag);
     if (className) element.className = className;
@@ -89,6 +88,7 @@ function createSearchForm(document, state, onSubmit) {
         event.preventDefault();
         onSubmit({ q: search.value, status: status.value });
     });
+    status.addEventListener('change', () => onSubmit({ q: search.value, status: status.value }));
     form.append(label, search, statusLabel, status, submit);
     return form;
 }
@@ -97,7 +97,7 @@ function createArchiveButton(document, state, applicationId, onDownload) {
     const button = document.createElement('button');
     const isActive = state.archiveApplicationId === applicationId;
     button.type = 'button';
-    button.className = 'btn btn-outline';
+    button.className = 'btn btn-primary';
     button.dataset.action = 'download-application-archive';
     button.textContent = isActive ? 'ZIP’i iptal et' : 'Belgeleri ZIP indir';
     button.setAttribute('aria-label', isActive ? 'ZIP indirmeyi iptal et' : 'Belgeleri ZIP indir');
@@ -120,7 +120,7 @@ function createQueueTable(document, items, state, handlers) {
             item.student_number,
             [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
             item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru',
-            readStatusLabel(item.status),
+            item.deletion_state && state.query.status === 'archive_all' ? STATUS_LABELS.deleted : readStatusLabel(item.status),
             formatDate(item.submitted_at),
             formatDate(item.updated_at)
         ];
@@ -133,11 +133,30 @@ function createQueueTable(document, items, state, handlers) {
         actionCell.dataset.label = 'Detay';
         const action = document.createElement('button');
         action.type = 'button';
-        action.className = 'btn btn-outline';
+        action.className = 'btn btn-primary';
         action.dataset.action = 'open-detail';
         action.textContent = 'Detay';
         action.addEventListener('click', () => handlers.onOpenDetail(item.id));
-        actionCell.append(action, createArchiveButton(document, state, item.id, handlers.onDownloadArchive));
+        const actions = document.createElement('div');
+        actions.className = 'staff-archive-row-actions';
+        actions.append(action, createArchiveButton(document, state, item.id, handlers.onDownloadArchive));
+        if (state.query.status === 'deleted' || item.deletion_state) {
+            const restore = document.createElement('button');
+            restore.type = 'button';
+            restore.className = 'btn btn-primary';
+            restore.dataset.action = 'restore-application';
+            restore.textContent = 'Geri al';
+            restore.addEventListener('click', () => handlers.onRestore(item.id));
+            const purge = document.createElement('button');
+            purge.type = 'button';
+            purge.className = 'btn btn-primary';
+            purge.dataset.action = 'purge-application';
+            purge.textContent = item.deletion_state === 'purge_pending' ? 'Kalıcı silmeyi sürdür' : 'Kalıcı sil';
+            purge.addEventListener('click', () => handlers.onPurge(item.id));
+            if (item.deletion_state === 'purge_pending') restore.disabled = true;
+            actions.append(restore, purge);
+        }
+        actionCell.append(actions);
         row.append(actionCell);
         body.append(row);
     });
@@ -189,6 +208,51 @@ function createQueueError(document, state, onRetry) {
     return panel;
 }
 
+let archiveToastTimer = null;
+
+function createArchiveToast(document, message, onDismiss) {
+    if (archiveToastTimer) {
+        clearTimeout(archiveToastTimer);
+        archiveToastTimer = null;
+    }
+    const overlay = document.createElement('div');
+    overlay.className = 'staff-toast-modal-overlay';
+    overlay.setAttribute('role', 'alert');
+    overlay.setAttribute('aria-live', 'polite');
+
+    const card = document.createElement('div');
+    card.className = 'staff-toast-modal-card';
+
+    const text = document.createElement('p');
+    text.className = 'staff-toast-modal-text';
+    text.textContent = message;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'staff-toast-modal-confirm';
+    button.textContent = 'Tamam';
+    button.addEventListener('click', () => {
+        if (archiveToastTimer) {
+            clearTimeout(archiveToastTimer);
+            archiveToastTimer = null;
+        }
+        onDismiss();
+    });
+
+    card.append(text, button);
+    overlay.append(card);
+
+    archiveToastTimer = setTimeout(() => {
+        archiveToastTimer = null;
+        onDismiss();
+    }, 5000);
+    if (typeof archiveToastTimer?.unref === 'function') {
+        archiveToastTimer.unref();
+    }
+
+    return overlay;
+}
+
 function renderQueue(root, state, handlers) {
     const document = root.ownerDocument;
     const panel = document.createElement('div');
@@ -204,7 +268,13 @@ function renderQueue(root, state, handlers) {
         panel.append(createQueueTable(document, state.result.items, state, handlers));
         panel.append(createPagination(document, state.result.pagination, handlers.onPageChange));
     }
-    if (state.archiveNotice) panel.append(createText(document, 'p', 'staff-archive-state', state.archiveNotice));
+    if (state.archiveNotice) {
+        panel.append(createText(document, 'p', 'staff-archive-state', state.archiveNotice));
+        panel.append(createArchiveToast(document, state.archiveNotice, () => {
+            state.archiveNotice = null;
+            handlers.onRender?.() ?? root.ownerDocument.defaultView?.location?.reload?.();
+        }));
+    }
     root.replaceChildren(panel);
 }
 
@@ -238,7 +308,7 @@ function createApplicationSummary(document, application) {
     return section;
 }
 
-function createDocumentAccessActions(document, applicationId, item, handlers, isPending) {
+function createDocumentAccessActions(document, item, handlers, isPending) {
     const actions = document.createElement('div');
     actions.className = 'staff-archive-document-actions';
     const preview = document.createElement('button');
@@ -249,14 +319,7 @@ function createDocumentAccessActions(document, applicationId, item, handlers, is
     preview.disabled = isPending;
     preview.textContent = 'Önizle';
     preview.addEventListener('click', () => handlers.onPreview(item));
-    const download = document.createElement('a');
-    download.className = 'btn btn-outline';
-    download.dataset.action = 'download-document';
-    download.href = APPLICATION_DOCUMENT_ROUTE(applicationId, item.code, 'download');
-    download.download = item.filename || 'belge';
-    if (isPending) download.setAttribute('aria-disabled', 'true');
-    download.textContent = 'İndir';
-    actions.append(preview, download);
+    actions.append(preview);
     return actions;
 }
 
@@ -285,7 +348,7 @@ function createDocumentSection(document, applicationId, documents, state, handle
         details.className = 'staff-archive-details-grid';
         fields.forEach(([fieldLabel, value]) => appendDetail(document, details, fieldLabel, value));
         card.append(details, item.access_available === true
-            ? createDocumentAccessActions(document, applicationId, item, handlers, Boolean(state.actionPending))
+            ? createDocumentAccessActions(document, item, handlers, Boolean(state.actionPending))
             : createUnavailableDocumentState(document, item));
         if (item.student_message) {
             card.append(createText(document, 'p', 'staff-archive-student-message', `Öğrenciye iletilen neden: ${item.student_message}`));
@@ -358,10 +421,10 @@ function createPreviewPanel(document, preview, handlers) {
 function renderDetail(root, state, handlers) {
     const document = root.ownerDocument;
     const panel = document.createElement('div');
-    const back = document.createElement('button');
+        const back = document.createElement('button');
     panel.className = 'staff-archive-detail-view';
     back.type = 'button';
-    back.className = 'btn btn-outline';
+    back.className = 'btn btn-primary';
     back.dataset.action = 'back-to-queue';
     back.textContent = 'Arşiv listesine dön';
     back.addEventListener('click', handlers.onBack);
@@ -382,7 +445,12 @@ function renderDetail(root, state, handlers) {
             createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers)
         );
     }
-    if (state.archiveNotice) panel.append(createText(document, 'p', 'staff-archive-state', state.archiveNotice));
+    if (state.archiveNotice) {
+        panel.append(createText(document, 'p', 'staff-archive-state', state.archiveNotice));
+        panel.append(createArchiveToast(document, state.archiveNotice, () => {
+            handlers.onDismissNotice?.();
+        }));
+    }
     const previewPanel = createPreviewPanel(document, state.preview, handlers);
     if (previewPanel) panel.append(previewPanel);
     root.replaceChildren(panel);
@@ -397,7 +465,7 @@ function createStaffArchiveApi() {
             throw Object.assign(new Error('Staff request failed.'), { status: 0 });
         }
         const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw Object.assign(new Error('Staff request failed.'), {
+        if (!response.ok) throw Object.assign(new Error(payload?.error?.message || 'Staff request failed.'), {
             status: response.status, code: payload?.error?.code
         });
         return payload;
@@ -423,6 +491,16 @@ function createStaffArchiveApi() {
             const route = APPLICATION_DOCUMENT_ROUTE(applicationId, file.code, 'archive-file');
             const query = new URLSearchParams({ revision: String(file.expected_revision_number), identity: file.object_identity });
             return fetch(`${route}?${query}`, { credentials: 'same-origin', signal });
+        },
+        restoreApplication(applicationId) {
+            return request(`/api/staff/applications/${encodeURIComponent(applicationId)}/restore`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+            });
+        },
+        purgeApplication(applicationId) {
+            return request(`/api/staff/applications/${encodeURIComponent(applicationId)}/purge`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+            });
         }
     };
 }
@@ -438,7 +516,7 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
         preview: null, result: null, archiveApplicationId: null, archiveNotice: null,
-        query: { q: '', status: 'terminal', page: 1, page_size: 25 }
+        query: { q: '', status: 'archive_all', page: 1, page_size: 25 }
     };
     let queryRequestId = 0;
     let detailRequestId = 0;
@@ -460,12 +538,15 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
                 onPreview: openPreview,
                 onClose: closePreview,
                 onRetry: () => openPreview(state.preview?.document),
-                onDownloadArchive: downloadArchive
+                onDownloadArchive: downloadArchive,
+                onDismissNotice: () => { state.archiveNotice = null; render(); }
             });
         } else {
             renderQueue(root, state, {
                 onSearch: submitSearch, onRetry: loadQueue, onPageChange: changePage,
-                onOpenDetail: openDetail, onDownloadArchive: downloadArchive
+                onOpenDetail: openDetail, onDownloadArchive: downloadArchive,
+                onRestore: restoreApplication, onPurge: purgeApplication,
+                onDismissNotice: () => { state.archiveNotice = null; render(); }
             });
         }
     };
@@ -505,8 +586,9 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         if (error?.code === 'DOCUMENT_SCAN_PENDING') return 'Belge güvenlik kontrolü bekleniyor.';
         if (error?.code === 'DOCUMENT_SCAN_UNSAFE') return 'Belge güvenli bulunmadı ve erişime kapatıldı.';
         if (error?.code === 'DOCUMENT_SCAN_FAILED') return 'Belge güvenlik kontrolü tamamlanamadı.';
+        if (error?.code === 'DOCUMENT_NOT_AVAILABLE') return 'Belge mevcut değil veya erişilemiyor (güvenlik taraması bekleniyor olabilir).';
         if (error instanceof Error && /Belge|ZIP/i.test(error.message)) return error.message;
-        return 'ZIP hazırlanamadı. Belgeleri tek tek indirebilirsiniz.';
+        return 'ZIP hazırlanamadı. Lütfen daha sonra yeniden deneyin veya ofis bilgisayarından indirin.';
     }
 
     async function downloadArchive(applicationId) {
@@ -521,10 +603,19 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         archiveController = controller;
         state.archiveApplicationId = applicationId;
         state.archiveNotice = null;
+        const archiveItem = state.detail?.application?.id === applicationId
+            ? state.detail.application
+            : state.result?.items?.find((item) => item.id === applicationId);
+        const suggestedName = createArchiveFilename({
+            firstName: archiveItem?.first_name,
+            lastName: archiveItem?.last_name,
+            studentNumber: archiveItem?.student_number
+        });
         render();
         try {
             await downloadApplicationArchive({
                 applicationId, window: document.defaultView, signal: controller.signal,
+                suggestedName,
                 getManifest: (signal) => readArchiveManifest(applicationId, signal),
                 fetchFile: (id, file, signal) => api.readArchiveFile(id, file, signal)
             });
@@ -626,6 +717,35 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
                 render();
             }
         }
+    }
+
+    async function restoreApplication(applicationId) {
+        try {
+            await api.restoreApplication(applicationId);
+            state.archiveNotice = 'Başvuru önceki durumuna geri alındı.';
+        } catch (error) {
+            state.archiveNotice = error?.status === 403
+                ? 'Bu işlem için yetkiniz yok.' : 'Başvuru geri alınamadı. Durumu yenileyip tekrar deneyin.';
+        }
+        await loadQueue();
+    }
+
+    async function purgeApplication(applicationId) {
+        const isConfirmed = document.defaultView.confirm(
+            'Başvuru ve yüklenen belgeler kalıcı olarak silinecek. Bu işlem başladıktan sonra geri alınamaz. Devam edilsin mi?'
+        );
+        if (!isConfirmed) return;
+        state.archiveNotice = 'Kalıcı silme çalışıyor…';
+        render();
+        try {
+            await api.purgeApplication(applicationId);
+            state.archiveNotice = 'Başvuru ve belgeleri kalıcı olarak silindi.';
+        } catch (error) {
+            state.archiveNotice = error?.status === 403
+                ? 'Kalıcı silme için yönetici yetkisi gerekir.'
+                : 'Kalıcı silme tamamlanmadı. Kayıt silme beklemede; aynı düğmeyle tekrar deneyin.';
+        }
+        await loadQueue();
     }
 
     async function submitSearch({ q, status }) {

@@ -41,6 +41,23 @@
     vertical-align: top;
 }
 
+.staff-archive-row-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+}
+
+.staff-archive-row-actions .btn {
+    min-height: 38px;
+    white-space: nowrap;
+}
+
+.staff-archive-detail-view > .btn-primary {
+    justify-self: start;
+    margin-top: 0.25rem;
+}
+
 .staff-archive-table th {
     color: var(--text-secondary);
     font-size: 0.78rem;

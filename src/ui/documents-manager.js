@@ -1,8 +1,25 @@
 import { DOCUMENT_CATEGORIES, OFFICE_DOCUMENTS } from '../config/documents-config.js';
 
 function createDocumentAction(label, action, documentRecord) {
+    if (action === 'print') {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-primary documents-card-print';
+        button.dataset.action = action;
+        button.textContent = label;
+        button.setAttribute('aria-label', `${documentRecord.title}: ${label}`);
+        button.addEventListener('click', () => {
+            const printWindow = document.defaultView?.open(documentRecord.fileUrl, '_blank');
+            if (!printWindow) return;
+            printWindow.addEventListener('load', () => {
+                printWindow.focus();
+                printWindow.print();
+            }, { once: true });
+        });
+        return button;
+    }
     const link = document.createElement('a');
-    link.className = action === 'print' ? 'btn btn-primary documents-card-print' : 'btn btn-outline';
+    link.className = 'btn btn-outline';
     link.dataset.action = action;
     link.href = documentRecord.fileUrl;
     link.rel = 'noopener';
@@ -40,11 +57,11 @@ function createDocumentCard(documentRecord) {
     const actions = document.createElement('div');
     actions.className = 'documents-card-actions';
     actions.append(
-        createDocumentAction('Yazdır (Hızlı Çıkar)', 'print', documentRecord),
         createDocumentAction('Önizle', 'preview', documentRecord),
         createDocumentAction('İndir', 'download', documentRecord)
     );
-    card.append(heading, category, preview, badge, actions);
+    card.append(heading, category, badge, preview, actions);
+    actions.prepend(createDocumentAction('Yazdır (Hızlı Çıkar)', 'print', documentRecord));
     return card;
 }
 

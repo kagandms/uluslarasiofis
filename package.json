@@ -15,11 +15,16 @@
     "build": "vite build",
     "prebuild:staging": "npm run package:extension",
     "build:staging": "node scripts/build-staging.mjs",
+    "prebuild:production": "npm run package:extension",
+    "build:production": "node scripts/build-production.mjs",
     "preview": "vite preview",
     "db:migrate:local": "wrangler d1 migrations apply uluslarasiofis-local --local",
     "db:migrate:staging": "wrangler d1 migrations apply uluslarasiofis-staging --remote --env staging",
+    "db:migrate:production": "wrangler d1 migrations apply uluslarasiofis-production --remote --env production",
     "deploy:staging": "npm run build:staging && wrangler deploy --env staging",
-    "deploy:dry-run:staging": "npm run build:staging && wrangler deploy --env staging --dry-run"
+    "deploy:dry-run:staging": "npm run build:staging && wrangler deploy --env staging --dry-run",
+    "deploy:production": "npm run build:production && wrangler deploy --env production",
+    "deploy:dry-run:production": "npm run build:production && wrangler deploy --env production --dry-run"
   },
   "repository": {
     "type": "git",

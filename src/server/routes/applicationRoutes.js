@@ -2,12 +2,14 @@ import { ApiError, ApplicationConflictError } from '../domain/errors.js';
 import { APPLICATION_OWNER_SESSION_DAYS, CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../config/constants.js';
 import { createOpaqueSessionToken, createSessionCookie, createExpiredSessionCookie, getSessionCookieName, hashSessionToken, readCookie } from '../auth/sessionToken.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
+import { constantTimeCompare, generateAccessCode, hashAccessCode, isValidAccessCodeFormat, isValidApplicationReference, normalizeApplicationReference, verifyAccessCode } from '../auth/applicationAccessCode.js';
 import { requireStaff } from '../auth/staffAuth.js';
-import { generateAccessCode, hashAccessCode, isValidAccessCodeFormat, isValidApplicationReference, normalizeApplicationReference, verifyAccessCode } from '../auth/applicationAccessCode.js';
 import { consumePublicRateLimit } from '../security/requestRateLimit.js';
 import { APPLICATION_CREATE_RATE_LIMIT } from '../security/application-rate-limits.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
+import { normalizeStudentNumber } from '../repositories/d1/studentRepository.js';
 import { isValidPhoneNumber } from '../../shared/phoneNumber.js';
+import { calculateUnder18, readIstanbulDate } from '../../shared/age.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { readSubmissionReadiness } from '../services/submissionReadiness.js';
@@ -154,6 +156,14 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
         }
         changes.isUnder18 = body.is_under_18 === null ? null : (body.is_under_18 ? 1 : 0);
     }
+    if (Object.hasOwn(body, 'date_of_birth') || Object.hasOwn(body, 'is_under_18')) {
+        const birthDate = changes.dateOfBirth ?? application.date_of_birth;
+        const under18 = calculateUnder18(birthDate, readIstanbulDate());
+        if (under18 === null && !allowIncomplete) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Doğum tarihini kontrol edip tekrar deneyin.');
+        }
+        changes.isUnder18 = under18 === null ? null : (under18 ? 1 : 0);
+    }
     const fingerprintStatus = Object.hasOwn(body, 'fingerprint_status')
         ? readFingerprintStatus(body.fingerprint_status)
         : application.fingerprint_status;
@@ -230,8 +240,47 @@ async function updateCurrentApplicationFields(request, environment, requestId, {
     if (!Number.isSafeInteger(body.lock_version) || body.lock_version < 1) {
         throw new ApiError(400, 'LOCK_VERSION_REQUIRED', 'Güncel başvuru sürümü gerekli. Sayfayı yenileyip tekrar deneyin.');
     }
-    const expectedLockVersion = body.lock_version;
-    const changes = readDraftChanges(body, currentApplication, { allowIncomplete });
+    let expectedLockVersion = body.lock_version;
+    let renumberedApplication = null;
+    if (Object.hasOwn(body, 'student_number')) {
+        const submittedNumber = requireString(body, 'student_number', { min: 0, max: 64 });
+        const isChanged = submittedNumber.length > 0
+            && normalizeStudentNumber(submittedNumber) !== normalizeStudentNumber(currentApplication.student_number);
+        if (submittedNumber.length === 0 && !allowIncomplete) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Öğrenci numarasını kontrol edip tekrar deneyin.');
+        }
+        if (isChanged) {
+            try {
+                renumberedApplication = await repositories.applications.changeDraftStudentNumber({
+                    applicationId: session.application_id, studentId: crypto.randomUUID(),
+                    studentNumber: submittedNumber, expectedLockVersion, ownerSessionId: session.session_id
+                });
+            } catch (error) {
+                if (error instanceof ApplicationConflictError) {
+                    if (error.code === 'APPLICATION_UPDATE_CONFLICT') {
+                        throw new ApiError(409, error.code, 'Başvurunuz başka bir cihaz veya sekmede güncellendi. Lütfen sayfayı yenileyip en güncel bilgileri kontrol edin.');
+                    }
+                    throw new ApiError(409, error.code, 'Bu öğrenci numarası için zaten etkin bir başvuru bulunuyor.');
+                }
+                throw error;
+            }
+            if (!renumberedApplication) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
+            expectedLockVersion = renumberedApplication.lock_version;
+            await createAuditEvent(repositories, {
+                eventType: 'application.draft_updated', actorType: 'student', applicationId: session.application_id,
+                requestId, metadata: { changedFields: 'studentNumber' }
+            });
+        }
+    }
+    const otherKeys = Object.keys(body).filter((key) => !['lock_version', 'student_number'].includes(key));
+    if (otherKeys.length === 0) {
+        if (!Object.hasOwn(body, 'student_number')) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Güncellenecek başvuru bilgisi gerekli.');
+        }
+        const unchanged = renumberedApplication || currentApplication;
+        return { application: createApplicationDto(unchanged, environment) };
+    }
+    const changes = readDraftChanges(body, renumberedApplication || currentApplication, { allowIncomplete });
     let application;
     try {
         application = await repositories.applications.updateDraft(session.application_id, changes, {
@@ -445,50 +494,69 @@ async function rejectAccessCredentials({ repositories, request, referenceNumber 
         });
         if (!allowed) throw new ApiError(429, 'RATE_LIMITED', 'Çok fazla hatalı deneme yapıldı. Daha sonra tekrar deneyin.', true);
     }
-    throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya erişim kodu hatalı.');
+    throw new ApiError(401, 'INVALID_CREDENTIALS', 'Başvuru numarası veya öğrenci numarası hatalı.');
 }
 
 /**
- * Verifies application reference and secret access code, issuing a new owner session for another device.
+ * Verifies application reference and student number, issuing a new owner session for another device.
  * Enforces rate limiting on both IP level (broad NAT tolerance) and reference level (strict anti-brute-force).
  * @param {Request} request Public JSON POST request.
  * @param {object} environment Cloudflare Worker bindings.
  * @param {string} requestId Correlation identifier.
  * @returns {Promise<object>} Route result with student-safe DTO and new session cookie.
- * @throws {ApiError} When input, rate limit, reference, or access code is invalid.
+ * @throws {ApiError} When input, rate limit, reference, or student number is invalid.
  */
-export async function accessApplicationWithCode(request, environment, requestId) {
+export async function accessApplicationWithReference(request, environment, requestId) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
     const body = await readJsonBody(request);
     const rawRef = body.reference_number;
+    const rawStudentNumber = body.student_number;
     const rawCode = body.access_code;
 
-    if (!rawRef || typeof rawRef !== 'string' || !rawCode || typeof rawCode !== 'string') {
-        throw new ApiError(400, 'INVALID_INPUT', 'Başvuru numarası ve erişim kodu zorunludur.');
+    if (!rawRef || typeof rawRef !== 'string' || (!rawStudentNumber && !rawCode)) {
+        throw new ApiError(400, 'INVALID_INPUT', 'Başvuru numarası ve öğrenci numarası zorunludur.');
     }
 
     const repositories = createRepositories(environment);
-
     const referenceNumber = normalizeApplicationReference(rawRef);
 
-    if (!isValidApplicationReference(referenceNumber) || !isValidAccessCodeFormat(rawCode)) {
+    if (!isValidApplicationReference(referenceNumber)) {
         return rejectAccessCredentials({ repositories, request, referenceNumber });
     }
 
-    const application = await repositories.applications.findByReferenceNumber(referenceNumber);
-    if (!application || !application.access_code_hash || ['completed','cancelled','rejected'].includes(application.status)) {
-        // Constant-time dummy verify to mitigate timing attacks
-        await verifyAccessCode(rawCode, '0000000000000000000000000000000000000000000000000000000000000000');
+    let application = null;
+    if (rawStudentNumber && typeof rawStudentNumber === 'string') {
+        let submittedStudentNumber;
+        try {
+            submittedStudentNumber = normalizeStudentNumber(rawStudentNumber);
+        } catch {
+            return rejectAccessCredentials({ repositories, request, referenceNumber });
+        }
+
+        application = await repositories.applications.findByReferenceNumber(referenceNumber);
+        if (!application || ['completed', 'cancelled', 'rejected'].includes(application.status)
+            || !constantTimeCompare(submittedStudentNumber, normalizeStudentNumber(application.student_number))) {
+            return rejectAccessCredentials({ repositories, request, referenceNumber });
+        }
+    } else if (rawCode && typeof rawCode === 'string') {
+        if (!isValidAccessCodeFormat(rawCode)) {
+            return rejectAccessCredentials({ repositories, request, referenceNumber });
+        }
+        application = await repositories.applications.findByReferenceNumber(referenceNumber);
+        if (!application || !application.access_code_hash || ['completed', 'cancelled', 'rejected'].includes(application.status)) {
+            await verifyAccessCode(rawCode, '0000000000000000000000000000000000000000000000000000000000000000');
+            return rejectAccessCredentials({ repositories, request, referenceNumber });
+        }
+        const isValid = await verifyAccessCode(rawCode, application.access_code_hash);
+        if (!isValid) {
+            return rejectAccessCredentials({ repositories, request, referenceNumber });
+        }
+    } else {
         return rejectAccessCredentials({ repositories, request, referenceNumber });
     }
 
-    const isValid = await verifyAccessCode(rawCode, application.access_code_hash);
-    if (!isValid) {
-        return rejectAccessCredentials({ repositories, request, referenceNumber });
-    }
-
-    // Success: create a fresh opaque session token for this device, guarded against concurrent code reset
+    // Success: create a fresh opaque session token for this device.
     const token = createOpaqueSessionToken();
     const createdAt = new Date().toISOString();
     const sessionCreated = await repositories.sessions.createApplicationSessionGuarded({
@@ -521,16 +589,8 @@ export async function accessApplicationWithCode(request, environment, requestId)
     });
 }
 
-/**
- * Regenerates the secret access code from an authenticated owner session.
- * Used when network drops prevented saving the code on initial creation or when rotating.
- * Terminal applications cannot regenerate code.
- * @param {Request} request Authenticated owner-session request.
- * @param {object} environment Worker bindings.
- * @param {string} requestId Correlation identifier.
- * @returns {Promise<object>} Safe response with new plaintext access code.
- * @throws {ApiError} When origin, session, state, or rate limit fails.
- */
+export const accessApplicationWithCode = accessApplicationWithReference;
+
 export async function regenerateCurrentAccessCode(request, environment, requestId) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
@@ -568,13 +628,6 @@ export async function regenerateCurrentAccessCode(request, environment, requestI
     };
 }
 
-/**
- * Controlled staff endpoint to reset a student's access code after in-person/verified identity check.
- * Revokes all previous owner sessions for safety. Reference number remains unchanged.
- * @param {object} options Route context.
- * @returns {Promise<object>} New code for staff to communicate to the student.
- * @throws {ApiError} When staff auth, origin, or application lookup fails.
- */
 export async function resetStaffApplicationAccessCode({ request, environment, applicationId, requestId }) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);

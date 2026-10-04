@@ -304,7 +304,7 @@ test('server-calculated document requirements change with the saved under-18 sta
     const { environment, database } = createEnvironment();
     const adult = await createDraft(environment, '2026123908');
     const updateAge = async (cookie, isUnder18) => worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), is_under_18: isUnder18 }
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), date_of_birth: isUnder18 ? '2010-01-01' : '2000-01-01', is_under_18: !isUnder18 }
     }), environment, {});
     const listRequirements = async (cookie) => worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {});
 
@@ -407,7 +407,7 @@ test('adult sessions cannot create a birth certificate upload intent by supplyin
     const { environment } = createEnvironment();
     const adult = await createDraft(environment, '2026123909');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: adult.cookie, body: { lock_version: await readApplicationVersion(environment, adult.cookie), is_under_18: false }
+        method: 'PATCH', cookie: adult.cookie, body: { lock_version: await readApplicationVersion(environment, adult.cookie), date_of_birth: '2000-01-01', is_under_18: false }
     }), environment, {});
 
     const response = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
@@ -448,7 +448,7 @@ test('student document requirements and upload intents are scoped to the current
     const studentA = await createDraft(environment, '2026123910');
     const studentB = await createDraft(environment, '2026123911');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: studentB.cookie, body: { lock_version: await readApplicationVersion(environment, studentB.cookie), is_under_18: true }
+        method: 'PATCH', cookie: studentB.cookie, body: { lock_version: await readApplicationVersion(environment, studentB.cookie), date_of_birth: '2010-01-01', is_under_18: true }
     }), environment, {});
 
     const studentARequirements = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie: studentA.cookie }), environment, {});
@@ -646,7 +646,7 @@ test('birth certificate uploaded by an under-18 student cannot be finalized afte
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123915');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), is_under_18: true }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), date_of_birth: '2010-01-01', is_under_18: true }
     }), environment, {});
     const intentResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
@@ -655,7 +655,7 @@ test('birth certificate uploaded by an under-18 student cannot be finalized afte
     const intent = await intentResponse.json();
     await putSignedFile(environment, intent.upload.url, 'application/pdf');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), is_under_18: false }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), date_of_birth: '2000-01-01', is_under_18: false }
     }), environment, {});
     const finalizeResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/finalize', {
         method: 'POST', cookie: created.cookie, body: { intent_id: intent.upload.intent_id }

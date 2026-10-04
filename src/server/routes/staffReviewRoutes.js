@@ -109,6 +109,34 @@ export async function approveStaffApplicationDocument({ request, environment, ap
     return { document_status: 'approved', revision_number: revisionNumber };
 }
 
+/** Reopens an approved current document for review while retaining its clean scan verdict. */
+export async function unapproveStaffApplicationDocument({ request, environment, applicationId, code, requestId }) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const staff = await requireStaff(request, environment, STAFF_ROLES);
+    const body = await readJsonBody(request);
+    requireOnlyKeys(body, ['expected_revision_number']);
+    const revisionNumber = readExpectedRevisionNumber(body.expected_revision_number);
+    const repositories = createD1Repositories(environment.DB);
+    const application = await repositories.applications.findById(applicationId);
+    requireApplication(application);
+    if (!readDocumentPolicy(code, application.application_type, application.is_under_18 === 1,
+        application.address_evidence_type ?? null)) {
+        throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya incelemeye uygun değil.');
+    }
+    const document = await repositories.documents.findCurrentPrivateFileByApplicationAndCode(applicationId, code);
+    if (!document || document.revision_number !== revisionNumber || document.revision_status !== 'approved'
+        || document.review_status !== 'approved' || !['under_review', 'resubmission_required'].includes(application.status)
+        || document.upload_status !== 'finalized' || document.upload_intent_status !== 'completed'
+        || document.scan_status !== 'clean' || document.cleanup_status !== 'none') throw reviewConflict();
+    const updated = await repositories.applicationReviews.unapproveCurrentDocument({
+        applicationId, documentRecordId: document.document_record_id, revisionId: document.revision_id,
+        revisionNumber, code, staffId: staff.id, now: new Date().toISOString(), requestId, auditId: crypto.randomUUID()
+    });
+    if (!updated) throw reviewConflict();
+    return { document_status: 'under_review', revision_number: revisionNumber };
+}
+
 /**
  * Requests replacement of a finalized current document without opening it; stores the reason atomically.
  * @param {{request: Request, environment: object, applicationId: string, code: string, requestId: string}} input Staff route context.

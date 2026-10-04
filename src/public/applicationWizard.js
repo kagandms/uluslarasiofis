@@ -5,9 +5,64 @@ import { createPhoneField } from './phoneField.js';
 import { createNationalityField } from './nationalityField.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 import { isValidPhoneNumber } from '../shared/phoneNumber.js';
+import { calculateCurrentUnder18 } from '../shared/age.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
+const CONTACT_DRAFT_KEY = 'portal_draft_contact_fields';
+
+function getDraftStorage(view) {
+    try {
+        if (view?.localStorage) return view.localStorage;
+        if (typeof localStorage !== 'undefined') return localStorage;
+    } catch {
+        return null;
+    }
+    return null;
+}
+
+function saveContactDraftFields(view, fields) {
+    const storage = getDraftStorage(view);
+    if (!storage || !fields) return;
+    try {
+        const payload = {
+            student_number: fields.student_number || '',
+            student_email: fields.student_email || '',
+            student_phone: fields.student_phone || '',
+            phone_country: fields.phone_country || '',
+            application_type: fields.application_type || '',
+            whatsapp_opt_in: Boolean(fields.whatsapp_opt_in),
+            contact_acknowledgement_accepted: Boolean(fields.contact_acknowledgement_accepted)
+        };
+        storage.setItem(CONTACT_DRAFT_KEY, JSON.stringify(payload));
+    } catch {
+        // Storage might be unavailable or restricted
+    }
+}
+
+function loadContactDraftFields(view) {
+    const storage = getDraftStorage(view);
+    if (!storage) return null;
+    try {
+        const raw = storage.getItem(CONTACT_DRAFT_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return typeof parsed === 'object' && parsed !== null ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+function clearContactDraftFields(view) {
+    const storage = getDraftStorage(view);
+    if (!storage) return;
+    try {
+        storage.removeItem(CONTACT_DRAFT_KEY);
+    } catch {
+        // Ignore
+    }
+}
+
 const UPLOAD_ERROR_KEYS = Object.freeze({
     FILE_TOO_LARGE: 'fileTooLarge', INVALID_FILE: 'invalidFileType', STORAGE_UNAVAILABLE: 'uploadIntentFailed',
     UPLOAD_CAPABILITY_EXPIRED: 'uploadCapabilityExpired', UPLOAD_NETWORK_ERROR: 'uploadNetworkFailed',
@@ -176,7 +231,7 @@ function createContactStep(document, application, formValues, state, api) {
         key: 'applicationType', name: 'application_type', value: fields.application_type, required: true,
         options: [{ value: '', key: 'applicationType' }, { value: 'initial', key: 'initialApplication' }, { value: 'renewal', key: 'renewalApplication' }]
     }));
-    form.querySelector('[name="student_number"]').disabled = Boolean(application);
+    form.querySelector('[name="student_number"]').disabled = Boolean(application && application.status !== 'draft');
     form.querySelector('[name="application_type"]').disabled = Boolean(application && application.status !== 'draft');
     const isContactAcknowledgementAccepted = application?.contact_acknowledgement?.accepted_current === true
         || fields.contact_acknowledgement_accepted === true;
@@ -273,6 +328,7 @@ function appendFingerprintCode(document, fieldset, application, messages) {
     input.value = application.fingerprint_code || '';
     label.append(createTranslatedElement(document, 'span', 'fingerprintCodeLabel', messages.fingerprintCodeLabel), input);
     fieldset.append(label);
+    fieldset.append(createTranslatedElement(document, 'small', 'fingerprintCodeHelp', messages.fingerprintCodeHelp));
     if (!input.value.trim()) fieldset.append(createTranslatedElement(document, 'p', 'fingerprintCodeMissing', messages.fingerprintCodeMissing));
 }
 
@@ -290,16 +346,17 @@ function createResidenceStep(document, application, formValues) {
         const key = ({ first_name: 'firstName', last_name: 'lastName', passport_number: 'passportNumber', nationality: 'nationality', date_of_birth: 'dateOfBirth' })[field];
         form.append(createTextField(document, { key, name: field, value: fields[field], type: field === 'date_of_birth' ? 'date' : 'text', required: true }));
     });
-    const under18 = application.is_under_18 === 1 || fields.is_under_18 === true
-        ? 'true' : (application.is_under_18 === 0 || fields.is_under_18 === false ? 'false' : '');
-    form.append(createSelectField(document, {
-        key: 'under18Question', name: 'is_under_18', value: under18, required: true,
+    const under18 = calculateCurrentUnder18(fields.date_of_birth);
+    const under18Field = createSelectField(document, {
+        key: 'under18Question', name: 'is_under_18', value: under18 === null ? '' : String(under18), required: false,
         options: [
             { value: '', key: 'under18SelectPlaceholder', disabled: true },
             { value: 'true', key: 'yes' },
             { value: 'false', key: 'no' }
         ]
-    }));
+    });
+    under18Field.querySelector('select').disabled = true;
+    form.append(under18Field);
     form.append(createAddressEvidenceChoices(document, fields, messages, Boolean(application && application.status !== 'draft')));
     renderFingerprintSection(form, fields);
     const continueButton = createContinueButton(document, messages);
@@ -629,6 +686,7 @@ function createApplicantReview(document, application) {
 export function createSubmissionConfirmation(document, application, messages) {
     const confirmation = document.createElement('section');
     confirmation.className = 'application-submission-confirmation';
+    confirmation.tabIndex = -1;
     confirmation.setAttribute('role', 'status');
     confirmation.setAttribute('aria-live', 'polite');
     confirmation.append(createTranslatedElement(document, 'h3', 'submissionSuccessHeading', messages.submissionSuccessHeading));
@@ -641,6 +699,7 @@ export function createSubmissionConfirmation(document, application, messages) {
             document.createTextNode(`: ${application.reference_number}`)
         );
         confirmation.append(refElement);
+        confirmation.append(createTranslatedElement(document, 'p', 'applicationReferencePurpose', messages.applicationReferencePurpose));
     }
     const studentNumber = document.createElement('p');
     studentNumber.append(
@@ -652,6 +711,12 @@ export function createSubmissionConfirmation(document, application, messages) {
     reminder.className = 'submission-credentials-reminder';
     confirmation.append(reminder);
     confirmation.append(createTranslatedElement(document, 'p', 'submissionTracking', messages.submissionTracking));
+    const newApplicationLink = document.createElement('a');
+    newApplicationLink.href = '/basvuru/?new=1';
+    newApplicationLink.className = 'application-button application-button-secondary';
+    newApplicationLink.dataset.i18n = 'submissionNewStudentApplicationAction';
+    newApplicationLink.textContent = messages.submissionNewStudentApplicationAction;
+    confirmation.append(newApplicationLink);
     if (application.submitted_at) confirmation.append(createSubmissionTime(document, application.submitted_at, messages));
     const trackingLink = document.createElement('a');
     trackingLink.href = '/basvurum/';
@@ -660,107 +725,6 @@ export function createSubmissionConfirmation(document, application, messages) {
     trackingLink.textContent = messages.trackingViewAction;
     confirmation.append(trackingLink);
     return confirmation;
-}
-
-function createAccessCredentialsCard(document, state, messages) {
-    const creds = state.newDraftCredentials;
-    if (!creds || !creds.reference_number || !creds.access_code) return null;
-
-    const card = document.createElement('aside');
-    card.className = 'application-credentials-card';
-    card.setAttribute('role', 'region');
-    card.setAttribute('aria-label', messages.accessCredentialsHeading);
-
-    const title = createTranslatedElement(document, 'h3', 'accessCredentialsHeading', messages.accessCredentialsHeading);
-    const notice = createTranslatedElement(document, 'p', 'accessCredentialsDraftNotice', messages.accessCredentialsDraftNotice);
-    notice.className = 'credentials-draft-notice';
-
-    const warning = createTranslatedElement(document, 'p', 'accessCredentialsWarning', messages.accessCredentialsWarning);
-    warning.className = 'credentials-warning';
-
-    const grid = document.createElement('div');
-    grid.className = 'credentials-grid';
-
-    // Reference number row
-    const refGroup = document.createElement('div');
-    refGroup.className = 'credential-field-group';
-    const refLabel = createTranslatedElement(document, 'span', 'accessReferenceNumberLabel', messages.accessReferenceNumberLabel);
-    const refVal = document.createElement('code');
-    refVal.className = 'credential-value credential-reference';
-    refVal.tabIndex = 0;
-    refVal.textContent = creds.reference_number;
-    const refCopy = createButton(document, messages, 'copyAction', 'copy-reference', 'application-button application-button-secondary');
-    refCopy.addEventListener('click', async () => {
-        await copyCredentialValue(document, refVal, refCopy, creds.reference_number, messages);
-    });
-    refGroup.append(refLabel, refVal, refCopy, createCredentialCopyStatus(document));
-
-    // Access code row
-    const codeGroup = document.createElement('div');
-    codeGroup.className = 'credential-field-group';
-    const codeLabel = createTranslatedElement(document, 'span', 'accessCodeLabel', messages.accessCodeLabel);
-    const codeVal = document.createElement('code');
-    codeVal.className = 'credential-value credential-code';
-    codeVal.tabIndex = 0;
-    codeVal.textContent = creds.access_code;
-    const codeCopy = createButton(document, messages, 'copyAction', 'copy-code', 'application-button application-button-secondary');
-    codeCopy.addEventListener('click', async () => {
-        await copyCredentialValue(document, codeVal, codeCopy, creds.access_code, messages);
-    });
-    codeGroup.append(codeLabel, codeVal, codeCopy, createCredentialCopyStatus(document));
-
-    grid.append(refGroup, codeGroup);
-
-    // Download button
-    const downloadBtn = createButton(document, messages, 'downloadCredentialsAction', 'download-credentials', 'application-button application-button-primary');
-    downloadBtn.addEventListener('click', () => {
-        const content = `${messages.homeUniversityName || 'İstanbul Topkapı Üniversitesi'} - ${messages.portalTitle || 'Uluslararası Öğrenci Portalı'}\n` +
-            `--------------------------------------------------\n` +
-            `${messages.accessReferenceNumberLabel}: ${creds.reference_number}\n` +
-            `${messages.accessCodeLabel}: ${creds.access_code}\n` +
-            `--------------------------------------------------\n` +
-            `${messages.accessCredentialsWarning}\n`;
-        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `basvuru-${creds.reference_number.toLowerCase()}.txt`;
-        document.body.append(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-    });
-
-    // Regenerate code button
-    const regenerateBtn = createButton(document, messages, 'regenerateCodeAction', 'regenerate-code', 'application-button application-button-secondary');
-    regenerateBtn.addEventListener('click', async () => {
-        regenerateBtn.disabled = true;
-        try {
-            const res = await (state.api?.regenerateCurrentAccessCode ? state.api.regenerateCurrentAccessCode() : regenerateCurrentAccessCode());
-            state.newDraftCredentials = {
-                reference_number: res.reference_number,
-                access_code: res.access_code
-            };
-            state.regenerateSuccess = true;
-            renderWizard(state.root || document.querySelector('#application-wizard') || document.body, state);
-        } catch {
-            regenerateBtn.disabled = false;
-        }
-    });
-
-    const actions = document.createElement('div');
-    actions.className = 'credentials-actions';
-    actions.append(downloadBtn, regenerateBtn);
-
-    card.append(title, notice, warning, grid, actions);
-
-    if (state.regenerateSuccess) {
-        const successMsg = createTranslatedElement(document, 'p', 'regenerateCodeSuccess', messages.regenerateCodeSuccess);
-        successMsg.className = 'credentials-regenerate-success';
-        card.append(successMsg);
-    }
-
-    return card;
 }
 
 function createCredentialCopyStatus(document) {
@@ -787,36 +751,29 @@ async function copyCredentialValue(document, valueElement, button, value, messag
     status.hidden = false;
 }
 
-function createCodeRegenerationBanner(document, state, messages) {
+function createReferenceBanner(document, state, messages) {
     const banner = document.createElement('aside');
     banner.className = 'application-credentials-banner';
     banner.setAttribute('role', 'region');
     banner.setAttribute('aria-label', messages.accessCredentialsHeading);
 
+    const reference = state.application.reference_number;
     const refText = document.createElement('p');
     refText.className = 'credentials-banner-text';
+    const refValue = document.createElement('code');
+    refValue.className = 'credential-value credential-reference';
+    refValue.tabIndex = 0;
+    refValue.textContent = reference;
     refText.append(
         createTranslatedElement(document, 'strong', 'accessReferenceNumberLabel', messages.accessReferenceNumberLabel),
-        document.createTextNode(`: ${state.application.reference_number}`)
+        document.createTextNode(': '), refValue
     );
-
-    const regenerateBtn = createButton(document, messages, 'regenerateCodeAction', 'regenerate-code', 'application-button application-button-secondary');
-    regenerateBtn.addEventListener('click', async () => {
-        regenerateBtn.disabled = true;
-        try {
-            const res = await (state.api?.regenerateCurrentAccessCode ? state.api.regenerateCurrentAccessCode() : regenerateCurrentAccessCode());
-            state.newDraftCredentials = {
-                reference_number: res.reference_number,
-                access_code: res.access_code
-            };
-            state.regenerateSuccess = true;
-            renderWizard(state.root || document.querySelector('#application-wizard') || document.body, state);
-        } catch {
-            regenerateBtn.disabled = false;
-        }
+    const copyButton = createButton(document, messages, 'copyAction', 'copy-reference', 'application-button application-button-secondary');
+    copyButton.addEventListener('click', async () => {
+        await copyCredentialValue(document, refValue, copyButton, reference, messages);
     });
-
-    banner.append(refText, regenerateBtn);
+    const purpose = createTranslatedElement(document, 'p', 'applicationReferencePurpose', messages.applicationReferencePurpose);
+    banner.append(refText, copyButton, createCredentialCopyStatus(document), purpose);
     return banner;
 }
 
@@ -847,19 +804,19 @@ function createResumeWithCredentialsSection(document, state, messages) {
     refInput.autocomplete = 'off';
     refLabel.append(refInput);
 
-    const codeLabel = document.createElement('label');
-    codeLabel.className = 'application-form-field';
-    codeLabel.htmlFor = 'resume-access-code';
-    codeLabel.append(createTranslatedElement(document, 'span', 'accessCodeLabel', messages.accessCodeLabel));
-    const codeInput = document.createElement('input');
-    codeInput.type = 'text';
-    codeInput.id = 'resume-access-code';
-    codeInput.name = 'resume_access_code';
-    codeInput.maxLength = 64;
-    codeInput.required = true;
-    codeInput.setAttribute('aria-required', 'true');
-    codeInput.autocomplete = 'off';
-    codeLabel.append(codeInput);
+    const numberLabel = document.createElement('label');
+    numberLabel.className = 'application-form-field';
+    numberLabel.htmlFor = 'resume-student-number';
+    numberLabel.append(createTranslatedElement(document, 'span', 'studentNumber', messages.studentNumber));
+    const numberInput = document.createElement('input');
+    numberInput.type = 'text';
+    numberInput.id = 'resume-student-number';
+    numberInput.name = 'resume_student_number';
+    numberInput.maxLength = 64;
+    numberInput.required = true;
+    numberInput.setAttribute('aria-required', 'true');
+    numberInput.autocomplete = 'off';
+    numberLabel.append(numberInput);
 
     const submitBtn = createButton(document, messages, 'accessDeviceSubmit', 'resume-submit', 'application-button application-button-secondary');
     submitBtn.type = 'submit';
@@ -868,22 +825,22 @@ function createResumeWithCredentialsSection(document, state, messages) {
     feedback.className = 'application-message resume-feedback';
     feedback.setAttribute('role', 'alert');
 
-    form.append(refLabel, codeLabel, submitBtn, feedback);
+    form.append(refLabel, numberLabel, submitBtn, feedback);
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         const ref = refInput.value.trim();
-        const code = codeInput.value.trim();
-        if (!ref || !code) return;
+        const studentNumber = numberInput.value.trim();
+        if (!ref || !studentNumber) return;
         submitBtn.disabled = true;
         feedback.textContent = '';
         try {
-            if (typeof state.api.accessApplicationWithCode !== 'function') {
-                throw new Error('accessApplicationWithCode not supported');
+            if (typeof state.api.accessApplicationWithReference !== 'function') {
+                throw new Error('accessApplicationWithReference not supported');
             }
-            await state.api.accessApplicationWithCode({
+            await state.api.accessApplicationWithReference({
                 reference_number: ref,
-                access_code: code
+                student_number: studentNumber
             });
             state.application = await state.api.readCurrentApplication();
             if (state.application.status === 'resubmission_required') {
@@ -917,9 +874,17 @@ function createSubmissionTime(document, submittedAt, messages) {
     const time = document.createElement('p');
     time.append(
         createTranslatedElement(document, 'span', 'submissionSubmittedAt', messages.submissionSubmittedAt),
-        document.createTextNode(` ${submittedAt}`)
+        document.createTextNode(` ${formatSubmissionTime(submittedAt, document.documentElement.lang || 'tr')}`)
     );
     return time;
+}
+
+function formatSubmissionTime(submittedAt, locale) {
+    const instant = new Date(submittedAt);
+    if (!Number.isFinite(instant.getTime())) return submittedAt;
+    return new Intl.DateTimeFormat(locale, {
+        dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Europe/Istanbul'
+    }).format(instant);
 }
 
 function createReviewStep(document, state) {
@@ -935,7 +900,8 @@ function createReviewStep(document, state) {
     review.append(createTranslatedElement(document, 'p', accepted ? 'declarationAccepted' : 'declarationRequired', messages[accepted ? 'declarationAccepted' : 'declarationRequired']));
     if (accepted && application.declaration.accepted_at) {
         const time = document.createElement('p');
-        time.append(createTranslatedElement(document, 'span', 'declarationAcceptedAt', messages.declarationAcceptedAt), document.createTextNode(` ${application.declaration.accepted_at}`));
+        time.append(createTranslatedElement(document, 'span', 'declarationAcceptedAt', messages.declarationAcceptedAt),
+            document.createTextNode(` ${formatSubmissionTime(application.declaration.accepted_at, document.documentElement.lang || 'tr')}`));
         review.append(time);
     }
     if (application.status === 'submitted') {
@@ -943,7 +909,9 @@ function createReviewStep(document, state) {
         return review;
     }
     const readiness = renderReviewReadiness(document, state);
-    review.append(readiness.section);
+    if (readiness.section) {
+        review.append(readiness.section);
+    }
     const submitButton = createButton(
         document,
         messages,
@@ -999,13 +967,12 @@ export function getReviewReadiness(application, requirements, uploads = {}, dele
 function renderReviewReadiness(document, state) {
     const messages = readMessages(document);
     const readiness = getReviewReadiness(state.application, state.requirements, state.uploads, state.deleting);
+    if (!readiness.issues.length) {
+        return { section: null, canSubmit: true };
+    }
     const section = document.createElement('section');
     section.className = 'review-readiness-summary';
     section.append(createTranslatedElement(document, 'h3', 'reviewReadinessHeading', messages.reviewReadinessHeading));
-    if (!readiness.issues.length) {
-        section.append(createTranslatedElement(document, 'p', 'reviewReady', messages.reviewReady));
-        return { section, canSubmit: true };
-    }
     const list = document.createElement('ul');
     readiness.issues.forEach((issue) => {
         const item = document.createElement('li');
@@ -1028,7 +995,7 @@ function createSaveStatus(document, state) {
     const messages = readMessages(document);
     const key = state.saveStatus === 'session_expired' ? 'sessionExpired'
         : (state.saveStatus === 'failed' ? (state.application ? 'autosaveFailed' : 'draftSaveFailed')
-            : (state.saveStatus === 'unsaved' && !state.application ? 'draftNotSaved' : `autosave_${state.saveStatus}`));
+            : `autosave_${state.saveStatus}`);
     const status = createTranslatedElement(document, 'p', key, messages[key] || messages.autosave_saved);
     status.dataset.saveStatus = 'true';
     status.setAttribute('role', 'status');
@@ -1045,7 +1012,7 @@ function updateSaveStatus(root, state) {
     if (!status) return;
     const messages = readMessages(root.ownerDocument);
     const key = state.saveStatus === 'failed' ? (state.application ? 'autosaveFailed' : 'draftSaveFailed')
-        : (state.saveStatus === 'unsaved' && !state.application ? 'draftNotSaved' : `autosave_${state.saveStatus}`);
+        : `autosave_${state.saveStatus}`;
     status.dataset.i18n = key;
     status.textContent = messages[key] || '';
     status.hidden = state.saveStatus === 'idle';
@@ -1122,12 +1089,10 @@ function renderWizard(root, state) {
     heading.tabIndex = -1;
     panel.append(createProgress(document, state.step), heading);
     panel.append(createSaveStatus(document, state));
-    if (state.newDraftCredentials) {
-        const credentialsCard = createAccessCredentialsCard(document, state, messages);
-        if (credentialsCard) panel.append(credentialsCard);
-    } else if (state.application && state.application.status === 'draft' && state.application.reference_number) {
-        const credentialsBanner = createCodeRegenerationBanner(document, state, messages);
-        if (credentialsBanner) panel.append(credentialsBanner);
+    const referenceNumber = state.application?.reference_number || state.application?.access_credentials?.reference_number;
+    if (state.application && state.application.status === 'draft' && referenceNumber) {
+        if (!state.application.reference_number) state.application.reference_number = referenceNumber;
+        panel.append(createReferenceBanner(document, state, messages));
     }
     if (state.preferenceWarning) {
         panel.append(createPreferenceWarningBanner(document, state, messages));
@@ -1156,6 +1121,13 @@ function renderWizard(root, state) {
     if (state._focusError && errorElement) {
         errorElement.focus();
         state._focusError = false;
+    } else if (state._focusSubmissionConfirmation) {
+        const confirmation = root.querySelector('.application-submission-confirmation');
+        if (confirmation) {
+            confirmation.focus();
+            confirmation.scrollIntoView?.({ block: 'start', behavior: 'instant' });
+        }
+        state._focusSubmissionConfirmation = false;
     } else if (state._focusStepHeading) {
         heading.focus();
         state._focusStepHeading = false;
@@ -1265,6 +1237,7 @@ function readVisibleFields(root, application = {}) {
 
 function buildAutosaveValues(fields) {
     const values = {
+        student_number: fields.student_number ?? '',
         application_type: fields.application_type ?? 'initial',
         address_evidence_type: fields.address_evidence_type ?? null,
         student_email: fields.student_email ?? '',
@@ -1483,10 +1456,8 @@ async function saveStep(root, state, api) {
         const isInitialDraftCreation = (state.step === 0 && !state.application);
         if (state.step === 0 && !state.application) {
             state.application = await api.createApplicationDraft(createContactDraft(fields));
+            clearContactDraftFields(root.ownerDocument.defaultView);
             state.saveStatus = 'saved';
-            if (state.application?.access_credentials) {
-                state.newDraftCredentials = state.application.access_credentials;
-            }
             state.autosave = createAutosave(state, api, root);
         } else if (state.application && state.step <= 1) {
             state.autosave.schedule(buildAutosaveValues(fields));
@@ -1646,8 +1617,9 @@ async function submitApplication(root, state, api) {
     renderWizard(root, state);
     try {
         state.application = await api.submitCurrentApplication();
+        clearContactDraftFields(root.ownerDocument.defaultView);
         state.errorKey = null;
-        state._focusStepHeading = true;
+        state._focusSubmissionConfirmation = true;
     } catch (error) {
         state.errorKey = createErrorKey(error, 'applicationSubmitFailed');
         state._focusError = true;
@@ -1658,14 +1630,54 @@ async function submitApplication(root, state, api) {
     }
 }
 
-function handleWizardInput(root, state) {
+function canCreateContactDraft(form) {
+    if (!form) return false;
+    setContactPhoneValidity(form);
+    return ['student_number', 'student_email', 'student_phone', 'application_type']
+        .every((name) => form.querySelector(`[name="${name}"]`)?.checkValidity() === true);
+}
+
+function handleWizardInput(root, state, api) {
     state.hasUnsubmittedFieldChanges = true;
     if (state.step === 0) {
         state.formValues = readVisibleFields(root, state.application || {});
         if (state.application && state.autosave) scheduleCurrentFields(root, state);
         if (!state.application) {
-            state.saveStatus = 'unsaved';
+            saveContactDraftFields(root.ownerDocument.defaultView, state.formValues);
+            state.saveStatus = 'saving';
             updateSaveStatus(root, state);
+            if (state.contactDraftTimer !== null) root.ownerDocument.defaultView.clearTimeout(state.contactDraftTimer);
+            const form = root.querySelector('#application-step-form');
+            if (!state.isCreatingContactDraft && canCreateContactDraft(form)) {
+                state.contactDraftTimer = root.ownerDocument.defaultView.setTimeout(async () => {
+                    state.contactDraftTimer = null;
+                    if (state.application || state.isCreatingContactDraft) return;
+                    state.isCreatingContactDraft = true;
+                    try {
+                        const fields = readVisibleFields(root, {});
+                        state.application = await api.createApplicationDraft(createContactDraft(fields));
+                        clearContactDraftFields(root.ownerDocument.defaultView);
+                        state.autosave = createAutosave(state, api, root);
+                        const latestFields = readVisibleFields(root, state.application);
+                        state.autosave.schedule(buildAutosaveValues(latestFields));
+                        await state.autosave.flush();
+                        state.saveStatus = 'saved';
+                        updateSaveStatus(root, state);
+                        renderWizard(root, state);
+                    } catch {
+                        state.saveStatus = 'failed';
+                        updateSaveStatus(root, state);
+                    } finally {
+                        state.isCreatingContactDraft = false;
+                    }
+                }, 450);
+            } else {
+                state.contactDraftTimer = root.ownerDocument.defaultView.setTimeout(() => {
+                    state.contactDraftTimer = null;
+                    state.saveStatus = 'saved';
+                    updateSaveStatus(root, state);
+                }, 400);
+            }
         }
         updateContactContinueButton(root);
         const prefField = root.querySelector('.notification-preference-group');
@@ -1673,6 +1685,12 @@ function handleWizardInput(root, state) {
             prefField.syncPhone(state.formValues.student_phone);
         }
         return;
+    }
+    if (state.step === 1) {
+        const birthDate = root.querySelector('[name="date_of_birth"]')?.value || '';
+        const ageAnswer = calculateCurrentUnder18(birthDate);
+        const ageField = root.querySelector('[name="is_under_18"]');
+        if (ageField) ageField.value = ageAnswer === null ? '' : String(ageAnswer);
     }
     if (state.application && state.step <= 1 && state.autosave) scheduleCurrentFields(root, state);
     if (state.step === 1) updateResidenceContinueButton(root, readVisibleFields(root, state.application || {}));
@@ -1699,7 +1717,7 @@ function handleWizardChange(root, state, api, event) {
         renderWizard(root, state);
         return;
     }
-    handleWizardInput(root, state);
+    handleWizardInput(root, state, api);
     if (['application_type', 'address_evidence_type'].includes(input.name)) {
         state.errorKey = null;
         void persistRequirementSelection(root, state, api);
@@ -1713,7 +1731,7 @@ function handleWizardChange(root, state, api, event) {
  * @returns {Promise<object>} Live wizard state.
  * @throws {TypeError} When the wizard mount element is missing.
  */
-export async function initializeApplicationWizard(root, api) {
+export async function initializeApplicationWizard(root, api, options = {}) {
     if (!root || !root.ownerDocument) throw new TypeError('An application wizard root is required.');
     const state = {
         application: null,
@@ -1728,7 +1746,6 @@ export async function initializeApplicationWizard(root, api) {
         uploads: {},
         deleting: {},
         notificationPreference: null,
-        newDraftCredentials: null,
         _animateNextRender: true,
         navigateHome: (path) => root.ownerDocument.defaultView.location.assign(path),
         navigateToTracking: typeof api.navigateToTracking === 'function'
@@ -1747,7 +1764,7 @@ export async function initializeApplicationWizard(root, api) {
         event.preventDefault();
         void saveStep(root, state, api);
     });
-    root.addEventListener('input', () => handleWizardInput(root, state));
+    root.addEventListener('input', () => handleWizardInput(root, state, api));
     root.addEventListener('change', (event) => handleWizardChange(root, state, api, event));
     root.addEventListener('click', (event) => { void handleWizardClick(root, state, api, event); });
     root.ownerDocument.addEventListener('public:locale-changed', () => {
@@ -1766,6 +1783,12 @@ export async function initializeApplicationWizard(root, api) {
         }
     });
     root.ownerDocument.addEventListener('click', (event) => { void handleReturnHome(event, root, state); });
+    if (options.startNewApplication === true) {
+        clearContactDraftFields(root.ownerDocument.defaultView);
+        state.formValues = {};
+        renderWizard(root, state);
+        return state;
+    }
     try {
         state.application = await api.readCurrentApplication();
         state.saveStatus = 'saved';
@@ -1775,6 +1798,17 @@ export async function initializeApplicationWizard(root, api) {
             renderWizard(root, state);
             return state;
         }
+        if (state.application.status !== 'draft') {
+            // A submitted application is finished: "Start application" always opens a blank contact form.
+            clearContactDraftFields(root.ownerDocument.defaultView);
+            state.application = null;
+            state.saveStatus = 'idle';
+            state.formValues = {};
+            state.step = 0;
+            renderWizard(root, state);
+            return state;
+        }
+        clearContactDraftFields(root.ownerDocument.defaultView);
         state.step = state.application.status === 'submitted' ? 4
             : (state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0);
         state.autosave = createAutosave(state, api, root);
@@ -1788,6 +1822,13 @@ export async function initializeApplicationWizard(root, api) {
         await refreshRequirements(state, api);
     } catch (error) {
         state.errorKey = error.code === 'APPLICATION_SESSION_REQUIRED' ? null : 'applicationLoadFailed';
+        if (!state.application) {
+            const restored = loadContactDraftFields(root.ownerDocument.defaultView);
+            if (restored) {
+                state.formValues = restored;
+                state.saveStatus = 'saved';
+            }
+        }
     }
     renderWizard(root, state);
     return state;

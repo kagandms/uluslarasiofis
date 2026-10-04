@@ -23,6 +23,49 @@ function flushAsync() {
     return new Promise((resolve) => setImmediate(resolve));
 }
 
+async function initializeTrackingAndLookup(document, root, api) {
+    let cachedPayload = null;
+    let lookupResult = null;
+    let studentNumber = 'STU-1';
+    if (!api.lookupApplicationTracking) {
+        try {
+            cachedPayload = await api.readCurrentApplicationTracking();
+            studentNumber = cachedPayload.application.student_number || studentNumber;
+        } catch {
+            cachedPayload = null;
+        }
+    }
+    const lookupApi = {
+        ...api,
+        async readCurrentApplicationTracking() {
+            if (cachedPayload) {
+                const payload = cachedPayload;
+                cachedPayload = null;
+                payload.application.student_number ||= studentNumber;
+                return payload;
+            }
+            const payload = await api.readCurrentApplicationTracking();
+            const ownerNumber = lookupResult?.application?.student_number;
+            if (ownerNumber && !payload.application.student_number) payload.application.student_number = ownerNumber;
+            return payload;
+        },
+        async lookupApplicationTracking(number) {
+            if (api.lookupApplicationTracking) {
+                lookupResult = await api.lookupApplicationTracking(number);
+                return lookupResult;
+            }
+            cachedPayload = await api.readCurrentApplicationTracking();
+            cachedPayload.application.student_number ||= studentNumber;
+            return { found: true, ...cachedPayload };
+        }
+    };
+    const result = await initializeApplicationTracking(root, lookupApi);
+    root.querySelector('[name="student_number"]').value = studentNumber;
+    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await flushAsync();
+    return result;
+}
+
 function enterPhone(root, value) {
     const input = root.querySelector('[data-phone-visible]');
     input.value = value;
@@ -122,7 +165,7 @@ test('application_id missing or different blocks management in tracking view and
         }
     };
 
-    await initializeApplicationTracking(root, api);
+    await initializeTrackingAndLookup(root.ownerDocument, root, api);
     await flushAsync();
     await flushAsync();
 
@@ -158,7 +201,7 @@ test('unknown current consent version blocks opt-in and does not auto-accept', a
             return createFullContractFixture({ current_consent_version: 'whatsapp-consent-v2' });
         }
     };
-    await initializeApplicationTracking(root, api);
+    await initializeTrackingAndLookup(root.ownerDocument, root, api);
     await flushAsync();
     await flushAsync();
 
@@ -743,7 +786,7 @@ test('tracking view: ready owner session mounts preferences card, supports opt-o
         }
     };
 
-    const result = await initializeApplicationTracking(root, api);
+    const result = await initializeTrackingAndLookup(root.ownerDocument, root, api);
     assert.equal(result.kind, 'ready');
 
     await flushAsync();
@@ -838,7 +881,7 @@ test('tracking view: can_opt_in = false explains phone required and hides action
         }
     };
 
-    await initializeApplicationTracking(root, api);
+    await initializeTrackingAndLookup(root.ownerDocument, root, api);
     await flushAsync();
     await flushAsync();
 
@@ -962,7 +1005,7 @@ test('requires_reconsent: true ve eski kayıtlı izin varken opt-out mümkün', 
         }
     };
 
-    await initializeApplicationTracking(trackRoot, api);
+    await initializeTrackingAndLookup(trackRoot.ownerDocument, trackRoot, api);
     await flushAsync();
     await flushAsync();
 
@@ -1059,7 +1102,7 @@ test('can_opt_in: false iken kayıtlı izni opt-out etmek mümkün', async () =>
         }
     };
 
-    await initializeApplicationTracking(trackRoot, api);
+    await initializeTrackingAndLookup(trackRoot.ownerDocument, trackRoot, api);
     await flushAsync();
     await flushAsync();
 
@@ -1154,7 +1197,7 @@ test('Bilinmeyen izin sürümünde yeni opt-in engellenirken opt-out mümkün', 
         }
     };
 
-    await initializeApplicationTracking(trackRoot, api);
+    await initializeTrackingAndLookup(trackRoot.ownerDocument, trackRoot, api);
     await flushAsync();
     await flushAsync();
 
@@ -1201,7 +1244,7 @@ test('Bozuk/eksik yanıt veya başka application_id için kaydedildi gösterilmi
         }
     };
 
-    await initializeApplicationTracking(root1, apiMismatch);
+    await initializeTrackingAndLookup(root1.ownerDocument, root1, apiMismatch);
     await flushAsync();
     await flushAsync();
 
@@ -1235,7 +1278,7 @@ test('Bozuk/eksik yanıt veya başka application_id için kaydedildi gösterilmi
         }
     };
 
-    await initializeApplicationTracking(root2, apiBroken);
+    await initializeTrackingAndLookup(root2.ownerDocument, root2, apiBroken);
     await flushAsync();
     await flushAsync();
 
@@ -1275,7 +1318,7 @@ test('Opt-out PUT yanıtı izin durumunu hâlâ etkin gösterirse başarı göst
         }
     };
 
-    await initializeApplicationTracking(root, api);
+    await initializeTrackingAndLookup(root.ownerDocument, root, api);
     await flushAsync();
     await flushAsync();
 

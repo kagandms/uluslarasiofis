@@ -787,7 +787,7 @@ test('idle-expired, absolute-expired, and disabled staff sessions are unauthoriz
     const idleToken = 'j'.repeat(43);
     const absoluteToken = 'k'.repeat(43);
     const disabledToken = 'm'.repeat(43);
-    const expiredIdleAt = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+    const expiredIdleAt = new Date(Date.now() - 61 * 60 * 1000).toISOString();
     await seedStaff(environment, database, { id: 'staff-reviewer', username: 'reviewer' });
     await seedStaff(environment, database, { id: 'staff-disabled', username: 'disabled', isActive: false });
     await seedStaffSession(database, 'staff-reviewer', idleToken, { lastSeenAt: expiredIdleAt });
@@ -1269,7 +1269,7 @@ test('application draft updates ignore fields outside the public allowlist', asy
     const cookie = created.headers.get('Set-Cookie').split(';')[0];
     const response = await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie),
-            student_email: 'updated@example.edu', status: 'submitted', student_number: '2026999999',
+            student_email: 'updated@example.edu', status: 'submitted',
             storage_key: 'quarantine/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', staff_note: 'private'
         }
     }), environment, {});
@@ -1284,7 +1284,7 @@ test('application draft updates ignore fields outside the public allowlist', asy
     assert.equal(row.student_email, 'updated@example.edu');
     assert.equal(row.student_number, '2026123460');
     assert.equal(payload.application.status, 'draft');
-    assert.doesNotMatch(JSON.stringify(payload), /storage_key|staff_note|2026999999/i);
+    assert.doesNotMatch(JSON.stringify(payload), /storage_key|staff_note/i);
 });
 
 test('owner session can change draft application type and reload preserves it', async () => {

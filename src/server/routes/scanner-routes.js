@@ -140,3 +140,19 @@ export async function handleStaffScannerRequest(request,environment,requestId) {
     if (!await repository.retry({ jobId,now,staffId:staff.id,requestId })) throw createLeaseConflict();
     return { requeued:true };
 }
+
+/** Expedites the current pending document through the existing PC ClamAV queue. */
+export async function prioritizeStaffDocumentScan(request, environment, applicationId, documentCode, requestId) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const body = await readJsonBody(request, 1024);
+    if (Object.keys(body).length !== 0) throw new ApiError(400, 'INVALID_SCANNER_INPUT', 'Tarama isteği doğrulanamadı.');
+    const staff = await requireStaff(request, environment, ['reviewer', 'admin']);
+    const repository = createScannerRepository(environment.DB);
+    const now = new Date().toISOString();
+    await repository.reconcile(now);
+    if (!await repository.prioritizePendingDocument({ applicationId, code: documentCode, now, staffId: staff.id, requestId })) {
+        throw createLeaseConflict();
+    }
+    return { queued: true };
+}

@@ -52,6 +52,30 @@
           "remote": false
         }
       ]
+    },
+    "production": {
+      "name": "goc",
+      "vars": {
+        "APP_ENV": "production",
+        "R2_BUCKET_NAME": "uluslarasiofis-documents-production",
+        "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "uluslarasiofis-production",
+          "database_id": "74b45974-8665-4616-bce0-3380da71c22f",
+          "migrations_dir": "migrations",
+          "remote": false
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "DOCUMENTS",
+          "bucket_name": "uluslarasiofis-documents-production",
+          "remote": false
+        }
+      ]
     }
   }
 }

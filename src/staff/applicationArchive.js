@@ -11,7 +11,7 @@ function validateManifest(manifest, maxBytes) {
     if (manifest.files.length === 0) throw new Error('İndirilecek güvenli güncel belge bulunamadı.');
     if (manifest.files.length > ARCHIVE_LIMITS.files || !Number.isSafeInteger(manifest.total_source_bytes) || manifest.total_source_bytes < 0
         || manifest.total_source_bytes > maxBytes) {
-        throw new Error('ZIP bu tarayıcı için büyük. Belgeleri tek tek indirin.');
+        throw new Error('ZIP bu tarayıcı için büyük. Lütfen belgeleri ofis bilgisayarından indirin.');
     }
     let sum = 0;
     const names = new Set();
@@ -47,11 +47,29 @@ function createByteGuard(expectedBytes, limits) {
     });
 }
 
-function saveBlob(window, blob) {
+export function createArchiveFilename({ firstName, lastName, studentNumber } = {}) {
+    const rawName = [firstName, lastName].filter(Boolean).join(' ').trim();
+    const source = rawName || (studentNumber ? String(studentNumber).trim() : '');
+    if (!source) return 'basvuru-belgeleri.zip';
+    const trMap = {
+        'ç': 'c', 'Ç': 'c', 'ğ': 'g', 'Ğ': 'g', 'ı': 'i', 'I': 'i', 'İ': 'i',
+        'ö': 'o', 'Ö': 'o', 'ş': 's', 'Ş': 's', 'ü': 'u', 'Ü': 'u'
+    };
+    const normalized = source
+        .replace(/[çÇğĞıIİöÖşŞüÜ]/g, (ch) => trMap[ch] || ch)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    return normalized ? `${normalized}.zip` : 'basvuru-belgeleri.zip';
+}
+
+function saveBlob(window, blob, filename = 'basvuru-belgeleri.zip') {
     const url = window.URL.createObjectURL(blob);
     const link = window.document.createElement('a');
     link.href = url;
-    link.download = 'basvuru-belgeleri.zip';
+    link.download = filename;
     window.document.body.append(link);
     link.click();
     link.remove();
@@ -59,16 +77,11 @@ function saveBlob(window, blob) {
 }
 
 /** Creates a current-documents ZIP after validating every streamed byte. */
-export async function downloadApplicationArchive({ applicationId, window, manifest, getManifest, fetchFile, signal }) {
+export async function downloadApplicationArchive({ applicationId, window, manifest, getManifest, fetchFile, signal, suggestedName = 'basvuru-belgeleri.zip' }) {
     const supportsStreaming = typeof window?.showSaveFilePicker === 'function' && window.isSecureContext !== false;
-    const pickerPromise = supportsStreaming ? window.showSaveFilePicker({
-        suggestedName: 'basvuru-belgeleri.zip',
-        types: [{ description: 'ZIP arşivi', accept: { 'application/zip': ['.zip'] } }]
-    }) : null;
-    pickerPromise?.catch(() => {});
     const maxBytes = supportsStreaming ? ARCHIVE_LIMITS.streamedBytes : ARCHIVE_LIMITS.blobBytes;
     const abortController = new AbortController();
-    const relayAbort = () => abortController.abort(signal.reason);
+    const relayAbort = () => abortController.abort(signal?.reason);
     if (signal?.aborted) relayAbort();
     else signal?.addEventListener('abort', relayAbort, { once: true });
     let zipWriter;
@@ -76,10 +89,13 @@ export async function downloadApplicationArchive({ applicationId, window, manife
     let completed = false;
     const limits = { maxBytes, totalBytes: 0 };
     try {
-        const selectedHandle = supportsStreaming ? await pickerPromise : null;
         const currentManifest = manifest ?? await getManifest(abortController.signal);
         if (abortController.signal.aborted) throw new DOMException('Canceled', 'AbortError');
         validateManifest(currentManifest, maxBytes);
+        const selectedHandle = supportsStreaming ? await window.showSaveFilePicker({
+            suggestedName,
+            types: [{ description: 'ZIP arşivi', accept: { 'application/zip': ['.zip'] } }]
+        }) : null;
         if (supportsStreaming) {
             writable = await selectedHandle.createWritable();
             zipWriter = new ZipWriter(writable, { level: 0, signal: abortController.signal });
@@ -97,7 +113,7 @@ export async function downloadApplicationArchive({ applicationId, window, manife
         if (limits.totalBytes !== currentManifest.total_source_bytes) throw new Error('İndirilen belge boyutları uyuşmuyor. ZIP iptal edildi.');
         const blob = await zipWriter.close();
         completed = true;
-        if (!supportsStreaming) saveBlob(window, blob);
+        if (!supportsStreaming) saveBlob(window, blob, suggestedName);
         return { status: 'saved' };
     } catch (error) {
         abortController.abort();
