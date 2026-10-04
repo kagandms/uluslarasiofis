@@ -518,6 +518,35 @@ body.dark-mode .ykn-status-item {
 }
 
 /* ==========================================
+   YKN PRO 2-TUŞ İŞLEM ALANI (OFİS STANDARDI)
+   ========================================== */
+.ykn-pro-actions #btn-copy {
+    transition: var(--transition);
+}
+
+body.dark-mode .ykn-pro-actions #btn-copy {
+    background: #232330;
+    color: #f4f6f8;
+    border: 1px solid #454558;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+body.dark-mode .ykn-pro-actions #btn-copy:hover:not(:disabled) {
+    background: #2d2d3c;
+    color: #ffffff;
+    border-color: #63637e;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+body.dark-mode .ykn-pro-actions #btn-copy:disabled {
+    background: #1c1c24;
+    color: #717182;
+    border-color: #2e2e38;
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ==========================================
    YKN ÖĞRETİCİ ADIM AKIŞI (1 -> 2 -> 3 -> 4)
    ========================================== */
 .ykn-steps-container {
