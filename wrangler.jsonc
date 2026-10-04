@@ -34,7 +34,8 @@
       "vars": {
         "APP_ENV": "staging",
         "R2_BUCKET_NAME": "uluslarasiofis-documents-staging",
-        "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1"
+        "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1",
+        "STAFF_SHARED_USERNAME": "international.office.topkapi@topkapi.edu.tr"
       },
       "d1_databases": [
         {
@@ -58,7 +59,8 @@
       "vars": {
         "APP_ENV": "production",
         "R2_BUCKET_NAME": "uluslarasiofis-documents-production",
-        "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1"
+        "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1",
+        "STAFF_SHARED_USERNAME": "international.office.topkapi@topkapi.edu.tr"
       },
       "d1_databases": [
         {

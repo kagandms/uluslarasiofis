@@ -10,7 +10,7 @@ const REASONS = Object.freeze({
     WHATSAPP_CONSENT_REQUIRED: 'Öğrencinin WhatsApp izni yok.',
     WHATSAPP_CONSENT_PHONE_CHANGED: 'Telefon değişti; öğrencinin yeniden izin vermesi gerekiyor.',
     WHATSAPP_CONSENT_VERSION_STALE: 'İzin metni güncellendi; öğrencinin yeniden izin vermesi gerekiyor.',
-    WHATSAPP_PROVIDER_NOT_CONFIGURED: 'WhatsApp sağlayıcısı yapılandırılmadı.',
+    WHATSAPP_PROVIDER_NOT_CONFIGURED: 'WhatsApp sağlayıcısı yapılandırılmadı (Bu özellik şu an kullanılamamaktadır).',
     WHATSAPP_TEMPLATE_NOT_APPROVED: 'Bu şablon ve dil için kurum onaylı Meta eşlemesi yok.',
     EMAIL_PROVIDER_NOT_CONFIGURED: 'E-posta sağlayıcısı yapılandırılmadı.',
     RECIPIENT_PHONE_UNAVAILABLE: 'Başvuruda geçerli uluslararası telefon numarası yok.',
@@ -128,6 +128,11 @@ export function createNotificationManager(api) {
         const language = createSelect(document, 'Dil', 'language', LANGUAGES, state.language, (value) => updateSelection('language', value));
         channel.disabled = state.loading; template.disabled = state.loading; language.disabled = state.loading;
         panel.append(channel.parentElement, template.parentElement, language.parentElement);
+        if (state.channel === 'whatsapp') {
+            const warningNotice = createText(document, 'div', 'staff-notification-status-banner', 'Bu özellik şu an kullanılamamaktadır.');
+            warningNotice.style.cssText = 'background: rgba(220, 53, 69, 0.08); border: 1px solid rgba(220, 53, 69, 0.3); color: #c0392b; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; margin: 8px 0; text-align: center;';
+            panel.append(warningNotice);
+        }
         const previewButton = document.createElement('button');
         previewButton.type = 'button'; previewButton.className = 'btn btn-outline'; previewButton.textContent = 'Önizle';
         previewButton.disabled = state.loading;
