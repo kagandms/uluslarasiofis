@@ -3,30 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        body { font-family: Arial, sans-serif; width: 300px; padding: 10px; }
-        button { width: 100%; padding: 10px; margin: 5px 0; cursor: pointer; background: #0056b3; color: white; border: none; border-radius: 4px; }
+        body { font-family: Arial, sans-serif; width: 320px; padding: 12px; color: #172033; }
+        h3 { margin: 0 0 12px; }
+        p { margin: 0 0 12px; color: #5d687c; font-size: 12px; line-height: 1.4; }
+        button { width: 100%; padding: 11px 12px; margin: 5px 0; cursor: pointer; background: #0056b3; color: white; border: none; border-radius: 5px; font-weight: 600; }
         button:hover { background: #004494; }
-        .input-group { margin: 10px 0; }
-        input { width: 93%; padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; }
-        #status-message { margin-top: 10px; font-size: 12px; color: green; font-weight: bold; text-align: center; }
+        button:disabled { cursor: wait; opacity: 0.65; }
+        #status-message { min-height: 30px; margin-top: 12px; font-size: 12px; color: #176b3a; font-weight: bold; text-align: center; line-height: 1.35; }
+        #status-message[data-status="error"] { color: #a82424; }
+        #status-message[data-status="warning"] { color: #8a5a00; }
     </style>
 </head>
 <body>
-    <h3 style="margin-top: 0;">YÖKSİS Otomasyonu</h3>
-    
-    <button id="btn-copy">1. Diğer Verileri Kopyala (Topkapı)</button>
-    
-    <hr style="margin:15px 0;">
-    
-    <div class="input-group">
-        <label style="font-size: 12px; font-weight: bold;">Kabul ID:</label>
-        <input type="text" id="kabul-id-input" placeholder="Örn: 23A-90C-F5" style="text-transform: uppercase;">
-    </div>
-    <button id="btn-search">2. Kabul ID ile Sorgula (YÖKSİS)</button>
-    
-    <hr style="margin:15px 0;">
+    <h3>YÖKSİS Otomasyonu</h3>
+    <p>Apply’da öğrencinin profilini açtıktan sonra işlemleri sırayla başlatın.</p>
 
-    <button id="btn-fill">3. Kalan Bilgileri Doldur (YÖKSİS)</button>
+    <button id="btn-read-acceptance">1. Kabul Mektubunu Oku ve YÖKSİS’te Ara</button>
+    <button id="btn-copy">2. Bilgileri Al ve Pasaport Fotoğrafını Kırp</button>
     
     <div id="status-message">Bekleniyor...</div>
 

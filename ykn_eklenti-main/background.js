@@ -199,10 +199,14 @@ function withTimeout(promise, timeoutMs, errorMessage) {
 async function ensureContentScriptInjected(tabId, pageKind) {
     try {
         if (chrome.scripting && chrome.scripting.executeScript) {
-            const file = pageKind === 'bridge' ? 'bridge.js' : 'content.js';
+            const files = pageKind === 'bridge'
+                ? ['portal-security.js', 'bridge.js']
+                : pageKind === 'apply'
+                    ? ['pdf.min.js', 'document-parser.js', 'content.js']
+                    : ['content.js'];
             await chrome.scripting.executeScript({
-                target: { tabId, allFrames: true },
-                files: [file]
+                target: { tabId },
+                files
             });
         }
     } catch (error) {
@@ -1750,6 +1754,21 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'OCR_IMAGE') {
+        const isValidImage = typeof request.imageBase64 === 'string'
+            && request.imageBase64.length <= 15_000_000
+            && /^data:image\/(?:jpeg|png);base64,/i.test(request.imageBase64);
+        if (!isAllowedApplyUrl(sender?.tab?.url || '') || !isValidImage) {
+            sendResponse({ success: false, error: 'OCR isteği doğrulanamadı.' });
+            return false;
+        }
+        void getPortalTabId()
+            .then((portalTabId) => sendTabMessage(portalTabId, request))
+            .then((response) => sendResponse(response || { success: false, error: 'Yetkili portal OCR yanıtı vermedi.' }))
+            .catch(() => sendResponse({ success: false, error: 'Yetkili portal OCR isteği tamamlanamadı.' }));
+        return true;
+    }
+
     if (request.action === 'SYNC_YOKSIS_MAIN_WORLD') {
         // Eski popup sürümleri content-script doldurmasından sonra aynı veriyi
         // MAIN world'de yeniden yazıyordu. Bu işlem artık FILL_YOKSIS_FORM

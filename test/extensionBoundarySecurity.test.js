@@ -71,3 +71,13 @@ test('extension manifest and bridge contain no broad preview or university-subdo
     assert.match(bridge, /event\.origin\s*!==\s*window\.location\.origin/);
     assert.match(bridge, /\/yetkili/);
 });
+
+test('passport OCR uses the staff session cookie and accepts requests only from Apply', async () => {
+    const bridge = await readFile(resolve(extensionRoot, 'bridge.js'), 'utf8');
+    const background = await readFile(resolve(extensionRoot, 'background.js'), 'utf8');
+
+    assert.match(bridge, /credentials:\s*'same-origin'/);
+    assert.doesNotMatch(bridge, /localStorage\.getItem|sessionStorage\.getItem/);
+    assert.match(background, /isAllowedApplyUrl\(sender\?\.tab\?\.url/);
+    assert.match(background, /imageBase64\.length\s*<=\s*15_000_000/);
+});

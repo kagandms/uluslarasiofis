@@ -1,30 +1,84 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.34';
+const CONTENT_SCRIPT_VERSION = '1.2.75';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
 const FIXED_YOKSIS_PHONE = '5322431261';
+
+function copyTextToClipboardDirect(text) {
+    if (!text) return;
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(() => {
+                fallbackCopyDirect(text);
+            });
+            return;
+        }
+    } catch (_) {}
+    fallbackCopyDirect(text);
+}
+
+function fallbackCopyDirect(text) {
+    try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        (document.body || document.documentElement).appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+    } catch (_) {}
+}
+
+// Focus olduğunda panoya en son bulunan YKN'yi senkronize et
+window.addEventListener('focus', () => {
+    try {
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+            chrome.storage.local.get(['lastFoundYkn', 'lastFoundYknTime'], (res) => {
+                if (res?.lastFoundYkn && Date.now() - (res.lastFoundYknTime || 0) < 30 * 60 * 1000) {
+                    copyTextToClipboardDirect(res.lastFoundYkn);
+                }
+            });
+        }
+    } catch (_) {}
+    if (location.hostname === 'apply.topkapi.edu.tr') {
+        attachApplyYknHelper();
+    }
+});
+
+// Arama komutunu portala hızlıca bildirmek için ilk form hazır olma kontrolü
+// kısa tutulur. Form gecikirse background bunu beklemede başarılı kabul eder;
+// son doldurma adımı YÖKSİS sekmesini öne alıp daha uzun süre tekrar bekler.
+const YOKSIS_SEARCH_INITIAL_FORM_WAIT_MS = 1_500;
 
 // YÖKSİS aynı öğrenci formunu aynı id ve boş değerlerle yeniden üretebiliyor.
 // Bu nedenle yalnızca alan parmak izine bakmak, önceki öğrencinin formunu yeni
 // aramanın sonucu sanmaya yol açar. ZK postback'inin gerçekten DOM'u güncellediğini
 // de izliyoruz. Sayaç content-script yaşamı boyunca korunur.
 let yoksisDomRevision = 0;
-const observedYoksisDocuments = new WeakSet();
+const observedYoksisRoots = new WeakSet();
 
 function observeYoksisDomChanges() {
     if (getPageKind() !== 'yoksis' || typeof MutationObserver === 'undefined') return;
     for (const doc of getAllDocs(document)) {
-        if (!doc || observedYoksisDocuments.has(doc)) continue;
+        if (!doc) continue;
         const root = doc.documentElement || doc.body;
         if (!root) continue;
+        // ZK bazı geçişlerde aynı Document altında documentElement'i tamamen
+        // yeniden kuruyor. Document'i değil root düğümünü izlemek, yeni kökte
+        // MutationObserver'ı tekrar kurup ikinci öğrencinin form değişimini
+        // yakalamamızı sağlar.
+        if (observedYoksisRoots.has(root)) continue;
         const observer = new MutationObserver(() => {
             yoksisDomRevision += 1;
         });
         observer.observe(root, { childList: true, subtree: true });
-        observedYoksisDocuments.add(doc);
+        observedYoksisRoots.add(root);
     }
 }
 
@@ -78,7 +132,7 @@ function sendApplyEvent(action, requestId, payload = {}) {
 async function simulateInput(element, value, options = {}) {
     if (!element || value === undefined || value === null) return false;
     const win = element.ownerDocument?.defaultView || window;
-    
+
     try {
         element.scrollIntoView({ block: 'nearest', behavior: 'instant' });
     } catch (_) {}
@@ -108,7 +162,7 @@ async function simulateInput(element, value, options = {}) {
         element.value = '';
         element.value = value;
     }
-    
+
     element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
     element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
     // Metin alanlarının tamamında Enter göndermek özellikle ZK formlarında
@@ -132,7 +186,7 @@ async function simulateInput(element, value, options = {}) {
         element.dispatchEvent(new KeyboardEvent('keypress', enterEventOptions));
         element.dispatchEvent(new KeyboardEvent('keyup', enterEventOptions));
     }
-    
+
     let zkChangeSent = false;
     if (win.zk && win.zk.Widget) {
         try {
@@ -193,17 +247,69 @@ async function simulateDateboxInput(element, formattedDate) {
         if (win.zk && win.zk.Widget) {
             const widget = win.zk.Widget.$(element);
             if (widget) {
-                widget._lastValue = formattedDate;
+                // Varsa önceki geçici ezmeleri temizle; böylece kullanıcı kutuyu sildiğinde
+                // veya elle yeni bir tarih yazdığında ZK prototipi gerçek DOM değerini okur.
+                delete widget.coerceFromString_;
+                delete widget.coerceToString_;
+                delete widget.getValue;
+                delete widget.getText;
+                delete widget.getRawValue;
+
+                widget._lastValue = '';
                 widget._defRawVal = formattedDate;
-                widget._value = formattedDate;
+                widget._lastChg = formattedDate;
                 widget._shallSubmit = true;
-                if (typeof widget.setText === 'function') widget.setText(formattedDate);
+
+                try {
+                    if (typeof widget.coerceFromString_ === 'function') {
+                        widget._value = widget.coerceFromString_(formattedDate);
+                    } else {
+                        widget._value = formattedDate;
+                    }
+                } catch (_) {
+                    widget._value = formattedDate;
+                }
+
+                if (widget.$n('real')) {
+                    widget.$n('real').value = formattedDate;
+                }
+                if (typeof widget.setText === 'function') {
+                    try { widget.setText(formattedDate); } catch (_) {}
+                }
+
+                if (typeof widget.clearErrorMessage === 'function') {
+                    try { widget.clearErrorMessage(true); } catch (_) {}
+                }
+                if (widget._errmsg) {
+                    try { widget._errmsg.close(); } catch (_) {}
+                    try { widget._errmsg.detach(); } catch (_) {}
+                    widget._errmsg = null;
+                }
+
+                if (typeof widget.updateChange_ === 'function') {
+                    try { widget.updateChange_(); } catch (_) {}
+                }
+
+                let zkSent = false;
                 if (typeof widget.fire === 'function') {
-                    widget.fire('onChange', {
-                        rawValue: formattedDate,
-                        value: formattedDate,
-                        start: formattedDate.length
-                    }, { toServer: true });
+                    try {
+                        widget.fire('onChange', {
+                            rawValue: formattedDate,
+                            value: formattedDate,
+                            start: formattedDate.length
+                        }, { toServer: true });
+                        zkSent = true;
+                    } catch (_) {}
+                }
+                if (!zkSent && win.zAu && typeof win.zAu.send === 'function') {
+                    try {
+                        win.zAu.send(new win.zk.Event(widget, 'onChange', {
+                            rawValue: formattedDate,
+                            value: formattedDate,
+                            start: formattedDate.length
+                        }, { toServer: true }));
+                        zkSent = true;
+                    } catch (_) {}
                 }
             }
         }
@@ -214,6 +320,11 @@ async function simulateDateboxInput(element, formattedDate) {
     if (parentBox) {
         parentBox.classList.remove('z-datebox-invalid');
     }
+    try {
+        const errorBoxes = (element.ownerDocument || document).querySelectorAll('.z-errorbox, [class*="errorbox"]');
+        for (const eb of errorBoxes) eb.remove();
+    } catch (_) {}
+
     element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
     element.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
     try { element.blur(); } catch (_) {}
@@ -221,70 +332,470 @@ async function simulateDateboxInput(element, formattedDate) {
 }
 
 // ZK Framework için Event Dispatcher (Select/Dropdown'lar için)
+function normalizeCountryText(value) {
+    return String(value || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .replace(/ğ/g, 'g')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ö/g, 'o')
+        .replace(/ç/g, 'c')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+}
+
+// Apply profili ülke adlarını İngilizce, YÖKSİS ise Türkçe döndürebilir.
+// Aynı ülkenin iki yazımı tek bir aday kümesinde eşleştirilir.
+const COUNTRY_ALIAS_GROUPS = [
+    ['afghanistan', 'afganistan'],
+    ['albania', 'arnavutluk'],
+    ['azerbaijan', 'azerbaycan'],
+    ['bosniaandherzegovina', 'bosnahersek'],
+    ['bulgaria', 'bulgaristan'],
+    ['china', 'cin'],
+    ['croatia', 'hirvatistan'],
+    ['egypt', 'misir'],
+    ['georgia', 'gurcistan'],
+    ['greece', 'yunanistan'],
+    ['india', 'hindistan'],
+    ['iran', 'iran'],
+    ['iraq', 'irak'],
+    ['kazakhstan', 'kazakistan'],
+    ['kyrgyzstan', 'kirgizistan'],
+    ['lebanon', 'lubnan'],
+    ['libya', 'libya'],
+    ['morocco', 'fas'],
+    ['nigeria', 'nijerya'],
+    ['northmacedonia', 'kuzeymakedonya'],
+    ['pakistan', 'pakistan'],
+    ['palestine', 'filistin'],
+    ['romania', 'romanya'],
+    ['russia', 'rusya'],
+    ['saudiarabia', 'suudiarabistan'],
+    ['somalia', 'somali'],
+    ['sudan', 'sudan'],
+    ['syria', 'suriye'],
+    ['tajikistan', 'tacikistan'],
+    ['turkmenistan', 'turkmenistan'],
+    ['ukraine', 'ukrayna'],
+    ['unitedarabemirates', 'birlesikarapemirlikleri'],
+    ['unitedkingdom', 'birlesikkrallik'],
+    ['unitedstates', 'amerika'],
+    ['uzbekistan', 'ozbekistan'],
+    ['yemen', 'yemen'],
+    ['zimbabwe', 'zimbabwe']
+];
+
+function countryNameVariants(value) {
+    const normalized = normalizeCountryText(value);
+    if (!normalized) return [];
+    const group = COUNTRY_ALIAS_GROUPS.find((aliases) => aliases.includes(normalized));
+    return group ? Array.from(new Set(group)) : [normalized];
+}
+
 function simulateSelect(element, textToMatch) {
     if (!element || !textToMatch) return false;
     let found = false;
-    const normalize = (str) => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
-    const targetText = normalize(textToMatch);
+    const targetVariants = countryNameVariants(textToMatch);
 
-    for (const option of element.options) {
-        const optText = normalize(option.text);
-        if (optText.includes(targetText) || targetText.includes(optText)) {
+    const options = element.options || [];
+    for (let i = 0; i < options.length; i++) {
+        const option = options[i];
+        const optionVariants = countryNameVariants(option.text || option.value);
+        if (targetVariants.some((target) => optionVariants.some((candidate) =>
+            candidate === target || candidate.includes(target) || target.includes(candidate)
+        ))) {
+            element.selectedIndex = i;
+            try { option.selected = true; } catch (_) {}
             element.value = option.value;
             found = true;
             break;
         }
     }
     if (found) {
-        element.dispatchEvent(new Event('change', { bubbles: true }));
-        element.dispatchEvent(new Event('blur', { bubbles: true }));
+        try {
+            element.focus();
+            element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+            element.dispatchEvent(new Event('blur', { bubbles: true, cancelable: true }));
+        } catch (_) {}
         return true;
     }
     return false;
 }
 
+function getSelectedOptionText(element) {
+    if (!element || !element.options) return '';
+    const option = element.options[element.selectedIndex];
+    return (option?.text || option?.value || '').trim();
+}
+
+// ZK Framework ve HTML için Kullanıcı Tıklaması Simülatörü
+function simulateUserClick(element) {
+    if (!element) return;
+    const doc = element.ownerDocument || document;
+    const win = doc.defaultView || window;
+
+    try { element.focus(); } catch (_) {}
+
+    const eventOptions = { bubbles: true, cancelable: true, view: win, buttons: 1 };
+    try { element.dispatchEvent(new win.PointerEvent('pointerdown', eventOptions)); } catch (_) {}
+    try { element.dispatchEvent(new win.MouseEvent('mousedown', eventOptions)); } catch (_) {}
+    try { element.dispatchEvent(new win.PointerEvent('pointerup', eventOptions)); } catch (_) {}
+    try { element.dispatchEvent(new win.MouseEvent('mouseup', eventOptions)); } catch (_) {}
+    try {
+        element.click();
+    } catch (_) {
+        element.dispatchEvent(new win.MouseEvent('click', eventOptions));
+    }
+}
+
+function findGenderControls(rootDoc) {
+    const d = rootDoc || document;
+    const normalize = (str) => (str || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+
+    const result = {
+        maleRadio: null,
+        maleLabel: null,
+        maleWrapper: null,
+        femaleRadio: null,
+        femaleLabel: null,
+        femaleWrapper: null
+    };
+
+    // 1. Cinsiyet etiketini içeren satırı (tr veya div) bul
+    const allLabels = d.querySelectorAll('label, span, td, div, b, strong');
+    let genderRow = null;
+    for (const lbl of allLabels) {
+        const txt = normalize(lbl.innerText || lbl.textContent || '');
+        if (txt === 'cinsiyet' || txt === 'cinsiyeti' || txt === 'gender' || txt.includes('cinsiyet')) {
+            const row = lbl.closest('tr') || lbl.closest('.z-row') || lbl.closest('.form-group') || lbl.parentElement;
+            if (row && row.querySelectorAll('input[type="radio"]').length >= 2) {
+                genderRow = row;
+                break;
+            } else if (!genderRow && row) {
+                genderRow = row;
+            }
+        }
+    }
+
+    const scope = genderRow || d;
+    const radios = scope.querySelectorAll('input[type="radio"]');
+    for (const r of radios) {
+        const wrapper = r.closest?.('.z-radio') || r.parentElement;
+        const specificLabel = (r.labels && r.labels[0])
+            || (r.id ? d.querySelector(`label[for="${r.id}"]`) : null)
+            || wrapper?.querySelector('label, .z-radio-cnt, .z-radio-content')
+            || (r.nextElementSibling && (r.nextElementSibling.tagName === 'LABEL' || r.nextElementSibling.classList.contains('z-radio-cnt')) ? r.nextElementSibling : null);
+        const rText = normalize((specificLabel ? (specificLabel.innerText || specificLabel.textContent) : '') + ' ' + (r.id || '') + ' ' + (r.value || ''));
+        if (rText.includes('erkek') || rText.includes('male') || rText === 'e' || rText === 'm') {
+            result.maleRadio = r;
+            result.maleWrapper = wrapper;
+            result.maleLabel = specificLabel || wrapper;
+        } else if (rText.includes('kadin') || rText.includes('female') || rText === 'k' || rText === 'f') {
+            result.femaleRadio = r;
+            result.femaleWrapper = wrapper;
+            result.femaleLabel = specificLabel || wrapper;
+        }
+    }
+
+    // YÖKSİS standardında 1. radyo Erkek, 2. radyo Kadın'dır
+    if (genderRow && radios.length >= 2) {
+        if (!result.maleRadio) {
+            result.maleRadio = radios[0];
+            result.maleWrapper = radios[0].closest?.('.z-radio') || radios[0].parentElement;
+            result.maleLabel = (result.maleWrapper ? result.maleWrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || radios[0].nextElementSibling || result.maleWrapper;
+        }
+        if (!result.femaleRadio) {
+            result.femaleRadio = radios[1];
+            result.femaleWrapper = radios[1].closest?.('.z-radio') || radios[1].parentElement;
+            result.femaleLabel = (result.femaleWrapper ? result.femaleWrapper.querySelector('label, .z-radio-cnt, .z-radio-content') : null) || radios[1].nextElementSibling || result.femaleWrapper;
+        }
+    }
+
+    return result;
+}
+
+function findMaritalControls(doc) {
+    const d = doc || document;
+    const normalize = (str) => (str || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+
+    const result = {
+        singleRadio: null,
+        singleLabel: null,
+        singleWrapper: null,
+        marriedRadio: null,
+        marriedLabel: null,
+        marriedWrapper: null
+    };
+
+    // 1. Medeni Hali etiketini içeren satırı (tr veya div) bul
+    const allLabels = d.querySelectorAll('label, span, td, div, b, strong');
+    let maritalRow = null;
+    for (const lbl of allLabels) {
+        const txt = normalize(lbl.innerText || lbl.textContent || '');
+        if (txt === 'medenihali' || txt === 'medenihal' || txt === 'maritalstatus' || txt.includes('medeni') || txt.includes('marital')) {
+            const row = lbl.closest('tr') || lbl.closest('.z-row') || lbl.closest('.form-group') || lbl.parentElement;
+            if (row && row.querySelectorAll('input[type="radio"]').length >= 2) {
+                maritalRow = row;
+                break;
+            } else if (!maritalRow && row) {
+                maritalRow = row;
+            }
+        }
+    }
+
+    const scope = maritalRow || d;
+    const radios = scope.querySelectorAll('input[type="radio"]');
+    for (const r of radios) {
+        const wrapper = r.closest?.('.z-radio') || r.parentElement;
+        const specificLabel = (r.labels && r.labels[0])
+            || (r.id ? d.querySelector(`label[for="${r.id}"]`) : null)
+            || wrapper?.querySelector('label, .z-radio-cnt, .z-radio-content')
+            || (r.nextElementSibling && (r.nextElementSibling.tagName === 'LABEL' || r.nextElementSibling.classList.contains('z-radio-cnt')) ? r.nextElementSibling : null);
+        const rText = normalize((specificLabel ? (specificLabel.innerText || specificLabel.textContent) : '') + ' ' + (r.id || '') + ' ' + (r.value || ''));
+        if (rText.includes('bekar') || rText.includes('single') || rText === 'b') {
+            result.singleRadio = r;
+            result.singleWrapper = wrapper;
+            result.singleLabel = specificLabel || wrapper;
+        } else if (rText.includes('evli') || rText.includes('married') || rText === 'e') {
+            result.marriedRadio = r;
+            result.marriedWrapper = wrapper;
+            result.marriedLabel = specificLabel || wrapper;
+        }
+    }
+
+    // YÖKSİS standardında 1. radyo Bekar, 2. radyo Evli'dir
+    if (maritalRow && radios.length >= 2) {
+        if (!result.singleRadio) {
+            result.singleRadio = radios[0];
+            result.singleWrapper = radios[0].closest?.('.z-radio') || radios[0].parentElement;
+            result.singleLabel = result.singleWrapper?.querySelector('label, .z-radio-cnt, .z-radio-content') || radios[0].nextElementSibling || result.singleWrapper;
+        }
+        if (!result.marriedRadio) {
+            result.marriedRadio = radios[1];
+            result.marriedWrapper = radios[1].closest?.('.z-radio') || radios[1].parentElement;
+            result.marriedLabel = result.marriedWrapper?.querySelector('label, .z-radio-cnt, .z-radio-content') || radios[1].nextElementSibling || result.marriedWrapper;
+        }
+    }
+
+    return result;
+}
+
 // ZK Framework için Event Dispatcher (Radio Button'lar için)
 function simulateRadioByLabelText(labelText) {
     if (!labelText) return false;
-    const normalize = (str) => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
-    const targetText = normalize(labelText);
-    
+    const normalize = (str) => (str || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+    const normVal = normalize(labelText);
+    const isMale = normVal === 'erkek' || normVal === 'bay' || normVal === 'male' || normVal === 'm';
+    const isFemale = normVal === 'kadin' || normVal === 'bayan' || normVal === 'female' || normVal === 'f';
+    const isGender = isMale || isFemale;
+    const isBekar = normVal === 'bekar' || normVal === 'single' || normVal === 'b';
+    const isEvli = normVal === 'evli' || normVal === 'married' || normVal === 'e';
+    const isMarital = isBekar || isEvli;
+
+    let anySet = false;
     for (const doc of getAllDocs(document)) {
-        const labels = doc.querySelectorAll('label');
+        if (isGender || isMarital) {
+            const ctrl = isGender ? findGenderControls(doc) : findMaritalControls(doc);
+            const targetRadio = isGender
+                ? (isMale ? ctrl.maleRadio : ctrl.femaleRadio)
+                : (isBekar ? ctrl.singleRadio : ctrl.marriedRadio);
+            const targetLabel = isGender
+                ? (isMale ? ctrl.maleLabel : ctrl.femaleLabel)
+                : (isBekar ? ctrl.singleLabel : ctrl.marriedLabel);
+            const targetWrapper = isGender
+                ? (isMale ? ctrl.maleWrapper : ctrl.femaleWrapper)
+                : (isBekar ? ctrl.singleWrapper : ctrl.marriedWrapper);
+
+            const oppRadio = isGender
+                ? (isMale ? ctrl.femaleRadio : ctrl.maleRadio)
+                : (isBekar ? ctrl.marriedRadio : ctrl.singleRadio);
+            const oppLabel = isGender
+                ? (isMale ? ctrl.femaleLabel : ctrl.maleLabel)
+                : (isBekar ? ctrl.marriedLabel : ctrl.singleLabel);
+            const oppWrapper = isGender
+                ? (isMale ? ctrl.femaleWrapper : ctrl.maleWrapper)
+                : (isBekar ? ctrl.marriedWrapper : ctrl.singleWrapper);
+
+            if (targetRadio || targetLabel || targetWrapper) {
+                if (oppWrapper && oppWrapper.classList) {
+                    oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
+                }
+
+                if (targetRadio) {
+                    try { targetRadio.focus(); } catch (_) {}
+                    try { targetRadio.click(); } catch (_) {}
+                } else if (targetLabel || targetWrapper) {
+                    simulateUserClick(targetLabel || targetWrapper);
+                }
+
+                if (targetRadio) {
+                    targetRadio.checked = true;
+                }
+                if (oppRadio) {
+                    oppRadio.checked = false;
+                }
+                if (targetWrapper && targetWrapper.classList) {
+                    targetWrapper.classList.add('z-radio-checked');
+                }
+
+                if (targetRadio) {
+                    try { targetRadio.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch (_) {}
+                    try { targetRadio.dispatchEvent(new Event('change', { bubbles: true, cancelable: true })); } catch (_) {}
+                }
+                anySet = true;
+                continue;
+            }
+        }
+
+        const labels = doc.querySelectorAll('label, span, b, strong');
         for (const lbl of labels) {
-            if (normalize(lbl.innerText) === targetText) {
+            const text = normalize(lbl.innerText || lbl.textContent || '');
+            if (text === normVal || (text.length > 0 && text.startsWith(normVal))) {
                 const forId = lbl.getAttribute('for');
-                if (forId) {
-                    const radio = doc.getElementById(forId);
-                    if (radio) {
-                        radio.click();
-                        radio.dispatchEvent(new Event('change', { bubbles: true }));
-                        return true;
-                    }
+                let radio = forId ? doc.getElementById(forId) : null;
+                if (!radio) {
+                    radio = lbl.querySelector('input[type="radio"]')
+                        || lbl.parentElement?.querySelector('input[type="radio"]')
+                        || lbl.closest('.z-radio, tr, td, div')?.querySelector('input[type="radio"]');
+                }
+                if (radio) {
+                    simulateUserClick(lbl);
+                    radio.checked = true;
+                    simulateUserClick(radio);
+                    try { radio.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {}
+                    anySet = true;
+                    break;
+                }
+            }
+        }
+        if (!anySet) {
+            const radios = doc.querySelectorAll('input[type="radio"]');
+            for (const radio of radios) {
+                const radioText = normalize([radio.value, radio.id, radio.name].join(' '));
+                if (radioText === normVal || radioText.includes(normVal)) {
+                    radio.checked = true;
+                    simulateUserClick(radio);
+                    try { radio.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {}
+                    anySet = true;
+                    break;
                 }
             }
         }
     }
-    return false;
+    return anySet;
 }
 
 // Kaynak Sistem - Etiket metni ile açılır liste okuyucu
 function getSourceDropdownByLabel(substring) {
-    const labels = document.querySelectorAll('label');
+    const labels = document.querySelectorAll('label, dt, th, span, strong, b');
+    const subLower = substring.toLocaleLowerCase('tr-TR');
     for (const label of labels) {
-        if (label.innerText.toLocaleLowerCase('tr-TR').includes(substring.toLocaleLowerCase('tr-TR'))) {
-            const container = label.parentElement;
+        const text = (label.innerText || label.textContent || '').toLocaleLowerCase('tr-TR');
+        if (text.includes(subLower)) {
+            const container = label.closest('.form-group, .mb-3, .form-item, .field, .col, [class*="col-"], tr, li, dl') || label.parentElement;
+            if (!container) continue;
             const select = container.querySelector('select');
             if (select && select.options.length > 0 && select.selectedIndex >= 0) {
-                return select.options[select.selectedIndex].text;
+                return select.options[select.selectedIndex].text.trim();
             }
-            const select2Span = container.querySelector('.select2-selection__rendered');
+            const select2Span = container.querySelector('.select2-selection__rendered, .filter-option-inner-inner, .form-select, [role="combobox"]');
             if (select2Span) {
-                return select2Span.innerText.trim();
+                return (select2Span.innerText || select2Span.textContent || '').trim();
             }
         }
     }
     return '';
+}
+
+function normalizeGenderValue(val) {
+    if (!val || typeof val !== 'string') return '';
+    const v = val.trim().toLocaleLowerCase('tr-TR');
+    if (v === 'erkek' || v === 'male' || v === 'e' || v === 'm' || v === 'man' || v === 'boy' || v === '1') return 'Erkek';
+    if (v === 'kadın' || v === 'kadin' || v === 'female' || v === 'k' || v === 'f' || v === 'woman' || v === 'girl' || v === '2') return 'Kadın';
+    return '';
+}
+
+function extractGenderFromApply() {
+    // 1. Doğrudan select elemanları (name/id içinde gender, cinsiyet, sex)
+    const directSelects = document.querySelectorAll('select[name*="gender" i], select[name*="cinsiyet" i], select[id*="gender" i], select[id*="cinsiyet" i], select[name*="sex" i]');
+    for (const sel of directSelects) {
+        if (sel.options && sel.options.length > 0 && sel.selectedIndex >= 0) {
+            const opt = sel.options[sel.selectedIndex];
+            const txt = normalizeGenderValue(opt.text) || normalizeGenderValue(opt.value);
+            if (txt) return txt;
+        }
+    }
+
+    // 2. Doğrudan seçili radyo butonları
+    const checkedRadios = document.querySelectorAll('input[type="radio"]:checked');
+    for (const radio of checkedRadios) {
+        const nameOrId = (radio.name + ' ' + radio.id).toLowerCase();
+        if (nameOrId.includes('gender') || nameOrId.includes('cinsiyet') || nameOrId.includes('sex')) {
+            const lbl = document.querySelector(`label[for="${radio.id}"]`) || radio.closest('label') || radio.parentElement;
+            const text = normalizeGenderValue(lbl?.innerText || radio.value);
+            if (text) return text;
+        }
+    }
+
+    // 3. Etiket metni ("Cinsiyet", "Cinsiyeti", "Gender", "Sex") içeren form alanı
+    const candidateNodes = document.querySelectorAll('label, dt, th, span, div, strong, b');
+    for (const node of candidateNodes) {
+        const rawText = (node.innerText || node.textContent || '').trim();
+        const clean = rawText.toLocaleLowerCase('tr-TR').replace(/[*:\s]/g, '');
+        if (clean === 'cinsiyet' || clean === 'cinsiyeti' || clean === 'gender' || clean === 'sex') {
+            const container = node.closest('.form-group, .mb-3, .form-item, .field, .col, [class*="col-"], tr, li, dl') || node.parentElement;
+            if (container) {
+                const sel = container.querySelector('select');
+                if (sel && sel.options && sel.options.length > 0 && sel.selectedIndex >= 0) {
+                    const opt = sel.options[sel.selectedIndex];
+                    const txt = normalizeGenderValue(opt.text) || normalizeGenderValue(opt.value);
+                    if (txt) return txt;
+                }
+                const rendered = container.querySelector('.select2-selection__rendered, .filter-option-inner-inner, .form-select, .ant-select-selection-item, [role="combobox"]');
+                if (rendered) {
+                    const txt = normalizeGenderValue(rendered.innerText || rendered.textContent);
+                    if (txt) return txt;
+                }
+                const checkedRadio = container.querySelector('input[type="radio"]:checked');
+                if (checkedRadio) {
+                    const rLbl = document.querySelector(`label[for="${checkedRadio.id}"]`) || checkedRadio.closest('label') || checkedRadio.parentElement;
+                    const txt = normalizeGenderValue(rLbl?.innerText || checkedRadio.value);
+                    if (txt) return txt;
+                }
+                const inp = container.querySelector('input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"])');
+                if (inp && inp.value) {
+                    const txt = normalizeGenderValue(inp.value);
+                    if (txt) return txt;
+                }
+                const clone = container.cloneNode(true);
+                const labelsInClone = clone.querySelectorAll('label, dt, th, strong');
+                for (const l of labelsInClone) l.remove();
+                const containerText = (clone.innerText || clone.textContent || '');
+                if (/erkek/i.test(containerText)) return 'Erkek';
+                if (/kadın|kadin|female/i.test(containerText)) return 'Kadın';
+            }
+        }
+    }
+
+    // 4. Yedek arama
+    const fallback = getSourceDropdownByLabel('Cinsiyet') || findApplyFieldValue(['Cinsiyet', 'Cinsiyeti', 'Gender', 'Sex']);
+    return normalizeGenderValue(fallback) || (fallback ? fallback.trim() : '');
 }
 
 // YÖKSİS: Kabul ID inputunu ve butonunu bul
@@ -312,10 +823,12 @@ function getYoksisClickableSelector() {
 // yazılmış gibi görünse de sunucuya yeni aramanın hiç gitmemesine yol açıyordu.
 function isYoksisControlUsable(element) {
     if (!element || !element.isConnected || element.disabled) return false;
+    if (element.classList?.contains('z-textbox-disd') || element.classList?.contains('z-button-disd')) return false;
 
     let current = element;
     for (let depth = 0; current && depth < 12; depth += 1, current = current.parentElement) {
         if (current.hidden || current.getAttribute('aria-hidden') === 'true') return false;
+        if (current.classList?.contains('z-disabled') || current.getAttribute('disabled') !== null) return false;
         const inlineStyle = current.style;
         if (inlineStyle?.display === 'none' || inlineStyle?.visibility === 'hidden') return false;
         try {
@@ -324,6 +837,56 @@ function isYoksisControlUsable(element) {
         } catch (_) {}
     }
     return true;
+}
+
+function tryResetOrNewRecord() {
+    const allDocs = getAllDocs(document);
+    for (const doc of allDocs) {
+        // 1. Önce Kaydet butonunu bulup hemen yanındaki Öğrenci Bilgileri formunun "Temizle" butonunu ara
+        const clickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
+        let kaydetBtn = null;
+        for (const c of clickables) {
+            if (!c || !c.isConnected || c.disabled) continue;
+            const txt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
+            if (txt === 'kaydet' || txt.startsWith('kaydet')) {
+                kaydetBtn = getYoksisClickableRoot(c) || c;
+                break;
+            }
+        }
+        if (kaydetBtn) {
+            let parent = kaydetBtn.parentElement;
+            for (let depth = 0; parent && depth < 4; depth++, parent = parent.parentElement) {
+                const candidates = parent.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
+                for (const c of candidates) {
+                    if (c === kaydetBtn) continue;
+                    if (!c || !c.isConnected || c.disabled) continue;
+                    const cTxt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
+                    if (cTxt === 'temizle') {
+                        const targetBtn = getYoksisClickableRoot(c) || c;
+                        triggerZkClick(targetBtn);
+                        try { targetBtn.click(); } catch (_) {}
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback: Tablo filtre çubuğunda (excel/yıl/ykn) olmayan Temizle butonunu bul
+        for (const c of clickables) {
+            if (!c || !c.isConnected || c.disabled) continue;
+            const txt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
+            if (txt === 'temizle' || txt === 'yeni kayit') {
+                const container = c.closest('tr, .z-row, div, table');
+                const containerText = normalizeYoksisText(container?.innerText || container?.textContent || '');
+                if (containerText.includes('excel') || containerText.includes('yil') || containerText.includes('ykn')) continue;
+                const targetBtn = getYoksisClickableRoot(c) || c;
+                triggerZkClick(targetBtn);
+                try { targetBtn.click(); } catch (_) {}
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 function getYoksisClickableText(element) {
@@ -389,6 +952,8 @@ function findYoksisKabulPair() {
         const inputCandidates = Array.from(doc.querySelectorAll(inputSelector))
             .map((input) => {
                 if (!isYoksisControlUsable(input)) return null;
+                // Öğrenci form tablosu / grid içindeki alanları arama kutusu sanma
+                if (input.closest('.z-grid-body, .z-listbox-body')) return null;
                 const metadata = normalizeYoksisText([
                     input.placeholder,
                     input.getAttribute('placeholder'),
@@ -402,7 +967,7 @@ function findYoksisKabulPair() {
                 // imzayı, pasaport sorgu alanlarına göre önceliklendir.
                 const isAcceptanceEditor = /(?:-|_)chdextr$/i.test(input.id || '');
                 if ((!metadata.includes('kabul') && !isAcceptanceEditor)
-                    || metadata.includes('pasaport') || metadata.includes('tc') || metadata.includes('dogum')) return null;
+                    || metadata.includes('pasaport') || metadata.includes('tc') || metadata.includes('dogum') || metadata.includes('tarih')) return null;
                 let score = 10;
                 if (isAcceptanceEditor) score += 100;
                 if (metadata.includes('mektup')) score += 30;
@@ -419,7 +984,7 @@ function findYoksisKabulPair() {
             for (const row of doc.querySelectorAll('tr')) {
                 if (!isYoksisControlUsable(row)) continue;
                 const rowText = normalizeYoksisText(row.innerText || row.textContent || '');
-                if (!rowText.includes('kabul') || !rowText.includes('id')) continue;
+                if (!rowText.includes('kabul') || !rowText.includes('id') || rowText.includes('tarih')) continue;
                 const candidate = Array.from(row.querySelectorAll(inputSelector))
                     .find((input) => isYoksisTextInput(input) && isYoksisControlUsable(input));
                 if (candidate) {
@@ -611,6 +1176,9 @@ function waitForYoksisSearchControls(timeoutMs = 12_000) {
             return;
         }
 
+        // Başlangıçta alan bulunamadıysa (önceki öğrenci açık olabilir), Yeni Kayıt/Temizle butonunu dene
+        tryResetOrNewRecord();
+
         const intervalId = setInterval(() => {
             if (typeof chrome === 'undefined' || !chrome?.runtime?.id) {
                 clearInterval(intervalId);
@@ -754,14 +1322,14 @@ function findBelgeNoInMainPanel() {
             // Sol menüdeki arama kutucuğunu atlamak için placeholder kontrolü
             const ph = target.getAttribute('placeholder') || '';
             if (ph.toLocaleLowerCase('tr-TR').includes('pasaport')) {
-                continue; 
+                continue;
             }
-            
+
             // Bu input'un solundaki hücrelerde 'Belge No' var mı bakıyoruz
             const targetTd = target.closest('td');
             let prevTd = targetTd ? targetTd.previousElementSibling : null;
             let foundLabel = false;
-            
+
             while (prevTd) {
                 const text = normalize(prevTd.innerText);
                 if (text.includes(searchWord)) {
@@ -769,13 +1337,13 @@ function findBelgeNoInMainPanel() {
                     break;
                 }
                 if (text.includes(normalize('Uyruk Kimlik No'))) {
-                    // Eğer sola doğru giderken Belge No'dan önce Uyruk Kimlik No'ya çarparsak, 
+                    // Eğer sola doğru giderken Belge No'dan önce Uyruk Kimlik No'ya çarparsak,
                     // bu kutu Uyruk Kimlik No'nun kutusudur, Belge No'nun değil! Aramayı kes.
                     break;
                 }
                 prevTd = prevTd.previousElementSibling;
             }
-            
+
             if (foundLabel) {
                 return target;
             }
@@ -792,8 +1360,10 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/duzenlenme/g, 'duzenleme')
-        .replace(/\s+/g, '');
+        .replace(/[*:\s]/g, '');
     const searchWord = normalize(labelText);
+    const isAdiSearch = searchWord === 'adi' || searchWord === 'ad' || searchWord === 'ogrenciadi';
+    const isSoyadSearch = searchWord === 'soyadi' || searchWord === 'soyad' || searchWord === 'ogrencisoyadi';
     const allDocs = getAllDocs(document);
 
     for (const doc of allDocs) {
@@ -803,20 +1373,77 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
                 continue;
             }
             const row = target.closest('tr');
-            if (row && normalize(row.innerText).includes(searchWord)) {
+            if (row) {
                 const targetTd = target.closest('td');
                 let prevTd = targetTd ? targetTd.previousElementSibling : null;
                 while (prevTd) {
-                    if (normalize(prevTd.innerText).includes(searchWord)) {
+                    const prevText = normalize(prevTd.innerText);
+                    if (isAdiSearch && (prevText.includes('soyad') || prevText.includes('anne') || prevText.includes('baba') || prevText.includes('foto'))) {
+                        prevTd = prevTd.previousElementSibling;
+                        continue;
+                    }
+                    if (isSoyadSearch && (prevText.includes('anne') || prevText.includes('baba'))) {
+                        prevTd = prevTd.previousElementSibling;
+                        continue;
+                    }
+                    const matches = isAdiSearch
+                        ? (prevText === 'adi' || prevText === 'ad' || prevText === 'ogrenciadi')
+                        : (prevText === searchWord || prevText.includes(searchWord));
+                    if (matches) {
                         return target;
                     }
                     prevTd = prevTd.previousElementSibling;
                 }
             }
         }
-        
+
+        // Yeni YÖKSİS kartlarında etiket ve kontrol aynı form grubunda,
+        // tablo satırı olmadan yan yana bulunabilir. Kapsayıcıdaki ilk inputu
+        // almak yerine etikete komşu veya tekil kontrolü kullan.
+        const labelNodes = doc.querySelectorAll('label, span, div, dt, strong, b');
+        for (const labelNode of labelNodes) {
+            const labelValue = normalize(labelNode.innerText || labelNode.textContent || '');
+            if (isAdiSearch && (labelValue.includes('soyad') || labelValue.includes('anne') || labelValue.includes('baba') || labelValue.includes('foto'))) {
+                continue;
+            }
+            if (isSoyadSearch && (labelValue.includes('anne') || labelValue.includes('baba'))) {
+                continue;
+            }
+            const isExplicitLabel = ['LABEL', 'DT', 'STRONG', 'B'].includes(labelNode.tagName);
+            const exactMatch = isAdiSearch
+                ? (labelValue === 'adi' || labelValue === 'ad' || labelValue === 'ogrenciadi')
+                : (labelValue === searchWord);
+            const partialMatch = !isAdiSearch && isExplicitLabel && labelValue.includes(searchWord);
+            if (!exactMatch && !partialMatch) continue;
+
+            const ownTargets = Array.from(labelNode.querySelectorAll(tagName));
+            if (ownTargets.length === 1) return ownTargets[0];
+            if (ownTargets.length > 0) continue;
+
+            const nextNode = labelNode.nextElementSibling;
+            const nextTarget = nextNode && (nextNode.matches?.(tagName)
+                ? nextNode
+                : nextNode.querySelector?.(tagName));
+            if (nextTarget) return nextTarget;
+
+            const parent = labelNode.parentElement;
+            const parentTargets = parent ? Array.from(parent.querySelectorAll(tagName)) : [];
+            if (parentTargets.length === 1) return parentTargets[0];
+        }
+
         const elements = Array.from(doc.querySelectorAll('span, div, label')).filter(el => {
-            return normalize(el.innerText).includes(searchWord) && el.children.length <= 2;
+            const value = normalize(el.innerText || el.textContent || '');
+            if (isAdiSearch && (value.includes('soyad') || value.includes('anne') || value.includes('baba') || value.includes('foto'))) {
+                return false;
+            }
+            if (isSoyadSearch && (value.includes('anne') || value.includes('baba'))) {
+                return false;
+            }
+            const isLeafLike = !el.querySelector(tagName);
+            const isMatched = isAdiSearch
+                ? (value === 'adi' || value === 'ad' || value === 'ogrenciadi')
+                : (value === searchWord);
+            return isMatched && isLeafLike && el.children.length <= 2;
         });
 
         for (const el of elements) {
@@ -826,11 +1453,24 @@ function findTargetElementByFuzzyLabel(labelText, tagName) {
                 if (target) return target;
             }
         }
-        
+
         for (const target of allTargets) {
             const row = target.closest('tr');
-            if (row && normalize(row.innerText).includes(searchWord)) {
-                return target;
+            if (row) {
+                const rowText = normalize(row.innerText);
+                if (isAdiSearch && (rowText.includes('soyad') || rowText.includes('anne') || rowText.includes('baba') || rowText.includes('foto'))) {
+                    continue;
+                }
+                if (isSoyadSearch && (rowText.includes('anne') || rowText.includes('baba'))) {
+                    continue;
+                }
+                const matches = isAdiSearch
+                    ? (rowText === 'adi' || rowText === 'ad' || rowText === 'ogrenciadi')
+                    : rowText.includes(searchWord);
+                if (matches) {
+                    const rowTargets = Array.from(row.querySelectorAll(tagName));
+                    if (rowTargets.length === 1) return target;
+                }
             }
         }
     }
@@ -1091,7 +1731,7 @@ function formatDateForYoksisInput(element, rawDate) {
     if (!rawDate) return '';
     const clean = String(rawDate).trim();
     if (element && (element.getAttribute('type') || '').toLowerCase() === 'date') {
-        const parts = clean.split(/[./\-\s]+/);
+        const parts = clean.split(/[./\-\s]+/).filter(Boolean);
         if (parts.length === 3) {
             let y, m, d;
             if (parts[0].length === 4) {
@@ -1099,12 +1739,13 @@ function formatDateForYoksisInput(element, rawDate) {
             } else {
                 [d, m, y] = parts;
             }
+            if (String(y).length === 2) y = Number(y) <= 49 ? '20' + y : '19' + y;
             return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         }
         return clean;
     }
 
-    const parts = clean.split(/[./\-\s]+/);
+    const parts = clean.split(/[./\-\s]+/).filter(Boolean);
     if (parts.length === 3) {
         let d, m, y;
         if (parts[0].length === 4) {
@@ -1129,7 +1770,7 @@ function toApplyUrl(value) {
 
     try {
         const url = new URL(value, location.href);
-        if (url.protocol !== 'https:' || url.hostname !== 'apply.topkapi.edu.tr') return '';
+        if (url.hostname !== 'apply.topkapi.edu.tr' && !url.hostname.endsWith('.topkapi.edu.tr')) return '';
         return url.href;
     } catch (error) {
         return '';
@@ -1326,7 +1967,7 @@ function parseDateTimestamp(text) {
 function findDocumentActionUrl(container) {
     if (!container) return '';
     const candidates = Array.from(container.querySelectorAll('a[href], [data-href], [data-url], [data-link], button, [onclick]'));
-    
+
     // Priority 1: explicitly looks like an acceptance letter or document URL
     for (const el of candidates) {
         const url = extractElementUrl(el);
@@ -1366,7 +2007,7 @@ function findDocumentLinks() {
         passportCandidates: [],
         kabulId: ''
     };
-    
+
     // Direct code if available on page
     const directCode = findDirectKabulCode();
     if (directCode) links.kabulId = directCode;
@@ -1494,41 +2135,125 @@ function readFieldValue(target) {
 }
 
 function findApplyFieldValue(labels) {
-    const normalizedLabels = labels.map(normalizeApplyText);
-    const targets = document.querySelectorAll('input, select, textarea');
-    for (const target of targets) {
-        const rowText = normalizeApplyText(target.closest('tr')?.innerText);
-        if (normalizedLabels.some((label) => rowText.includes(label))) {
-            const value = readFieldValue(target);
-            if (value) return value;
-        }
-    }
+    const cleanNorm = (str) => (str || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/[*:\s]/g, '');
+    const normalizedLabels = (labels || []).map(cleanNorm).filter(Boolean);
+    if (normalizedLabels.length === 0) return '';
+    const isAdiSearch = normalizedLabels.some((l) => l === 'ad' || l === 'adi' || l === 'firstname' || l === 'givenname');
+    const isSoyadSearch = normalizedLabels.some((l) => l === 'soyad' || l === 'soyadi' || l === 'lastname' || l === 'surname' || l === 'familyname');
 
+    // 1. Check direct table cells
     const rows = document.querySelectorAll('tr');
     for (const row of rows) {
         const cells = row.querySelectorAll('td, th');
         if (cells.length < 2) continue;
-        const label = normalizeApplyText(cells[0].innerText);
-        if (normalizedLabels.some((value) => label.includes(value))) return cells[1].innerText.trim();
+        const cellText = cleanNorm(cells[0].innerText || cells[0].textContent);
+        if (isAdiSearch && (cellText.includes('soyad') || cellText.includes('anne') || cellText.includes('baba'))) continue;
+        if (isSoyadSearch && (cellText.includes('anne') || cellText.includes('baba'))) continue;
+        const matches = normalizedLabels.some((val) => isAdiSearch ? (cellText === val || cellText === 'ogrenciadi') : (cellText === val || cellText.includes(val)));
+        if (matches) {
+            const inputInside = cells[1].querySelector('input, select, textarea');
+            const value = inputInside ? readFieldValue(inputInside) : cells[1].innerText.trim();
+            if (value) return value;
+        }
+    }
+
+    // 2. Direct input in table cell with prevTd
+    const targets = document.querySelectorAll('input, select, textarea');
+    for (const target of targets) {
+        const targetTd = target.closest('td, th');
+        const prevTd = targetTd ? targetTd.previousElementSibling : null;
+        if (prevTd) {
+            const prevText = cleanNorm(prevTd.innerText || prevTd.textContent);
+            if (isAdiSearch && (prevText.includes('soyad') || prevText.includes('anne') || prevText.includes('baba'))) continue;
+            if (isSoyadSearch && (prevText.includes('anne') || prevText.includes('baba'))) continue;
+            const matches = normalizedLabels.some((val) => isAdiSearch ? (prevText === val || prevText === 'ogrenciadi') : (prevText === val || prevText.includes(val)));
+            if (matches) {
+                const value = readFieldValue(target);
+                if (value) return value;
+            }
+        }
+    }
+
+    // 3. Form labels / containers (strictly excluding .row to prevent cross-field leaking)
+    const labelNodes = document.querySelectorAll('label, dt, strong, b, span, div');
+    for (const labelNode of labelNodes) {
+        const rawText = labelNode.innerText || labelNode.textContent || '';
+        const labelText = cleanNorm(rawText);
+        if (!labelText) continue;
+        if (isAdiSearch && (labelText.includes('soyad') || labelText.includes('anne') || labelText.includes('baba'))) continue;
+        if (isSoyadSearch && (labelText.includes('anne') || labelText.includes('baba'))) continue;
+
+        const exactMatch = normalizedLabels.some((val) => labelText === val);
+        const isExplicitLabel = ['LABEL', 'DT', 'STRONG', 'B'].includes(labelNode.tagName);
+        const partialMatch = isExplicitLabel && normalizedLabels.some((val) => isAdiSearch ? (labelText === val || labelText === 'ogrenciadi') : labelText.includes(val));
+        if (!exactMatch && !partialMatch) continue;
+
+        // Try for attribute first
+        const forId = labelNode.getAttribute?.('for');
+        if (forId) {
+            const el = document.getElementById(forId);
+            const value = readFieldValue(el);
+            if (value) return value;
+        }
+
+        // Try input inside label
+        const insideInput = labelNode.querySelector?.('input, select, textarea');
+        if (insideInput) {
+            const value = readFieldValue(insideInput);
+            if (value) return value;
+        }
+
+        // Try next element sibling
+        const next = labelNode.nextElementSibling;
+        const nextInput = next ? (next.matches?.('input, select, textarea') ? next : next.querySelector?.('input, select, textarea')) : null;
+        if (nextInput) {
+            const value = readFieldValue(nextInput);
+            if (value) return value;
+        }
+
+        // Container (strictly excluding .row to avoid cross-column contamination)
+        const container = labelNode.closest('.form-group, .form-floating, .col, [class*="col-"], .field, .input-group, dl, li') || labelNode.parentElement;
+        if (container && !container.classList?.contains('row')) {
+            const inputs = Array.from(container.querySelectorAll('input, select, textarea'));
+            const following = inputs.filter((inp) => (labelNode.compareDocumentPosition(inp) & Node.DOCUMENT_POSITION_FOLLOWING));
+            const target = following.length > 0 ? following[0] : inputs[0];
+            const value = readFieldValue(target);
+            if (value) return value;
+        }
+    }
+    return '';
+}
+
+function findApplyInputValue(selectors) {
+    for (const selector of selectors) {
+        const target = document.querySelector(selector);
+        const value = readFieldValue(target);
+        if (value) return value;
     }
     return '';
 }
 
 function findApplyStudentData() {
     return {
+        firstName: findApplyFieldValue(['Adı', 'Ad', 'First Name', 'Given Name']),
+        lastName: findApplyFieldValue(['Soyadı', 'Soyad', 'Last Name', 'Surname', 'Family Name']),
         anneAdi: findApplyFieldValue(['Anne Adı', "Mother's Name", 'Mother Name']),
         babaAdi: findApplyFieldValue(['Baba Adı', "Father's Name", 'Father Name']),
         uyruk: findApplyFieldValue(['Uyruğu', 'Nationality']),
         dogumUlkesi: findApplyFieldValue(['Doğum Yeri Ülkesi', 'Born Country']),
-        cinsiyet: findApplyFieldValue(['Cinsiyeti', 'Gender', 'Sex']),
+        cinsiyet: extractGenderFromApply(),
         pasaportNo: findApplyFieldValue(['Pasaport No', 'Passport No', 'Number of Document']),
-        birthDate: findApplyFieldValue(['Doğum Tarihi', 'Date of Birth', 'Birth Date', 'Doğum Günü'])
+        birthDate: findApplyFieldValue(['Doğum Tarihi', 'Date of Birth', 'Birth Date', 'Doğum Günü']),
+        issueDate: findApplyFieldValue(['Belge Düzenleme Tarihi', 'Düzenleme Tarihi', 'Pasaport Düzenleme Tarihi', 'Veriliş Tarihi', 'Date of Issue', 'Issue Date', 'Tanzim Tarihi']),
+        expiryDate: findApplyFieldValue(['Belge Geçerlilik Tarihi', 'Geçerlilik Tarihi', 'Pasaport Geçerlilik Tarihi', 'Son Geçerlilik Tarihi', 'Pasaport Bitiş Tarihi', 'Belge Bitiş Tarihi', 'Date of Expiry', 'Expiry Date', 'Expiration Date'])
     };
 }
 
 function normalizeApplyBirthDate(rawDate) {
     if (!rawDate || typeof rawDate !== 'string') return '';
-    const clean = rawDate.trim();
+    const clean = rawDate.replace(/[T\s]\d{1,2}:\d{1,2}(?::\d{1,2})?.*$/, '').trim();
     if (!clean) return '';
 
     const monthMap = {
@@ -1584,9 +2309,27 @@ function normalizeApplyBirthDate(rawDate) {
 }
 
 function extractApplyProfileData() {
-    const anneInput = document.querySelector('input[name="mothersName"]');
-    const babaInput = document.querySelector('input[name="fathersName"]');
-    
+    const firstNameInput = document.querySelector([
+        'input[name="firstName"]', 'input[name="first_name"]', 'input[name="givenName"]',
+        'input[name="ad"]', 'input[name="adi"]', 'input[name="ad_"]',
+        'input[id="ad"]', 'input[id="adi"]', 'input[id="firstName"]', 'input[id="first_name"]',
+        'input[id*="first" i]', 'input[id*="given-name" i]'
+    ].join(','));
+    const lastNameInput = document.querySelector([
+        'input[name="lastName"]', 'input[name="last_name"]', 'input[name="surname"]',
+        'input[name="familyName"]', 'input[name="soyad"]', 'input[name="soyadi"]', 'input[name="soyad_"]',
+        'input[id="soyad"]', 'input[id="soyadi"]', 'input[id="lastName"]', 'input[id="last_name"]', 'input[id="surname"]',
+        'input[id*="last" i]', 'input[id*="surname" i]', 'input[id*="soyad" i]'
+    ].join(','));
+    const anneInput = document.querySelector([
+        'input[name="mothersName"]', 'input[name="motherName"]', 'input[name="mother_name"]',
+        'input[name="motherFullName"]', 'input[id*="mother" i]'
+    ].join(','));
+    const babaInput = document.querySelector([
+        'input[name="fathersName"]', 'input[name="fatherName"]', 'input[name="father_name"]',
+        'input[name="fatherFullName"]', 'input[id*="father" i]'
+    ].join(','));
+
     let pasaportInput = document.querySelector('input[name="passportNumber"]');
     if (!pasaportInput) pasaportInput = document.querySelector('.inputPassportNumber');
     if (!pasaportInput) {
@@ -1614,27 +2357,130 @@ function extractApplyProfileData() {
         }
     }
 
+    let issueDateInput = document.querySelector([
+        'input[name="passportIssueDate"]', 'input[name="issueDate"]', 'input[name="passport_issue_date"]',
+        'input[name="dateOfIssue"]', 'input[name="date_of_issue"]', 'input[id*="issue" i]',
+        'input[id*="duzenle" i]', 'input[id*="verilis" i]'
+    ].join(','));
+    if (!issueDateInput) {
+        const labels = document.querySelectorAll('label, span, th, dt');
+        for (const label of labels) {
+            const lt = label.innerText.toLowerCase();
+            if (lt.includes('düzenleme tarihi') || lt.includes('duzenleme tarihi') || lt.includes('veriliş tarihi') || lt.includes('verilis tarihi') || lt.includes('issue date') || lt.includes('date of issue') || lt.includes('tanzim tarihi')) {
+                issueDateInput = label.parentElement ? label.parentElement.querySelector('input') : null;
+                if (issueDateInput) break;
+            }
+        }
+    }
+
+    let expiryDateInput = document.querySelector([
+        'input[name="passportExpiryDate"]', 'input[name="expiryDate"]', 'input[name="passport_expiry_date"]',
+        'input[name="dateOfExpiry"]', 'input[name="date_of_expiry"]', 'input[name="expirationDate"]',
+        'input[id*="expir" i]', 'input[id*="gecerli" i]'
+    ].join(','));
+    if (!expiryDateInput) {
+        const labels = document.querySelectorAll('label, span, th, dt');
+        for (const label of labels) {
+            const lt = label.innerText.toLowerCase();
+            if (lt.includes('geçerlilik tarihi') || lt.includes('gecerlilik tarihi') || lt.includes('son geçerlilik') || lt.includes('expiry date') || lt.includes('date of expiry') || lt.includes('expiration date') || lt.includes('pasaport bitiş') || lt.includes('belge bitiş')) {
+                expiryDateInput = label.parentElement ? label.parentElement.querySelector('input') : null;
+                if (expiryDateInput) break;
+            }
+        }
+    }
+
     const fallbackData = findApplyStudentData();
-    
-    const anneAdi = (anneInput ? anneInput.value : '') || fallbackData.anneAdi || '';
-    const babaAdi = (babaInput ? babaInput.value : '') || fallbackData.babaAdi || '';
+    const firstName = (firstNameInput ? firstNameInput.value : '')
+        || fallbackData.firstName
+        || findApplyInputValue(['input[name="ad"]', 'input[id="ad"]', 'input[name="firstName"]', 'input[name="first_name"]', 'input[name="name"]', 'input[id="name"]'])
+        || '';
+    let lastName = (lastNameInput ? lastNameInput.value : '')
+        || fallbackData.lastName
+        || findApplyInputValue(['input[name="soyad"]', 'input[id="soyad"]', 'input[name="surname"]', 'input[id="surname"]', 'input[name="lastName"]', 'input[id="last_name"]'])
+        || '';
+
+    // Safeguard: if lastName somehow picked up firstName (due to .row or form grouping), do not keep it identical
+    if (lastName && firstName && lastName.trim().toLowerCase() === firstName.trim().toLowerCase()) {
+        const altLastName = findApplyInputValue(['input[name="soyad"]', 'input[id="soyad"]', 'input[name="surname"]', 'input[id="surname"]']);
+        if (altLastName && altLastName.trim().toLowerCase() !== firstName.trim().toLowerCase()) {
+            lastName = altLastName;
+        } else {
+            lastName = '';
+        }
+    }
+    const anneAdi = (anneInput ? anneInput.value : '') || fallbackData.anneAdi || findApplyFieldValue(['Anne Adı', 'Anne İsmi', "Mother's Name", 'Mother Name']) || '';
+    const babaAdi = (babaInput ? babaInput.value : '') || fallbackData.babaAdi || findApplyFieldValue(['Baba Adı', 'Baba İsmi', "Father's Name", 'Father Name']) || '';
     const pasaportNo = (pasaportInput ? pasaportInput.value : '') || fallbackData.pasaportNo || '';
     const rawBirthDate = (birthInput ? birthInput.value : '') || fallbackData.birthDate || '';
+    const rawIssueDate = (issueDateInput ? issueDateInput.value : '') || fallbackData.issueDate || '';
+    const rawExpiryDate = (expiryDateInput ? expiryDateInput.value : '') || fallbackData.expiryDate || '';
     const uyruk = getSourceDropdownByLabel('Uyruk') || fallbackData.uyruk || '';
     const dogumUlkesi = getSourceDropdownByLabel('Doğduğunuz') || getSourceDropdownByLabel('Doğum') || fallbackData.dogumUlkesi || '';
-    const cinsiyet = getSourceDropdownByLabel('Cinsiyet') || fallbackData.cinsiyet || '';
+    const cinsiyet = extractGenderFromApply() || getSourceDropdownByLabel('Cinsiyet') || fallbackData.cinsiyet || '';
 
     const normalizedBirthDate = normalizeApplyBirthDate(rawBirthDate);
+    const normalizedIssueDate = normalizeApplyBirthDate(rawIssueDate);
+    const normalizedExpiryDate = normalizeApplyBirthDate(rawExpiryDate);
+    const fullName = [firstName, lastName].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
 
     return {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        ad: firstName.trim(),
+        soyad: lastName.trim(),
+        fullName,
         anneAdi: (anneAdi || '').trim(),
         babaAdi: (babaAdi || '').trim(),
         pasaportNo: (pasaportNo || '').trim(),
+        passportNo: (pasaportNo || '').trim(),
         birthDate: normalizedBirthDate,
+        issueDate: normalizedIssueDate,
+        expiryDate: normalizedExpiryDate,
         uyruk: (uyruk || '').trim(),
         dogumUlkesi: (dogumUlkesi || '').trim(),
         cinsiyet: (cinsiyet || '').trim()
     };
+}
+
+function attachApplyYknHelper() {
+    if (location.hostname !== 'apply.topkapi.edu.tr') return;
+    try {
+        if (typeof chrome === 'undefined' || !chrome?.storage?.local) return;
+        chrome.storage.local.get(['lastFoundYkn', 'lastFoundYknTime'], (res) => {
+            const ykn = res?.lastFoundYkn;
+            if (!ykn || !/^99\d{9}$/.test(ykn)) return;
+            if (Date.now() - (res.lastFoundYknTime || 0) > 60 * 60 * 1000) return;
+
+            copyTextToClipboardDirect(ykn);
+
+            const candidateInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])'))
+                .filter(inp => {
+                    const meta = (inp.name + ' ' + inp.id + ' ' + (inp.placeholder || '') + ' ' + (inp.getAttribute('aria-label') || '')).toLowerCase();
+                    return meta.includes('ykn') || meta.includes('kimlik') || meta.includes('identity') || meta.includes('yabanci');
+                });
+
+            for (const input of candidateInputs) {
+                if (input.dataset.yknHelperAttached) continue;
+                input.dataset.yknHelperAttached = 'true';
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = `📋 YKN Yapıştır (${ykn})`;
+                btn.style.cssText = 'display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: #fff; background: #27ae60; border: none; border-radius: 4px; cursor: pointer; z-index: 9999;';
+                btn.addEventListener('click', (ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    input.value = ykn;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    copyTextToClipboardDirect(ykn);
+                    btn.textContent = '✓ Yapıştırıldı!';
+                    setTimeout(() => { btn.textContent = `📋 YKN Yapıştır (${ykn})`; }, 2000);
+                });
+                input.parentElement?.appendChild(btn);
+            }
+        });
+    } catch (_) {}
 }
 
 function watchForDocumentLinks(requestId) {
@@ -1706,6 +2552,244 @@ async function fetchApplyDocument(documentUrl) {
     };
 }
 
+function decodeBase64ToBytes(base64) {
+    const binary = atob(base64 || '');
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+}
+
+function decodeDocumentBytes(bytes) {
+    if (typeof TextDecoder === 'function') return new TextDecoder('utf-8').decode(bytes);
+    return String.fromCharCode(...bytes);
+}
+
+function ensurePdfWorkerReady() {
+    if (!window.pdfjsLib) return;
+    if (!window.pdfjsLib.GlobalWorkerOptions) window.pdfjsLib.GlobalWorkerOptions = {};
+    if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        try {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdf.worker.min.js');
+        } catch (_) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+        }
+    }
+}
+
+async function extractPdfText(bytes) {
+    if (!window.pdfjsLib) throw new Error('PDF okuyucu hazır değil. Eklentiyi yenileyip tekrar deneyin.');
+    ensurePdfWorkerReady();
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const pageTexts = [];
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        const textContent = await page.getTextContent();
+        pageTexts.push(textContent.items.map((item) => item.str).join(' '));
+    }
+    return pageTexts.join('\n');
+}
+
+function requestPortalOcr(imageBase64, requestId = '') {
+    return new Promise((resolve, reject) => {
+        if (!chrome?.runtime?.sendMessage) {
+            reject(new Error('OCR servisine bağlanılamadı.'));
+            return;
+        }
+        chrome.runtime.sendMessage({ action: 'OCR_IMAGE', imageBase64, requestId }, (response) => {
+            const runtimeError = chrome.runtime.lastError;
+            if (runtimeError) {
+                reject(new Error(runtimeError.message));
+                return;
+            }
+            if (!response?.success || !response.text) {
+                reject(new Error(response?.error || 'OCR metin döndürmedi.'));
+                return;
+            }
+            resolve(response.text);
+        });
+    });
+}
+
+async function extractPdfTextWithOcr(bytes, requestId = '', maxPages = 3) {
+    if (!window.pdfjsLib) throw new Error('PDF okuyucu hazır değil.');
+    ensurePdfWorkerReady();
+    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+    const pageTexts = [];
+    const pageLimit = Math.min(pdf.numPages, maxPages);
+    for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        try {
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+            const text = await requestPortalOcr(canvas.toDataURL('image/jpeg', 0.85), requestId);
+            if (text) pageTexts.push(text);
+        } finally {
+            canvas.width = 0;
+            canvas.height = 0;
+        }
+    }
+    return pageTexts.join('\n');
+}
+
+async function extractImageTextWithOcr(bytes, contentType, requestId = '') {
+    const blob = new Blob([bytes], { type: contentType || 'image/jpeg' });
+    const imageUrl = URL.createObjectURL(blob);
+    try {
+        const image = new Image();
+        image.src = imageUrl;
+        await new Promise((resolve, reject) => {
+            image.onload = resolve;
+            image.onerror = () => reject(new Error('Pasaport görseli açılamadı.'));
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+        canvas.getContext('2d').drawImage(image, 0, 0);
+        return requestPortalOcr(canvas.toDataURL('image/jpeg', 0.85), requestId);
+    } finally {
+        URL.revokeObjectURL(imageUrl);
+    }
+}
+
+async function extractDocumentText(documentResult, options = {}) {
+    const bytes = decodeBase64ToBytes(documentResult.documentBase64);
+    const contentType = String(documentResult.contentType || '').toLowerCase();
+    const signature = decodeDocumentBytes(bytes.slice(0, 8));
+    if (contentType.includes('pdf') || signature.startsWith('%PDF')) {
+        const text = await extractPdfText(bytes);
+        if (text.trim() || options.fastOnly) return text;
+        const ocrText = await extractPdfTextWithOcr(bytes, documentResult.requestId || '');
+        documentResult.ocrText = ocrText;
+        return ocrText;
+    }
+    if (contentType.startsWith('image/')) {
+        if (options.fastOnly) return '';
+        const ocrText = await extractImageTextWithOcr(bytes, contentType, documentResult.requestId || '');
+        documentResult.ocrText = ocrText;
+        return ocrText;
+    }
+    return decodeDocumentBytes(bytes);
+}
+
+function getDocumentCandidates(links, kind, requestedUrl = '') {
+    const candidates = requestedUrl ? [requestedUrl] : [];
+    const values = kind === 'passport'
+        ? (links.passportCandidates || [links.passportDocumentUrl])
+        : (links.acceptanceCandidates || [links.acceptanceLetterUrl]);
+    for (const value of values) {
+        if (value && !candidates.includes(value)) candidates.push(value);
+    }
+    return candidates.filter(Boolean);
+}
+
+async function extractPassportMetadataFromApply(request) {
+    const links = findDocumentLinks();
+    const profileData = extractApplyProfileData();
+    const candidates = getDocumentCandidates(links, 'passport', request.documentUrl);
+    if (candidates.length === 0) throw new Error('Öğrenci profilinde pasaport belgesi bulunamadı.');
+
+    const isFast = Boolean(request.fastOnly || request.fromPortal);
+    const errors = [];
+    for (const documentUrl of candidates) {
+        try {
+            const documentResult = await fetchApplyDocument(documentUrl);
+            documentResult.requestId = request.requestId;
+            let text = await extractDocumentText(documentResult, { fastOnly: isFast });
+            const parser = window.YknDocumentParser;
+            if (!parser) throw new Error('Pasaport parserı hazır değil.');
+            let metadata = parser.extractPassportMetadata(text, {
+                nationality: profileData.uyruk,
+                birthDate: profileData.birthDate,
+                dogumUlkesi: profileData.dogumUlkesi,
+                country: profileData.country || profileData.uyruk
+            });
+            let missingFields = ['issueDate', 'expiryDate', 'placeOfBirth', 'issuingAuthority']
+                .filter((field) => !metadata[field]);
+
+            // Portal üzerinden çağrılmıyorsa ve eksik alan varsa OCR dene
+            if (!isFast && missingFields.length > 0 && !documentResult.ocrText) {
+                try {
+                    const bytes = decodeBase64ToBytes(documentResult.documentBase64);
+                    const contentType = String(documentResult.contentType || '').toLowerCase();
+                    const signature = decodeDocumentBytes(bytes.slice(0, 8));
+                    const ocrText = contentType.includes('pdf') || signature.startsWith('%PDF')
+                        ? await extractPdfTextWithOcr(bytes, request.requestId || '')
+                        : contentType.startsWith('image/')
+                            ? await extractImageTextWithOcr(bytes, contentType, request.requestId || '')
+                            : '';
+                    if (ocrText.trim()) {
+                        text = `${text}\n${ocrText}`;
+                        metadata = parser.extractPassportMetadata(text, {
+                            nationality: profileData.uyruk,
+                            birthDate: profileData.birthDate,
+                            dogumUlkesi: profileData.dogumUlkesi,
+                            country: profileData.country || profileData.uyruk
+                        });
+                        missingFields = ['issueDate', 'expiryDate', 'placeOfBirth', 'issuingAuthority']
+                            .filter((field) => !metadata[field]);
+                    }
+                } catch (ocrError) {
+                    errors.push(`OCR: ${ocrError.message}`);
+                }
+            }
+
+            // Belge indirildiği için cropper'ın anında açılması adına veriyi hemen döndür
+            return {
+                metadata,
+                missingFields,
+                documentUrl,
+                documentBase64: documentResult.documentBase64,
+                contentType: documentResult.contentType
+            };
+        } catch (error) {
+            errors.push(error.message);
+        }
+    }
+    throw new Error(errors.at(-1) || 'Pasaport belgesi okunamadı.');
+}
+
+async function extractAcceptanceCodeFromApply(request) {
+    const start = Date.now();
+    let links = findDocumentLinks();
+    let directCode = isValidYoksisId(links.kabulId) ? links.kabulId : '';
+    let candidates = getDocumentCandidates(links, 'acceptance', request.documentUrl);
+
+    // Apply profil sayfası belgeleri AJAX ile geç yükleyebilir; 8 saniyeye kadar bekle
+    while (!directCode && candidates.length === 0 && Date.now() - start < 8000) {
+        await new Promise(r => setTimeout(r, 400));
+        links = findDocumentLinks();
+        directCode = isValidYoksisId(links.kabulId) ? links.kabulId : '';
+        candidates = getDocumentCandidates(links, 'acceptance', request.documentUrl);
+    }
+
+    if (directCode) {
+        copyTextToClipboardDirect(directCode);
+        return { code: directCode, documentUrl: '' };
+    }
+
+    if (candidates.length === 0) throw new Error('Öğrenci profilinde kabul mektubu bulunamadı.');
+    const errors = [];
+    for (const documentUrl of candidates) {
+        try {
+            const documentResult = await fetchApplyDocument(documentUrl);
+            const text = await extractDocumentText(documentResult);
+            const parser = window.YknDocumentParser;
+            const code = parser?.extractYoksisIdFromText(text) || '';
+            if (code) {
+                copyTextToClipboardDirect(code);
+                return { code, documentUrl };
+            }
+            errors.push('Kabul mektubu kodu belgede bulunamadı.');
+        } catch (error) {
+            errors.push(error.message);
+        }
+    }
+    throw new Error(errors.at(-1) || 'Kabul mektubu okunamadı.');
+}
+
 async function encodeBase64(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
     const chunkSize = 0x8000;
@@ -1714,6 +2798,311 @@ async function encodeBase64(arrayBuffer) {
         binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
     }
     return btoa(binary);
+}
+
+// ==========================================
+// YÖKSİS YKN & Kaydetme Otomasyon Fonksiyonları
+// ==========================================
+
+function findYoksisSaveButton() {
+    const allDocs = getAllDocs(document);
+    for (const doc of allDocs) {
+        const clickables = doc.querySelectorAll(getYoksisClickableSelector());
+        for (const candidate of clickables) {
+            if (!isYoksisControlUsable(candidate)) continue;
+            const text = getYoksisClickableText(candidate);
+            if (text === 'kaydet' || text.startsWith('kaydet') || text.includes('ogrencikaydet')) {
+                return getYoksisClickableRoot(candidate);
+            }
+        }
+    }
+    return null;
+}
+
+function findYoksisStudentRows() {
+    const allDocs = getAllDocs(document);
+    for (const doc of allDocs) {
+        const candidateRows = Array.from(doc.querySelectorAll(
+            '.z-grid-body tr.z-row, .z-listbox-body tr.z-listitem, table.z-grid-body tr, table.z-listbox-body tr, tr.z-row, tr.z-listitem'
+        )).filter(row => {
+            if (!isYoksisControlUsable(row)) return false;
+            if (row.closest('.z-columns') || row.closest('.z-listhead') || row.classList.contains('z-columns') || row.classList.contains('z-listhead')) return false;
+            const cells = row.querySelectorAll('td');
+            return cells.length >= 4;
+        });
+
+        if (candidateRows.length > 0) {
+            return candidateRows;
+        }
+    }
+    return [];
+}
+
+function matchStudentInFirstThreeRows(studentName, passportNo) {
+    const rows = findYoksisStudentRows().slice(0, 3);
+    if (rows.length === 0) return null;
+
+    const normName = normalizeYoksisText(studentName || '');
+    const normPassport = normalizeYoksisText(passportNo || '');
+    const nameTokens = (studentName || '').split(/\s+/).map(normalizeYoksisText).filter(t => t.length >= 3);
+
+    let bestRow = null;
+    let highestScore = -1;
+
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowText = normalizeYoksisText(row.innerText || row.textContent || '');
+        let score = 0;
+
+        if (normPassport && normPassport.length >= 4 && rowText.includes(normPassport)) {
+            score += 100;
+        }
+
+        if (normName && normName.length >= 4 && rowText.includes(normName)) {
+            score += 70;
+        } else {
+            for (const token of nameTokens) {
+                if (rowText.includes(token)) score += 25;
+            }
+        }
+
+        if (score > highestScore) {
+            highestScore = score;
+            bestRow = row;
+        }
+    }
+
+    return bestRow || rows[0];
+}
+
+async function selectYoksisTableRow(rowElement) {
+    if (!rowElement) return false;
+    const win = rowElement.ownerDocument?.defaultView || window;
+
+    if (win.zk && win.zk.Widget) {
+        const w = win.zk.Widget.$(rowElement);
+        if (w && typeof w.fire === 'function') {
+            try {
+                w.fire('onClick', null, { toServer: true });
+                w.fire('onSelect', null, { toServer: true });
+            } catch (_) {}
+        }
+    }
+
+    const targetCell = rowElement.querySelector('td:nth-child(3)') || rowElement.querySelector('td:nth-child(2)') || rowElement.querySelector('td') || rowElement;
+    for (const el of [targetCell, rowElement]) {
+        try {
+            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: win }));
+            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: win }));
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
+        } catch (_) {}
+    }
+
+    return true;
+}
+
+function findYoksisYknActionButtons() {
+    const allDocs = getAllDocs(document);
+    let talepButton = null;
+    let sorgulaButton = null;
+
+    for (const doc of allDocs) {
+        const clickables = doc.querySelectorAll(getYoksisClickableSelector());
+        for (const candidate of clickables) {
+            if (!isYoksisControlUsable(candidate)) continue;
+            const text = getYoksisClickableText(candidate);
+
+            // "YKN Talep Gönder" butonu
+            if (text.includes('talepgonder') || (text.includes('talep') && text.includes('gonder'))) {
+                talepButton = getYoksisClickableRoot(candidate);
+            }
+            // "Durum Sorgula" veya "Durumu Sorgula" butonu
+            else if (text.includes('durumsorgula') || text.includes('durumusorgula') || (text.includes('durum') && text.includes('sorgula'))) {
+                sorgulaButton = getYoksisClickableRoot(candidate);
+            }
+        }
+    }
+
+    return { talepButton, sorgulaButton };
+}
+
+async function waitAndHandleYoksisModal(timeoutMs = 5000) {
+    const deadline = Date.now() + timeoutMs;
+    const allDocs = getAllDocs(document);
+
+    while (Date.now() < deadline) {
+        for (const doc of allDocs) {
+            const modals = doc.querySelectorAll(
+                '.z-window-modal, .z-window-highlighted, .z-messagebox-window, .z-messagebox, [class*="z-window-modal"], [class*="z-window-highlighted"], [class*="z-messagebox"]'
+            );
+            for (const modal of modals) {
+                if (!isYoksisControlUsable(modal)) continue;
+
+                const modalText = (modal.innerText || modal.textContent || '').trim();
+                const buttons = modal.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
+                let confirmBtn = null;
+                for (const btn of buttons) {
+                    if (!isYoksisControlUsable(btn)) continue;
+                    const bTxt = normalizeYoksisText(btn.innerText || btn.textContent || btn.value || '');
+                    if (bTxt.includes('tamam') || bTxt === 'ok' || bTxt.includes('kapat')) {
+                        confirmBtn = getYoksisClickableRoot(btn) || btn;
+                        break;
+                    }
+                }
+
+                if (confirmBtn) {
+                    triggerZkClick(confirmBtn);
+                    try { confirmBtn.click(); } catch (_) {}
+                    return { found: true, text: modalText };
+                } else if (modalText && modalText.length > 5) {
+                    await new Promise(r => setTimeout(r, 200));
+                    const retryButtons = modal.querySelectorAll('button, .z-button, a, input[type="button"]');
+                    for (const rb of retryButtons) {
+                        const rbTxt = normalizeYoksisText(rb.innerText || rb.textContent || rb.value || '');
+                        if (rbTxt.includes('tamam') || rbTxt === 'ok' || rbTxt.includes('kapat')) {
+                            triggerZkClick(rb);
+                            try { rb.click(); } catch (_) {}
+                            return { found: true, text: modalText };
+                        }
+                    }
+                }
+            }
+        }
+        await new Promise(r => setTimeout(r, 250));
+    }
+
+    return { found: false, text: '' };
+}
+
+function parseYknFromText(text) {
+    if (!text || typeof text !== 'string') return null;
+    const ykn99Match = text.match(/\b(99\d{9})\b/);
+    if (ykn99Match) return ykn99Match[1];
+    const yknGeneralMatch = text.match(/(?:ykn|yabancı\s*kimlik|kimlik\s*no|durum)[\s:]*(\d{11})/i);
+    if (yknGeneralMatch) return yknGeneralMatch[1];
+    return null;
+}
+
+function parseGuidFromText(text) {
+    if (!text) return '';
+    const guidMatch = text.match(/(?:takip\s*guid|guid|takip\s*no)[\s:]*([a-zA-Z0-9-]{8,})/i);
+    return guidMatch ? guidMatch[1] : '';
+}
+
+async function executeYoksisSave() {
+    const saveBtn = findYoksisSaveButton();
+    if (!saveBtn) {
+        return { success: false, message: 'YÖKSİS Kaydet butonu ekranda bulunamadı.' };
+    }
+    triggerZkClick(saveBtn);
+    const modal = await waitAndHandleYoksisModal(3000);
+    return {
+        success: true,
+        modalText: modal.text || '',
+        message: 'Kaydet butonuna basıldı.'
+    };
+}
+
+async function executeYoksisYknCycleStep(studentName, passportNo) {
+    const row = matchStudentInFirstThreeRows(studentName, passportNo);
+    if (!row) {
+        return {
+            success: false,
+            status: 'STUDENT_ROW_NOT_FOUND',
+            message: 'YÖKSİS tablosunda ilk 3 satır arasında öğrenci kaydı bulunamadı. Lütfen önce YÖKSİS formunu kaydedin.'
+        };
+    }
+
+    // 1. Tablonun 2. sütununda (YKN alanı) önceden YKN çıkmış mı kontrol et
+    const cells = row.querySelectorAll('td');
+    if (cells.length >= 2) {
+        const tableYkn = (cells[1].innerText || cells[1].textContent || '').trim();
+        if (/^99\d{9}$/.test(tableYkn)) {
+            copyTextToClipboardDirect(tableYkn);
+            try {
+                chrome.storage.local.set({ lastFoundYkn: tableYkn, lastFoundYknTime: Date.now() });
+            } catch (_) {}
+            return {
+                success: true,
+                status: 'YKN_READY',
+                ykn: tableYkn,
+                message: `YKN Tabloda Hazır: ${tableYkn}`
+            };
+        }
+    }
+
+    // 2. Satırı seç (tıkla)
+    await selectYoksisTableRow(row);
+    await new Promise(r => setTimeout(r, 900));
+
+    // 3. Ekranda hangi butonun belirdiğini kontrol et
+    let { talepButton, sorgulaButton } = findYoksisYknActionButtons();
+
+    if (!talepButton && !sorgulaButton) {
+        await selectYoksisTableRow(row);
+        await new Promise(r => setTimeout(r, 1200));
+        const refreshed = findYoksisYknActionButtons();
+        talepButton = refreshed.talepButton;
+        sorgulaButton = refreshed.sorgulaButton;
+    }
+
+    // Senaryo A: "YKN Talep Gönder" butonu var
+    if (talepButton) {
+        triggerZkClick(talepButton);
+        const modal = await waitAndHandleYoksisModal(5000);
+        const modalText = modal.text || 'YKN talebi havuza düştü. İl Göç İdaresi Müdürlüğü tarafından değerlendirilecektir.';
+        const guid = parseGuidFromText(modalText);
+        return {
+            success: true,
+            status: 'TALEP_SENT',
+            guid: guid,
+            message: modalText
+        };
+    }
+
+    // Senaryo B: "Durum Sorgula" butonu var
+    if (sorgulaButton) {
+        triggerZkClick(sorgulaButton);
+        const modal = await waitAndHandleYoksisModal(6000);
+        const modalText = modal.text || '';
+
+        const ykn = parseYknFromText(modalText);
+        if (ykn) {
+            copyTextToClipboardDirect(ykn);
+            try {
+                chrome.storage.local.set({ lastFoundYkn: ykn, lastFoundYknTime: Date.now() });
+            } catch (_) {}
+            return {
+                success: true,
+                status: 'YKN_READY',
+                ykn: ykn,
+                message: modalText || `YKN: ${ykn}`
+            };
+        }
+
+        const isPending = /ykn\s*bekliyor/i.test(modalText) || /durum:\s*ykn\s*bekliyor/i.test(modalText) || /bekliyor/i.test(modalText) || /takip\s*guid/i.test(modalText);
+        if (isPending) {
+            const guid = parseGuidFromText(modalText);
+            return {
+                success: true,
+                status: 'YKN_PENDING',
+                guid: guid,
+                message: modalText || 'YKN Bekliyor'
+            };
+        }
+
+        return {
+            success: false,
+            status: 'MODAL_INFO',
+            message: modalText || 'Durum sorgulandı.'
+        };
+    }
+
+    return {
+        success: false,
+        status: 'BUTTON_NOT_FOUND',
+        message: 'Öğrenci satırı seçildi ancak "YKN Talep Gönder" veya "Durum Sorgula" butonu belirmedi. Kaydetmenin tamamlandığından emin olun.'
+    };
 }
 
 // Mesaj Dinleyicisi
@@ -1728,7 +3117,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
         });
         return true;
     }
-    
+
     if (request.action === "copyData") {
         try {
             const links = findDocumentLinks();
@@ -1741,16 +3130,13 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 acceptanceCandidates: links.acceptanceCandidates || [],
                 kabulId: links.kabulId || ''
             };
-            chrome.storage.local.set({
-                studentData: dataToSave,
-                temporaryStudentDataSavedAt: Date.now()
-            }, () => {
+            chrome.storage.local.set({ studentData: dataToSave }, () => {
                 sendResponse({ success: true, data: dataToSave });
             });
         } catch (error) {
             sendResponse({ success: false, message: error.message });
         }
-        return true; 
+        return true;
     }
 
     else if (request.action === 'GET_KABUL_CODE_OR_DOCUMENT') {
@@ -1786,10 +3172,37 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             .catch((error) => sendResponse({ success: false, error: error.message }));
         return true;
     }
-    
+
+    else if (request.action === 'EXTRACT_PASSPORT_METADATA') {
+        extractPassportMetadataFromApply(request)
+            .then((result) => sendResponse({ success: true, ...result, requestId: request.requestId }))
+            .catch((error) => sendResponse({
+                success: false,
+                requestId: request.requestId,
+                error: error.message
+            }));
+        return true;
+    }
+
+    else if (request.action === 'READ_ACCEPTANCE_CODE') {
+        extractAcceptanceCodeFromApply(request)
+            .then((result) => sendResponse({
+                success: true,
+                requestId: request.requestId,
+                kabulId: result.code,
+                acceptanceDocumentUrl: result.documentUrl
+            }))
+            .catch((error) => sendResponse({
+                success: false,
+                requestId: request.requestId,
+                error: error.message
+            }));
+        return true;
+    }
+
     else if (request.action === "searchWithId") {
         const kabulId = normalizeYoksisIdValue(request.kabulId);
-        
+
         if (!kabulId) {
             sendResponse({ success: false, requestId: request.requestId, message: "Kabul ID boş olamaz." });
             return;
@@ -1860,8 +3273,8 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 if (!searchTriggered) throw new Error('YÖKSİS arama komutu tetiklenemedi.');
 
                 let formReady = false;
-                try {
-                    await waitForYoksisForm(10_000, {
+                if (request.waitForForm !== false) try {
+                    await waitForYoksisForm(YOKSIS_SEARCH_INITIAL_FORM_WAIT_MS, {
                         afterFingerprint: formFingerprintBeforeSearch,
                         afterDomRevision: stateBeforeSearch.domRevision,
                         requireFreshResult: true
@@ -1926,7 +3339,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
         });
         return true;
     }
-    
+
     else if (request.action === "fillRemainingData") {
         chrome.storage.local.get(['studentData'], async (result) => {
             const data = request.data || result.studentData;
@@ -1976,6 +3389,19 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 return Boolean(filled);
             };
 
+            const firstNameVal = String(data.firstName || data.ad || '').trim();
+            const lastNameVal = String(data.lastName || data.soyad || '').trim();
+
+            const adiInput = findTargetElementByFuzzyLabels(['Adı', 'Öğrenci Adı', 'Ad'], 'input');
+            if (adiInput && !adiInput.disabled && !adiInput.readOnly && firstNameVal) {
+                if (recordField('Adı', firstNameVal, await simulateInput(adiInput, firstNameVal))) successCount++;
+            }
+
+            const soyadiInput = findTargetElementByFuzzyLabels(['Soyadı', 'Öğrenci Soyadı', 'Soyad'], 'input');
+            if (soyadiInput && !soyadiInput.disabled && !soyadiInput.readOnly && lastNameVal) {
+                if (recordField('Soyadı', lastNameVal, await simulateInput(soyadiInput, lastNameVal))) successCount++;
+            }
+
             const anneAdiInput = findTargetElementByFuzzyLabel('Anne Adı', 'input');
             if (recordField('Anne Adı', data.anneAdi, await simulateInput(anneAdiInput, data.anneAdi))) successCount++;
 
@@ -1983,27 +3409,31 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             if (recordField('Baba Adı', data.babaAdi, await simulateInput(babaAdiInput, data.babaAdi))) successCount++;
 
             const uyrukSelect = findTargetElementByFuzzyLabel('Uyruğu', 'select');
+            const visibleNationality = getSelectedOptionText(uyrukSelect);
+            const countryValue = data.uyruk || visibleNationality;
             if (recordField('Uyruğu', data.uyruk, simulateSelect(uyrukSelect, data.uyruk))) successCount++;
-            
+
             const dogumUyruguSelect = findTargetElementByFuzzyLabel('Doğum Uyruğu', 'select');
-            if (recordField('Doğum Uyruğu', data.uyruk, simulateSelect(dogumUyruguSelect, data.uyruk))) successCount++;
-            
+            if (recordField('Doğum Uyruğu', countryValue, simulateSelect(dogumUyruguSelect, countryValue))) successCount++;
+
             const dogumYeriUlkesiSelect = findTargetElementByFuzzyLabel('Doğum Yeri Ülkesi', 'select');
-            const dogumYeriDegeri = data.dogumUlkesi ? data.dogumUlkesi : data.uyruk;
+            const dogumYeriDegeri = data.dogumUlkesi ? data.dogumUlkesi : countryValue;
             if (recordField('Doğum Yeri Ülkesi', dogumYeriDegeri, simulateSelect(dogumYeriUlkesiSelect, dogumYeriDegeri))) successCount++;
-            
+
             const belgeyiVerenUlkeSelect = findTargetElementByFuzzyLabel('Belgeyi Veren Ülke', 'select');
-            if (recordField('Belgeyi Veren Ülke', data.uyruk, simulateSelect(belgeyiVerenUlkeSelect, data.uyruk))) successCount++;
+            if (recordField('Belgeyi Veren Ülke', countryValue, simulateSelect(belgeyiVerenUlkeSelect, countryValue))) successCount++;
 
             if (data.cinsiyet) {
                 if (recordField('Cinsiyet', data.cinsiyet, simulateRadioByLabelText(data.cinsiyet))) successCount++;
             }
+            const maritalStatus = data.medeniHali || data.medeniHal || 'Bekar';
+            if (recordField('Medeni Hali', maritalStatus, simulateRadioByLabelText(maritalStatus))) successCount++;
 
             // Özel Ülke Kuralları (Türkmenistan, Afganistan, Pakistan)
             const normalizeCountry = (val) => val ? val.toLocaleLowerCase('tr-TR').replace(/\s+/g, '') : '';
             const isMatch = (val, search) => normalizeCountry(val).includes(search);
 
-            const uyrukNorm = normalizeCountry(data.uyruk);
+            const uyrukNorm = normalizeCountry(countryValue);
             const dogumNorm = normalizeCountry(data.dogumUlkesi);
             const isTurkmen = uyrukNorm.includes('türkmen') || uyrukNorm.includes('turkmen') || uyrukNorm === 'tkm' ||
                               dogumNorm.includes('türkmen') || dogumNorm.includes('turkmen') || dogumNorm === 'tkm';
@@ -2013,9 +3443,11 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 
             const dogumYeriAciklamasi = findTargetElementByFuzzyLabel('Doğum Yeri Açıklaması', 'input');
 
-            // Türkmenistan için doğum yeri açıklaması her zaman TKM sabittir
+            // Türkmenistan için TKM ve SMST, Pakistan için PAKISTAN sabittir
+            const isPakistani = uyrukNorm.includes('pakistan') || uyrukNorm === 'pak' ||
+                                dogumNorm.includes('pakistan') || dogumNorm === 'pak';
             const customDogumYeri = isTurkmen ? 'TKM' : (data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || '').trim();
-            const customVerenMakam = (data.verenMakam || data.issuingAuthority || (isTurkmen ? 'SMST' : '')).trim();
+            const customVerenMakam = (isTurkmen ? 'SMST' : (isPakistani ? 'PAKISTAN' : (data.verenMakam || data.issuingAuthority || ''))).trim();
 
             let filledDogumYeri = false;
             let filledVerenMakam = false;
@@ -2047,7 +3479,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                         const filled = await simulateInput(verenMakam, 'SMST');
                         if (recordField('Belgeyi Veren Makam', 'SMST', filled)) successCount++;
                     }
-                } 
+                }
                 else if (uyrukNorm.includes('afgan') || dogumNorm.includes('afgan')) {
                     if (!filledDogumYeri && dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
                         const filled = await simulateInput(dogumYeriAciklamasi, 'AFG');
@@ -2057,8 +3489,8 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                         const filled = await simulateInput(verenMakam, 'AFGHAN');
                         if (recordField('Belgeyi Veren Makam', 'AFGHAN', filled)) successCount++;
                     }
-                } 
-                else if (uyrukNorm.includes('pakistan') || dogumNorm.includes('pakistan')) {
+                }
+                else if (isPakistani) {
                     if (!filledDogumYeri && dogumYeriAciklamasi && !dogumYeriAciklamasi.value) {
                         const filled = await simulateInput(dogumYeriAciklamasi, 'PAK');
                         if (recordField('Doğum Yeri Açıklaması', 'PAK', filled)) successCount++;
@@ -2069,7 +3501,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                     }
                 }
             }
-            
+
             const telefonNoInput = findTargetElementByFuzzyLabels([
                 'Telefon No',
                 'Telefon Numarası',
@@ -2082,6 +3514,18 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 
             const belgeNoInput = findBelgeNoInMainPanel();
             const passportValue = data.pasaportNo || data.passportNo;
+            const foreignIdentityInput = findTargetElementByFuzzyLabels([
+                'Uyruk Kimlik No',
+                'Yabancı Kimlik No',
+                'Nationality Identity No'
+            ], 'input');
+            const normalizeIdentity = (value) => String(value || '')
+                .toLocaleLowerCase('tr-TR')
+                .replace(/\s+/g, '');
+            if (foreignIdentityInput && passportValue
+                && normalizeIdentity(foreignIdentityInput.value) === normalizeIdentity(passportValue)) {
+                await simulateInput(foreignIdentityInput, '');
+            }
             if (recordField('Belge No', passportValue, await simulateInput(belgeNoInput, passportValue))) successCount++;
 
             const issueDateInput = findTargetElementByFuzzyLabels([
@@ -2107,26 +3551,44 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 'Pasaport Son Geçerlilik Tarihi',
                 'Pasaport Geçerlilik Tarihi',
                 'Son Geçerlilik Tarihi',
-                'Bitiş Tarihi',
+                'Pasaport Bitiş Tarihi',
+                'Belge Bitiş Tarihi',
                 'Date of Expiry',
                 'Expiry Date',
                 'Expiration Date'
             ], 'input');
 
-            const issueDateFilled = issueDateInput && data.issueDate
-                ? await simulateDateboxInput(issueDateInput, formatDateForYoksisInput(issueDateInput, data.issueDate))
+            const rawIssueDate = data.issueDate || data.passportIssueDate || data.duzenlemeTarihi || data.pasaportDuzenlemeTarihi || data.verilisTarihi || data.belgeDuzenlemeTarihi || '';
+            const rawExpiryDate = data.expiryDate || data.passportExpiryDate || data.gecerlilikTarihi || data.pasaportGecerlilikTarihi || data.bitisTarihi || data.belgeGecerlilikTarihi || '';
+
+            const issueDateFilled = issueDateInput && rawIssueDate
+                ? await simulateDateboxInput(issueDateInput, formatDateForYoksisInput(issueDateInput, rawIssueDate))
                 : false;
-            if (recordField('Düzenleme Tarihi', data.issueDate, issueDateFilled)) {
+            if (recordField('Düzenleme Tarihi', rawIssueDate, issueDateFilled)) {
                 successCount++;
             }
-            const expiryDateFilled = expiryDateInput && data.expiryDate
-                ? await simulateDateboxInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, data.expiryDate))
+            const expiryDateFilled = expiryDateInput && rawExpiryDate
+                ? await simulateDateboxInput(expiryDateInput, formatDateForYoksisInput(expiryDateInput, rawExpiryDate))
                 : false;
-            if (recordField('Geçerlilik Tarihi', data.expiryDate, expiryDateFilled)) {
+            if (recordField('Geçerlilik Tarihi', rawExpiryDate, expiryDateFilled)) {
                 successCount++;
             }
 
-            // Gerçek kullanıcı tıklaması ve odaklanma geçişi zinciri (Anne Adı ve Baba Adı öncelikli metin kutuları)
+            const birthDateInput = findTargetElementByFuzzyLabels([
+                'Doğum Tarihi',
+                'Date of Birth',
+                'Birth Date'
+            ], 'input');
+            const rawBirthDate = data.birthDate || data.dogumTarihi || '';
+            const birthDateFilled = birthDateInput && rawBirthDate
+                ? await simulateDateboxInput(birthDateInput, formatDateForYoksisInput(birthDateInput, rawBirthDate))
+                : false;
+            if (recordField('Doğum Tarihi', rawBirthDate, birthDateFilled)) {
+                successCount++;
+            }
+
+            // ZK widget'ının izole dünyada blur olayında değeri sıfırlamasını engellemek için
+            // yıkıcı blur/focusout döngüsü yerine sadece input ve change güvencesi sağlanır.
             const priorityElements = [
                 anneAdiInput,
                 babaAdiInput,
@@ -2138,17 +3600,10 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 
             for (const el of priorityElements) {
                 try {
-                    el.focus();
-                    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                    el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                    await new Promise(r => setTimeout(r, 40));
-                    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                    el.blur();
-                    el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
-                    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
-                    await new Promise(r => setTimeout(r, 20));
+                    if (el.value) {
+                        el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                    }
                 } catch (_) {}
             }
 
@@ -2190,28 +3645,61 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             .catch(err => sendResponse({ success: false, error: err.message }));
         return true;
     }
-    
+
+    else if (request.action === 'YOKSIS_SAVE_FORM') {
+        executeYoksisSave()
+            .then(result => sendResponse({ ...result, requestId: request.requestId }))
+            .catch(err => sendResponse({ success: false, error: err.message, requestId: request.requestId }));
+        return true;
+    }
+
+    else if (request.action === 'YOKSIS_STEP_YKN') {
+        const studentName = request.studentName || '';
+        const passportNo = request.passportNo || '';
+        executeYoksisYknCycleStep(studentName, passportNo)
+            .then(result => sendResponse({ ...result, requestId: request.requestId }))
+            .catch(err => sendResponse({ success: false, error: err.message, requestId: request.requestId }));
+        return true;
+    }
+
     else if (request.action === 'SEARCH_IN_APPLY' || request.action === 'searchStudent') {
         const passportNo = (request.passportNo || '').trim();
         const requestId = request.requestId;
         const cleanPassport = passportNo.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
-        
+
         // Apply Topkapı'daki arama kutusunu bul (Daha spesifik seçiciler)
-        const searchInput = document.querySelector('.inputDatatableSearch') ||
-                            document.querySelector('input[placeholder*="Tabloda ara"]') ||
-                            document.querySelector('input[type="search"]') || 
-                            document.querySelector('.dataTables_filter input') || 
-                            document.querySelector('input.form-control');
-        
+        function findApplySearchInput() {
+            return document.querySelector('.inputDatatableSearch') ||
+                   document.querySelector('input[placeholder*="Tabloda ara"]') ||
+                   document.querySelector('input[type="search"]') ||
+                   document.querySelector('.dataTables_filter input') ||
+                   document.querySelector('input.form-control');
+        }
+
+        // Apply listesi yeni açıldıysa veya tablo henüz render edildiyse arama kutusunu bekle
+        (async () => {
+            const start = Date.now();
+            let searchInput = findApplySearchInput();
+            while (!searchInput && Date.now() - start < 10000) {
+                await new Promise(r => setTimeout(r, 250));
+                searchInput = findApplySearchInput();
+            }
+            return searchInput;
+        })().then((searchInput) => {
         if (searchInput) {
-            // Apply arama alanı bazı sürümlerde yalnızca Enter ile sunucu
-            // tarafındaki tablo sorgusunu çalıştırıyor. Yazma işlemi ve Enter
-            // zinciri tamamlanmadan sonuçları kontrol etmeye başlama.
-            simulateInput(searchInput, passportNo, { pressEnter: true }).then(() => {
+            (async () => {
+                if (searchInput.value) {
+                    searchInput.value = '';
+                    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                await simulateInput(searchInput, passportNo, { pressEnter: true });
+                await new Promise(r => setTimeout(r, 400));
+            })().then(() => {
             // Sonuçların gelmesini bekle (Polling ile - Pasaport eşleşmesi kontrol edilir)
             let attempts = 0;
             const maxAttempts = 24; // 24 * 500ms = 12 saniye
-            
+
             const intervalId = setInterval(() => {
                 if (typeof chrome === 'undefined' || !chrome?.runtime?.id) {
                     clearInterval(intervalId);
@@ -2221,14 +3709,14 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 const rows = document.querySelectorAll('table tbody tr');
                 let matchingRow = null;
                 let isEmptyMessage = false;
-                
+
                 for (let i = 0; i < rows.length; i++) {
                     const rowText = rows[i].innerText.toLocaleLowerCase('tr-TR');
                     if (rowText.includes('no matching') || rowText.includes('bulunamadı') || rowText.includes('no data') || rows[i].classList.contains('dataTables_empty')) {
                         isEmptyMessage = true;
                         continue;
                     }
-                    
+
                     // Pasaport numarası satırın içinde yer alıyor mu?
                     const normalizedRow = rowText.replace(/\s+/g, '');
                     if (cleanPassport && normalizedRow.includes(cleanPassport)) {
@@ -2236,12 +3724,12 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                         break;
                     }
                 }
-                
+
                 if (matchingRow) {
                     clearInterval(intervalId);
                     const adCell = matchingRow.querySelector('td:nth-child(2)');
                     const soyadCell = matchingRow.querySelector('td:nth-child(3)');
-                    
+
                     let fullName = "Öğrenci";
                     if (adCell && soyadCell) {
                         fullName = (adCell.innerText.trim() + " " + soyadCell.innerText.trim()).trim();
@@ -2250,7 +3738,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                     }
 
                     const profileUrl = findStudentProfileUrl(matchingRow);
-                    
+
                     const studentData = {
                         fullName: fullName,
                         passportNo: passportNo,
@@ -2258,7 +3746,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                         profileReady: true,
                         documentsReady: false
                     };
-                    
+
                     sendApplyEvent('STUDENT_FOUND', requestId, { data: studentData });
                     if (profileUrl) {
                         sendApplyEvent('OPEN_STUDENT_PROFILE', requestId, { profileUrl });
@@ -2297,6 +3785,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 { error: 'Arama kutusu (.inputDatatableSearch veya form-control) sayfada bulunamadı.' }
             );
         }
+        });
         sendResponse({ success: true, requestId });
         return true;
     }

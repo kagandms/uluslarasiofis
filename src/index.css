@@ -2193,14 +2193,33 @@ body.dark-mode .history-badge {
     font-size: 0.85rem;
 }
 
+.documents-card-preview {
+    background: #fff;
+    border: 1px solid var(--border-color, #e2e5e9);
+    border-radius: 0.75rem;
+    height: 15rem;
+    width: 100%;
+}
+
 .documents-card-actions {
-    justify-content: flex-start;
+    display: grid;
+    gap: 0.65rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-top: 0.25rem;
 }
 
 .documents-card-actions .btn {
     min-height: 2.5rem;
     text-decoration: none;
+    width: 100%;
+}
+
+.documents-card-actions .documents-card-print {
+    background-color: #7e0000;
+    border-color: #7e0000;
+    color: #fff;
+    grid-column: 1 / -1;
+    min-height: 3.2rem;
 }
 
 .documents-empty-state {

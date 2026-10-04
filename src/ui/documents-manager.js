@@ -2,7 +2,7 @@ import { DOCUMENT_CATEGORIES, OFFICE_DOCUMENTS } from '../config/documents-confi
 
 function createDocumentAction(label, action, documentRecord) {
     const link = document.createElement('a');
-    link.className = 'btn btn-outline';
+    link.className = action === 'print' ? 'btn btn-primary documents-card-print' : 'btn btn-outline';
     link.dataset.action = action;
     link.href = documentRecord.fileUrl;
     link.rel = 'noopener';
@@ -30,13 +30,21 @@ function createDocumentCard(documentRecord) {
     badge.className = 'documents-card-badge';
     badge.textContent = documentRecord.badge;
 
+    const preview = document.createElement('iframe');
+    preview.className = 'documents-card-preview';
+    preview.src = `${documentRecord.fileUrl}#page=1&toolbar=0&navpanes=0`;
+    preview.title = `${documentRecord.title} — ilk sayfa önizlemesi`;
+    preview.loading = 'lazy';
+    preview.setAttribute('aria-label', preview.title);
+
     const actions = document.createElement('div');
     actions.className = 'documents-card-actions';
     actions.append(
+        createDocumentAction('Yazdır (Hızlı Çıkar)', 'print', documentRecord),
         createDocumentAction('Önizle', 'preview', documentRecord),
         createDocumentAction('İndir', 'download', documentRecord)
     );
-    card.append(heading, category, badge, actions);
+    card.append(heading, category, preview, badge, actions);
     return card;
 }
 

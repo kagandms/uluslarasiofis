@@ -2,7 +2,7 @@
 // İkamet Portalı (Web Sayfası) ile Eklenti (Background) arasında köprü görevi görür.
 (() => {
     if (window !== window.top) return;
-    const BRIDGE_VERSION = '1.2.34';
+    const BRIDGE_VERSION = '1.2.75';
     const isStaffRoute = () => window.location.pathname === '/yetkili'
         || window.location.pathname.startsWith('/yetkili/');
     if (!isStaffRoute()) return;
@@ -131,6 +131,33 @@ window.addEventListener('message', async (event) => {
 // Arka plandan gelen olayları (örn. arama sonuçları) dinle ve web sayfasına ilet
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        if (request.action === 'OCR_IMAGE') {
+            void (async () => {
+                if (!await hasStaffSession() || !isStaffRoute()) {
+                    return { success: false, error: 'Yetkili oturumu gerekli. Yeniden giriş yapıp tekrar deneyin.' };
+                }
+                const encodedImage = String(request.imageBase64 || '');
+                if (encodedImage.length > 15_000_000 || !/^data:image\/(?:jpeg|png);base64,/i.test(encodedImage)) {
+                    return { success: false, error: 'OCR görüntüsü desteklenmiyor.' };
+                }
+                const binaryImage = atob(encodedImage.replace(/^data:[^,]+,/, ''));
+                const imageBytes = Uint8Array.from(binaryImage, (character) => character.charCodeAt(0));
+                const response = await fetch('/api/ocr', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: imageBytes
+                });
+                if (!response.ok) return { success: false, error: 'OCR servisi şu anda kullanılamıyor.' };
+                const result = await response.json();
+                const text = result.text || result.responses?.[0]?.textAnnotations?.[0]?.description || '';
+                return text.trim()
+                    ? { success: true, text }
+                    : { success: false, error: 'OCR metin döndürmedi.' };
+            })().then(sendResponse).catch(() => sendResponse({ success: false, error: 'OCR isteği tamamlanamadı.' }));
+            return true;
+        }
         if (request.source === 'APPLY_TOPKAPI' && isStaffRoute()) {
             void hasStaffSession().then((isAuthenticated) => {
                 if (!isAuthenticated || !isStaffRoute()) return;

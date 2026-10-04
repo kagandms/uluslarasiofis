@@ -14,6 +14,12 @@ const extensionFiles = [
     'content.js',
     'portal-security.js',
     'storage-lifecycle.js',
+    'document-parser.js',
+    'pdf.min.js',
+    'pdf.worker.min.js',
+    'cropper.js',
+    'cropper.html',
+    'cropper-selection.js',
     'popup.html',
     'popup.js'
 ];
@@ -24,33 +30,6 @@ function readExtensionManifest() {
     if (!manifest.version || !/^\d+\.\d+\.\d+$/.test(manifest.version)) {
         throw new Error('YKN eklentisi manifest.json sürümü geçerli değil.');
     }
-    return manifest;
-}
-
-function addProductionPortalOrigin(manifest) {
-    const configuredOrigin = process.env.PORTAL_PRODUCTION_ORIGIN?.trim();
-    if (!configuredOrigin) {
-        if (process.env.VERCEL === '1') {
-            throw new Error('PORTAL_PRODUCTION_ORIGIN is required to package the staff extension for production.');
-        }
-        return manifest;
-    }
-
-    let portalUrl;
-    try {
-        portalUrl = new URL(configuredOrigin);
-    } catch {
-        throw new Error('PORTAL_PRODUCTION_ORIGIN must be a valid HTTPS origin.');
-    }
-    if (portalUrl.protocol !== 'https:' || portalUrl.username || portalUrl.password || portalUrl.port
-        || portalUrl.pathname !== '/' || portalUrl.search || portalUrl.hash) {
-        throw new Error('PORTAL_PRODUCTION_ORIGIN must be a valid HTTPS origin without a path.');
-    }
-
-    const originPattern = `${portalUrl.origin}/*`;
-    manifest.host_permissions = [...new Set([...manifest.host_permissions, originPattern])];
-    const bridgeScript = manifest.content_scripts.find((script) => script.js.includes('bridge.js'));
-    bridgeScript.matches = [...new Set([...bridgeScript.matches, originPattern])];
     return manifest;
 }
 
@@ -189,7 +168,7 @@ function writeDownloadMetadata(manifest, archiveName, fingerprint) {
 }
 
 function packageExtension() {
-    const manifest = addProductionPortalOrigin(readExtensionManifest());
+    const manifest = readExtensionManifest();
     mkdirSync(downloadsRoot, { recursive: true });
     removeGeneratedArchives();
     assertExtensionFilesExist();

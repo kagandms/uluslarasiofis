@@ -18,6 +18,8 @@ const UPLOAD_ERROR_KEYS = Object.freeze({
     DOCUMENT_NOT_EDITABLE: 'applicationNoLongerEditable', DECLARATION_VERSION_CONFLICT: 'declarationVersionChanged',
     APPLICATION_TYPE_CHANGE_BLOCKED: 'applicationTypeChangeBlocked',
     APPLICATION_UPDATE_CONFLICT: 'applicationUpdateConflict',
+    APPLICATION_ALREADY_ACTIVE: 'applicationAlreadyActive',
+    RATE_LIMITED: 'applicationRateLimited',
     CONTACT_ACKNOWLEDGEMENT_REQUIRED: 'contactAcknowledgementRequired',
     CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT: 'contactAcknowledgementVersionChanged',
     CONTACT_INFORMATION_INCOMPLETE: 'contactInformationIncomplete',
@@ -1025,13 +1027,32 @@ function renderReviewReadiness(document, state) {
 function createSaveStatus(document, state) {
     const messages = readMessages(document);
     const key = state.saveStatus === 'session_expired' ? 'sessionExpired'
-        : (state.saveStatus === 'failed' ? 'autosaveFailed' : `autosave_${state.saveStatus}`);
+        : (state.saveStatus === 'failed' ? (state.application ? 'autosaveFailed' : 'draftSaveFailed')
+            : (state.saveStatus === 'unsaved' && !state.application ? 'draftNotSaved' : `autosave_${state.saveStatus}`));
     const status = createTranslatedElement(document, 'p', key, messages[key] || messages.autosave_saved);
     status.dataset.saveStatus = 'true';
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
-    if (state.saveStatus === 'failed') status.append(createButton(document, messages, 'retrySave', 'autosave-retry'));
+    status.hidden = state.saveStatus === 'idle';
+    if (state.saveStatus === 'failed' && state.application) {
+        status.append(createButton(document, messages, 'retrySave', 'autosave-retry'));
+    }
     return status;
+}
+
+function updateSaveStatus(root, state) {
+    const status = root.querySelector('[data-save-status]');
+    if (!status) return;
+    const messages = readMessages(root.ownerDocument);
+    const key = state.saveStatus === 'failed' ? (state.application ? 'autosaveFailed' : 'draftSaveFailed')
+        : (state.saveStatus === 'unsaved' && !state.application ? 'draftNotSaved' : `autosave_${state.saveStatus}`);
+    status.dataset.i18n = key;
+    status.textContent = messages[key] || '';
+    status.hidden = state.saveStatus === 'idle';
+    if (state.saveStatus === 'failed' && state.application && !status.querySelector('[data-action="autosave-retry"]')) {
+        status.append(createButton(root.ownerDocument, messages, 'retrySave', 'autosave-retry'));
+    }
+    if (state.saveStatus !== 'failed' || !state.application) status.querySelector('[data-action="autosave-retry"]')?.remove();
 }
 
 function createProgress(document, step) {
@@ -1462,6 +1483,7 @@ async function saveStep(root, state, api) {
         const isInitialDraftCreation = (state.step === 0 && !state.application);
         if (state.step === 0 && !state.application) {
             state.application = await api.createApplicationDraft(createContactDraft(fields));
+            state.saveStatus = 'saved';
             if (state.application?.access_credentials) {
                 state.newDraftCredentials = state.application.access_credentials;
             }
@@ -1517,6 +1539,7 @@ async function saveStep(root, state, api) {
         state._focusStepHeading = true;
     } catch (error) {
         state.errorKey = createErrorKey(error, error.code === 'DECLARATION_ACCEPTANCE_REQUIRED' ? 'declarationAcceptanceFailed' : 'applicationSaveFailed');
+        if (!state.application && state.step === 0) state.saveStatus = 'failed';
         state._focusError = true;
         if (error.code === 'DECLARATION_VERSION_CONFLICT') {
             try {
@@ -1640,6 +1663,10 @@ function handleWizardInput(root, state) {
     if (state.step === 0) {
         state.formValues = readVisibleFields(root, state.application || {});
         if (state.application && state.autosave) scheduleCurrentFields(root, state);
+        if (!state.application) {
+            state.saveStatus = 'unsaved';
+            updateSaveStatus(root, state);
+        }
         updateContactContinueButton(root);
         const prefField = root.querySelector('.notification-preference-group');
         if (prefField && typeof prefField.syncPhone === 'function') {
@@ -1693,7 +1720,7 @@ export async function initializeApplicationWizard(root, api) {
         requirements: [],
         step: 0,
         errorKey: null,
-        saveStatus: 'saved',
+        saveStatus: 'idle',
         isAdvancing: false,
         isSubmitting: false,
         formValues: null,
@@ -1709,6 +1736,12 @@ export async function initializeApplicationWizard(root, api) {
             : (path) => root.ownerDocument.defaultView.location.assign(path),
         api
     };
+    const guardUnsavedNavigation = (event) => {
+        if (!['unsaved', 'saving', 'failed'].includes(state.saveStatus)) return;
+        event.preventDefault();
+        event.returnValue = '';
+    };
+    root.ownerDocument.defaultView.addEventListener('beforeunload', guardUnsavedNavigation);
     root.addEventListener('submit', (event) => {
         if (event.target.id !== 'application-step-form') return;
         event.preventDefault();
@@ -1735,6 +1768,7 @@ export async function initializeApplicationWizard(root, api) {
     root.ownerDocument.addEventListener('click', (event) => { void handleReturnHome(event, root, state); });
     try {
         state.application = await api.readCurrentApplication();
+        state.saveStatus = 'saved';
         if (state.application.status === 'resubmission_required') {
             state.redirectingToTracking = true;
             state.navigateToTracking('/basvurum/');

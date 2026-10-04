@@ -135,6 +135,44 @@ test('contact step keeps Continue disabled until valid contact fields and the se
     assert.equal(acceptedVersion, 'contact-reachability-v1');
     assert.equal(state.step, 1);
     assert.equal(state.application.contact_acknowledgement.accepted_current, true);
+    const navigation = new document.defaultView.Event('beforeunload', { cancelable: true });
+    document.defaultView.dispatchEvent(navigation);
+    assert.equal(navigation.defaultPrevented, false);
+    document.defaultView.close();
+});
+
+test('new application is never marked saved before a server draft exists and warns before losing unsaved fields', async () => {
+    const { document, root } = createRoot();
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async createApplicationDraft() { throw Object.assign(new Error('Rate limited.'), { code: 'RATE_LIMITED' }); }
+    };
+    const state = await initializeApplicationWizard(root, api);
+
+    assert.equal(root.querySelector('[data-save-status]').hidden, true);
+    root.querySelector('[name="student_number"]').value = 'SYN-NEW-1';
+    root.querySelector('[name="application_type"]').value = 'initial';
+    root.querySelector('[name="student_email"]').value = 'synthetic@example.edu';
+    const phone = root.querySelector('[data-phone-visible]');
+    phone.value = '+905551112233';
+    phone.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    const email = root.querySelector('[name="student_email"]');
+    email.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    const acknowledgement = root.querySelector('[name="contact_acknowledgement_accepted"]');
+    acknowledgement.checked = true;
+    acknowledgement.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    root.querySelector('[name="student_number"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.match(root.querySelector('[data-save-status]').textContent, /henüz.*kaydedilmedi/i);
+    await submitWizard(root);
+
+    assert.equal(state.application, null);
+    assert.equal(root.querySelector('[name="student_number"]').value, 'SYN-NEW-1');
+    assert.match(root.textContent, /Çok sayıda istek/i);
+    assert.equal(root.querySelector('[data-action="autosave-retry"]'), null);
+    const navigation = new document.defaultView.Event('beforeunload', { cancelable: true });
+    document.defaultView.dispatchEvent(navigation);
+    assert.equal(navigation.defaultPrevented, true);
     document.defaultView.close();
 });
 

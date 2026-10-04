@@ -81,7 +81,7 @@ Local `.dev.vars` can contain:
 - `APPS_SCRIPT_URL` and `APPS_SCRIPT_API_KEY` for the existing tebligat proxy.
 - `AZURE_VISION_ENDPOINT`, `AZURE_VISION_KEY`, and `GOOGLE_VISION_API_KEY` for the staff OCR endpoint.
 
-`R2_BUCKET_NAME` is selected by the local or staging Wrangler environment. It is a resource name, not a secret. `PORTAL_PRODUCTION_ORIGIN` is read by the extension packaging script from the shell environment. Set it to the exact HTTPS portal origin when packaging the production extension; it is not a Worker binding.
+`R2_BUCKET_NAME` is selected by the local or staging Wrangler environment. It is a resource name, not a secret. The YKN extension manifest carries only the explicitly approved staging and production portal origins.
 
 ## Backend foundation
 
@@ -108,4 +108,4 @@ The server proxy accepts only `getAll`, `search`, `add`, `update`, `unmark`, and
 
 ## Extension packaging
 
-The extension package includes exact Apply and YÖKSİS origins. `PORTAL_PRODUCTION_ORIGIN` adds one HTTPS portal origin to the generated package. Do not add preview-domain or university-subdomain wildcards.
+The extension package includes exact staging (`goc-staging.topkapiuni.workers.dev`), intended Worker production (`goc.topkapiuni.workers.dev`), current production (`topkapiikamet.vercel.app`), Apply, and YÖKSİS origins. Do not add preview-domain or university-subdomain wildcards.

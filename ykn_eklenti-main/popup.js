@@ -1,127 +1,113 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const btnAcceptance = document.getElementById('btn-read-acceptance');
     const btnCopy = document.getElementById('btn-copy');
-    const btnSearch = document.getElementById('btn-search');
-    const btnFill = document.getElementById('btn-fill');
     const statusMessage = document.getElementById('status-message');
-    const kabulIdInput = document.getElementById('kabul-id-input');
 
-    // Kabul ID'yi mevcut grup yapısını koruyarak biçimlendir.
-    // Önceki sabit XXX-XXX-XX maskesi AB-123-CD gibi geçerli kodları bozuyordu.
-    kabulIdInput.addEventListener('input', function (e) {
-        const raw = e.target.value.toUpperCase().replace(/[–—−]/g, '-');
-        const sanitized = raw.replace(/[^A-Z0-9\-\s]/g, '');
-        if (sanitized.includes('-')) {
-            const endsWithSeparator = /-\s*$/.test(sanitized);
-            const groups = sanitized.split(/\s*-\s*/).slice(0, 3)
-                .map((part) => part.replace(/\s+/g, '').replace(/[^A-Z0-9]/g, ''));
-            e.target.value = groups.join('-') + (endsWithSeparator ? '-' : '');
-            return;
-        }
+    if (!btnAcceptance || !btnCopy || !statusMessage) return;
 
-        // Tired without separators: the common YÖKSİS 3-3-2 form is
-        // inferred only when its length is unambiguous; other valid group
-        // lengths are left intact instead of being corrupted.
-        const compact = sanitized.replace(/\s+/g, '');
-        e.target.value = compact.length === 8
-            ? `${compact.slice(0, 3)}-${compact.slice(3, 6)}-${compact.slice(6)}`
-            : compact;
-    });
+    let statusTimer = null;
 
-    function showStatus(message, duration = 3000) {
+    function showStatus(message, type = 'info') {
         statusMessage.textContent = message;
-        setTimeout(() => {
+        statusMessage.dataset.status = type;
+        if (statusTimer) clearTimeout(statusTimer);
+        statusTimer = setTimeout(() => {
             statusMessage.textContent = 'Bekleniyor...';
-        }, duration);
+            statusMessage.dataset.status = 'info';
+        }, 6_000);
     }
 
-    async function findTab(domain) {
-        // Tüm sekmeleri al
-        let allTabs = await chrome.tabs.query({});
-        // URL'si domain'i içeren ilk sekmeyi bul
-        return allTabs.find(t => t.url && t.url.includes(domain));
+    function createRequestId(prefix) {
+        return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     }
 
-    // 1. Verileri Kopyala
-    btnCopy.addEventListener('click', async () => {
+    function sendMessage(message) {
+        return new Promise((resolve) => {
+            try {
+                chrome.runtime.sendMessage(message, (response) => {
+                    const runtimeError = chrome.runtime.lastError;
+                    if (runtimeError) {
+                        resolve({ success: false, error: runtimeError.message });
+                        return;
+                    }
+                    resolve(response || { success: false, error: 'Eklentiden yanıt alınamadı.' });
+                });
+            } catch (error) {
+                resolve({ success: false, error: error.message });
+            }
+        });
+    }
+
+    function setBusy(button, busy) {
+        button.disabled = busy;
+        button.classList.toggle('is-loading', busy);
+    }
+
+    async function copyToClipboard(value) {
+        if (!value) return;
         try {
-            let sourceTab = await findTab("apply.topkapi.edu.tr");
-            if (!sourceTab) {
-                showStatus("Hata: Açık bir Topkapı (Kaynak) sekmesi bulunamadı!");
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(value);
                 return;
             }
-            
-            chrome.tabs.sendMessage(sourceTab.id, { action: "copyData" }, (response) => {
-                if (chrome.runtime.lastError) {
-                    showStatus("Hata: Sayfayı yenileyin (F5).");
-                    return;
-                }
-                if (response && response.success) {
-                    showStatus("Tüm veriler kopyalandı (Pasaport dahil)!");
-                } else {
-                    showStatus("Veriler kopyalanamadı: " + (response ? response.message : ""));
-                }
-            });
-        } catch (error) {
-            showStatus("Beklenmeyen bir hata oluştu.");
+            const textarea = document.createElement('textarea');
+            textarea.value = value;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            textarea.remove();
+        } catch (_) {
+            // Clipboard izinleri kapalıysa YÖKSİS aktarımı yine tamamlanabilir.
         }
-    });
+    }
 
-    // 2. Kabul ID ile Sorgula
-    btnSearch.addEventListener('click', async () => {
-        const kabulId = kabulIdInput.value.trim();
-        if (!kabulId) {
-            showStatus("Lütfen Kabul ID girin!");
+    btnAcceptance.addEventListener('click', async () => {
+        setBusy(btnAcceptance, true);
+        showStatus('Kabul mektubu okunuyor ve YÖKSİS aranıyor...', 'info');
+        const response = await sendMessage({
+            action: 'READ_ACCEPTANCE_AND_FILL_YOKSIS',
+            requestId: createRequestId('acceptance')
+        });
+        setBusy(btnAcceptance, false);
+
+        if (!response?.success) {
+            showStatus(`Hata: ${response?.error || response?.message || 'Kabul mektubu okunamadı.'}`, 'error');
             return;
         }
 
-        try {
-            // Portalın Tek Tık akışıyla aynı güvenli yol: YÖKSİS sekmesi
-            // yoksa açılır, ZK arama alanı hazır olana kadar beklenir ve
-            // öğrencinin yeni formu açılmadan başarılı sayılmaz.
-            chrome.runtime.sendMessage({
-                action: 'SEARCH_YOKSIS_FROM_POPUP',
-                kabulId,
-                data: { yoksisId: kabulId },
-                requestId: `popup-${Date.now()}-${Math.random().toString(36).slice(2)}`
-            }, (response) => {
-                if (chrome.runtime.lastError) {
-                    showStatus("Hata: Eklentiyi yeniden yükleyip tekrar deneyin.");
-                    return;
-                }
-                if (response && response.success) {
-                    showStatus("Kabul kodu aratıldı; öğrenci formu hazır.");
-                } else {
-                    showStatus("Hata: " + (response?.error || response?.message || "Bilinmeyen hata"));
-                }
-            });
-        } catch (error) {
-            showStatus("Beklenmeyen bir hata oluştu.");
-        }
+        await copyToClipboard(response.kabulId);
+        const filled = response.autoFilled ? ' Bilgiler de YÖKSİS’e dolduruldu.' : '';
+        showStatus(`Kabul kodu kopyalandı ve YÖKSİS’te aratıldı.${filled}`, 'success');
     });
 
-    // 3. Kalan Bilgileri Doldur
-    btnFill.addEventListener('click', async () => {
-        try {
-            let yoksisTab = await findTab("yoksis.yok.gov.tr");
-            if (!yoksisTab) {
-                showStatus("Hata: Açık bir YÖKSİS sekmesi bulunamadı!");
-                return;
-            }
-            
-            chrome.tabs.sendMessage(yoksisTab.id, { action: "fillRemainingData" }, (response) => {
-                if (chrome.runtime.lastError) {
-                    showStatus("Hata: YÖKSİS sayfasını yenileyin (F5).");
-                    return;
-                }
-                if (response && response.success) {
-                    showStatus("Bilgiler başarıyla dolduruldu!");
-                    chrome.tabs.update(yoksisTab.id, { active: true });
-                } else {
-                    showStatus("Hata: " + (response ? response.message : "Bilinmeyen hata"));
-                }
-            });
-        } catch (error) {
-            showStatus("Beklenmeyen bir hata oluştu.");
+    btnCopy.addEventListener('click', async () => {
+        setBusy(btnCopy, true);
+        showStatus('Apply bilgileri ve pasaport belgesi hazırlanıyor...', 'info');
+        const response = await sendMessage({
+            action: 'COPY_APPLY_DATA_AND_FILL_YOKSIS',
+            requestId: createRequestId('student')
+        });
+        setBusy(btnCopy, false);
+
+        if (!response?.success) {
+            showStatus(`Hata: ${response?.error || response?.message || 'Bilgiler kopyalanamadı.'}`, 'error');
+            return;
         }
+
+        if (!response.cropperOpened && response.manualPhotoRequired) {
+            const message = response.autoFilled
+                ? 'Pasaport bulunamadı; diğer bilgiler YÖKSİS’e aktarıldı. Fotoğrafı YÖKSİS’te elle yükleyin.'
+                : (response.message || 'Pasaport bulunamadı. Bilgiler hazırlandı; fotoğrafı YÖKSİS’te elle yükleyin.');
+            showStatus(message, response.autoFilled ? 'warning' : 'info');
+            return;
+        }
+
+        const missing = response.passportMetadata?.missingFields || [];
+        const warning = missing.length > 0 ? ` Bazı pasaport alanları okunamadı: ${missing.join(', ')}.` : '';
+        showStatus(`Pasaport fotoğrafı kırpma ekranı açıldı.${warning}`, missing.length > 0 ? 'warning' : 'success');
+        if (response.cropperOpened) window.close();
     });
 });
