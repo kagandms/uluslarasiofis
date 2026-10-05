@@ -26,7 +26,7 @@ test('Apps Script proxy sends its credential in a server-side POST body', async 
     assert.equal(requestUrl, environment.APPS_SCRIPT_URL);
     assert.equal(requestOptions.method, 'POST');
     assert.equal(requestOptions.headers['Content-Type'], 'application/json');
-    assert.equal(requestOptions.redirect, 'error');
+    assert.equal(requestOptions.redirect, 'follow');
     assert.deepEqual(JSON.parse(requestOptions.body), {
         action: 'update',
         key: 'test-only-api-key',

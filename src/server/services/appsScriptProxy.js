@@ -47,7 +47,7 @@ export async function callAppsScript(action, parameters, environment, fetcher = 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...parameters, action, key: environment.APPS_SCRIPT_API_KEY }),
-            redirect: 'error',
+            redirect: 'follow',
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
         });
         if (response.ok) {
