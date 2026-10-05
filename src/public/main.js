@@ -99,13 +99,14 @@ function initScrollReveal() {
     if (typeof window === 'undefined') return;
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-    const hasNativeScrollDriven = typeof CSS !== 'undefined' &&
-        CSS.supports &&
-        CSS.supports('(animation-timeline: view()) and (animation-range: entry)');
-
-    if (hasNativeScrollDriven) return;
-
-    if (typeof IntersectionObserver === 'undefined') return;
+    if (typeof IntersectionObserver === 'undefined') {
+        document.querySelectorAll(
+            '.public-section, .process-overview li, .public-document-card, .status-timeline-step'
+        ).forEach((el) => {
+            el.classList.add('scroll-reveal-item', 'is-revealed');
+        });
+        return;
+    }
 
     const observer = new IntersectionObserver((entries) => {
         entries.forEach((entry) => {
@@ -115,24 +116,56 @@ function initScrollReveal() {
             }
         });
     }, {
-        threshold: 0.1,
-        rootMargin: '0px 0px -20px 0px'
+        threshold: 0.12,
+        rootMargin: '0px 0px -40px 0px'
     });
 
+    const setupElement = (el, variantClass) => {
+        if (!el || el.classList.contains('scroll-reveal-item')) return;
+        el.classList.add('scroll-reveal-item');
+        if (variantClass) el.classList.add(variantClass);
+
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight && rect.bottom > 0) {
+            setTimeout(() => {
+                el.classList.add('is-revealed');
+            }, 80);
+        } else {
+            observer.observe(el);
+        }
+    };
+
     const registerElements = () => {
-        const elements = document.querySelectorAll(
-            '.public-section, .process-overview li, .public-document-card, .status-timeline-step'
-        );
-        elements.forEach((el) => {
-            if (!el.classList.contains('scroll-reveal-item')) {
-                el.classList.add('scroll-reveal-item');
-                const rect = el.getBoundingClientRect();
-                if (rect.top < window.innerHeight && rect.bottom > 0) {
-                    el.classList.add('is-revealed');
-                } else {
-                    observer.observe(el);
-                }
-            }
+        // 1. Process Section & Steps
+        const processSection = document.querySelector('.public-section[aria-labelledby="process-heading"]');
+        if (processSection) setupElement(processSection, 'reveal-from-bottom');
+
+        const processItems = document.querySelectorAll('.process-overview li');
+        const processVariants = [
+            'reveal-from-left',
+            'reveal-fade-grow',
+            'reveal-from-bottom',
+            'reveal-fade-grow',
+            'reveal-from-right'
+        ];
+        processItems.forEach((item, index) => {
+            setupElement(item, processVariants[index % processVariants.length]);
+        });
+
+        // 2. Documents Section (Left Column: enters from left, cards emerge from nothing)
+        const docsSection = document.querySelector('.public-section[aria-labelledby="documents-heading"]');
+        if (docsSection) setupElement(docsSection, 'reveal-from-left');
+
+        document.querySelectorAll('.public-document-card').forEach((card) => {
+            setupElement(card, 'reveal-fade-grow');
+        });
+
+        // 3. Statuses Section (Right Column: enters from right, steps cascade from right)
+        const statusSection = document.getElementById('public-application-statuses');
+        if (statusSection) setupElement(statusSection, 'reveal-from-right');
+
+        document.querySelectorAll('.status-timeline-step').forEach((step) => {
+            setupElement(step, 'reveal-from-right');
         });
     };
 

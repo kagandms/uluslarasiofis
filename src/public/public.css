@@ -662,36 +662,39 @@ html[dir="rtl"] .public-home-link:hover {
 }
 
 /* Page entry animation */
-/* Rich page entry animations */
+/* Rich page entry animations - extended, smooth & cinematic */
 .public-hero {
-    animation: public-hero-enter 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: public-hero-enter 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.public-hero .public-eyebrow {
+    animation: public-hero-eyebrow 850ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
 }
 .public-hero h1 {
-    animation: public-slide-up 400ms cubic-bezier(0.16, 1, 0.3, 1) 60ms both;
+    animation: public-hero-title 950ms cubic-bezier(0.16, 1, 0.3, 1) 180ms both;
 }
-.public-hero p:last-child {
-    animation: public-slide-up 400ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
+.public-hero p:not(.public-eyebrow) {
+    animation: public-hero-text 950ms cubic-bezier(0.16, 1, 0.3, 1) 320ms both;
 }
 .home-actions {
-    animation: public-slide-up 400ms cubic-bezier(0.16, 1, 0.3, 1) 180ms both;
+    animation: public-hero-actions 1000ms cubic-bezier(0.16, 1, 0.3, 1) 480ms both;
+}
+.home-actions .home-cta-primary {
+    animation: public-cta-enter 850ms cubic-bezier(0.16, 1, 0.3, 1) 600ms both;
+}
+.home-actions .home-cta-secondary {
+    animation: public-cta-enter 850ms cubic-bezier(0.16, 1, 0.3, 1) 720ms both;
 }
 
-.process-overview li:nth-child(1) { animation: public-slide-up 380ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both; }
-.process-overview li:nth-child(2) { animation: public-slide-up 380ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both; }
-.process-overview li:nth-child(3) { animation: public-slide-up 380ms cubic-bezier(0.16, 1, 0.3, 1) 220ms both; }
-.process-overview li:nth-child(4) { animation: public-slide-up 380ms cubic-bezier(0.16, 1, 0.3, 1) 280ms both; }
-.process-overview li:nth-child(5) { animation: public-slide-up 380ms cubic-bezier(0.16, 1, 0.3, 1) 340ms both; }
-
+body:not([data-page="home"]) .public-section,
 .application-panel,
-.placeholder-panel,
-.public-section {
-    animation: public-page-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+.placeholder-panel {
+    animation: public-page-enter 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes public-hero-enter {
     from {
         opacity: 0;
-        transform: translateY(8px);
+        transform: translateY(18px);
     }
     to {
         opacity: 1;
@@ -699,10 +702,73 @@ html[dir="rtl"] .public-home-link:hover {
     }
 }
 
+@keyframes public-hero-eyebrow {
+    from {
+        opacity: 0;
+        transform: translateX(-28px);
+        filter: blur(2px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+        filter: blur(0);
+    }
+}
+
+@keyframes public-hero-title {
+    from {
+        opacity: 0;
+        transform: translateY(32px);
+        filter: blur(3px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+    }
+}
+
+@keyframes public-hero-text {
+    from {
+        opacity: 0;
+        transform: translateY(28px);
+        filter: blur(2px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+        filter: blur(0);
+    }
+}
+
+@keyframes public-hero-actions {
+    from {
+        opacity: 0;
+        transform: translateY(24px) scale(0.96);
+        filter: blur(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+@keyframes public-cta-enter {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.94);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
 @keyframes public-slide-up {
     from {
         opacity: 0;
-        transform: translateY(14px);
+        transform: translateY(24px);
     }
     to {
         opacity: 1;
@@ -713,7 +779,7 @@ html[dir="rtl"] .public-home-link:hover {
 @keyframes public-page-enter {
     from {
         opacity: 0;
-        transform: translateY(12px);
+        transform: translateY(18px);
     }
     to {
         opacity: 1;
@@ -806,49 +872,117 @@ html[dir="rtl"] .application-credentials-card { text-align: right; }
     .phone-field input { grid-column: 1; }
     .tracking-owner-access-link { width: 100%; }
 }
-/* Scroll-driven reveal animation for homepage sections & items */
-@keyframes scroll-reveal-in {
-    from {
-        opacity: 0.15;
-        transform: translateY(22px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    @supports ((animation-timeline: view()) and (animation-range: entry)) {
-        body[data-page="home"] .public-section,
-        body[data-page="home"] .process-overview li,
-        body[data-page="home"] .public-document-card,
-        body[data-page="home"] .status-timeline-step {
-            animation: scroll-reveal-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-            animation-timeline: view();
-            animation-range: entry 5% entry 38%;
-        }
-    }
-}
-
-/* Fallback for browsers without native scroll-driven animations */
+/* Scroll-driven reveal animation system: left, right, yoktan yavaşça yüklenme (fade-grow), bottom */
 body[data-page="home"] .scroll-reveal-item {
-    opacity: 0.15;
-    transform: translateY(22px);
-    transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
-    will-change: opacity, transform;
+    opacity: 0;
+    transform: translate3d(0, 32px, 0);
+    filter: blur(3px);
+    transition: opacity 0.85s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.85s cubic-bezier(0.16, 1, 0.3, 1),
+                filter 0.85s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform, filter;
 }
 
 body[data-page="home"] .scroll-reveal-item.is-revealed {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
 }
 
-body[data-page="home"] .process-overview li.scroll-reveal-item:nth-child(1) { transition-delay: 0.04s; }
-body[data-page="home"] .process-overview li.scroll-reveal-item:nth-child(2) { transition-delay: 0.08s; }
-body[data-page="home"] .process-overview li.scroll-reveal-item:nth-child(3) { transition-delay: 0.12s; }
-body[data-page="home"] .process-overview li.scroll-reveal-item:nth-child(4) { transition-delay: 0.16s; }
-body[data-page="home"] .process-overview li.scroll-reveal-item:nth-child(5) { transition-delay: 0.20s; }
+/* Soldan yumuşakça kayarak gelme */
+body[data-page="home"] .scroll-reveal-item.reveal-from-left {
+    transform: translate3d(-52px, 0, 0);
+    filter: blur(3px);
+}
+body[data-page="home"] .scroll-reveal-item.reveal-from-left.is-revealed {
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+}
+
+/* Sağdan yumuşakça kayarak gelme */
+body[data-page="home"] .scroll-reveal-item.reveal-from-right {
+    transform: translate3d(52px, 0, 0);
+    filter: blur(3px);
+}
+body[data-page="home"] .scroll-reveal-item.reveal-from-right.is-revealed {
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+}
+
+/* Yoktan yavaşça yüklenme (fade-grow: opacity + scale + blur çözülmesi) */
+body[data-page="home"] .scroll-reveal-item.reveal-fade-grow {
+    transform: translate3d(0, 22px, 0) scale(0.90);
+    filter: blur(6px);
+    transition-duration: 0.95s;
+}
+body[data-page="home"] .scroll-reveal-item.reveal-fade-grow.is-revealed {
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+}
+
+/* Aşağıdan yumuşakça yükselme */
+body[data-page="home"] .scroll-reveal-item.reveal-from-bottom {
+    transform: translate3d(0, 38px, 0);
+    filter: blur(2px);
+}
+body[data-page="home"] .scroll-reveal-item.reveal-from-bottom.is-revealed {
+    transform: translate3d(0, 0, 0);
+    filter: blur(0);
+}
+
+/* RTL yön desteği */
+html[dir="rtl"] body[data-page="home"] .scroll-reveal-item.reveal-from-left:not(.is-revealed) {
+    transform: translate3d(52px, 0, 0);
+}
+html[dir="rtl"] body[data-page="home"] .scroll-reveal-item.reveal-from-right:not(.is-revealed) {
+    transform: translate3d(-52px, 0, 0);
+}
+
+/* "Başvuru Nasıl İlerler?" adım ardışıkları ve sayı baloncuğu yaylanması */
+body[data-page="home"] .process-overview li.scroll-reveal-item:nth-child(1) { transition-delay: 0.05s; }
+body[data-page="home"] .process-overview li.scroll-reveal-item:nth-child(2) { transition-delay: 0.16s; }
+body[data-page="home"] .process-overview li.scroll-reveal-item:nth-child(3) { transition-delay: 0.28s; }
+body[data-page="home"] .process-overview li.scroll-reveal-item:nth-child(4) { transition-delay: 0.40s; }
+body[data-page="home"] .process-overview li.scroll-reveal-item:nth-child(5) { transition-delay: 0.52s; }
+
+body[data-page="home"] .process-overview li.scroll-reveal-item > span {
+    transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s, box-shadow 0.65s ease 0.15s;
+    transform: scale(0.65);
+}
+body[data-page="home"] .process-overview li.scroll-reveal-item.is-revealed > span {
+    transform: scale(1);
+}
+
+/* "Hazırlamanız Gereken Belgeler" kartları ardışık yoktan belirme */
+body[data-page="home"] .public-document-card.scroll-reveal-item {
+    transition-duration: 0.85s;
+}
+body[data-page="home"] .public-document-card.scroll-reveal-item:nth-child(1) { transition-delay: 0.06s; }
+body[data-page="home"] .public-document-card.scroll-reveal-item:nth-child(2) { transition-delay: 0.14s; }
+body[data-page="home"] .public-document-card.scroll-reveal-item:nth-child(3) { transition-delay: 0.22s; }
+body[data-page="home"] .public-document-card.scroll-reveal-item:nth-child(4) { transition-delay: 0.30s; }
+body[data-page="home"] .public-document-card.scroll-reveal-item:nth-child(5) { transition-delay: 0.38s; }
+body[data-page="home"] .public-document-card.scroll-reveal-item:nth-child(6) { transition-delay: 0.46s; }
+body[data-page="home"] .public-document-card.scroll-reveal-item:nth-child(7) { transition-delay: 0.54s; }
+body[data-page="home"] .public-document-card.scroll-reveal-item:nth-child(8) { transition-delay: 0.62s; }
+
+/* "Başvuru Durumları" zaman çizelgesi sağdan ardışık geliş ve rozet büyümesi */
+body[data-page="home"] .status-timeline-step.scroll-reveal-item {
+    transition-duration: 0.85s;
+}
+body[data-page="home"] .status-timeline-step.scroll-reveal-item:nth-child(1) { transition-delay: 0.08s; }
+body[data-page="home"] .status-timeline-step.scroll-reveal-item:nth-child(2) { transition-delay: 0.18s; }
+body[data-page="home"] .status-timeline-step.scroll-reveal-item:nth-child(3) { transition-delay: 0.28s; }
+body[data-page="home"] .status-timeline-step.scroll-reveal-item:nth-child(4) { transition-delay: 0.38s; }
+body[data-page="home"] .status-timeline-step.scroll-reveal-item:nth-child(5) { transition-delay: 0.48s; }
+
+body[data-page="home"] .status-timeline-step.scroll-reveal-item .status-timeline-marker {
+    transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) 0.12s;
+    transform: scale(0.6);
+}
+body[data-page="home"] .status-timeline-step.scroll-reveal-item.is-revealed .status-timeline-marker {
+    transform: scale(1);
+}
 
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
