@@ -191,7 +191,7 @@ function islemUnmark_(e) {
     var isim = e.parameter.isim;
     var no = e.parameter.no;
 
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sayfa);
+    var sheet = findSheetByNameOrDate_(SpreadsheetApp.getActiveSpreadsheet(), sayfa);
     if (!sheet) return hataDondur_("Sayfa bulunamadi: " + sayfa);
 
     var lastRow = sheet.getLastRow();
@@ -226,6 +226,32 @@ function sonTarihliSayfayiBul_(ss) {
       return sheets[i];
     }
   }
+  return null;
+}
+
+// ------------------------------------------------------------
+// YARDIMCI: SAYFAYI ISIM VEYA TARIH UYUMLULUGUYLA BULMA (dd.mm veya dd.mm.yyyy)
+// ------------------------------------------------------------
+function findSheetByNameOrDate_(ss, sayfaAdi) {
+  if (!sayfaAdi) return null;
+  var sheet = ss.getSheetByName(sayfaAdi);
+  if (sheet) return sheet;
+
+  // 1. "dd.mm.yyyy" formatindaysa "dd.mm" olarak dene
+  var matchFull = sayfaAdi.match(/^(\d{2}\.\d{2})\.\d{4}$/);
+  if (matchFull) {
+    sheet = ss.getSheetByName(matchFull[1]);
+    if (sheet) return sheet;
+  }
+
+  // 2. "dd.mm" formatindaysa aktif yilla "dd.mm.yyyy" olarak dene
+  var matchShort = sayfaAdi.match(/^(\d{2}\.\d{2})$/);
+  if (matchShort) {
+    var yil = new Date().getFullYear();
+    sheet = ss.getSheetByName(matchShort[1] + "." + yil);
+    if (sheet) return sheet;
+  }
+
   return null;
 }
 
@@ -354,11 +380,17 @@ function islemAdd_(e) {
     var isim = e.parameter.isim;
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName(sayfa);
+    var sheet = findSheetByNameOrDate_(ss, sayfa);
     
     // Eger sayfa henuz acilmamissa otomatik olustur (hata vermesini onler)
     if (!sheet) {
-      sheet = yeniSayfaOlustur_(sayfa);
+      var sonSayfa = sonTarihliSayfayiBul_(ss);
+      var hedefSayfaAdi = sayfa;
+      if (sonSayfa && !YIL_DESENI.test(sonSayfa.getName())) {
+        var kisaAd = sayfa.match(/^(\d{2}\.\d{2})/);
+        if (kisaAd) hedefSayfaAdi = kisaAd[1];
+      }
+      sheet = yeniSayfaOlustur_(hedefSayfaAdi);
       if (!sheet) return hataDondur_("Bu haftanin sekmesi bulunamadi ve olusturulamadi.");
     }
 
@@ -409,7 +441,7 @@ function islemAdd_(e) {
     // Satirin isim hucresindeki arka plan rengini temizle (eski sablon rengi kalmissa)
     sheet.getRange(targetRow, 1).setBackground(null);
 
-    return json_({ success: true, message: "Kayit eklendi", assignedNo: assignedNo });
+    return json_({ success: true, message: "Kayit eklendi", assignedNo: assignedNo, sayfa: sheet.getName() });
 
   } catch (err) {
     return hataDondur_("Kayit ekleme hatasi: " + err.message);
@@ -437,7 +469,7 @@ function islemRemove_(e) {
     var isim = e.parameter.isim;
     var no = e.parameter.no;
 
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sayfa);
+    var sheet = findSheetByNameOrDate_(SpreadsheetApp.getActiveSpreadsheet(), sayfa);
     if (!sheet) return hataDondur_("Sayfa bulunamadi: " + sayfa);
 
     var lastRow = sheet.getLastRow();
@@ -479,7 +511,7 @@ function islemUpdate_(e) {
     var isim = e.parameter.isim;
     var no = e.parameter.no;
 
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sayfa);
+    var sheet = findSheetByNameOrDate_(SpreadsheetApp.getActiveSpreadsheet(), sayfa);
     if (!sheet) return hataDondur_("Sayfa bulunamadi: " + sayfa);
 
     var lastRow = sheet.getLastRow();

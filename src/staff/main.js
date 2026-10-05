@@ -738,6 +738,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Check if already added
             if (btnAdd.dataset.added === 'true') {
                 const assignedNo = btnAdd.dataset.assignedNo;
+                const targetSayfa = btnAdd.dataset.sheetName || sayfa;
                 const originalHtml = btnAdd.innerHTML;
                 btnAdd.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> Kaldırılıyor...';
                 btnAdd.disabled = true;
@@ -746,7 +747,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const response = await fetch('/api/remove-tebligat', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ sayfa, isim, no: assignedNo })
+                        body: JSON.stringify({ sayfa: targetSayfa, isim, no: assignedNo })
                     });
                     const data = await response.json();
                     if (response.ok && data.success) {
@@ -757,7 +758,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         btnAdd.style.cursor = '';
                         btnAdd.disabled = false;
                         btnAdd.dataset.added = 'false';
-                        showToast(`Başarılı: ${sayfa} sayfasından kaldırıldı!`, 'success');
+                        delete btnAdd.dataset.sheetName;
+                        delete btnAdd.dataset.assignedNo;
+                        showToast(`Başarılı: ${targetSayfa} sayfasından kaldırıldı!`, 'success');
                     } else {
                         const message = (typeof data.error === 'object' && data.error ? (data.error.message || data.error.code) : data.error) || 'Kaldırma başarısız';
                         throw new Error(message);
@@ -785,15 +788,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 const data = await response.json();
                 if (response.ok && data.success) {
-                    setAddedToSheetButtonState(btnAdd, sayfa, data.assignedNo);
+                    const addedSheet = data.sayfa || sayfa;
+                    setAddedToSheetButtonState(btnAdd, addedSheet, data.assignedNo);
                     btnAdd.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
                     btnAdd.style.color = '#27ae60';
                     btnAdd.style.borderColor = '#27ae60';
                     btnAdd.style.cursor = 'pointer';
                     btnAdd.disabled = false;
                     btnAdd.dataset.added = 'true';
+                    btnAdd.dataset.sheetName = addedSheet;
                     btnAdd.dataset.assignedNo = data.assignedNo || '';
-                    showToast(`Başarılı: ${sayfa} sayfasına ${data.assignedNo || '-'} numarasıyla eklendi!`, 'success');
+                    showToast(`Başarılı: ${addedSheet} sayfasına ${data.assignedNo || '-'} numarasıyla eklendi!`, 'success');
                 } else {
                     const message = (typeof data.error === 'object' && data.error ? (data.error.message || data.error.code) : data.error) || 'Ekleme başarısız';
                     throw new Error(message);
