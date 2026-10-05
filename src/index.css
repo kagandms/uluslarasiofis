@@ -2385,6 +2385,21 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
     gap: 0.75rem;
 }
 
+.staff-status-revert-btn {
+    border-color: var(--card-border);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.staff-status-revert-btn:hover {
+    border-color: #d97706;
+    color: #d97706;
+    background: rgba(217, 119, 6, 0.08);
+}
+
 .staff-resubmission-form {
     display: grid;
     gap: 0.65rem;

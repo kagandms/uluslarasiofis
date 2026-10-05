@@ -844,3 +844,67 @@ test('staff scan action expedites the current pending document for the PC ClamAV
     assert.ok(Date.parse(job.available_at) <= Date.now() + 1000);
     assert.equal(database.prepare('SELECT scan_status FROM document_revision_files WHERE id=?').bind(fileId).first().scan_status, 'pending');
 });
+
+test('staff can roll back an accidental status progression and student tracking reflects it immediately', async () => {
+    const { environment, database } = createEnvironment();
+    attachPrivateStorage(environment);
+    const applicationId = await seedApplication(database, { studentNumber: 'STUDENT-ROLLBACK' });
+    const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-session-rollback-00000000000000000');
+    const cookie = await seedStaff(environment, database);
+    const requiredCodes = [
+        'residence_application_form', 'passport', 'residence_card', 'photographs', 'health_insurance',
+        'student_certificate', 'residence_permit_fee', 'address_rental_contract', 'home_utility_bill'
+    ];
+    for (const code of requiredCodes) {
+        await seedReviewableDocument(database, applicationId, code, {
+            revisionStatus: 'approved', reviewStatus: 'approved'
+        });
+    }
+
+    let expectedUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first().updated_at;
+    let res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie, body: { target_status: 'approved_for_processing', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+    assert.equal(res.status, 200);
+    expectedUpdatedAt = (await readJson(res)).updated_at;
+
+    res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie, body: { target_status: 'sent_to_migration', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+    assert.equal(res.status, 200);
+    expectedUpdatedAt = (await readJson(res)).updated_at;
+
+    let tracking = await worker.fetch(request('/api/public/applications/current/tracking', { cookie: ownerCookie }), environment);
+    assert.equal((await readJson(tracking)).application.status, 'sent_to_migration');
+
+    let detail = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment);
+    assert.deepEqual((await readJson(detail)).allowed_status_transitions, ['migration_approved', 'approved_for_processing']);
+
+    // Staff accidentally advances to migration_approved
+    res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie, body: { target_status: 'migration_approved', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+    assert.equal(res.status, 200);
+    expectedUpdatedAt = (await readJson(res)).updated_at;
+
+    tracking = await worker.fetch(request('/api/public/applications/current/tracking', { cookie: ownerCookie }), environment);
+    assert.equal((await readJson(tracking)).application.status, 'migration_approved');
+
+    detail = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment);
+    assert.deepEqual((await readJson(detail)).allowed_status_transitions, ['completed', 'sent_to_migration']);
+
+    // Staff rolls back to sent_to_migration
+    res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie, body: { target_status: 'sent_to_migration', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+    assert.equal(res.status, 200);
+    expectedUpdatedAt = (await readJson(res)).updated_at;
+
+    tracking = await worker.fetch(request('/api/public/applications/current/tracking', { cookie: ownerCookie }), environment);
+    assert.equal((await readJson(tracking)).application.status, 'sent_to_migration');
+
+    const app = database.prepare('SELECT status, terminal_at, retention_due_at FROM applications WHERE id = ?').bind(applicationId).first();
+    assert.equal(app.status, 'sent_to_migration');
+    assert.equal(app.terminal_at, null);
+    assert.equal(app.retention_due_at, null);
+});

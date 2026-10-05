@@ -19,11 +19,28 @@ test('application state machine accepts only the specified forward transitions',
     }
 });
 
-test('application state machine rejects reverse, skipped, terminal, and arbitrary transitions', () => {
+test('application state machine accepts single-step rollback transitions for active processing states', () => {
+    const allowedRollbacks = [
+        ['approved_for_processing', 'under_review'],
+        ['sent_to_migration', 'approved_for_processing'],
+        ['migration_approved', 'sent_to_migration']
+    ];
+
+    for (const [currentStatus, targetStatus] of allowedRollbacks) {
+        assert.deepEqual(evaluateApplicationTransition(currentStatus, targetStatus, {
+            allRequiredDocumentsApproved: true
+        }), { allowed: true, code: null }, `${currentStatus} -> ${targetStatus} rollback must be allowed`);
+    }
+});
+
+test('application state machine rejects invalid reverse, skipped, terminal, and arbitrary transitions', () => {
     const deniedTransitions = [
         ['draft', 'completed'], ['submitted', 'completed'], ['submitted', 'approved_for_processing'],
-        ['under_review', 'sent_to_migration'], ['completed', 'under_review'],
-        ['sent_to_migration', 'submitted'], ['cancelled', 'under_review'], ['submitted', 'made_up']
+        ['under_review', 'sent_to_migration'], ['under_review', 'submitted'],
+        ['completed', 'migration_approved'], ['completed', 'under_review'],
+        ['sent_to_migration', 'submitted'], ['sent_to_migration', 'under_review'],
+        ['migration_approved', 'under_review'], ['migration_approved', 'approved_for_processing'],
+        ['cancelled', 'under_review'], ['submitted', 'made_up']
     ];
 
     for (const [currentStatus, targetStatus] of deniedTransitions) {

@@ -728,3 +728,40 @@ test('staff application review does not expose an access-code reset action', asy
     assert.equal(root.querySelector('#staff-reset-code-modal'), null);
     assert.equal(resetCalledWith, null);
 });
+
+test('staff application workflow renders rollback action with outline style and revert label', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: {
+                    ...QUEUE_ITEM,
+                    status: 'migration_approved'
+                },
+                assignment: null,
+                allowed_status_transitions: ['completed', 'sent_to_migration'],
+                documents: []
+            };
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const forwardButton = root.querySelector('[data-action="application-status-transition"][data-target-status="completed"]');
+    assert.ok(forwardButton);
+    assert.equal(forwardButton.classList.contains('btn-primary'), true);
+    assert.equal(forwardButton.textContent, 'Başvuruyu Tamamla');
+
+    const revertButton = root.querySelector('[data-action="application-status-transition"][data-target-status="sent_to_migration"]');
+    assert.ok(revertButton);
+    assert.equal(revertButton.classList.contains('btn-outline'), true);
+    assert.equal(revertButton.classList.contains('staff-status-revert-btn'), true);
+    assert.equal(revertButton.dataset.isRevert, 'true');
+    assert.match(revertButton.textContent, /Durumu Geri Al/);
+});

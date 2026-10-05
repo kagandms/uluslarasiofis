@@ -27,6 +27,24 @@ const STATUS_ACTION_LABELS = Object.freeze({
     migration_approved: 'Göç İdaresi Onayladı',
     completed: 'Başvuruyu Tamamla'
 });
+const STATUS_ORDER = Object.freeze({
+    submitted: 1,
+    resubmission_required: 1,
+    under_review: 2,
+    approved_for_processing: 3,
+    sent_to_migration: 4,
+    migration_approved: 5,
+    completed: 6
+});
+const STATUS_REVERT_LABELS = Object.freeze({
+    under_review: '◀ Durumu Geri Al: İncelemede',
+    approved_for_processing: '◀ Durumu Geri Al: İşlem İçin Onaylandı',
+    sent_to_migration: '◀ Durumu Geri Al: Göç İdaresine Gönderildi'
+});
+
+function isStatusRevert(currentStatus, targetStatus) {
+    return (STATUS_ORDER[targetStatus] || 0) < (STATUS_ORDER[currentStatus] || 0);
+}
 const APPLICATION_DOCUMENT_ROUTE = (applicationId, code, action) =>
     `/api/staff/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(code)}/${action}`;
 
@@ -475,13 +493,17 @@ function createApplicationWorkflow(document, application, detail, state, handler
         section.append(createText(document, 'p', 'staff-applications-state', 'Öğrenciden belge bekleniyor.'));
     }
     for (const targetStatus of detail.allowed_status_transitions || []) {
-        const label = STATUS_ACTION_LABELS[targetStatus];
+        const isRevert = isStatusRevert(application.status, targetStatus);
+        const label = isRevert
+            ? (STATUS_REVERT_LABELS[targetStatus] || `◀ Durumu Geri Al: ${STATUS_LABELS[targetStatus] || targetStatus}`)
+            : STATUS_ACTION_LABELS[targetStatus];
         if (!label) continue;
         const action = document.createElement('button');
         action.type = 'button';
-        action.className = 'btn btn-primary';
+        action.className = isRevert ? 'btn btn-outline staff-status-revert-btn' : 'btn btn-primary';
         action.dataset.action = 'application-status-transition';
         action.dataset.targetStatus = targetStatus;
+        if (isRevert) action.dataset.isRevert = 'true';
         action.disabled = Boolean(state.actionPending);
         action.textContent = state.actionPending === `status:${targetStatus}` ? 'İşleniyor…' : label;
         action.addEventListener('click', () => handlers.onTransition(targetStatus));
@@ -938,7 +960,9 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 ? 'Belge onaylandı.'
                 : actionKey.startsWith('unapprove:')
                     ? 'Belge onayı kaldırıldı; belge yeniden incelenebilir.'
-                    : 'İşlem tamamlandı.';
+                    : actionKey.startsWith('status:') && state.detail?.application?.status && isStatusRevert(state.detail.application.status, actionKey.slice(7))
+                        ? 'Başvuru durumu geri alındı.'
+                        : 'İşlem tamamlandı.';
             state.resubmissionDocument = null;
             discardPreview();
             await refreshDetail();
