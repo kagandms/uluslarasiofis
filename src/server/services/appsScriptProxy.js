@@ -39,6 +39,9 @@ export async function callAppsScript(action, parameters, environment, fetcher = 
     if (!ALLOWED_ACTIONS.has(action)) throw new UpstreamServiceError('UNSUPPORTED_ACTION', true);
     const endpoint = readEndpoint(environment);
     let response;
+    let payload = null;
+    let postError = null;
+
     try {
         response = await fetcher(endpoint, {
             method: 'POST',
@@ -47,18 +50,51 @@ export async function callAppsScript(action, parameters, environment, fetcher = 
             redirect: 'error',
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
         });
+        if (response.ok) {
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+        }
     } catch (error) {
-        const isTimeout = error?.name === 'TimeoutError' || error?.name === 'AbortError';
-        throw new UpstreamServiceError(isTimeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_FAILURE');
+        postError = error;
     }
-    if (!response.ok) throw new UpstreamServiceError('UPSTREAM_FAILURE');
-    let payload;
-    try {
-        payload = await response.json();
-    } catch {
-        throw new UpstreamServiceError('INVALID_UPSTREAM_RESPONSE');
-    }
+
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.success === false) {
+        try {
+            const getUrl = new URL(endpoint);
+            getUrl.searchParams.set('key', environment.APPS_SCRIPT_API_KEY);
+            if (action === 'search' && parameters.q) {
+                getUrl.searchParams.set('q', parameters.q);
+                if (parameters.year) getUrl.searchParams.set('year', parameters.year);
+            } else {
+                getUrl.searchParams.set('action', action);
+                for (const [key, value] of Object.entries(parameters)) {
+                    if (value !== undefined && value !== null) {
+                        getUrl.searchParams.set(key, String(value));
+                    }
+                }
+            }
+            const getResponse = await fetcher(getUrl.toString(), {
+                method: 'GET',
+                redirect: 'follow',
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+            });
+            if (getResponse.ok) {
+                try {
+                    payload = await getResponse.json();
+                } catch {
+                    payload = null;
+                }
+            }
+        } catch (error) {
+            const isTimeout = error?.name === 'TimeoutError' || error?.name === 'AbortError' || postError?.name === 'TimeoutError' || postError?.name === 'AbortError';
+            throw new UpstreamServiceError(isTimeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_FAILURE');
+        }
+    }
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) || (payload.success === false && !payload.results)) {
         throw new UpstreamServiceError('UPSTREAM_FAILURE');
     }
     return payload;

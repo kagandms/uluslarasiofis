@@ -757,7 +757,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                         btnAdd.dataset.added = 'false';
                         showToast(`Başarılı: ${sayfa} sayfasından kaldırıldı!`, 'success');
                     } else {
-                        throw new Error(data.error || 'Kaldırma başarısız');
+                        const message = (typeof data.error === 'object' && data.error ? (data.error.message || data.error.code) : data.error) || 'Kaldırma başarısız';
+                        throw new Error(message);
                     }
                 } catch (err) {
                     console.error(err);
@@ -792,7 +793,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     btnAdd.dataset.assignedNo = data.assignedNo || '';
                     showToast(`Başarılı: ${sayfa} sayfasına ${data.assignedNo || '-'} numarasıyla eklendi!`, 'success');
                 } else {
-                    throw new Error(data.error || 'Ekleme başarısız');
+                    const message = (typeof data.error === 'object' && data.error ? (data.error.message || data.error.code) : data.error) || 'Ekleme başarısız';
+                    throw new Error(message);
                 }
             } catch (err) {
                 console.error(err);
