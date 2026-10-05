@@ -3389,8 +3389,8 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 return Boolean(filled);
             };
 
-            const firstNameVal = String(data.firstName || data.ad || '').trim();
-            const lastNameVal = String(data.lastName || data.soyad || '').trim();
+            const firstNameVal = String(data.firstName || data.adi || data.ad || '').trim();
+            const lastNameVal = String(data.lastName || data.soyadi || data.soyad || '').trim();
 
             const adiInput = findTargetElementByFuzzyLabels(['Adı', 'Öğrenci Adı', 'Ad'], 'input');
             if (adiInput && !adiInput.disabled && !adiInput.readOnly && firstNameVal) {

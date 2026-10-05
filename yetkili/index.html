@@ -807,6 +807,37 @@
                 </div>
             </div>
 
+            <!-- Pasaport Okunamayan Alanlar Hızlı Doldurma Kutusu (Kırpma Ekranı) -->
+            <div id="cropper-missing-fields-box" style="display: none; background: rgba(243, 156, 18, 0.08); border: 1.5px dashed #f39c12; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="font-size: 0.82rem; font-weight: 700; color: #b9770e; display: flex; align-items: center; gap: 6px;">
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="#b9770e" stroke-width="2.5" fill="none"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        Pasaporttan Okunamayan Alanlar (Fotoğrafa bakarak yazabilirsiniz):
+                    </span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 115px; gap: 8px; align-items: end;">
+                    <div>
+                        <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 2px;">Düzenleme Tarihi</label>
+                        <input type="text" id="cropper-input-issue-date" placeholder="GG.AA.YYYY" style="width: 100%; padding: 6px 8px; font-size: 0.85rem; border: 1.5px solid #f39c12; border-radius: 6px; font-weight: 600; background: var(--bg-color); color: var(--text-primary);">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 2px;">Geçerlilik Tarihi</label>
+                        <input type="text" id="cropper-input-expiry-date" placeholder="GG.AA.YYYY" style="width: 100%; padding: 6px 8px; font-size: 0.85rem; border: 1.5px solid #f39c12; border-radius: 6px; font-weight: 600; background: var(--bg-color); color: var(--text-primary);">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 2px;">Veren Makam / D. Yeri</label>
+                        <input type="text" id="cropper-input-authority" placeholder="Örn: AZE / BAKU" style="width: 100%; padding: 6px 8px; font-size: 0.85rem; border: 1px solid var(--border-color); border-radius: 6px; font-weight: 600; background: var(--bg-color); color: var(--text-primary);">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 2px;">Medeni Hali</label>
+                        <select id="cropper-select-medeni" style="width: 100%; padding: 6px 8px; font-size: 0.85rem; border: 1.5px solid var(--accent); border-radius: 6px; font-weight: 600; background: var(--bg-color); color: var(--text-primary); cursor: pointer;">
+                            <option value="Bekar" selected>Bekar</option>
+                            <option value="Evli">Evli</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
             <div class="modal-actions" style="display: grid; grid-template-columns: 1fr 1.3fr 1.7fr; gap: 10px; width: 100%;">
                 <button type="button" id="btn-passport-crop-cancel" class="btn btn-outline" style="padding: 10px; font-size: 0.95rem;">
                     Kapat

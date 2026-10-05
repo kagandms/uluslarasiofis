@@ -25,7 +25,12 @@ function getElements() {
         pageSelector: document.getElementById('passport-page-selector'),
         pageInfo: document.getElementById('passport-page-info'),
         btnPrevPage: document.getElementById('btn-passport-prev-page'),
-        btnNextPage: document.getElementById('btn-passport-next-page')
+        btnNextPage: document.getElementById('btn-passport-next-page'),
+        cropperMissingBox: document.getElementById('cropper-missing-fields-box'),
+        cropperInputIssueDate: document.getElementById('cropper-input-issue-date'),
+        cropperInputExpiryDate: document.getElementById('cropper-input-expiry-date'),
+        cropperInputAuthority: document.getElementById('cropper-input-authority'),
+        cropperSelectMedeni: document.getElementById('cropper-select-medeni')
     };
 }
 
@@ -160,7 +165,17 @@ export function appendPassportPages(newPages) {
     updatePageSelectorUI();
 }
 
-export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0, studentName = '', passportNo = '' }) {
+function formatDateDisplay(isoDate) {
+    if (!isoDate || typeof isoDate !== 'string') return '';
+    const clean = isoDate.trim();
+    const parts = clean.split(/[-/.]/);
+    if (parts.length === 3 && parts[0].length === 4) {
+        return `${parts[2]}.${parts[1]}.${parts[0]}`;
+    }
+    return clean;
+}
+
+export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0, studentName = '', passportNo = '', studentData = null }) {
     if (pages && pages.length > 0) {
         cropperPages = pages.map((p, idx) => {
             if (typeof p === 'string') return { dataUrl: p, pageNumber: idx + 1 };
@@ -176,7 +191,18 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
     }
 
     const activeSrc = cropperPages[currentCropperPageIndex]?.dataUrl || imageSrc;
-    const { modal, image, slider, angleLabel, btnAspectRatio } = getElements();
+    const {
+        modal,
+        image,
+        slider,
+        angleLabel,
+        btnAspectRatio,
+        cropperMissingBox,
+        cropperInputIssueDate,
+        cropperInputExpiryDate,
+        cropperInputAuthority,
+        cropperSelectMedeni
+    } = getElements();
     if (!modal || !image) return;
 
     if (passportCropperInstance) {
@@ -190,6 +216,32 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
     if (angleLabel) angleLabel.textContent = '0°';
     currentAspectRatio = 3 / 4;
     if (btnAspectRatio) btnAspectRatio.textContent = 'Oran: 3:4 (Vesikalık)';
+
+    // Eksik alanları ve medeni hali modal içinde göster ve doldur
+    if (cropperMissingBox) {
+        const issueDate = studentData?.issueDate || '';
+        const expiryDate = studentData?.expiryDate || '';
+        const authority = studentData?.issuingAuthority || studentData?.verenMakam || studentData?.birthPlace || studentData?.dogumYeriAciklamasi || '';
+
+        if (cropperInputIssueDate) {
+            cropperInputIssueDate.value = formatDateDisplay(issueDate);
+            cropperInputIssueDate.style.borderColor = issueDate ? 'var(--border-color)' : '#f39c12';
+        }
+        if (cropperInputExpiryDate) {
+            cropperInputExpiryDate.value = formatDateDisplay(expiryDate);
+            cropperInputExpiryDate.style.borderColor = expiryDate ? 'var(--border-color)' : '#f39c12';
+        }
+        if (cropperInputAuthority) {
+            cropperInputAuthority.value = authority;
+            cropperInputAuthority.style.borderColor = authority ? 'var(--border-color)' : '#f39c12';
+        }
+        if (cropperSelectMedeni) {
+            const medeni = studentData?.medeniHali || studentData?.medeniHal || 'Bekar';
+            cropperSelectMedeni.value = medeni.toLowerCase().startsWith('e') ? 'Evli' : 'Bekar';
+        }
+
+        cropperMissingBox.style.display = 'block';
+    }
 
     updatePageSelectorUI();
 
@@ -260,17 +312,24 @@ function downloadCroppedImage(autoTransfer = false) {
     } catch (_) {}
 
     // Kırpılan fotoğrafı web uygulamasına ve YÖKSİS aktarım mekanizmasına ilet
+    const { cropperInputIssueDate, cropperInputExpiryDate, cropperInputAuthority, cropperSelectMedeni } = getElements();
     window.dispatchEvent(new CustomEvent('ykn:photo-cropped', {
         detail: {
             dataUrl,
             fileName,
             studentInfo: currentStudentInfo,
-            autoTransfer
+            autoTransfer,
+            userFields: {
+                issueDate: cropperInputIssueDate?.value?.trim() || '',
+                expiryDate: cropperInputExpiryDate?.value?.trim() || '',
+                issuingAuthority: cropperInputAuthority?.value?.trim() || '',
+                medeniHali: cropperSelectMedeni?.value || 'Bekar'
+            }
         }
     }));
 
     if (autoTransfer) {
-        showToast('Fotoğraf kırpıldı ve kaydedildi! 4. Adım açıldı.', 'success');
+        showToast('Fotoğraf hazırlandı; YÖKSİS’e aktarılıyor...', 'info');
     } else {
         showToast(`Fotoğraf hazırlandı ve indirildi: ${fileName}`, 'success');
     }
@@ -291,8 +350,102 @@ export function initPassportCropperModal() {
         btnCancel,
         btnClose,
         btnPrevPage,
-        btnNextPage
+        btnNextPage,
+        cropperInputIssueDate,
+        cropperInputExpiryDate,
+        cropperInputAuthority,
+        cropperSelectMedeni
     } = getElements();
+
+    function isValidDateString(str) {
+        if (!str || typeof str !== 'string') return false;
+        const clean = str.trim();
+        const parts = clean.split(/[./-]/);
+        if (parts.length !== 3) return false;
+        let d, m, y;
+        if (parts[0].length === 4) {
+            y = parseInt(parts[0], 10);
+            m = parseInt(parts[1], 10);
+            d = parseInt(parts[2], 10);
+        } else {
+            d = parseInt(parts[0], 10);
+            m = parseInt(parts[1], 10);
+            y = parseInt(parts[2], 10);
+        }
+        if (isNaN(d) || isNaN(m) || isNaN(y)) return false;
+        if (y < 1920 || y > 2050 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+        const dateObj = new Date(y, m - 1, d);
+        return dateObj.getFullYear() === y && dateObj.getMonth() === m - 1 && dateObj.getDate() === d;
+    }
+
+    function attachDateMask(input, targetId) {
+        if (!input) return;
+        input.addEventListener('input', () => {
+            let raw = input.value;
+            const endsWithSep = /[./\-\s]$/.test(raw);
+            raw = raw.replace(/[./\-\s]{2,}/g, '.');
+
+            const isoMatch = raw.trim().match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+            if (isoMatch) {
+                const [, y, m, d] = isoMatch;
+                input.value = d.padStart(2, '0') + '.' + m.padStart(2, '0') + '.' + y;
+            } else {
+                const digits = raw.replace(/\D/g, '').slice(0, 8);
+                let formatted = '';
+                if (digits.length === 0) {
+                    formatted = '';
+                } else if (digits.length <= 2) {
+                    formatted = digits + (digits.length === 2 && endsWithSep ? '.' : '');
+                } else if (digits.length <= 4) {
+                    formatted = digits.slice(0, 2) + '.' + digits.slice(2) + (digits.length === 4 && endsWithSep ? '.' : '');
+                } else {
+                    formatted = digits.slice(0, 2) + '.' + digits.slice(2, 4) + '.' + digits.slice(4);
+                }
+                if (input.value !== formatted) {
+                    input.value = formatted;
+                }
+            }
+
+            input.style.borderColor = isValidDateString(input.value) ? 'var(--border-color)' : '#f39c12';
+
+            const portalEl = document.getElementById(targetId);
+            if (portalEl && portalEl.value !== input.value) {
+                portalEl.value = input.value;
+                portalEl.dispatchEvent(new Event('input'));
+            }
+        });
+    }
+
+    if (cropperInputIssueDate) {
+        attachDateMask(cropperInputIssueDate, 'ykn-issue-date');
+    }
+    if (cropperInputExpiryDate) {
+        attachDateMask(cropperInputExpiryDate, 'ykn-expiry-date');
+    }
+    if (cropperInputAuthority) {
+        cropperInputAuthority.addEventListener('input', () => {
+            const val = cropperInputAuthority.value.trim().toUpperCase();
+            const portalEl = document.getElementById('ykn-issuing-authority');
+            if (portalEl && portalEl.value !== val) {
+                portalEl.value = val;
+                portalEl.dispatchEvent(new Event('input'));
+            }
+        });
+    }
+    if (cropperSelectMedeni) {
+        cropperSelectMedeni.addEventListener('change', () => {
+            const val = cropperSelectMedeni.value;
+            const bekarRadio = document.getElementById('ykn-medeni-bekar');
+            const evliRadio = document.getElementById('ykn-medeni-evli');
+            if (val === 'Evli' && evliRadio) {
+                evliRadio.checked = true;
+                evliRadio.dispatchEvent(new Event('change'));
+            } else if (bekarRadio) {
+                bekarRadio.checked = true;
+                bekarRadio.dispatchEvent(new Event('change'));
+            }
+        });
+    }
 
     if (modal) {
         modal.addEventListener('click', (e) => {

@@ -23,7 +23,7 @@ const PASSPORT_MAX_PAGES = 5;
 const PASSPORT_MAX_OCR_PAGES = 2;
 const PASSPORT_ORIENTATION_ANGLES = [0, 90, 180, 270];
 const PASSPORT_ORIENTATION_SCORE_THRESHOLD = 45;
-const PASSPORT_ORIENTATION_OCR_TIMEOUT_MS = 5_000;
+const PASSPORT_ORIENTATION_OCR_TIMEOUT_MS = 15_000;
 const DOCUMENT_CACHE_MAX_ENTRIES = 8;
 const documentBytesCache = new Map();
 const documentRequestKeys = new Map();
@@ -40,6 +40,13 @@ function cacheDocumentBytes(key, value) {
         const oldestKey = documentBytesCache.keys().next().value;
         documentBytesCache.delete(oldestKey);
     }
+}
+
+function postAppMessage(payload) {
+    const origin = (typeof window !== 'undefined' && window.location?.origin && window.location.origin !== 'null')
+        ? window.location.origin
+        : '*';
+    window.postMessage(payload, origin);
 }
 
 function scorePassportPageText(text, studentName = '', passportNo = '') {
@@ -606,6 +613,65 @@ export function initYknManager() {
         updateMissingFieldsUI();
     }
 
+    function waitForStudentDocuments(timeoutMs = 6000) {
+        if (currentStudentData?.documentsReady || currentStudentData?.yoksisId) {
+            return Promise.resolve(true);
+        }
+        return new Promise((resolve) => {
+            const start = Date.now();
+            const check = setInterval(() => {
+                if (currentStudentData?.documentsReady || currentStudentData?.yoksisId || Date.now() - start >= timeoutMs) {
+                    clearInterval(check);
+                    resolve(Boolean(currentStudentData?.documentsReady || currentStudentData?.yoksisId));
+                }
+            }, 100);
+        });
+    }
+
+    async function startManualYoksisFillAfterCrop() {
+        if (currentStudentData?.yoksisReady !== true) {
+            if (currentStudentData?.yoksisId) {
+                addStatus('YÖKSİS formu hazırlanıyor: kabul kodu aratılıyor...', 'info');
+                showToast('YÖKSİS formu hazırlanıyor...', 'info');
+                try {
+                    await postExtensionRequest('TRANSFER_TO_YOKSIS', {
+                        data: getYoksisTransportData(currentStudentData),
+                        kabulId: currentStudentData.yoksisId,
+                        waitForForm: true,
+                        requestId: createRequestId('auto-yoksis-prep')
+                    }, 35000);
+                    currentStudentData.yoksisReady = true;
+                } catch (prepErr) {
+                    console.warn('[YKN] YÖKSİS kabul kodu otomatik arama uyarısı:', prepErr);
+                }
+            } else {
+                addStatus('Fotoğraf kaydedildi. Her şeyi YÖKSİS’e aktarmak için önce kabul kodunu YÖKSİS’te aratın.', 'warning');
+                showToast('Önce kabul kodunu YÖKSİS’te aratın.', 'warning');
+                return;
+            }
+        }
+
+        if (!beginButtonAction('paste-yoksis', btnPasteYoksis, 30_000, () => {
+            setWorkflowStepStatus(4, 'error');
+            addStatus('YÖKSİS formu doldurma yanıt vermedi. Tekrar deneyebilirsiniz.', 'error');
+            showToast('YÖKSİS formu yanıt vermedi.', 'error');
+        })) return;
+
+        activeSearchRequestId = createRequestId();
+        syncUserEnteredPassportDates();
+        addStatus('Fotoğraf onaylandı. Öğrenci bilgileri ve fotoğraf YÖKSİS’e aktarılıyor...', 'info');
+        showToast('Tüm bilgiler YÖKSİS’e aktarılıyor...', 'info');
+
+        postAppMessage({
+            source: 'WEB_APP',
+            payload: {
+                action: 'FILL_YOKSIS_FORM',
+                data: getYoksisTransportData(currentStudentData),
+                requestId: activeSearchRequestId
+            }
+        });
+    }
+
     function isTurkmenStudent(student) {
         const nationalityText = `${student?.uyruk || ''} ${student?.dogumUlkesi || ''}`.toUpperCase();
         return nationalityText.includes('TÜRKMEN') || nationalityText.includes('TURKMEN') || nationalityText.includes('TKM');
@@ -826,13 +892,13 @@ export function initYknManager() {
         clearExtensionCheckTimeout();
         extensionBridgeActive = false;
         extensionCheckRequestId = requestId || createRequestId();
-        window.postMessage({
+        postAppMessage({
             source: 'WEB_APP',
             payload: {
                 action: 'PING',
                 requestId: extensionCheckRequestId
             }
-        }, '*');
+        });
         extensionCheckTimeoutTimer = setTimeout(() => {
             if (!extensionBridgeActive) showExtensionMissing();
         }, 1800);
@@ -1137,10 +1203,10 @@ export function initYknManager() {
         const safeData = data.data
             ? { ...data, data: getYoksisTransportData(data.data) }
             : data;
-        window.postMessage({
+        postAppMessage({
             source: 'WEB_APP',
             payload: { action, ...safeData, workflowId, requestId: workflowId }
-        }, '*');
+        });
     }
 
     function failOneClick(errorCode, message) {
@@ -1167,7 +1233,8 @@ export function initYknManager() {
             pages: currentStudentData.passportPages || [],
             initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
             studentName: currentStudentData.fullName || '',
-            passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || ''
+            passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
+            studentData: currentStudentData
         });
     }
 
@@ -1282,7 +1349,7 @@ export function initYknManager() {
 
         pendingDocumentReads.add(documentKind);
         documentRequestKeys.set(documentKind, cacheKey);
-        window.postMessage({
+        postAppMessage({
             source: 'WEB_APP',
             payload: {
                 action: 'READ_APPLY_DOCUMENT',
@@ -1290,7 +1357,7 @@ export function initYknManager() {
                 documentUrl: normalizedUrl,
                 requestId
             }
-        }, '*');
+        });
     }
 
     function isPdfData(bytes) {
@@ -1475,7 +1542,8 @@ export function initYknManager() {
                                 pages: allPages,
                                 initialPageIndex: initialTotal + bestPageIndex,
                                 studentName: currentStudentData?.fullName || '',
-                                passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                                passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || '',
+                                studentData: currentStudentData
                             });
                         }
                         addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
@@ -1788,14 +1856,14 @@ export function initYknManager() {
                     activeSearchRequestId = createRequestId();
                     syncUserEnteredPassportDates();
                     addStatus(`Kabul kodu YÖKSİS sekmesinde aranıyor: ${yoksisId}`, 'info');
-                    window.postMessage({
+                    postAppMessage({
                         source: 'WEB_APP',
                         payload: {
                             action: 'TRANSFER_TO_YOKSIS',
                             data: getYoksisTransportData(currentStudentData),
                             requestId: activeSearchRequestId
                         }
-                    }, '*');
+                    });
                 }
                 if (isOneClickActive(ONE_CLICK_STAGE.ACCEPTANCE_READING)) {
                     startOneClickYoksisSearch();
@@ -1857,14 +1925,14 @@ export function initYknManager() {
             requestExtensionCheck(activeSearchRequestId);
 
             // Asıl arama isteği
-            window.postMessage({
+            postAppMessage({
                 source: 'WEB_APP',
                 payload: {
                     action: 'SEARCH_STUDENT',
                     passportNo: passportNo,
                     requestId: activeSearchRequestId
                 }
-            }, '*');
+            });
 
             // 2.5 saniye sonra eklenti köprüsü hala ses vermediyse erken uyarı ver
             setTimeout(() => {
@@ -1914,13 +1982,13 @@ export function initYknManager() {
             if (!activeSearchRequestId) activeSearchRequestId = createRequestId();
 
             addStatus('Apply profilinden öğrenci bilgileri alınıyor...', 'info');
-            window.postMessage({
+            postAppMessage({
                 source: 'WEB_APP',
                 payload: {
                     action: 'COPY_APPLY_DATA',
                     requestId: activeSearchRequestId
                 }
-            }, '*');
+            });
         });
     }
 
@@ -1959,14 +2027,14 @@ export function initYknManager() {
                 activeSearchRequestId = createRequestId();
                 syncUserEnteredPassportDates();
 
-                window.postMessage({
+                postAppMessage({
                     source: 'WEB_APP',
                     payload: {
                         action: 'TRANSFER_TO_YOKSIS',
                         data: getYoksisTransportData(currentStudentData),
                         requestId: activeSearchRequestId
                     }
-                }, '*');
+                });
                 return;
             }
 
@@ -1990,13 +2058,13 @@ export function initYknManager() {
             }
 
             addStatus('Kabul mektubu ve kod Apply sekmesinde taranıyor...', 'info');
-            window.postMessage({
+            postAppMessage({
                 source: 'WEB_APP',
                 payload: {
                     action: 'EXTRACT_KABUL_CODE',
                     requestId: activeSearchRequestId || createRequestId()
                 }
-            }, '*');
+            });
         });
     }
 
@@ -2029,7 +2097,8 @@ export function initYknManager() {
                     pages: currentStudentData.passportPages || [],
                     initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
                     studentName: currentStudentData?.fullName || '',
-                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || '',
+                    studentData: currentStudentData
                 });
                 shouldOpenCropperWhenReady = false;
                 btnCopy.disabled = false;
@@ -2040,13 +2109,13 @@ export function initYknManager() {
                     addStatus('Pasaport belgesi indiriliyor ve kırpma ekranı açılıyor...', 'info');
                     requestApplyDocument('passport', passportDocUrl);
                 } else {
-                    window.postMessage({
+                    postAppMessage({
                         source: 'WEB_APP',
                         payload: {
                             action: 'COPY_APPLY_DATA',
                             requestId: activeSearchRequestId
                         }
-                    }, '*');
+                    });
                     addStatus('Apply profil bilgileri ve pasaport taranıyor...', 'info');
                 }
             }
@@ -2066,7 +2135,8 @@ export function initYknManager() {
                     pages: currentStudentData.passportPages || [],
                     initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
                     studentName: currentStudentData?.fullName || '',
-                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || ''
+                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || '',
+                    studentData: currentStudentData
                 });
                 shouldOpenCropperWhenReady = false;
             } else {
@@ -2075,13 +2145,13 @@ export function initYknManager() {
                     addStatus('Pasaport belgesi indiriliyor...', 'info');
                     requestApplyDocument('passport', passportDocumentUrl);
                 } else {
-                    window.postMessage({
+                    postAppMessage({
                         source: 'WEB_APP',
                         payload: {
                             action: 'COPY_APPLY_DATA',
                             requestId: activeSearchRequestId
                         }
-                    }, '*');
+                    });
                     addStatus('Pasaport belgesi taranıyor...', 'info');
                 }
             }
@@ -2125,13 +2195,13 @@ export function initYknManager() {
             }
 
             addStatus('Kabul mektubu ve kod Apply sekmesinde taranıyor...', 'info');
-            window.postMessage({
+            postAppMessage({
                 source: 'WEB_APP',
                 payload: {
                     action: 'EXTRACT_KABUL_CODE',
                     requestId: activeSearchRequestId
                 }
-            }, '*');
+            });
 
             void 'Kabul mektubu PDF bağlantısı bulunamadı!';
         });
@@ -2155,10 +2225,10 @@ export function initYknManager() {
             }
 
             window.addEventListener('message', handleResponse);
-            window.postMessage({
+            postAppMessage({
                 source: 'WEB_APP',
                 payload: { action, requestId, ...payload }
-            }, '*');
+            });
         });
     }
 
@@ -2236,13 +2306,31 @@ export function initYknManager() {
         });
     }
 
-    window.addEventListener('ykn:photo-cropped', (e) => {
-        const { dataUrl, fileName, autoTransfer } = e.detail || {};
+    window.addEventListener('ykn:photo-cropped', async (e) => {
+        const { dataUrl, fileName, autoTransfer, userFields } = e.detail || {};
         if (!dataUrl) return;
 
         if (currentStudentData) {
             currentStudentData.croppedPhotoBase64 = dataUrl;
             currentStudentData.photoFileName = fileName;
+            if (userFields) {
+                if (userFields.issueDate) {
+                    const parsed = parseDateValue(userFields.issueDate);
+                    currentStudentData.issueDate = parsed || userFields.issueDate;
+                }
+                if (userFields.expiryDate) {
+                    const parsed = parseDateValue(userFields.expiryDate);
+                    currentStudentData.expiryDate = parsed || userFields.expiryDate;
+                }
+                if (userFields.issuingAuthority) {
+                    currentStudentData.issuingAuthority = userFields.issuingAuthority;
+                    currentStudentData.verenMakam = userFields.issuingAuthority;
+                }
+                if (userFields.medeniHali) {
+                    currentStudentData.medeniHali = userFields.medeniHali;
+                    currentStudentData.medeniHal = userFields.medeniHali;
+                }
+            }
             syncUserEnteredPassportDates();
             populateStudentFieldsToInputs(currentStudentData);
         }
@@ -2260,7 +2348,7 @@ export function initYknManager() {
             return;
         }
 
-        window.postMessage({
+        postAppMessage({
             source: 'WEB_APP',
             payload: {
                 action: 'SAVE_CROPPED_PHOTO',
@@ -2268,30 +2356,10 @@ export function initYknManager() {
                 fileName: fileName,
                 requestId: activeSearchRequestId
             }
-        }, '*');
+        });
 
         if (autoTransfer) {
-            if (currentStudentData.yoksisReady !== true) {
-                addStatus(`Vesikalık fotoğraf kaydedildi (${fileName}). Kabul kodu YÖKSİS'te aratıldıktan sonra form doldurulabilir.`, 'warning');
-                showToast('Fotoğraf kaydedildi. Kabul kodu henüz YÖKSİS\'te aranmadıysa önce 1. Tuşa basınız.', 'warning');
-                return;
-            }
-
-            activeSearchRequestId = createRequestId();
-            syncUserEnteredPassportDates();
-
-            const hasPhoto = Boolean(currentStudentData.croppedPhotoBase64);
-            addStatus(`YÖKSİS sayfasına geçiliyor, bilgiler${hasPhoto ? ' ve vesikalık fotoğraf' : ''} form alanlarına aktarılıyor...`, 'info');
-            showToast('YÖKSİS sayfasına geçiliyor...', 'info');
-
-            window.postMessage({
-                source: 'WEB_APP',
-                payload: {
-                    action: 'FILL_YOKSIS_FORM',
-                    data: getYoksisTransportData(currentStudentData),
-                    requestId: activeSearchRequestId
-                }
-            }, '*');
+            await startManualYoksisFillAfterCrop();
         } else {
             addStatus(`Vesikalık fotoğraf başarıyla kırpıldı ve kaydedildi (${fileName}). YÖKSİS formunu doldurmak için ilgili tuşa basabilirsiniz.`, 'success');
             showToast('Fotoğraf hazırlandı.', 'success');
@@ -2326,14 +2394,14 @@ export function initYknManager() {
             showToast('Kabul kodu YÖKSİS\'e aktarılıyor, lütfen bekleyin...', 'info');
             addStatus('Kabul kodu YÖKSİS sekmesinde aranıyor...', 'info');
 
-            window.postMessage({
+            postAppMessage({
                 source: 'WEB_APP',
                 payload: {
                     action: 'TRANSFER_TO_YOKSIS',
                     data: getYoksisTransportData(currentStudentData),
                     requestId: activeSearchRequestId
                 }
-            }, '*');
+            });
         });
     }
 
@@ -2366,14 +2434,14 @@ export function initYknManager() {
             addStatus(`YÖKSİS sayfasına geçiliyor, bilgiler${hasPhoto ? ' ve vesikalık fotoğraf' : ''} form alanlarına aktarılıyor...`, 'info');
             showToast('YÖKSİS sayfasına geçiliyor...', 'info');
 
-            window.postMessage({
+            postAppMessage({
                 source: 'WEB_APP',
                 payload: {
                     action: 'FILL_YOKSIS_FORM',
                     data: getYoksisTransportData(currentStudentData),
                     requestId: activeSearchRequestId
                 }
-            }, '*');
+            });
         });
     }
 
@@ -2572,7 +2640,8 @@ export function initYknManager() {
                             pages: currentStudentData.passportPages || [],
                             initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
                             studentName: currentStudentData.fullName || '',
-                            passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || ''
+                            passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
+                            studentData: currentStudentData
                         });
                         addStatus('Öğrenci bilgileri kopyalandı. Fotoğraf kırpma ekranı açıldı.', 'success');
                     } else {
@@ -2605,14 +2674,14 @@ export function initYknManager() {
                             activeSearchRequestId = createRequestId();
                             syncUserEnteredPassportDates();
                             addStatus(`Kabul kodu YÖKSİS sekmesinde aranıyor: ${validCode}`, 'info');
-                            window.postMessage({
+                            postAppMessage({
                                 source: 'WEB_APP',
                                 payload: {
                                     action: 'TRANSFER_TO_YOKSIS',
                                     data: getYoksisTransportData(currentStudentData),
                                     requestId: activeSearchRequestId
                                 }
-                            }, '*');
+                            });
                         }
                         if (isOneClickActive(ONE_CLICK_STAGE.ACCEPTANCE_READING)) {
                             startOneClickYoksisSearch();
