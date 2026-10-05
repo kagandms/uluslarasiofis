@@ -10,7 +10,7 @@ export function createScanJobStatement(database, { fileId, finalizedAt }) {
             (id,file_id,revision_id,storage_key,byte_size,media_type,available_at,created_at,updated_at)
         SELECT lower(hex(randomblob(16))), files.id, files.revision_id, files.storage_key,
             files.byte_size, files.media_type,
-            strftime('%Y-%m-%dT%H:%M:%fZ',max(datetime(intents.expires_at),datetime(?,'+300 seconds'))), ?, ?
+            strftime('%Y-%m-%dT%H:%M:%fZ', ?), ?, ?
         FROM document_revision_files AS files
         JOIN document_revisions AS revisions ON revisions.id=files.revision_id
         JOIN upload_intents AS intents ON intents.revision_file_id=files.id AND intents.status='completed'

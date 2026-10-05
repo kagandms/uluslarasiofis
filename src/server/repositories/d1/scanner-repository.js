@@ -11,7 +11,7 @@ const CURRENT_JOB = `EXISTS (
 const RECONCILE_INSERT = `INSERT OR IGNORE INTO document_scan_jobs
     (id,file_id,revision_id,storage_key,byte_size,media_type,available_at,created_at,updated_at)
     SELECT lower(hex(randomblob(16))), files.id, files.revision_id, files.storage_key, files.byte_size, files.media_type,
-      strftime('%Y-%m-%dT%H:%M:%fZ',max(datetime(intents.expires_at),datetime(intents.completed_at,'+300 seconds'))), ?, ?
+      strftime('%Y-%m-%dT%H:%M:%fZ', ?), ?, ?
     FROM document_revision_files AS files
     JOIN document_revisions AS revisions ON revisions.id=files.revision_id
     JOIN upload_intents AS intents ON intents.revision_file_id=files.id AND intents.status='completed'
@@ -23,7 +23,9 @@ const NON_RETRYABLE_FAILURE_CODES = new Set(['unsupported_content', 'policy_bloc
 /** @param {D1Database} database Binding. @param {string} now UTC time. @returns {Promise<void>} Repairs queue state without assigning clean. */
 async function reconcile(database, now) {
     await database.batch([
-        database.prepare(RECONCILE_INSERT).bind(now, now),
+        database.prepare(RECONCILE_INSERT).bind(now, now, now),
+        database.prepare(`UPDATE document_scan_jobs SET available_at=?
+            WHERE status='queued' AND available_at > ? AND ${CURRENT_JOB}`).bind(now, now),
         database.prepare(`UPDATE document_scan_jobs SET status='stale',updated_at=?
             WHERE status IN ('queued','leased') AND NOT ${CURRENT_JOB}`).bind(now),
         database.prepare(`UPDATE document_scan_jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END,

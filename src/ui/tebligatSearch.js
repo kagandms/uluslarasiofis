@@ -238,7 +238,7 @@ export function initTebligatSearch() {
     const cacheStatusText = document.getElementById('cache-status-text');
 
     // Sayfa açıldığında önbelleği belleğe al ve durum metnini güncelle
-    const cachedCount = loadCacheIntoMemory();
+    let cachedCount = loadCacheIntoMemory();
     if (cacheStatusText) {
         if (cachedCount > 0) {
             cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--success); font-weight: bold;">Güncel (${cachedCount} Kayıt)</span>`;
@@ -247,15 +247,27 @@ export function initTebligatSearch() {
         }
     }
 
-    if (btnSyncCloud) {
-        btnSyncCloud.addEventListener('click', async () => {
-            const syncController = new AbortController();
-            const syncStartedAt = performance.now();
-            const syncTimeoutId = window.setTimeout(
-                () => syncController.abort(),
-                CLOUD_SYNC_TIMEOUT_MS
-            );
-            const syncProgressId = window.setInterval(() => {
+    let isSyncing = false;
+
+    async function syncTebligatDatabase({ isManual = false } = {}) {
+        if (isSyncing) return;
+        isSyncing = true;
+
+        const syncController = new AbortController();
+        const syncStartedAt = performance.now();
+        const syncTimeoutId = window.setTimeout(
+            () => syncController.abort(),
+            CLOUD_SYNC_TIMEOUT_MS
+        );
+        let syncProgressId = null;
+        let originalHtml = '';
+
+        if (isManual && btnSyncCloud) {
+            originalHtml = btnSyncCloud.innerHTML;
+            btnSyncCloud.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> İndiriliyor...';
+            btnSyncCloud.disabled = true;
+
+            syncProgressId = window.setInterval(() => {
                 const elapsedSeconds = Math.floor((performance.now() - syncStartedAt) / 1000);
                 if (cacheStatusText) {
                     cacheStatusText.innerHTML = `<span style="color: var(--accent);"><div class="spinner" style="width:12px; height:12px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 5px;"></div> Bulut verisi indiriliyor (${elapsedSeconds} sn)...</span>`;
@@ -265,53 +277,88 @@ export function initTebligatSearch() {
             if (cacheStatusText) {
                 cacheStatusText.innerHTML = `<span style="color: var(--accent);"><div class="spinner" style="width:12px; height:12px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 5px;"></div> Bulut verisi indiriliyor (0 sn)...</span>`;
             }
-            
-            const originalHtml = btnSyncCloud.innerHTML;
-            btnSyncCloud.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> İndiriliyor...';
-            btnSyncCloud.disabled = true;
+        } else if (cacheStatusText) {
+            const curCount = inMemoryCache.length;
+            cacheStatusText.innerHTML = `<span style="color: var(--accent); font-size: 0.85rem;"><div class="spinner" style="width:11px; height:11px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 4px;"></div> Arka planda eşitleniyor... ${curCount > 0 ? `(${curCount} kayıt)` : ''}</span>`;
+        }
 
-            try {
-                const response = await fetch('/api/get-all-tebligat', { signal: syncController.signal });
-                const data = await response.json();
-                
-                if (response.ok && Array.isArray(data.results)) {
-                    const allCachedRows = data.results;
-                    localStorage.setItem('tebligat_excel_cache', JSON.stringify(allCachedRows));
-                    const newCount = loadCacheIntoMemory();
-                    
-                    if (cacheStatusText) {
-                        cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--success); font-weight: bold;">Güncellendi (${newCount} Kayıt)</span>`;
-                    }
-                    if (window.showToast) window.showToast('Veritabanı başarıyla cihazınıza senkronize edildi!', 'success');
+        try {
+            const response = await fetch('/api/get-all-tebligat', { signal: syncController.signal });
+            const data = await response.json();
 
-                    // Eğer arama kutusunda yazı varsa anında yeni verilerle güncelle
-                    if (searchInput.value.trim().length >= 2) {
-                        runSearch();
-                    }
-                } else {
-                    throw new Error('SYNC_FAILED');
-                }
-            } catch (err) {
+            if (response.ok && Array.isArray(data.results)) {
+                const allCachedRows = data.results;
+                localStorage.setItem('tebligat_excel_cache', JSON.stringify(allCachedRows));
+                localStorage.setItem('tebligat_last_sync_time', String(Date.now()));
+                const newCount = loadCacheIntoMemory();
+                cachedCount = newCount;
+
                 if (cacheStatusText) {
-                    const isTimeout = err.name === 'AbortError';
+                    cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--success); font-weight: bold;">Güncel (${newCount} Kayıt)</span>`;
+                }
+                if (isManual && window.showToast) {
+                    window.showToast('Veritabanı başarıyla cihazınıza senkronize edildi!', 'success');
+                }
+
+                if (searchInput && searchInput.value.trim().length >= 2) {
+                    runSearch();
+                }
+            } else {
+                throw new Error('SYNC_FAILED');
+            }
+        } catch (err) {
+            const isTimeout = err.name === 'AbortError';
+            if (cacheStatusText) {
+                const currentCount = inMemoryCache.length;
+                if (currentCount > 0) {
+                    cacheStatusText.innerHTML = `Bulut verisi: <span style="color: var(--success); font-weight: bold;">Güncel (${currentCount} Kayıt)</span>`;
+                } else {
                     cacheStatusText.textContent = isTimeout
                         ? 'Senkronizasyon zaman sınırını aştı. Yerel kayıtlar kullanılabilir.'
                         : 'Senkronizasyon tamamlanamadı. Tekrar deneyin; yerel kayıtlar kullanılabilir.';
                 }
-                if (window.showToast) {
-                    const message = err.name === 'AbortError'
-                        ? 'Bulut verisi zamanında alınamadı. Yerel kayıtlar kullanılabilir.'
-                        : 'Bulut verisi eşitlenemedi. Lütfen tekrar deneyin.';
-                    window.showToast(message, 'error');
-                }
-            } finally {
-                window.clearTimeout(syncTimeoutId);
-                window.clearInterval(syncProgressId);
+            }
+            if (isManual && window.showToast) {
+                const message = isTimeout
+                    ? 'Bulut verisi zamanında alınamadı. Yerel kayıtlar kullanılabilir.'
+                    : 'Bulut verisi eşitlenemedi. Lütfen tekrar deneyin.';
+                window.showToast(message, 'error');
+            }
+        } finally {
+            window.clearTimeout(syncTimeoutId);
+            if (syncProgressId) window.clearInterval(syncProgressId);
+            if (isManual && btnSyncCloud) {
                 btnSyncCloud.innerHTML = originalHtml;
                 btnSyncCloud.disabled = false;
             }
+            isSyncing = false;
+        }
+    }
+
+    if (btnSyncCloud) {
+        btnSyncCloud.addEventListener('click', () => {
+            void syncTebligatDatabase({ isManual: true });
         });
     }
+
+    // Yetkili giriş yaptığında arka planda otomatik senkronizasyon (son eşitlemeden 3 dk geçmişse veya önbellek boşsa)
+    const lastSyncTimestamp = parseInt(localStorage.getItem('tebligat_last_sync_time') || '0', 10);
+    const isCacheStale = (Date.now() - lastSyncTimestamp > 3 * 60 * 1000) || cachedCount === 0;
+    if (isCacheStale) {
+        window.setTimeout(() => {
+            void syncTebligatDatabase({ isManual: false }).catch(() => {});
+        }, 800);
+    }
+
+    // Tebliğ sekmesine geçildiğinde gerekiyorsa arka planda tazele
+    document.addEventListener('workspace:view-changed', (event) => {
+        if (event.detail?.viewName === 'teblig') {
+            const lastSync = parseInt(localStorage.getItem('tebligat_last_sync_time') || '0', 10);
+            if (Date.now() - lastSync > 5 * 60 * 1000) {
+                void syncTebligatDatabase({ isManual: false }).catch(() => {});
+            }
+        }
+    });
     // --- CLOUD SYNC BİTTİ ---
 
     // 1. Skeleton Animasyonu için CSS Ekle (Eğer yoksa)

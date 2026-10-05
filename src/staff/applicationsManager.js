@@ -1009,6 +1009,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                     : `ClamAV taraması tamamlandı: ${readDocumentStateLabel(currentDocument?.scan_status || 'failed')}.`;
                 clearScanPoll();
                 render();
+                document.dispatchEvent(new CustomEvent('scanner:refresh'));
                 return;
             }
             scheduleScanResultPoll(documentCode);

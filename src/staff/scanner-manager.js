@@ -154,6 +154,22 @@ export function initializeScannerManager(root, api = createScannerApi()) {
             cleanText.textContent = 'Tüm taranan belgeler güvenli ve onaylı.';
             detailsRoot.append(cleanText);
         }
+
+        schedulePoll(backlog > 0 ? 6_000 : 30_000);
+    }
+
+    let pollTimer = null;
+    function schedulePoll(delayMs) {
+        if (pollTimer) {
+            clearTimeout(pollTimer);
+            pollTimer = null;
+        }
+        const view = root.ownerDocument?.defaultView || window;
+        if (!view || view.closed) return;
+        pollTimer = view.setTimeout(() => {
+            void loadStatus().catch(() => {});
+        }, delayMs);
+        if (typeof pollTimer?.unref === 'function') pollTimer.unref();
     }
 
     async function loadStatus() {
@@ -168,6 +184,7 @@ export function initializeScannerManager(root, api = createScannerApi()) {
             const err = document.createElement('p');
             err.textContent = 'Tarama durumu alınamadı. Yenileyin; belgeler güvenli kabul edilmedi.';
             detailsRoot.append(err);
+            schedulePoll(30_000);
         } finally {
             refresh.disabled = false;
         }
@@ -186,5 +203,14 @@ export function initializeScannerManager(root, api = createScannerApi()) {
     }
 
     refresh.addEventListener('click', loadStatus);
+
+    const handleGlobalRefresh = () => { void loadStatus().catch(() => {}); };
+    root.ownerDocument.addEventListener('scanner:refresh', handleGlobalRefresh);
+    root.ownerDocument.addEventListener('staff-applications:view-changed', (event) => {
+        if (event.detail?.view !== 'detail') {
+            handleGlobalRefresh();
+        }
+    });
+
     void loadStatus().catch(() => {});
 }
