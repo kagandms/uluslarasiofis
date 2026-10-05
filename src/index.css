@@ -164,6 +164,7 @@ h1 {
     flex-shrink: 0;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
     transition: var(--transition);
+    margin-right: 1.5rem;
 }
 
 .header-live-clock:hover {
