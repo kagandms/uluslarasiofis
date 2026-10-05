@@ -26,7 +26,7 @@ test('Apps Script proxy sends its credential in a server-side POST body', async 
     assert.equal(requestUrl, environment.APPS_SCRIPT_URL);
     assert.equal(requestOptions.method, 'POST');
     assert.equal(requestOptions.headers['Content-Type'], 'application/json');
-    assert.equal(requestOptions.redirect, 'follow');
+    assert.equal(requestOptions.redirect, 'manual');
     assert.deepEqual(JSON.parse(requestOptions.body), {
         action: 'update',
         key: 'test-only-api-key',
@@ -34,6 +34,36 @@ test('Apps Script proxy sends its credential in a server-side POST body', async 
         isim: 'Test',
         no: '1'
     });
+});
+
+test('Apps Script proxy follows 302 redirect location to fetch echo payload', async () => {
+    const environment = {
+        APPS_SCRIPT_URL: 'https://apps.example.test/exec',
+        APPS_SCRIPT_API_KEY: 'test-only-api-key'
+    };
+    const calls = [];
+    const fetcher = async (url, options) => {
+        calls.push({ url: String(url), options });
+        if (options?.method === 'POST') {
+            return new Response(null, {
+                status: 302,
+                headers: { Location: 'https://script.googleusercontent.com/macros/echo?token=xyz' }
+            });
+        }
+        return new Response('{"success":true,"message":"Isaretlendi"}', {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    };
+
+    const result = await callAppsScript('update', { sayfa: '01.01.2026', isim: 'Test', no: '1' }, environment, fetcher);
+    assert.deepEqual(result, { success: true, message: 'Isaretlendi' });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].options.method, 'POST');
+    assert.equal(calls[0].options.redirect, 'manual');
+    assert.equal(calls[1].options.method, 'GET');
+    assert.equal(calls[1].options.redirect, 'follow');
+    assert.equal(calls[1].url, 'https://script.googleusercontent.com/macros/echo?token=xyz');
 });
 
 test('Apps Script proxy rejects unknown actions and missing server configuration', async () => {

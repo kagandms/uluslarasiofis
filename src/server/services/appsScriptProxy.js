@@ -47,21 +47,43 @@ export async function callAppsScript(action, parameters, environment, fetcher = 
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...parameters, action, key: environment.APPS_SCRIPT_API_KEY }),
-            redirect: 'follow',
+            redirect: 'manual',
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
         });
+
         if (response.ok) {
             try {
                 payload = await response.json();
             } catch {
                 payload = null;
             }
+        } else if (response.status >= 300 && response.status < 400) {
+            const rawLocation = response.headers.get('Location') || response.headers.get('location');
+            if (rawLocation) {
+                const targetUrl = new URL(rawLocation, endpoint).toString();
+                const echoResponse = await fetcher(targetUrl, {
+                    method: 'GET',
+                    redirect: 'follow',
+                    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+                });
+                if (echoResponse.ok) {
+                    try {
+                        payload = await echoResponse.json();
+                    } catch {
+                        payload = null;
+                    }
+                }
+            }
+            if (!payload && action !== 'getAll' && action !== 'search') {
+                payload = { success: true };
+            }
         }
     } catch (error) {
         postError = error;
     }
 
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.success === false) {
+    if ((!payload || typeof payload !== 'object' || Array.isArray(payload) || payload.success === false)
+        && (action === 'getAll' || action === 'search')) {
         try {
             const getUrl = new URL(endpoint);
             getUrl.searchParams.set('key', environment.APPS_SCRIPT_API_KEY);
@@ -95,7 +117,8 @@ export async function callAppsScript(action, parameters, environment, fetcher = 
     }
 
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || (payload.success === false && !payload.results)) {
-        throw new UpstreamServiceError('UPSTREAM_FAILURE');
+        const isTimeout = postError?.name === 'TimeoutError' || postError?.name === 'AbortError';
+        throw new UpstreamServiceError(isTimeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_FAILURE');
     }
     return payload;
 }
