@@ -21,6 +21,9 @@ import { handleMetaWhatsAppWebhook } from './services/metaWhatsAppWebhook.js';
 import { createMetaWhatsAppProvider } from './services/metaWhatsAppProvider.js';
 import { runNotificationDispatchBatch } from './services/notificationDispatcher.js';
 import { handleStaffApplicationDeletion } from './routes/staffApplicationDeletionRoutes.js';
+import { backupD1ToR2, getLatestBackupMetadata } from './services/d1BackupService.js';
+import { requireStaff } from './auth/staffAuth.js';
+import { requireMethod } from './routes/shared.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -217,6 +220,21 @@ async function routeApi(request, environment, requestId) {
         '/api/get-all-tebligat', '/api/search-tebligat', '/api/add-tebligat',
         '/api/update-tebligat', '/api/unmark-tebligat', '/api/remove-tebligat'
     ].includes(pathname)) return handleTebligatRequest(request, environment, pathname);
+    if (pathname === '/api/staff/admin/backup') {
+        await requireStaff(request, environment);
+        requireMethod(request, 'POST');
+        return backupD1ToR2({
+            database: environment.DB,
+            storage: environment.DOCUMENTS,
+            environmentName: environment.APP_ENV || 'production'
+        });
+    }
+    if (pathname === '/api/staff/admin/backup/latest') {
+        await requireStaff(request, environment);
+        requireMethod(request, 'GET');
+        const latest = await getLatestBackupMetadata(environment.DOCUMENTS, environment.APP_ENV || 'production');
+        return { latest };
+    }
     throw new ApiError(404, 'NOT_FOUND', 'İstenen kaynak bulunamadı.');
 }
 
@@ -244,6 +262,17 @@ const worker = {
         }
     },
     async scheduled(_controller, environment) {
+        if (environment.DB && environment.DOCUMENTS && typeof environment.DOCUMENTS.put === 'function') {
+            try {
+                await backupD1ToR2({
+                    database: environment.DB,
+                    storage: environment.DOCUMENTS,
+                    environmentName: environment.APP_ENV || 'production'
+                });
+            } catch (backupError) {
+                console.error('[Scheduled] D1 automated backup failed:', backupError);
+            }
+        }
         const provider = createMetaWhatsAppProvider(environment);
         return runNotificationDispatchBatch({ database: environment.DB, provider,
             isEnabled: environment.NOTIFICATION_DISPATCH_ENABLED === 'true' });
