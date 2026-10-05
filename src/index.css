@@ -127,6 +127,19 @@ h1, h2, h3 {
     height: 50px;
     object-fit: contain;
     cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.logo-dark {
+    display: none;
+}
+
+body.dark-mode .logo-light {
+    display: none;
+}
+
+body.dark-mode .logo-dark {
+    display: inline-block;
 }
 
 h1 {
@@ -2133,6 +2146,13 @@ body.dark-mode .history-badge {
     text-align: center;
     animation: staff-login-enter 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
     box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--card-border);
+}
+
+body.dark-mode .staff-login-card img {
+    background: #ffffff;
+    padding: 6px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 @keyframes staff-login-enter {

@@ -71,7 +71,10 @@
     <div id="app-content" hidden>
         <header class="app-header">
             <div class="header-content">
-                    <a href="/yetkili/#home-screen" id="staff-home-link" aria-label="Yetkili ana menüsü"><img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" alt="İstanbul Topkapı Üniversitesi" class="logo-img"></a>
+                    <a href="/yetkili/#home-screen" id="staff-home-link" aria-label="Yetkili ana menüsü">
+                        <img src="/logo_tr_transparent.png" alt="İstanbul Topkapı Üniversitesi" class="logo-img logo-light" onerror="this.src='https://www.topkapi.edu.tr/resources/files/logo_tr.jpg'">
+                        <img src="/logo_tr_dark.png" alt="İstanbul Topkapı Üniversitesi" class="logo-img logo-dark">
+                    </a>
                 <div style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
                     <h1>İstanbul Topkapı Üniversitesi Uluslararası Öğrenci İşlemleri Portalı</h1>
                     <div id="header-live-clock" class="header-live-clock" aria-label="Canlı Saat" title="Türkiye Saati (TSİ)">
@@ -87,11 +90,6 @@
                         <span id="live-clock-date" class="live-clock-date">--</span>
                     </div>
                     <div class="header-actions" style="display: flex; align-items: center; gap: 8px;">
-
-                        <button id="btn-install-pwa" class="btn-header" title="Uygulamayı Yükle" style="display: none;">
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                            <span class="hide-mobile">Yükle</span>
-                        </button>
                         <button onclick="if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>{for(let reg of r)reg.unregister()})};if(window.caches){caches.keys().then(k=>Promise.all(k.map(c=>caches.delete(c)))).then(()=>{window.location.href=window.location.pathname+'?v='+Date.now()})}else{window.location.href=window.location.pathname+'?v='+Date.now()}" class="btn-header" title="Sistemi Güncelle">
                             <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
                             <span class="hide-mobile">Güncelle</span>
