@@ -620,10 +620,34 @@ export function initTebligatSearch() {
         const isim = card.dataset.isim;
         const no = card.dataset.no;
 
-        // Butonu yükleniyor durumuna al
         const originalHtml = btn.innerHTML;
-        btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> İşleniyor...';
+        const originalBg = btn.style.backgroundColor;
+        const originalColor = btn.style.color;
+        const originalBorder = btn.style.borderColor;
+        const originalCursor = btn.style.cursor;
+
+        // Anlık (İyimser) durum güncellemesi: milisaniyesinde işaretlendiye geç
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
+        btn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+        btn.style.color = '#27ae60';
+        btn.style.borderColor = '#27ae60';
+        btn.style.cursor = 'default';
+        btn.classList.add('marked');
         btn.disabled = true;
+
+        const unmarkBtn = card.querySelector('.btn-unmark-tebligat');
+        if (unmarkBtn) {
+            unmarkBtn.style.display = 'flex';
+        }
+
+        const uniqueId = `${sayfa}-${isim}-${no || ''}`;
+        localStorage.setItem('tebligat_marked_' + uniqueId, 'true');
+
+        const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
+        if (memItem) {
+            memItem.isaretli = true;
+            memItem.isMarked = true;
+        }
 
         try {
             const response = await fetch('/api/update-tebligat', {
@@ -637,32 +661,6 @@ export function initTebligatSearch() {
             const data = await response.json();
             
             if (response.ok && data.success === true) {
-                // Başarılı durumu
-                btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
-                btn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
-                btn.style.color = '#27ae60';
-                btn.style.borderColor = '#27ae60';
-                btn.style.cursor = 'default';
-                btn.classList.add('marked');
-                btn.disabled = true;
-                
-                // Kaldır butonunu görünür yap
-                const unmarkBtn = card.querySelector('.btn-unmark-tebligat');
-                if (unmarkBtn) {
-                    unmarkBtn.style.display = 'flex';
-                }
-                
-                // LocalStorage'a kaydet
-                const uniqueId = `${sayfa}-${isim}-${no || ''}`;
-                localStorage.setItem('tebligat_marked_' + uniqueId, 'true');
-                
-                // Bellek içi RAM kaydını da güncelle
-                const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
-                if (memItem) {
-                    memItem.isaretli = true;
-                    memItem.isMarked = true;
-                }
-
                 if (window.showToast) {
                     window.showToast('E-Tablo güncellendi (İsim yeşil oldu, C kolonuna tarih yazıldı).', 'success');
                 }
@@ -670,8 +668,22 @@ export function initTebligatSearch() {
                 throw new Error('UPDATE_FAILED');
             }
         } catch (error) {
+            // Hata durumunda geri al
             btn.innerHTML = originalHtml;
+            btn.style.backgroundColor = originalBg;
+            btn.style.color = originalColor;
+            btn.style.borderColor = originalBorder;
+            btn.style.cursor = originalCursor;
+            btn.classList.remove('marked');
             btn.disabled = false;
+            if (unmarkBtn) {
+                unmarkBtn.style.display = 'none';
+            }
+            localStorage.removeItem('tebligat_marked_' + uniqueId);
+            if (memItem) {
+                memItem.isaretli = false;
+                memItem.isMarked = false;
+            }
             if (window.showToast) {
                 window.showToast('İşaretleme tamamlanamadı. Tekrar deneyin.', 'error');
             } else {
@@ -693,10 +705,26 @@ export function initTebligatSearch() {
         const isim = card.dataset.isim;
         const no = card.dataset.no;
 
-        // Butonu yükleniyor durumuna al
-        const originalHtml = btn.innerHTML;
-        btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div>...';
-        btn.disabled = true;
+        const markBtn = card.querySelector('.btn-mark-tebligat');
+        const uniqueId = `${sayfa}-${isim}-${no || ''}`;
+        const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
+
+        // Anlık (İyimser) durum güncellemesi: milisaniyesinde kaldır butonunu gizle ve İşaretle butonunu aktifleştir
+        btn.style.display = 'none';
+        if (markBtn) {
+            markBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> İşaretle';
+            markBtn.style.backgroundColor = 'transparent';
+            markBtn.style.color = 'var(--text-secondary)';
+            markBtn.style.borderColor = 'var(--card-border)';
+            markBtn.style.cursor = 'pointer';
+            markBtn.classList.remove('marked');
+            markBtn.disabled = false;
+        }
+        localStorage.removeItem('tebligat_marked_' + uniqueId);
+        if (memItem) {
+            memItem.isaretli = false;
+            memItem.isMarked = false;
+        }
 
         try {
             const response = await fetch('/api/unmark-tebligat', {
@@ -710,34 +738,6 @@ export function initTebligatSearch() {
             const data = await response.json();
             
             if (response.ok && data.success === true) {
-                // Başarılı durumu: Kaldır butonunu gizle
-                btn.style.display = 'none';
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
-
-                // İşaretle butonunu eski haline getir
-                const markBtn = card.querySelector('.btn-mark-tebligat');
-                if (markBtn) {
-                    markBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> İşaretle';
-                    markBtn.style.backgroundColor = 'transparent';
-                    markBtn.style.color = 'var(--text-secondary)';
-                    markBtn.style.borderColor = 'var(--card-border)';
-                    markBtn.style.cursor = 'pointer';
-                    markBtn.classList.remove('marked');
-                    markBtn.disabled = false;
-                }
-                
-                // LocalStorage'dan sil
-                const uniqueId = `${sayfa}-${isim}-${no || ''}`;
-                localStorage.removeItem('tebligat_marked_' + uniqueId);
-                
-                // Bellek içi RAM kaydını da güncelle
-                const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
-                if (memItem) {
-                    memItem.isaretli = false;
-                    memItem.isMarked = false;
-                }
-                
                 if (window.showToast) {
                     window.showToast('İşaret başarıyla kaldırıldı.', 'success');
                 }
@@ -745,12 +745,26 @@ export function initTebligatSearch() {
                 throw new Error('UNMARK_FAILED');
             }
         } catch (error) {
-            btn.innerHTML = originalHtml;
-            btn.disabled = false;
+            // Hata durumunda geri al (tekrar işaretli hale getir)
+            btn.style.display = 'flex';
+            if (markBtn) {
+                markBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
+                markBtn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+                markBtn.style.color = '#27ae60';
+                markBtn.style.borderColor = '#27ae60';
+                markBtn.style.cursor = 'default';
+                markBtn.classList.add('marked');
+                markBtn.disabled = true;
+            }
+            localStorage.setItem('tebligat_marked_' + uniqueId, 'true');
+            if (memItem) {
+                memItem.isaretli = true;
+                memItem.isMarked = true;
+            }
             if (window.showToast) {
                 window.showToast('İşaret kaldırılamadı. Tekrar deneyin.', 'error');
             } else {
-                alert('Hata: ' + error.message);
+                alert('İşaret kaldırılamadı. Lütfen tekrar deneyin.');
             }
         }
     });

@@ -7,8 +7,8 @@ import { requireMethod, requireSameOrigin } from './shared.js';
 const MUTATIONS = Object.freeze({
     '/api/add-tebligat': { action: 'add', requiresNumber: false },
     '/api/update-tebligat': { action: 'update', requiresNumber: true },
-    '/api/unmark-tebligat': { action: 'unmark', requiresNumber: true },
-    '/api/remove-tebligat': { action: 'remove', requiresNumber: true }
+    '/api/unmark-tebligat': { action: 'unmark', requiresNumber: false },
+    '/api/remove-tebligat': { action: 'remove', requiresNumber: false }
 });
 
 function safeUpstreamFailure(error) {
@@ -26,10 +26,10 @@ function readMutation(body, requiresNumber) {
     if (requiresNumber && typeof body.no !== 'string' && typeof body.no !== 'number') {
         throw new ApiError(400, 'VALIDATION_ERROR', 'İşlem için geçerli tebligat numarası gerekli.');
     }
-    if (body.no !== undefined && String(body.no).length > 30) throw new ApiError(400, 'VALIDATION_ERROR', 'Tebligat numarasını kontrol edip tekrar deneyin.');
+    if (body.no !== undefined && body.no !== null && String(body.no).length > 30) throw new ApiError(400, 'VALIDATION_ERROR', 'Tebligat numarasını kontrol edip tekrar deneyin.');
     return {
         sayfa: body.sayfa.trim(), isim: body.isim.trim(),
-        ...(body.no === undefined ? {} : { no: String(body.no) })
+        ...(body.no !== undefined && body.no !== null && String(body.no).trim() !== '' ? { no: String(body.no).trim() } : {})
     };
 }
 

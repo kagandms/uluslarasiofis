@@ -6,6 +6,7 @@ import {
     parseDateValue,
     extractPassportPlaceOfBirth,
     extractPassportIssuingAuthority,
+    extractPassportGender,
     getCountryIso3Code
 } from '../utils/ykn-document-parser.js';
 import { selectBestPassportOrientation } from '../utils/passport-orientation.js';
@@ -51,8 +52,17 @@ function scorePassportPageText(text, studentName = '', passportNo = '') {
         score += 100;
     }
 
-    // 2. Passport identification words
-    if (upperText.includes('PASSPORT') || upperText.includes('PASSEPORT') || upperText.includes('PASAPORTE') || upperText.includes('PASAPORT')) {
+    // 2. Passport identification words in multiple languages
+    if (
+        upperText.includes('PASSPORT') ||
+        upperText.includes('PASSEPORT') ||
+        upperText.includes('PASAPORTE') ||
+        upperText.includes('PASAPORT') ||
+        upperText.includes('ПАСПОРТ') ||
+        upperText.includes('جواز') ||
+        upperText.includes('REISEPASS') ||
+        upperText.includes('PASSAPORTO')
+    ) {
         score += 30;
     }
 
@@ -76,20 +86,65 @@ function scorePassportPageText(text, studentName = '', passportNo = '') {
         }
     }
 
-    // 5. Passport field labels (Dates, Birth, Authority)
-    if (upperText.includes('DATE OF BIRTH') || upperText.includes('DATE DE NAISSANCE') || upperText.includes('DOĞUM TARİHİ')) {
+    // 5. Passport field labels (Dates, Birth, Authority, Gender) in multiple languages
+    if (
+        upperText.includes('DATE OF BIRTH') ||
+        upperText.includes('DATE DE NAISSANCE') ||
+        upperText.includes('DOĞUM TARİHİ') ||
+        upperText.includes('ДАТА РОЖДЕНИЯ') ||
+        upperText.includes('ДАТА РОЖД') ||
+        upperText.includes('تاريخ الميلاد')
+    ) {
         score += 25;
     }
-    if (upperText.includes('DATE OF EXPIRY') || upperText.includes('EXPIRATION') || upperText.includes('VALID UNTIL') || upperText.includes('GEÇERLİLİK')) {
+    if (
+        upperText.includes('DATE OF EXPIRY') ||
+        upperText.includes('EXPIRATION') ||
+        upperText.includes('VALID UNTIL') ||
+        upperText.includes('GEÇERLİLİK') ||
+        upperText.includes('СРОК ДЕЙСТВИЯ') ||
+        upperText.includes('ДЕЙСТВИТЕЛЕН ДО') ||
+        upperText.includes('تاريخ الانتهاء') ||
+        upperText.includes('تاريخ الصلاحية') ||
+        upperText.includes('MÖHLETI') ||
+        upperText.includes('MUDDATI')
+    ) {
         score += 25;
     }
-    if (upperText.includes('DATE OF ISSUE') || upperText.includes('DÜZENLEME TARİHİ') || upperText.includes('ISSUED')) {
+    if (
+        upperText.includes('DATE OF ISSUE') ||
+        upperText.includes('DÜZENLEME TARİHİ') ||
+        upperText.includes('ISSUED') ||
+        upperText.includes('ДАТА ВЫДАЧИ') ||
+        upperText.includes('تاريخ الإصدار') ||
+        upperText.includes('تاريخ الاصدار') ||
+        upperText.includes('BERILGAN')
+    ) {
         score += 20;
     }
-    if (upperText.includes('PLACE OF BIRTH') || upperText.includes('LIEU DE NAISSANCE') || upperText.includes('DOĞUM YERİ')) {
+    if (
+        upperText.includes('PLACE OF BIRTH') ||
+        upperText.includes('LIEU DE NAISSANCE') ||
+        upperText.includes('DOĞUM YERİ') ||
+        upperText.includes('МЕСТО РОЖДЕНИЯ') ||
+        upperText.includes('МЕСТО РОЖД') ||
+        upperText.includes('ТУҒАН ЖЕРІ') ||
+        upperText.includes('ТУҒАН ЖЕР') ||
+        upperText.includes('مكان الميلاد') ||
+        upperText.includes('محل الميلاد')
+    ) {
         score += 20;
     }
-    if (upperText.includes('AUTHORITY') || upperText.includes('AUTORITÉ') || upperText.includes('VEREN MAKAM')) {
+    if (
+        upperText.includes('AUTHORITY') ||
+        upperText.includes('AUTORITÉ') ||
+        upperText.includes('VEREN MAKAM') ||
+        upperText.includes('ОРГАН ВЫДАЧИ') ||
+        upperText.includes('КЕМ ВЫДАН') ||
+        upperText.includes('جهة الإصدار') ||
+        upperText.includes('جهة الاصدار') ||
+        upperText.includes('SMST')
+    ) {
         score += 20;
     }
 
@@ -299,6 +354,17 @@ export function initYknManager() {
     const inputExpiryDate = document.getElementById('ykn-expiry-date');
     const inputBirthPlace = document.getElementById('ykn-birth-place');
     const inputIssuingAuthority = document.getElementById('ykn-issuing-authority');
+    const panelFields = document.getElementById('ykn-fields-panel');
+    const badgeMissing = document.getElementById('ykn-missing-badge');
+    const alertMissing = document.getElementById('ykn-missing-alert');
+    const badgeIssueDate = document.getElementById('badge-issue-date');
+    const badgeExpiryDate = document.getElementById('badge-expiry-date');
+    const badgeBirthPlace = document.getElementById('badge-birth-place');
+    const badgeAuthority = document.getElementById('badge-issuing-authority');
+    const inputMotherName = document.getElementById('ykn-mother-name');
+    const inputFatherName = document.getElementById('ykn-father-name');
+    const inputBirthDate = document.getElementById('ykn-birth-date');
+    const btnSyncYoksisFields = document.getElementById('btn-sync-yoksis-fields');
 
     try {
         initPassportCropperModal();
@@ -308,22 +374,199 @@ export function initYknManager() {
 
     function formatDateForDisplay(isoDate) {
         if (!isoDate || typeof isoDate !== 'string') return '';
-        const parts = isoDate.split('-');
-        if (parts.length === 3) {
+        const clean = isoDate.trim();
+        const parts = clean.split(/[-/.]/);
+        if (parts.length === 3 && parts[0].length === 4) {
             return `${parts[2]}.${parts[1]}.${parts[0]}`;
         }
-        return isoDate;
+        return clean;
+    }
+
+    function isValidDateString(str) {
+        if (!str || typeof str !== 'string') return false;
+        const clean = str.trim();
+        const parts = clean.split(/[./-]/);
+        if (parts.length !== 3) return false;
+        let d, m, y;
+        if (parts[0].length === 4) {
+            y = parseInt(parts[0], 10);
+            m = parseInt(parts[1], 10);
+            d = parseInt(parts[2], 10);
+        } else {
+            d = parseInt(parts[0], 10);
+            m = parseInt(parts[1], 10);
+            y = parseInt(parts[2], 10);
+        }
+        if (isNaN(d) || isNaN(m) || isNaN(y)) return false;
+        if (y < 1920 || y > 2050 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+        const dateObj = new Date(y, m - 1, d);
+        return dateObj.getFullYear() === y && dateObj.getMonth() === m - 1 && dateObj.getDate() === d;
+    }
+
+    function updateMissingFieldsUI() {
+        if (!panelFields) return;
+        if (!currentStudentData) {
+            panelFields.style.display = 'none';
+            return;
+        }
+        panelFields.style.display = 'block';
+
+        const issueVal = (inputIssueDate?.value || currentStudentData.issueDate || '').trim();
+        const expiryVal = (inputExpiryDate?.value || currentStudentData.expiryDate || '').trim();
+        const bpVal = (inputBirthPlace?.value || currentStudentData.birthPlace || currentStudentData.dogumYeriAciklamasi || currentStudentData.dogumYeri || '').trim();
+        const authVal = (inputIssuingAuthority?.value || currentStudentData.issuingAuthority || currentStudentData.verenMakam || '').trim();
+
+        const missing = [];
+
+        function markField(inputEl, badgeEl, val, name) {
+            const hasVal = Boolean(val);
+            if (inputEl) {
+                inputEl.style.borderColor = hasVal ? 'var(--border-color)' : '#f39c12';
+                inputEl.style.backgroundColor = hasVal ? 'transparent' : 'rgba(243, 156, 18, 0.05)';
+            }
+            if (badgeEl) {
+                if (hasVal) {
+                    badgeEl.textContent = '✓ Dolu';
+                    badgeEl.style.color = '#27ae60';
+                    badgeEl.style.fontWeight = '600';
+                } else {
+                    badgeEl.textContent = '⚠️ Eksik';
+                    badgeEl.style.color = '#e67e22';
+                    badgeEl.style.fontWeight = '700';
+                }
+            }
+            if (!hasVal) missing.push(name);
+        }
+
+        function markDateField(inputEl, badgeEl, val, name) {
+            const valid = isValidDateString(val);
+            if (inputEl) {
+                inputEl.style.borderColor = valid ? 'var(--border-color)' : '#f39c12';
+                inputEl.style.backgroundColor = valid ? 'transparent' : 'rgba(243, 156, 18, 0.05)';
+            }
+            if (badgeEl) {
+                if (valid) {
+                    badgeEl.textContent = '✓ Dolu';
+                    badgeEl.style.color = '#27ae60';
+                    badgeEl.style.fontWeight = '600';
+                } else {
+                    badgeEl.textContent = val ? '⚠️ Geçersiz Tarih' : '⚠️ Eksik';
+                    badgeEl.style.color = '#e67e22';
+                    badgeEl.style.fontWeight = '700';
+                }
+            }
+            if (!valid) missing.push(name);
+        }
+
+        markDateField(inputIssueDate, badgeIssueDate, issueVal, 'Düzenleme Tarihi');
+        markDateField(inputExpiryDate, badgeExpiryDate, expiryVal, 'Geçerlilik Tarihi');
+        markField(inputBirthPlace, badgeBirthPlace, bpVal, 'Doğum Yeri');
+        markField(inputIssuingAuthority, badgeAuthority, authVal, 'Veren Makam');
+
+        if (badgeMissing) {
+            if (missing.length > 0) {
+                badgeMissing.textContent = `⚠️ ${missing.length} Eksik Alan`;
+                badgeMissing.style.background = 'rgba(231, 76, 60, 0.12)';
+                badgeMissing.style.color = '#e74c3c';
+            } else {
+                badgeMissing.textContent = '✓ Tüm Alanlar Hazır';
+                badgeMissing.style.background = 'rgba(39, 174, 96, 0.12)';
+                badgeMissing.style.color = '#27ae60';
+            }
+        }
+
+        if (alertMissing) {
+            if (missing.length > 0) {
+                alertMissing.style.display = 'block';
+                alertMissing.innerHTML = `⚠️ Pasaporttan bazı alanlar okunamadı: <strong>${missing.join(', ')}</strong>. Lütfen kutucuklara yazarak doldurun.`;
+            } else {
+                alertMissing.style.display = 'none';
+            }
+        }
+    }
+
+    function populateStudentFieldsToInputs(student) {
+        if (!student) return;
+        if (inputIssueDate && !inputIssueDate.value && student.issueDate) {
+            inputIssueDate.value = formatDateForDisplay(student.issueDate);
+        }
+        if (inputExpiryDate && !inputExpiryDate.value && student.expiryDate) {
+            inputExpiryDate.value = formatDateForDisplay(student.expiryDate);
+        }
+        if (inputBirthPlace && !inputBirthPlace.value && (student.birthPlace || student.dogumYeriAciklamasi || student.dogumYeri)) {
+            inputBirthPlace.value = (student.birthPlace || student.dogumYeriAciklamasi || student.dogumYeri).toUpperCase();
+        }
+        if (inputIssuingAuthority && !inputIssuingAuthority.value && (student.issuingAuthority || student.verenMakam)) {
+            inputIssuingAuthority.value = (student.issuingAuthority || student.verenMakam).toUpperCase();
+        }
+        if (inputMotherName && !inputMotherName.value && student.anneAdi) {
+            inputMotherName.value = student.anneAdi;
+        }
+        if (inputFatherName && !inputFatherName.value && student.babaAdi) {
+            inputFatherName.value = student.babaAdi;
+        }
+        if (inputBirthDate && !inputBirthDate.value && (student.birthDate || student.dogumTarihi)) {
+            inputBirthDate.value = formatDateForDisplay(student.birthDate || student.dogumTarihi);
+        }
+        const medeniStatus = student.medeniHali || student.medeniHal || 'Bekar';
+        const medeniBekar = document.getElementById('ykn-medeni-bekar');
+        const medeniEvli = document.getElementById('ykn-medeni-evli');
+        if (medeniBekar && medeniEvli) {
+            if (String(medeniStatus).trim().toLowerCase().startsWith('e')) {
+                medeniEvli.checked = true;
+            } else {
+                medeniBekar.checked = true;
+            }
+        }
+        updateMissingFieldsUI();
+    }
+
+    function attachDateInputMask(input) {
+        if (!input) return;
+        input.addEventListener('input', () => {
+            let raw = input.value;
+            const endsWithSep = /[./\-\s]$/.test(raw);
+            raw = raw.replace(/[./\-\s]{2,}/g, '.');
+
+            const isoMatch = raw.trim().match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+            if (isoMatch) {
+                const [, y, m, d] = isoMatch;
+                input.value = d.padStart(2, '0') + '.' + m.padStart(2, '0') + '.' + y;
+            } else {
+                const digits = raw.replace(/\D/g, '').slice(0, 8);
+                let formatted = '';
+                if (digits.length === 0) {
+                    formatted = '';
+                } else if (digits.length <= 2) {
+                    formatted = digits + (digits.length === 2 && endsWithSep ? '.' : '');
+                } else if (digits.length <= 4) {
+                    formatted = digits.slice(0, 2) + '.' + digits.slice(2) + (digits.length === 4 && endsWithSep ? '.' : '');
+                } else {
+                    formatted = digits.slice(0, 2) + '.' + digits.slice(2, 4) + '.' + digits.slice(4);
+                }
+                if (input.value !== formatted) {
+                    input.value = formatted;
+                }
+            }
+            syncUserEnteredPassportDates();
+        });
     }
 
     function syncUserEnteredPassportDates() {
         if (!currentStudentData) return;
         if (inputIssueDate && inputIssueDate.value.trim()) {
-            const parsed = parseDateValue(inputIssueDate.value.trim());
-            currentStudentData.issueDate = parsed || inputIssueDate.value.trim();
+            const raw = inputIssueDate.value.trim();
+            if (isValidDateString(raw)) {
+                const parsed = parseDateValue(raw);
+                currentStudentData.issueDate = parsed || raw;
+            }
         }
         if (inputExpiryDate && inputExpiryDate.value.trim()) {
-            const parsed = parseDateValue(inputExpiryDate.value.trim());
-            currentStudentData.expiryDate = parsed || inputExpiryDate.value.trim();
+            const raw = inputExpiryDate.value.trim();
+            if (isValidDateString(raw)) {
+                const parsed = parseDateValue(raw);
+                currentStudentData.expiryDate = parsed || raw;
+            }
         }
         if (inputBirthPlace && inputBirthPlace.value.trim()) {
             const bp = inputBirthPlace.value.trim().toUpperCase();
@@ -336,6 +579,31 @@ export function initYknManager() {
             currentStudentData.issuingAuthority = auth;
             currentStudentData.verenMakam = auth;
         }
+        if (inputMotherName && inputMotherName.value.trim()) {
+            currentStudentData.anneAdi = inputMotherName.value.trim().toUpperCase();
+        }
+        if (inputFatherName && inputFatherName.value.trim()) {
+            currentStudentData.babaAdi = inputFatherName.value.trim().toUpperCase();
+        }
+        if (inputBirthDate && inputBirthDate.value.trim()) {
+            const raw = inputBirthDate.value.trim();
+            if (isValidDateString(raw)) {
+                const parsed = parseDateValue(raw);
+                currentStudentData.birthDate = parsed || raw;
+                currentStudentData.dogumTarihi = currentStudentData.birthDate;
+            }
+        }
+        const medeniBekar = document.getElementById('ykn-medeni-bekar');
+        const medeniEvli = document.getElementById('ykn-medeni-evli');
+        if (medeniBekar && medeniEvli) {
+            const status = medeniEvli.checked ? 'Evli' : 'Bekar';
+            currentStudentData.medeniHali = status;
+            currentStudentData.medeniHal = status;
+        } else {
+            currentStudentData.medeniHali = currentStudentData.medeniHali || 'Bekar';
+            currentStudentData.medeniHal = currentStudentData.medeniHali;
+        }
+        updateMissingFieldsUI();
     }
 
     function isTurkmenStudent(student) {
@@ -343,8 +611,14 @@ export function initYknManager() {
         return nationalityText.includes('TÜRKMEN') || nationalityText.includes('TURKMEN') || nationalityText.includes('TKM');
     }
 
+    function isPakistaniStudent(student) {
+        const nationalityText = `${student?.uyruk || ''} ${student?.dogumUlkesi || ''}`.toUpperCase();
+        return nationalityText.includes('PAKİSTAN') || nationalityText.includes('PAKISTAN') || nationalityText.includes('PAK');
+    }
+
     function getCountryAuthorityFallback(student) {
         if (isTurkmenStudent(student)) return 'SMST';
+        if (isPakistaniStudent(student)) return 'PAKISTAN';
         return getCountryIso3Code(student?.uyruk || student?.dogumUlkesi);
     }
 
@@ -370,6 +644,15 @@ export function initYknManager() {
             student.verenMakam = 'SMST';
             student.issuingAuthority = 'SMST';
             if (inputIssuingAuthority) inputIssuingAuthority.value = 'SMST';
+            return;
+        }
+
+        const isPakistani = isPakistaniStudent(student);
+        if (isPakistani) {
+            // Pakistan pasaportlarında YÖKSİS için veren makam sabit olarak PAKISTAN'dır.
+            student.verenMakam = 'PAKISTAN';
+            student.issuingAuthority = 'PAKISTAN';
+            if (inputIssuingAuthority) inputIssuingAuthority.value = 'PAKISTAN';
             return;
         }
 
@@ -750,6 +1033,11 @@ export function initYknManager() {
         if (inputExpiryDate) inputExpiryDate.value = '';
         if (inputBirthPlace) inputBirthPlace.value = '';
         if (inputIssuingAuthority) inputIssuingAuthority.value = '';
+        if (inputMotherName) inputMotherName.value = '';
+        if (inputFatherName) inputFatherName.value = '';
+        if (inputBirthDate) inputBirthDate.value = '';
+        if (panelFields) panelFields.style.display = 'none';
+        if (alertMissing) alertMissing.style.display = 'none';
         setOneClickButtonMode('ready');
         if (btnOneClick) btnOneClick.style.display = 'none';
     }
@@ -760,6 +1048,11 @@ export function initYknManager() {
             studentData?.documentsReady ||
             (studentData?.yoksisId && isValidYoksisId(studentData.yoksisId))
         );
+        if (hasStudent) {
+            populateStudentFieldsToInputs(studentData);
+        } else if (panelFields) {
+            panelFields.style.display = 'none';
+        }
         if (proActions) {
             proActions.style.display = hasStudent ? 'flex' : 'none';
         }
@@ -1329,6 +1622,9 @@ export function initYknManager() {
 
                 // Pasaportta veren makam etiketi yoksa ülkenin ISO-3 kodunu kullan.
                 applyCountryDefaultsToStudent(currentStudentData);
+                syncUserEnteredPassportDates();
+                populateStudentFieldsToInputs(currentStudentData);
+                updateMissingFieldsUI();
 
                 // Eksik alan varsa ve incelenebilecek ek pasaport aday belgeleri varsa diğer belgeyi iste
                 const fieldsComplete = Boolean(
@@ -1841,17 +2137,103 @@ export function initYknManager() {
         });
     }
 
+    function postExtensionRequest(action, payload = {}, timeoutMs = 35000) {
+        return new Promise((resolve) => {
+            const requestId = payload.requestId || createRequestId();
+            const timer = setTimeout(() => {
+                window.removeEventListener('message', handleResponse);
+                resolve({ success: false, error: 'Eklentiden yanıt zaman aşımına uğradı. Eklentinin açık ve yetkili sekmede olduğunu kontrol edin.' });
+            }, timeoutMs);
+
+            function handleResponse(event) {
+                if (event.source !== window || !event.data) return;
+                if (event.data.source === 'EXTENSION' && event.data.type === 'RESPONSE' && event.data.requestId === requestId) {
+                    clearTimeout(timer);
+                    window.removeEventListener('message', handleResponse);
+                    resolve(event.data.response || { success: false });
+                }
+            }
+
+            window.addEventListener('message', handleResponse);
+            window.postMessage({
+                source: 'WEB_APP',
+                payload: { action, requestId, ...payload }
+            }, '*');
+        });
+    }
+
     if (inputIssueDate) {
-        inputIssueDate.addEventListener('input', syncUserEnteredPassportDates);
+        attachDateInputMask(inputIssueDate);
     }
     if (inputExpiryDate) {
-        inputExpiryDate.addEventListener('input', syncUserEnteredPassportDates);
+        attachDateInputMask(inputExpiryDate);
     }
     if (inputBirthPlace) {
         inputBirthPlace.addEventListener('input', syncUserEnteredPassportDates);
     }
     if (inputIssuingAuthority) {
         inputIssuingAuthority.addEventListener('input', syncUserEnteredPassportDates);
+    }
+    if (inputMotherName) {
+        inputMotherName.addEventListener('input', syncUserEnteredPassportDates);
+    }
+    if (inputFatherName) {
+        inputFatherName.addEventListener('input', syncUserEnteredPassportDates);
+    }
+    if (inputBirthDate) {
+        attachDateInputMask(inputBirthDate);
+    }
+
+    if (btnSyncYoksisFields) {
+        btnSyncYoksisFields.addEventListener('click', async () => {
+            if (!currentStudentData && !inputPassport?.value.trim()) {
+                showToast('Lütfen önce bir öğrenci arayın.', 'warning');
+                return;
+            }
+            syncUserEnteredPassportDates();
+            btnSyncYoksisFields.disabled = true;
+            btnSyncYoksisFields.classList.add('is-loading');
+            addStatus('Pasaport ve öğrenci alanları YÖKSİS formuna aktarılıyor...', 'info');
+            showToast('Alanlar YÖKSİS’e aktarılıyor...', 'info');
+
+            try {
+                const reqId = createRequestId('sync-fields');
+                const response = await postExtensionRequest('FILL_YOKSIS_FORM', {
+                    data: getYoksisTransportData(currentStudentData),
+                    requestId: reqId
+                }, 25000);
+
+                btnSyncYoksisFields.disabled = false;
+                btnSyncYoksisFields.classList.remove('is-loading');
+
+                if (response?.success) {
+                    addStatus('✓ Pasaport ve öğrenci alanları YÖKSİS formunda başarıyla güncellendi.', 'success');
+                    showToast('YÖKSİS form alanları güncellendi!', 'success');
+                } else {
+                    const msg = response?.error || response?.message || 'YÖKSİS formuna aktarılamadı.';
+                    addStatus(`YÖKSİS aktarım uyarısı: ${msg}`, 'warning');
+                    showToast(msg, 'warning');
+                }
+            } catch (err) {
+                btnSyncYoksisFields.disabled = false;
+                btnSyncYoksisFields.classList.remove('is-loading');
+                addStatus(`Hata: ${err.message}`, 'error');
+                showToast(`Hata: ${err.message}`, 'error');
+            }
+        });
+    }
+
+    const radioMedeniBekar = document.getElementById('ykn-medeni-bekar');
+    const radioMedeniEvli = document.getElementById('ykn-medeni-evli');
+    if (radioMedeniBekar) {
+        radioMedeniBekar.addEventListener('change', () => {
+            syncUserEnteredPassportDates();
+        });
+    }
+    if (radioMedeniEvli) {
+        radioMedeniEvli.addEventListener('change', () => {
+            syncUserEnteredPassportDates();
+        });
     }
 
     window.addEventListener('ykn:photo-cropped', (e) => {
@@ -1861,6 +2243,8 @@ export function initYknManager() {
         if (currentStudentData) {
             currentStudentData.croppedPhotoBase64 = dataUrl;
             currentStudentData.photoFileName = fileName;
+            syncUserEnteredPassportDates();
+            populateStudentFieldsToInputs(currentStudentData);
         }
 
         if (btnCopy) {

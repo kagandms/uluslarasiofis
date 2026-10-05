@@ -26,17 +26,13 @@ const staffAuthReady = document.readyState === 'loading'
     })
     : initStaffAuth();
 
-function setAddedToSheetButtonState(button, sheetDate, assignedNo, isPending = false) {
+function setAddedToSheetButtonState(button, sheetDate, assignedNo) {
     button.replaceChildren();
 
     const icon = document.createElement('span');
     icon.className = 'sheet-button-icon';
     icon.setAttribute('aria-hidden', 'true');
-    if (isPending) {
-        icon.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px; border-color: #27ae60; border-top-color: transparent;"></div>';
-    } else {
-        icon.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-    }
+    icon.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>';
 
     const content = document.createElement('span');
     content.className = 'sheet-button-content';
@@ -47,11 +43,11 @@ function setAddedToSheetButtonState(button, sheetDate, assignedNo, isPending = f
 
     const details = document.createElement('span');
     details.className = 'sheet-button-details';
-    details.textContent = isPending ? `${sheetDate} (Kaydediliyor...)` : `${sheetDate} / No: ${assignedNo || '-'}`;
+    details.textContent = assignedNo ? `${sheetDate} / No: ${assignedNo}` : `${sheetDate}`;
 
     const hint = document.createElement('span');
     hint.className = 'sheet-button-hint';
-    hint.textContent = isPending ? 'Sıra numarası alınıyor...' : 'Tekrar tıklayarak kaldır';
+    hint.textContent = 'Tekrar tıklayarak kaldır';
 
     content.append(status, details, hint);
     button.append(icon, content);
@@ -739,31 +735,35 @@ document.addEventListener('DOMContentLoaded', async () => {
             const yyyy = nextMonday.getFullYear();
             const sayfa = `${dd}.${mm}.${yyyy}`;
 
-            // Check if already added
+            if (btnAdd.dataset.requestPending === 'true') return;
+
+            // Check if already added (Remove mode)
             if (btnAdd.dataset.added === 'true') {
                 const assignedNo = btnAdd.dataset.assignedNo;
                 const targetSayfa = btnAdd.dataset.sheetName || sayfa;
-                const originalHtml = btnAdd.innerHTML;
-                btnAdd.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> Kaldırılıyor...';
-                btnAdd.disabled = true;
+                const prevAssignedNo = assignedNo;
+                const prevSheetName = targetSayfa;
+
+                // Anlık iyimser geçiş (0 ms): Doğrudan eklenmedi moduna geç
+                btnAdd.dataset.requestPending = 'true';
+                btnAdd.dataset.added = 'false';
+                delete btnAdd.dataset.sheetName;
+                delete btnAdd.dataset.assignedNo;
+                btnAdd.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line><line x1="15" y1="13" x2="15" y2="17"></line><line x1="13" y1="15" x2="17" y2="15"></line></svg> E-Tabloya Ekle`;
+                btnAdd.style.backgroundColor = '#27ae60';
+                btnAdd.style.borderColor = '#27ae60';
+                btnAdd.style.color = '';
+                btnAdd.style.cursor = 'pointer';
+                btnAdd.disabled = false;
 
                 try {
                     const response = await fetch('/api/remove-tebligat', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ sayfa: targetSayfa, isim, no: assignedNo })
+                        body: JSON.stringify({ sayfa: targetSayfa, isim, ...(assignedNo ? { no: assignedNo } : {}) })
                     });
                     const data = await response.json();
                     if (response.ok && data.success) {
-                        btnAdd.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="btn-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line><line x1="15" y1="13" x2="15" y2="17"></line><line x1="13" y1="15" x2="17" y2="15"></line></svg> E-Tabloya Ekle`;
-                        btnAdd.style.backgroundColor = '#27ae60';
-                        btnAdd.style.borderColor = '#27ae60';
-                        btnAdd.style.color = '';
-                        btnAdd.style.cursor = '';
-                        btnAdd.disabled = false;
-                        btnAdd.dataset.added = 'false';
-                        delete btnAdd.dataset.sheetName;
-                        delete btnAdd.dataset.assignedNo;
                         showToast(`Başarılı: ${targetSayfa} sayfasından kaldırıldı!`, 'success');
                     } else {
                         const message = (typeof data.error === 'object' && data.error ? (data.error.message || data.error.code) : data.error) || 'Kaldırma başarısız';
@@ -771,24 +771,36 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                 } catch (err) {
                     console.error(err);
-                    btnAdd.innerHTML = originalHtml;
-                    btnAdd.disabled = false;
+                    // Hata durumunda geri al
+                    btnAdd.dataset.added = 'true';
+                    btnAdd.dataset.sheetName = prevSheetName;
+                    btnAdd.dataset.assignedNo = prevAssignedNo || '';
+                    setAddedToSheetButtonState(btnAdd, prevSheetName, prevAssignedNo);
+                    btnAdd.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+                    btnAdd.style.color = '#27ae60';
+                    btnAdd.style.borderColor = '#27ae60';
                     showToast(`Hata: ${err.message}`, 'error');
+                } finally {
+                    btnAdd.dataset.requestPending = 'false';
                 }
                 return;
             }
 
-            // Set button to loading (Add mode) - Optimistic immediate confirmation
+            // Anlık iyimser geçiş (0 ms - Add mode): Tıklandığı gibi Eklendi moduna geç
             const originalHtml = btnAdd.innerHTML;
             const originalBg = btnAdd.style.backgroundColor;
             const originalBorder = btnAdd.style.borderColor;
             const originalColor = btnAdd.style.color;
-            setAddedToSheetButtonState(btnAdd, sayfa, null, true);
+
+            btnAdd.dataset.requestPending = 'true';
+            btnAdd.dataset.added = 'true';
+            btnAdd.dataset.sheetName = sayfa;
+            setAddedToSheetButtonState(btnAdd, sayfa, null);
             btnAdd.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
             btnAdd.style.color = '#27ae60';
             btnAdd.style.borderColor = '#27ae60';
-            btnAdd.style.cursor = 'wait';
-            btnAdd.disabled = true;
+            btnAdd.style.cursor = 'pointer';
+            btnAdd.disabled = false;
 
             try {
                 const response = await fetch('/api/add-tebligat', {
@@ -800,15 +812,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const data = await response.json();
                 if (response.ok && data.success) {
                     const addedSheet = data.sayfa || sayfa;
-                    setAddedToSheetButtonState(btnAdd, addedSheet, data.assignedNo, false);
-                    btnAdd.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
-                    btnAdd.style.color = '#27ae60';
-                    btnAdd.style.borderColor = '#27ae60';
-                    btnAdd.style.cursor = 'pointer';
-                    btnAdd.disabled = false;
-                    btnAdd.dataset.added = 'true';
                     btnAdd.dataset.sheetName = addedSheet;
                     btnAdd.dataset.assignedNo = data.assignedNo || '';
+                    setAddedToSheetButtonState(btnAdd, addedSheet, data.assignedNo);
                     showToast(`Başarılı: ${addedSheet} sayfasına ${data.assignedNo || '-'} numarasıyla eklendi!`, 'success');
                 } else {
                     const message = (typeof data.error === 'object' && data.error ? (data.error.message || data.error.code) : data.error) || 'Ekleme başarısız';
@@ -816,13 +822,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             } catch (err) {
                 console.error(err);
+                // Hata durumunda geri al
+                btnAdd.dataset.added = 'false';
+                delete btnAdd.dataset.sheetName;
+                delete btnAdd.dataset.assignedNo;
                 btnAdd.innerHTML = originalHtml;
                 btnAdd.style.backgroundColor = originalBg;
                 btnAdd.style.borderColor = originalBorder;
                 btnAdd.style.color = originalColor;
                 btnAdd.style.cursor = '';
-                btnAdd.disabled = false;
                 showToast(`Hata: ${err.message}`, 'error');
+            } finally {
+                btnAdd.dataset.requestPending = 'false';
             }
         }
     });

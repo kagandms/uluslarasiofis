@@ -205,10 +205,99 @@
 
                             <!-- Öğrenci Sonuç Alanı -->
                             <div id="ykn-student-result" style="display: none; border-top: 1px solid var(--border-color); padding-top: 15px;">
-                                <h4 id="ykn-student-name" style="margin-bottom: 15px; color: var(--accent);">Öğrenci Adı Soyadı</h4>
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                                    <h4 id="ykn-student-name" style="margin: 0; color: var(--accent);">Öğrenci Adı Soyadı</h4>
+                                    <span id="ykn-student-badge" class="badge" style="background: rgba(39, 174, 96, 0.1); color: #27ae60; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; font-weight: 600;">Profil Bulundu</span>
+                                </div>
 
+                                <!-- Pasaport ve YÖKSİS Bilgi Paneli (Eksik Alanlar & Tarihler) -->
+                                <div id="ykn-fields-panel" style="display: none; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; margin-top: 10px; margin-bottom: 12px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <svg viewBox="0 0 24 24" width="16" height="16" stroke="var(--accent)" stroke-width="2" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                            <strong style="font-size: 0.9rem; color: var(--text-primary);">Pasaport & YÖKSİS Bilgileri</strong>
+                                        </div>
+                                        <span id="ykn-missing-badge" class="badge" style="font-size: 0.72rem; padding: 3px 8px; border-radius: 4px; font-weight: 700; background: rgba(39, 174, 96, 0.1); color: #27ae60;">Hazır</span>
+                                    </div>
 
+                                    <!-- Eksik Alan Uyarısı -->
+                                    <div id="ykn-missing-alert" style="display: none; padding: 8px 10px; background: rgba(243, 156, 18, 0.1); border-left: 3px solid #f39c12; border-radius: 4px; font-size: 0.8rem; color: #b9770e; margin-bottom: 10px;">
+                                        ⚠️ Pasaporttan bazı tarihler veya alanlar okunamadı. Lütfen aşağıdaki kutucuklara bakıp eksikleri doldurun.
+                                    </div>
 
+                                    <!-- 4 Temel Pasaport / YÖKSİS Alanı -->
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+                                        <div>
+                                            <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary);">
+                                                <span>Düzenleme Tarihi</span>
+                                                <span id="badge-issue-date" style="font-size: 0.7rem;"></span>
+                                            </label>
+                                            <input type="text" id="ykn-issue-date" class="glass-input" placeholder="GG.AA.YYYY" style="width: 100%; padding: 7px 10px; font-size: 0.85rem; font-weight: 600;">
+                                        </div>
+                                        <div>
+                                            <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary);">
+                                                <span>Geçerlilik Tarihi</span>
+                                                <span id="badge-expiry-date" style="font-size: 0.7rem;"></span>
+                                            </label>
+                                            <input type="text" id="ykn-expiry-date" class="glass-input" placeholder="GG.AA.YYYY" style="width: 100%; padding: 7px 10px; font-size: 0.85rem; font-weight: 600;">
+                                        </div>
+                                        <div>
+                                            <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary);">
+                                                <span>Doğum Yeri / Açıklaması</span>
+                                                <span id="badge-birth-place" style="font-size: 0.7rem;"></span>
+                                            </label>
+                                            <input type="text" id="ykn-birth-place" class="glass-input" placeholder="Örn: BAKU, TKM, AFG" style="width: 100%; padding: 7px 10px; font-size: 0.85rem; font-weight: 600;">
+                                        </div>
+                                        <div>
+                                            <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary);">
+                                                <span>Belgeyi Veren Makam</span>
+                                                <span id="badge-issuing-authority" style="font-size: 0.7rem;"></span>
+                                            </label>
+                                            <input type="text" id="ykn-issuing-authority" class="glass-input" placeholder="Örn: AZE, SMST, AFGHAN" style="width: 100%; padding: 7px 10px; font-size: 0.85rem; font-weight: 600;">
+                                        </div>
+                                    </div>
+
+                                    <!-- Detay Alanları (Anne/Baba/Doğum Tarihi) -->
+                                    <details style="margin-top: 4px; font-size: 0.8rem;">
+                                        <summary style="cursor: pointer; color: var(--accent); font-weight: 500; user-select: none;">+ Anne/Baba Adı & Doğum Tarihi</summary>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border-color);">
+                                            <div>
+                                                <label style="font-size: 0.72rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Anne Adı</label>
+                                                <input type="text" id="ykn-mother-name" class="glass-input" placeholder="Anne Adı" style="width: 100%; padding: 5px 8px; font-size: 0.82rem;">
+                                            </div>
+                                            <div>
+                                                <label style="font-size: 0.72rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Baba Adı</label>
+                                                <input type="text" id="ykn-father-name" class="glass-input" placeholder="Baba Adı" style="width: 100%; padding: 5px 8px; font-size: 0.82rem;">
+                                            </div>
+                                            <div>
+                                                <label style="font-size: 0.72rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Doğum Tarihi</label>
+                                                <input type="text" id="ykn-birth-date" class="glass-input" placeholder="GG.AA.YYYY" style="width: 100%; padding: 5px 8px; font-size: 0.82rem;">
+                                            </div>
+                                        </div>
+                                    </details>
+
+                                    <!-- Medeni Hali Seçimi (YÖKSİS Zorunlu Alan) -->
+                                    <div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                                        <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);">Medeni Hali (YÖKSİS Zorunlu):</label>
+                                        <div style="display: flex; align-items: center; gap: 14px;">
+                                            <label style="display: flex; align-items: center; gap: 4px; font-size: 0.82rem; cursor: pointer; color: var(--text-primary); font-weight: 500;">
+                                                <input type="radio" name="ykn-medeni-hal" id="ykn-medeni-bekar" value="Bekar" checked style="accent-color: var(--accent); cursor: pointer;"> Bekar
+                                            </label>
+                                            <label style="display: flex; align-items: center; gap: 4px; font-size: 0.82rem; cursor: pointer; color: var(--text-primary); font-weight: 500;">
+                                                <input type="radio" name="ykn-medeni-hal" id="ykn-medeni-evli" value="Evli" style="accent-color: var(--accent); cursor: pointer;"> Evli
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Senkronizasyon ve Manuel Gönderme Butonu -->
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-color);">
+                                        <span style="font-size: 0.74rem; color: var(--text-secondary);">Değişiklikler anında kaydedilir ve aktarıma dahil edilir.</span>
+                                        <button type="button" id="btn-sync-yoksis-fields" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.78rem; display: flex; align-items: center; gap: 4px;" title="Bu alanları arka plandaki YÖKSİS formuna hemen aktar">
+                                            <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                                            Alanları YÖKSİS'e Gönder
+                                        </button>
+                                    </div>
+                                </div>
 
                                 <!-- Eklentiyle Birebir 2 Tuşlu Modern İşlem Alanı -->
                                 <div class="ykn-pro-actions" id="ykn-pro-actions" style="display: none; flex-direction: column; gap: 10px; margin-top: 12px;">
@@ -242,14 +331,6 @@
                                     <p id="ykn-one-click-help" style="margin: 7px 0 0; color: var(--text-secondary); font-size: 0.74rem; line-height: 1.35; text-align: center;">
                                         Kabul kodunu okur, YÖKSİS’te arar, bilgileri ve pasaport fotoğrafını hazırlar.
                                     </p>
-                                </div>
-
-                                <!-- İsteğe Bağlı Fotoğraf Kırpma Butonu -->
-                                <div style="margin-top: 10px; border-top: 1px dashed var(--card-border); padding-top: 10px;">
-                                    <button type="button" id="btn-ykn-crop-photo" class="btn btn-outline" style="display: none; border-color: var(--accent); color: var(--accent); width: 100%; font-size: 0.85rem; padding: 0.55rem; justify-content: center; gap: 8px;">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                                        Öğrenci Fotoğrafını Kırp / İndir (İsteğe Bağlı)
-                                    </button>
                                 </div>
                             </div>
                         </div>
