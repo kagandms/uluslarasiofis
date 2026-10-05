@@ -45,6 +45,12 @@ export function createApplicationReviewRepository(database, notes) {
                     WHERE application_id = ? AND revoked_at IS NULL AND changes() = 1
                 `).bind(now, applicationId));
             }
+            if (currentStatus === 'completed') {
+                statements.push(database.prepare(`
+                    UPDATE application_sessions SET revoked_at = NULL
+                    WHERE application_id = ? AND changes() = 1
+                `).bind(applicationId));
+            }
             const results = await database.batch(statements);
             return results[0]?.meta?.changes === 1 && results[1]?.meta?.changes === 1;
         },

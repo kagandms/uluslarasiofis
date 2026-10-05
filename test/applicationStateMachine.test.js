@@ -23,7 +23,8 @@ test('application state machine accepts single-step rollback transitions for act
     const allowedRollbacks = [
         ['approved_for_processing', 'under_review'],
         ['sent_to_migration', 'approved_for_processing'],
-        ['migration_approved', 'sent_to_migration']
+        ['migration_approved', 'sent_to_migration'],
+        ['completed', 'migration_approved']
     ];
 
     for (const [currentStatus, targetStatus] of allowedRollbacks) {
@@ -37,7 +38,7 @@ test('application state machine rejects invalid reverse, skipped, terminal, and 
     const deniedTransitions = [
         ['draft', 'completed'], ['submitted', 'completed'], ['submitted', 'approved_for_processing'],
         ['under_review', 'sent_to_migration'], ['under_review', 'submitted'],
-        ['completed', 'migration_approved'], ['completed', 'under_review'],
+        ['completed', 'under_review'], ['completed', 'sent_to_migration'], ['completed', 'approved_for_processing'],
         ['sent_to_migration', 'submitted'], ['sent_to_migration', 'under_review'],
         ['migration_approved', 'under_review'], ['migration_approved', 'approved_for_processing'],
         ['cancelled', 'under_review'], ['submitted', 'made_up']

@@ -907,4 +907,39 @@ test('staff can roll back an accidental status progression and student tracking 
     assert.equal(app.status, 'sent_to_migration');
     assert.equal(app.terminal_at, null);
     assert.equal(app.retention_due_at, null);
+
+    // Staff advances again to migration_approved and then completes the application
+    res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie, body: { target_status: 'migration_approved', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+    assert.equal(res.status, 200);
+    expectedUpdatedAt = (await readJson(res)).updated_at;
+
+    res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie, body: { target_status: 'completed', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+    assert.equal(res.status, 200);
+    expectedUpdatedAt = (await readJson(res)).updated_at;
+
+    // Staff detail on completed application shows allowed rollback to migration_approved
+    detail = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment);
+    assert.deepEqual((await readJson(detail)).allowed_status_transitions, ['migration_approved']);
+
+    // Staff rolls back from completed to migration_approved
+    res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie, body: { target_status: 'migration_approved', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+    assert.equal(res.status, 200);
+    expectedUpdatedAt = (await readJson(res)).updated_at;
+
+    // Student session is un-revoked and student tracking shows migration_approved
+    tracking = await worker.fetch(request('/api/public/applications/current/tracking', { cookie: ownerCookie }), environment);
+    assert.equal(tracking.status, 200);
+    assert.equal((await readJson(tracking)).application.status, 'migration_approved');
+
+    // Database fields terminal_at and retention_due_at are reset to null
+    const restoredApp = database.prepare('SELECT status, terminal_at, retention_due_at FROM applications WHERE id = ?').bind(applicationId).first();
+    assert.equal(restoredApp.status, 'migration_approved');
+    assert.equal(restoredApp.terminal_at, null);
+    assert.equal(restoredApp.retention_due_at, null);
 });

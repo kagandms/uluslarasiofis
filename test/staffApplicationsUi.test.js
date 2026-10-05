@@ -765,3 +765,35 @@ test('staff application workflow renders rollback action with outline style and 
     assert.equal(revertButton.dataset.isRevert, 'true');
     assert.match(revertButton.textContent, /Durumu Geri Al/);
 });
+
+test('staff application workflow renders rollback action when application is completed', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: {
+                    ...QUEUE_ITEM,
+                    status: 'completed'
+                },
+                assignment: null,
+                allowed_status_transitions: ['migration_approved'],
+                documents: []
+            };
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const revertButton = root.querySelector('[data-action="application-status-transition"][data-target-status="migration_approved"]');
+    assert.ok(revertButton);
+    assert.equal(revertButton.classList.contains('btn-outline'), true);
+    assert.equal(revertButton.classList.contains('staff-status-revert-btn'), true);
+    assert.equal(revertButton.dataset.isRevert, 'true');
+    assert.equal(revertButton.textContent, '◀ Durumu Geri Al: Göç İdaresi Onayladı');
+});

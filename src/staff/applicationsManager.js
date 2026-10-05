@@ -39,7 +39,8 @@ const STATUS_ORDER = Object.freeze({
 const STATUS_REVERT_LABELS = Object.freeze({
     under_review: '◀ Durumu Geri Al: İncelemede',
     approved_for_processing: '◀ Durumu Geri Al: İşlem İçin Onaylandı',
-    sent_to_migration: '◀ Durumu Geri Al: Göç İdaresine Gönderildi'
+    sent_to_migration: '◀ Durumu Geri Al: Göç İdaresine Gönderildi',
+    migration_approved: '◀ Durumu Geri Al: Göç İdaresi Onayladı'
 });
 
 function isStatusRevert(currentStatus, targetStatus) {
