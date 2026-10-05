@@ -74,6 +74,18 @@
                     <a href="/yetkili/#home-screen" id="staff-home-link" aria-label="Yetkili ana menüsü"><img src="https://www.topkapi.edu.tr/resources/files/logo_tr.jpg" alt="İstanbul Topkapı Üniversitesi" class="logo-img"></a>
                 <div style="display: flex; align-items: center; justify-content: space-between; flex: 1;">
                     <h1>İstanbul Topkapı Üniversitesi Uluslararası Öğrenci İşlemleri Portalı</h1>
+                    <div id="header-live-clock" class="header-live-clock" aria-label="Canlı Saat" title="Türkiye Saati (TSİ)">
+                        <div class="live-clock-badge">
+                            <span class="live-clock-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                            </span>
+                            <span id="live-clock-time" class="live-clock-time">--:--:--</span>
+                        </div>
+                        <span id="live-clock-date" class="live-clock-date">--</span>
+                    </div>
                     <div class="header-actions" style="display: flex; align-items: center; gap: 8px;">
 
                         <button id="btn-install-pwa" class="btn-header" title="Uygulamayı Yükle" style="display: none;">

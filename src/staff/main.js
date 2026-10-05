@@ -16,6 +16,7 @@ import { initStaffAuth } from './auth.js';
 import { initializeStaffApplicationsManager } from './applicationsManager.js';
 import { initializeStaffArchiveManager } from './archiveManager.js';
 import { initDocumentsManager } from '../ui/documents-manager.js';
+import { initLiveClock } from '../ui/liveClock.js';
 
 const staffAuthReady = document.readyState === 'loading'
     ? new Promise((resolve) => {
@@ -93,6 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     // --- Initializations ---
     try { initTheme(); } catch (e) { console.error('initTheme error:', e); }
+    try { initLiveClock(); } catch (e) { console.error('initLiveClock error:', e); }
     try { initHistoryPanel(); } catch (e) { console.error('initHistoryPanel error:', e); }
     try { initTebligatSearch(); } catch (e) { console.error('initTebligatSearch error:', e); }
     document.addEventListener('workspace:view-changed', (event) => {

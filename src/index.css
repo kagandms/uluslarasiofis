@@ -137,6 +137,92 @@ h1 {
     padding-left: 1.5rem;
 }
 
+/* Live Clock Widget in Header */
+.header-live-clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 14px;
+    background: rgba(139, 0, 0, 0.04);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    color: var(--text-primary);
+    user-select: none;
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    transition: var(--transition);
+}
+
+.header-live-clock:hover {
+    border-color: var(--accent);
+    background: rgba(139, 0, 0, 0.07);
+}
+
+body.dark-mode .header-live-clock {
+    background: rgba(255, 77, 77, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+body.dark-mode .header-live-clock:hover {
+    border-color: var(--accent);
+    background: rgba(255, 77, 77, 0.14);
+}
+
+.live-clock-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.live-clock-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    animation: liveClockPulse 2s ease-in-out infinite;
+}
+
+@keyframes liveClockPulse {
+    0%, 100% { opacity: 0.8; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.08); }
+}
+
+.live-clock-time {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.live-clock-date {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    border-left: 1px solid var(--card-border);
+    padding-left: 10px;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+@media (max-width: 950px) {
+    .live-clock-date {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-live-clock {
+        margin: 4px 0;
+        padding: 5px 12px;
+    }
+    .live-clock-time {
+        font-size: 0.95rem;
+    }
+}
+
 /* Layout */
 .container {
     max-width: 1180px;

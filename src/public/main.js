@@ -4,6 +4,7 @@ import { initializeApplicationTracking } from './applicationTracking.js';
 import * as applicationApi from './applicationApi.js';
 import { renderPublicDocumentOverview } from './home.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
+import { initLiveClock } from '../ui/liveClock.js';
 
 const LOCALE_STORAGE_KEY = 'portal_ui_locale';
 const FALLBACK_LOCALE = 'tr';
@@ -78,6 +79,7 @@ function initPublicPortal() {
     });
 
     applyLocale(readSavedLocale());
+    try { initLiveClock(); } catch (e) { console.error('initLiveClock error:', e); }
     if (document.body.dataset.page === 'application') {
         const wizardRoot = document.getElementById('application-wizard');
         const startNewApplication = new URL(window.location.href).searchParams.get('new') === '1';
