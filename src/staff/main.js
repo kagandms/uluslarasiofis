@@ -26,13 +26,17 @@ const staffAuthReady = document.readyState === 'loading'
     })
     : initStaffAuth();
 
-function setAddedToSheetButtonState(button, sheetDate, assignedNo) {
+function setAddedToSheetButtonState(button, sheetDate, assignedNo, isPending = false) {
     button.replaceChildren();
 
     const icon = document.createElement('span');
     icon.className = 'sheet-button-icon';
     icon.setAttribute('aria-hidden', 'true');
-    icon.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    if (isPending) {
+        icon.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px; border-color: #27ae60; border-top-color: transparent;"></div>';
+    } else {
+        icon.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    }
 
     const content = document.createElement('span');
     content.className = 'sheet-button-content';
@@ -43,11 +47,11 @@ function setAddedToSheetButtonState(button, sheetDate, assignedNo) {
 
     const details = document.createElement('span');
     details.className = 'sheet-button-details';
-    details.textContent = `${sheetDate} / No: ${assignedNo || '-'}`;
+    details.textContent = isPending ? `${sheetDate} (Kaydediliyor...)` : `${sheetDate} / No: ${assignedNo || '-'}`;
 
     const hint = document.createElement('span');
     hint.className = 'sheet-button-hint';
-    hint.textContent = 'Tekrar tıklayarak kaldır';
+    hint.textContent = isPending ? 'Sıra numarası alınıyor...' : 'Tekrar tıklayarak kaldır';
 
     content.append(status, details, hint);
     button.append(icon, content);
@@ -774,9 +778,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            // Set button to loading (Add mode)
+            // Set button to loading (Add mode) - Optimistic immediate confirmation
             const originalHtml = btnAdd.innerHTML;
-            btnAdd.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> Ekleniyor...';
+            const originalBg = btnAdd.style.backgroundColor;
+            const originalBorder = btnAdd.style.borderColor;
+            const originalColor = btnAdd.style.color;
+            setAddedToSheetButtonState(btnAdd, sayfa, null, true);
+            btnAdd.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+            btnAdd.style.color = '#27ae60';
+            btnAdd.style.borderColor = '#27ae60';
+            btnAdd.style.cursor = 'wait';
             btnAdd.disabled = true;
 
             try {
@@ -789,7 +800,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const data = await response.json();
                 if (response.ok && data.success) {
                     const addedSheet = data.sayfa || sayfa;
-                    setAddedToSheetButtonState(btnAdd, addedSheet, data.assignedNo);
+                    setAddedToSheetButtonState(btnAdd, addedSheet, data.assignedNo, false);
                     btnAdd.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
                     btnAdd.style.color = '#27ae60';
                     btnAdd.style.borderColor = '#27ae60';
@@ -806,6 +817,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (err) {
                 console.error(err);
                 btnAdd.innerHTML = originalHtml;
+                btnAdd.style.backgroundColor = originalBg;
+                btnAdd.style.borderColor = originalBorder;
+                btnAdd.style.color = originalColor;
+                btnAdd.style.cursor = '';
                 btnAdd.disabled = false;
                 showToast(`Hata: ${err.message}`, 'error');
             }

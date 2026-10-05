@@ -398,9 +398,10 @@ function islemAdd_(e) {
     var targetRow = -1;
     var assignedNo = null;
 
+    var data = null;
     // A sutununda (AD SOYAD) bos olan ilk satiri bul
     if (lastRow > 1) {
-      var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
       for (var i = 0; i < data.length; i++) {
         var rowName = (data[i][0] !== null && data[i][0] !== undefined) ? data[i][0].toString().trim() : "";
         if (rowName === "") {
@@ -422,10 +423,9 @@ function islemAdd_(e) {
     // Eger B sutununda onceden suruklenmis/yazilmis bir numara yoksa, siradaki numarayi hesapla
     if (assignedNo === null || assignedNo === "") {
       var maxNo = 0;
-      if (lastRow > 1) {
-        var numData = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
-        for (var k = 0; k < numData.length; k++) {
-          var num = parseInt(numData[k][0], 10);
+      if (lastRow > 1 && data) {
+        for (var k = 0; k < data.length; k++) {
+          var num = parseInt(data[k][1], 10);
           if (!isNaN(num) && num > maxNo) maxNo = num;
         }
       }

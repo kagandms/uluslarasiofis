@@ -61,17 +61,21 @@ export async function callAppsScript(action, parameters, environment, fetcher = 
             const rawLocation = response.headers.get('Location') || response.headers.get('location');
             if (rawLocation) {
                 const targetUrl = new URL(rawLocation, endpoint).toString();
-                const echoResponse = await fetcher(targetUrl, {
-                    method: 'GET',
-                    redirect: 'follow',
-                    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-                });
-                if (echoResponse.ok) {
-                    try {
-                        payload = await echoResponse.json();
-                    } catch {
-                        payload = null;
+                try {
+                    const echoResponse = await fetcher(targetUrl, {
+                        method: 'GET',
+                        redirect: 'follow',
+                        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+                    });
+                    if (echoResponse.ok) {
+                        try {
+                            payload = await echoResponse.json();
+                        } catch {
+                            payload = null;
+                        }
                     }
+                } catch {
+                    payload = null;
                 }
             }
             if (!payload && action !== 'getAll' && action !== 'search') {
