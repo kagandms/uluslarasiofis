@@ -1553,6 +1553,9 @@ export function initYknManager() {
 
                 // Pasaport dijital metin analizi (tüm sayfalardan)
                 const fullDigitalText = renderedPages.map(p => p.text).filter(Boolean).join('\n');
+                let detectedGender = extractPassportGender(fullDigitalText, {
+                    birthDate: currentStudentData?.birthDate
+                });
                 let passportDates = extractPassportDatesFromText(fullDigitalText, { birthDate: currentStudentData?.birthDate });
 
                 if (passportDates.issueDate && !currentStudentData.issueDate) {
@@ -1617,6 +1620,11 @@ export function initYknManager() {
                                     orientedCanvas = orientation.canvas;
                                 }
                                 if (pageOcrText) {
+                                    if (!detectedGender) {
+                                        detectedGender = extractPassportGender(pageOcrText, {
+                                            birthDate: currentStudentData?.birthDate
+                                        });
+                                    }
                                     if (!currentStudentData.issueDate || !currentStudentData.expiryDate) {
                                         const ocrDates = extractPassportDatesFromText(pageOcrText, { birthDate: currentStudentData?.birthDate });
                                         if (ocrDates.issueDate && !currentStudentData.issueDate) {
@@ -1669,6 +1677,9 @@ export function initYknManager() {
                         });
                     }
                 }
+
+                // Pasaport MRZ/OCR cinsiyeti, Apply formundaki eksik değeri düzeltir.
+                if (detectedGender) currentStudentData.cinsiyet = detectedGender;
 
                 // Pasaport doğum yeri ve veren makam analizi
                 if (detectedBirthPlace) {
@@ -2311,6 +2322,14 @@ export function initYknManager() {
         if (!dataUrl) return;
 
         if (currentStudentData) {
+            const passportText = (currentStudentData.passportPages || [])
+                .map((page) => page.text || '')
+                .filter(Boolean)
+                .join('\n');
+            const passportGender = extractPassportGender(passportText, {
+                birthDate: currentStudentData.birthDate
+            });
+            if (passportGender) currentStudentData.cinsiyet = passportGender;
             currentStudentData.croppedPhotoBase64 = dataUrl;
             currentStudentData.photoFileName = fileName;
             if (userFields) {

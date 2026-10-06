@@ -163,7 +163,8 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                 calls.push({ type: 'update-tab', updateProperties });
                 callback({ ...yoksisTab, ...updateProperties });
             },
-            sendMessage(_tabId, message, callback) {
+            sendMessage(_tabId, message, optionsOrCallback, maybeCallback) {
+                const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
                 calls.push({ type: 'message', message });
                 chrome.runtime.lastError = null;
                 if (message.action === 'PING') {
