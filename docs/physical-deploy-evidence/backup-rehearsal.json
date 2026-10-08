@@ -1,0 +1,14 @@
+{
+  "backup_path": "/Users/kagansmtdms/.codex/secure-backups/physical-intake-20261008T164512Z/production-pre0018.sql",
+  "created_at": "20261008T164512Z",
+  "bytes": 125067,
+  "sha256": "5afdb0b918915f43d28c443c83af1544b1d492d31c563c72526041fe894d6b11",
+  "mode": "0o600",
+  "local_rehearsal": {
+    "existing_tables": 32,
+    "changed_existing_rows": [],
+    "success": true
+  },
+  "production_migration_applied": false,
+  "production_deployed": false
+}

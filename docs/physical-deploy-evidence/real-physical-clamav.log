@@ -1,0 +1,36 @@
+✔ QR claims are single-use and bound to the creating PC session (37.27825ms)
+✔ phone files remain private until a content-bound full scan then reach only the owning PC (23.751625ms)
+✔ logout, staff deactivation, idle timeout and transfer expiry revoke the phone too (61.968833ms)
+✔ revoked or expired PC cannot be claimed via an unused QR (14.714958ms)
+✔ duplicate simultaneous uploads never overwrite or delete the winning object (18.171792ms)
+✔ consumed photo IDs remain idempotent and cannot reappear on retry (19.695583ms)
+Mobile JPEG validation failed. { errorName: 'ApiError' }
+✔ rejects forged MIME, malformed JPEG, oversize payloads and cross-origin uploads (20.358083ms)
+✔ upload and claim rate limits are enforced by atomic database counters (15.556375ms)
+Mobile photo reservation failed. { errorName: 'ApiError' }
+✔ file quotas and simultaneous PC transfer quotas are enforced (18.212083ms)
+✔ expiry cleanup removes temporary objects while preserving online documents (16.271375ms)
+✔ physical registration preserves online rows and blocks PDF access and approval until clean (27.744084ms)
+✔ physical query uses the independent records with pagination and safe search (17.5535ms)
+✔ unsafe verdict prevents mobile import and physical approval or download (17.958584ms)
+✔ physical policy validates identity, versions and readable PDFs (0.22175ms)
+✔ production supplemental scanning preserves online priority and updates only the matching file family (21.120375ms)
+✔ the unchanged Python scanner accepts supplemental leases without an agent update (61.702375ms)
+Mobile photo storage failed. { errorName: 'Error' }
+Worker request failed. {
+  requestId: 'req_860743ad-2833-4576-be2d-3f53a69a30ae',
+  errorName: 'Error',
+  errorCode: 'INTERNAL_ERROR'
+}
+✔ failed storage writes can retry the same phone photo without consuming another quota (16.937875ms)
+Mobile JPEG validation failed. { errorName: 'ApiError' }
+✔ the unchanged runner and signed ClamAV scan physical PDFs and allow clean phone JPEGs while rejecting JPEG polyglots and blocking an EICAR PDF (18899.043834ms)
+ℹ {"engine":"1.5.4","signatures":"28147","signatureUpdatedAt":"2026-10-08T06:24:12.000Z","outcomes":["clean","clean","unsafe"]}
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19138.759291

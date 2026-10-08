@@ -1,0 +1,11 @@
+✔ 0018 preserves online and existing physical records and keeps legacy photos non-clean (14.173125ms)
+✔ tracked filename application is once-only and raw replay fails without changing records (12.976ms)
+✔ a migration failure rolls back earlier additions and never marks the filename applied (13.042167ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 79.330916

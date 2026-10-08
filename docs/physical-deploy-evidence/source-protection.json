@@ -1,0 +1,12 @@
+{
+  "original_files_count": 174,
+  "original_files_changed": [],
+  "protected_files_count": 19,
+  "protected_code_changed": [],
+  "allowed_config_delta": {
+    "PHYSICAL_INTAKE_MODE": "off"
+  },
+  "PRINT_ENABLED_unchanged": true,
+  "local_production_head": "cb6b9a8ee515ea11cb2f2bd9ab677121567075ea",
+  "remote_production_head": "16cc28f0ef9e66b925b8e7eb1774c72a2e15b3dd"
+}

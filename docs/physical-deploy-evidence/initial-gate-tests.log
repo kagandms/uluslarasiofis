@@ -1,0 +1,35 @@
+Mobile photo reservation failed. { errorName: 'Error' }
+✔ native D1/R2 migrations and the physical PDF scanner wire contract work together (735.89775ms)
+✔ QR claims are single-use and bound to the creating PC session (55.151667ms)
+✔ phone files remain private until a content-bound full scan then reach only the owning PC (22.791041ms)
+✔ logout, staff deactivation, idle timeout and transfer expiry revoke the phone too (57.803ms)
+✔ revoked or expired PC cannot be claimed via an unused QR (13.302625ms)
+✔ duplicate simultaneous uploads never overwrite or delete the winning object (15.744417ms)
+✔ consumed photo IDs remain idempotent and cannot reappear on retry (20.403417ms)
+Mobile JPEG validation failed. { errorName: 'RangeError' }
+✔ rejects forged MIME, malformed JPEG, oversize payloads and cross-origin uploads (19.250834ms)
+✔ upload and claim rate limits are enforced by atomic database counters (15.625458ms)
+Mobile photo reservation failed. { errorName: 'ApiError' }
+✔ file quotas and simultaneous PC transfer quotas are enforced (16.357958ms)
+✔ expiry cleanup removes temporary objects while preserving online documents (15.631459ms)
+✔ physical registration preserves online rows and blocks PDF access and approval until clean (26.298208ms)
+✔ physical query uses the independent records with pagination and safe search (18.933ms)
+✔ unsafe verdict prevents mobile import and physical approval or download (17.808ms)
+✔ physical policy validates identity, versions and readable PDFs (0.221875ms)
+✔ production supplemental scanning preserves online priority and updates only the matching file family (20.712166ms)
+✔ the unchanged Python scanner accepts supplemental leases without an agent update (76.600875ms)
+Mobile photo storage failed. { errorName: 'Error' }
+Worker request failed. {
+  requestId: 'req_0cd00649-8d22-4ef0-8af3-8b1ef09a3873',
+  errorName: 'Error',
+  errorCode: 'INTERNAL_ERROR'
+}
+✔ failed storage writes can retry the same phone photo without consuming another quota (16.462709ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1175.038458

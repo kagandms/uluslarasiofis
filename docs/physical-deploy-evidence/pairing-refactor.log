@@ -1,0 +1,49 @@
+✔ missing, malformed, future, expired and oversized gate windows fail closed (7.631375ms)
+✔ default OFF denies new physical records and QR while online authentication still works (37.928958ms)
+✔ UAT admits only the operator-approved PC session, including shared-account second computers (15.823375ms)
+✔ the candidate endpoint requires authentication and same-origin and grants no authority (14.202625ms)
+✔ UAT expiry, OFF and a changed selected session revoke previously paired phones (47.045791ms)
+✔ a copied QR gives no upload authority before confirmation by the creating PC (18.4965ms)
+✔ OFF keeps the existing scanner usable before any physical security migration (14.647541ms)
+Worker request failed. {
+  requestId: 'req_259fe421-f39a-45f9-9709-6cc4208f2207',
+  errorName: 'ApiError',
+  errorCode: 'PHYSICAL_SCHEMA_NOT_READY'
+}
+✔ an accidentally opened gate without its schema cannot break the original scanner queue (14.747292ms)
+✔ PC file and camera selection append documents and expose the separate phone transfer control (180.902916ms)
+✔ phone camera and multi-photo gallery inputs are both available on the pairing page (16.2635ms)
+✔ QR claims are single-use and bound to the creating PC session (46.98825ms)
+✔ phone files remain private until a content-bound full scan then reach only the owning PC (24.158583ms)
+✔ logout, staff deactivation, idle timeout and transfer expiry revoke the phone too (61.157958ms)
+✔ revoked or expired PC cannot be claimed via an unused QR (14.64ms)
+✔ duplicate simultaneous uploads never overwrite or delete the winning object (16.62175ms)
+✔ consumed photo IDs remain idempotent and cannot reappear on retry (18.97625ms)
+Mobile JPEG validation failed. { errorName: 'ApiError' }
+✔ rejects forged MIME, malformed JPEG, oversize payloads and cross-origin uploads (19.746833ms)
+✔ upload and claim rate limits are enforced by atomic database counters (14.986084ms)
+Mobile photo reservation failed. { errorName: 'ApiError' }
+✔ file quotas and simultaneous PC transfer quotas are enforced (16.408417ms)
+✔ expiry cleanup removes temporary objects while preserving online documents (15.401834ms)
+✔ physical registration preserves online rows and blocks PDF access and approval until clean (26.728375ms)
+✔ physical query uses the independent records with pagination and safe search (16.734958ms)
+✔ unsafe verdict prevents mobile import and physical approval or download (18.061625ms)
+✔ physical policy validates identity, versions and readable PDFs (0.298791ms)
+✔ production supplemental scanning preserves online priority and updates only the matching file family (22.363541ms)
+✔ the unchanged Python scanner accepts supplemental leases without an agent update (74.545333ms)
+Mobile photo storage failed. { errorName: 'Error' }
+Worker request failed. {
+  requestId: 'req_b4d1cbc4-95e7-4430-baf0-6756031280a7',
+  errorName: 'Error',
+  errorCode: 'INTERNAL_ERROR'
+}
+✔ failed storage writes can retry the same phone photo without consuming another quota (16.196834ms)
+✔ single JPEG validation rejects concatenated images and content after the image end (15.1815ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5128.036167

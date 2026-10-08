@@ -1,0 +1,53 @@
+{
+  "status": "READY_PENDING",
+  "appliedNames": [
+    "0001_backend_foundation.sql",
+    "0002_session3_fingerprint_and_birth_certificate.sql",
+    "0003_session3_document_cleanup.sql",
+    "0004_public_portal_document_policy.sql",
+    "0005_document_scoped_application_notes.sql",
+    "0006_notification_preferences_and_delivery_state.sql",
+    "0007_notification_provider_webhook_events.sql",
+    "0008_application_reference_and_access_code.sql",
+    "0009_document_scanner.sql",
+    "0010_application_deletions.sql",
+    "0011_mobile_document_transfers.sql",
+    "0012_physical_intakes.sql",
+    "0013_physical_intake_review.sql",
+    "0011_print_queue.sql",
+    "0012_print_options.sql",
+    "0013_print_orientation_volume.sql",
+    "0014_print_orientation_devmode.sql"
+  ],
+  "pendingNames": [
+    "0018_staff_document_security.sql"
+  ],
+  "columnState": [
+    {
+      "table": "mobile_document_transfers",
+      "column": "pairing_code_hash",
+      "present": false
+    },
+    {
+      "table": "mobile_document_transfers",
+      "column": "phone_approved_at",
+      "present": false
+    },
+    {
+      "table": "mobile_document_transfer_files",
+      "column": "upload_status",
+      "present": false
+    },
+    {
+      "table": "mobile_document_transfer_files",
+      "column": "scan_status",
+      "present": false
+    },
+    {
+      "table": "mobile_document_transfer_files",
+      "column": "sha256",
+      "present": false
+    }
+  ],
+  "objectCount": 0
+}

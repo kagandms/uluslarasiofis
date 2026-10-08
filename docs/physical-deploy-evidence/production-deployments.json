@@ -1,0 +1,157 @@
+[
+  {
+    "id": "b645ef96-cc63-4c79-95e9-2a4abe3fc21e",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "annotations": {
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "0814ac13-668d-4682-8d32-38c1047f1242",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T10:13:21.058272Z"
+  },
+  {
+    "id": "45082774-1694-4546-982a-218e1e314870",
+    "source": "dash",
+    "strategy": "percentage",
+    "annotations": {
+      "workers/message": "Deployed version c98f0eed",
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "c98f0eed-6200-4ef5-a793-465fb9ee134c",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T10:24:48.935917Z"
+  },
+  {
+    "id": "87aff9e4-1275-4d72-9843-8e1bf835bcf7",
+    "source": "dash",
+    "strategy": "percentage",
+    "annotations": {
+      "workers/message": "Deployed version 6c1725b3",
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "6c1725b3-993a-4937-a790-28cb77a5a9c9",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T10:25:36.747811Z"
+  },
+  {
+    "id": "41ead93a-2414-4b62-8fba-2579946aefd4",
+    "source": "dash",
+    "strategy": "percentage",
+    "annotations": {
+      "workers/message": "Deployed version b2053e01",
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "b2053e01-a44c-47fd-b26b-306b38466334",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T10:25:49.628508Z"
+  },
+  {
+    "id": "7c90aa0a-fb41-4058-bc1f-ca453293b67f",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "annotations": {
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "10887acb-0ea7-4f0a-83e6-4d0b8e272b2e",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T10:44:08.945245Z"
+  },
+  {
+    "id": "3eab9951-6626-40f9-800b-8d9534898fa0",
+    "source": "api",
+    "strategy": "percentage",
+    "annotations": {
+      "workers/message": "Fail-closed production print gate; PRINT_ENABLE...",
+      "workers/triggered_by": "upload"
+    },
+    "versions": [
+      {
+        "version_id": "6d9b67ed-675e-4d63-a3ee-460c8162cfba",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T10:45:02.09471Z"
+  },
+  {
+    "id": "84c20701-7ddc-4bb4-9310-794ce84a2b26",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "annotations": {
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "8de7bdca-990f-4977-83d5-a39975ad77c6",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T11:36:04.042022Z"
+  },
+  {
+    "id": "9fc38cb1-5487-47a8-bc05-462511ea63be",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "annotations": {
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "0e8dec4b-4cd2-40f6-ac1c-0879954a261d",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T11:56:09.351424Z"
+  },
+  {
+    "id": "68dc11e3-adc6-43c6-8531-2ea28b065e58",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "annotations": {
+      "workers/triggered_by": "deployment"
+    },
+    "versions": [
+      {
+        "version_id": "7ab86b48-ce3b-462d-b206-da6ed6f1e534",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T13:07:44.239869Z"
+  },
+  {
+    "id": "5d1689a2-4ed4-471a-bd18-1fe649e25183",
+    "source": "api",
+    "strategy": "percentage",
+    "annotations": {
+      "workers/message": "Production print gate true; reviewed v7 code; p...",
+      "workers/triggered_by": "upload"
+    },
+    "versions": [
+      {
+        "version_id": "cf84967e-e813-4e09-9146-17e3109c52c5",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T14:05:34.595982Z"
+  }
+]

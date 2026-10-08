@@ -1,0 +1,13 @@
+ClamAV update process started at Thu Oct  8 19:51:40 2026
+daily database available for update (local version: 28146, remote version: 28147)
+Testing database: '/var/folders/0f/b0hws9jj3hg46bwn607k2v840000gn/T/physical-signed-clamav-3zffsy8w/signatures/tmp.813c8ccd6c/daily.cld' ...
+Database test passed.
+daily.cld updated (version: 28147, sigs: 355740, f-level: 90, builder: svc.clamav-publisher)
+main.cvd database is up-to-date (version: 63, sigs: 3287027, f-level: 90, builder: tomjudge)
+Downloaded missing CVD .sign file main-63.cvd.sign
+bytecode.cvd database is up-to-date (version: 339, sigs: 80, f-level: 90, builder: nrandolp)
+Downloaded missing CVD .sign file bytecode-339.cvd.sign
+ERROR: NULL X509 store
+ERROR: NULL X509 store
+ERROR: NULL X509 store
+ERROR: NULL X509 store

@@ -1,0 +1,15 @@
+✔ missing, malformed, future, expired and oversized gate windows fail closed (1.15825ms)
+✔ default OFF denies new physical records and QR while online authentication still works (29.9775ms)
+✔ UAT admits only the operator-approved PC session, including shared-account second computers (14.484208ms)
+✔ the candidate endpoint requires authentication and same-origin and grants no authority (12.887416ms)
+✔ UAT expiry, OFF and a changed selected session revoke previously paired phones (40.813084ms)
+✔ a copied QR gives no upload authority before confirmation by the creating PC (16.288583ms)
+✔ OFF keeps the existing scanner usable before any physical security migration (12.962792ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 251.427958

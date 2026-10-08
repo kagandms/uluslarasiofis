@@ -1,0 +1,10 @@
+{
+  "exit_code": 0,
+  "applied": false,
+  "file_count": 57,
+  "production_base_commit": "6123ec3c1d9b223d288b34ec4fab5d568972aaf9",
+  "feature_commit": "c5fe4c02097d7e3b02989a9cf7d52f4fe5c5c5d1",
+  "diagnostic": "",
+  "patch_archive": "feature-ready.patch.gz",
+  "raw_patch_sha256": "c6107e2c15033a7bdb86bfb7bf07f03899882e5247343a08e623b1c0e360c39f"
+}

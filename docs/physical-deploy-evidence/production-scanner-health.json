@@ -1,0 +1,31 @@
+[
+  {
+    "results": [
+      {
+        "health": "ready",
+        "engine_version": "1.5.4",
+        "signature_version": "28147",
+        "signature_updated_at": "2026-10-08T06:24:12.000Z",
+        "seen_at": "2026-10-08T14:35:13.478Z"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "EEUR",
+      "served_by_colo": "PRG",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.4682
+      },
+      "duration": 0.4682,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 647168,
+      "rows_read": 2,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

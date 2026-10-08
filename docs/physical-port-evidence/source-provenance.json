@@ -1,0 +1,202 @@
+[
+  {
+    "file": "docs/mobile-document-transfer-design.md",
+    "provenance": "untracked local file",
+    "sha256": "8eff201dc90b604bd69d1f668a79619cc54d3da5ccc28fce35cc133d953b8d54"
+  },
+  {
+    "file": "docs/physical-intake-design.md",
+    "provenance": "untracked local file",
+    "sha256": "982875ff626112d1fd044da1d31e6ab15c1ec0cc0a9a43fb251f309a64775b8f"
+  },
+  {
+    "file": "migrations/0011_mobile_document_transfers.sql",
+    "provenance": "untracked local file",
+    "sha256": "fd76729252b70a95ded3301a73853cd3db1a792adcc52008d911c1322e6037e2"
+  },
+  {
+    "file": "migrations/0012_physical_intakes.sql",
+    "provenance": "untracked local file",
+    "sha256": "e7e2f56bbafa8adbc354e34fa54bd2e361294ebec1738724025450cd9394994b"
+  },
+  {
+    "file": "migrations/0013_physical_intake_review.sql",
+    "provenance": "untracked local file",
+    "sha256": "d50556dd092c4edbd39a602ac93d6dfde997cad5209c561dcac19acfdcda4045"
+  },
+  {
+    "file": "mobile-transfer/index.html",
+    "provenance": "untracked local file",
+    "sha256": "531ddb9a9d121f2ce12f734da6c8c6cd2198e8dc962983fc24595c39a93295e0"
+  },
+  {
+    "file": "package-lock.json",
+    "provenance": "tracked local modification",
+    "sha256": "2d6ac9462946c3e5a7297e249b577aafbde4f61863fe69fa4a2b750af0322909"
+  },
+  {
+    "file": "package.json",
+    "provenance": "tracked local modification",
+    "sha256": "5ff8d0eeed7d3534d446b9d1fdbff041b9385ec93b085e3b06921beb4119b093"
+  },
+  {
+    "file": "src/config/mobile-transfer-policy.js",
+    "provenance": "untracked local file",
+    "sha256": "df7b45f2e452ed1d6b5d507b805f5ffc3cd6f55d4849ec5c9ffd6ca726191f32"
+  },
+  {
+    "file": "src/config/physical-document-limits.js",
+    "provenance": "untracked local file",
+    "sha256": "d41b2384378cf991e8d91387d9c339890b6a02c0e0d1472794fb563013af1c3e"
+  },
+  {
+    "file": "src/config/physical-intake-policy.js",
+    "provenance": "untracked local file",
+    "sha256": "04f1c690e3bb75869b915283f43fcde6c2bf852c893e26b3da3b11000129e8f2"
+  },
+  {
+    "file": "src/mobile-transfer/main.js",
+    "provenance": "untracked local file",
+    "sha256": "1f2208a04e1de69a4658214c710d25a41bc25e1712e48d6ecfa6968989852b9b"
+  },
+  {
+    "file": "src/mobile-transfer/mobile-transfer.css",
+    "provenance": "untracked local file",
+    "sha256": "9a3778a8fd4188034155a04eec72821cea95fd560ce2c7590626c75b888c2b8e"
+  },
+  {
+    "file": "src/server/domain/physical-intake-policy.js",
+    "provenance": "untracked local file",
+    "sha256": "6742c0791c681c3b43f0dc4f83e2fa614608744a61ff7c6a4420a8423d1c1939"
+  },
+  {
+    "file": "src/server/repositories/d1/physical-intake-repository.js",
+    "provenance": "untracked local file",
+    "sha256": "9816a084b9d6629f9fc17404941978669bb2901d9c3d86b8aac2d4c58a6f521d"
+  },
+  {
+    "file": "src/server/repositories/d1/physical-registration-repository.js",
+    "provenance": "untracked local file",
+    "sha256": "4ded02fafe2b9945368a7e15b9b15bbaea7c6faf81e50eff8acd10cd60912daf"
+  },
+  {
+    "file": "src/server/routes/mobile-transfer-routes.js",
+    "provenance": "untracked local file",
+    "sha256": "f6d2f2751da3fdbc2f74e2f42f18da2444bb8cc2d39a390493b9919b68c09f0d"
+  },
+  {
+    "file": "src/server/routes/physical-intake-routes.js",
+    "provenance": "untracked local file",
+    "sha256": "97b8c63f4dcb930a6fc923941ca713f5c49bd8af1540876b0de6f6e183e69c14"
+  },
+  {
+    "file": "src/server/routes/physical-pdf-routes.js",
+    "provenance": "untracked local file",
+    "sha256": "134d496fde0ab8e27a82b6f12716f467e2ed3b17214daa907b57bcb42b519af2"
+  },
+  {
+    "file": "src/server/routes/physical-registration-routes.js",
+    "provenance": "untracked local file",
+    "sha256": "98f219ed5efa1053eb4998a157cce6d2ef7b41a61ee109bd8b5b5e9eee42793d"
+  },
+  {
+    "file": "src/server/worker.js",
+    "provenance": "tracked local modification",
+    "sha256": "a0d90738a3f56fc4f657f3b8ac03d2d018ebc470e0a47ae3c710f7c7cb5c873c"
+  },
+  {
+    "file": "src/services/mobile-transfer-client.js",
+    "provenance": "untracked local file",
+    "sha256": "9749eafba7140b991a661eb211565f854c1b2e2dda84899486024806bcb59df2"
+  },
+  {
+    "file": "src/services/optimize-document-image.js",
+    "provenance": "untracked local file",
+    "sha256": "db8609d94ca67b795e190e26b1dc0c594c2294413cf22641413b335ef1a773a1"
+  },
+  {
+    "file": "src/services/pdfMergerService.js",
+    "provenance": "untracked local file",
+    "sha256": "cdb2d6bbd658973faca3ec21c0214d30ace29c942f01406b2ba66677b02d9b38"
+  },
+  {
+    "file": "src/services/split-pdf-pages.js",
+    "provenance": "untracked local file",
+    "sha256": "742fb58655f639b4a1cd00c6ffcb62befe100d479ebcbf45325484a063ca9cbc"
+  },
+  {
+    "file": "src/staff/application-queue-table.js",
+    "provenance": "untracked local file",
+    "sha256": "a277a57d6f4a09d0b5868d519c8ebb5ea81777c50a06ce2140e5e66f8b451e5d"
+  },
+  {
+    "file": "src/staff/applicationsManager.js",
+    "provenance": "tracked local modification",
+    "sha256": "06406f499af24952a92adf1a81b0fdb76478bfe767c57f5385f2c994e7e8ee57"
+  },
+  {
+    "file": "src/staff/main.js",
+    "provenance": "tracked local modification",
+    "sha256": "3f419d4207892484dc77236c6c4553b0aed72dea297d5e4f495eb74f99b6e6e7"
+  },
+  {
+    "file": "src/staff/physical-form-ocr.js",
+    "provenance": "untracked local file",
+    "sha256": "05d7f455adefb8d70764d467b15d9c1f84df71ac8c03242eeb65dd2aaf01d01d"
+  },
+  {
+    "file": "src/staff/physical-intake-client.js",
+    "provenance": "untracked local file",
+    "sha256": "7c57c5e390dfd9f54246ff60b10f928884a5c115ba191f5291b0cc8fa8af8c4c"
+  },
+  {
+    "file": "src/staff/physical-intake-manager.js",
+    "provenance": "untracked local file",
+    "sha256": "33194ddd1fe795a3ebd9f17827876d616ca5c0a8a29bcb0fd0fd281a32826737"
+  },
+  {
+    "file": "src/staff/physical-intake-view.js",
+    "provenance": "untracked local file",
+    "sha256": "c671239ebbc80aceafe094db6b8e388238867d967f24f4ccf94ff96cf8012305"
+  },
+  {
+    "file": "src/staff/physical-intake.css",
+    "provenance": "untracked local file",
+    "sha256": "24aa34e3881aa88c116704b73a11d64c65f03e5f542344dec9f51abd47892d07"
+  },
+  {
+    "file": "src/ui/mobile-transfer-panel.js",
+    "provenance": "untracked local file",
+    "sha256": "c44548b12cc3d2c5107676daa7801d4d14e85fbd1986832e686bc744255ad047"
+  },
+  {
+    "file": "src/ui/pdfMergerModal.js",
+    "provenance": "untracked local file",
+    "sha256": "eaeb6056e7af9cb6fec6a3656b25bd68f962c79bb8771af0c33bb2f101b26aba"
+  },
+  {
+    "file": "src/ui/staff-modal.css",
+    "provenance": "untracked local file",
+    "sha256": "170ebbc359ffdae836c102373d97e9c508acd4d9b6b04c494646dced7c8abef4"
+  },
+  {
+    "file": "src/ui/workspaceNavigation.js",
+    "provenance": "tracked local modification",
+    "sha256": "3de251f970372c5f4b7b048afd3efc0e176f33947d8a3ce4da5de3048f0fcc12"
+  },
+  {
+    "file": "test/physical-pdf-editor.test.js",
+    "provenance": "untracked local file",
+    "sha256": "f96e8e94202fb50dc1a98c5bd298c213539008b50c8a0afc08343f638e3c89c1"
+  },
+  {
+    "file": "vite.config.js",
+    "provenance": "tracked local modification",
+    "sha256": "92199bc4e19278520088a2c126c6c49ea4d50d77f106bfb06ae741d6f5a01e45"
+  },
+  {
+    "file": "yetkili/index.html",
+    "provenance": "tracked local modification",
+    "sha256": "7874d851c543530737cba5f62c5d7c00ad179de466857acb9ac104091a65bdf1"
+  }
+]
