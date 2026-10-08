@@ -38,12 +38,12 @@ export function requirePhysicalSessionAllowed(environment, sessionHash) {
     }
 }
 
-/** Checks the last migration guard before using the supplemental scanner queue.
+/** Checks temporary upload bookkeeping before accepting mobile transfers.
  * @param {object} environment Worker bindings. @returns {Promise<boolean>} Complete schema marker present.
  * @throws {Error} Metadata query failed.
  */
-export async function hasPhysicalSecuritySchema(environment) {
+export async function hasPhysicalTransferSchema(environment) {
     if (!environment.DB) return false;
-    const guard = await environment.DB.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name='physical_insert_scan_guard'").first();
+    const guard = await environment.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='mobile_transfer_rate_limits'").first();
     return Boolean(guard);
 }

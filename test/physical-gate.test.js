@@ -84,31 +84,10 @@ test('UAT expiry, OFF and a changed selected session revoke previously paired ph
     }
 });
 
-test('a copied QR gives no upload authority before confirmation by the creating PC', async () => {
-    const context = await createPortFixture();
-    const created = await portRequest(context, '/api/staff/mobile-transfers', { method: 'POST', cookie: context.staffCookie });
-    const transfer = await created.json();
-    const claim = await portRequest(context, '/api/mobile-transfer/claim', { method: 'POST', json: { token: transfer.claimToken } });
-    const phone = await claim.json();
-    transfer.phoneCookie = claim.headers.get('Set-Cookie').split(';')[0];
-
-    const premature = await uploadPhoto(context, transfer);
-    const other = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/approve`, { method: 'POST', cookie: context.otherCookie, json: { code: phone.pairingCode } });
-    const wrong = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/approve`, { method: 'POST', cookie: context.staffCookie, json: { code: '000000' } });
-    const owner = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/approve`, { method: 'POST', cookie: context.staffCookie, json: { code: phone.pairingCode } });
-
-    assert.equal(premature.status, 409);
-    assert.equal(other.status, 410);
-    assert.equal(wrong.status, 409);
-    assert.equal(owner.status, 200);
-    assert.equal((await uploadPhoto(context, transfer)).status, 200);
-    assert.equal(readCookie(new Request('https://portal.test', { headers: { Cookie: transfer.phoneCookie } }), 'mobile_transfer_session').length, 43);
-});
-
 test('OFF keeps the existing scanner usable before any physical security migration', async () => {
     const context = await createPortFixture();
     delete context.environment.PHYSICAL_INTAKE_MODE;
-    context.database.exec('DROP TRIGGER physical_insert_scan_guard; DROP VIEW staff_scan_files; DROP TABLE staff_document_scan_jobs;');
+    context.database.exec('DROP TABLE mobile_transfer_rate_limits;');
 
     const scanner = await portRequest(context, '/api/scanner/claim', { method: 'POST', json: { runner_id: 'synthetic' }, headers: { Authorization: `Bearer ${context.environment.SCANNER_SECRET}` } });
 
@@ -118,7 +97,7 @@ test('OFF keeps the existing scanner usable before any physical security migrati
 
 test('an accidentally opened gate without its schema cannot break the original scanner queue', async () => {
     const context = await createPortFixture();
-    context.database.exec('DROP TRIGGER physical_insert_scan_guard; DROP VIEW staff_scan_files; DROP TABLE staff_document_scan_jobs;');
+    context.database.exec('DROP TABLE mobile_transfer_rate_limits;');
 
     const scanner = await portRequest(context, '/api/scanner/claim', { method: 'POST', json: { runner_id: 'synthetic' }, headers: { Authorization: `Bearer ${context.environment.SCANNER_SECRET}` } });
     const qr = await portRequest(context, '/api/staff/mobile-transfers', { method: 'POST', cookie: context.staffCookie });

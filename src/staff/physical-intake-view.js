@@ -130,12 +130,8 @@ function renderCreate(document, panel, options) {
 function createFileRow(document, intake, file, handlers) {
     const row = document.createElement('li');
     row.append(text(document, 'strong', 'Güncel PDF'),
-        text(document, 'p', `${formatQueueDate(file.uploaded_at)} · ${(file.byte_size / 1048576).toFixed(2)} MB · ${file.scan_status === 'clean' ? 'Güvenlik taraması tamamlandı' : file.scan_status === 'pending' ? 'Güvenlik taraması bekleniyor' : 'Güvenlik kontrolü başarısız'}`));
+        text(document, 'p', `${formatQueueDate(file.uploaded_at)} · ${(file.byte_size / 1048576).toFixed(2)} MB · Kaydedildi`));
     if (intake.deleted_at) return row;
-    if (file.scan_status !== 'clean') {
-        if (intake.status === 'under_review') row.append(button(document, 'Sil', handlers.deletePdf));
-        return row;
-    }
     const actions = document.createElement('div');
     actions.className = 'physical-pdf-actions';
     [['preview', 'PDF’i Aç'], ['download', 'İndir']].forEach(([action, label]) => {

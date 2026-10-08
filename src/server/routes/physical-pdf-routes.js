@@ -94,7 +94,7 @@ async function storeReservedPdf(context, payload) {
     return context.repository.file(payload.fileId);
 }
 
-/** Persists an immutable staff PDF version pending antivirus scanning.
+/** Persists an immutable staff PDF version after PDF validation.
  * @param {Request} request Authorized same-origin request. @param {object} context Intake, staff and bindings.
  * @returns {Promise<object>} Confirmed file identity. @throws {ApiError} Invalid, stale or unavailable upload.
  */
@@ -117,7 +117,6 @@ export async function openPhysicalPdf(context, options) {
     }
     const file = await context.repository.file(options.fileId);
     if (!file || file.intake_id !== context.intake.id || file.upload_status !== 'finalized') throw new ApiError(404, 'PDF_NOT_FOUND', 'PDF bulunamadı.');
-    if (file.scan_status !== 'clean') throw new ApiError(409, 'PDF_SCAN_PENDING', 'PDF güvenlik taramasını geçmedi. Kaydı daha sonra yenileyin.');
     const head = await context.environment.DOCUMENTS.head(file.storage_key);
     if (!head || head.size !== file.byte_size || !head.etag) throw new ApiError(404, 'PDF_NOT_FOUND', 'PDF dosyası bulunamadı.');
     const object = await context.environment.DOCUMENTS.get(file.storage_key, { onlyIf: { etagMatches: head.etag } });

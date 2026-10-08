@@ -1,6 +1,4 @@
-import { readPhysicalGate, hasPhysicalSecuritySchema } from './config/physical-intake-gate.js';
 import { readPhysicalAccess } from './routes/physical-access-routes.js';
-import { createCombinedScannerRepository } from './repositories/d1/combined-scanner-repository.js';
 import { handlePhysicalIntakes } from './routes/physical-intake-routes.js';
 import { handleMobileTransfer, cleanupMobileTransfers } from './routes/mobile-transfer-routes.js';
 import { requirePrintRequestAccess } from './services/print-access.js';
@@ -82,7 +80,7 @@ async function routeApi(request, environment, requestId) {
     const printFinalizeMatch = pathname.match(/^\/api\/public\/print\/jobs\/([A-Za-z0-9_-]{1,64})\/finalize$/);
     if (printFinalizeMatch) return finalizePublicPrintUpload(request, environment, printFinalizeMatch[1]);
     if (pathname === '/api/staff/print/status') return readStaffPrintStatus(request, environment);
-    if (pathname.startsWith('/api/scanner/')) return handleScannerRequest(request, environment, readPhysicalGate(environment).mode !== 'off' && await hasPhysicalSecuritySchema(environment) ? createCombinedScannerRepository(environment.DB) : undefined);
+    if (pathname.startsWith('/api/scanner/')) return handleScannerRequest(request, environment);
     const documentScanMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/scan$/);
     if (documentScanMatch) {
         let applicationId;

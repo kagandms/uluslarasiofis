@@ -164,7 +164,6 @@ test('PDF removal denies missing sessions, cross-origin requests and stale versi
 
 test('PDF removal cannot change approved or deleted receipts', async () => {
     const fixture = await createApiFixture();
-    fixture.database.prepare("UPDATE physical_intake_files SET scan_status='clean'").run();
     fixture.database.prepare("UPDATE physical_intakes SET status='approved_for_processing'").run();
 
     const approved = await worker.fetch(createDeleteRequest(fixture), fixture.environment);

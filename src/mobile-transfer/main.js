@@ -13,12 +13,6 @@ let transferId;
 let expiresAt = 0;
 let pendingPhotos = [];
 let isSending = false;
-let pairingCode = '';
-const checkApproval = document.createElement('button');
-checkApproval.type = 'button';
-checkApproval.textContent = 'Bilgisayar onayını kontrol et';
-checkApproval.hidden = true;
-status.after(checkApproval);
 
 /**
  * @param {string} message Human-readable transfer result.
@@ -58,40 +52,21 @@ async function pairPhone() {
             const paired = await requestMobileTransfer('/api/mobile-transfer/claim', { method: 'POST', body: JSON.stringify({ token }), headers: { 'Content-Type': 'application/json' } });
             transferId = paired.id;
             expiresAt = paired.expires_at;
-            pairingCode = paired.pairingCode;
-            sessionStorage.setItem('mobileDocumentTransfer', JSON.stringify({ transferId, expiresAt, pairingCode }));
+            sessionStorage.setItem('mobileDocumentTransfer', JSON.stringify({ transferId, expiresAt }));
             history.replaceState(null, '', location.pathname);
         } else {
             const paired = JSON.parse(sessionStorage.getItem('mobileDocumentTransfer') || 'null');
             transferId = paired?.transferId;
             expiresAt = paired?.expiresAt || 0;
-            pairingCode = paired?.pairingCode || '';
         }
         if (!transferId || expiresAt * 1000 <= Date.now()) throw new Error('PC’den yeni QR açıp okutun.');
-        await refreshPhoneApproval();
+        capture.disabled = choose.disabled = false;
+        showTransferStatus('Bilgisayara bağlandı. Fotoğrafları ekleyebilirsiniz.');
     } catch (error) {
         console.error('Phone pairing failed.', { errorName: error.name });
         showTransferStatus(error.message, 'error');
     }
 }
-
-async function refreshPhoneApproval() {
-    try {
-        const access = await requestMobileTransfer(`/api/mobile-transfer/${transferId}/status`);
-        capture.disabled = choose.disabled = !access.approved;
-        checkApproval.hidden = access.approved;
-        if (access.approved) {
-            pairingCode = '';
-            sessionStorage.setItem('mobileDocumentTransfer', JSON.stringify({ transferId, expiresAt }));
-        }
-        showTransferStatus(access.approved ? 'Bilgisayara bağlandı. Fotoğrafları ekleyebilirsiniz.' : `Eşleştirme kodu: ${pairingCode}. Bu kodu QR’ı açan bilgisayarda onaylayın.`);
-    } catch (error) {
-        console.warn('Phone approval check failed.', { errorName: error.name });
-        showTransferStatus(error.message, 'error');
-    }
-}
-
-checkApproval.addEventListener('click', refreshPhoneApproval);
 
 function queuePhotos(input) {
     if (isSending) return;

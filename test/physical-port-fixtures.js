@@ -62,9 +62,6 @@ export async function pairPortPhone(context) {
     const transfer = await created.json();
     const claimed = await portRequest(context, '/api/mobile-transfer/claim', { method: 'POST', json: { token: transfer.claimToken } });
     assert.equal(claimed.status, 200, await claimed.clone().text());
-    const phone = await claimed.json();
-    const approved = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/approve`, { method: 'POST', cookie: context.staffCookie, json: { code: phone.pairingCode } });
-    assert.equal(approved.status, 200, await approved.clone().text());
     return { ...transfer, phoneCookie: claimed.headers.get('Set-Cookie').split(';')[0] };
 }
 
@@ -73,27 +70,6 @@ const JPEG = Uint8Array.from(Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP////
 export function uploadPhoto(context, transfer, options = {}) {
     return portRequest(context, `/api/mobile-transfer/${transfer.id}/photos`, { method: 'POST', cookie: transfer.phoneCookie,
         body: options.bytes || JPEG, headers: { 'Content-Type': 'image/jpeg', 'X-Photo-Id': options.id || crypto.randomUUID(), ...options.headers } });
-}
-
-/** Exercises the unchanged scanner content/result wire contract with synthetic engine evidence. */
-export async function scanPortFile(context, outcome = 'clean') {
-    const machine = { Authorization: `Bearer ${context.environment.SCANNER_SECRET}` };
-    const claimed = await portRequest(context, '/api/scanner/claim', { method: 'POST', json: { runner_id: 'synthetic-runner' }, headers: machine });
-    assert.equal(claimed.status, 200, await claimed.clone().text());
-    const { job } = await claimed.json();
-    assert.ok(job);
-    const headers = { ...machine, 'X-Scan-Lease': job.lease_token };
-    const content = await portRequest(context, `/api/scanner/jobs/${job.id}/content`, { headers });
-    assert.equal(content.status, 200, await content.clone().text());
-    const bytes = new Uint8Array(await content.arrayBuffer());
-    const result = { file_id: job.file_id, revision_id: job.revision_id, storage_key: job.storage_key, byte_size: job.byte_size,
-        object_etag: content.headers.get('X-Object-ETag'), sha256: content.headers.get('X-Content-SHA256'), outcome,
-        result_code: outcome === 'clean' ? 'scanned' : 'malware', engine_version: 'synthetic', signature_version: 'synthetic',
-        signature_updated_at: new Date().toISOString(), scanned_at: new Date().toISOString(), full_scan: true, policy_version: 'clamav-full-v1' };
-    const response = await portRequest(context, `/api/scanner/jobs/${job.id}/result`, { method: 'POST', headers, json: result });
-    assert.equal(response.status, 200, await response.clone().text());
-    assert.equal((await portRequest(context, `/api/scanner/jobs/${job.id}/result`, { method: 'POST', headers, json: result })).status, 409);
-    return { job, bytes };
 }
 
 /** Creates a valid synthetic PDF registration request. */

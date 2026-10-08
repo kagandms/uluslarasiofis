@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { cleanupMobileTransfers } from '../src/server/routes/mobile-transfer-routes.js';
 import { listPhysicalTransitions, validatePhysicalIntake } from '../src/server/domain/physical-intake-policy.js';
 import { validatePhysicalPdf } from '../src/server/routes/physical-pdf-routes.js';
-import { createPortFixture, pairPortPhone, portRequest, uploadPhoto, scanPortFile, registerPortPdf } from './physical-port-fixtures.js';
+import { createPortFixture, pairPortPhone, portRequest, uploadPhoto, registerPortPdf } from './physical-port-fixtures.js';
 test('QR claims are single-use and bound to the creating PC session', async () => {
     const context = await createPortFixture();
     const transfer = await pairPortPhone(context);
@@ -16,20 +16,19 @@ test('QR claims are single-use and bound to the creating PC session', async () =
     assert.equal(other.status, 410);
 });
 
-test('phone files remain private until a content-bound full scan then reach only the owning PC', async () => {
+test('validated phone photos reach only the owning PC without a scanner job', async () => {
     const context = await createPortFixture();
     const transfer = await pairPortPhone(context);
     const id = crypto.randomUUID();
     const base = `/api/staff/mobile-transfers/${transfer.id}`;
 
     assert.equal((await uploadPhoto(context, transfer, { id })).status, 200);
-    assert.equal((await portRequest(context, `${base}/files/${id}`, { cookie: context.staffCookie })).status, 409);
-    const scanned = await scanPortFile(context);
     const owner = await portRequest(context, `${base}/files/${id}`, { cookie: context.staffCookie });
     const other = await portRequest(context, `${base}/files/${id}`, { cookie: context.otherCookie });
 
     assert.equal(owner.status, 200);
-    assert.deepEqual(new Uint8Array(await owner.arrayBuffer()), scanned.bytes);
+    assert.deepEqual(new Uint8Array(await owner.arrayBuffer()), context.objects.values().next().value.bytes);
+    assert.equal((await context.database.prepare('SELECT count(*) AS total FROM document_scan_jobs').first()).total, 0);
     assert.equal(other.status, 410);
     assert.equal((await portRequest(context, `${base}/files/${id}`)).status, 401);
 });
@@ -81,7 +80,6 @@ test('consumed photo IDs remain idempotent and cannot reappear on retry', async 
     const transfer = await pairPortPhone(context);
     const id = crypto.randomUUID();
     await uploadPhoto(context, transfer, { id });
-    await scanPortFile(context);
 
     const consumed = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/files/${id}`, { method:'DELETE', cookie:context.staffCookie });
     const replay = await uploadPhoto(context, transfer, { id });
@@ -143,24 +141,21 @@ test('expiry cleanup removes temporary objects while preserving online documents
     assert.equal((await context.database.prepare('SELECT count(*) AS total FROM mobile_document_transfers').first()).total, 0);
 });
 
-test('physical registration preserves online rows and blocks PDF access and approval until clean', async () => {
+test('physical registration and approval work without a verdict and never change online records', async () => {
     const context = await createPortFixture();
     await context.database.exec("INSERT INTO students(id,student_number,normalized_student_number) VALUES('student','ONLINE','ONLINE'); INSERT INTO applications(id,student_id,application_type,status) VALUES('online','student','initial','under_review');");
     const receipt = await registerPortPdf(context);
     const base = `/api/staff/physical-intakes/${receipt.id}`;
 
-    const pending = await portRequest(context, `${base}/files/${receipt.id}/preview`, {cookie:context.staffCookie});
-    const denied = await portRequest(context, `${base}/status`, {method:'PATCH',cookie:context.staffCookie,json:{lock_version:1,status:'approved_for_processing'}});
-    await scanPortFile(context);
     const approved = await portRequest(context, `${base}/status`, {method:'PATCH',cookie:context.staffCookie,json:{lock_version:1,status:'approved_for_processing'}});
     const opened = await portRequest(context, `${base}/files/${receipt.id}/download`, {cookie:context.staffCookie});
 
-    assert.equal(pending.status,409);
-    assert.equal(denied.status,409);
     assert.equal(approved.status,200);
     assert.equal(opened.status,200);
     assert.deepEqual(new Uint8Array(await opened.arrayBuffer()),receipt.bytes);
+    assert.equal((await context.database.prepare('SELECT scan_status FROM physical_intake_files').first()).scan_status,'pending');
     assert.equal((await context.database.prepare("SELECT status FROM applications WHERE id='online'").first()).status,'under_review');
+    assert.equal((await context.database.prepare('SELECT count(*) AS total FROM document_scan_jobs').first()).total,0);
 });
 
 test('physical query uses the independent records with pagination and safe search', async () => {
@@ -173,18 +168,6 @@ test('physical query uses the independent records with pagination and safe searc
     assert.equal((await response.json()).pagination.total,1);
 });
 
-test('unsafe verdict prevents mobile import and physical approval or download', async () => {
-    const context = await createPortFixture();
-    const receipt = await registerPortPdf(context);
-
-    await scanPortFile(context,'unsafe');
-    const opened = await portRequest(context, `/api/staff/physical-intakes/${receipt.id}/files/${receipt.id}/download`, {cookie:context.staffCookie});
-
-    assert.equal(opened.status,409);
-    const file = await context.database.prepare('SELECT * FROM physical_intake_files').first();
-    assert.deepEqual(listPhysicalTransitions(receipt.detail.intake,file),['rejected']);
-});
-
 test('physical policy validates identity, versions and readable PDFs', async () => {
     const receipt = { first_name:' Synthetic ',last_name:'Student',passport_number:'test',application_type:'initial' };
 
@@ -193,13 +176,13 @@ test('physical policy validates identity, versions and readable PDFs', async () 
     await assert.rejects(validatePhysicalPdf(new Uint8Array([1,2,3])));
 });
 
-test('production supplemental scanning preserves online priority and updates only the matching file family', async () => {
+test('physical uploads never enter the online scanner and leave its pending verdict untouched', async () => {
     const context = await createPortFixture();
     const storageKey = `quarantine/${crypto.randomUUID()}`;
     const bytes = new TextEncoder().encode('%PDF-1.7\nsynthetic online document\n%%EOF');
     await context.storage.put(storageKey,bytes,{httpMetadata:{contentType:'application/pdf'}});
     await context.database.exec(`INSERT INTO students(id,student_number,normalized_student_number) VALUES('s','SCAN','SCAN');
-        INSERT INTO applications(id,student_id,application_type) VALUES('a','s','initial');
+        INSERT INTO applications(id,student_id,application_type,status) VALUES('a','s','initial','under_review');
         INSERT INTO document_records(id,application_id,requirement_id,application_type) VALUES('d','a','req-initial-passport','initial');
         INSERT INTO document_revisions(id,document_record_id,revision_number,status,is_current,submitted_by_type) VALUES('r','d',1,'submitted',1,'student');`);
     await context.database.prepare(`INSERT INTO document_revision_files(id,revision_id,page_order,storage_key,original_filename,media_type,byte_size,upload_status,scan_status)
@@ -208,28 +191,16 @@ test('production supplemental scanning preserves online priority and updates onl
         VALUES('i','f','ik','2000-01-01T00:00:00Z','completed','2000-01-01T00:00:00Z');`);
     await registerPortPdf(context);
 
-    const online = await scanPortFile(context);
-    const physicalBefore = await context.database.prepare('SELECT scan_status FROM physical_intake_files').first();
-    const physical = await scanPortFile(context);
+    const scanner = await portRequest(context, '/api/scanner/claim', {method:'POST',json:{runner_id:'synthetic'},headers:{Authorization:`Bearer ${context.environment.SCANNER_SECRET}`}});
+    const { job } = await scanner.json();
 
-    assert.equal(online.job.file_id,'f');
-    assert.equal(physicalBefore.scan_status,'pending');
-    assert.match(physical.job.file_id,/^physical_/);
-    assert.equal((await context.database.prepare("SELECT scan_status FROM document_revision_files WHERE id='f'").first()).scan_status,'clean');
-});
+    const pendingDownload = await portRequest(context, '/api/staff/applications/a/documents/passport/download', {cookie:context.staffCookie});
+    assert.equal(pendingDownload.status,404);
+    assert.equal(job.file_id,'f');
+    assert.equal((await context.database.prepare('SELECT scan_status FROM physical_intake_files').first()).scan_status,'pending');
+    assert.equal((await context.database.prepare("SELECT scan_status FROM document_revision_files WHERE id='f'").first()).scan_status,'pending');
+    assert.equal((await context.database.prepare('SELECT count(*) AS total FROM document_scan_jobs').first()).total,1);
 
-test('the unchanged Python scanner accepts supplemental leases without an agent update', async () => {
-    const { spawnSync } = await import('node:child_process');
-    const context = await createPortFixture();
-    await registerPortPdf(context);
-    const scanned = await scanPortFile(context);
-    const scannerPath = new URL('../scripts/scanner/',import.meta.url).pathname;
-
-    const parsed = spawnSync('python3',['-c',
-        'import sys,json; sys.path.insert(0,sys.argv[1]); from scanner_job import parse_job; assert parse_job(json.load(sys.stdin)) is not None',scannerPath],
-        {input:JSON.stringify({job:scanned.job}),encoding:'utf8'});
-
-    assert.equal(parsed.status,0,parsed.stderr);
 });
 
 test('failed storage writes can retry the same phone photo without consuming another quota', async () => {

@@ -36,7 +36,7 @@ function applyTrackedMigration(database) {
     }
 }
 
-test('0018 preserves online and existing physical records and keeps legacy photos non-clean', () => {
+test('0018 preserves online and existing physical records and adds only temporary photo bookkeeping', () => {
     const database = createExistingDatabase();
     const online = database.prepare('SELECT * FROM applications').all().results;
     const physical = database.prepare('SELECT * FROM physical_intakes').all().results;
@@ -47,10 +47,10 @@ test('0018 preserves online and existing physical records and keeps legacy photo
     assert.deepEqual(database.prepare('SELECT * FROM physical_intakes').all().results, physical);
     const photo = database.prepare('SELECT * FROM mobile_document_transfer_files').first();
     assert.equal(photo.id, 'photo');
-    assert.equal(photo.scan_status, 'pending');
+    assert.equal(Object.hasOwn(photo, 'scan_status'), false);
     assert.equal(photo.sha256, null);
     assert.equal(photo.upload_status, 'finalized');
-    assert.equal(database.prepare('SELECT * FROM mobile_document_transfers').first().phone_approved_at, null);
+    assert.equal(Object.hasOwn(database.prepare('SELECT * FROM mobile_document_transfers').first(), 'phone_approved_at'), false);
 });
 
 test('tracked filename application is once-only and raw replay fails without changing records', () => {
@@ -69,7 +69,7 @@ test('tracked filename application is once-only and raw replay fails without cha
 
 test('a migration failure rolls back earlier additions and never marks the filename applied', () => {
     const database = createExistingDatabase();
-    database.exec('CREATE TABLE staff_document_scan_jobs(id TEXT);');
+    database.exec('CREATE TABLE mobile_transfer_rate_limits(id TEXT);');
     const schema = database.prepare('SELECT * FROM sqlite_master ORDER BY name').all().results;
 
     assert.throws(() => applyTrackedMigration(database), /already exists/);

@@ -47,7 +47,7 @@ export function validatePhysicalIntake(body) {
 export function listPhysicalTransitions(intake, pdf) {
     if (intake.deleted_at) return [];
     return REVIEW_STATUSES.filter(status => status !== intake.status
-        && (status !== 'approved_for_processing' || pdf?.upload_status === 'finalized' && pdf?.scan_status === 'clean'));
+        && (status !== 'approved_for_processing' || pdf?.upload_status === 'finalized'));
 }
 
 /** Validates a rejection reason. @param {unknown} value Reason. @returns {string} Bounded reason. @throws {ApiError} Missing or short reason. */

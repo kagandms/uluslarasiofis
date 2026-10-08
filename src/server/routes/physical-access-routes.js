@@ -1,7 +1,7 @@
 import { ApiError } from '../domain/errors.js';
 import { requireStaff } from '../auth/staffAuth.js';
 import { hashSessionToken, readCookie } from '../auth/sessionToken.js';
-import { readPhysicalGate, isPhysicalSessionAllowed, requirePhysicalSessionAllowed, hasPhysicalSecuritySchema } from '../config/physical-intake-gate.js';
+import { readPhysicalGate, isPhysicalSessionAllowed, requirePhysicalSessionAllowed, hasPhysicalTransferSchema } from '../config/physical-intake-gate.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
 
 /** Authenticates staff and enforces the physical intake gate.
@@ -11,7 +11,7 @@ import { requireMethod, requireSameOrigin } from './shared.js';
 export async function requirePhysicalStaff(request, environment) {
     const staff = await requireStaff(request, environment, ['reviewer', 'admin']);
     requirePhysicalSessionAllowed(environment, await hashSessionToken(readCookie(request, 'staff_session')));
-    if (!await hasPhysicalSecuritySchema(environment)) throw new ApiError(503, 'PHYSICAL_SCHEMA_NOT_READY', 'Fiziksel başvuru hazırlığı tamamlanmadı.');
+    if (!await hasPhysicalTransferSchema(environment)) throw new ApiError(503, 'PHYSICAL_SCHEMA_NOT_READY', 'Fiziksel başvuru hazırlığı tamamlanmadı.');
     return staff;
 }
 
@@ -26,7 +26,7 @@ export async function readPhysicalAccess(request, environment) {
     if (isCandidateRequest) requireSameOrigin(request);
     const sessionHash = await hashSessionToken(readCookie(request, 'staff_session'));
     const gate = readPhysicalGate(environment);
-    const isSchemaReady = gate.mode !== 'off' && await hasPhysicalSecuritySchema(environment);
+    const isSchemaReady = gate.mode !== 'off' && await hasPhysicalTransferSchema(environment);
     return { mode: gate.mode, allowed: isPhysicalSessionAllowed(environment, sessionHash) && isSchemaReady, expiresAt: gate.expiresAt,
         ...(isCandidateRequest ? { candidateSessionHash: sessionHash } : {}) };
 }

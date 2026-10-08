@@ -5,7 +5,7 @@ import { readSharedStaffUsername } from '../config/sharedStaffAccount.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { ApiError } from '../domain/errors.js';
 import { requirePhysicalStaff } from './physical-access-routes.js';
-import { readPhysicalGate, hasPhysicalSecuritySchema } from '../config/physical-intake-gate.js';
+import { readPhysicalGate, hasPhysicalTransferSchema } from '../config/physical-intake-gate.js';
 import { createOpaqueSessionToken, hashSessionToken, readCookie } from '../auth/sessionToken.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
 import { MAX_TRANSFER_CLAIM_REQUESTS_PER_MINUTE, TRANSFER_TTL_SECONDS } from '../../config/mobile-transfer-policy.js';
@@ -27,7 +27,6 @@ async function requireTransfer(request, environment, transferId, audience) {
         .bind(transferId, tokenHash, nowSeconds()).first();
     if (!transfer) throw unavailable();
     await requireTransferOwner(environment, transferId);
-    if (audience === 'phone' && request.method === 'POST' && !transfer.phone_approved_at) throw new ApiError(409, 'PHONE_APPROVAL_REQUIRED', 'Telefondaki kodu QR’ı açan bilgisayarda onaylayın.');
     return transfer;
 }
 
@@ -56,29 +55,25 @@ async function claimTransfer(request, environment) {
     const candidate = await environment.DB.prepare('SELECT id FROM mobile_document_transfers WHERE claim_token_hash=?').bind(await hashSessionToken(body)).first();
     if (!candidate) throw unavailable();
     await requireTransferOwner(environment, candidate.id);
-    const pairingCode = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000);
     const phoneToken = createOpaqueSessionToken();
-    const result = await environment.DB.prepare(`UPDATE mobile_document_transfers SET phone_token_hash=?,pairing_code_hash=? WHERE claim_token_hash=? AND phone_token_hash IS NULL AND expires_at>? AND ${ACTIVE_TRANSFER_STAFF} RETURNING id,expires_at`)
-        .bind(await hashSessionToken(phoneToken), await hashSessionToken(pairingCode), await hashSessionToken(body), nowSeconds(), readSharedStaffUsername(environment)).first();
+    const result = await environment.DB.prepare(`UPDATE mobile_document_transfers SET phone_token_hash=? WHERE claim_token_hash=? AND phone_token_hash IS NULL AND expires_at>? AND ${ACTIVE_TRANSFER_STAFF} RETURNING id,expires_at`)
+        .bind(await hashSessionToken(phoneToken), await hashSessionToken(body), nowSeconds(), readSharedStaffUsername(environment)).first();
     if (!result) throw unavailable();
-    return new Response(JSON.stringify({ ...result, pairingCode }), { headers: {
+    return new Response(JSON.stringify(result), { headers: {
         'Content-Type': 'application/json', 'Cache-Control': 'no-store',
         'Set-Cookie': `${PHONE_COOKIE}=${phoneToken}; HttpOnly; Secure; SameSite=Strict; Path=/api/mobile-transfer; Max-Age=${Math.max(0, result.expires_at - nowSeconds())}`
     } });
 }
 
 async function listPhotos(environment, transferId) {
-    const files = await environment.DB.prepare(`SELECT id,byte_size FROM mobile_document_transfer_files WHERE transfer_id=? AND upload_status='finalized' AND scan_status='clean' ORDER BY created_at,id`).bind(transferId).all();
-    const pending = await environment.DB.prepare("SELECT count(*) AS total FROM mobile_document_transfer_files WHERE transfer_id=? AND upload_status='finalized' AND scan_status='pending'").bind(transferId).first();
-    const blocked = await environment.DB.prepare("SELECT count(*) AS total FROM mobile_document_transfer_files WHERE transfer_id=? AND upload_status IN ('failed','finalized') AND (upload_status='failed' OR scan_status IN ('unsafe','failed'))").bind(transferId).first();
-    const transfer = await environment.DB.prepare('SELECT phone_token_hash,phone_approved_at FROM mobile_document_transfers WHERE id=?').bind(transferId).first();
-    return { files: files.results, pending: pending.total, blocked: blocked.total, awaitingApproval: Boolean(transfer.phone_token_hash && !transfer.phone_approved_at) };
+    const files = await environment.DB.prepare(`SELECT id,byte_size FROM mobile_document_transfer_files WHERE transfer_id=? AND upload_status='finalized' ORDER BY created_at,id`).bind(transferId).all();
+    return { files: files.results };
 }
 
 async function accessPhoto(request, environment, transferId, photoId) {
     const file = await environment.DB.prepare('SELECT * FROM mobile_document_transfer_files WHERE id=? AND transfer_id=?').bind(photoId, transferId).first();
     if (!file) throw new ApiError(404, 'PHOTO_NOT_FOUND', 'Fotoğraf bulunamadı.');
-    if (file.upload_status !== 'finalized' || file.scan_status !== 'clean') throw new ApiError(409, 'PHOTO_SCAN_PENDING', 'Fotoğraf güvenlik taramasını geçmedi.');
+    if (file.upload_status !== 'finalized') throw new ApiError(409, 'PHOTO_NOT_READY', 'Fotoğraf yüklemesi tamamlanmadı.');
     if (request.method === 'DELETE') {
         requireSameOrigin(request);
         await environment.DOCUMENTS.delete(file.storage_key);
@@ -103,18 +98,6 @@ async function removeTransfer(environment, transferId) {
         environment.DB.prepare('DELETE FROM mobile_document_transfer_files WHERE transfer_id=?').bind(transferId),
         environment.DB.prepare('DELETE FROM mobile_document_transfers WHERE id=?').bind(transferId)
     ]);
-}
-
-async function approvePhone(request, environment, transferId) {
-    requireMethod(request, 'POST');
-    requireSameOrigin(request);
-    await requireTransfer(request, environment, transferId, 'staff');
-    await enforceTransferRate({ request, environment }, `approve:${transferId}`, 5);
-    const { code } = await readJsonBody(request, 128);
-    if (typeof code !== 'string' || !/^[0-9]{6}$/.test(code)) throw new ApiError(400, 'PAIRING_CODE_INVALID', 'Telefondaki altı haneli kodu girin.');
-    const approved = await environment.DB.prepare('UPDATE mobile_document_transfers SET phone_approved_at=?,pairing_code_hash=NULL WHERE id=? AND phone_token_hash IS NOT NULL AND phone_approved_at IS NULL AND pairing_code_hash=?').bind(nowSeconds(), transferId, await hashSessionToken(code)).run();
-    if (approved.meta.changes !== 1) throw new ApiError(409, 'PAIRING_CODE_INVALID', 'Kod eşleşmedi veya zaten onaylandı.');
-    return { approved: true };
 }
 
 async function routeStaffTransfer(request, environment, pathname) {
@@ -142,18 +125,10 @@ export async function handleMobileTransfer(request, environment) {
     if (!['staging', 'production'].includes(environment.APP_ENV)) throw new ApiError(404, 'NOT_FOUND', 'Aktarım bulunamadı.');
     if (!environment.DB || !environment.DOCUMENTS) throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'Aktarım hizmeti kullanılamıyor.');
     if (readPhysicalGate(environment).mode === 'off') throw new ApiError(403, 'PHYSICAL_INTAKE_DISABLED', 'Fiziksel başvuru şu anda kapalı.');
-    if (!await hasPhysicalSecuritySchema(environment)) throw new ApiError(503, 'PHYSICAL_SCHEMA_NOT_READY', 'Fiziksel başvuru hazırlığı tamamlanmadı.');
+    if (!await hasPhysicalTransferSchema(environment)) throw new ApiError(503, 'PHYSICAL_SCHEMA_NOT_READY', 'Fiziksel başvuru hazırlığı tamamlanmadı.');
     const pathname = new URL(request.url).pathname;
     if (pathname === '/api/staff/mobile-transfers') return createTransfer(request, environment);
     if (pathname === '/api/mobile-transfer/claim') return claimTransfer(request, environment);
-    const phoneStatus = pathname.match(/^\/api\/mobile-transfer\/([0-9a-f-]{36})\/status$/);
-    if (phoneStatus) {
-        requireMethod(request, 'GET');
-        const transfer = await requireTransfer(request, environment, phoneStatus[1], 'phone');
-        return { approved: Boolean(transfer.phone_approved_at) };
-    }
-    const approvalMatch = pathname.match(/^\/api\/staff\/mobile-transfers\/([0-9a-f-]{36})\/approve$/);
-    if (approvalMatch) return approvePhone(request, environment, approvalMatch[1]);
     const phoneMatch = pathname.match(/^\/api\/mobile-transfer\/([0-9a-f-]{36})\/photos$/);
     if (phoneMatch) {
         requireMethod(request, 'POST');
@@ -171,7 +146,7 @@ export async function handleMobileTransfer(request, environment) {
  */
 export async function cleanupMobileTransfers(environment) {
     if (!['staging', 'production'].includes(environment.APP_ENV) || !environment.DB || !environment.DOCUMENTS) return;
-    const schema = await environment.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='staff_document_scan_jobs'").first();
+    const schema = await environment.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='mobile_transfer_rate_limits'").first();
     if (!schema) return;
     await environment.DB.prepare('DELETE FROM mobile_transfer_rate_limits WHERE window<?').bind(Math.floor(Date.now()/60000)-60).run();
     const expired = await environment.DB.prepare('SELECT id FROM mobile_document_transfers WHERE expires_at<=? LIMIT 20').bind(nowSeconds()).all();
