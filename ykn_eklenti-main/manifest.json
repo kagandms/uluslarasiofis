@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YKN ve Pasaport Aktarıcı",
-  "version": "1.2.82",
+  "version": "1.2.90",
   "description": "Topkapı Üniversitesi - YÖKSİS Veri Aktarım Eklentisi",
   "permissions": [
     "storage",

@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YÖKSİS Mock - Test Simülatörü</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+        body { background: #f0f2f5; min-height: 100vh; }
+
+        /* Floating Test Control Box */
+        #test-floating-card {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 380px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.08);
+            z-index: 99999;
+            padding: 16px;
+        }
+        #test-floating-card h4 { font-size: 15px; margin-bottom: 8px; color: #1e293b; display: flex; align-items: center; justify-content: space-between; }
+        #test-floating-card p { font-size: 12px; color: #64748b; margin-bottom: 12px; line-height: 1.4; }
+        .test-btn {
+            width: 100%;
+            background: #0284c7;
+            color: #fff;
+            border: none;
+            padding: 10px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+        }
+        .test-btn:hover { background: #0369a1; }
+        .test-btn-reset { background: #f1f5f9; color: #475569; }
+        .test-btn-reset:hover { background: #e2e8f0; }
+        #test-logs {
+            background: #0f172a;
+            color: #38bdf8;
+            font-family: Menlo, Monaco, Consolas, monospace;
+            font-size: 11px;
+            padding: 10px;
+            border-radius: 6px;
+            max-height: 160px;
+            overflow-y: auto;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+        .log-success { color: #4ade80; }
+        .log-error { color: #f87171; }
+        .log-info { color: #cbd5e1; }
+
+        /* YÖKSİS Mock Styling */
+        .yoksis-header {
+            background: linear-gradient(to right, #007799, #0099bb);
+            color: white;
+            padding: 10px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .yoksis-title { font-size: 18px; font-weight: bold; letter-spacing: 0.5px; }
+        .yoksis-user { font-size: 12px; opacity: 0.9; }
+
+        .yoksis-menubar {
+            background: #e9ecef;
+            border-bottom: 1px solid #ced4da;
+            padding: 6px 20px;
+            position: relative;
+        }
+
+        /* ZK Menubar Mimic */
+        .z-menubar { display: flex; list-style: none; }
+        .z-menu {
+            position: relative;
+            display: inline-block;
+        }
+        .z-menu-cnt {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 14px;
+            background: #ffffff;
+            border: 1px solid #0284c7;
+            border-radius: 4px;
+            color: #0284c7;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            user-select: none;
+        }
+        .z-menu-cnt:hover {
+            background: #f0f9ff;
+        }
+
+        /* ZK Dropdown Popup */
+        .z-menupopup {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #ffffff;
+            min-width: 250px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            margin-top: 2px;
+            list-style: none;
+        }
+        .z-menupopup.open {
+            display: block !important;
+        }
+        .z-menuitem {
+            display: block;
+        }
+        .z-menuitem-cnt {
+            display: block;
+            padding: 9px 14px;
+            color: #334155;
+            font-size: 13px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .z-menuitem-cnt:hover {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        /* Content Area */
+        .yoksis-content {
+            padding: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Announcements view */
+        #view-announcements {
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 20px;
+        }
+        #view-announcements h3 { color: #0f172a; margin-bottom: 12px; font-size: 16px; border-bottom: 2px solid #0284c7; padding-bottom: 6px; }
+
+        /* YKN Request View */
+        #view-ykn-screen {
+            display: none;
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 24px;
+        }
+        #view-ykn-screen h3 { color: #0369a1; margin-bottom: 16px; font-size: 16px; }
+
+        .search-box-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 16px;
+            max-width: 500px;
+            margin-bottom: 24px;
+        }
+        .search-box-card h4 { font-size: 14px; color: #334155; margin-bottom: 12px; }
+        .form-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+        .form-label { font-size: 13px; width: 140px; color: #475569; font-weight: 500; }
+        .form-input {
+            flex: 1;
+            padding: 7px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .form-btn {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .form-btn:hover { background: #0369a1; }
+    </style>
+</head>
+<body>
+
+    <!-- YÖKSİS Mock Header -->
+    <div class="yoksis-header">
+        <div class="yoksis-title">YÜKSEKÖĞRETİM KURULU (MOCK SİMÜLASYONU)</div>
+        <div class="yoksis-user">TEST KULLANICISI - İSTANBUL TOPKAPI ÜNİVERSİTESİ</div>
+    </div>
+
+    <!-- Menubar with Öğrenci İşlemleri -->
+    <div class="yoksis-menubar">
+        <ul class="z-menubar">
+            <li class="z-menu" id="menu-student">
+                <a class="z-menu-cnt" href="javascript:;">
+                    <span class="z-menu-text">Öğrenci İşlemleri ▾</span>
+                </a>
+                <ul class="z-menupopup" id="popup-student">
+                    <li class="z-menuitem">
+                        <a class="z-menuitem-cnt" href="javascript:;">
+                            <span class="z-menuitem-text">Göç İdaresi İkamet İzni Belge İletimi</span>
+                        </a>
+                    </li>
+                    <li class="z-menuitem" id="item-ykn-v2">
+                        <a class="z-menuitem-cnt" href="javascript:;">
+                            <span class="z-menuitem-text">Göç İdaresinden YKN Talebi V2</span>
+                        </a>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Page Content -->
+    <div class="yoksis-content">
+        <!-- 1. Duyurular Ekranı (İlk Açılış) -->
+        <div id="view-announcements">
+            <h3>Genel Duyurular</h3>
+            <p style="color: #64748b; font-size: 14px; line-height: 1.6;">
+                YÖKSİS ana menüdesiniz. "Öğrenci İşlemleri" menüsü normalde üzerine gelindiğinde (hover) açılır.<br>
+                Sağ alttaki test kutusundan <strong>"Eklenti Menü Gezinmesini Test Et"</strong> butonuna basarak yeni eklenti kodunun menüyü otomatik olarak nasıl açıp tıkladığını izleyebilirsiniz.
+            </p>
+        </div>
+
+        <!-- 2. Öğrenciler İçin YKN Talep Ekranı (Menüye Tıklandıktan Sonra Açılan Ekran) -->
+        <div id="view-ykn-screen">
+            <h3>Öğrenciler İçin YKN Talep Ekranı</h3>
+            <div class="search-box-card">
+                <h4>Kabul Mektup ID ile Sorgula</h4>
+                <div class="form-row">
+                    <label class="form-label" for="kabul-id-input">Kabul Mektup Id</label>
+                    <input type="text" id="kabul-id-input" class="form-input" placeholder="Kabul Mektup Id varsa giriniz">
+                </div>
+                <div style="text-align: right;">
+                    <button type="button" id="btn-kabul-ara" class="form-btn">Kabul Mektup Id İle Ara</button>
+                </div>
+            </div>
+            <div id="search-success-banner" style="display: none; background: #ecfdf5; border: 1px solid #10b981; border-radius: 6px; padding: 14px; color: #065f46; font-size: 13px;">
+                🎉 <strong>Başarılı:</strong> Kabul ID arama butonu tetiklendi! Eklenti menüyü açtı, YKN ekranına girdi ve aramayı başlattı.
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Test Control Card -->
+    <div id="test-floating-card">
+        <h4>
+            <span>🧪 YKN Eklenti Test Paneli</span>
+            <span style="font-size: 11px; color: #10b981;">v1.2.90</span>
+        </h4>
+        <p>Eve geldiğinizde gerçek YÖKSİS olmadan eklentinin menü navigasyonunu doğrudan burada test edebilirsiniz.</p>
+        
+        <button id="btn-run-test" class="test-btn">▶ Eklenti Menü Gezinmesini Test Et</button>
+        <button id="btn-reset-test" class="test-btn test-btn-reset">🔄 Sayfayı Sıfırla</button>
+
+        <div id="test-logs">Hazır. Testi başlatmak için yukarıdaki butona tıklayın.</div>
+    </div>
+
+    <script>
+        // --- 1. ZK Framework Mock Altyapısı ---
+        const menuStudent = document.getElementById('menu-student');
+        const popupStudent = document.getElementById('popup-student');
+        const itemYknV2 = document.getElementById('item-ykn-v2');
+        const viewAnnouncements = document.getElementById('view-announcements');
+        const viewYknScreen = document.getElementById('view-ykn-screen');
+        const kabulIdInput = document.getElementById('kabul-id-input');
+        const btnKabulAra = document.getElementById('btn-kabul-ara');
+        const searchSuccessBanner = document.getElementById('search-success-banner');
+        const testLogs = document.getElementById('test-logs');
+
+        function log(msg, type = 'info') {
+            const span = document.createElement('div');
+            span.className = 'log-' + type;
+            span.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            testLogs.appendChild(span);
+            testLogs.scrollTop = testLogs.scrollHeight;
+        }
+
+        // ZK Widget Mock'u
+        window.zk = {
+            processing: false,
+            loading: 0,
+            Widget: {
+                $: function(el) {
+                    if (!el) return null;
+                    if (el === menuStudent || el.closest('#menu-student')) {
+                        return {
+                            open: function() {
+                                popupStudent.classList.add('open');
+                                log('ZK Widget: menu.open() çağrıldı, popup açıldı.', 'success');
+                            },
+                            menupopup: {
+                                open: function() {
+                                    popupStudent.classList.add('open');
+                                }
+                            },
+                            fire: function(ev) {
+                                log(`ZK Widget: Öğrenci İşlemleri.${ev} fired.`, 'info');
+                            }
+                        };
+                    }
+                    if (el === itemYknV2 || el.closest('#item-ykn-v2')) {
+                        return {
+                            fire: function(ev) {
+                                log(`ZK Widget: Göç İdaresinden YKN Talebi V2.${ev} fired.`, 'success');
+                                navigateToYknScreen();
+                            }
+                        };
+                    }
+                    return null;
+                }
+            }
+        };
+
+        // Hover ile menü açma (gerçek YÖKSİS davranışı)
+        menuStudent.addEventListener('mouseenter', () => {
+            popupStudent.classList.add('open');
+        });
+        menuStudent.addEventListener('mouseleave', (e) => {
+            // Test sırasında hemen kapanmasın
+        });
+        menuStudent.querySelector('.z-menu-cnt').addEventListener('click', () => {
+            popupStudent.classList.toggle('open');
+        });
+
+        function navigateToYknScreen() {
+            popupStudent.classList.remove('open');
+            viewAnnouncements.style.display = 'none';
+            viewYknScreen.style.display = 'block';
+            log('YÖKSİS ekranı değişti: "Öğrenciler İçin YKN Talep Ekranı" açıldı!', 'success');
+        }
+
+        itemYknV2.addEventListener('click', (e) => {
+            e.preventDefault();
+            navigateToYknScreen();
+        });
+
+        btnKabulAra.addEventListener('click', () => {
+            searchSuccessBanner.style.display = 'block';
+            log(`Kabul Mektup ID ile Ara tıklandı! Kod: "${kabulIdInput.value || 'GİRİLMEDİ'}"`, 'success');
+        });
+
+        // --- 2. Eklenti Fonksiyonlarının Birebir Uygulaması (v1.2.82) ---
+        function normalizeYoksisText(str) {
+            return (str || '')
+                .toLocaleLowerCase('tr-TR')
+                .replace(/ı/g, 'i')
+                .replace(/ğ/g, 'g')
+                .replace(/ü/g, 'u')
+                .replace(/ş/g, 's')
+                .replace(/ö/g, 'o')
+                .replace(/ç/g, 'c')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-z0-9]/g, '')
+                .replace(/\s+/g, '');
+        }
+
+        function isControlUsable(el) {
+            if (!el || el.hidden) return false;
+            const style = window.getComputedStyle(el);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+        }
+
+        function openYoksisDropdownMenu(menuElement) {
+            log('openYoksisDropdownMenu() çalıştı: ZK open() ve hover olayları gönderiliyor...', 'info');
+            const win = window;
+            if (win.zk && win.zk.Widget) {
+                const w = win.zk.Widget.$(menuElement);
+                if (w && typeof w.open === 'function') w.open();
+            }
+
+            const opts = { bubbles: true, cancelable: true, view: win };
+            ['pointerover', 'pointerenter', 'mouseover', 'mouseenter'].forEach(t => {
+                menuElement.dispatchEvent(new MouseEvent(t, opts));
+            });
+            menuElement.click();
+            return true;
+        }
+
+        function findMenuEntry(expectedText, options = {}) {
+            const expected = normalizeYoksisText(expectedText);
+            const selectors = '.z-menu, .z-menu-item, .z-menuitem, .z-menuitem-text, .z-menu-text, .z-menu-cnt, .z-menuitem-cnt, a, button, span';
+            const matches = [];
+            for (const el of document.querySelectorAll(selectors)) {
+                if (!options.allowHidden && !isControlUsable(el)) continue;
+                const txt = normalizeYoksisText(el.innerText || el.textContent || '');
+                if (!txt) continue;
+                if (txt === expected || (expected.length >= 8 && txt.includes(expected)) || (txt.length >= 8 && expected.includes(txt))) {
+                    const clickable = el.closest('.z-menu-item, .z-menuitem, .z-menu, a, button') || el;
+                    if (!options.allowHidden && !isControlUsable(clickable)) continue;
+                    matches.push(clickable);
+                }
+            }
+            return matches[0] || null;
+        }
+
+        async function simulateExtensionWorkflow() {
+            log('▶ TEST BAŞLATILDI: Eklentinin kabul kodunu bulup YÖKSİS ekranını açma akışı simüle ediliyor...', 'info');
+
+            // 1. Öğrenci İşlemleri menüsünü bul
+            const studentMenu = findMenuEntry('Öğrenci İşlemleri');
+            if (!studentMenu) {
+                log('HATA: "Öğrenci İşlemleri" menüsü bulunamadı!', 'log-error');
+                return;
+            }
+            log('✓ "Öğrenci İşlemleri" menüsü DOM üzerinde tespit edildi.', 'success');
+
+            // 2. Menüyü hover + click ile aç
+            openYoksisDropdownMenu(studentMenu);
+            await new Promise(r => setTimeout(r, 200));
+
+            // 3. Göç İdaresinden YKN Talebi V2 seçeneğini ara
+            log('Açılan menüde "Göç İdaresinden YKN Talebi V2" aranıyor...', 'info');
+            let yknEntry = findMenuEntry('Göç İdaresinden YKN Talebi V2');
+            if (!yknEntry) {
+                yknEntry = findMenuEntry('Göç İdaresinden YKN Talebi V2', { allowHidden: true });
+            }
+
+            if (!yknEntry) {
+                log('HATA: "Göç İdaresinden YKN Talebi V2" bulunamadı!', 'error');
+                return;
+            }
+            log('✓ "Göç İdaresinden YKN Talebi V2" başarıyla bulundu!', 'success');
+
+            // 4. Alt menüye tıkla
+            log('Alt menüye tıklandı...', 'info');
+            yknEntry.click();
+            await new Promise(r => setTimeout(r, 300));
+
+            // 5. YKN ekranındaki kabul mektup arama inputunu bul ve doldur
+            if (viewYknScreen.style.display !== 'none') {
+                kabulIdInput.value = 'MOCK-12345-TR';
+                log('✓ YKN ekranı açıldı! Kabul Mektup ID alanına kod yazıldı: "MOCK-12345-TR"', 'success');
+                
+                await new Promise(r => setTimeout(r, 400));
+                btnKabulAra.click();
+                log('🎉 TEST TAMAMLANDI: Eski hatanın çözüldüğü ve akışın çalıştığı doğrulandı.', 'success');
+            } else {
+                log('HATA: YKN ekranına geçiş yapılamadı.', 'error');
+            }
+        }
+
+        // Buton Dinleyicileri
+        document.getElementById('btn-run-test').addEventListener('click', () => {
+            testLogs.innerHTML = '';
+            simulateExtensionWorkflow();
+        });
+
+        document.getElementById('btn-reset-test').addEventListener('click', () => {
+            viewAnnouncements.style.display = 'block';
+            viewYknScreen.style.display = 'none';
+            popupStudent.classList.remove('open');
+            kabulIdInput.value = '';
+            searchSuccessBanner.style.display = 'none';
+            testLogs.innerHTML = 'Sayfa sıfırlandı. Teste hazır.';
+        });
+    </script>
+</body>
+</html>

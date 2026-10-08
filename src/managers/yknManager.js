@@ -7,7 +7,9 @@ import {
     extractPassportPlaceOfBirth,
     extractPassportIssuingAuthority,
     extractPassportGender,
-    getCountryIso3Code
+    getCountryIso3Code,
+    normalizeGender,
+    inferGenderFromName
 } from '../utils/ykn-document-parser.js';
 import { selectBestPassportOrientation } from '../utils/passport-orientation.js';
 import {
@@ -525,6 +527,19 @@ export function initYknManager() {
                 medeniBekar.checked = true;
             }
         }
+        const cinsiyetVal = student.cinsiyet || '';
+        const cinsiyetErkek = document.getElementById('ykn-cinsiyet-erkek');
+        const cinsiyetKadin = document.getElementById('ykn-cinsiyet-kadin');
+        if (cinsiyetErkek && cinsiyetKadin) {
+            const resolvedGender = normalizeGender(cinsiyetVal) || inferGenderFromName(student.fullName || student.adSoyad || student.ad || '');
+            if (resolvedGender === 'Kadın') {
+                cinsiyetKadin.checked = true;
+                cinsiyetErkek.checked = false;
+            } else if (resolvedGender === 'Erkek') {
+                cinsiyetErkek.checked = true;
+                cinsiyetKadin.checked = false;
+            }
+        }
         updateMissingFieldsUI();
     }
 
@@ -609,6 +624,15 @@ export function initYknManager() {
         } else {
             currentStudentData.medeniHali = currentStudentData.medeniHali || 'Bekar';
             currentStudentData.medeniHal = currentStudentData.medeniHali;
+        }
+        const cinsiyetErkek = document.getElementById('ykn-cinsiyet-erkek');
+        const cinsiyetKadin = document.getElementById('ykn-cinsiyet-kadin');
+        if (cinsiyetErkek && cinsiyetKadin) {
+            if (cinsiyetKadin.checked) {
+                currentStudentData.cinsiyet = 'Kadın';
+            } else if (cinsiyetErkek.checked) {
+                currentStudentData.cinsiyet = 'Erkek';
+            }
         }
         updateMissingFieldsUI();
     }
@@ -1678,8 +1702,14 @@ export function initYknManager() {
                     }
                 }
 
-                // Pasaport MRZ/OCR cinsiyeti, Apply formundaki eksik değeri düzeltir.
-                if (detectedGender) currentStudentData.cinsiyet = detectedGender;
+                // Pasaport MRZ/OCR cinsiyeti, Apply formundaki eksik değeri tamamlar.
+                if (detectedGender && !currentStudentData.cinsiyet) {
+                    currentStudentData.cinsiyet = detectedGender;
+                }
+                if (!currentStudentData.cinsiyet) {
+                    const inferred = inferGenderFromName(currentStudentData?.fullName || currentStudentData?.adSoyad || currentStudentData?.ad || '');
+                    if (inferred) currentStudentData.cinsiyet = inferred;
+                }
 
                 // Pasaport doğum yeri ve veren makam analizi
                 if (detectedBirthPlace) {
@@ -2006,14 +2036,30 @@ export function initYknManager() {
     if (btnReadAcceptance) {
         btnReadAcceptance.addEventListener('click', async () => {
             const enteredPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
-            if (!enteredPassport && !currentStudentData) {
+            const currentPassport = (currentStudentData?.passportNo || currentStudentData?.pasaportNo || '').trim().toUpperCase();
+            const cleanEntered = enteredPassport.replace(/[^A-Z0-9]/gi, '');
+            const cleanCurrent = currentPassport.replace(/[^A-Z0-9]/gi, '');
+
+            // Arama zaten devam ediyorsa yeni arama başlatma, tamamlandığında otomatik devam et
+            if (searchTimeoutTimer) {
+                shouldAutoRunAcceptanceAfterSearch = true;
+                showToast('Arama devam ediyor, tamamlandığında kabul mektubu okunacak.', 'info');
+                return;
+            }
+
+            if (!currentStudentData) {
+                if (cleanEntered && btnSearch) {
+                    shouldAutoRunAcceptanceAfterSearch = true;
+                    btnSearch.click();
+                    return;
+                }
                 showToast('Lütfen önce pasaport numarası girin.', 'warning');
                 if (inputPassport) inputPassport.focus();
                 return;
             }
 
-            // Yeni pasaport girilmişse veya mevcut öğrenci ile uyuşmuyorsa önce arama yap
-            if (enteredPassport && (!currentStudentData || currentStudentData.passportNo !== enteredPassport)) {
+            // Yalnızca kullanıcı kutucuğa mevcut öğrenciden TAMAMEN FARKLI bir pasaport yazmışsa yeni arama tetikle
+            if (cleanEntered && cleanCurrent && cleanEntered !== cleanCurrent) {
                 if (btnSearch) {
                     shouldAutoRunAcceptanceAfterSearch = true;
                     btnSearch.click();
@@ -2021,9 +2067,8 @@ export function initYknManager() {
                 }
             }
 
-            if (!currentStudentData) {
-                showToast('Lütfen önce bir öğrenci arayın.', 'warning');
-                return;
+            if (enteredPassport && !currentStudentData.passportNo) {
+                currentStudentData.passportNo = enteredPassport;
             }
 
             // Eğer kabul kodu zaten mevcutsa doğrudan panoya kopyala ve YÖKSİS'te ara
@@ -2082,7 +2127,30 @@ export function initYknManager() {
     if (btnCopy) {
         btnCopy.addEventListener('click', async () => {
             const enteredPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
-            if (enteredPassport && (!currentStudentData || currentStudentData.passportNo !== enteredPassport)) {
+            const currentPassport = (currentStudentData?.passportNo || currentStudentData?.pasaportNo || '').trim().toUpperCase();
+            const cleanEntered = enteredPassport.replace(/[^A-Z0-9]/gi, '');
+            const cleanCurrent = currentPassport.replace(/[^A-Z0-9]/gi, '');
+
+            // Arama zaten devam ediyorsa yeni arama başlatma, tamamlandığında otomatik devam et
+            if (searchTimeoutTimer) {
+                shouldAutoRunCopyAfterSearch = true;
+                showToast('Arama devam ediyor, tamamlandığında bilgiler hazırlanacak.', 'info');
+                return;
+            }
+
+            if (!currentStudentData) {
+                if (cleanEntered && btnSearch) {
+                    shouldAutoRunCopyAfterSearch = true;
+                    btnSearch.click();
+                    return;
+                }
+                showToast('Lütfen önce bir öğrenci arayın.', 'warning');
+                if (inputPassport) inputPassport.focus();
+                return;
+            }
+
+            // Yalnızca kullanıcı kutucuğa mevcut öğrenciden TAMAMEN FARKLI bir pasaport yazmışsa yeni arama tetikle
+            if (cleanEntered && cleanCurrent && cleanEntered !== cleanCurrent) {
                 if (btnSearch) {
                     shouldAutoRunCopyAfterSearch = true;
                     btnSearch.click();
@@ -2090,9 +2158,8 @@ export function initYknManager() {
                 }
             }
 
-            if (!currentStudentData) {
-                showToast('Lütfen önce bir öğrenci arayın.', 'warning');
-                return;
+            if (enteredPassport && !currentStudentData.passportNo) {
+                currentStudentData.passportNo = enteredPassport;
             }
 
             btnCopy.disabled = true;
@@ -2317,6 +2384,19 @@ export function initYknManager() {
         });
     }
 
+    const radioCinsiyetErkek = document.getElementById('ykn-cinsiyet-erkek');
+    const radioCinsiyetKadin = document.getElementById('ykn-cinsiyet-kadin');
+    if (radioCinsiyetErkek) {
+        radioCinsiyetErkek.addEventListener('change', () => {
+            syncUserEnteredPassportDates();
+        });
+    }
+    if (radioCinsiyetKadin) {
+        radioCinsiyetKadin.addEventListener('change', () => {
+            syncUserEnteredPassportDates();
+        });
+    }
+
     window.addEventListener('ykn:photo-cropped', async (e) => {
         const { dataUrl, fileName, autoTransfer, userFields } = e.detail || {};
         if (!dataUrl) return;
@@ -2329,7 +2409,13 @@ export function initYknManager() {
             const passportGender = extractPassportGender(passportText, {
                 birthDate: currentStudentData.birthDate
             });
-            if (passportGender) currentStudentData.cinsiyet = passportGender;
+            if (passportGender && !currentStudentData.cinsiyet) {
+                currentStudentData.cinsiyet = passportGender;
+            }
+            if (!currentStudentData.cinsiyet) {
+                const inferred = inferGenderFromName(currentStudentData?.fullName || currentStudentData?.adSoyad || currentStudentData?.ad || '');
+                if (inferred) currentStudentData.cinsiyet = inferred;
+            }
             currentStudentData.croppedPhotoBase64 = dataUrl;
             currentStudentData.photoFileName = fileName;
             if (userFields) {
@@ -2344,6 +2430,9 @@ export function initYknManager() {
                 if (userFields.issuingAuthority) {
                     currentStudentData.issuingAuthority = userFields.issuingAuthority;
                     currentStudentData.verenMakam = userFields.issuingAuthority;
+                }
+                if (userFields.cinsiyet) {
+                    currentStudentData.cinsiyet = userFields.cinsiyet;
                 }
                 if (userFields.medeniHali) {
                     currentStudentData.medeniHali = userFields.medeniHali;
@@ -2791,8 +2880,12 @@ export function initYknManager() {
             const passCandidates = incoming.passportCandidates && incoming.passportCandidates.length > 0
                 ? incoming.passportCandidates
                 : (incoming.passportDocumentUrl || incoming.passportImageUrl ? [incoming.passportDocumentUrl || incoming.passportImageUrl] : []);
+            const currentSearchPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
+            const resolvedPassportNo = (incoming.passportNo || incoming.pasaportNo || currentSearchPassport || '').trim().toUpperCase();
             currentStudentData = {
                 ...incoming,
+                passportNo: resolvedPassportNo,
+                pasaportNo: resolvedPassportNo,
                 passportCandidates: passCandidates,
                 currentPassportCandidateIndex: 0,
                 yoksisId: safeYoksisId
@@ -2818,9 +2911,13 @@ export function initYknManager() {
             const passCandidates = incoming.passportCandidates && incoming.passportCandidates.length > 0
                 ? incoming.passportCandidates
                 : (incoming.passportDocumentUrl || incoming.passportImageUrl ? [incoming.passportDocumentUrl || incoming.passportImageUrl] : (currentStudentData?.passportCandidates || []));
+            const currentSearchPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
+            const resolvedPassportNo = (currentStudentData?.passportNo || currentStudentData?.pasaportNo || incoming.passportNo || incoming.pasaportNo || currentSearchPassport || '').trim().toUpperCase();
             currentStudentData = {
                 ...currentStudentData,
                 ...incoming,
+                passportNo: resolvedPassportNo,
+                pasaportNo: resolvedPassportNo,
                 acceptanceLetterUrl: candidates[0] || incoming.acceptanceLetterUrl || '',
                 acceptanceCandidates: candidates,
                 currentCandidateIndex: 0,

@@ -8,7 +8,9 @@ import {
     extractPassportGender,
     extractPassportDatesFromText,
     extractPassportDatesFromText as extractPassportDates,
-    parseDateValue
+    parseDateValue,
+    normalizeGender,
+    inferGenderFromName
 } from '../src/utils/ykn-document-parser.js';
 
 // Evaluate extension parser in global scope
@@ -564,6 +566,58 @@ test('Russian and CIS passport place of birth and authority optimizations', () =
     // Fallback Russian authority
     assert.equal(extractPassportIssuingAuthority('', { uyruk: 'RUSYA' }), 'MIA OF RUSSIA');
     assert.equal(extParser.extractPassportIssuingAuthority('', { uyruk: 'RUSYA' }), 'MIA OF RUSSIA');
+});
+
+test('Gender normalization and name-based gender inference', () => {
+    // 1. Explicit normalization
+    assert.equal(normalizeGender('Erkek'), 'Erkek');
+    assert.equal(normalizeGender('Kadın'), 'Kadın');
+    assert.equal(normalizeGender('kadin'), 'Kadın');
+    assert.equal(normalizeGender('Female'), 'Kadın');
+    assert.equal(normalizeGender('Male'), 'Erkek');
+    assert.equal(normalizeGender('F'), 'Kadın');
+    assert.equal(normalizeGender('M'), 'Erkek');
+    assert.equal(normalizeGender('K'), 'Kadın');
+    assert.equal(normalizeGender('E'), 'Erkek');
+    assert.equal(normalizeGender('Female / Kadın'), 'Kadın');
+    assert.equal(normalizeGender('Male / Erkek'), 'Erkek');
+
+    assert.equal(extParser.normalizeGender('Female'), 'Kadın');
+    assert.equal(extParser.normalizeGender('Male'), 'Erkek');
+    assert.equal(extParser.normalizeGender('Kadın'), 'Kadın');
+    assert.equal(extParser.normalizeGender('Erkek'), 'Erkek');
+
+    // 2. Name-based inference: Turkmen / Slavic / Turkish female and male
+    assert.equal(inferGenderFromName('MERJEN BEGENJOVA'), 'Kadın');
+    assert.equal(inferGenderFromName('AYNUR BEGENJOVA'), 'Kadın');
+    assert.equal(inferGenderFromName('LUIZA ROZYÝEWA'), 'Kadın');
+    assert.equal(inferGenderFromName('Luiza'), 'Kadın');
+    assert.equal(inferGenderFromName('BEGENJOV AHMET'), 'Erkek');
+    assert.equal(inferGenderFromName('BATYR BEGENJOW'), 'Erkek');
+    assert.equal(inferGenderFromName('OGULJAN ALLAMYRADOVA'), 'Kadın');
+    assert.equal(inferGenderFromName('Ivanov Ivan Ivanovich'), 'Erkek');
+    assert.equal(inferGenderFromName('Ivanova Maria Petrovna'), 'Kadın');
+    assert.equal(inferGenderFromName('Leyla Aliyeva'), 'Kadın');
+    assert.equal(inferGenderFromName('Ali Mammadov'), 'Erkek');
+
+    assert.equal(extParser.inferGenderFromName('MERJEN BEGENJOVA'), 'Kadın');
+    assert.equal(extParser.inferGenderFromName('AYNUR BEGENJOVA'), 'Kadın');
+    assert.equal(extParser.inferGenderFromName('LUIZA ROZYÝEWA'), 'Kadın');
+    assert.equal(extParser.inferGenderFromName('BEGENJOV AHMET'), 'Erkek');
+
+    // 3. Metadata extraction with name hint when text has no explicit sex field
+    const passNoSex = `PASSPORT
+SURNAME: BEGENJOVA
+GIVEN NAMES: MERJEN
+DATE OF BIRTH: 01.01.2003
+DATE OF ISSUE: 01.01.2021
+DATE OF EXPIRY: 01.01.2031`;
+
+    const meta = extractPassportMetadata(passNoSex, { fullName: 'MERJEN BEGENJOVA' });
+    assert.equal(meta.cinsiyet, 'Kadın');
+
+    const extMeta = extParser.extractPassportMetadata(passNoSex, { fullName: 'MERJEN BEGENJOVA' });
+    assert.equal(extMeta.cinsiyet, 'Kadın');
 });
 
 

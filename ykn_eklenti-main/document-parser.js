@@ -1321,6 +1321,86 @@
         return { surname: '', givenNames: '' };
     }
 
+    function normalizeGender(val) {
+        if (!val || typeof val !== 'string') return '';
+        const v = val.trim().toLowerCase().replace(/ı/g, 'i').replace(/ý/g, 'y');
+        if (!v) return '';
+
+        if (v === 'k' || v === 'f' || v === '2') return 'Kadın';
+        if (v === 'e' || v === 'm' || v === '1') return 'Erkek';
+        if (v === 'erkek' || v === 'male' || v === 'man' || v === 'boy' || v === 'bay') return 'Erkek';
+        if (v === 'kadin' || v === 'female' || v === 'woman' || v === 'girl' || v === 'bayan') return 'Kadın';
+
+        const femalePattern = /(?:^|[^\p{L}\p{N}])(?:kadin|female|woman|girl|kiz|bayan|femme|женский|женщина|жен)(?:$|[^\p{L}\p{N}])/iu;
+        const malePattern = /(?:^|[^\p{L}\p{N}])(?:erkek|male|man|boy|homme|мужской|мужчина|муж)(?:$|[^\p{L}\p{N}])/iu;
+
+        const isFemale = femalePattern.test(v);
+        const isMale = malePattern.test(v);
+
+        if (isFemale && !isMale) return 'Kadın';
+        if (isMale && !isFemale) return 'Erkek';
+        return '';
+    }
+
+    function inferGenderFromName(fullName) {
+        if (!fullName || typeof fullName !== 'string') return '';
+        const clean = fullName.trim().toLowerCase().replace(/ı/g, 'i').replace(/ý/g, 'y').replace(/ə/g, 'e');
+        const parts = clean.split(/[\s,._\-\/]+/).filter(Boolean);
+        if (parts.length === 0) return '';
+
+        for (const part of parts) {
+            if (/(?:ova|eva|yewa|yeva|owa|ewa|ovna|evna|kyzy|qizi|gizi|kizi|gyzy|skaya|ckaya|ina)$/i.test(part)) {
+                return 'Kadın';
+            }
+            if (/(?:ovich|evich|oglu|oğlu|ogly|uulu|skiy|sky|cki)$/i.test(part)) {
+                return 'Erkek';
+            }
+        }
+
+        for (const part of parts) {
+            if (/(?:ov|ev|yew|yev|ow|ew)$/i.test(part) && !/(?:ova|eva|yewa|yeva|owa|ewa)$/i.test(part)) {
+                return 'Erkek';
+            }
+        }
+
+        const femaleNames = new Set([
+            'merjen', 'aynur', 'luiza', 'fatima', 'fatma', 'ayse', 'zeynep', 'emine', 'hatice',
+            'meryem', 'mariam', 'maryam', 'zuhra', 'zahra', 'gulnar', 'gulsen', 'aysel',
+            'leyla', 'layla', 'madina', 'medina', 'malika', 'nigora', 'dilnoza', 'shahlo', 'feruza', 'nargiza',
+            'zarina', 'diana', 'elena', 'olga', 'anna', 'anastasia', 'tatyana', 'ekaterina', 'natalia', 'irina',
+            'svetlana', 'marina', 'yulia', 'alina', 'polina', 'daria', 'ksenia', 'yasemin', 'elif', 'ebru',
+            'esra', 'eda', 'gamze', 'tugba', 'seyma', 'hilal', 'busra', 'betul',
+            'rabia', 'kubra', 'merve', 'irem', 'damla', 'duygu', 'selin', 'sinem', 'hande',
+            'ozge', 'pinar', 'burcu', 'tugce', 'asli', 'aylin', 'ceren',
+            'cansu', 'didem', 'dilara', 'ezgi', 'gizem', 'ipek', 'melis', 'melisa', 'nilay', 'nur', 'ozlem',
+            'seda', 'sezen', 'simge', 'yasmin', 'yagmur', 'oguljan', 'ogulkeyik', 'jemal',
+            'gozel', 'guzal', 'shirin', 'bahar', 'gulya', 'gulnora', 'dinara', 'samira', 'amina', 'khadija',
+            'hajar', 'nour', 'sarah', 'sara', 'salma', 'laylo', 'aziza', 'munira', 'marhabo', 'sabina', 'kamila'
+        ]);
+
+        const maleNames = new Set([
+            'ahmet', 'ahmed', 'mehmet', 'mehmed', 'ali', 'mustafa', 'hasan', 'huseyin', 'ibrahim',
+            'ismail', 'osman', 'omer', 'yusuf', 'halil', 'murat', 'murad', 'emre', 'burak', 'can',
+            'cem', 'mert', 'berk', 'kaan', 'batuhan', 'furkan', 'oguz', 'kerem', 'serkan', 'hakan',
+            'tolga', 'volkan', 'onur', 'ufuk', 'serdar', 'erdal', 'erkan', 'baris', 'alper', 'atakan',
+            'bugra', 'cihan', 'deniz', 'dogukan', 'enes', 'eren', 'fatih', 'gokhan',
+            'harun', 'ilker', 'koray', 'levent', 'metin', 'oguzhan', 'samet', 'selim', 'sinan',
+            'tarik', 'ugur', 'umut', 'yasin', 'zafer', 'dovlet', 'dovran', 'maksat', 'merdan',
+            'shatlyk', 'guvanch', 'ruslan', 'timur', 'azamat', 'nurlan', 'eldar', 'sanzhar', 'bekzod', 'jasur',
+            'otabek', 'sherzod', 'dmitry', 'alexander', 'sergey', 'andrey', 'mikhail', 'ivan', 'vladimir',
+            'igor', 'artem', 'nikita', 'pavel', 'mohamed', 'mohammad', 'muhammad', 'mahmoud', 'abdullah',
+            'abdul', 'khalid', 'tariq', 'omar', 'amr', 'ziad', 'karim', 'youssef', 'nazar', 'batyr', 'berdi',
+            'atajan', 'eziz', 'resul', 'allamyrat', 'annamyrat', 'bayram'
+        ]);
+
+        for (const p of parts) {
+            if (femaleNames.has(p)) return 'Kadın';
+            if (maleNames.has(p)) return 'Erkek';
+        }
+
+        return '';
+    }
+
     const GENDER_LABELS = [
         'sex', 'gender',
         'sexe',
@@ -1376,18 +1456,22 @@
             }
             remainder = remainder.replace(/^[\s:;#\-_/\\\\|.,]+/, '').trim();
 
-            if (/^(?:M\/F|F\/M|E\/K|K\/E|М\/Ж|Ж\/М)$/i.test(remainder)) {
+            // Ignore generic placeholders like "M/F" or "M / F" or "E/K" or "М/Ж"
+            const placeholderExact = /^(?:M\s*[\/\\|]\s*F|F\s*[\/\\|]\s*M|E\s*[\/\\|]\s*K|K\s*[\/\\|]\s*E|М\s*[\/\\|]\s*Ж|Ж\s*[\/\\|]\s*М)$/i;
+            if (placeholderExact.test(remainder)) {
                 remainder = '';
+            } else {
+                remainder = remainder.replace(/^(?:M\s*[\/\\|]\s*F|F\s*[\/\\|]\s*M|E\s*[\/\\|]\s*K|K\s*[\/\\|]\s*E|М\s*[\/\\|]\s*Ж|Ж\s*[\/\\|]\s*М)[\s:;#\-_/\\|.,]*/i, '').trim();
             }
 
             if (remainder) {
                 const firstToken = remainder.split(/[\s/\\,.;:-]+/)[0].trim();
                 if (firstToken) {
-                    if (maleRegex.test(` ${firstToken} `)) return 'Erkek';
                     if (femaleRegex.test(` ${firstToken} `)) return 'Kadın';
+                    if (maleRegex.test(` ${firstToken} `)) return 'Erkek';
                 }
-                if (maleRegex.test(` ${remainder} `)) return 'Erkek';
                 if (femaleRegex.test(` ${remainder} `)) return 'Kadın';
+                if (maleRegex.test(` ${remainder} `)) return 'Erkek';
             }
 
             if (i + 1 < lines.length) {
@@ -1395,8 +1479,8 @@
                 if (nextLine && !GENDER_LABELS.some(l => nextLine.toLowerCase().includes(l.toLowerCase()))) {
                     const firstToken = nextLine.split(/[\s/\\,.;:-]+/)[0].trim();
                     if (firstToken) {
-                        if (maleRegex.test(` ${firstToken} `)) return 'Erkek';
                         if (femaleRegex.test(` ${firstToken} `)) return 'Kadın';
+                        if (maleRegex.test(` ${firstToken} `)) return 'Erkek';
                     }
                 }
             }
@@ -1409,7 +1493,13 @@
         const dates = extractPassportDates(text, options);
         const mrz = extractDatesFromMrz(text);
         const mrzNames = extractMrzNames(text);
-        const cinsiyet = extractPassportGender(text, options) || mrz.cinsiyet || '';
+        let cinsiyet = extractPassportGender(text, options) || mrz.cinsiyet || '';
+        if (!cinsiyet) {
+            const studentName = options.fullName || options.studentName || `${mrzNames.givenNames || ''} ${mrzNames.surname || ''}`.trim();
+            if (studentName) {
+                cinsiyet = inferGenderFromName(studentName);
+            }
+        }
         return {
             issueDate: dates.issueDate || '',
             expiryDate: dates.expiryDate || mrz.expiryDate || '',
@@ -1433,6 +1523,8 @@
         extractMrzNames,
         parseDateValue,
         isValidYoksisId,
-        getCountryIso3Code
+        getCountryIso3Code,
+        normalizeGender,
+        inferGenderFromName
     });
 })();

@@ -1,7 +1,7 @@
 {
   "name": "ikamet-main",
   "version": "2.2.1",
-  "description": "İstanbul Topkapı Üniversitesi Uluslararası Öğrenci İşlemleri Portalı",
+  "description": "\u0130stanbul Topkap\u0131 \u00dcniversitesi Uluslararas\u0131 \u00d6\u011frenci \u0130\u015flemleri Portal\u0131",
   "main": "app.js",
   "scripts": {
     "test": "node --disable-warning=ExperimentalWarning --test test/**/*.test.js",
@@ -21,10 +21,12 @@
     "db:migrate:local": "wrangler d1 migrations apply uluslarasiofis-local --local",
     "db:migrate:staging": "wrangler d1 migrations apply uluslarasiofis-staging --remote --env staging",
     "db:migrate:production": "wrangler d1 migrations apply uluslarasiofis-production --remote --env production",
-    "deploy:staging": "npm run build:staging && wrangler deploy --env staging",
-    "deploy:dry-run:staging": "npm run build:staging && wrangler deploy --env staging --dry-run",
+    "deploy:staging": "npm run build:staging && wrangler deploy --env staging --keep-vars",
+    "deploy:dry-run:staging": "npm run build:staging && wrangler deploy --env staging --dry-run --keep-vars",
     "deploy:production": "npm run build:production && wrangler deploy --env production",
-    "deploy:dry-run:production": "npm run build:production && wrangler deploy --env production --dry-run"
+    "deploy:dry-run:production": "npm run build:production && wrangler deploy --env production --dry-run",
+    "predeploy:production": "node scripts/check-production-print-secrets.mjs",
+    "predeploy:dry-run:production": "node scripts/check-production-print-secrets.mjs"
   },
   "repository": {
     "type": "git",
@@ -52,6 +54,7 @@
     "@zip.js/zip.js": "2.22.0",
     "aws4fetch": "^1.0.20",
     "i18n-iso-countries": "7.14.0",
-    "libphonenumber-js": "1.13.14"
+    "libphonenumber-js": "1.13.14",
+    "pdf-lib": "^1.17.1"
   }
 }

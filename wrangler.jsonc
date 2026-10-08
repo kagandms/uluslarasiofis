@@ -6,6 +6,12 @@
   "vars": {
     "APP_ENV": "local",
     "R2_BUCKET_NAME": "uluslarasiofis-documents-local",
+    "PRINT_BUCKET_NAME": "uluslarasiofis-print-local",
+    "PRINT_ENABLE_A3": "false",
+    "PRINT_ENABLE_COLOR": "false",
+    "PRINT_ENABLE_DUPLEX": "false",
+    "PRINT_MAX_COPIES_PER_JOB": "50",
+    "PRINT_MAX_PAGE_COPIES": "200",
     "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1"
   },
   "assets": {
@@ -13,7 +19,10 @@
     "not_found_handling": "404-page"
   },
   "triggers": {
-    "crons": ["0 0 * * *"]
+    "crons": [
+      "* * * * *",
+      "0 0 * * *"
+    ]
   },
   "d1_databases": [
     {
@@ -29,6 +38,11 @@
       "binding": "DOCUMENTS",
       "bucket_name": "uluslarasiofis-documents-local",
       "remote": false
+    },
+    {
+      "binding": "PRINT_FILES",
+      "bucket_name": "uluslarasiofis-print-local",
+      "remote": false
     }
   ],
   "env": {
@@ -37,6 +51,12 @@
       "vars": {
         "APP_ENV": "staging",
         "R2_BUCKET_NAME": "uluslarasiofis-documents-staging",
+        "PRINT_BUCKET_NAME": "uluslarasiofis-print-staging",
+        "PRINT_ENABLE_A3": "false",
+        "PRINT_ENABLE_COLOR": "false",
+        "PRINT_ENABLE_DUPLEX": "false",
+        "PRINT_MAX_COPIES_PER_JOB": "50",
+        "PRINT_MAX_PAGE_COPIES": "200",
         "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1",
         "STAFF_SHARED_USERNAME": "international.office.topkapi@topkapi.edu.tr"
       },
@@ -54,14 +74,33 @@
           "binding": "DOCUMENTS",
           "bucket_name": "uluslarasiofis-documents-staging",
           "remote": false
+        },
+        {
+          "binding": "PRINT_FILES",
+          "bucket_name": "uluslarasiofis-print-staging",
+          "remote": false
         }
       ]
     },
     "production": {
       "name": "goc",
+      "triggers": {
+        "crons": [
+          "* * * * *",
+          "0 0 * * *"
+        ]
+      },
       "vars": {
         "APP_ENV": "production",
+        "PRINT_ENABLED": "true",
+        "PRINT_UAT_ENABLED": "false",
         "R2_BUCKET_NAME": "uluslarasiofis-documents-production",
+        "PRINT_BUCKET_NAME": "uluslarasiofis-print-production",
+        "PRINT_ENABLE_A3": "false",
+        "PRINT_ENABLE_COLOR": "false",
+        "PRINT_ENABLE_DUPLEX": "false",
+        "PRINT_MAX_COPIES_PER_JOB": "50",
+        "PRINT_MAX_PAGE_COPIES": "200",
         "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1",
         "STAFF_SHARED_USERNAME": "international.office.topkapi@topkapi.edu.tr"
       },
@@ -79,8 +118,20 @@
           "binding": "DOCUMENTS",
           "bucket_name": "uluslarasiofis-documents-production",
           "remote": false
+        },
+        {
+          "binding": "PRINT_FILES",
+          "bucket_name": "uluslarasiofis-print-production",
+          "remote": false
         }
-      ]
+      ],
+      "secrets": {
+        "required": [
+          "PRINTER_SECRET",
+          "PRINT_R2_ACCESS_KEY_ID",
+          "PRINT_R2_SECRET_ACCESS_KEY"
+        ]
+      }
     }
   }
 }

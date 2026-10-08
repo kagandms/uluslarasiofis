@@ -17,6 +17,9 @@ import { initializeStaffApplicationsManager } from './applicationsManager.js';
 import { initializeStaffArchiveManager } from './archiveManager.js';
 import { initDocumentsManager } from '../ui/documents-manager.js';
 import { initLiveClock } from '../ui/liveClock.js';
+import { openPdfMergerModal } from '../ui/pdfMergerModal.js';
+import { openStaffGuideModal } from '../ui/staffGuideModal.js';
+import { initializeStaffPrintStatus } from './print-status.js';
 
 const staffAuthReady = document.readyState === 'loading'
     ? new Promise((resolve) => {
@@ -125,7 +128,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { initDocumentsManager(); } catch (error) {
         console.error('Documents workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
+    try { initializeStaffPrintStatus(); } catch (error) {
+        console.error('Print status failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
     try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
+
+    // --- Header Tools: PDF Merger & Staff Guide ---
+    const btnPdfMerger = document.getElementById('btn-staff-pdf-merger');
+    if (btnPdfMerger) {
+        btnPdfMerger.addEventListener('click', () => {
+            try {
+                openPdfMergerModal();
+            } catch (err) {
+                console.error('PDF merger modal error:', err);
+                showToast('PDF birleştirici açılamadı.', 'error');
+            }
+        });
+    }
+
+    const btnStaffGuide = document.getElementById('btn-staff-guide');
+    if (btnStaffGuide) {
+        btnStaffGuide.addEventListener('click', () => {
+            try {
+                openStaffGuideModal();
+            } catch (err) {
+                console.error('Staff guide modal error:', err);
+                showToast('Rehber açılamadı.', 'error');
+            }
+        });
+    }
     
     try { initDraftAutoSave(); } catch (e) { console.error('initDraftAutoSave error:', e); }
     try { setActiveStep(STEP_IDS.UPLOAD); } catch (e) { console.error('setActiveStep error:', e); }

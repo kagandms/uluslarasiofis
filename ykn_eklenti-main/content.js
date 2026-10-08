@@ -658,8 +658,8 @@ function simulateRadioByLabelText(labelText) {
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]/g, '');
     const normVal = normalize(labelText);
-    const isMale = normVal === 'erkek' || normVal === 'bay' || normVal === 'male' || normVal === 'm' || normVal === '1';
-    const isFemale = normVal === 'kadin' || normVal === 'bayan' || normVal === 'female' || normVal === 'f' || normVal === '2';
+    const isMale = normVal === 'erkek' || normVal === 'bay' || normVal === 'male' || normVal === 'e' || normVal === 'm' || normVal === '1';
+    const isFemale = normVal === 'kadin' || normVal === 'bayan' || normVal === 'female' || normVal === 'k' || normVal === 'f' || normVal === '2';
     const isGender = isMale || isFemale;
     const isBekar = normVal === 'bekar' || normVal === 'single' || normVal === 'b' || normVal === '1';
     const isEvli = normVal === 'evli' || normVal === 'married' || normVal === 'e' || normVal === '2';
@@ -700,6 +700,9 @@ function simulateRadioByLabelText(labelText) {
 
                 // 2. Hedef radyo ve wrapper aç (DOM + CSS)
                 if (targetRadio) {
+                    try { targetRadio.checked = false; } catch (_) {}
+                    try { targetRadio.focus(); } catch (_) {}
+                    try { targetRadio.click(); } catch (_) {}
                     targetRadio.checked = true;
                 }
                 if (targetWrapper && targetWrapper.classList) {
@@ -707,10 +710,6 @@ function simulateRadioByLabelText(labelText) {
                 }
 
                 // 3. Tıklama simülasyonu
-                if (targetRadio) {
-                    try { targetRadio.focus(); } catch (_) {}
-                    try { targetRadio.click(); } catch (_) {}
-                }
                 if (targetLabel) {
                     try { targetLabel.click(); } catch (_) {}
                 } else if (targetWrapper) {
@@ -742,26 +741,47 @@ function simulateRadioByLabelText(labelText) {
                                 try { oppW.setChecked(false); } catch (_) {}
                             }
                             oppW._checked = false;
-                            if (oppW._lastValue !== undefined) oppW._lastValue = false;
+                            oppW._lastValue = false;
                         }
 
                         if (targetW) {
+                            targetW._lastValue = null;
+                            targetW._lastChg = null;
+
                             if (typeof targetW.setChecked === 'function') {
                                 try { targetW.setChecked(true); } catch (_) {}
                             }
                             targetW._checked = true;
-                            if (targetW._lastValue !== undefined) targetW._lastValue = true;
 
                             let checkSent = false;
+                            if (typeof targetW.fireOnCheck_ === 'function') {
+                                try {
+                                    targetW.fireOnCheck_(true);
+                                    checkSent = true;
+                                } catch (_) {}
+                            }
                             if (typeof targetW.fire === 'function') {
                                 try {
                                     targetW.fire('onCheck', { checked: true }, { toServer: true });
                                     checkSent = true;
                                 } catch (_) {}
                             }
-                            if (!checkSent && win.zAu && typeof win.zAu.send === 'function') {
+
+                            const rg = (typeof targetW.getRadiogroup === 'function') ? targetW.getRadiogroup() : null;
+                            if (rg) {
+                                try {
+                                    if (typeof rg.setSelectedItem === 'function') rg.setSelectedItem(targetW);
+                                    if (typeof rg.fireOnCheck_ === 'function') rg.fireOnCheck_(targetW);
+                                    if (typeof rg.fire === 'function') rg.fire('onCheck', { items: [targetW], reference: targetW }, { toServer: true });
+                                } catch (_) {}
+                            }
+
+                            if (win.zAu && typeof win.zAu.send === 'function') {
                                 try {
                                     win.zAu.send(new win.zk.Event(targetW, 'onCheck', { checked: true }, { toServer: true }));
+                                    if (rg) {
+                                        win.zAu.send(new win.zk.Event(rg, 'onCheck', { items: [targetW], reference: targetW }, { toServer: true }));
+                                    }
                                 } catch (_) {}
                             }
                         }
@@ -837,9 +857,81 @@ function getSourceDropdownByLabel(substring) {
 
 function normalizeGenderValue(val) {
     if (!val || typeof val !== 'string') return '';
-    const v = val.trim().toLocaleLowerCase('tr-TR');
-    if (v === 'erkek' || v === 'male' || v === 'e' || v === 'm' || v === 'man' || v === 'boy' || v === '1') return 'Erkek';
-    if (v === 'kadın' || v === 'kadin' || v === 'female' || v === 'k' || v === 'f' || v === 'woman' || v === 'girl' || v === '2') return 'Kadın';
+    const v = val.trim().toLowerCase().replace(/ı/g, 'i').replace(/ý/g, 'y');
+    if (!v) return '';
+
+    if (v === 'k' || v === 'f' || v === '2') return 'Kadın';
+    if (v === 'e' || v === 'm' || v === '1') return 'Erkek';
+    if (v === 'erkek' || v === 'male' || v === 'man' || v === 'boy' || v === 'bay') return 'Erkek';
+    if (v === 'kadin' || v === 'female' || v === 'woman' || v === 'girl' || v === 'bayan') return 'Kadın';
+
+    const femalePattern = /(?:^|[^\p{L}\p{N}])(?:kadin|female|woman|girl|kiz|bayan|femme|женский|женщина|жен)(?:$|[^\p{L}\p{N}])/iu;
+    const malePattern = /(?:^|[^\p{L}\p{N}])(?:erkek|male|man|boy|homme|мужской|мужчина|муж)(?:$|[^\p{L}\p{N}])/iu;
+
+    const isFemale = femalePattern.test(v);
+    const isMale = malePattern.test(v);
+
+    if (isFemale && !isMale) return 'Kadın';
+    if (isMale && !isFemale) return 'Erkek';
+    return '';
+}
+
+function inferGenderFromName(fullName) {
+    if (!fullName || typeof fullName !== 'string') return '';
+    const clean = fullName.trim().toLowerCase().replace(/ı/g, 'i').replace(/ý/g, 'y').replace(/ə/g, 'e');
+    const parts = clean.split(/[\s,._\-\/]+/).filter(Boolean);
+    if (parts.length === 0) return '';
+
+    for (const part of parts) {
+        if (/(?:ova|eva|yewa|yeva|owa|ewa|ovna|evna|kyzy|qizi|gizi|kizi|gyzy|skaya|ckaya|ina)$/i.test(part)) {
+            return 'Kadın';
+        }
+        if (/(?:ovich|evich|oglu|oğlu|ogly|uulu|skiy|sky|cki)$/i.test(part)) {
+            return 'Erkek';
+        }
+    }
+
+    for (const part of parts) {
+        if (/(?:ov|ev|yew|yev|ow|ew)$/i.test(part) && !/(?:ova|eva|yewa|yeva|owa|ewa)$/i.test(part)) {
+            return 'Erkek';
+        }
+    }
+
+    const femaleNames = new Set([
+        'merjen', 'aynur', 'luiza', 'fatima', 'fatma', 'ayse', 'zeynep', 'emine', 'hatice',
+        'meryem', 'mariam', 'maryam', 'zuhra', 'zahra', 'gulnar', 'gulsen', 'aysel',
+        'leyla', 'layla', 'madina', 'medina', 'malika', 'nigora', 'dilnoza', 'shahlo', 'feruza', 'nargiza',
+        'zarina', 'diana', 'elena', 'olga', 'anna', 'anastasia', 'tatyana', 'ekaterina', 'natalia', 'irina',
+        'svetlana', 'marina', 'yulia', 'alina', 'polina', 'daria', 'ksenia', 'yasemin', 'elif', 'ebru',
+        'esra', 'eda', 'gamze', 'tugba', 'seyma', 'hilal', 'busra', 'betul',
+        'rabia', 'kubra', 'merve', 'irem', 'damla', 'duygu', 'selin', 'sinem', 'hande',
+        'ozge', 'pinar', 'burcu', 'tugce', 'asli', 'aylin', 'ceren',
+        'cansu', 'didem', 'dilara', 'ezgi', 'gizem', 'ipek', 'melis', 'melisa', 'nilay', 'nur', 'ozlem',
+        'seda', 'sezen', 'simge', 'yasmin', 'yagmur', 'oguljan', 'ogulkeyik', 'jemal',
+        'gozel', 'guzal', 'shirin', 'bahar', 'gulya', 'gulnora', 'dinara', 'samira', 'amina', 'khadija',
+        'hajar', 'nour', 'sarah', 'sara', 'salma', 'laylo', 'aziza', 'munira', 'marhabo', 'sabina', 'kamila'
+    ]);
+
+    const maleNames = new Set([
+        'ahmet', 'ahmed', 'mehmet', 'mehmed', 'ali', 'mustafa', 'hasan', 'huseyin', 'ibrahim',
+        'ismail', 'osman', 'omer', 'yusuf', 'halil', 'murat', 'murad', 'emre', 'burak', 'can',
+        'cem', 'mert', 'berk', 'kaan', 'batuhan', 'furkan', 'oguz', 'kerem', 'serkan', 'hakan',
+        'tolga', 'volkan', 'onur', 'ufuk', 'serdar', 'erdal', 'erkan', 'baris', 'alper', 'atakan',
+        'bugra', 'cihan', 'deniz', 'dogukan', 'enes', 'eren', 'fatih', 'gokhan',
+        'harun', 'ilker', 'koray', 'levent', 'metin', 'oguzhan', 'samet', 'selim', 'sinan',
+        'tarik', 'ugur', 'umut', 'yasin', 'zafer', 'dovlet', 'dovran', 'maksat', 'merdan',
+        'shatlyk', 'guvanch', 'ruslan', 'timur', 'azamat', 'nurlan', 'eldar', 'sanzhar', 'bekzod', 'jasur',
+        'otabek', 'sherzod', 'dmitry', 'alexander', 'sergey', 'andrey', 'mikhail', 'ivan', 'vladimir',
+        'igor', 'artem', 'nikita', 'pavel', 'mohamed', 'mohammad', 'muhammad', 'mahmoud', 'abdullah',
+        'abdul', 'khalid', 'tariq', 'omar', 'amr', 'ziad', 'karim', 'youssef', 'nazar', 'batyr', 'berdi',
+        'atajan', 'eziz', 'resul', 'allamyrat', 'annamyrat', 'bayram'
+    ]);
+
+    for (const p of parts) {
+        if (femaleNames.has(p)) return 'Kadın';
+        if (maleNames.has(p)) return 'Erkek';
+    }
+
     return '';
 }
 
@@ -884,10 +976,19 @@ function extractGenderFromApply() {
                     const txt = normalizeGenderValue(rendered.innerText || rendered.textContent);
                     if (txt) return txt;
                 }
-                const checkedRadio = container.querySelector('input[type="radio"]:checked');
-                if (checkedRadio) {
-                    const rLbl = document.querySelector(`label[for="${checkedRadio.id}"]`) || checkedRadio.closest('label') || checkedRadio.parentElement;
-                    const txt = normalizeGenderValue(rLbl?.innerText || checkedRadio.value);
+                const allRadios = container.querySelectorAll('input[type="radio"]');
+                for (const radio of allRadios) {
+                    if (radio.checked) {
+                        const rLbl = (radio.id ? document.querySelector(`label[for="${radio.id}"]`) : null)
+                            || radio.closest('label')
+                            || radio.parentElement;
+                        const txt = normalizeGenderValue(rLbl?.innerText || radio.value);
+                        if (txt) return txt;
+                    }
+                }
+                const activeBtn = container.querySelector('.active input[type="radio"], input[type="radio"][checked], [aria-checked="true"], .btn.active, label.active');
+                if (activeBtn) {
+                    const txt = normalizeGenderValue(activeBtn.innerText || activeBtn.textContent || activeBtn.value);
                     if (txt) return txt;
                 }
                 const inp = container.querySelector('input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"])');
@@ -895,12 +996,20 @@ function extractGenderFromApply() {
                     const txt = normalizeGenderValue(inp.value);
                     if (txt) return txt;
                 }
+                const dataCells = container.querySelectorAll('td, dd, .value, .col-value');
+                for (const cell of dataCells) {
+                    const txt = normalizeGenderValue(cell.innerText || cell.textContent);
+                    if (txt) return txt;
+                }
                 const clone = container.cloneNode(true);
                 const labelsInClone = clone.querySelectorAll('label, dt, th, strong');
                 for (const l of labelsInClone) l.remove();
                 const containerText = (clone.innerText || clone.textContent || '');
-                if (/erkek/i.test(containerText)) return 'Erkek';
-                if (/kadın|kadin|female/i.test(containerText)) return 'Kadın';
+                const normContainer = containerText.trim().toLowerCase().replace(/ı/g, 'i').replace(/ý/g, 'y');
+                const hasFemale = /(?:^|[^\p{L}\p{N}])(?:kadin|female|woman|girl|kiz|bayan|femme)(?:$|[^\p{L}\p{N}])/iu.test(normContainer);
+                const hasMale = /(?:^|[^\p{L}\p{N}])(?:erkek|male|man|boy|homme)(?:$|[^\p{L}\p{N}])/iu.test(normContainer);
+                if (hasFemale && !hasMale) return 'Kadın';
+                if (hasMale && !hasFemale) return 'Erkek';
             }
         }
     }
@@ -1599,12 +1708,18 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
             }
 
             const formSignals = [
-                findTargetElementByFuzzyLabel('Anne Adı', 'input'),
-                findTargetElementByFuzzyLabel('Baba Adı', 'input'),
+                findTargetElementByFuzzyLabels(['Anne Adı', 'Ana Adı', 'Anne İsmi', 'Ana İsmi', 'Mother Name', "Mother's Name"], 'input'),
+                findTargetElementByFuzzyLabels(['Baba Adı', 'Baba İsmi', 'Father Name', "Father's Name"], 'input'),
+                findTargetElementByFuzzyLabels(['Adı', 'Ad', 'Öğrenci Adı', 'First Name', 'Given Name'], 'input'),
+                findTargetElementByFuzzyLabels(['Soyadı', 'Soyad', 'Öğrenci Soyadı', 'Last Name', 'Surname'], 'input'),
+                findTargetElementByFuzzyLabels(['Doğum Tarihi', 'Date of Birth', 'Birth Date'], 'input'),
                 findBelgeNoInMainPanel(),
-                findTargetElementByFuzzyLabel('Uyruğu', 'select'),
-                findTargetElementByFuzzyLabel('Cinsiyet', 'input')
+                findTargetElementByFuzzyLabels(['Uyruğu', 'Uyruk', 'Nationality'], 'select') || findTargetElementByFuzzyLabels(['Uyruğu', 'Uyruk', 'Nationality'], 'input'),
+                findTargetElementByFuzzyLabels(['Cinsiyet', 'Cinsiyeti', 'Gender'], 'input')
             ].filter(Boolean).length;
+            const hasPhotoInput = Boolean(findYoksisFileInput(findPhotoUploadButton()));
+            const hasPhotoBtn = Boolean(findPhotoUploadButton());
+            const hasPhotoControl = hasPhotoInput || hasPhotoBtn;
             const fingerprint = getYoksisFormFingerprint();
             const formChangedAfterSearch = !afterFingerprint || fingerprint !== afterFingerprint;
             const domChangedAfterSearch = afterDomRevision === null || yoksisDomRevision > afterDomRevision;
@@ -1621,11 +1736,11 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
             stableChecks = fingerprint && fingerprint === previousFingerprint ? stableChecks + 1 : 0;
             previousFingerprint = fingerprint;
 
-            const hasBasicControls = formSignals >= 2;
+            const hasBasicControls = formSignals >= 2 || (formSignals >= 1 && hasPhotoControl);
 
             // Form temel alanlara ve yeni sonuç kanıtına sahipse:
-            // - En az iki öğrenci alanı görünür olmalı
-            // - Dört ardışık sabit kontrol (~320ms) ve boşta ZK durumu aranmalı
+            // - En az iki öğrenci alanı veya bir alan + fotoğraf kontrolü görünür olmalı
+            // - İki ardışık sabit kontrol (~160ms) ve boşta ZK durumu aranmalı
             if (hasBasicControls && hasFreshSearchResult && semanticMatch !== false
                 && stableChecks >= 2 && !isZkProcessing()) {
                 cleanup();
@@ -1686,6 +1801,14 @@ function findBelgeNoInMainPanel() {
                     break;
                 }
                 prevTd = prevTd.previousElementSibling;
+            }
+
+            if (!foundLabel) {
+                const row = target.closest('tr');
+                const rowText = normalize(row && (row.innerText || row.textContent) || '');
+                if (rowText.includes(searchWord) && !rowText.includes('pasaport') && !rowText.includes(normalize('Uyruk Kimlik No'))) {
+                    foundLabel = true;
+                }
             }
 
             if (foundLabel) {
@@ -2760,12 +2883,17 @@ function extractApplyProfileData() {
     const rawExpiryDate = (expiryDateInput ? expiryDateInput.value : '') || fallbackData.expiryDate || '';
     const uyruk = getSourceDropdownByLabel('Uyruk') || fallbackData.uyruk || '';
     const dogumUlkesi = getSourceDropdownByLabel('Doğduğunuz') || getSourceDropdownByLabel('Doğum') || fallbackData.dogumUlkesi || '';
-    const cinsiyet = extractGenderFromApply() || getSourceDropdownByLabel('Cinsiyet') || fallbackData.cinsiyet || '';
+    let cinsiyet = extractGenderFromApply() || getSourceDropdownByLabel('Cinsiyet') || fallbackData.cinsiyet || '';
+    cinsiyet = normalizeGenderValue(cinsiyet);
 
     const normalizedBirthDate = normalizeApplyBirthDate(rawBirthDate);
     const normalizedIssueDate = normalizeApplyBirthDate(rawIssueDate);
     const normalizedExpiryDate = normalizeApplyBirthDate(rawExpiryDate);
     const fullName = [firstName, lastName].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+
+    if (!cinsiyet) {
+        cinsiyet = inferGenderFromName(fullName || fallbackData.fullName || '');
+    }
 
     return {
         firstName: firstName.trim(),
@@ -2838,16 +2966,22 @@ function watchForDocumentLinks(requestId) {
         const safeKabulId = isValidYoksisId(links.kabulId) ? links.kabulId : '';
         if (links.passportDocumentUrl || links.acceptanceLetterUrl || safeKabulId) {
             clearInterval(intervalId);
+            const profileData = extractApplyProfileData();
+            if (!profileData.passportNo) delete profileData.passportNo;
+            if (!profileData.pasaportNo) delete profileData.pasaportNo;
             sendApplyEvent('STUDENT_DOCUMENTS_FOUND', requestId, {
-                data: { ...extractApplyProfileData(), ...links, kabulId: safeKabulId }
+                data: { ...profileData, ...links, kabulId: safeKabulId }
             });
             return;
         }
 
         if (Date.now() >= deadline) {
             clearInterval(intervalId);
+            const profileData = extractApplyProfileData();
+            if (!profileData.passportNo) delete profileData.passportNo;
+            if (!profileData.pasaportNo) delete profileData.pasaportNo;
             sendApplyEvent('STUDENT_DOCUMENTS_FOUND', requestId, {
-                data: { ...extractApplyProfileData(), ...links, kabulId: safeKabulId }
+                data: { ...profileData, ...links, kabulId: safeKabulId }
             });
         }
     }, 400);
@@ -3709,21 +3843,28 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 return;
             }
 
-            // Arama sonrası YÖKSİS öğrenci paneli ve fotoğraf bileşeni gecikmeli
-            // gelebilir. Tek input görünür görünmez devam etmek eksik aktarım
-            // ürettiği için formun kararlı hale gelmesini daha uzun bekle.
-            try {
-                await waitForYoksisForm(10000);
-            } catch (_) {
-                // Form zaten açık veya süre aşıldıysa mevcut elemanlarla devam et
+            const checkHasFormControl = () => Boolean(
+                findTargetElementByFuzzyLabels(['Anne Adı', 'Ana Adı', 'Anne İsmi', 'Ana İsmi', 'Mother Name', "Mother's Name"], 'input')
+                || findTargetElementByFuzzyLabels(['Baba Adı', 'Baba İsmi', 'Father Name', "Father's Name"], 'input')
+                || findTargetElementByFuzzyLabels(['Adı', 'Ad', 'Öğrenci Adı', 'First Name', 'Given Name'], 'input')
+                || findTargetElementByFuzzyLabels(['Soyadı', 'Soyad', 'Öğrenci Soyadı', 'Last Name', 'Surname'], 'input')
+                || findBelgeNoInMainPanel()
+                || findTargetElementByFuzzyLabels(['Uyruğu', 'Uyruk', 'Nationality'], 'select')
+                || findTargetElementByFuzzyLabels(['Uyruğu', 'Uyruk', 'Nationality'], 'input')
+                || findPhotoUploadButton()
+            );
+
+            // Form henüz ekranda değilse (arama sonrası hemen çağrıldıysa) formun açılmasını bekle.
+            // Form zaten ekrandaysa gereksiz 10 saniye beklemeden anında doldurmaya geç.
+            if (!checkHasFormControl()) {
+                try {
+                    await waitForYoksisForm(4000);
+                } catch (_) {
+                    // Süre aşıldıysa mevcut elemanlarla devam et
+                }
             }
 
-            const hasFormControl = Boolean(
-                findTargetElementByFuzzyLabel('Anne Adı', 'input')
-                || findTargetElementByFuzzyLabel('Baba Adı', 'input')
-                || findBelgeNoInMainPanel()
-                || findTargetElementByFuzzyLabel('Uyruğu', 'select')
-            );
+            const hasFormControl = checkHasFormControl();
             if (!hasFormControl) {
                 sendResponse({
                     success: false,
@@ -3763,10 +3904,10 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 if (recordField('Soyadı', lastNameVal, await simulateInput(soyadiInput, lastNameVal))) successCount++;
             }
 
-            const anneAdiInput = findTargetElementByFuzzyLabel('Anne Adı', 'input');
+            const anneAdiInput = findTargetElementByFuzzyLabels(['Anne Adı', 'Ana Adı', 'Anne İsmi', 'Ana İsmi', "Mother's Name", 'Mother Name'], 'input');
             if (recordField('Anne Adı', data.anneAdi, await simulateInput(anneAdiInput, data.anneAdi))) successCount++;
 
-            const babaAdiInput = findTargetElementByFuzzyLabel('Baba Adı', 'input');
+            const babaAdiInput = findTargetElementByFuzzyLabels(['Baba Adı', 'Baba İsmi', "Father's Name", 'Father Name'], 'input');
             if (recordField('Baba Adı', data.babaAdi, await simulateInput(babaAdiInput, data.babaAdi))) successCount++;
 
             const uyrukSelect = findTargetElementByFuzzyLabel('Uyruğu', 'select');

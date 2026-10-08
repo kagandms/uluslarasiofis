@@ -1,3 +1,5 @@
+import { requirePrintRequestAccess } from './services/print-access.js';
+import { readStaffPrintUatStatus, uploadPrintUatDocument } from './routes/print-uat-routes.js';
 import { handleScannerRequest, handleStaffScannerRequest, prioritizeStaffDocumentScan } from './routes/scanner-routes.js';
 import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
 import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
@@ -24,6 +26,10 @@ import { handleStaffApplicationDeletion } from './routes/staffApplicationDeletio
 import { backupD1ToR2, getLatestBackupMetadata } from './services/d1BackupService.js';
 import { requireStaff } from './auth/staffAuth.js';
 import { requireMethod } from './routes/shared.js';
+import { createPublicPrintUploadIntent, finalizePublicPrintUpload, readPublicPrintJobStatus,
+    readPublicPrintStatus } from './routes/printRoutes.js';
+import { handlePrinterRequest, readStaffPrintStatus } from './routes/printerRoutes.js';
+import { runPrintCleanup } from './services/printCleanupService.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -57,6 +63,17 @@ function withMetaWhatsAppProvider(environment) {
 
 async function routeApi(request, environment, requestId) {
     const { pathname } = new URL(request.url);
+    await requirePrintRequestAccess(request, environment);
+    if (pathname.startsWith('/api/printer/')) return handlePrinterRequest(request, environment);
+    if (pathname === '/api/public/print/status') return readPublicPrintStatus(request, environment);
+    if (pathname === '/api/staff/print/uat/status') return readStaffPrintUatStatus(request, environment);
+    const uatUploadMatch = pathname.match(/^\/api\/public\/print\/jobs\/([A-Za-z0-9_-]{1,64})\/upload$/);
+    if (uatUploadMatch) return uploadPrintUatDocument(request, environment, uatUploadMatch[1]);
+    if (pathname === '/api/public/print/upload-intents') return createPublicPrintUploadIntent(request, environment);
+    if (pathname === '/api/public/print/jobs/status') return readPublicPrintJobStatus(request, environment);
+    const printFinalizeMatch = pathname.match(/^\/api\/public\/print\/jobs\/([A-Za-z0-9_-]{1,64})\/finalize$/);
+    if (printFinalizeMatch) return finalizePublicPrintUpload(request, environment, printFinalizeMatch[1]);
+    if (pathname === '/api/staff/print/status') return readStaffPrintStatus(request, environment);
     if (pathname.startsWith('/api/scanner/')) return handleScannerRequest(request, environment);
     const documentScanMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/scan$/);
     if (documentScanMatch) {
@@ -261,7 +278,18 @@ const worker = {
             return errorResponse(requestId, apiError.status, apiError.code, apiError.message, apiError.retryable);
         }
     },
-    async scheduled(_controller, environment) {
+    async scheduled(controller, environment) {
+        if (controller.cron === '* * * * *') {
+            if (environment.DB && environment.PRINT_FILES) {
+                try {
+                    await runPrintCleanup(environment);
+                } catch (cleanupError) {
+                    console.error('[Scheduled] Print cleanup failed.', { errorName: cleanupError?.name || 'UnknownError' });
+                    throw cleanupError;
+                }
+            }
+            return;
+        }
         if (environment.DB && environment.DOCUMENTS && typeof environment.DOCUMENTS.put === 'function') {
             try {
                 await backupD1ToR2({

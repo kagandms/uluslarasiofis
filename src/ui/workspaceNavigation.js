@@ -4,7 +4,8 @@ const VIEW_TITLES = {
     ykn: 'YKN',
     cover: 'Kapak Hazırla',
     teblig: 'Tebliğ Bul',
-    documents: 'Belgeler'
+    documents: 'Belgeler',
+    print: 'Yazdırma'
 };
 
 function getWorkspaceElements() {
@@ -25,13 +26,15 @@ function getViewPanel(viewName) {
 }
 
 function focusView(viewName) {
-    const targetId = viewName === 'teblig'
+    const targetId = viewName === 'print'
+        ? 'print-status-title'
+        : (viewName === 'teblig'
         ? 'tebligat-search-input'
         : (viewName === 'ykn'
             ? 'ykn-passport-input'
             : (viewName === 'archive'
                 ? (document.getElementById('staff-archive-search') ? 'staff-archive-search' : 'archive-title')
-                : `${viewName}-title`));
+                : `${viewName}-title`)));
     document.getElementById(targetId)?.focus();
 }
 

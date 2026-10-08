@@ -588,6 +588,66 @@ test('YÖKSİS fill reports photo upload truthfully and fills passport fields', 
     }
 });
 
+test('YÖKSİS form readiness recognizes Ana Adı and photo button immediately without 10s delay', async () => {
+    const harness = createContentHarness(`
+        <table>
+            <tr><td>Ana Adı</td><td><input id="mother-name"></td></tr>
+            <tr><td>Baba Adı</td><td><input id="father-name"></td></tr>
+            <tr><td>Fotoğraf Adı</td><td><button id="photo-upload">Fotoğraf Yükle</button><input id="photo-file" type="file"></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    makeFileInputWritable(harness.dom.window.document.getElementById('photo-file'));
+
+    const start = Date.now();
+    try {
+        const response = await harness.send({
+            action: 'WAIT_YOKSIS_FORM',
+            timeoutMs: 5000,
+            requestId: 'test-fast-ana-adi'
+        });
+
+        const elapsed = Date.now() - start;
+        assert.equal(response.success, true);
+        assert.equal(response.formReady, true);
+        assert.ok(elapsed < 1000, `Expected fast resolution under 1000ms, took ${elapsed}ms`);
+    } finally {
+        harness.close();
+    }
+});
+
+test('YÖKSİS fillRemainingData fills open form immediately without 10s timeout', async () => {
+    const harness = createContentHarness(`
+        <table>
+            <tr><td>Ana Adı</td><td><input id="mother-name"></td></tr>
+            <tr><td>Baba Adı</td><td><input id="father-name"></td></tr>
+            <tr><td>Belge No</td><td><input id="document-number" placeholder="Belge No"></td></tr>
+            <tr><td>Fotoğraf Adı</td><td><button id="photo-upload">Fotoğraf Yükle</button><input id="photo-file" type="file"></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    makeFileInputWritable(harness.dom.window.document.getElementById('photo-file'));
+
+    const start = Date.now();
+    try {
+        const response = await harness.send({
+            action: 'fillRemainingData',
+            data: {
+                anneAdi: 'FATMA',
+                babaAdi: 'MEHMET',
+                pasaportNo: 'A12345678'
+            }
+        });
+
+        const elapsed = Date.now() - start;
+        assert.equal(response.success, true);
+        assert.equal(harness.dom.window.document.getElementById('mother-name').value, 'FATMA');
+        assert.equal(harness.dom.window.document.getElementById('father-name').value, 'MEHMET');
+        assert.equal(harness.dom.window.document.getElementById('document-number').value, 'A12345678');
+        assert.ok(elapsed < 1000, `Expected fast fill under 1000ms, took ${elapsed}ms`);
+    } finally {
+        harness.close();
+    }
+});
+
 test('Apply document discovery returns real acceptance and passport candidates', async () => {
     const harness = createContentHarness(`
         <input name="mothersName" value="ANNE">

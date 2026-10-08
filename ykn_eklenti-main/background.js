@@ -1357,13 +1357,14 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
                             }
 
+                            try { targetRadio.checked = false; } catch (_) {}
+                            try { targetRadio.focus(); } catch (_) {}
+                            try { targetRadio.click(); } catch (_) {}
                             targetRadio.checked = true;
                             if (targetWrapper && targetWrapper.classList) {
                                 targetWrapper.classList.add('z-radio-checked');
                             }
 
-                            try { targetRadio.focus(); } catch (_) {}
-                            try { targetRadio.click(); } catch (_) {}
                             if (targetLabel) {
                                 try { targetLabel.click(); } catch (_) {}
                             } else if (targetWrapper) {
@@ -1386,26 +1387,47 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                             try { oppW.setChecked(false); } catch (_) {}
                                         }
                                         oppW._checked = false;
-                                        if (oppW._lastValue !== undefined) oppW._lastValue = false;
+                                        oppW._lastValue = false;
                                     }
 
                                     if (targetW) {
+                                        targetW._lastValue = null;
+                                        targetW._lastChg = null;
+
                                         if (typeof targetW.setChecked === 'function') {
                                             try { targetW.setChecked(true); } catch (_) {}
                                         }
                                         targetW._checked = true;
-                                        if (targetW._lastValue !== undefined) targetW._lastValue = true;
 
                                         var onCheckSent = false;
+                                        if (typeof targetW.fireOnCheck_ === 'function') {
+                                            try {
+                                                targetW.fireOnCheck_(true);
+                                                onCheckSent = true;
+                                            } catch (_) {}
+                                        }
                                         if (typeof targetW.fire === 'function') {
                                             try {
                                                 targetW.fire('onCheck', { checked: true }, { toServer: true });
                                                 onCheckSent = true;
                                             } catch (_) {}
                                         }
-                                        if (!onCheckSent && win.zAu && typeof win.zAu.send === 'function') {
+
+                                        var rg = (typeof targetW.getRadiogroup === 'function') ? targetW.getRadiogroup() : null;
+                                        if (rg) {
+                                            try {
+                                                if (typeof rg.setSelectedItem === 'function') rg.setSelectedItem(targetW);
+                                                if (typeof rg.fireOnCheck_ === 'function') rg.fireOnCheck_(targetW);
+                                                if (typeof rg.fire === 'function') rg.fire('onCheck', { items: [targetW], reference: targetW }, { toServer: true });
+                                            } catch (_) {}
+                                        }
+
+                                        if (win.zAu && typeof win.zAu.send === 'function') {
                                             try {
                                                 win.zAu.send(new win.zk.Event(targetW, 'onCheck', { checked: true }, { toServer: true }));
+                                                if (rg) {
+                                                    win.zAu.send(new win.zk.Event(rg, 'onCheck', { items: [targetW], reference: targetW }, { toServer: true }));
+                                                }
                                             } catch (_) {}
                                         }
                                     }
@@ -1421,11 +1443,13 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                     }
 
                     function fillMaritalRadio(docs, value, result) {
-                        if (value === undefined || value === null || String(value).trim() === '') return;
+                        if (value === undefined || value === null || String(value).trim() === '') value = 'Bekar';
                         var normVal = norm(value);
                         var isSingle = normVal === 'bekar' || normVal === 'single' || normVal === 'b' || normVal === '1';
                         var isMarried = normVal === 'evli' || normVal === 'married' || normVal === 'e' || normVal === '2';
-                        if (!isSingle && !isMarried) return;
+                        if (!isSingle && !isMarried) {
+                            isSingle = true;
+                        }
 
                         var targetRadio = null;
                         var oppRadio = null;
@@ -1530,13 +1554,14 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
                             }
 
+                            try { targetRadio.checked = false; } catch (_) {}
+                            try { targetRadio.focus(); } catch (_) {}
+                            try { targetRadio.click(); } catch (_) {}
                             targetRadio.checked = true;
                             if (targetWrapper && targetWrapper.classList) {
                                 targetWrapper.classList.add('z-radio-checked');
                             }
 
-                            try { targetRadio.focus(); } catch (_) {}
-                            try { targetRadio.click(); } catch (_) {}
                             if (targetLabel) {
                                 try { targetLabel.click(); } catch (_) {}
                             } else if (targetWrapper) {
@@ -1559,26 +1584,47 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                             try { oppW.setChecked(false); } catch (_) {}
                                         }
                                         oppW._checked = false;
-                                        if (oppW._lastValue !== undefined) oppW._lastValue = false;
+                                        oppW._lastValue = false;
                                     }
 
                                     if (targetW) {
+                                        targetW._lastValue = null;
+                                        targetW._lastChg = null;
+
                                         if (typeof targetW.setChecked === 'function') {
                                             try { targetW.setChecked(true); } catch (_) {}
                                         }
                                         targetW._checked = true;
-                                        if (targetW._lastValue !== undefined) targetW._lastValue = true;
 
                                         var onCheckSent = false;
+                                        if (typeof targetW.fireOnCheck_ === 'function') {
+                                            try {
+                                                targetW.fireOnCheck_(true);
+                                                onCheckSent = true;
+                                            } catch (_) {}
+                                        }
                                         if (typeof targetW.fire === 'function') {
                                             try {
                                                 targetW.fire('onCheck', { checked: true }, { toServer: true });
                                                 onCheckSent = true;
                                             } catch (_) {}
                                         }
-                                        if (!onCheckSent && win.zAu && typeof win.zAu.send === 'function') {
+
+                                        var rg = (typeof targetW.getRadiogroup === 'function') ? targetW.getRadiogroup() : null;
+                                        if (rg) {
+                                            try {
+                                                if (typeof rg.setSelectedItem === 'function') rg.setSelectedItem(targetW);
+                                                if (typeof rg.fireOnCheck_ === 'function') rg.fireOnCheck_(targetW);
+                                                if (typeof rg.fire === 'function') rg.fire('onCheck', { items: [targetW], reference: targetW }, { toServer: true });
+                                            } catch (_) {}
+                                        }
+
+                                        if (win.zAu && typeof win.zAu.send === 'function') {
                                             try {
                                                 win.zAu.send(new win.zk.Event(targetW, 'onCheck', { checked: true }, { toServer: true }));
+                                                if (rg) {
+                                                    win.zAu.send(new win.zk.Event(rg, 'onCheck', { items: [targetW], reference: targetW }, { toServer: true }));
+                                                }
                                             } catch (_) {}
                                         }
                                     }
@@ -1634,8 +1680,8 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         var issuingAuthority = data.verenMakam || data.issuingAuthority || '';
                         var birthCountry = data.dogumUlkesi || data.uyruk || '';
 
-                        fillTextByLabels(allDocs, ['Anne Adı', 'Mother Name', "Mother's Name"], data.anneAdi, fillResult, 'Anne Adı', false);
-                        fillTextByLabels(allDocs, ['Baba Adı', 'Father Name', "Father's Name"], data.babaAdi, fillResult, 'Baba Adı', false);
+                        fillTextByLabels(allDocs, ['Anne Adı', 'Ana Adı', 'Anne İsmi', 'Ana İsmi', 'Mother Name', "Mother's Name"], data.anneAdi, fillResult, 'Anne Adı', false);
+                        fillTextByLabels(allDocs, ['Baba Adı', 'Baba İsmi', 'Father Name', "Father's Name"], data.babaAdi, fillResult, 'Baba Adı', false);
                         fillSelectByLabels(allDocs, ['Uyruğu', 'Nationality'], data.uyruk, fillResult, 'Uyruğu');
                         fillSelectByLabels(allDocs, ['Doğum Uyruğu', 'Birth Nationality'], data.uyruk, fillResult, 'Doğum Uyruğu');
                         fillSelectByLabels(allDocs, ['Doğum Yeri Ülkesi', 'Birth Country', 'Born Country'], birthCountry, fillResult, 'Doğum Yeri Ülkesi');
@@ -1695,6 +1741,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             }
 
                             if (combined.indexOf('anneadi') !== -1 ||
+                                combined.indexOf('anaadi') !== -1 ||
                                 combined.indexOf('babaadi') !== -1 ||
                                 combined.indexOf('dogumyeriaciklama') !== -1 ||
                                 combined.indexOf('verenmakam') !== -1 ||
