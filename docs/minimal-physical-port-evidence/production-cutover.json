@@ -1,0 +1,30 @@
+{
+  "status": "PHYSICAL FEATURE DEPLOY SUCCESS — GATE OFF",
+  "feature_commit": "cbc57d3809f7aaa71f4aebadd8238fc5dceece74",
+  "deployment_id": "5c42f99c-0b66-48b9-a7f5-5b9bc0dba6fe",
+  "worker_version_id": "28dcac23-abb7-446c-9c7d-f0889a5c627f",
+  "migration": "0018_staff_document_security.sql",
+  "migration_status": "APPLIED_AND_VERIFIED",
+  "gate": "off",
+  "PRINT_ENABLED": "true",
+  "protected_bindings_unchanged": true,
+  "cron_unchanged": true,
+  "agents_unchanged_from_offline_baseline": true,
+  "asset_smoke_count": 22,
+  "backup_path": "/Users/kagansmtdms/.codex/secure-backups/physical-cutover-20261008T180221Z/production-pre0018.sql",
+  "backup_sha256": "9f73977a52db5afe4fffc4b86b459bd2c32c672b5a05057fa01c0aabf0070b84",
+  "node_tests": {
+    "total": 741,
+    "pass": 740,
+    "fail": 0,
+    "skip": 1
+  },
+  "browser_smoke": [
+    "home rendered",
+    "online application wizard rendered",
+    "staff login rendered, no console errors"
+  ],
+  "staff_authenticated_crud_uat": false,
+  "rollback_rehearsal": "Initial smoke harness lacked browser headers; existing Cloudflare 1010 policy caused 403. Previous Worker restored, test headers corrected, accepted version restored to 100%, all final checks passed.",
+  "staging_touched": false
+}
