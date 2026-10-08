@@ -1,0 +1,355 @@
+{
+  "review_base": "6123ec3",
+  "previous_feature_files": 57,
+  "minimal_feature_files": 53,
+  "removed_feature_files": [
+    "src/server/repositories/d1/combined-scanner-repository.js",
+    "src/server/repositories/d1/staff-document-scanner-repository.js",
+    "src/server/routes/scanner-routes.js",
+    "test/physical-scanner-real.test.js"
+  ],
+  "entries": [
+    {
+      "file": "migrations/0011_mobile_document_transfers.sql",
+      "decision": "retained",
+      "category": "migration-history",
+      "reason": "Already-applied original production physical/QR schema history; unchanged and not reapplied."
+    },
+    {
+      "file": "migrations/0012_physical_intakes.sql",
+      "decision": "retained",
+      "category": "migration-history",
+      "reason": "Already-applied original production physical/QR schema history; unchanged and not reapplied."
+    },
+    {
+      "file": "migrations/0013_physical_intake_review.sql",
+      "decision": "retained",
+      "category": "migration-history",
+      "reason": "Already-applied original production physical/QR schema history; unchanged and not reapplied."
+    },
+    {
+      "file": "migrations/0018_staff_document_security.sql",
+      "decision": "retained",
+      "category": "minimal-migration",
+      "reason": "Only mobile upload state, SHA-256 and rate-limit bookkeeping; no scanner schema."
+    },
+    {
+      "file": "mobile-transfer/index.html",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Staging phone camera, gallery and upload page entry."
+    },
+    {
+      "file": "package-lock.json",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Locked dependency resolution corresponding to package.json."
+    },
+    {
+      "file": "package.json",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "QR rendering dependency and test/build wiring."
+    },
+    {
+      "file": "scripts/check-physical-production-migration.mjs",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Read-only exact-filename migration history and partial/obsolete schema drift check."
+    },
+    {
+      "file": "src/config/mobile-transfer-policy.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Central staging physical limits/build availability configuration for mobile-transfer-policy."
+    },
+    {
+      "file": "src/config/physical-document-limits.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Central staging physical limits/build availability configuration for physical-document-limits."
+    },
+    {
+      "file": "src/config/physical-intake-policy.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Central staging physical limits/build availability configuration for physical-intake-policy."
+    },
+    {
+      "file": "src/mobile-transfer/main.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Existing staging phone transfer page behavior/style retained."
+    },
+    {
+      "file": "src/mobile-transfer/mobile-transfer.css",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Existing staging phone transfer page behavior/style retained."
+    },
+    {
+      "file": "src/server/config/physical-intake-gate.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Previously authorized server OFF/UAT/session allow gate; temporary schema readiness."
+    },
+    {
+      "file": "src/server/domain/jpeg-container-policy.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Reject malformed, concatenated or trailing-content JPEG uploads."
+    },
+    {
+      "file": "src/server/domain/physical-intake-policy.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Validate independent physical record identity, versions and review transitions without verdicts."
+    },
+    {
+      "file": "src/server/repositories/d1/combined-scanner-repository.js",
+      "decision": "removed-from-feature-diff",
+      "category": "runtime-build",
+      "reason": "Removed: physical/online combined scanner dispatch."
+    },
+    {
+      "file": "src/server/repositories/d1/physical-intake-repository.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Physical D1 query, versioned edits and status/soft-delete operations."
+    },
+    {
+      "file": "src/server/repositories/d1/physical-registration-repository.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Atomic physical record/PDF registration with audit event."
+    },
+    {
+      "file": "src/server/repositories/d1/staff-document-scanner-repository.js",
+      "decision": "removed-from-feature-diff",
+      "category": "runtime-build",
+      "reason": "Removed: physical/mobile queue, leases and verdict writes."
+    },
+    {
+      "file": "src/server/routes/mobile-photo-upload.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Bounded JPEG validation and immutable/idempotent D1-before-R2 upload."
+    },
+    {
+      "file": "src/server/routes/mobile-transfer-routes.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "One-use QR claim, owning-PC import/ack, TTL and private-object cleanup."
+    },
+    {
+      "file": "src/server/routes/mobile-transfer-security.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Active PC owner/session checks and atomic claim/upload rate limits."
+    },
+    {
+      "file": "src/server/routes/physical-access-routes.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Staff gate status and non-bearer selected-PC candidate endpoint."
+    },
+    {
+      "file": "src/server/routes/physical-intake-routes.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Independent staff-only physical query/detail/review/restore API."
+    },
+    {
+      "file": "src/server/routes/physical-pdf-routes.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Parse bounded PDFs, save revisions and authorized private download/edit/delete."
+    },
+    {
+      "file": "src/server/routes/physical-registration-routes.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Validate and atomically register physical metadata plus initial PDF."
+    },
+    {
+      "file": "src/server/routes/scanner-routes.js",
+      "decision": "removed-from-feature-diff",
+      "category": "runtime-build",
+      "reason": "Restored byte-identical production route: no supplemental repository argument."
+    },
+    {
+      "file": "src/server/worker.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Route physical/phone APIs and expire temporary objects; original scanner dispatch preserved."
+    },
+    {
+      "file": "src/services/mobile-transfer-client.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Same-origin QR transport client and error handling."
+    },
+    {
+      "file": "src/services/optimize-document-image.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Canvas image normalization, orientation and compression before sending JPEG."
+    },
+    {
+      "file": "src/services/pdfMergerService.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Append selected photos/files to existing PDF pages and preserve page order."
+    },
+    {
+      "file": "src/services/split-pdf-pages.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Load saved PDF pages into the existing physical page editor."
+    },
+    {
+      "file": "src/staff/application-queue-table.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Reusable existing staging physical record table/pagination presentation."
+    },
+    {
+      "file": "src/staff/main.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Mount the physical workspace alongside unchanged online workspace."
+    },
+    {
+      "file": "src/staff/physical-form-ocr.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Existing staging physical form ocr flow preserved with production integration."
+    },
+    {
+      "file": "src/staff/physical-intake-client.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Existing staging physical intake client flow preserved with production integration."
+    },
+    {
+      "file": "src/staff/physical-intake-manager.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Existing staging physical intake manager flow preserved with production integration."
+    },
+    {
+      "file": "src/staff/physical-intake-view.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Existing staging physical intake view flow preserved with production integration."
+    },
+    {
+      "file": "src/staff/physical-intake.css",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Existing staging physical intake flow preserved with production integration."
+    },
+    {
+      "file": "src/ui/mobile-transfer-panel.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Byte-identical staging QR panel: receive phone images into the owning PDF editor."
+    },
+    {
+      "file": "src/ui/pdfMergerModal.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Existing production merger integration with staging physical save/import actions."
+    },
+    {
+      "file": "src/ui/staff-modal.css",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Existing staff PDF editor styling required for the physical integration."
+    },
+    {
+      "file": "src/ui/workspaceNavigation.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Online/Physical chooser navigation with existing print navigation retained."
+    },
+    {
+      "file": "test/notificationMigration.test.js",
+      "decision": "retained",
+      "category": "test",
+      "reason": "Regression coverage or synthetic fixture for notificationMigration.test."
+    },
+    {
+      "file": "test/physical-gate.test.js",
+      "decision": "retained",
+      "category": "test",
+      "reason": "Regression coverage or synthetic fixture for physical gate.test."
+    },
+    {
+      "file": "test/physical-migration-safety.test.js",
+      "decision": "retained",
+      "category": "test",
+      "reason": "Regression coverage or synthetic fixture for physical migration safety.test."
+    },
+    {
+      "file": "test/physical-pdf-editor.test.js",
+      "decision": "retained",
+      "category": "test",
+      "reason": "Regression coverage or synthetic fixture for physical pdf editor.test."
+    },
+    {
+      "file": "test/physical-port-fixtures.js",
+      "decision": "retained",
+      "category": "test",
+      "reason": "Regression coverage or synthetic fixture for physical port fixtures."
+    },
+    {
+      "file": "test/physical-port-native.test.js",
+      "decision": "retained",
+      "category": "test",
+      "reason": "Regression coverage or synthetic fixture for physical port native.test."
+    },
+    {
+      "file": "test/physical-port-navigation.test.js",
+      "decision": "retained",
+      "category": "test",
+      "reason": "Regression coverage or synthetic fixture for physical port navigation.test."
+    },
+    {
+      "file": "test/physical-port-selection.test.js",
+      "decision": "retained",
+      "category": "test",
+      "reason": "Regression coverage or synthetic fixture for physical port selection.test."
+    },
+    {
+      "file": "test/physical-port.test.js",
+      "decision": "retained",
+      "category": "test",
+      "reason": "Regression coverage or synthetic fixture for physical port.test."
+    },
+    {
+      "file": "test/physical-scanner-real.test.js",
+      "decision": "removed-from-feature-diff",
+      "category": "test",
+      "reason": "Removed: acceptance test for the cancelled physical scanner architecture."
+    },
+    {
+      "file": "vite.config.js",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Include phone page and physical feature entry in production build."
+    },
+    {
+      "file": "wrangler.jsonc",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Production default OFF feature gate; print settings unchanged."
+    },
+    {
+      "file": "yetkili/index.html",
+      "decision": "retained",
+      "category": "runtime-build",
+      "reason": "Online/Physical choice and physical workspace host."
+    }
+  ]
+}

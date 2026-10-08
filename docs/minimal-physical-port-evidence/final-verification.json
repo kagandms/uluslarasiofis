@@ -1,0 +1,21 @@
+{
+  "status": "MINIMAL PHYSICAL FEATURE PORT READY",
+  "feature_files": 53,
+  "staging_ui_identical": [
+    "src/mobile-transfer/main.js",
+    "src/ui/mobile-transfer-panel.js",
+    "src/staff/physical-intake-view.js"
+  ],
+  "node": {
+    "total": 741,
+    "pass": 740,
+    "fail": 0,
+    "skip": 1
+  },
+  "production_build_and_dry_run_exit": 0,
+  "production_deploy": false,
+  "production_migration": false,
+  "physical_scanner_queue": false,
+  "physical_clean_verdict_required": false,
+  "fake_clean_verdict_written": false
+}

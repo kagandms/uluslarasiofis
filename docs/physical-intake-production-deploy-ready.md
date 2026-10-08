@@ -1,161 +1,100 @@
-# Production fiziksel başvuru yayın hazırlığı
+# Minimal fiziksel başvuru aktarımı
 
-**PRODUCTION PHYSICAL INTAKE DEPLOY READY — varsayılan OFF gate ile yayın adayı.**
+**MINIMAL PHYSICAL FEATURE PORT READY**
 
-Bu sonuç kod, migration provası, build ve dry-run hazırlığını ifade eder. Production Worker deploy edilmedi; production migration uygulanmadı; gerçek telefonda production UAT yapılmadı. Tam kullanım açılışı kontrollü UAT kabulüne bağlıdır.
+Bu rapor önceki scanner tabanlı yayın planının yerine geçer. Production deploy/migration yapılmadı; gerçek production telefon UAT'si henüz yapılmadı. Yeni fiziksel ClamAV kuyruğu, scanner servisi ve clean-verdict zorunluluğu kapsamdan çıkarıldı.
 
-## Git tabanı ve dosya kapsamı
+## İnceleme tabanı ve 57 dosyanın kararı
 
-GitHub production HEAD: `16cc28f0ef9e66b925b8e7eb1774c72a2e15b3dd`. Yerel production HEAD: `cb6b9a8ee515ea11cb2f2bd9ab677121567075ea`.
+Branch: `codex/physical-intake-production-port`. Özellik inceleme tabanı: `6123ec3` (mevcut production çalışma dosyalarının byte içeriklerini koruyan snapshot). Snapshot'ın 63 dosyası fiziksel özellik değişikliği değildir; doğrudan remote production HEAD ile karşılaştırmada bunlar ve önceden mevcut YKN commit'i ayrıca görünür. Kör merge yapılmamalıdır.
 
-Canlı sistemin kaynak çalışma klasörü bu HEAD'lerin üzerinde commit edilmemiş print, guide ve YKN dosyaları içeriyor. Önceki **49 dosyalık patch production çalışma dosyalarına göre hazırlanmıştı; çıplak Git HEAD'e göre 49 dosyalık bir branch diff'i değildi**. Bu fark gizlenmedi: mevcut production dosyalarının 63 tanesi, byte içerikleri değiştirilmeden, `6123ec3` snapshot commit'ine kaydedildi. Bu commit staging aktarımı değildir ve print/scanner görevlerini değiştirmez. Eski agent ZIP paketleri, rollout arşivleri ve cache dosyaları commit kapsamına alınmadı.
+57 dosyalık feature farkı **53 dosyaya** indi:
 
-Fiziksel özellik commit'i `c5fe4c0`. Bu commit'in inceleme tabanı `6123ec3` olmalıdır. Production HEAD'e göre toplam branch diff'i snapshot dosyalarını ve yerel HEAD'de önceden bulunan YKN fix'ini de içerir. Production'a kör bir merge yapılmamalı; snapshot'ın mevcut production tabanı olduğu gözden geçirilmelidir.
+- 40 runtime/build/config dosyası: mevcut staging özelliği, production bağlantıları ve dosya/oturum korumaları.
+- 9 test/fixture dosyası: fiziksel davranış, veri ayrımı ve production regresyonları.
+- 3 tarihsel migration: production'da zaten uygulanmış 0011/0012/0013; byte içerikleri değiştirilmedi, tekrar uygulanmayacak.
+- 1 küçültülmüş migration: 0018.
 
-İlk 49 dosyanın tamamı taşınan davranışın, migration geçmişinin veya testlerin bir parçasıdır; alakasız yeni özellik eklenmedi. Bununla birlikte, hepsi yeni production runtime dosyası değildir:
+Dosya bazında 57 kararın tamamı: [scope-audit.json](minimal-physical-port-evidence/scope-audit.json). Güncel 53 dosya: [feature-files.json](minimal-physical-port-evidence/feature-files.json). Rapor/evidence dosyaları bu sayıya dahil değildir.
 
-- 38 dosya: runtime, arayüz, paket/build ve entegrasyon.
-- 4 SQL: üçü production'da zaten uygulanmış tarihsel migration, yalnız `0018` yenidir.
-- 7 dosya: testler ve test fixture'ı.
+Çıkarılan gereksiz parçalar:
 
-Bu görevde sekiz dosya daha gerekti: merkezi sunucu gate'i, erişim/candidate endpoint'i, tek JPEG konteyner doğrulaması, üç test dosyası, migration preflight script'i ve Wrangler'daki OFF ayarı. Son özellik farkı **57 dosya**. Tam liste: `physical-deploy-evidence/feature-files.json`. Production tabanının 63 dosyası bu sayıya dahil değildir.
+- `combined-scanner-repository.js` ve `staff-document-scanner-repository.js` kaldırıldı.
+- `scanner-routes.js` production snapshot içeriğine birebir döndürüldü. Worker scanner çağrısı da özgün çağrıdır.
+- Fiziksel/mobil scan-job oluşturma, lease/retry/verdict bağlantıları kaldırıldı.
+- 0018'den `staff_document_scan_jobs`, iki index, `staff_scan_files` view ve iki fiziksel scan/onay trigger'ı çıkarıldı.
+- Mobil `scan_status`, `pairing_code_hash`, `phone_approved_at` kolonları çıkarıldı.
+- Fiziksel PDF erişimi/onayı ve QR fotoğraf importundan `clean` zorunluluğu çıkarıldı. Bekleyen tarama mesajları kaldırıldı.
+- Staging'de olmayan altı haneli PC onayı, approval/status endpoint'leri ve telefon kontrol düğmesi kaldırıldı.
+- İptal edilen mimariye ait fiziksel gerçek ClamAV testi ve fixture scanner helper'ı kaldırıldı. Önceki scanner içeren hazır patch arşivi kaldırıldı.
 
-174 özgün production dosyasının hash'i yeniden karşılaştırıldı: değişen yok. Online manager, online scanner repository, auth, scanner script'leri, print agent ve backup kodu korundu. Wrangler'daki tek özellik farkı `PHYSICAL_INTAKE_MODE: off`; `PRINT_ENABLED`, print binding'leri ve mevcut cron tanımları aynı kaldı. Geçici fotoğraf temizliği mevcut minute cron akışına print temizliğinden sonra eklendi; yeni provider görevi oluşturulmadı.
+## Staging arayüzü ve production koruması
 
-## Backend ve veri ayrımı
+Telefon sayfası JS'i, PC QR paneli ve fiziksel detay görünümü staging kaynaklarıyla byte düzeyinde aynıdır. Kamera/galeri, bilgisayardan dosya seçimi, liste, PDF düzenleme/sayfa sıralama/silme/birleştirme ve kayıt akışı korunur. Manager farkı mevcut sunucu gate kontrolü ve staging görünümünün çağırdığı eksik PDF ayırma handler'ını tamamlayan küçük düzeltmedir. Yetkili → İkamet Başvuruları → ONLINE/FİZİKSEL seçimi production çalışma alanlarına bağlanır.
 
-Online akış `applications`, `document_records`, `document_revisions`, `document_revision_files` ve mevcut API'leri kullanır. Fiziksel akış `physical_intakes`, `physical_intake_files` ve `/api/staff/physical-intakes/*` üzerinden çalışır. Online kayıtlar dönüştürülmez, yeniden sınıflandırılmaz veya güncellenmez. İsteğe bağlı `linked_application_id` yalnız doğrulanmış bir referanstır.
+Online manager, online scanner route/repository/policy, online belge erişimi/review ve mevcut print/scanner agent kaynakları production snapshot ile aynıdır. Asıl production checkout'ındaki 174 dosyanın hash'i değişmedi. `PRINT_ENABLED`, `/yazdir/`, scanner görevleri ve mevcut cron tanımları değiştirilmedi. Worker'ın mevcut cron'una yalnız geçici fiziksel fotoğraf temizliği eklenir; yeni scanner/provider görevi yoktur. Wrangler fiziksel gate'i varsayılan `off` tutar.
 
-Fiziksel kayıt PDF ve öğrenci bilgileriyle oluşturulur; yeni PDF sürümleri immutable saklama anahtarları kullanır. Optimistic version kontrolü eşzamanlı güncellemeleri korur. Soft delete/restore vardır; kalıcı belge silme veya öğrenci verisi migration'ı eklenmedi. Sunucu PDF erişimini ve onayı `finalized + clean` sonucuna bağlar; D1 trigger'ları onay koşulunu ayrıca uygular.
+## Veri modeli ve 0018 kararı
 
-Belgeler mevcut özel `DOCUMENTS` R2 bucket'ındaki `quarantine/<UUID>` anahtarlarıyla saklanır. Public R2 URL kullanılmaz. Boyut, format, sayfa/piksel sınırları, ETag/SHA-256 bütünlüğü ve oturum yetkisi kontrol edilir.
+Online veriler mevcut `applications`/`document_*` tabloları ve API'lerinde kalır. Fiziksel veriler mevcut `physical_intakes`/`physical_intake_files` tablolarındadır. İsteğe bağlı online bağlantı yalnız doğrulanmış bir referanstır; fiziksel kayıt online satırları güncellemez.
 
-## Varsayılan OFF gate ve kontrollü UAT
+Yeni fiziksel kayıt/tablo modeli gerekmiyor. **0018 yine gereklidir, fakat yalnız üç ek içerir:**
 
-`PHYSICAL_INTAKE_MODE` yalnız `off`, `uat`, `on` değerlerini anlamlı biçimde kullanır. Eksik/geçersiz değer OFF olur. OFF, fiziksel kayıt/okuma, QR oluşturma, claim ve telefon yükleme işlemlerini sunucuda engeller. Online başvurular çalışmaya devam eder. Migration henüz yoksa OFF scanner eski online repository'yi kullanır; yanlışlıkla açılan gate ile eksik şema da online scanner'ı bozamaz.
+1. Mobil fotoğraf `upload_status`: uploading/finalized/failed/consumed; eşzamanlı yükleme, başarısız yükleme tekrarı ve tekrar import korunur.
+2. Mobil fotoğraf `sha256`: aynı ID ile farklı içerik gönderimini ve saklama sırasında içerik değişimini reddeder.
+3. `mobile_transfer_rate_limits`: claim/upload isteklerini sunucuda atomik sınırlar.
 
-UAT için dört yeni **operator değişkeni** gerekir:
+Bunlar ClamAV kuyruğu veya tarama kararı değildir. D1 rezervasyonu R2 yazımından önce yapılır; aynı fotoğraf tekrarları kota tüketmez veya kazanan objeyi silmez. Kalıcı fiziksel PDF sürümleme/optimistic lock mevcut yapıyla korunur.
 
-| Değişken | Değer |
-|---|---|
-| `PHYSICAL_INTAKE_MODE` | `uat` |
-| `PHYSICAL_INTAKE_UAT_SESSION_HASH` | Operator'ın seçtiği PC oturumunun candidate digest'i |
-| `PHYSICAL_INTAKE_UAT_STARTS_AT` | UTC ISO başlangıç |
-| `PHYSICAL_INTAKE_UAT_EXPIRES_AT` | UTC ISO bitiş; başlangıçtan en fazla 3600 saniye |
+0018 hiçbir application/physical kaydına UPDATE/DELETE/DROP uygulamaz. Mevcut yedeğin yerel kopyasındaki 33 tabloda (SQLite iç tablosu dahil) eski kolon/satırlar aynen kaldı. Eski fotoğraflara digest uydurulmaz; digest'i olmayan geçici fotoğraf indirilemez, TTL temizliğine bırakılır.
 
-Digest bir bearer token değildir; mevcut staff cookie'si veya herhangi bir gizli anahtar gösterilmez. Endpoint erişimi kendiliğinden açmaz. Ortak personel hesabı modeli korunur; UAT izni hesap adına değil tek PC oturumuna bağlanır. Aynı hesapla başka bilgisayarda açılan oturum erişemez. Logout, aktif kullanıcı/rol kontrolü, staff idle/session expiry ve UAT bitişi erişimi keser.
+Tarihsel 0012'deki `physical_document_scan_jobs` tablosu ve fiziksel `scan_status` kolonu production'da zaten vardır: bu görev bunları silmez veya değiştirmez. Yeni akış bunları kullanmaz; fiziksel dosyaların tarihsel `pending` alanına `clean` yazılmaz. ONLINE pending/unsafe/failed erişim ve onay kuralları korunur.
 
-Candidate endpoint, özellik OFF olarak deploy edildikten sonra seçilen PC'deki oturumlu, aynı-origin sayfadan çağrılır:
+SQL raw replay idempotent değildir; ikinci yürütme duplicate column ile durur. Desteklenen yol tam dosya adıyla izlenen Wrangler migrations apply'dır. Yeni yerel Wrangler provasında ilk uygulama başarılı, tekrar `No migrations to apply`. Kısmi uygulanmış/önceki scanner şeması drift sayılır; migration geçmişine elle kayıt eklenmez. Read-only production preflight: `READY_PENDING`, yalnız 0018 bekliyor.
 
-```js
-const response = await fetch('/api/staff/physical-access/session', {
-  method: 'POST', credentials: 'same-origin'
-});
-const activation = await response.json();
-```
+## QR, doğrulama ve özel depolama
 
-Operator `activation.candidateSessionHash` değerini özel yönetim kanalında kullanır; rapora/loga yazmaz. Cloudflare yönetiminde yalnız yukarıdaki dört fiziksel değişken hazırlanır. Print ayarlarına, mevcut secret değerlerine ve scanner görevlerine dokunulmaz. Bu aktivasyon bu görevde uygulanmadı.
+Staging'deki tek claim'li 256 bit QR korunur; ilk claim yapan telefon HttpOnly/Secure/SameSite=Strict cookie alır. QR en fazla 15 dakika geçerlidir. URL fragment'i claim sonrası kaldırılır. Fotoğrafları yalnız QR'ı oluşturan aktif personelin aynı PC oturumu alabilir; başka PC oturumu erişemez. Logout, inactive staff, idle timeout, session/QR expiry ve gate kapanması telefon yüklemesini de keser.
 
-## QR fotoğrafları ve retention
+Ek PC onayı kaldırıldığı için QR ilk claim öncesi bir erişim yetkisidir: paylaşılmamalıdır. Tek kullanımlık claim sonrasında başka telefona taşınamaz; hiçbir claim fotoğrafların başka bilgisayara yönlendirilmesini sağlamaz.
 
-QR 256 bit rastgele, tek claim hakkı olan token taşır. Süresi en fazla **15 dakika**, UAT bitişi daha erkense ona kadar. Token URL fragment'indedir. Telefon claim sonrası fragment'i kaldırır; HttpOnly/Secure/SameSite=Strict cookie alır. Telefonun görüntülediği altı haneli kod yalnız QR'ı oluşturan PC tarafından onaylanabilir. Bu onay olmadan yükleme yapılamaz. Kopyalanmış QR tek başına upload yetkisi vermez; başka PC/personele ait oturum orijinal aktarımı onaylayamaz veya okuyamaz.
+Görüntüler istemcide canvas ile JPEG'e normalize edilir; sunucuda gerçek JPEG konteyneri/sonu, boyut ve piksel sınırı doğrulanır. Tek fotoğraf 8 MiB/36 MP; aktarım 30 fotoğraf/120 MiB. PDF sunucuda parse edilir: 10 MiB ve 300 sayfa sınırı; erişimde byte/digest/ETag ve staff yetkisi kontrol edilir. Bu dosya doğrulamasıdır; antivirüs taraması yapıldığı iddia edilmez. Fiziksel kodun mevcut SHA-256 yardımcı fonksiyonunu kullanması herhangi bir scanner queue/verdict çalıştırmaz.
 
-JPEG başlığı, segment sınırları, tek görüntü sonu ve piksel sınırı doğrulanır; görüntü sonuna eklenmiş arşiv/ikinci görüntü reddedilir. Dosya 8 MiB; oturum 30 fotoğraf/120 MiB; oturum açma, claim ve upload oran sınırları vardır. Aynı ID + aynı içerik tekrarları idempotent; farklı içerik/oturum ve eşzamanlı çakışmalar reddedilir.
+Geçici fotoğraflar mevcut private `DOCUMENTS` R2 bucket'ında immutable `quarantine/<UUID>` objeleridir; public URL yoktur. PC receipt/ack sonrası obje hemen silinir; consumed metadata TTL sonuna kadar tekrarları engeller. Pencere kapanması objeleri temizler; expiry cleanup mevcut cron'da 20 oturumluk partilerle çalışır. 15 dakika erişim sınırıdır; fiziksel silme cron/backlog/provider başarısına bağlıdır. Kaydedilen PDF sürümleri bu geçici fotoğraf TTL'sinden ayrıdır; soft delete geçmişi korur.
 
-Fotoğraflar `mobile_document_transfer_files` metadata'sı ve özel R2 objeleri olarak kalır. `pending` veya `unsafe/failed` dosyalar PC'ye verilmez. PC temiz dosyayı aldığına dair acknowledgement gönderince R2 objesi hemen silinir; tekrar upload'u önleyen consumed metadata TTL sonuna kadar tutulur. Pencere kapandığında aktarım iptal edilip objeler temizlenir. Süresi dolan oturumlar mevcut minute cron üzerinden her çalışmada 20 oturumluk partilerle temizlenir. Bu nedenle 15 dakika kesin erişim sınırıdır; fiziksel silme cron/backlog ve provider başarısına bağlıdır, kesin 15 dakikalık silme SLA'sı değildir. Gate OFF olsa da migration sonrası temizlik devam eder.
+## UAT ve ilerideki yayın/rollback sırası
 
-Fiziksel başvurunun kaydedilen PDF sürümleri geçici fotoğraf politikasından ayrıdır: soft delete PDF geçmişini korur, otomatik kalıcı PDF purge eklenmedi. Scan job/audit metadata'sı da fotoğraf gövdesi değildir ve D1'de kalır. D1 yedeği R2 obje gövdelerinin yedeği değildir.
+Bu bölüm hazırlık planıdır; production mutation komutları çalıştırılmadı.
 
-## Mevcut scanner ile çalışma ve gerçek motor kanıtı
+1. Snapshot tabanını ve sadeleştirilmiş farkı incele; ayrı yayın kararı al. Gate OFF kalsın.
+2. Cutover öncesi private dizinde yeni D1 export ve restore point al; mevcut Worker/asset sürümünü ve print/env ayarlarını kaydet. Mevcut özel export'un yerel migration provası geçti; cutover yedeği yerine geçmez. D1 export R2 gövdelerini kapsamaz.
+3. `node scripts/check-physical-production-migration.mjs uluslarasiofis-production` yalnız metadata okur. READY_PENDING ise yalnız bekleyen 0018'i Wrangler üzerinden uygula; ALREADY_APPLIED_SKIP ise tekrar uygulama; drift varsa dur.
+4. Build/dry-run sonrası Worker + asset'leri gate OFF ile, mevcut env/secret değerlerini koruyarak yayımla. Online ve mevcut QR print/scanner smoke kontrollerini yap. Fiziksel scanner testi/aktivasyonu gerekmiyor.
+5. Önceden istenen kontrollü UAT gate'i korunur: seçilen PC'de oturum açıp aynı-origin POST `/api/staff/physical-access/session` ile candidate digest al. Operator `PHYSICAL_INTAKE_MODE=uat`, seçili `PHYSICAL_INTAKE_UAT_SESSION_HASH`, UTC `PHYSICAL_INTAKE_UAT_STARTS_AT` ve en fazla bir saatlik `PHYSICAL_INTAKE_UAT_EXPIRES_AT` ayarlarını hazırlar. Bu endpoint kendiliğinden izin vermez; mevcut secret'lar değiştirilmez.
+6. Seçili PC ve gerçek telefonda sentetik belgelerle kamera/galeri → doğrudan PC import → PDF düzenleme/birleştirme/kayıt/indirme/revision kontrolü yap. İkinci PC, claim tekrarları, logout/expiry ve private erişim reddini doğrula. ONLINE pending belge halen erişilemez olmalı; online scanner normal çalışmalı.
+7. UAT sonunda gate OFF; kabul sonrası normal yetkili kullanımını açma ayrı operator kararıdır.
 
-Yeni bir scanner servisi/Cloudflare Queue yok. Ek D1 kuyruğu `staff_document_scan_jobs`; view `staff_scan_files` yalnız güncel/finalized fiziksel PDF'leri ve süresi dolmamış mobil fotoğrafları seçer. Eski `document_scan_jobs` ve online repository değişmedi. Combined repository önce online işi, sonra staff işini lease eder. `staff_` job ID ve `physical_`/`mobile_` file ID, mevcut Python parser/wire formatına uygundur. Lease, retry, digest, ETag, stale result ve full scan evidence kontrolleri korunur.
-
-Başlangıçta yerel installed imza `28146` 24 saatlik sınırı aştığı için gerçek test `signature_stale` ile durdu. Bu sınır gevşetilmedi. Resmî veritabanının **ayrı geçici kopyası** güncellendi; çalışan scanner'ın dizini/görevi değiştirilmedi. Mevcut runner + gerçek ClamAV 1.5.4, resmî `28147` veritabanıyla, local HTTPS Worker API üzerinden şu sonuçları üretti:
-
-- Fiziksel PDF: `clean`, dosya erişimi açıldı.
-- Telefon JPEG: `clean`, yalnız sahibi PC erişebildi.
-- JPEG'e eklenmiş arşiv: sunucu upload doğrulamasında `415`.
-- EICAR gömülü fiziksel PDF: `unsafe`, indirme engellendi.
-
-JPEG'e arşiv eklenmesi mevcut motorda `clean` dönebildiği için konteyner sınırı kontrolü eklendi. Scanner komutu/policy'si değiştirilmedi. `--official-db-only` dahil mevcut full scan bayrakları kullanıldı. Main CVD için `sigtool` doğrulaması `Verification OK` verdi. İzole updater detached X509 store uyarıları verdi; mevcut ClamAV doğrulama seçenekleri devre dışı bırakılmadı ve özel/uydurulmuş signature veritabanı kullanılmadı.
-
-Opt-in gerçek fiziksel motor testi:
+İleride onaylı yayın penceresinde kullanılacak komutlar:
 
 ```sh
-RUN_PHYSICAL_REAL_CLAMAV=1 \
-PHYSICAL_SCANNER_STATE=/path/to/existing/scanner-installation \
-PHYSICAL_SCANNER_SIGNATURES=/path/to/fresh/official/signatures \
-node --disable-warning=ExperimentalWarning --test test/physical-scanner-real.test.js
-```
-
-Bu test kendi HTTPS endpoint'i, synthetic token'ı ve geçici state dizinini kullanır; production'a istek/job göndermez. Production'da normal agent'ın son heartbeat'i ve gerçek yeni job verdict'i UAT sırasında ayrıca doğrulanacaktır. Son okunan production heartbeat `ready / 1.5.4 / 28147`, `seen_at=2026-10-08T14:35:13.478Z` idi; bu, güncel liveness kanıtı değildir. Aktivasyon öncesinde yeni heartbeat görülmeli. Online backlog çok uzunsa QR TTL dolmadan fotoğraf taraması tamamlanamayabilir; `pending` bypass yapılmaz.
-
-## Migration, yedek ve tekrar uygulama
-
-Production'da üç tarihsel physical migration zaten kayıtlı; tekrar çalıştırılmayacak ve yeniden numaralandırılmayacak. Aynı numaralı print/physical dosyaları farklı tam dosya adlarıyla Wrangler tarafından izlenir. Yeni preflight, tüm geçmişin tam dosya adlarıyla kayıtlı olduğunu ve tek bekleyenin `0018` olduğunu doğruladı.
-
-`0018` yalnız transfer/file kolonlarını, rate-limit tablosunu, supplemental queue/view/index ve approval trigger'larını ekler. Online application tablolarında `UPDATE`, `DELETE`, `DROP` veya yeniden oluşturma yok. Mevcut physical satırlara status değişikliği uygulanmaz; yeni guard'lar gelecekteki onayları denetler. Eski fotoğraflar `pending`, digest yokken erişilemez; migration onları clean ilan etmez.
-
-Raw SQL ikinci kez çalıştırılmaya uygun bir idempotent script değildir: duplicate column ile durur. Desteklenen yol `wrangler d1 migrations apply` ve tam dosya adı kaydıdır. Yerel gerçek Wrangler provasında ilk uygulama başarılı, tekrarında `No migrations to apply` görüldü. Kısmi/manuel uygulanmış şema preflight'ta **BLOCKED_SCHEMA_DRIFT** olur; migration kaydına elle INSERT, dosyayı yeniden adlandırma veya raw SQL'i tekrar yürütme yapılmaz.
-
-Read-only production SQL export yedeği oluşturuldu, özel yerel dizinde `0700`, dosyada `0600` izinleriyle saklandı. Hash ve yol `physical-deploy-evidence/backup-rehearsal.json` içinde; SQL içerikleri Git'e alınmadı. `0018`, bu export'un yerel in-memory kopyasında uygulandı: **32 mevcut tablonun eski kolonlarındaki satırlar aynen kaldı**. Ayrıca populated synthetic verilerde koruma, tracked repeat ve failure rollback testleri geçti. Canlı online yazımlar devam ettiği için cutover'dan hemen önce yeniden export/Time Travel restore point alınmalıdır.
-
-## Kontrollü production UAT için sıra
-
-1. Branch'in runtime snapshot tabanını ve 57 dosyalık feature commit'ini gözden geçir; production'a merge/deploy için ayrı yayın kararı ver.
-2. Gate OFF olarak kalırken yeni yedek al, hash/izinlerini kaydet; D1 Time Travel restore point ve mevcut Worker/version/config'i kaydet.
-3. `node scripts/check-physical-production-migration.mjs uluslarasiofis-production` yalnız metadata okur. `READY_PENDING` ise yalnız bekleyen `0018` uygulanır; `ALREADY_APPLIED_SKIP` ise tekrar uygulanmaz. Drift varsa dur.
-4. Worker'ı OFF gate ile deploy et. Online liste/detay/arşiv, `/yazdir/` mevcut QR/print akışı, print status ve scanner heartbeat için smoke kontrolü yap. Fiziksel API'nin unauthorized/kapalı erişimi reddettiğini doğrula.
-5. Güncel production scanner heartbeat `ready`, signature yaşı en fazla 24 saat ve normal agent'ın polling'i doğrulanmış olsun. Mevcut görevi/secret'ı değiştirme.
-6. Seçilen PC'de giriş yap; candidate digest al. Operator yalnız bu oturumu, en fazla bir saat için UAT değişkenleriyle etkinleştirsin. Aynı hesabın ikinci PC'sinin fiziksel API/QR erişimini reddettiğini kontrol et.
-7. Gerçek telefonun kamera ve galerisinden **sentetik test belgeleri** gönder. Altı haneli kodu orijinal PC'de onayla. Gerçek scanner job'ında ETag/SHA, engine/signature metadata ve `clean` verdict'i görmeden PC import/approve bekleme.
-8. Synthetic fiziksel kaydı `UAT-...` öğrenci/test pasaport bilgileriyle oluştur; PDF açma, revision, reject/approve, soft delete/restore ve logout/expired QR kontrollerini yap. Gerçek öğrenci verisi kullanma. UAT kayıtlarını soft delete et; PDF geçmişinin korunduğunu bil.
-9. UAT sonunda gate OFF'a döner veya süresi biter. Tüm kabul kontrolleri geçmeden `on` yapılmaz. Herkese normal staff kullanımını açmak, ayrı operator değişikliği ve yayın kararıdır.
-
-## Deploy ve rollback komutları — bu görevde çalıştırılmadı
-
-Yedek dizini Git dışında, özel izinli olmalı. Aşağıdaki mutation komutları yalnız onaylanmış yayın penceresinde:
-
-```sh
-# Read-only cutover export; output path must be private and outside Git.
 npx wrangler d1 export uluslarasiofis-production --remote --env production --output /private/backup/production-pre0018.sql
 node scripts/check-physical-production-migration.mjs uluslarasiofis-production
-
-# Only after READY_PENDING; do not execute raw migration SQL.
 npx wrangler d1 migrations apply uluslarasiofis-production --remote --env production
 node scripts/check-physical-production-migration.mjs uluslarasiofis-production
-
 npm run build:production
 npx wrangler deploy --env production --dry-run --keep-vars
 npx wrangler deploy --env production --keep-vars
 ```
 
-Wrangler config OFF değerini açıkça içerir. `--keep-vars` mevcut remote değişkenleri/secret'ları korumak için kullanılır; config'teki print değerleri yayın öncesi canlı değerlerle karşılaştırılır. Secret put/delete yapılmaz. Staging kaynakları veya agent kurulumları değiştirilmez.
+İlk rollback: fiziksel gate OFF. Kod rollback: doğrulanmış production snapshot `6123ec3` için temiz checkout/build/dry-run, mevcut print/env/secret ayarları korunarak baseline Worker+asset yayını. Additive 0018 yerinde kalır; DROP/down migration yapılmaz. Eski Worker'a dönüldüğünde geçici fotoğraf cleanup'u bulunmayacağından fiziksel transferleri önce kapat/temizle veya dar kapsamlı temizlik kodunu koru. Tam DB restore yalnız veri hasarı halinde ayrıca değerlendirilir; sonraki online başvuruları kaybettirebilecek bir migration rollback yöntemi olarak kullanılmaz.
 
-Rollback'in ilk adımı yalnız `PHYSICAL_INTAKE_MODE=off`: yeni fiziksel/telefon işlemleri kesilir; online sistem ve mevcut scanner kuyruğu normal devam eder, geçici temizlik çalışır. Staff lease sonuçları gate kapatılınca reddedilebilir; clean bypass yoktur, online lease'ler bundan etkilenmez.
+## Kanıt
 
-Kod rollback gerekiyorsa `6123ec3` mevcut production snapshot'ından ayrı temiz checkout oluştur, `npm ci` ve production build/dry-run yap, mevcut print ayarları/secret'ları korunarak `--keep-vars` ile baseline Worker + asset'lerini yeniden yayımla. D1 `0018` tabloları/kolonları yerinde bırakılır; DROP/down migration yapılmaz. Bu additive şema eski online/print koduyla uyumludur.
+- Node: **741 test; 740 başarılı, 0 hata, 1 mevcut online gerçek ClamAV opt-in skip**.
+- Native D1/R2; staging navigation, PC fotoğraf seçimi, QR camera/gallery; migration koruma/tekrar/rollback testleri geçti.
+- Mevcut scanner Python: 14 başarılı. Mevcut print agent Python: 45 başarılı.
+- Production build ve production dry-run başarılı; gerçek deploy yok. Build'in mevcut chunk uyarıları yayın davranışı değişikliği değildir.
+- Read-only production şema kontrolü READY_PENDING. Yerel migration ilk uygulama ve tekrar provası başarılı.
+- [Güncel kanıtlar](minimal-physical-port-evidence/): kaynak koruması, migration, test ve redakte edilmiş dry-run çıktıları.
 
-`wrangler rollback <verified-version-id> --env production` alternatifi yalnız o sürümün çalışan print kodu, asset'leri ve env ayarları doğrulandıysa kullanılabilir. Son Wrangler inventory'sindeki version ID `0814ac13-668d-4682-8d32-38c1047f1242` otomatik güvenli rollback hedefi ilan edilmedi; eski version print ayarlarını da geri alabilir. Tercih kontrollü baseline rebuild + değişkenleri korumadır.
-
-D1 export/Time Travel restore yalnız veri hasarı halinde ayrı kurtarma kararıyla yapılır; tüm DB'yi geri almak sonraki online başvuruları kaybettirebilir. Migration rollback için production DB restore edilmez. R2 objeleri/online belgeleri topluca silinmez.
-
-## Son doğrulama
-
-| Kontrol | Sonuç |
-|---|---|
-| Tam Node, gerçek fiziksel ClamAV opt-in dahil | 745 test: 744 pass, 0 fail, 1 skip |
-| Skip | Eski ayrı opt-in online ClamAV acceptance suite; yeni fiziksel gerçek motor testi çalıştı |
-| Scanner Python | 14 / 14 |
-| Mevcut Print Agent Python | 45 / 45; mevcut test venv'i, görev değişmedi |
-| Native D1/R2 | Node suite içinde geçti |
-| Production export + yerel 0018 provası | 32 mevcut tablo, eski satırlarda değişiklik yok |
-| Wrangler local migration repeat | İlk uygulama OK, tekrar No migrations to apply |
-| Production metadata preflight | READY_PENDING; yalnız 0018 |
-| Feature patch check | 57 dosya, error-all whitespace check başarılı; uygulanmadı |
-| Production build + dry-run | Başarılı, gate OFF; gerçek deploy yok |
-| Production primary files | 174 özgün dosya değişmedi |
-
-Build'de mevcut bundle/dynamic import uyarıları ve yerel dry-run'da print secret değerlerinin olmamasına ilişkin uyarı görülebilir; remote secret-name preflight geçti, secret değerleri alınmadı/değiştirilmedi. Runtime dependency audit önceki port turunda temizdi; dev toolchain dependency yükseltmesi bu göreve dahil edilmedi.
-
-Bu rapor, önceki fiziksel port raporunun yayın hazırlığı açısından güncel devamıdır. Yayın adayı hazır; gerçek production telefon UAT kabulü sonraki kontrollü yayının parçasıdır.
+Önceki `physical-deploy-evidence` test/engine logları geçmiş mimarinin kanıtlarıdır; güncel fiziksel yayın kabul kriteri veya çalışma talimatı değildir.

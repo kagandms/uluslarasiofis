@@ -1,0 +1,12 @@
+[
+  {
+    "run": "first",
+    "exit_code": 0,
+    "no_pending_migrations": false
+  },
+  {
+    "run": "repeat",
+    "exit_code": 0,
+    "no_pending_migrations": true
+  }
+]

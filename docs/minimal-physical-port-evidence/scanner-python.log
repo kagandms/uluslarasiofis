@@ -1,0 +1,9 @@
+..........scan_failed code=engine_unavailable
+scan_failed code=scan_timeout
+..runner_iteration_failed; lease_retry_remains_in_D1
+runner_iteration_failed; lease_retry_remains_in_D1
+..
+----------------------------------------------------------------------
+Ran 14 tests in 0.027s
+
+OK

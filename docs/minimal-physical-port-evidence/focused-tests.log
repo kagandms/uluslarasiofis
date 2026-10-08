@@ -1,0 +1,73 @@
+(node:48489) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ missing, malformed, future, expired and oversized gate windows fail closed (7.198834ms)
+✔ default OFF denies new physical records and QR while online authentication still works (54.770208ms)
+✔ UAT admits only the operator-approved PC session, including shared-account second computers (25.72825ms)
+✔ the candidate endpoint requires authentication and same-origin and grants no authority (17.135459ms)
+✔ UAT expiry, OFF and a changed selected session revoke previously paired phones (73.273667ms)
+✔ OFF keeps the existing scanner usable before any physical security migration (22.30025ms)
+Worker request failed. {
+  requestId: 'req_6674765a-e46d-4b5d-bf86-e303565850a5',
+  errorName: 'ApiError',
+  errorCode: 'PHYSICAL_SCHEMA_NOT_READY'
+}
+✔ an accidentally opened gate without its schema cannot break the original scanner queue (19.164917ms)
+(node:48490) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ 0018 preserves online and existing physical records and adds only temporary photo bookkeeping (53.077958ms)
+✔ tracked filename application is once-only and raw replay fails without changing records (23.729583ms)
+✔ a migration failure rolls back earlier additions and never marks the filename applied (19.583042ms)
+(node:48491) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Saved PDF could not be opened for editing. { errorName: 'Error' }
+✔ shows only the current PDF with open, delete, download and edit actions (59.296334ms)
+✔ a removed current PDF does not expose an older revision and offers PDF Ekle (7.649333ms)
+✔ saved PDF pages can be reordered, removed and combined with a new page (25.520625ms)
+✔ rejects unreadable saved PDFs instead of opening an empty editor (0.797125ms)
+✔ removes only the expected current PDF and audits the change atomically (2.0795ms)
+✔ rejects stale PDF removal without changing the pointer or writing an audit (0.376917ms)
+✔ authenticated removal keeps the receipt and denies old PDF links (41.409ms)
+✔ PDF removal denies missing sessions, cross-origin requests and stale versions (20.313542ms)
+✔ PDF removal cannot change approved or deleted receipts (19.476ms)
+(node:48492) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+Mobile photo reservation failed. { errorName: 'Error' }
+✔ native D1/R2 validated photo import and physical PDF access work without scanning (667.278333ms)
+✔ production intake entry shows Online and Physical before opening either existing workspace (209.786ms)
+✔ PC file and camera selection append documents and expose the separate phone transfer control (223.081416ms)
+✔ phone camera and multi-photo gallery inputs are both available on the pairing page (19.665875ms)
+(node:48495) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ QR claims are single-use and bound to the creating PC session (61.009292ms)
+✔ validated phone photos reach only the owning PC without a scanner job (28.86925ms)
+✔ logout, staff deactivation, idle timeout and transfer expiry revoke the phone too (83.619833ms)
+✔ revoked or expired PC cannot be claimed via an unused QR (20.52975ms)
+✔ duplicate simultaneous uploads never overwrite or delete the winning object (26.111875ms)
+✔ consumed photo IDs remain idempotent and cannot reappear on retry (23.035875ms)
+Mobile JPEG validation failed. { errorName: 'ApiError' }
+✔ rejects forged MIME, malformed JPEG, oversize payloads and cross-origin uploads (21.60525ms)
+✔ upload and claim rate limits are enforced by atomic database counters (17.2495ms)
+Mobile photo reservation failed. { errorName: 'ApiError' }
+✔ file quotas and simultaneous PC transfer quotas are enforced (18.965041ms)
+✔ expiry cleanup removes temporary objects while preserving online documents (25.656292ms)
+✔ physical registration and approval work without a verdict and never change online records (37.515125ms)
+✔ physical query uses the independent records with pagination and safe search (23.159959ms)
+✔ physical policy validates identity, versions and readable PDFs (0.217583ms)
+✔ physical uploads never enter the online scanner and leave its pending verdict untouched (21.373625ms)
+Mobile photo storage failed. { errorName: 'Error' }
+Worker request failed. {
+  requestId: 'req_a538d007-5d2e-4084-926a-d3fce83a6aa0',
+  errorName: 'Error',
+  errorCode: 'INTERNAL_ERROR'
+}
+✔ failed storage writes can retry the same phone photo without consuming another quota (20.289125ms)
+✔ single JPEG validation rejects concatenated images and content after the image end (18.524208ms)
+✔ QR owner checks respect the existing normalized staff identifier contract (17.063833ms)
+ℹ tests 40
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5301.947917
