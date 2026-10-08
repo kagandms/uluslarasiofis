@@ -57,6 +57,7 @@ function pdfjsSupportAssetsPlugin() {
 }
 
 export default defineConfig({
+    define: { 'import.meta.env.PHYSICAL_INTAKES_ENABLED': JSON.stringify(['staging', 'production'].includes(process.env.CLOUDFLARE_ENV)) },
     plugins: [cloudflare(), pdfjsSupportAssetsPlugin()],
     environments: {
         client: {
@@ -67,7 +68,8 @@ export default defineConfig({
                         application: resolve(projectRoot, 'basvuru/index.html'),
                         tracking: resolve(projectRoot, 'basvurum/index.html'),
                         print: resolve(projectRoot, 'yazdir/index.html'),
-                        staff: resolve(projectRoot, 'yetkili/index.html')
+                        staff: resolve(projectRoot, 'yetkili/index.html'),
+                        mobileTransfer: resolve(projectRoot, 'mobile-transfer/index.html')
                     }
                 }
             }

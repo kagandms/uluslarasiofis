@@ -1,3 +1,8 @@
+import { readPhysicalGate, hasPhysicalSecuritySchema } from './config/physical-intake-gate.js';
+import { readPhysicalAccess } from './routes/physical-access-routes.js';
+import { createCombinedScannerRepository } from './repositories/d1/combined-scanner-repository.js';
+import { handlePhysicalIntakes } from './routes/physical-intake-routes.js';
+import { handleMobileTransfer, cleanupMobileTransfers } from './routes/mobile-transfer-routes.js';
 import { requirePrintRequestAccess } from './services/print-access.js';
 import { readStaffPrintUatStatus, uploadPrintUatDocument } from './routes/print-uat-routes.js';
 import { handleScannerRequest, handleStaffScannerRequest, prioritizeStaffDocumentScan } from './routes/scanner-routes.js';
@@ -63,6 +68,9 @@ function withMetaWhatsAppProvider(environment) {
 
 async function routeApi(request, environment, requestId) {
     const { pathname } = new URL(request.url);
+    if (['/api/staff/physical-access', '/api/staff/physical-access/session'].includes(pathname)) return readPhysicalAccess(request, environment);
+    if (pathname.startsWith('/api/staff/physical-intakes')) return handlePhysicalIntakes(request, environment, requestId);
+    if (pathname.startsWith('/api/staff/mobile-transfers') || pathname.startsWith('/api/mobile-transfer/')) return handleMobileTransfer(request, environment);
     await requirePrintRequestAccess(request, environment);
     if (pathname.startsWith('/api/printer/')) return handlePrinterRequest(request, environment);
     if (pathname === '/api/public/print/status') return readPublicPrintStatus(request, environment);
@@ -74,7 +82,7 @@ async function routeApi(request, environment, requestId) {
     const printFinalizeMatch = pathname.match(/^\/api\/public\/print\/jobs\/([A-Za-z0-9_-]{1,64})\/finalize$/);
     if (printFinalizeMatch) return finalizePublicPrintUpload(request, environment, printFinalizeMatch[1]);
     if (pathname === '/api/staff/print/status') return readStaffPrintStatus(request, environment);
-    if (pathname.startsWith('/api/scanner/')) return handleScannerRequest(request, environment);
+    if (pathname.startsWith('/api/scanner/')) return handleScannerRequest(request, environment, readPhysicalGate(environment).mode !== 'off' && await hasPhysicalSecuritySchema(environment) ? createCombinedScannerRepository(environment.DB) : undefined);
     const documentScanMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/scan$/);
     if (documentScanMatch) {
         let applicationId;
@@ -288,8 +296,12 @@ const worker = {
                     throw cleanupError;
                 }
             }
+            try { await cleanupMobileTransfers(environment); }
+            catch (error) { console.error('Temporary photo cleanup failed.', { errorName: error.name }); }
             return;
         }
+        try { await cleanupMobileTransfers(environment); }
+        catch (error) { console.error('Temporary photo cleanup failed.', { errorName: error.name }); }
         if (environment.DB && environment.DOCUMENTS && typeof environment.DOCUMENTS.put === 'function') {
             try {
                 await backupD1ToR2({

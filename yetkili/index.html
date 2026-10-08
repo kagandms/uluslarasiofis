@@ -122,7 +122,7 @@
                     <p>Devam etmek için çalışma alanlarından birini açın.</p>
                 </div>
                 <div class="home-actions">
-                    <button type="button" class="home-action" data-workspace-view="applications" aria-controls="view-applications">
+                    <button type="button" class="home-action" data-intake-entry data-workspace-view="applications" aria-controls="view-applications">
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M8 9h8M8 13h8M8 17h5"></path></svg></span>
                         <span class="home-action-content"><strong>İkamet Başvuruları</strong><small>Başvuru kuyruğu ve belge durumları</small></span>
                     </button>
@@ -159,7 +159,7 @@
                     <h2 id="workspace-title" class="workspace-title-badge" tabindex="-1"><span class="workspace-title-dot" aria-hidden="true"></span><span>Çalışma alanı</span></h2>
                 </div>
                 <nav class="workspace-nav" aria-label="Çalışma alanları">
-                    <button type="button" data-workspace-view="applications" aria-controls="view-applications">İkamet Başvuruları</button>
+                    <button type="button" data-intake-entry data-workspace-view="applications" aria-controls="view-applications">İkamet Başvuruları</button>
                     <button type="button" data-workspace-view="archive" aria-controls="view-archive">Arşiv</button>
                     <button type="button" data-workspace-view="ykn" aria-controls="view-ykn">YKN</button>
                     <button type="button" data-workspace-view="cover" aria-controls="view-cover">Kapak Hazırla</button>
@@ -167,6 +167,18 @@
                     <button type="button" data-workspace-view="documents" aria-controls="view-documents">Belgeler</button>
                     <button type="button" data-workspace-view="print" aria-controls="view-print">Yazdırma</button>
                 </nav>
+
+                <section id="view-intake" class="view-panel" hidden aria-labelledby="intake-title">
+                    <h3 id="intake-title" tabindex="-1">Başvuru kanalını seçin</h3>
+                    <div class="home-actions">
+                        <button type="button" class="home-action" data-workspace-view="applications" aria-controls="view-applications"><span class="home-action-content"><strong>ONLINE</strong><small>Portal üzerinden gönderilen başvurular</small></span></button>
+                        <button type="button" class="home-action" data-workspace-view="physical" aria-controls="view-physical"><span class="home-action-content"><strong>FİZİKSEL</strong><small>Ofise getirilen dosyalar, QR ile aktarım ve kayıtlı PDF’ler</small></span></button>
+                    </div>
+                </section>
+                <section id="view-physical" class="view-panel" hidden aria-labelledby="physical-title">
+                    <h3 id="physical-title" class="sr-only" tabindex="-1">Fiziksel Teslimler</h3>
+                    <div id="staff-physical-manager"></div>
+                </section>
 
                 <section id="view-applications" class="view-panel" hidden aria-labelledby="applications-title">
                     <h3 id="applications-title" class="sr-only" tabindex="-1">İkamet Başvuruları</h3>

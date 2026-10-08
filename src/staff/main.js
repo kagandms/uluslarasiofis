@@ -1,3 +1,4 @@
+import { initializePhysicalIntakeManager } from './physical-intake-manager.js';
 import { initializeScannerManager } from './scanner-manager.js';
 import { initTheme } from '../ui/themeManager.js';
 import { setActiveStep, STEP_IDS } from '../ui/stepWizard.js';
@@ -125,6 +126,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
         console.error('Archive workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
+    const physicalRoot = document.getElementById('staff-physical-manager');
+    if (physicalRoot) initializePhysicalIntakeManager(physicalRoot);
     try { initDocumentsManager(); } catch (error) {
         console.error('Documents workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }

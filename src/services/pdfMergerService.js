@@ -1,3 +1,4 @@
+import { optimizeDocumentImage } from './optimize-document-image.js';
 import { PDFDocument, PageSizes } from 'pdf-lib';
 
 const A4_PORTRAIT = PageSizes.A4; // [595.28, 841.89]
@@ -9,48 +10,9 @@ const PAGE_MARGIN = 20;
  * Works seamlessly with JPEG, PNG, WEBP, and other image types.
  */
 async function ensureJpegBytes(bytesOrBlob, mediaType = 'image/jpeg') {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-        return bytesOrBlob instanceof Uint8Array ? bytesOrBlob : new Uint8Array(bytesOrBlob);
-    }
-
-    const blob = bytesOrBlob instanceof Blob
-        ? bytesOrBlob
-        : new Blob([bytesOrBlob], { type: mediaType || 'image/jpeg' });
-
-    return new Promise((resolve, reject) => {
-        const url = URL.createObjectURL(blob);
-        const img = new Image();
-        img.onload = () => {
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0);
-
-                canvas.toBlob((convertedBlob) => {
-                    URL.revokeObjectURL(url);
-                    if (!convertedBlob) {
-                        reject(new Error('Görsel dönüştürülemedi.'));
-                        return;
-                    }
-                    convertedBlob.arrayBuffer()
-                        .then((buf) => resolve(new Uint8Array(buf)))
-                        .catch(reject);
-                }, 'image/jpeg', 0.88);
-            } catch (err) {
-                URL.revokeObjectURL(url);
-                reject(err);
-            }
-        };
-        img.onerror = () => {
-            URL.revokeObjectURL(url);
-            reject(new Error('Görsel yüklenemedi veya desteklenmeyen format.'));
-        };
-        img.src = url;
-    });
+    const blob = bytesOrBlob instanceof Blob ? bytesOrBlob : new Blob([bytesOrBlob], { type: mediaType });
+    const optimized = await optimizeDocumentImage(blob);
+    return new Uint8Array(await optimized.arrayBuffer());
 }
 
 /**
@@ -139,14 +101,16 @@ export async function mergeDocumentsToPdf(files, onProgress) {
                     mergedPdf.addPage(page);
                 }
             } catch (pdfErr) {
-                console.warn(`[PDF Merger] ${file.name || 'PDF'} ayrıştırma hatası, atlandı:`, pdfErr);
+                console.error('PDF input could not be read.', { errorName: pdfErr.name });
+                throw new Error(`${file.name || 'PDF'} okunamadı; hiçbir belge atlanarak PDF oluşturulmadı.`, { cause: pdfErr });
             }
         } else {
             // Image file (JPEG, PNG, WEBP, etc.)
             try {
                 await appendImageToPdf(mergedPdf, rawBytes, mediaType);
             } catch (imgErr) {
-                console.warn(`[PDF Merger] ${file.name || 'Görsel'} ekleme hatası, atlandı:`, imgErr);
+                console.error('Image input could not be read.', { errorName: imgErr.name });
+                throw new Error(`${file.name || 'Görsel'} okunamadı; hiçbir belge atlanarak PDF oluşturulmadı.`, { cause: imgErr });
             }
         }
     }

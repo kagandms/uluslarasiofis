@@ -105,10 +105,10 @@ async function heartbeat(request, repository, now) {
     return { recorded:true };
 }
 
-/** Routes machine-only scanner calls. @param {Request} request HTTPS request. @param {object} environment Bindings. @returns {Promise<object|Response>} Safe result. @throws {ApiError} Invalid authority or evidence. */
-export async function handleScannerRequest(request,environment) {
+/** Routes machine-only scanner calls. @param {Request} request HTTPS request. @param {object} environment Bindings. @param {object} [suppliedRepository] Compatible supplemental queue. @returns {Promise<object|Response>} Safe result. @throws {ApiError} Invalid authority or evidence. */
+export async function handleScannerRequest(request,environment, suppliedRepository) {
     await requireScanner(request,environment);
-    const repository = createScannerRepository(environment.DB);
+    const repository = suppliedRepository || createScannerRepository(environment.DB);
     const now = new Date().toISOString();
     const pathname = new URL(request.url).pathname;
     if (pathname==='/api/scanner/claim') return claim(request,repository,now);

@@ -1,5 +1,7 @@
+import { IS_PHYSICAL_INTAKE_ENABLED } from '../config/physical-intake-policy.js';
 const VIEW_TITLES = {
-    applications: 'İkamet Başvuruları',
+    ...(IS_PHYSICAL_INTAKE_ENABLED ? { intake: 'İkamet Başvuruları', physical: 'Fiziksel Teslimler' } : {}),
+    applications: IS_PHYSICAL_INTAKE_ENABLED ? 'Online Başvurular' : 'İkamet Başvuruları',
     archive: 'Arşiv',
     ykn: 'YKN',
     cover: 'Kapak Hazırla',
@@ -94,6 +96,12 @@ export function initWorkspaceNavigation() {
     const { homeScreen, workspaceContent, homeButton } = getWorkspaceElements();
     if (!homeScreen || !workspaceContent || !homeButton) return;
 
+    if (IS_PHYSICAL_INTAKE_ENABLED) {
+        document.querySelectorAll('[data-intake-entry]').forEach(button => {
+            button.dataset.workspaceView = 'intake';
+            button.setAttribute('aria-controls', 'view-intake');
+        });
+    }
     getViewButtons().forEach((button) => {
         button.addEventListener('click', () => showWorkspaceView(button.dataset.workspaceView));
     });

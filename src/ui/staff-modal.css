@@ -1,0 +1,56 @@
+.staff-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    box-sizing: border-box;
+    background: rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    overflow: hidden;
+    overscroll-behavior: contain;
+}
+.staff-modal-card {
+    position: relative;
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 0;
+    max-height: calc(100dvh - 32px) !important;
+    background: #fff;
+    color: #1e293b;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+}
+.staff-modal-card > :not(.staff-modal-header):not(.staff-modal-footer) {
+    min-height: 0;
+    overscroll-behavior: contain;
+    padding-inline: 16px !important;
+    -webkit-overflow-scrolling: touch;
+}
+.staff-modal-header, .staff-modal-footer {
+    flex-shrink: 0;
+    padding: 16px;
+}
+.staff-modal-header { gap: 12px; }
+.staff-modal-header > button { flex-shrink: 0; }
+body.dark-mode .staff-modal-card {
+    background: #1e222d;
+    color: #f1f5f9;
+    border-color: rgba(255, 255, 255, 0.12);
+}
+@media (max-width: 480px) {
+    .staff-modal-card { width: 100% !important; }
+    .staff-modal-header h3 { font-size: 1rem !important; }
+    .staff-modal-footer { flex-wrap: wrap; gap: 8px; }
+}
+
+.transfer-instructions { margin-bottom: 14px; border: 1px solid #e3d4d8; border-radius: 10px; padding: 12px; background: #faf5f6; color: #342b30; }
+.transfer-instructions summary { font-size: 13px; font-weight: 650; cursor: pointer; }
+.transfer-instructions ol { margin: 10px 0; padding-left: 20px; font-size: 12px; line-height: 1.6; }
+.transfer-instructions li + li { margin-top: 5px; }
+.transfer-instructions p { margin: 0; font-size: 11px; line-height: 1.5; }
+body.dark-mode .transfer-instructions { background: #30212a; border-color: #65434e; color: #f1e8ec; }
