@@ -92,7 +92,7 @@
       },
       "vars": {
         "APP_ENV": "production",
-        "PHYSICAL_INTAKE_MODE": "off",
+        "PHYSICAL_INTAKE_MODE": "on",
         "PRINT_ENABLED": "true",
         "PRINT_UAT_ENABLED": "false",
         "R2_BUCKET_NAME": "uluslarasiofis-documents-production",
