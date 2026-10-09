@@ -330,6 +330,7 @@ test('manual language changes localize the guide, settings and help in all five 
             assert.equal(dom.window.document.documentElement.lang, locale);
             assert.equal(dom.window.document.documentElement.dir, locale === 'ar' ? 'rtl' : 'ltr');
             assert.equal(dom.window.document.querySelector('#print-guide-title').textContent, PRINT_MESSAGES[locale].guideTitle);
+            assert.equal(dom.window.document.querySelector('#print-file-input').getAttribute('aria-label'), PRINT_MESSAGES[locale].selectFile);
             assert.equal(dom.window.document.querySelector('.advanced-settings summary').textContent, PRINT_MESSAGES[locale].changePrintSettings);
             assert.equal(dom.window.document.querySelector('#print-help-title').textContent, PRINT_MESSAGES[locale].helpTitle);
             assert.equal(dom.window.document.querySelector('.print-file-card'), card);

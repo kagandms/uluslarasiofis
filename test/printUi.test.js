@@ -17,6 +17,7 @@ test('print page exposes a five-language selector and a three-step guide while k
     assert.equal(document.querySelector('#print-file-input').multiple, true);
     assert.equal(document.querySelector('#print-add-file').textContent.trim(), 'Select a file');
     assert.equal(document.querySelector('#print-add-file').classList.contains('primary-button'), true);
+    assert.equal(document.querySelector('#print-file-input').getAttribute('aria-label'), 'Select a file');
     assert.equal(document.querySelector('#print-basket').hidden, true);
     assert.equal(document.querySelector('#print-message').hidden, true);
     assert.equal(document.querySelector('#print-submit').textContent, 'Send to print queue');
