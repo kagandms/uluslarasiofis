@@ -1,4 +1,4 @@
-.print-management { display: grid; gap: 1rem; }
+.print-management:not([hidden]) { display: grid; gap: 1rem; }
 .print-management-section { display: grid; gap: 1rem; min-width: 0; }
 .print-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .print-section-heading h3, .print-management-section h3 { margin: 0; }
