@@ -7,21 +7,26 @@ import {
     isValidCopies, normalizePrintCapabilities, summarizePrintSettings
 } from '../src/public/printSettings.js';
 
-test('print page exposes mobile-friendly setting controls with safe defaults', () => {
+test('print page offers a Turkish mobile-first multi-file basket', () => {
     const html = readFileSync(new URL('../yazdir/index.html', import.meta.url), 'utf8');
     const document = new JSDOM(html).window.document;
 
-    assert.equal(document.querySelector('#print-paper-size').value, 'A4');
-    assert.equal(document.querySelector('#print-color-mode').value, 'monochrome');
-    assert.equal(document.querySelector('#print-duplex').value, 'simplex');
-    assert.equal(document.querySelector('#print-orientation').value, 'portrait');
-    assert.equal(document.querySelector('#print-copies').value, '1');
-    assert.equal(document.querySelector('#print-copies').type, 'number');
-    assert.equal(document.querySelector('#print-copies-increase').textContent, '+');
-    assert.equal(document.querySelector('#print-paper-size option[value="A3"]').disabled, true);
-    assert.equal(document.querySelector('#print-color-mode option[value="color"]').disabled, true);
-    assert.equal(document.querySelector('#print-duplex option[value="duplexlong"]').disabled, true);
-    assert.match(document.querySelector('#print-settings-summary').textContent, /A4/);
+    assert.equal(document.documentElement.lang, 'tr');
+    assert.deepEqual([...document.querySelectorAll('#print-language option')].map((option) => option.value),
+        ['tr', 'en', 'ru', 'tk', 'ar']);
+    assert.equal(document.querySelector('#print-file-input').multiple, true);
+    assert.equal(document.querySelector('#print-submit').textContent, 'Tümünü Yazdır');
+    const template = document.querySelector('#print-file-template').content;
+    assert.equal(template.querySelectorAll('[data-setting]').length, 4);
+    assert.equal(template.querySelector('[data-setting="paper_size"]').value, 'A4');
+    assert.equal(template.querySelector('[data-setting="color_mode"] option[value="color"]').disabled, true);
+    assert.equal(template.querySelector('[data-pages="all"]').checked, true);
+    assert.match(document.querySelector('.print-guidance').textContent, /Yalnızca istediğiniz sayfaları/);
+    const stylesheet = readFileSync(new URL('../src/public/print.css', import.meta.url), 'utf8');
+    const script = readFileSync(new URL('../src/public/print.js', import.meta.url), 'utf8');
+    assert.match(stylesheet, /@media \(max-width: 520px\)/);
+    assert.match(stylesheet, /:focus-visible/);
+    assert.doesNotMatch(script, /Document sent to the printer|Please collect your document/);
 });
 
 test('public settings capabilities only enable known options and fail closed', () => {

@@ -140,12 +140,12 @@ test('public availability stays false when the isolated print bucket is not conf
 });
 
 test('upload intent rejects altered or disabled print settings before creating a job', async () => {
-    const { environment, database } = createEnvironment();
+    const { environment, database } = createEnvironment({ PRINT_ENABLE_COLOR: 'false' });
     await createPrintRepository(database).heartbeat({ printerId: 'office-printer', runnerId: 'runner-1', health: 'ready',
-        printerName: 'Uluslararası Ofis', now: new Date().toISOString() });
+        printerName: 'Uluslararası Ofis', settingsProtocol: 3, now: new Date().toISOString() });
     const response = await worker.fetch(request('/api/public/print/upload-intents', {
         method: 'POST', body: { byte_size: 8, copies: 1, media_type: 'application/pdf',
-            paper_size: 'A3', color_mode: 'color', duplex: 'duplexlong', orientation: 'portrait',
+            paper_size: 'A4', color_mode: 'color', duplex: 'simplex', orientation: 'portrait',
             idempotency_key: 'a'.repeat(64), tracking_token: 'b'.repeat(64), upload_token: 'c'.repeat(64) }
     }), environment);
 
@@ -164,13 +164,13 @@ test('configured print settings are stored and returned to the printer claim', a
     });
     const heartbeatResponse = await worker.fetch(request('/api/printer/heartbeat', {
         method: 'POST', body: { health: 'ready', printer_id: 'office-printer', printer_name: 'Uluslararası Ofis',
-            runner_id: 'runner-1', settings_protocol: 1 }, headers: printerHeaders()
+            runner_id: 'runner-1', settings_protocol: 3 }, headers: printerHeaders()
     }), environment);
     assert.equal(heartbeatResponse.status, 200);
     const capableStatusResponse = await worker.fetch(request('/api/public/print/status'), environment);
     assert.deepEqual((await capableStatusResponse.json()).options, {
         paper_sizes: ['A4', 'A3'], color_modes: ['monochrome', 'color'], duplex_modes: ['simplex', 'duplexlong'],
-        orientations: ['portrait'], limits: { max_copies: 3, max_page_copies: 200 }
+        orientations: ['portrait', 'landscape'], limits: { max_copies: 50, max_page_copies: 200 }
     });
     const tokens = { idempotency_key: 'd'.repeat(64), tracking_token: 'e'.repeat(64), upload_token: 'f'.repeat(64) };
     const intentResponse = await worker.fetch(request('/api/public/print/upload-intents', {

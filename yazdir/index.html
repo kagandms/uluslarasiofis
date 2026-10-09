@@ -11,68 +11,62 @@
 </head>
 <body>
     <main class="print-page">
-        <a class="print-brand" href="/" aria-label="Portal ana sayfa">
-            <img src="/logo_tr_transparent.png" alt="İstanbul Topkapı Üniversitesi">
+            <a class="print-brand" href="/" data-i18n-aria-label="brandLabel" aria-label="Portal ana sayfa">
+            <img src="/logo_tr_transparent.png" data-i18n-alt="logoAlt" alt="İstanbul Topkapı Üniversitesi">
         </a>
         <section class="print-card" aria-labelledby="print-title">
-            <p class="print-eyebrow">Uluslararası Öğrenci Ofisi</p>
-            <h1 id="print-title">Belge yazdır</h1>
-            <p class="print-intro">PDF, JPG veya PNG dosyanızı seçin. Belgeler en fazla 10 MB ve 20 sayfa olabilir.</p>
-            <div id="print-availability" class="print-availability" role="status" aria-live="polite">Yazıcı durumu kontrol ediliyor…</div>
-            <form id="print-form">
-                <label for="print-file">Dosya</label>
-                <input id="print-file" name="file" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" required>
-                <p id="print-file-details" class="print-hint">PDF, JPG veya PNG · En fazla 10 MB</p>
-                <section class="print-settings" aria-labelledby="print-settings-title">
-                    <h2 id="print-settings-title">Baskı Ayarları</h2>
-                    <div class="print-settings-grid">
-                        <div class="print-setting">
-                            <label for="print-paper-size">Kağıt boyutu</label>
-                            <select id="print-paper-size" name="paper_size">
-                                <option value="A4" selected>A4</option>
-                                <option value="A3" disabled>A3 · Hazne doğrulaması bekleniyor</option>
-                            </select>
-                        </div>
-                        <div class="print-setting">
-                            <label for="print-color-mode">Baskı rengi</label>
-                            <select id="print-color-mode" name="color_mode">
-                                <option value="monochrome" selected>Siyah-beyaz</option>
-                                <option value="color" disabled>Renkli · UAT onayı bekleniyor</option>
-                            </select>
-                        </div>
-                        <div class="print-setting">
-                            <label for="print-duplex">Tek / çift taraf</label>
-                            <select id="print-duplex" name="duplex">
-                                <option value="simplex" selected>Tek taraflı</option>
-                                <option value="duplexlong" disabled>Çift taraflı (uzun kenardan çevir) · UAT onayı bekleniyor</option>
-                            </select>
-                        </div>
-                        <div class="print-setting">
-                            <label for="print-orientation">Sayfa yönü</label>
-                            <select id="print-orientation" name="orientation">
-                                <option value="portrait" selected>Dikey</option>
-                                <option value="landscape">Yatay</option>
-                            </select>
-                        </div>
-                        <div class="print-setting">
-                            <label for="print-copies">Kopya sayısı</label>
-                            <div class="print-copy-control">
-                                <button id="print-copies-decrease" type="button" aria-label="Kopya sayısını azalt">−</button>
-                                <input id="print-copies" name="copies" type="number" min="1" step="1" value="1"
-                                    inputmode="numeric" required aria-describedby="print-copy-limits">
-                                <button id="print-copies-increase" type="button" aria-label="Kopya sayısını artır">+</button>
-                            </div>
-                        </div>
-                    </div>
-                    <p id="print-settings-summary" class="print-settings-summary" aria-live="polite">A4 · Siyah-beyaz · Tek taraflı · 1 kopya</p>
-                    <p id="print-copy-limits" class="print-hint">En fazla 50 kopya; toplam baskı sınırı 200 sayfa.</p>
-                    <p id="print-settings-hint" class="print-hint">A3, renkli ve çift taraflı baskı, ilgili yazıcı doğrulaması tamamlandığında açılır.</p>
-                </section>
-                <button id="print-submit" type="submit" disabled>Yazdır</button>
-            </form>
+            <div class="print-language-picker">
+                <label for="print-language" data-i18n="languageLabel">Dil</label>
+                <select id="print-language" data-i18n-aria-label="languageLabel" aria-label="Dil">
+                    <option value="tr">Türkçe</option>
+                    <option value="en">English</option>
+                    <option value="ru">Русский</option>
+                    <option value="tk">Türkmençe</option>
+                    <option value="ar">العربية</option>
+                </select>
+            </div>
+            <p class="print-eyebrow" data-i18n="eyebrow">Uluslararası Öğrenci Ofisi</p>
+            <h1 id="print-title" data-i18n="title">Belge yazdır</h1>
+            <p class="print-intro" data-i18n="intro">Yazdırmak istediğiniz dosyaları ekleyin. Her dosya en fazla 10 MB olabilir.</p>
+            <div id="print-availability" class="print-availability" role="status" aria-live="polite" data-i18n="availabilityChecking">Yazıcı durumu kontrol ediliyor…</div>
+            <p class="print-guidance" data-i18n="guidance">Her dosyanın baskı ayarlarını seçin. Yalnızca istediğiniz sayfaları yazdırabilirsiniz.</p>
+            <div id="print-files" class="print-files" aria-live="polite"></div>
+            <input id="print-file-input" class="visually-hidden" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" multiple>
+            <button id="print-add-file" class="secondary-button" type="button" data-i18n="addFile">+ Dosya Ekle</button>
+            <section id="print-basket" class="print-basket" data-i18n-aria-label="basketLabel" aria-label="Yazdırma özeti">
+                <p><span id="print-file-count">0 dosya</span><span id="print-page-total">0 baskı sayfası</span></p>
+                <button id="print-submit" type="button" data-i18n="submit" disabled>Tümünü Yazdır</button>
+            </section>
             <p id="print-message" class="print-message" role="status" aria-live="polite"></p>
+            <section id="print-history-section" class="print-history-section" aria-labelledby="print-history-title" hidden>
+                <h2 id="print-history-title" data-i18n="historyTitle">Gönderim durumu</h2>
+                <div id="print-history" class="print-history" aria-live="polite"></div>
+            </section>
         </section>
-        <footer>İstanbul Topkapı Üniversitesi Uluslararası Öğrenci Ofisi</footer>
+        <footer data-i18n="footer">İstanbul Topkapı Üniversitesi Uluslararası Öğrenci Ofisi</footer>
     </main>
+    <template id="print-file-template">
+        <article class="print-file-card">
+            <div class="file-heading">
+                <div class="file-name-block"><h2 class="file-name"></h2><p class="file-meta"></p></div>
+                <button class="remove-file-button" type="button" data-i18n="remove">Kaldır</button>
+            </div>
+            <p class="file-error" role="status" aria-live="polite"></p>
+            <div class="print-settings-grid">
+                <div class="print-setting"><label data-i18n="paperSize">Kağıt boyutu</label><select data-setting="paper_size"><option value="A4" data-i18n="paperA4">A4</option></select></div>
+                <div class="print-setting"><label data-i18n="printColor">Baskı rengi</label><select data-setting="color_mode"><option value="monochrome" data-i18n="monochrome">Siyah-beyaz</option><option value="color" data-i18n="colorUnavailable" disabled>Renkli · kullanılamıyor</option></select></div>
+                <div class="print-setting"><label data-i18n="orientationLabel">Sayfa yönü</label><select data-setting="orientation"><option value="portrait" data-i18n="portrait">Dikey</option><option value="landscape" data-i18n="landscape">Yatay</option></select></div>
+                <div class="print-setting"><label data-i18n="copiesLabel">Kopya sayısı</label><input data-setting="copies" type="number" min="1" step="1" value="1" inputmode="numeric" dir="ltr"></div>
+            </div>
+            <fieldset class="page-selection" hidden>
+                <legend data-i18n="pdfPages">PDF sayfaları</legend>
+                <label class="radio-option"><input type="radio" data-pages="all" checked><span data-i18n="allPages">Tüm sayfalar</span></label>
+                <label class="radio-option"><input type="radio" data-pages="custom"><span data-i18n="customPages">Belirli sayfalar</span></label>
+                <input class="page-range-input" type="text" inputmode="numeric" dir="ltr" data-i18n-placeholder="pageRangePlaceholder" data-i18n-aria-label="pageRangeLabel" placeholder="Örn. 1-5,8,12-15" aria-label="Yazdırılacak sayfalar" disabled>
+                <p class="page-selection-hint"></p>
+            </fieldset>
+            <p class="print-settings-summary"></p>
+        </article>
+    </template>
 </body>
 </html>
