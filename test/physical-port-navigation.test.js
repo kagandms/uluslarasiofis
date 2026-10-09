@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { rolldown } from 'rolldown';
 
 async function loadProductionNavigation() {
-    const bundle = await rolldown({ input:new URL('../src/ui/workspaceNavigation.js',import.meta.url).pathname,
+    const bundle = await rolldown({ input:fileURLToPath(new URL('../src/ui/workspaceNavigation.js', import.meta.url)),
         transform:{define:{'import.meta.env':JSON.stringify({PHYSICAL_INTAKES_ENABLED:true})}} });
     try {
         const { output } = await bundle.generate({format:'esm'});

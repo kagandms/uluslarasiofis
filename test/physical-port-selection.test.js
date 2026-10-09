@@ -4,11 +4,11 @@ import { JSDOM } from 'jsdom';
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rolldown } from 'rolldown';
 
 async function loadMerger() {
-    const bundle = await rolldown({ platform:'browser', input:new URL('../src/ui/pdfMergerModal.js',import.meta.url).pathname,
+    const bundle = await rolldown({ platform:'browser', input:fileURLToPath(new URL('../src/ui/pdfMergerModal.js', import.meta.url)),
         plugins:[{ name:'test-css', resolveId:source => source.endsWith('.css') ? 'virtual:css' : null,
             load:id => id === 'virtual:css' ? 'export default ""' : null }] });
     try {

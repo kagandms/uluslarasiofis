@@ -1,3 +1,18 @@
+## Production development workflow
+
+The canonical branch is `production`. Use this checkout for all future development:
+`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main`.
+The directory name is historical; its Git branch is `production`.
+
+Before editing, verify `git branch --show-current` and preserve any existing working changes.
+Run `npm ci`, `npm test`, `npm run build:production`, and `npm run deploy:dry-run:production`.
+Publish to Worker `goc` only when deployment is requested, using `npm run deploy:production`.
+Git pushes do not require a Cloudflare deployment. Remote migrations require explicit scope review.
+
+The staging commands and Wrangler environment below are historical and retained during the
+approved cleanup process. They are not the development or deployment target. Existing Codex
+worktrees and historical integration evidence remain preserved.
+
 # Uluslararası Öğrenci Ofisi Portalı
 
 The repository contains the public student portal, staff workspaces, a YKN Chrome extension, and a student-owned residence application wizard with private document upload lifecycle. Final readiness and submission remain fail-closed for a later phase.
