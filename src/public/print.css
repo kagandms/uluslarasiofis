@@ -4,9 +4,6 @@ body { margin: 0; min-width: 320px; }
 .print-page { width: min(100% - 32px, 760px); min-height: 100vh; margin: 0 auto; padding: 24px 0 20px; display: flex; flex-direction: column; }
 .print-brand { align-self: center; margin-bottom: 20px; }
 .print-brand img { display: block; width: 180px; max-height: 72px; object-fit: contain; }
-.print-language-picker { display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin: 0 0 18px; }
-.print-language-picker label { font-size: .9rem; font-weight: 650; }
-.print-language-picker select { min-height: 42px; max-width: 190px; padding: 7px 10px; border: 1px solid #cbd1da; border-radius: 9px; background: #fff; color: inherit; font: inherit; }
 .print-card { padding: clamp(18px, 4vw, 32px); background: white; border: 1px solid #dfe3e8; border-radius: 18px; box-shadow: 0 10px 30px #1720330c; }
 .print-eyebrow { margin: 0 0 8px; color: #7e1533; font-size: .82rem; font-weight: 700; }
 h1 { margin: 0; font-size: clamp(1.7rem, 7vw, 2.2rem); }

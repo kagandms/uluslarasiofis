@@ -3,7 +3,7 @@ export const PRINT_LOCALES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 export const PRINT_MESSAGES = Object.freeze({
     tr: Object.freeze({
         pageTitle: 'Belge yazdır | İstanbul Topkapı Üniversitesi',
-        languageLabel: 'Dil', brandLabel: 'Portal ana sayfa', logoAlt: 'İstanbul Topkapı Üniversitesi',
+        brandLabel: 'Portal ana sayfa', logoAlt: 'İstanbul Topkapı Üniversitesi',
         eyebrow: 'Uluslararası Öğrenci Ofisi', title: 'Belge yazdır',
         intro: 'Yazdırmak istediğiniz dosyaları ekleyin. Her dosya en fazla 10 MB olabilir.',
         availabilityChecking: 'Yazıcı durumu kontrol ediliyor…', availabilityReady: 'Yazıcı kullanıma hazır.',
@@ -42,7 +42,7 @@ export const PRINT_MESSAGES = Object.freeze({
     }),
     en: Object.freeze({
         pageTitle: 'Print a document | Istanbul Topkapi University',
-        languageLabel: 'Language', brandLabel: 'Portal home', logoAlt: 'Istanbul Topkapi University',
+        brandLabel: 'Portal home', logoAlt: 'Istanbul Topkapi University',
         eyebrow: 'International Student Office', title: 'Print a document',
         intro: 'Add the files you want to print. Each file can be up to 10 MB.',
         availabilityChecking: 'Checking printer status…', availabilityReady: 'The printer is ready.',
@@ -82,7 +82,7 @@ export const PRINT_MESSAGES = Object.freeze({
     }),
     ru: Object.freeze({
         pageTitle: 'Печать документа | Стамбульский университет Топкапы',
-        languageLabel: 'Язык', brandLabel: 'На главную портала', logoAlt: 'Стамбульский университет Топкапы',
+        brandLabel: 'На главную портала', logoAlt: 'Стамбульский университет Топкапы',
         eyebrow: 'Офис по работе с иностранными студентами', title: 'Печать документа',
         intro: 'Добавьте файлы для печати. Размер каждого файла — не более 10 МБ.',
         availabilityChecking: 'Проверка состояния принтера…', availabilityReady: 'Принтер готов к работе.',
@@ -131,7 +131,7 @@ export const PRINT_MESSAGES = Object.freeze({
     }),
     tk: Object.freeze({
         pageTitle: 'Resminamany çap etmek | Stambul Topkapy uniwersiteti',
-        languageLabel: 'Dil', brandLabel: 'Portalyň baş sahypasy', logoAlt: 'Stambul Topkapy uniwersiteti',
+        brandLabel: 'Portalyň baş sahypasy', logoAlt: 'Stambul Topkapy uniwersiteti',
         eyebrow: 'Halkara talyplar bölümi', title: 'Resminamany çap etmek',
         intro: 'Çap etmek isleýän faýllaryňyzy goşuň. Her faýlyň göwrümi 10 MB-dan köp bolmaly däl.',
         availabilityChecking: 'Printeriň ýagdaýy barlanýar…', availabilityReady: 'Printer çap etmäge taýýar.',
@@ -170,7 +170,7 @@ export const PRINT_MESSAGES = Object.freeze({
     }),
     ar: Object.freeze({
         pageTitle: 'طباعة مستند | جامعة إسطنبول توبكابي',
-        languageLabel: 'اللغة', brandLabel: 'الصفحة الرئيسية للبوابة', logoAlt: 'جامعة إسطنبول توبكابي',
+        brandLabel: 'الصفحة الرئيسية للبوابة', logoAlt: 'جامعة إسطنبول توبكابي',
         eyebrow: 'مكتب الطلاب الدوليين', title: 'طباعة مستند',
         intro: 'أضف الملفات التي تريد طباعتها. يجب ألا يتجاوز حجم كل ملف 10 ميغابايت.',
         availabilityChecking: 'جارٍ التحقق من حالة الطابعة…', availabilityReady: 'الطابعة جاهزة للاستخدام.',
@@ -218,20 +218,21 @@ function arabicPlural(count, one, two, few, other) {
     return other;
 }
 
-export function detectPrintLocale(languages) {
-    for (const language of languages || []) {
-        const primaryLanguage = String(language).trim().toLowerCase().split(/[-_]/)[0];
+export function detectPrintLocale(languages, language) {
+    const preferences = Array.isArray(languages) ? [...languages] : [];
+    if (typeof language === 'string' && !preferences.includes(language)) preferences.push(language);
+    for (const preference of preferences) {
+        if (typeof preference !== 'string') continue;
+        const normalizedPreference = preference.trim().toLowerCase();
+        if (!/^[a-z]{2,3}(?:[-_][a-z0-9]{1,8})*$/.test(normalizedPreference)) continue;
+        const primaryLanguage = normalizedPreference.split(/[-_]/)[0];
         if (PRINT_LOCALES.includes(primaryLanguage)) return primaryLanguage;
     }
-    return 'tr';
-}
-
-export function resolvePrintLocale(languages, storedLocale) {
-    return PRINT_LOCALES.includes(storedLocale) ? storedLocale : detectPrintLocale(languages);
+    return 'en';
 }
 
 export function translatePrintMessage(locale, key, params = {}) {
-    const message = PRINT_MESSAGES[locale]?.[key] ?? PRINT_MESSAGES.tr[key];
+    const message = PRINT_MESSAGES[locale]?.[key] ?? PRINT_MESSAGES.en[key];
     if (typeof message === 'function') return message(params);
     if (typeof message !== 'string') return key;
     return message.replace(/\{([a-zA-Z]+)\}/g, (placeholder, name) => String(params[name] ?? placeholder));

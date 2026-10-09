@@ -2,23 +2,22 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
-    PRINT_LOCALES, PRINT_MESSAGES, detectPrintLocale, getPrintMessageKeys, resolvePrintLocale,
+    PRINT_LOCALES, PRINT_MESSAGES, detectPrintLocale, getPrintMessageKeys,
     translatePrintMessage
 } from '../src/public/i18n/printMessages.js';
 
-test('browser locale detection maps supported regional tags and follows browser preference order', () => {
+test('browser locale detection maps supported tags and follows navigator preference order', () => {
     const regionalLocales = ['tr-TR', 'en-US', 'ru-RU', 'tk-TM', 'ar-SA'];
 
     assert.deepEqual(regionalLocales.map((locale) => detectPrintLocale([locale])), PRINT_LOCALES);
     assert.equal(detectPrintLocale(['fr-FR', 'ru-RU', 'en-US']), 'ru');
-    assert.equal(detectPrintLocale(['fr-FR', 'de-DE']), 'tr');
+    assert.equal(detectPrintLocale(['fr-FR', 'de-DE']), 'en');
     assert.equal(detectPrintLocale(['TK_tm']), 'tk');
-});
-
-test('a valid saved manual locale takes priority over browser preferences', () => {
-    assert.equal(resolvePrintLocale(['tr-TR'], 'ar'), 'ar');
-    assert.equal(resolvePrintLocale(['ar-SA'], 'invalid'), 'ar');
-    assert.equal(resolvePrintLocale(['de-DE'], null), 'tr');
+    assert.equal(detectPrintLocale(['fr-FR', 'de-DE'], 'ar-SA'), 'ar');
+    assert.equal(detectPrintLocale([], 'tk-TM'), 'tk');
+    assert.equal(detectPrintLocale(['en-US-u-ca-gregory']), 'en');
+    assert.equal(detectPrintLocale(['not a locale'], 'invalid'), 'en');
+    assert.equal(detectPrintLocale(null, 'ru-RU'), 'ru');
 });
 
 test('all five print dictionaries contain the same complete translation keys', () => {

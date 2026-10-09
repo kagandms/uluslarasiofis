@@ -7,21 +7,22 @@ import {
     isValidCopies, normalizePrintCapabilities, summarizePrintSettings
 } from '../src/public/printSettings.js';
 
-test('print page offers a Turkish mobile-first multi-file basket', () => {
+test('print page defaults to English until browser locale detection and keeps multi-file upload', () => {
     const html = readFileSync(new URL('../yazdir/index.html', import.meta.url), 'utf8');
     const document = new JSDOM(html).window.document;
 
-    assert.equal(document.documentElement.lang, 'tr');
-    assert.deepEqual([...document.querySelectorAll('#print-language option')].map((option) => option.value),
-        ['tr', 'en', 'ru', 'tk', 'ar']);
+    assert.equal(document.documentElement.lang, 'en');
+    assert.equal(document.querySelector('#print-language'), null);
     assert.equal(document.querySelector('#print-file-input').multiple, true);
-    assert.equal(document.querySelector('#print-submit').textContent, 'Tümünü Yazdır');
+    assert.equal(document.querySelector('#print-submit').textContent, 'Print all');
     const template = document.querySelector('#print-file-template').content;
     assert.equal(template.querySelectorAll('[data-setting]').length, 4);
     assert.equal(template.querySelector('[data-setting="paper_size"]').value, 'A4');
     assert.equal(template.querySelector('[data-setting="color_mode"] option[value="color"]').disabled, true);
     assert.equal(template.querySelector('[data-pages="all"]').checked, true);
-    assert.match(document.querySelector('.print-guidance').textContent, /Yalnızca istediğiniz sayfaları/);
+    assert.equal(template.querySelector('.page-range-input').hidden, true);
+    assert.equal(template.querySelector('.page-selection-hint').hidden, true);
+    assert.match(document.querySelector('.print-guidance').textContent, /print only the pages you need/);
     const stylesheet = readFileSync(new URL('../src/public/print.css', import.meta.url), 'utf8');
     const script = readFileSync(new URL('../src/public/print.js', import.meta.url), 'utf8');
     assert.match(stylesheet, /@media \(max-width: 520px\)/);

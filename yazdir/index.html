@@ -1,69 +1,59 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f8fafc">
-    <title>Belge Yazdır | İstanbul Topkapı Üniversitesi</title>
+    <title>Print a document | Istanbul Topkapi University</title>
     <link rel="icon" type="image/png" href="/icon.png?v=3">
     <link rel="stylesheet" href="/src/public/print.css">
     <script type="module" src="/src/public/print.js"></script>
 </head>
 <body>
     <main class="print-page">
-            <a class="print-brand" href="/" data-i18n-aria-label="brandLabel" aria-label="Portal ana sayfa">
-            <img src="/logo_tr_transparent.png" data-i18n-alt="logoAlt" alt="İstanbul Topkapı Üniversitesi">
+            <a class="print-brand" href="/" data-i18n-aria-label="brandLabel" aria-label="Portal home">
+            <img src="/logo_tr_transparent.png" data-i18n-alt="logoAlt" alt="Istanbul Topkapi University">
         </a>
         <section class="print-card" aria-labelledby="print-title">
-            <div class="print-language-picker">
-                <label for="print-language" data-i18n="languageLabel">Dil</label>
-                <select id="print-language" data-i18n-aria-label="languageLabel" aria-label="Dil">
-                    <option value="tr">Türkçe</option>
-                    <option value="en">English</option>
-                    <option value="ru">Русский</option>
-                    <option value="tk">Türkmençe</option>
-                    <option value="ar">العربية</option>
-                </select>
-            </div>
-            <p class="print-eyebrow" data-i18n="eyebrow">Uluslararası Öğrenci Ofisi</p>
-            <h1 id="print-title" data-i18n="title">Belge yazdır</h1>
-            <p class="print-intro" data-i18n="intro">Yazdırmak istediğiniz dosyaları ekleyin. Her dosya en fazla 10 MB olabilir.</p>
-            <div id="print-availability" class="print-availability" role="status" aria-live="polite" data-i18n="availabilityChecking">Yazıcı durumu kontrol ediliyor…</div>
-            <p class="print-guidance" data-i18n="guidance">Her dosyanın baskı ayarlarını seçin. Yalnızca istediğiniz sayfaları yazdırabilirsiniz.</p>
+            <p class="print-eyebrow" data-i18n="eyebrow">International Student Office</p>
+            <h1 id="print-title" data-i18n="title">Print a document</h1>
+            <p class="print-intro" data-i18n="intro">Add the files you want to print. Each file can be up to 10 MB.</p>
+            <div id="print-availability" class="print-availability" role="status" aria-live="polite" data-i18n="availabilityChecking">Checking printer status…</div>
+            <p class="print-guidance" data-i18n="guidance">Choose print settings for each file. You can print only the pages you need.</p>
             <div id="print-files" class="print-files" aria-live="polite"></div>
             <input id="print-file-input" class="visually-hidden" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" multiple>
-            <button id="print-add-file" class="secondary-button" type="button" data-i18n="addFile">+ Dosya Ekle</button>
-            <section id="print-basket" class="print-basket" data-i18n-aria-label="basketLabel" aria-label="Yazdırma özeti">
-                <p><span id="print-file-count">0 dosya</span><span id="print-page-total">0 baskı sayfası</span></p>
-                <button id="print-submit" type="button" data-i18n="submit" disabled>Tümünü Yazdır</button>
+            <button id="print-add-file" class="secondary-button" type="button" data-i18n="addFile">+ Add files</button>
+            <section id="print-basket" class="print-basket" data-i18n-aria-label="basketLabel" aria-label="Print summary">
+                <p><span id="print-file-count">0 files</span><span id="print-page-total">0 print pages</span></p>
+                <button id="print-submit" type="button" data-i18n="submit" disabled>Print all</button>
             </section>
             <p id="print-message" class="print-message" role="status" aria-live="polite"></p>
             <section id="print-history-section" class="print-history-section" aria-labelledby="print-history-title" hidden>
-                <h2 id="print-history-title" data-i18n="historyTitle">Gönderim durumu</h2>
+                <h2 id="print-history-title" data-i18n="historyTitle">Submission status</h2>
                 <div id="print-history" class="print-history" aria-live="polite"></div>
             </section>
         </section>
-        <footer data-i18n="footer">İstanbul Topkapı Üniversitesi Uluslararası Öğrenci Ofisi</footer>
+        <footer data-i18n="footer">Istanbul Topkapi University International Student Office</footer>
     </main>
     <template id="print-file-template">
         <article class="print-file-card">
             <div class="file-heading">
                 <div class="file-name-block"><h2 class="file-name"></h2><p class="file-meta"></p></div>
-                <button class="remove-file-button" type="button" data-i18n="remove">Kaldır</button>
+            <button class="remove-file-button" type="button" data-i18n="remove">Remove</button>
             </div>
             <p class="file-error" role="status" aria-live="polite"></p>
             <div class="print-settings-grid">
-                <div class="print-setting"><label data-i18n="paperSize">Kağıt boyutu</label><select data-setting="paper_size"><option value="A4" data-i18n="paperA4">A4</option></select></div>
-                <div class="print-setting"><label data-i18n="printColor">Baskı rengi</label><select data-setting="color_mode"><option value="monochrome" data-i18n="monochrome">Siyah-beyaz</option><option value="color" data-i18n="colorUnavailable" disabled>Renkli · kullanılamıyor</option></select></div>
-                <div class="print-setting"><label data-i18n="orientationLabel">Sayfa yönü</label><select data-setting="orientation"><option value="portrait" data-i18n="portrait">Dikey</option><option value="landscape" data-i18n="landscape">Yatay</option></select></div>
-                <div class="print-setting"><label data-i18n="copiesLabel">Kopya sayısı</label><input data-setting="copies" type="number" min="1" step="1" value="1" inputmode="numeric" dir="ltr"></div>
+                <div class="print-setting"><label data-i18n="paperSize">Paper size</label><select data-setting="paper_size"><option value="A4" data-i18n="paperA4">A4</option></select></div>
+                <div class="print-setting"><label data-i18n="printColor">Print color</label><select data-setting="color_mode"><option value="monochrome" data-i18n="monochrome">Black and white</option><option value="color" data-i18n="colorUnavailable" disabled>Color · unavailable</option></select></div>
+                <div class="print-setting"><label data-i18n="orientationLabel">Page orientation</label><select data-setting="orientation"><option value="portrait" data-i18n="portrait">Portrait</option><option value="landscape" data-i18n="landscape">Landscape</option></select></div>
+                <div class="print-setting"><label data-i18n="copiesLabel">Copies</label><input data-setting="copies" type="number" min="1" step="1" value="1" inputmode="numeric" dir="ltr"></div>
             </div>
             <fieldset class="page-selection" hidden>
-                <legend data-i18n="pdfPages">PDF sayfaları</legend>
-                <label class="radio-option"><input type="radio" data-pages="all" checked><span data-i18n="allPages">Tüm sayfalar</span></label>
-                <label class="radio-option"><input type="radio" data-pages="custom"><span data-i18n="customPages">Belirli sayfalar</span></label>
-                <input class="page-range-input" type="text" inputmode="numeric" dir="ltr" data-i18n-placeholder="pageRangePlaceholder" data-i18n-aria-label="pageRangeLabel" placeholder="Örn. 1-5,8,12-15" aria-label="Yazdırılacak sayfalar" disabled>
-                <p class="page-selection-hint"></p>
+                <legend data-i18n="pdfPages">PDF pages</legend>
+                <label class="radio-option"><input type="radio" data-pages="all" checked><span data-i18n="allPages">All pages</span></label>
+                <label class="radio-option"><input type="radio" data-pages="custom"><span data-i18n="customPages">Selected pages</span></label>
+                <input class="page-range-input" type="text" inputmode="numeric" dir="ltr" data-i18n-placeholder="pageRangePlaceholder" data-i18n-aria-label="pageRangeLabel" placeholder="e.g. 1-5,8,12-15" aria-label="Pages to print" disabled hidden>
+                <p class="page-selection-hint" hidden></p>
             </fieldset>
             <p class="print-settings-summary"></p>
         </article>

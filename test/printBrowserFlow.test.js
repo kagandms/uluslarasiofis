@@ -11,8 +11,9 @@ function createCapabilities({ allowColor = false } = {}) {
         orientations: ['portrait', 'landscape'], limits: { max_copies: 50, max_page_copies: 200 } };
 }
 
-function installBrowserGlobals(dom, fetchHandler, languages = ['tr-TR']) {
+function installBrowserGlobals(dom, fetchHandler, languages = ['tr-TR'], language = 'en-US') {
     Object.defineProperty(dom.window.navigator, 'languages', { configurable: true, value: languages });
+    Object.defineProperty(dom.window.navigator, 'language', { configurable: true, value: language });
     globalThis.document = dom.window.document;
     globalThis.window = dom.window;
     globalThis.sessionStorage = dom.window.sessionStorage;
@@ -68,9 +69,13 @@ test('multi-file browser flow extracts selected pages and preserves each card se
 
         const [pdfCard, imageCard] = dom.window.document.querySelectorAll('.print-file-card');
         const pageChoice = pdfCard.querySelector('[data-pages="custom"]');
+        const pageRange = pdfCard.querySelector('.page-range-input');
+        assert.equal(pageRange.hidden, true);
+        assert.equal(pdfCard.querySelector('.page-selection-hint').hidden, true);
         pageChoice.checked = true;
         pageChoice.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-        const pageRange = pdfCard.querySelector('.page-range-input');
+        assert.equal(pageRange.hidden, false);
+        assert.equal(pdfCard.querySelector('.page-selection-hint').hidden, false);
         pageRange.value = '1-5';
         pageRange.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
         pdfCard.querySelector('[data-setting="orientation"]').value = 'landscape';
@@ -197,8 +202,7 @@ test('automatic Arabic selection sets page RTL while keeping page-number fields 
         assert.equal(dom.window.document.documentElement.lang, 'ar');
         assert.equal(dom.window.document.documentElement.dir, 'rtl');
         assert.equal(dom.window.document.querySelector('#print-title').textContent, 'طباعة مستند');
-        assert.equal(dom.window.document.querySelector('#print-language').value, 'ar');
-        assert.equal(dom.window.document.querySelector('#print-language').getAttribute('aria-label'), 'اللغة');
+        assert.equal(dom.window.document.querySelector('#print-language'), null);
         assert.equal(dom.window.document.querySelector('#print-file-input').multiple, true);
         const sourcePdf = await PDFDocument.create();
         sourcePdf.addPage([595, 842]);
@@ -211,6 +215,7 @@ test('automatic Arabic selection sets page RTL while keeping page-number fields 
         const card = dom.window.document.querySelector('.print-file-card');
         assert.equal(card.querySelector('[data-setting="copies"]').dir, 'ltr');
         assert.equal(card.querySelector('.page-range-input').dir, 'ltr');
+        assert.equal(card.querySelector('.page-range-input').hidden, true);
         assert.match(card.querySelector('.print-settings-summary').textContent, /أبيض وأسود/);
     } finally {
         dom.window.close();
@@ -221,20 +226,22 @@ test('automatic Arabic selection sets page RTL while keeping page-number fields 
     }
 });
 
-test('a saved manual locale overrides the browser language on the next page visit', async () => {
+test('a legacy saved manual locale is ignored and browser preferences are sampled once', async () => {
     const dom = new JSDOM(pageHtml, { url: 'https://portal.test/yazdir/' });
     dom.window.localStorage.setItem('print.locale.v1', 'tk');
     installBrowserGlobals(dom, async () => ({ ok: true, json: async () => ({
         available: false, options: createCapabilities()
-    }) }), ['ar-SA']);
+    }) }), ['ar-SA'], 'en-US');
 
     try {
         await import(`../src/public/print.js?stored-locale=${crypto.randomUUID()}`);
         await waitFor(() => dom.window.document.querySelector('#print-availability').dataset.state === 'unavailable');
-        assert.equal(dom.window.document.documentElement.lang, 'tk');
-        assert.equal(dom.window.document.documentElement.dir, 'ltr');
-        assert.equal(dom.window.document.querySelector('#print-title').textContent, 'Resminamany çap etmek');
-        assert.equal(dom.window.document.querySelector('#print-language').value, 'tk');
+        assert.equal(dom.window.document.documentElement.lang, 'ar');
+        assert.equal(dom.window.document.documentElement.dir, 'rtl');
+        assert.equal(dom.window.document.querySelector('#print-title').textContent, 'طباعة مستند');
+        assert.equal(dom.window.document.querySelector('#print-language'), null);
+        Object.defineProperty(dom.window.navigator, 'languages', { configurable: true, value: ['ru-RU'] });
+        assert.equal(dom.window.document.documentElement.lang, 'ar');
     } finally {
         dom.window.close();
         delete globalThis.document;
@@ -244,8 +251,9 @@ test('a saved manual locale overrides the browser language on the next page visi
     }
 });
 
-test('manual language changes persist and preserve files, settings, and in-flight submission messages', async () => {
+test('browser locale stays fixed during submission while files and print settings remain intact', async () => {
     const dom = new JSDOM(pageHtml, { url: 'https://portal.test/yazdir/' });
+    dom.window.localStorage.setItem('print.locale.v1', 'tk');
     let releaseIntent;
     const intentPending = new Promise((resolve) => { releaseIntent = resolve; });
     const intents = [];
@@ -261,7 +269,7 @@ test('manual language changes persist and preserve files, settings, and in-fligh
         if (String(url).endsWith('/finalize')) return { ok: true };
         if (String(url).endsWith('/jobs/status')) return { ok: true, json: async () => ({ status: 'queued' }) };
         throw new Error(`Unexpected request: ${url}`);
-    });
+    }, ['ru-RU'], 'ar-SA');
 
     try {
         await import(`../src/public/print.js?locale-state=${crypto.randomUUID()}`);
@@ -274,7 +282,7 @@ test('manual language changes persist and preserve files, settings, and in-fligh
             new File([await sourcePdf.save()], 'preserve.pdf', { type: 'application/pdf' })
         ] });
         fileInput.dispatchEvent(new dom.window.Event('change'));
-        await waitFor(() => dom.window.document.querySelector('.page-selection-hint')?.textContent.includes('2 seçili'));
+        await waitFor(() => dom.window.document.querySelector('.page-selection-hint')?.textContent.includes('2'));
         const originalCard = dom.window.document.querySelector('.print-file-card');
         originalCard.querySelector('[data-pages="custom"]').checked = true;
         originalCard.querySelector('[data-pages="custom"]').dispatchEvent(new dom.window.Event('change', { bubbles: true }));
@@ -283,35 +291,115 @@ test('manual language changes persist and preserve files, settings, and in-fligh
         originalCard.querySelector('[data-setting="copies"]').value = '4';
         originalCard.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
 
-        const languageSelect = dom.window.document.querySelector('#print-language');
-        languageSelect.value = 'ru';
-        languageSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
         assert.equal(dom.window.document.documentElement.lang, 'ru');
         assert.equal(dom.window.document.documentElement.dir, 'ltr');
+        assert.equal(dom.window.document.querySelector('#print-language'), null);
         assert.equal(dom.window.document.querySelector('.print-file-card'), originalCard);
         assert.equal(originalCard.querySelector('[data-pages="custom"]').checked, true);
         assert.equal(originalCard.querySelector('.page-range-input').value, '2');
         assert.equal(originalCard.querySelector('[data-setting="color_mode"]').value, 'color');
         assert.equal(originalCard.querySelector('[data-setting="copies"]').value, '4');
-        assert.equal(dom.window.localStorage.getItem('print.locale.v1'), 'ru');
+        assert.equal(dom.window.localStorage.getItem('print.locale.v1'), 'tk');
 
         dom.window.document.querySelector('#print-submit').click();
         await waitFor(() => intents.length === 1);
-        languageSelect.value = 'ar';
-        languageSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-        assert.equal(dom.window.document.documentElement.lang, 'ar');
-        assert.equal(dom.window.document.documentElement.dir, 'rtl');
-        assert.match(dom.window.document.querySelector('#print-message').textContent, /جارٍ تحميل/);
-        assert.equal(dom.window.document.querySelector('#print-submit').textContent, 'جارٍ إرسال الملفات…');
+        Object.defineProperty(dom.window.navigator, 'languages', { configurable: true, value: ['ar-SA'] });
+        assert.equal(dom.window.document.documentElement.lang, 'ru');
+        assert.equal(dom.window.document.documentElement.dir, 'ltr');
+        assert.match(dom.window.document.querySelector('#print-message').textContent, /Загрузка файла/);
+        assert.equal(dom.window.document.querySelector('#print-submit').textContent, 'Отправка файлов…');
 
         releaseIntent({ ok: true, json: async () => ({ job_id: 'job-locale', status: 'uploading', upload: {
             url: '/upload/job-locale', method: 'PUT', requiredHeaders: {}
         } }) });
-        await waitFor(() => dom.window.document.querySelector('#print-message').textContent === 'أُضيفت مهام الطباعة إلى قائمة الانتظار.');
+        await waitFor(() => dom.window.document.querySelector('#print-message').textContent === 'Задания на печать добавлены в очередь.');
         assert.equal(intents[0].color_mode, 'color');
         assert.equal(intents[0].copies, 4);
         assert.equal(intents[0].media_type, 'application/pdf');
         assert.equal(dom.window.document.querySelectorAll('.print-file-card').length, 0);
+    } finally {
+        dom.window.close();
+        delete globalThis.document;
+        delete globalThis.window;
+        delete globalThis.sessionStorage;
+        delete globalThis.fetch;
+    }
+});
+
+test('all-pages mode hides and ignores stale PDF range input while preserving file settings', async () => {
+    const dom = new JSDOM(pageHtml, { url: 'https://portal.test/yazdir/' });
+    const intents = [];
+    const uploadedFiles = [];
+    installBrowserGlobals(dom, async (url, options = {}) => {
+        if (String(url).endsWith('/api/public/print/status')) {
+            return { ok: true, json: async () => ({ available: true, options: createCapabilities() }) };
+        }
+        if (String(url).endsWith('/api/public/print/upload-intents')) {
+            intents.push(JSON.parse(options.body));
+            return { ok: true, json: async () => ({ job_id: 'all-pages', status: 'uploading', upload: {
+                url: '/upload/all-pages', method: 'PUT', requiredHeaders: {}
+            } }) };
+        }
+        if (String(url).startsWith('/upload/')) {
+            uploadedFiles.push(options.body);
+            return { ok: true };
+        }
+        if (String(url).endsWith('/finalize')) return { ok: true };
+        if (String(url).endsWith('/jobs/status')) return { ok: true, json: async () => ({ status: 'queued' }) };
+        throw new Error(`Unexpected request: ${url}`);
+    });
+
+    try {
+        await import(`../src/public/print.js?all-pages=${crypto.randomUUID()}`);
+        await waitFor(() => dom.window.document.querySelector('#print-availability').dataset.state === 'ready');
+        const sourcePdf = await PDFDocument.create();
+        for (let index = 0; index < 3; index += 1) sourcePdf.addPage([595, 842]);
+        const sourceFile = new File([await sourcePdf.save()], 'all-pages.pdf', { type: 'application/pdf' });
+        const fileInput = dom.window.document.querySelector('#print-file-input');
+        Object.defineProperty(fileInput, 'files', { configurable: true, value: [sourceFile] });
+        fileInput.dispatchEvent(new dom.window.Event('change'));
+        await waitFor(() => dom.window.document.querySelector('.page-selection-hint')?.textContent.includes('3'));
+
+        const card = dom.window.document.querySelector('.print-file-card');
+        const rangeInput = card.querySelector('.page-range-input');
+        const hint = card.querySelector('.page-selection-hint');
+        assert.equal(rangeInput.hidden, true);
+        assert.equal(hint.hidden, true);
+        rangeInput.value = 'invalid range';
+        rangeInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        assert.equal(card.querySelector('.file-error').textContent, '');
+        assert.equal(dom.window.document.querySelector('#print-submit').disabled, false);
+
+        const customPages = card.querySelector('[data-pages="custom"]');
+        customPages.checked = true;
+        customPages.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        assert.equal(rangeInput.hidden, false);
+        assert.equal(hint.hidden, false);
+        assert.equal(dom.window.document.querySelector('#print-submit').disabled, true);
+        rangeInput.value = '1-2';
+        rangeInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        card.querySelector('[data-setting="copies"]').value = '2';
+        card.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+        const allPages = card.querySelector('[data-pages="all"]');
+        allPages.checked = true;
+        allPages.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        assert.equal(rangeInput.hidden, true);
+        assert.equal(hint.hidden, true);
+        assert.equal(rangeInput.value, '1-2');
+        rangeInput.value = 'invalid range';
+        rangeInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        assert.equal(card.querySelector('.file-error').textContent, '');
+        assert.equal(card.querySelector('[data-setting="copies"]').value, '2');
+        assert.equal(dom.window.document.querySelectorAll('.print-file-card').length, 1);
+        assert.equal(dom.window.document.querySelector('#print-submit').disabled, false);
+
+        dom.window.document.querySelector('#print-submit').click();
+        await waitFor(() => intents.length === 1 && uploadedFiles.length === 1);
+        const uploadedPdf = await PDFDocument.load(await uploadedFiles[0].arrayBuffer());
+        assert.equal(uploadedPdf.getPageCount(), 3);
+        assert.equal(intents[0].copies, 2);
+        assert.equal(intents[0].media_type, 'application/pdf');
     } finally {
         dom.window.close();
         delete globalThis.document;

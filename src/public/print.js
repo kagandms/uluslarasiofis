@@ -3,13 +3,12 @@ import { arePrintSettingsAvailable, createPrintUploadPayload, getMaximumCopies, 
 import { parsePageSelection } from './printPageSelection.js';
 import { extractPdfPages } from './printPdf.js';
 import { submitPrintEntries } from './printQueue.js';
-import { PRINT_LOCALES, resolvePrintLocale, translatePrintMessage } from './i18n/printMessages.js';
+import { detectPrintLocale, translatePrintMessage } from './i18n/printMessages.js';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_PRINT_PAGES = 20;
 const ACCEPTED_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
 const HISTORY_KEY = 'print.job-history.v2';
-const LOCALE_KEY = 'print.locale.v1';
 const fileInput = document.getElementById('print-file-input');
 const fileList = document.getElementById('print-files');
 const fileTemplate = document.getElementById('print-file-template');
@@ -21,7 +20,6 @@ const fileCount = document.getElementById('print-file-count');
 const pageTotal = document.getElementById('print-page-total');
 const historySection = document.getElementById('print-history-section');
 const historyList = document.getElementById('print-history');
-const languageSelect = document.getElementById('print-language');
 let optionCapabilities = normalizePrintCapabilities();
 let isAvailable = false;
 let hasCheckedAvailability = false;
@@ -29,17 +27,9 @@ let isSubmitting = false;
 const files = [];
 const jobs = readJobHistory();
 let currentMessage = null;
-let locale = resolvePrintLocale(window.navigator.languages, readSavedLocale());
+const locale = detectPrintLocale(window.navigator.languages, window.navigator.language);
 
 function t(key, params = {}) { return translatePrintMessage(locale, key, params); }
-
-function readSavedLocale() {
-    try { return window.localStorage.getItem(LOCALE_KEY); } catch { return null; }
-}
-
-function persistLocale(nextLocale) {
-    try { window.localStorage.setItem(LOCALE_KEY, nextLocale); } catch { /* This page still works for the current visit. */ }
-}
 
 function translateElements(container) {
     for (const element of container.querySelectorAll('[data-i18n]')) {
@@ -65,13 +55,10 @@ function setMessage(key, params = {}) {
     renderMessage();
 }
 
-function changeLocale(nextLocale, { shouldPersist = true } = {}) {
-    if (!PRINT_LOCALES.includes(nextLocale)) return;
-    locale = nextLocale;
+function applyLocale() {
     document.documentElement.lang = locale;
     document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
     document.title = t('pageTitle');
-    languageSelect.value = locale;
     translateElements(document);
     translateElements(fileTemplate.content);
     availability.textContent = t(hasCheckedAvailability
@@ -81,7 +68,6 @@ function changeLocale(nextLocale, { shouldPersist = true } = {}) {
     renderMessage();
     submitButton.textContent = t(isSubmitting ? 'submitting' : 'submit');
     updateBasket();
-    if (shouldPersist) persistLocale(locale);
 }
 
 function readJobHistory() {
@@ -179,8 +165,10 @@ function renderFile(entry) {
     if (rangeField && !rangeField.hidden) {
         const customPages = entry.card.querySelector('[data-pages="custom"]').checked;
         const rangeInput = entry.card.querySelector('.page-range-input');
-        rangeInput.disabled = !customPages;
         const hint = entry.card.querySelector('.page-selection-hint');
+        rangeInput.hidden = !customPages;
+        rangeInput.disabled = !customPages;
+        hint.hidden = !customPages;
         hint.textContent = count === null ? t('pageRangeReading')
             : t('pageRangeHint', { count, maximum: MAX_PRINT_PAGES });
     }
@@ -425,14 +413,13 @@ async function submitAll() {
 }
 
 addFileButton.addEventListener('click', () => fileInput.click());
-languageSelect.addEventListener('change', () => changeLocale(languageSelect.value));
 fileInput.addEventListener('change', () => {
     for (const file of fileInput.files || []) addFile(file);
     fileInput.value = '';
     setMessage(null);
 });
 submitButton.addEventListener('click', () => void submitAll());
-changeLocale(locale, { shouldPersist: false });
+applyLocale();
 renderHistory();
 for (const job of jobs) {
     if (!['submitted', 'unknown', 'failed', 'expired', 'cancelled'].includes(job.status)) void monitorJob(job);
