@@ -64,6 +64,7 @@ function renderMessage() {
 
 function setMessage(key, params = {}) {
     currentMessage = key ? { key, params } : null;
+    message.hidden = currentMessage === null;
     renderMessage();
 }
 
@@ -195,6 +196,19 @@ function renderFile(entry) {
     }
     const summary = entry.card.querySelector('.print-settings-summary');
     summary.textContent = `${summarizeSettings(settings)}${count ? ` · ${t('pagesWord', { count })}` : ''}`;
+    const sourcePages = entry.card.querySelector('.file-source-pages');
+    sourcePages.textContent = entry.file.type === 'application/pdf'
+        ? Number.isSafeInteger(entry.sourcePageCount)
+            ? t('pdfPageCount', { count: entry.sourcePageCount })
+            : t(entry.error ? 'pageCountUnavailable' : 'pdfPageCountReading')
+        : t('imagePageCount');
+    const printTotal = entry.card.querySelector('.file-print-total');
+    const hasValidCopies = isValidCopies(settings.copies, getMaximumCopies(optionCapabilities, count));
+    printTotal.textContent = count === null
+        ? t('filePrintTotalReading')
+        : count < 1 ? t('filePrintTotalChoosePages')
+            : hasValidCopies ? t('filePrintTotal', { count: count * Number(settings.copies) })
+                : t('filePrintTotalCheckCopies');
     const error = validateEntry(entry);
     entry.card.querySelector('.file-error').textContent = error;
     updateBasket();
@@ -231,6 +245,7 @@ function pageSelectionError(error, entry) {
 }
 
 function updateBasket() {
+    const hasFiles = files.length > 0;
     const total = files.reduce((sum, entry) => {
         try {
             const count = pageCountFor(entry);
@@ -238,6 +253,8 @@ function updateBasket() {
             return sum + (count && Number.isSafeInteger(copies) ? count * copies : 0);
         } catch { return sum; }
     }, 0);
+    addFileButton.textContent = t(hasFiles ? 'addAnotherFile' : 'selectFile');
+    document.getElementById('print-basket').hidden = !hasFiles;
     fileCount.textContent = t('fileCount', { count: files.length });
     pageTotal.textContent = t('pageCount', { count: total });
     submitButton.disabled = !isAvailable || isSubmitting || files.length === 0 || total > optionCapabilities.limits.max_page_copies

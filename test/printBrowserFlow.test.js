@@ -85,7 +85,7 @@ test('multi-file browser flow extracts selected pages and preserves each card se
         pdfCard.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
         imageCard.querySelector('[data-setting="copies"]').value = '3';
         imageCard.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-        assert.equal(dom.window.document.querySelector('#print-page-total').textContent, '13 baskı sayfası');
+        assert.equal(dom.window.document.querySelector('#print-page-total').textContent, 'Toplam baskı sayfası: 13');
 
         const submitButton = dom.window.document.querySelector('#print-submit');
         assert.equal(submitButton.disabled, false);
@@ -330,7 +330,7 @@ test('manual language changes localize the guide, settings and help in all five 
             assert.equal(dom.window.document.documentElement.lang, locale);
             assert.equal(dom.window.document.documentElement.dir, locale === 'ar' ? 'rtl' : 'ltr');
             assert.equal(dom.window.document.querySelector('#print-guide-title').textContent, PRINT_MESSAGES[locale].guideTitle);
-            assert.equal(dom.window.document.querySelector('.advanced-settings summary').textContent, PRINT_MESSAGES[locale].advancedSettings);
+            assert.equal(dom.window.document.querySelector('.advanced-settings summary').textContent, PRINT_MESSAGES[locale].changePrintSettings);
             assert.equal(dom.window.document.querySelector('#print-help-title').textContent, PRINT_MESSAGES[locale].helpTitle);
             assert.equal(dom.window.document.querySelector('.print-file-card'), card);
             assert.equal(copies.value, '2');
@@ -402,7 +402,7 @@ test('browser locale stays fixed during submission while files and print setting
         assert.equal(dom.window.document.documentElement.dir, 'rtl');
         assert.equal(dom.window.localStorage.getItem('print.locale.v1'), 'ar');
         assert.match(dom.window.document.querySelector('#print-message').textContent, /جارٍ تحميل/);
-        assert.equal(dom.window.document.querySelector('#print-submit').textContent, 'جارٍ إرسال الملفات…');
+        assert.equal(dom.window.document.querySelector('#print-submit').textContent, 'جارٍ إرسال الملفات إلى قائمة الانتظار…');
         assert.equal(dom.window.document.querySelector('.print-file-card'), originalCard);
         assert.equal(originalCard.querySelector('.page-range-input').value, '2');
         assert.equal(originalCard.querySelector('[data-setting="copies"]').value, '4');
@@ -498,6 +498,63 @@ test('all-pages mode hides and ignores stale PDF range input while preserving fi
         assert.equal(uploadedPdf.getPageCount(), 3);
         assert.equal(intents[0].copies, 2);
         assert.equal(intents[0].media_type, 'application/pdf');
+    } finally {
+        dom.window.close();
+        delete globalThis.document;
+        delete globalThis.window;
+        delete globalThis.sessionStorage;
+        delete globalThis.fetch;
+    }
+});
+
+test('first-time QR flow selects a file first and shows its page and print totals', async () => {
+    const dom = new JSDOM(pageHtml, { url: 'https://portal.test/yazdir/' });
+    installBrowserGlobals(dom, async (url) => {
+        if (String(url).endsWith('/api/public/print/status')) {
+            return { ok: true, json: async () => ({ available: true, options: createCapabilities() }) };
+        }
+        throw new Error(`Unexpected request: ${url}`);
+    }, ['tr-TR'], 'en-US');
+
+    try {
+        await import(`../src/public/print.js?first-use=${crypto.randomUUID()}`);
+        await waitFor(() => dom.window.document.querySelector('#print-availability').dataset.state === 'ready');
+        const document = dom.window.document;
+        const selectFileButton = document.querySelector('#print-add-file');
+        assert.equal(selectFileButton.textContent, 'Dosya Seç');
+        assert.equal(document.querySelector('#print-basket').hidden, true);
+        assert.equal(document.querySelector('.print-file-card'), null);
+        assert.equal(document.querySelector('#print-message').hidden, true);
+        assert.equal(document.querySelector('.print-guide').open, false);
+        assert.equal(document.querySelectorAll('.print-stepper li').length, 3);
+
+        const sourcePdf = await PDFDocument.create();
+        for (let page = 0; page < 3; page += 1) sourcePdf.addPage([595, 842]);
+        const fileInput = document.querySelector('#print-file-input');
+        Object.defineProperty(fileInput, 'files', { configurable: true, value: [
+            new File([await sourcePdf.save()], 'ogrenci-belgesi.pdf', { type: 'application/pdf' })
+        ] });
+        fileInput.dispatchEvent(new dom.window.Event('change'));
+
+        await waitFor(() => document.querySelector('.file-source-pages')?.textContent.includes('3'));
+        const card = document.querySelector('.print-file-card');
+        assert.equal(card.querySelector('.file-name').textContent, 'ogrenci-belgesi.pdf');
+        assert.equal(card.querySelector('.file-source-pages').textContent, 'PDF sayfa sayısı: 3');
+        assert.equal(card.querySelector('.file-print-total').textContent, 'Bu dosyanın toplam baskı sayfası: 3');
+        assert.equal(card.querySelector('.advanced-settings').open, false);
+        assert.equal(card.querySelector('[data-setting="paper_size"]').value, 'A4');
+        assert.equal(card.querySelector('[data-setting="color_mode"]').value, 'monochrome');
+        assert.equal(card.querySelector('[data-setting="orientation"]').value, 'portrait');
+        assert.equal(card.querySelector('[data-setting="copies"]').value, '1');
+        assert.equal(selectFileButton.textContent, '+ Başka Dosya Seç');
+        assert.equal(document.querySelector('#print-basket').hidden, false);
+        assert.equal(document.querySelector('#print-submit').textContent, 'Yazdırma Sırasına Gönder');
+
+        const copies = card.querySelector('[data-setting="copies"]');
+        copies.value = '2';
+        copies.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        assert.equal(card.querySelector('.file-print-total').textContent, 'Bu dosyanın toplam baskı sayfası: 6');
+        assert.equal(document.querySelector('#print-page-total').textContent, 'Toplam baskı sayfası: 6');
     } finally {
         dom.window.close();
         delete globalThis.document;
