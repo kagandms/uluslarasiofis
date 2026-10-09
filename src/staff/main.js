@@ -18,7 +18,6 @@ import { initializeStaffApplicationsManager } from './applicationsManager.js';
 import { initializeStaffArchiveManager } from './archiveManager.js';
 import { initDocumentsManager } from '../ui/documents-manager.js';
 import { initLiveClock } from '../ui/liveClock.js';
-import { openPdfMergerModal } from '../ui/pdfMergerModal.js';
 import { openStaffGuideModal } from '../ui/staffGuideModal.js';
 import { initializeStaffPrintStatus } from './print-status.js';
 
@@ -136,19 +135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
 
-    // --- Header Tools: PDF Merger & Staff Guide ---
-    const btnPdfMerger = document.getElementById('btn-staff-pdf-merger');
-    if (btnPdfMerger) {
-        btnPdfMerger.addEventListener('click', () => {
-            try {
-                openPdfMergerModal();
-            } catch (err) {
-                console.error('PDF merger modal error:', err);
-                showToast('PDF birleştirici açılamadı.', 'error');
-            }
-        });
-    }
-
+    // --- Header Tools: Staff Guide ---
     const btnStaffGuide = document.getElementById('btn-staff-guide');
     if (btnStaffGuide) {
         btnStaffGuide.addEventListener('click', () => {

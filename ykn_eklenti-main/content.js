@@ -1309,24 +1309,22 @@ function openYoksisDropdownMenu(menuElement) {
         }
     });
 
-    simulateButtonClick(menuElement);
-    try { menuElement.click(); } catch (_) {}
     return true;
 }
 
-function findYoksisMenuEntry(expectedText, options = {}) {
+function findYoksisMenuEntry(expectedText) {
     const expected = normalizeYoksisText(expectedText);
     const selectors = '.z-menu, .z-menu-item, .z-menuitem, .z-menuitem-text, .z-menu-text, .z-menu-cnt, .z-menuitem-cnt, [role="menuitem"], a, button, span, div';
     const matches = [];
     for (const doc of getAllDocs(document)) {
         for (const element of doc.querySelectorAll(selectors)) {
-            if (!options.allowHidden && !isYoksisControlUsable(element)) continue;
+            if (!isYoksisControlUsable(element)) continue;
             const normText = normalizeYoksisText(element.innerText || element.textContent || '');
             if (!normText) continue;
             const isMatch = normText === expected || (expected.length >= 8 && normText.includes(expected)) || (normText.length >= 8 && expected.includes(normText));
             if (!isMatch) continue;
             const clickable = element.closest('.z-menu-item, .z-menuitem, .z-menu, [role="menuitem"], a, button') || element;
-            if (!options.allowHidden && !isYoksisControlUsable(clickable)) continue;
+            if (!isYoksisControlUsable(clickable)) continue;
             matches.push(clickable);
         }
     }
@@ -1343,10 +1341,51 @@ async function waitForYoksisKabulSearch(timeoutMs = 12_000) {
     throw new Error('YÖKSİS YKN Talebi V2 ekranındaki Kabul Mektup ID arama alanı bulunamadı.');
 }
 
+function waitForYoksisMenuEntry(timeoutMs = 8_000) {
+    observeYoksisDomChanges();
+    const entry = findYoksisMenuEntry('Göç İdaresinden YKN Talebi V2');
+    if (entry) return Promise.resolve(entry);
+
+    return new Promise((resolve, reject) => {
+        const observers = [];
+        let timeoutId;
+        const cleanup = () => {
+            observers.forEach((observer) => observer.disconnect());
+            clearTimeout(timeoutId);
+        };
+        const check = () => {
+            const visibleEntry = findYoksisMenuEntry('Göç İdaresinden YKN Talebi V2');
+            if (!visibleEntry) return;
+            cleanup();
+            resolve(visibleEntry);
+        };
+
+        for (const doc of getAllDocs(document)) {
+            const root = doc.documentElement || doc.body;
+            if (!root || typeof MutationObserver === 'undefined') continue;
+            const observer = new MutationObserver(check);
+            observer.observe(root, {
+                attributes: true,
+                attributeFilter: ['aria-hidden', 'class', 'style'],
+                childList: true,
+                subtree: true
+            });
+            observers.push(observer);
+        }
+
+        timeoutId = setTimeout(() => {
+            cleanup();
+            reject(new Error('Öğrenci İşlemleri menüsünde Göç İdaresinden YKN Talebi V2 bulunamadı.'));
+        }, timeoutMs);
+        check();
+    });
+}
+
 async function openYoksisYknRequestScreen() {
+    const navigationStartedAt = performance.now();
     const existingScreen = findYoksisKabulPair();
     if (existingScreen.idInput && existingScreen.searchBtn) {
-        return { success: true, alreadyOpen: true };
+        return { success: true, alreadyOpen: true, durationMs: Math.round(performance.now() - navigationStartedAt) };
     }
 
     const studentMenu = findYoksisMenuEntry('Öğrenci İşlemleri');
@@ -1356,32 +1395,13 @@ async function openYoksisYknRequestScreen() {
 
     openYoksisDropdownMenu(studentMenu);
 
-    let yknMenuEntry = null;
-    const menuDeadline = Date.now() + 8_000;
-    while (Date.now() < menuDeadline && !yknMenuEntry) {
-        openYoksisDropdownMenu(studentMenu);
-
-        yknMenuEntry = findYoksisMenuEntry('Göç İdaresinden YKN Talebi V2');
-        if (!yknMenuEntry) {
-            yknMenuEntry = findYoksisMenuEntry('Göç İdaresinden YKN Talebi V2', { allowHidden: true });
-        }
-        if (!yknMenuEntry) {
-            await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-    }
-    if (!yknMenuEntry) {
-        throw new Error('Öğrenci İşlemleri menüsünde Göç İdaresinden YKN Talebi V2 bulunamadı.');
-    }
+    const yknMenuEntry = await waitForYoksisMenuEntry();
 
     const targetToClick = yknMenuEntry.tagName === 'A' ? yknMenuEntry : (yknMenuEntry.querySelector('a') || yknMenuEntry);
     simulateButtonClick(targetToClick);
-    try { targetToClick.click(); } catch (_) {}
-    simulateButtonClick(yknMenuEntry);
-    try { yknMenuEntry.click(); } catch (_) {}
-    triggerZkClick(yknMenuEntry);
 
     await waitForYoksisKabulSearch();
-    return { success: true, alreadyOpen: false };
+    return { success: true, alreadyOpen: false, durationMs: Math.round(performance.now() - navigationStartedAt) };
 }
 
 function simulateButtonClick(element) {
@@ -2126,7 +2146,7 @@ async function uploadPhotoToYoksis(photoBase64, fileName) {
     const currentStatus = fileInput.getAttribute('data-ykn-photo-status');
 
     if (currentToken === photoToken && (currentStatus === 'submitted' || currentStatus === 'file_assigned')) {
-        console.log('[YKN] Bu fotoğraf zaten atanmış, mükerrer yükleme engellendi:', fileName);
+        console.info('[YKN] Fotoğraf daha önce atanmış; yinelenen yükleme engellendi.');
         return true;
     }
 
@@ -2186,7 +2206,7 @@ async function uploadPhotoToYoksis(photoBase64, fileName) {
             }
         } catch (_) {}
 
-        console.log('[YKN] Fotoğraf başarıyla hazırlandı/yüklendi:', fileName);
+        console.info('[YKN] Fotoğraf dosyası YÖKSİS formuna eklendi.');
         return true;
     } catch (err) {
         console.error('[YKN] Fotoğraf yükleme hatası:', err);
@@ -3697,8 +3717,11 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             return;
         }
 
+        const inputReadyStartedAt = performance.now();
         waitForYoksisSearchControls()
             .then(async (initialPair) => {
+                const inputReadyDurationMs = Math.round(performance.now() - inputReadyStartedAt);
+                const inputWriteStartedAt = performance.now();
                 let idInput = initialPair.idInput;
                 let searchBtn = initialPair.searchBtn;
 
@@ -3737,6 +3760,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 if (!valueConfirmed) {
                     throw new Error('YÖKSİS Kabul Mektup ID değeri güncelleme sonrasında korunamadı. Sayfayı yenileyip tekrar deneyin.');
                 }
+                const inputWriteDurationMs = Math.round(performance.now() - inputWriteStartedAt);
 
                 // Baseline, kod ZK widget'ına işlendi *sonra* ve arama tıklaması
                 // yapılmadan hemen önce alınmalıdır. Böylece kodun onChange AU
@@ -3749,6 +3773,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 }
 
                 let searchTriggered = false;
+                const searchClickStartedAt = performance.now();
                 if (searchBtn) {
                     searchTriggered = triggerZkClick(searchBtn, idInput, kabulId);
                 } else {
@@ -3760,9 +3785,11 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                     searchTriggered = false;
                 }
                 if (!searchTriggered) throw new Error('YÖKSİS arama komutu tetiklenemedi.');
+                const searchClickDurationMs = Math.round(performance.now() - searchClickStartedAt);
 
                 let formReady = false;
                 let formErrorMessage = '';
+                const formWaitStartedAt = performance.now();
                 if (request.waitForForm !== false) try {
                     await waitForYoksisForm(YOKSIS_SEARCH_INITIAL_FORM_WAIT_MS, {
                         afterFingerprint: formFingerprintBeforeSearch,
@@ -3780,10 +3807,15 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                     searchTriggered,
                     formFingerprintBeforeSearch,
                     domRevisionBeforeSearch: stateBeforeSearch.domRevision,
-                    message: formErrorMessage
+                    message: formErrorMessage,
+                    inputReadyDurationMs,
+                    inputWriteDurationMs,
+                    searchClickDurationMs,
+                    formWaitDurationMs: Math.round(performance.now() - formWaitStartedAt)
                 };
             })
-            .then(({ formReady, searchTriggered, formFingerprintBeforeSearch, domRevisionBeforeSearch, message }) => sendResponse({
+            .then(({ formReady, searchTriggered, formFingerprintBeforeSearch, domRevisionBeforeSearch, message,
+                inputReadyDurationMs, inputWriteDurationMs, searchClickDurationMs, formWaitDurationMs }) => sendResponse({
                 // Tıklamayı göndermiş olmak başarı değildir: yeni öğrenci formu
                 // doğrulanmadıkça portal sonraki "bilgileri aktar" adımını açmamalı.
                 success: formReady,
@@ -3791,6 +3823,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 searchTriggered,
                 formFingerprintBeforeSearch,
                 domRevisionBeforeSearch,
+                timing: { inputReadyDurationMs, inputWriteDurationMs, searchClickDurationMs, formWaitDurationMs },
                 buttonFound: Boolean(findYoksisKabulPair().searchBtn),
                 requestId: request.requestId,
                 message: message || undefined

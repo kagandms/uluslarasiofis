@@ -30,6 +30,20 @@ const DOCUMENT_CACHE_MAX_ENTRIES = 8;
 const documentBytesCache = new Map();
 const documentRequestKeys = new Map();
 
+function startYknUiTiming() {
+    return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function reportYknUiTiming(stage, startedAt, outcome = 'ok') {
+    if (typeof window === 'undefined' || window.__YKN_DIAGNOSTICS_ENABLED__ !== true) return;
+    const now = globalThis.performance?.now?.() ?? Date.now();
+    console.info('[YKN_TIMING]', {
+        stage,
+        durationMs: Math.max(0, Math.round(now - startedAt)),
+        outcome
+    });
+}
+
 function getDocumentCacheKey(documentKind, documentUrl) {
     return `${documentKind}:${String(documentUrl || '').trim()}`;
 }
@@ -658,12 +672,15 @@ export function initYknManager() {
                 addStatus('YÖKSİS formu hazırlanıyor: kabul kodu aratılıyor...', 'info');
                 showToast('YÖKSİS formu hazırlanıyor...', 'info');
                 try {
-                    await postExtensionRequest('TRANSFER_TO_YOKSIS', {
+                    const preparation = await postExtensionRequest('TRANSFER_TO_YOKSIS', {
                         data: getYoksisTransportData(currentStudentData),
                         kabulId: currentStudentData.yoksisId,
                         waitForForm: true,
                         requestId: createRequestId('auto-yoksis-prep')
                     }, 35000);
+                    if (preparation?.success !== true || !bindYoksisTarget(preparation)) {
+                        throw new Error(preparation?.error || 'Doğrulanmış YÖKSİS sekmesi alınamadı.');
+                    }
                     currentStudentData.yoksisReady = true;
                 } catch (prepErr) {
                     console.warn('[YKN] YÖKSİS kabul kodu otomatik arama uyarısı:', prepErr);
@@ -868,6 +885,7 @@ export function initYknManager() {
     let pasteTimeoutTimer = null;
     let oneClickTimeoutTimer = null;
     let oneClickWorkflow = null;
+    const oneClickTimingStarts = new Map();
     let shouldOpenCropperWhenReady = false;
     let shouldAutoTransferYoksisAfterAcceptance = false;
     let shouldAutoRunAcceptanceAfterSearch = false;
@@ -1221,9 +1239,22 @@ export function initYknManager() {
         return transportData;
     }
 
+    function bindYoksisTarget(response) {
+        if (!Number.isInteger(response?.yoksisTabId) || typeof response.yoksisTabUrl !== 'string') {
+            return false;
+        }
+        currentStudentData = {
+            ...currentStudentData,
+            yoksisTabId: response.yoksisTabId,
+            yoksisTabUrl: response.yoksisTabUrl
+        };
+        return true;
+    }
+
     function postOneClickMessage(action, data = {}) {
         const workflowId = oneClickWorkflow?.workflowId;
         if (!workflowId) return;
+        oneClickTimingStarts.set(`${workflowId}:${action}`, startYknUiTiming());
         const safeData = data.data
             ? { ...data, data: getYoksisTransportData(data.data) }
             : data;
@@ -1249,6 +1280,11 @@ export function initYknManager() {
             return;
         }
         clearOneClickTimeout();
+        const passportStartedAt = oneClickTimingStarts.get(`${oneClickWorkflow.workflowId}:passport-document`);
+        if (passportStartedAt !== undefined) {
+            reportYknUiTiming('passport-document-preparation-until-cropper', passportStartedAt);
+            oneClickTimingStarts.delete(`${oneClickWorkflow.workflowId}:passport-document`);
+        }
         setOneClickStage(ONE_CLICK_STAGE.CROPPER_WAITING, 'Pasaport fotoğrafı hazır. Lütfen fotoğrafı kırpıp aktarımı onaylayın.');
         shouldOpenCropperWhenReady = false;
         if (isPassportCropperOpen()) return;
@@ -1263,6 +1299,7 @@ export function initYknManager() {
     }
 
     function startOneClickPassportRead() {
+        oneClickTimingStarts.set(`${oneClickWorkflow?.workflowId}:passport-document`, startYknUiTiming());
         setOneClickStage(ONE_CLICK_STAGE.PASSPORT_READING, 'Öğrenci bilgileri alındı. Pasaport okunuyor...');
         armOneClickTimeout(ONE_CLICK_STAGE.PASSPORT_READING, 30_000);
         if (currentStudentData?.passportImageSrc) {
@@ -2583,12 +2620,28 @@ export function initYknManager() {
 
         if (event.data.type === 'RESPONSE') {
             const response = event.data.response;
+            const responseTimingKey = `${requestId}:${event.data.action}`;
+            const responseStartedAt = oneClickTimingStarts.get(responseTimingKey);
+            if (responseStartedAt !== undefined) {
+                const timingStage = event.data.action === 'COPY_APPLY_DATA'
+                    ? 'apply-student-data-preparation'
+                    : event.data.action === 'TRANSFER_TO_YOKSIS'
+                        ? 'portal-to-extension-search-roundtrip'
+                        : event.data.action === 'FILL_YOKSIS_FORM'
+                            ? 'portal-to-extension-fill-roundtrip'
+                            : event.data.action === 'EXTRACT_KABUL_CODE'
+                                ? 'acceptance-code-extraction-roundtrip'
+                                : 'portal-extension-operation-roundtrip';
+                reportYknUiTiming(timingStage, responseStartedAt,
+                    response?.success === false ? 'failed' : 'ok');
+                oneClickTimingStarts.delete(responseTimingKey);
+            }
             if (event.data.action === 'SEARCH_STUDENT' && response?.success) {
                 addStatus('Apply sekmesine bağlantı kuruldu, sonuç bekleniyor.', 'info');
             } else if (event.data.action === 'TRANSFER_TO_YOKSIS'
                 && isOneClickActive(ONE_CLICK_STAGE.YOKSIS_SEARCHING)) {
                 clearOneClickTimeout();
-                if (response?.success && response.searchTriggered !== false) {
+                if (response?.success && response.searchTriggered !== false && bindYoksisTarget(response)) {
                     currentStudentData = { ...currentStudentData, yoksisReady: response.formReady === true };
                     completedWorkflowSteps.add(2);
                     updateWorkflowUI(3);
@@ -2665,7 +2718,7 @@ export function initYknManager() {
                     btnReadAcceptance.classList.remove('is-loading');
                 }
 
-                if (response?.success && response.formReady !== false) {
+                if (response?.success && response.formReady !== false && bindYoksisTarget(response)) {
                     currentStudentData = { ...currentStudentData, yoksisReady: true };
                     setWorkflowStepStatus(2, 'success');
                     if (currentWorkflowStep <= 2) {
