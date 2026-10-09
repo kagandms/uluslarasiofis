@@ -7,12 +7,13 @@ import {
     isValidCopies, normalizePrintCapabilities, summarizePrintSettings
 } from '../src/public/printSettings.js';
 
-test('print page defaults to English until browser locale detection and keeps multi-file upload', () => {
+test('print page exposes a five-language selector and a three-step guide while keeping multi-file upload', () => {
     const html = readFileSync(new URL('../yazdir/index.html', import.meta.url), 'utf8');
     const document = new JSDOM(html).window.document;
 
     assert.equal(document.documentElement.lang, 'en');
-    assert.equal(document.querySelector('#print-language'), null);
+    assert.ok(document.querySelector('#print-language'));
+    assert.equal(document.querySelectorAll('#print-language option').length, 5);
     assert.equal(document.querySelector('#print-file-input').multiple, true);
     assert.equal(document.querySelector('#print-submit').textContent, 'Print all');
     const template = document.querySelector('#print-file-template').content;
@@ -22,7 +23,10 @@ test('print page defaults to English until browser locale detection and keeps mu
     assert.equal(template.querySelector('[data-pages="all"]').checked, true);
     assert.equal(template.querySelector('.page-range-input').hidden, true);
     assert.equal(template.querySelector('.page-selection-hint').hidden, true);
-    assert.match(document.querySelector('.print-guidance').textContent, /print only the pages you need/);
+    assert.match(document.querySelector('.print-guide').textContent, /Print in three steps/);
+    assert.equal(document.querySelectorAll('.print-guide-steps li').length, 3);
+    assert.equal(document.querySelector('.print-help details').open, false);
+    assert.ok(template.querySelector('.advanced-settings summary'));
     const stylesheet = readFileSync(new URL('../src/public/print.css', import.meta.url), 'utf8');
     const script = readFileSync(new URL('../src/public/print.js', import.meta.url), 'utf8');
     assert.match(stylesheet, /@media \(max-width: 520px\)/);

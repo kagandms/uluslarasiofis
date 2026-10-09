@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { PDFDocument } from 'pdf-lib';
+import { PRINT_LOCALES, PRINT_MESSAGES } from '../src/public/i18n/printMessages.js';
 
 const pageHtml = readFileSync(new URL('../yazdir/index.html', import.meta.url), 'utf8');
 
@@ -248,7 +249,7 @@ test('automatic Arabic selection sets page RTL while keeping page-number fields 
         assert.equal(dom.window.document.documentElement.lang, 'ar');
         assert.equal(dom.window.document.documentElement.dir, 'rtl');
         assert.equal(dom.window.document.querySelector('#print-title').textContent, 'طباعة مستند');
-        assert.equal(dom.window.document.querySelector('#print-language'), null);
+        assert.equal(dom.window.document.querySelector('#print-language').value, 'ar');
         assert.equal(dom.window.document.querySelector('#print-file-input').multiple, true);
         const sourcePdf = await PDFDocument.create();
         sourcePdf.addPage([595, 842]);
@@ -272,7 +273,7 @@ test('automatic Arabic selection sets page RTL while keeping page-number fields 
     }
 });
 
-test('a legacy saved manual locale is ignored and browser preferences are sampled once', async () => {
+test('saved manual language takes priority over browser preferences and stays selected for the page session', async () => {
     const dom = new JSDOM(pageHtml, { url: 'https://portal.test/yazdir/' });
     dom.window.localStorage.setItem('print.locale.v1', 'tk');
     installBrowserGlobals(dom, async () => ({ ok: true, json: async () => ({
@@ -282,12 +283,59 @@ test('a legacy saved manual locale is ignored and browser preferences are sample
     try {
         await import(`../src/public/print.js?stored-locale=${crypto.randomUUID()}`);
         await waitFor(() => dom.window.document.querySelector('#print-availability').dataset.state === 'unavailable');
+        assert.equal(dom.window.document.documentElement.lang, 'tk');
+        assert.equal(dom.window.document.documentElement.dir, 'ltr');
+        assert.equal(dom.window.document.querySelector('#print-title').textContent, 'Resminamany çap etmek');
+        assert.equal(dom.window.document.querySelector('#print-language').value, 'tk');
+        Object.defineProperty(dom.window.navigator, 'languages', { configurable: true, value: ['ru-RU'] });
+        assert.equal(dom.window.document.documentElement.lang, 'tk');
+        const languageSelect = dom.window.document.querySelector('#print-language');
+        languageSelect.value = 'ar';
+        languageSelect.dispatchEvent(new dom.window.Event('change'));
         assert.equal(dom.window.document.documentElement.lang, 'ar');
         assert.equal(dom.window.document.documentElement.dir, 'rtl');
-        assert.equal(dom.window.document.querySelector('#print-title').textContent, 'طباعة مستند');
-        assert.equal(dom.window.document.querySelector('#print-language'), null);
-        Object.defineProperty(dom.window.navigator, 'languages', { configurable: true, value: ['ru-RU'] });
-        assert.equal(dom.window.document.documentElement.lang, 'ar');
+        assert.equal(dom.window.localStorage.getItem('print.locale.v1'), 'ar');
+    } finally {
+        dom.window.close();
+        delete globalThis.document;
+        delete globalThis.window;
+        delete globalThis.sessionStorage;
+        delete globalThis.fetch;
+    }
+});
+
+test('manual language changes localize the guide, settings and help in all five languages without clearing files', async () => {
+    const dom = new JSDOM(pageHtml, { url: 'https://portal.test/yazdir/' });
+    installBrowserGlobals(dom, async () => ({ ok: true, json: async () => ({
+        available: false, options: createCapabilities()
+    }) }), ['en-US'], 'en-US');
+
+    try {
+        await import(`../src/public/print.js?all-locales=${crypto.randomUUID()}`);
+        await waitFor(() => dom.window.document.querySelector('#print-availability').dataset.state === 'unavailable');
+        const fileInput = dom.window.document.querySelector('#print-file-input');
+        Object.defineProperty(fileInput, 'files', { configurable: true, value: [
+            new File([new Uint8Array([1, 2, 3])], 'preserved.png', { type: 'image/png' })
+        ] });
+        fileInput.dispatchEvent(new dom.window.Event('change'));
+        const card = dom.window.document.querySelector('.print-file-card');
+        const copies = card.querySelector('[data-setting="copies"]');
+        copies.value = '2';
+        copies.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+
+        for (const locale of PRINT_LOCALES) {
+            const select = dom.window.document.querySelector('#print-language');
+            select.value = locale;
+            select.dispatchEvent(new dom.window.Event('change'));
+            assert.equal(dom.window.document.documentElement.lang, locale);
+            assert.equal(dom.window.document.documentElement.dir, locale === 'ar' ? 'rtl' : 'ltr');
+            assert.equal(dom.window.document.querySelector('#print-guide-title').textContent, PRINT_MESSAGES[locale].guideTitle);
+            assert.equal(dom.window.document.querySelector('.advanced-settings summary').textContent, PRINT_MESSAGES[locale].advancedSettings);
+            assert.equal(dom.window.document.querySelector('#print-help-title').textContent, PRINT_MESSAGES[locale].helpTitle);
+            assert.equal(dom.window.document.querySelector('.print-file-card'), card);
+            assert.equal(copies.value, '2');
+        }
+        assert.equal(dom.window.localStorage.getItem('print.locale.v1'), 'ar');
     } finally {
         dom.window.close();
         delete globalThis.document;
@@ -299,7 +347,6 @@ test('a legacy saved manual locale is ignored and browser preferences are sample
 
 test('browser locale stays fixed during submission while files and print settings remain intact', async () => {
     const dom = new JSDOM(pageHtml, { url: 'https://portal.test/yazdir/' });
-    dom.window.localStorage.setItem('print.locale.v1', 'tk');
     let releaseIntent;
     const intentPending = new Promise((resolve) => { releaseIntent = resolve; });
     const intents = [];
@@ -339,26 +386,31 @@ test('browser locale stays fixed during submission while files and print setting
 
         assert.equal(dom.window.document.documentElement.lang, 'ru');
         assert.equal(dom.window.document.documentElement.dir, 'ltr');
-        assert.equal(dom.window.document.querySelector('#print-language'), null);
+        assert.equal(dom.window.document.querySelector('#print-language').value, 'ru');
         assert.equal(dom.window.document.querySelector('.print-file-card'), originalCard);
         assert.equal(originalCard.querySelector('[data-pages="custom"]').checked, true);
         assert.equal(originalCard.querySelector('.page-range-input').value, '2');
         assert.equal(originalCard.querySelector('[data-setting="color_mode"]').value, 'color');
         assert.equal(originalCard.querySelector('[data-setting="copies"]').value, '4');
-        assert.equal(dom.window.localStorage.getItem('print.locale.v1'), 'tk');
-
         dom.window.document.querySelector('#print-submit').click();
         await waitFor(() => intents.length === 1);
-        Object.defineProperty(dom.window.navigator, 'languages', { configurable: true, value: ['ar-SA'] });
-        assert.equal(dom.window.document.documentElement.lang, 'ru');
-        assert.equal(dom.window.document.documentElement.dir, 'ltr');
-        assert.match(dom.window.document.querySelector('#print-message').textContent, /Загрузка файла/);
-        assert.equal(dom.window.document.querySelector('#print-submit').textContent, 'Отправка файлов…');
+        const languageSelect = dom.window.document.querySelector('#print-language');
+        languageSelect.value = 'ar';
+        languageSelect.dispatchEvent(new dom.window.Event('change'));
+        Object.defineProperty(dom.window.navigator, 'languages', { configurable: true, value: ['en-US'] });
+        assert.equal(dom.window.document.documentElement.lang, 'ar');
+        assert.equal(dom.window.document.documentElement.dir, 'rtl');
+        assert.equal(dom.window.localStorage.getItem('print.locale.v1'), 'ar');
+        assert.match(dom.window.document.querySelector('#print-message').textContent, /جارٍ تحميل/);
+        assert.equal(dom.window.document.querySelector('#print-submit').textContent, 'جارٍ إرسال الملفات…');
+        assert.equal(dom.window.document.querySelector('.print-file-card'), originalCard);
+        assert.equal(originalCard.querySelector('.page-range-input').value, '2');
+        assert.equal(originalCard.querySelector('[data-setting="copies"]').value, '4');
 
         releaseIntent({ ok: true, json: async () => ({ job_id: 'job-locale', status: 'uploading', upload: {
             url: '/upload/job-locale', method: 'PUT', requiredHeaders: {}
         } }) });
-        await waitFor(() => dom.window.document.querySelector('#print-message').textContent === 'Задания на печать добавлены в очередь.');
+        await waitFor(() => dom.window.document.querySelector('#print-message').textContent === 'أُضيفت مهام الطباعة إلى قائمة الانتظار. تابع حالتها أدناه.');
         assert.equal(intents[0].color_mode, 'color');
         assert.equal(intents[0].copies, 4);
         assert.equal(intents[0].media_type, 'application/pdf');

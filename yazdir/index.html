@@ -15,11 +15,28 @@
             <img src="/logo_tr_transparent.png" data-i18n-alt="logoAlt" alt="Istanbul Topkapi University">
         </a>
         <section class="print-card" aria-labelledby="print-title">
+            <label class="print-language-control" for="print-language">
+                <span data-i18n="languageLabel">Language</span>
+                <select id="print-language">
+                    <option value="tr">Türkçe</option>
+                    <option value="en">English</option>
+                    <option value="ru">Русский</option>
+                    <option value="tk">Türkmençe</option>
+                    <option value="ar">العربية</option>
+                </select>
+            </label>
             <p class="print-eyebrow" data-i18n="eyebrow">International Student Office</p>
             <h1 id="print-title" data-i18n="title">Print a document</h1>
             <p class="print-intro" data-i18n="intro">Add the files you want to print. Each file can be up to 10 MB.</p>
             <div id="print-availability" class="print-availability" role="status" aria-live="polite" data-i18n="availabilityChecking">Checking printer status…</div>
-            <p class="print-guidance" data-i18n="guidance">Choose print settings for each file. You can print only the pages you need.</p>
+            <section class="print-guide" aria-labelledby="print-guide-title">
+                <h2 id="print-guide-title" data-i18n="guideTitle">Print in three steps</h2>
+                <ol class="print-guide-steps">
+                    <li><span class="guide-step-number" aria-hidden="true">1</span><div><h3 data-i18n="guideChooseTitle">Add your files</h3><p data-i18n="guideChooseText">Choose PDF, JPG or PNG files from your device.</p></div></li>
+                    <li><span class="guide-step-number" aria-hidden="true">2</span><div><h3 data-i18n="guideSettingsTitle">Set each file</h3><p data-i18n="guideSettingsText">Choose color and copies; open more settings for page ranges or orientation.</p></div></li>
+                    <li><span class="guide-step-number" aria-hidden="true">3</span><div><h3 data-i18n="guideSubmitTitle">Send and track</h3><p data-i18n="guideSubmitText">Send the files once, then follow each job's status below.</p></div></li>
+                </ol>
+            </section>
             <div id="print-files" class="print-files" aria-live="polite"></div>
             <input id="print-file-input" class="visually-hidden" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" multiple>
             <button id="print-add-file" class="secondary-button" type="button" data-i18n="addFile">+ Add files</button>
@@ -32,6 +49,16 @@
                 <h2 id="print-history-title" data-i18n="historyTitle">Submission status</h2>
                 <div id="print-history" class="print-history" aria-live="polite"></div>
             </section>
+            <section class="print-help" aria-labelledby="print-help-title">
+                <details>
+                    <summary id="print-help-title" data-i18n="helpTitle">Help and print status</summary>
+                    <div class="print-help-content">
+                        <article><h3 data-i18n="helpFormatsTitle">Files and limits</h3><p data-i18n="helpFormatsText">PDF, JPG and PNG files are supported. Each file can be up to 10 MB; a job can include up to 20 pages.</p></article>
+                        <article><h3 data-i18n="helpPagesTitle">PDF pages and settings</h3><p data-i18n="helpPagesText">Use a range such as 1-5, 3,7 to print selected pages. Color and other options appear only when the printer supports them.</p></article>
+                        <article><h3 data-i18n="helpStatusTitle">What job statuses mean</h3><p data-i18n="helpStatusText">Queued means waiting to print. Sent means the Print Agent handed the job to the computer's printer queue; it does not confirm physical output. If a result is uncertain, do not send the same file again.</p></article>
+                    </div>
+                </details>
+            </section>
         </section>
         <footer data-i18n="footer">Istanbul Topkapi University International Student Office</footer>
     </main>
@@ -42,12 +69,17 @@
             <button class="remove-file-button" type="button" data-i18n="remove">Remove</button>
             </div>
             <p class="file-error" role="status" aria-live="polite"></p>
-            <div class="print-settings-grid">
-                <div class="print-setting"><label data-i18n="paperSize">Paper size</label><select data-setting="paper_size"><option value="A4" data-i18n="paperA4">A4</option></select></div>
+            <div class="print-settings-grid print-primary-settings">
                 <div class="print-setting"><label data-i18n="printColor">Print color</label><select data-setting="color_mode"><option value="monochrome" data-i18n="monochrome">Black and white</option><option value="color" data-i18n="colorUnavailable" disabled>Color · unavailable</option></select></div>
-                <div class="print-setting"><label data-i18n="orientationLabel">Page orientation</label><select data-setting="orientation"><option value="portrait" data-i18n="portrait">Portrait</option><option value="landscape" data-i18n="landscape">Landscape</option></select></div>
                 <div class="print-setting"><label data-i18n="copiesLabel">Copies</label><input data-setting="copies" type="number" min="1" step="1" value="1" inputmode="numeric" dir="ltr"></div>
             </div>
+            <details class="advanced-settings">
+                <summary data-i18n="advancedSettings">More settings</summary>
+                <div class="print-settings-grid">
+                    <div class="print-setting"><label data-i18n="paperSize">Paper size</label><select data-setting="paper_size"><option value="A4" data-i18n="paperA4">A4</option></select></div>
+                    <div class="print-setting"><label data-i18n="orientationLabel">Page orientation</label><select data-setting="orientation"><option value="portrait" data-i18n="portrait">Portrait</option><option value="landscape" data-i18n="landscape">Landscape</option></select></div>
+                </div>
+            </details>
             <fieldset class="page-selection" hidden>
                 <legend data-i18n="pdfPages">PDF pages</legend>
                 <label class="radio-option"><input type="radio" data-pages="all" checked><span data-i18n="allPages">All pages</span></label>
