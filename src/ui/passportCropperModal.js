@@ -1,5 +1,5 @@
 import { showToast } from './toastManager.js';
-import { normalizeGender, inferGenderFromName } from '../utils/ykn-document-parser.js';
+import { normalizeProfileGender, normalizeProfileMaritalStatus } from '../utils/ykn-profile-state.js';
 
 let passportCropperInstance = null;
 let baseRotation = 0; // 0, 90, 180, 270...
@@ -239,13 +239,12 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
             cropperInputAuthority.style.borderColor = authority ? 'var(--border-color)' : '#f39c12';
         }
         if (cropperSelectGender) {
-            const rawGender = studentData?.cinsiyet || '';
-            const resolvedGender = normalizeGender(rawGender) || inferGenderFromName(studentData?.fullName || studentData?.adSoyad || studentData?.ad || studentName || '');
-            cropperSelectGender.value = resolvedGender === 'Kadın' ? 'Kadın' : 'Erkek';
+            cropperSelectGender.value = normalizeProfileGender(studentData?.cinsiyet);
+            cropperSelectGender.disabled = studentData?.genderSource === 'apply';
         }
         if (cropperSelectMedeni) {
-            const medeni = studentData?.medeniHali || studentData?.medeniHal || 'Bekar';
-            cropperSelectMedeni.value = medeni.toLowerCase().startsWith('e') ? 'Evli' : 'Bekar';
+            cropperSelectMedeni.value = normalizeProfileMaritalStatus(studentData?.medeniHali || studentData?.medeniHal);
+            cropperSelectMedeni.disabled = studentData?.maritalSource === 'apply';
         }
 
         cropperMissingBox.style.display = 'block';
@@ -331,8 +330,8 @@ function downloadCroppedImage(autoTransfer = false) {
                 issueDate: cropperInputIssueDate?.value?.trim() || '',
                 expiryDate: cropperInputExpiryDate?.value?.trim() || '',
                 issuingAuthority: cropperInputAuthority?.value?.trim() || '',
-                cinsiyet: cropperSelectGender?.value || 'Erkek',
-                medeniHali: cropperSelectMedeni?.value || 'Bekar'
+                cinsiyet: cropperSelectGender?.value || '',
+                medeniHali: cropperSelectMedeni?.value || ''
             }
         }
     }));
@@ -447,13 +446,9 @@ export function initPassportCropperModal() {
             const val = cropperSelectGender.value;
             const erkekRadio = document.getElementById('ykn-cinsiyet-erkek');
             const kadinRadio = document.getElementById('ykn-cinsiyet-kadin');
-            if (val === 'Kadın' && kadinRadio) {
-                kadinRadio.checked = true;
-                kadinRadio.dispatchEvent(new Event('change'));
-            } else if (erkekRadio) {
-                erkekRadio.checked = true;
-                erkekRadio.dispatchEvent(new Event('change'));
-            }
+            if (erkekRadio) erkekRadio.checked = val === 'Erkek';
+            if (kadinRadio) kadinRadio.checked = val === 'Kadın';
+            (kadinRadio || erkekRadio)?.dispatchEvent(new Event('change'));
         });
     }
     if (cropperSelectMedeni) {
@@ -461,13 +456,9 @@ export function initPassportCropperModal() {
             const val = cropperSelectMedeni.value;
             const bekarRadio = document.getElementById('ykn-medeni-bekar');
             const evliRadio = document.getElementById('ykn-medeni-evli');
-            if (val === 'Evli' && evliRadio) {
-                evliRadio.checked = true;
-                evliRadio.dispatchEvent(new Event('change'));
-            } else if (bekarRadio) {
-                bekarRadio.checked = true;
-                bekarRadio.dispatchEvent(new Event('change'));
-            }
+            if (bekarRadio) bekarRadio.checked = val === 'Bekar';
+            if (evliRadio) evliRadio.checked = val === 'Evli';
+            (bekarRadio || evliRadio)?.dispatchEvent(new Event('change'));
         });
     }
 

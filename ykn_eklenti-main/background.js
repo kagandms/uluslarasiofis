@@ -611,7 +611,6 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     }
 
                     const allDocs = getAllDocs(document);
-                    console.log('[YKN MAIN WORLD] Scanning docs count:', allDocs.length, 'with code:', code);
 
                     let inp = null;
                     let btn = null;
@@ -743,12 +742,10 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             inp = dInp;
                             btn = dBtn;
                             targetWin = win;
-                            console.log('[YKN MAIN WORLD] Found in doc:', { inp: Boolean(inp), btn: Boolean(btn) });
                             break;
                         }
                     }
 
-                    console.log('[YKN MAIN WORLD] Search summary:', { inp: Boolean(inp), btn: Boolean(btn) });
 
                     // 5. Input'a değeri yaz. ZK varsa tek bir onChange gönder;
                     // aynı isteği DOM, zAu ve widget üzerinden çoğaltma.
@@ -828,7 +825,7 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         searchTriggered: Boolean(inp)
                     };
                 } catch (e) {
-                    console.error('[YKN MAIN World Search Error]', e);
+                    console.error('[YKN MAIN World Search Error]', { errorName: e?.name || 'Error' });
                     return { error: e.message };
                 }
             },
@@ -836,12 +833,22 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
         });
         return results;
     } catch (err) {
-        console.warn('executeYoksisSearchInMainWorld error:', err);
+        console.warn('executeYoksisSearchInMainWorld error:', { errorName: err?.name || 'Error' });
         return null;
     }
 }
 
-async function syncYoksisFormInMainWorld(tabId, studentData) {
+/** Runs only the packaged ZK controller in the validated main frame. */
+async function runYoksisZkCommand(tabId, options) {
+    await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, world: 'MAIN', files: ['zk-form-controls.js'] });
+    const results = await chrome.scripting.executeScript({
+        target: { tabId, frameIds: [0] }, world: 'MAIN', args: [options],
+        func: async function executeYoksisZkCommand(command) { return await window.YknZkForm.execute(command); }
+    });
+    return results?.[0]?.result || { success: false, verified: false };
+}
+
+async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
     if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return null;
     try {
         const results = await chrome.scripting.executeScript({
@@ -1071,41 +1078,17 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         }
                     }
 
-                    function commitRadio(el, win) {
-                        if (!el || !el.checked) return;
-                        var wWin = win || window;
-                        var widgetCommitted = false;
-                        try {
-                            if (wWin.zk && wWin.zk.Widget) {
-                                var w = wWin.zk.Widget.$(el);
-                                if (w) {
-                                    if (typeof w.setChecked === 'function') {
-                                        try { w.setChecked(true); } catch (_) {}
-                                    }
-                                    var checkSent = false;
-                                    if (typeof w.fire === 'function') {
-                                        try {
-                                            w.fire('onCheck', { checked: true }, { toServer: true });
-                                            checkSent = true;
-                                            widgetCommitted = true;
-                                        } catch (_) {}
-                                    }
-                                    if (!checkSent && wWin.zAu && typeof wWin.zAu.send === 'function') {
-                                        try {
-                                            wWin.zAu.send(new wWin.zk.Event(w, 'onCheck', { checked: true }, { toServer: true }));
-                                            widgetCommitted = true;
-                                        } catch (_) {}
-                                    }
-                                }
-                            }
-                        } catch (_) {}
-                        if (!widgetCommitted) {
-                            try { el.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } catch (_) {}
+                    function isVisibleElement(el) {
+                        if (!el || !el.isConnected || el.disabled) return false;
+                        for (var ancestor = el; ancestor; ancestor = ancestor.parentElement) {
+                            var style = ancestor.ownerDocument.defaultView.getComputedStyle(ancestor);
+                            if (ancestor.hidden || ancestor.getAttribute('aria-hidden') === 'true' || style.display === 'none' || style.visibility === 'hidden') return false;
                         }
+                        return true;
                     }
 
                     function isUsableControl(el, kind) {
-                        if (!el) return false;
+                        if (!isVisibleElement(el)) return false;
                         var tag = (el.tagName || '').toLowerCase();
                         var type = (el.type || '').toLowerCase();
                         if (kind === 'radio') return tag === 'input' && type === 'radio';
@@ -1251,32 +1234,6 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         return ('0' + d).slice(-2) + '.' + ('0' + m).slice(-2) + '.' + y;
                     }
 
-                    function findRadioByText(docs, value) {
-                        var wanted = norm(value);
-                        if (!wanted) return null;
-                        for (var di = 0; di < docs.length; di++) {
-                            var doc = docs[di];
-                            var labels = doc.querySelectorAll('label, span, b, strong');
-                            for (var li = 0; li < labels.length; li++) {
-                                var node = labels[li];
-                                var text = norm(node.innerText || node.textContent || '');
-                                if (text !== wanted && text.indexOf(wanted) === -1) continue;
-                                var forId = node.getAttribute && node.getAttribute('for');
-                                var nodeRadios = node.querySelectorAll('input[type="radio"]');
-                                var radio = forId
-                                    ? doc.getElementById(forId)
-                                    : nodeRadios.length === 1 ? nodeRadios[0] : null;
-                                if (isUsableControl(radio, 'radio')) return radio;
-                            }
-                            var radios = doc.querySelectorAll('input[type="radio"]');
-                            for (var ri = 0; ri < radios.length; ri++) {
-                                var radioText = norm([radios[ri].value, radios[ri].id, radios[ri].name].join(' '));
-                                if (radioText === wanted || radioText.indexOf(wanted) !== -1) return radios[ri];
-                            }
-                        }
-                        return null;
-                    }
-
                     function selectMatchingOption(select, value) {
                         if (!select || value === undefined || value === null || String(value).trim() === '') return false;
                         var wanted = norm(value);
@@ -1332,414 +1289,6 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         addResultField(result, resultLabel, set);
                     }
 
-                    function fillGenderRadio(docs, value, result) {
-                        if (value === undefined || value === null || String(value).trim() === '') return;
-                        var normVal = norm(value);
-                        var isMale = normVal === 'erkek' || normVal === 'male' || normVal === 'e' || normVal === 'm' || normVal === 'bay' || normVal === '1';
-                        var isFemale = normVal === 'kadin' || normVal === 'female' || normVal === 'k' || normVal === 'f' || normVal === 'bayan' || normVal === '2';
-                        if (!isMale && !isFemale) return;
-
-                        var targetRadio = null;
-                        var oppRadio = null;
-                        var targetWrapper = null;
-                        var oppWrapper = null;
-                        var targetLabel = null;
-                        var oppLabel = null;
-                        var targetDoc = null;
-
-                        for (var di = 0; di < docs.length; di++) {
-                            var d = docs[di];
-                            var labels = d.querySelectorAll('label, span, td, div, b, strong, th');
-                            var genderRow = null;
-                            for (var li = 0; li < labels.length; li++) {
-                                var lbl = labels[li];
-                                var txt = norm(lbl.innerText || lbl.textContent || '');
-                                if (txt === 'cinsiyet' || txt === 'cinsiyeti' || txt === 'gender' || txt.indexOf('cinsiyet') !== -1) {
-                                    var row = (lbl.closest && lbl.closest('tr, .z-row, .z-radiogroup')) || lbl.parentElement;
-                                    if (row && row.querySelectorAll('input[type="radio"]').length >= 2) {
-                                        genderRow = row;
-                                        break;
-                                    } else if (!genderRow && row) {
-                                        genderRow = row;
-                                    }
-                                }
-                            }
-
-                            if (!genderRow) continue;
-                            var scope = genderRow;
-                            var radios = scope.querySelectorAll('input[type="radio"]');
-                            if (radios.length >= 2) {
-                                var maleRadio = null;
-                                var maleWrap = null;
-                                var maleLbl = null;
-                                var femaleRadio = null;
-                                var femaleWrap = null;
-                                var femaleLbl = null;
-
-                                for (var ri = 0; ri < radios.length; ri++) {
-                                    var r = radios[ri];
-                                    var wrap = (r.closest && r.closest('.z-radio'));
-                                    if (!wrap) {
-                                        var p = r.parentElement;
-                                        if (p && p.querySelectorAll('input[type="radio"]').length === 1) wrap = p;
-                                    }
-                                    wrap = wrap || r.parentElement;
-
-                                    var specificLabel = null;
-                                    if (r.id) {
-                                        specificLabel = d.getElementById(r.getAttribute('for')) || d.querySelector('label[for="' + r.id + '"]');
-                                    }
-                                    if (!specificLabel && wrap && wrap !== scope && wrap.querySelectorAll('input[type="radio"]').length === 1) {
-                                        specificLabel = wrap.querySelector('label, .z-radio-cnt, .z-radio-content');
-                                    }
-                                    if (!specificLabel && r.nextElementSibling && (r.nextElementSibling.tagName === 'LABEL' || (r.nextElementSibling.classList && r.nextElementSibling.classList.contains('z-radio-cnt')))) {
-                                        specificLabel = r.nextElementSibling;
-                                    }
-
-                                    var rLabelText = norm(specificLabel ? (specificLabel.innerText || specificLabel.textContent || '') : '');
-                                    var rValText = norm(r.value || '');
-
-                                    var isMaleR = rLabelText.indexOf('erkek') !== -1 || rLabelText.indexOf('male') !== -1 || rLabelText === 'e' || rLabelText === 'm' || rValText === 'e' || rValText === 'erkek' || rValText === '1';
-                                    var isFemaleR = rLabelText.indexOf('kadin') !== -1 || rLabelText.indexOf('female') !== -1 || rLabelText === 'k' || rLabelText === 'f' || rValText === 'k' || rValText === 'kadin' || rValText === '2';
-
-                                    if (isMaleR && !isFemaleR) {
-                                        maleRadio = r;
-                                        maleWrap = wrap;
-                                        maleLbl = specificLabel || wrap;
-                                    } else if (isFemaleR && !isMaleR) {
-                                        femaleRadio = r;
-                                        femaleWrap = wrap;
-                                        femaleLbl = specificLabel || wrap;
-                                    }
-                                }
-
-                                targetRadio = isMale ? maleRadio : femaleRadio;
-                                oppRadio = isMale ? femaleRadio : maleRadio;
-                                targetWrapper = isMale ? maleWrap : femaleWrap;
-                                oppWrapper = isMale ? femaleWrap : maleWrap;
-                                targetLabel = isMale ? maleLbl : femaleLbl;
-                                oppLabel = isMale ? femaleLbl : maleLbl;
-                                targetDoc = d;
-                                break;
-                            }
-                        }
-
-                        if (targetRadio) {
-                            var win = (targetDoc && targetDoc.defaultView) || window;
-
-                            if (oppRadio) {
-                                oppRadio.checked = false;
-                            }
-                            if (oppWrapper && oppWrapper.classList) {
-                                oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
-                            }
-
-                            try { targetRadio.checked = false; } catch (_) {}
-                            try { targetRadio.focus(); } catch (_) {}
-                            try { targetRadio.click(); } catch (_) {}
-                            targetRadio.checked = true;
-                            if (targetWrapper && targetWrapper.classList) {
-                                targetWrapper.classList.add('z-radio-checked');
-                            }
-
-                            if (targetLabel) {
-                                try { targetLabel.click(); } catch (_) {}
-                            } else if (targetWrapper) {
-                                try { targetWrapper.click(); } catch (_) {}
-                            }
-
-                            try { targetRadio.dispatchEvent(new Event('input', { bubbles: true, composed: true })); } catch (_) {}
-                            try { targetRadio.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } catch (_) {}
-                            if (oppRadio) {
-                                try { oppRadio.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } catch (_) {}
-                            }
-
-                            try {
-                                if (win.zk && win.zk.Widget) {
-                                    var targetW = win.zk.Widget.$(targetRadio) || (targetWrapper && win.zk.Widget.$(targetWrapper)) || (targetLabel && win.zk.Widget.$(targetLabel));
-                                    var oppW = oppRadio ? (win.zk.Widget.$(oppRadio) || (oppWrapper && win.zk.Widget.$(oppWrapper)) || (oppLabel && win.zk.Widget.$(oppLabel))) : null;
-
-                                    if (oppW) {
-                                        if (typeof oppW.setChecked === 'function') {
-                                            try { oppW.setChecked(false); } catch (_) {}
-                                        }
-                                        oppW._checked = false;
-                                        oppW._lastValue = false;
-                                    }
-
-                                    if (targetW) {
-                                        targetW._lastValue = null;
-                                        targetW._lastChg = null;
-
-                                        if (typeof targetW.setChecked === 'function') {
-                                            try { targetW.setChecked(true); } catch (_) {}
-                                        }
-                                        targetW._checked = true;
-
-                                        var onCheckSent = false;
-                                        if (typeof targetW.fireOnCheck_ === 'function') {
-                                            try {
-                                                targetW.fireOnCheck_(true);
-                                                onCheckSent = true;
-                                            } catch (_) {}
-                                        }
-                                        if (typeof targetW.fire === 'function') {
-                                            try {
-                                                targetW.fire('onCheck', { checked: true }, { toServer: true });
-                                                onCheckSent = true;
-                                            } catch (_) {}
-                                        }
-
-                                        var rg = (typeof targetW.getRadiogroup === 'function') ? targetW.getRadiogroup() : null;
-                                        if (rg) {
-                                            try {
-                                                if (typeof rg.setSelectedItem === 'function') rg.setSelectedItem(targetW);
-                                                if (typeof rg.fireOnCheck_ === 'function') rg.fireOnCheck_(targetW);
-                                                if (typeof rg.fire === 'function') rg.fire('onCheck', { items: [targetW], reference: targetW }, { toServer: true });
-                                            } catch (_) {}
-                                        }
-
-                                        if (win.zAu && typeof win.zAu.send === 'function') {
-                                            try {
-                                                win.zAu.send(new win.zk.Event(targetW, 'onCheck', { checked: true }, { toServer: true }));
-                                                if (rg) {
-                                                    win.zAu.send(new win.zk.Event(rg, 'onCheck', { items: [targetW], reference: targetW }, { toServer: true }));
-                                                }
-                                            } catch (_) {}
-                                        }
-                                    }
-                                }
-                            } catch (zkErr) {
-                                console.warn('ZK gender radio sync hatası:', zkErr);
-                            }
-
-                            addResultField(result, 'Cinsiyet', targetRadio.checked === true);
-                        } else {
-                            addResultField(result, 'Cinsiyet', false);
-                        }
-                    }
-
-                    function fillMaritalRadio(docs, value, result) {
-                        if (value === undefined || value === null || String(value).trim() === '') return;
-                        var normVal = norm(value);
-                        var isSingle = normVal === 'bekar' || normVal === 'single' || normVal === 'b' || normVal === '1';
-                        var isMarried = normVal === 'evli' || normVal === 'married' || normVal === 'e' || normVal === '2';
-                        if (!isSingle && !isMarried) {
-                            isSingle = true;
-                        }
-
-                        var targetRadio = null;
-                        var oppRadio = null;
-                        var targetWrapper = null;
-                        var oppWrapper = null;
-                        var targetLabel = null;
-                        var oppLabel = null;
-                        var targetDoc = null;
-
-                        for (var di = 0; di < docs.length; di++) {
-                            var d = docs[di];
-                            var labels = d.querySelectorAll('label, span, td, div, b, strong, th');
-                            var maritalRow = null;
-                            for (var li = 0; li < labels.length; li++) {
-                                var lbl = labels[li];
-                                var txt = norm(lbl.innerText || lbl.textContent || '');
-                                if (txt === 'medenihali' || txt === 'medenihal' || txt.indexOf('medeni') !== -1 || txt.indexOf('marital') !== -1) {
-                                    var row = (lbl.closest && lbl.closest('tr, .z-row, .z-radiogroup')) || lbl.parentElement;
-                                    if (row && row.querySelectorAll('input[type="radio"]').length >= 2) {
-                                        maritalRow = row;
-                                        break;
-                                    } else if (!maritalRow && row) {
-                                        maritalRow = row;
-                                    }
-                                }
-                            }
-
-                            var scope = maritalRow || d;
-                            var radios = scope.querySelectorAll('input[type="radio"]');
-                            if (radios.length >= 2) {
-                                var singleRadio = null;
-                                var singleWrap = null;
-                                var singleLbl = null;
-                                var marriedRadio = null;
-                                var marriedWrap = null;
-                                var marriedLbl = null;
-
-                                for (var ri = 0; ri < radios.length; ri++) {
-                                    var r = radios[ri];
-                                    var wrap = (r.closest && r.closest('.z-radio'));
-                                    if (!wrap) {
-                                        var p = r.parentElement;
-                                        if (p && p.querySelectorAll('input[type="radio"]').length === 1) wrap = p;
-                                    }
-                                    wrap = wrap || r.parentElement;
-
-                                    var specificLabel = null;
-                                    if (r.id) {
-                                        specificLabel = d.getElementById(r.getAttribute('for')) || d.querySelector('label[for="' + r.id + '"]');
-                                    }
-                                    if (!specificLabel && wrap && wrap !== scope && wrap.querySelectorAll('input[type="radio"]').length === 1) {
-                                        specificLabel = wrap.querySelector('label, .z-radio-cnt, .z-radio-content');
-                                    }
-                                    if (!specificLabel && r.nextElementSibling && (r.nextElementSibling.tagName === 'LABEL' || (r.nextElementSibling.classList && r.nextElementSibling.classList.contains('z-radio-cnt')))) {
-                                        specificLabel = r.nextElementSibling;
-                                    }
-
-                                    var rLabelText = norm(specificLabel ? (specificLabel.innerText || specificLabel.textContent || '') : '');
-                                    var rValText = norm(r.value || '');
-
-                                    var isSingleR = rLabelText.indexOf('bekar') !== -1 || rLabelText.indexOf('single') !== -1 || rLabelText === 'b' || rValText === 'b' || rValText === 'bekar' || rValText === '1';
-                                    var isMarriedR = rLabelText.indexOf('evli') !== -1 || rLabelText.indexOf('married') !== -1 || rLabelText === 'e' || rValText === 'e' || rValText === 'evli' || rValText === '2';
-
-                                    if (isSingleR && !isMarriedR) {
-                                        singleRadio = r;
-                                        singleWrap = wrap;
-                                        singleLbl = specificLabel || wrap;
-                                    } else if (isMarriedR && !isSingleR) {
-                                        marriedRadio = r;
-                                        marriedWrap = wrap;
-                                        marriedLbl = specificLabel || wrap;
-                                    }
-                                }
-
-                                if (!singleRadio && !marriedRadio) {
-                                    singleRadio = radios[0];
-                                    marriedRadio = radios[1];
-                                } else if (!singleRadio && marriedRadio) {
-                                    singleRadio = (radios[0] === marriedRadio) ? radios[1] : radios[0];
-                                } else if (!marriedRadio && singleRadio) {
-                                    marriedRadio = (radios[0] === singleRadio) ? radios[1] : radios[0];
-                                }
-
-                                targetRadio = isSingle ? singleRadio : marriedRadio;
-                                oppRadio = isSingle ? marriedRadio : singleRadio;
-                                targetWrapper = isSingle ? singleWrap : marriedWrap;
-                                oppWrapper = isSingle ? marriedWrap : singleWrap;
-                                targetLabel = isSingle ? singleLbl : marriedLbl;
-                                oppLabel = isSingle ? marriedLbl : singleLbl;
-                                targetDoc = d;
-                                break;
-                            }
-                        }
-
-                        if (targetRadio) {
-                            var win = (targetDoc && targetDoc.defaultView) || window;
-
-                            if (oppRadio) {
-                                oppRadio.checked = false;
-                            }
-                            if (oppWrapper && oppWrapper.classList) {
-                                oppWrapper.classList.remove('z-radio-checked', 'z-radio-on');
-                            }
-
-                            try { targetRadio.checked = false; } catch (_) {}
-                            try { targetRadio.focus(); } catch (_) {}
-                            try { targetRadio.click(); } catch (_) {}
-                            targetRadio.checked = true;
-                            if (targetWrapper && targetWrapper.classList) {
-                                targetWrapper.classList.add('z-radio-checked');
-                            }
-
-                            if (targetLabel) {
-                                try { targetLabel.click(); } catch (_) {}
-                            } else if (targetWrapper) {
-                                try { targetWrapper.click(); } catch (_) {}
-                            }
-
-                            try { targetRadio.dispatchEvent(new Event('input', { bubbles: true, composed: true })); } catch (_) {}
-                            try { targetRadio.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } catch (_) {}
-                            if (oppRadio) {
-                                try { oppRadio.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } catch (_) {}
-                            }
-
-                            try {
-                                if (win.zk && win.zk.Widget) {
-                                    var targetW = win.zk.Widget.$(targetRadio) || (targetWrapper && win.zk.Widget.$(targetWrapper)) || (targetLabel && win.zk.Widget.$(targetLabel));
-                                    var oppW = oppRadio ? (win.zk.Widget.$(oppRadio) || (oppWrapper && win.zk.Widget.$(oppWrapper)) || (oppLabel && win.zk.Widget.$(oppLabel))) : null;
-
-                                    if (oppW) {
-                                        if (typeof oppW.setChecked === 'function') {
-                                            try { oppW.setChecked(false); } catch (_) {}
-                                        }
-                                        oppW._checked = false;
-                                        oppW._lastValue = false;
-                                    }
-
-                                    if (targetW) {
-                                        targetW._lastValue = null;
-                                        targetW._lastChg = null;
-
-                                        if (typeof targetW.setChecked === 'function') {
-                                            try { targetW.setChecked(true); } catch (_) {}
-                                        }
-                                        targetW._checked = true;
-
-                                        var onCheckSent = false;
-                                        if (typeof targetW.fireOnCheck_ === 'function') {
-                                            try {
-                                                targetW.fireOnCheck_(true);
-                                                onCheckSent = true;
-                                            } catch (_) {}
-                                        }
-                                        if (typeof targetW.fire === 'function') {
-                                            try {
-                                                targetW.fire('onCheck', { checked: true }, { toServer: true });
-                                                onCheckSent = true;
-                                            } catch (_) {}
-                                        }
-
-                                        var rg = (typeof targetW.getRadiogroup === 'function') ? targetW.getRadiogroup() : null;
-                                        if (rg) {
-                                            try {
-                                                if (typeof rg.setSelectedItem === 'function') rg.setSelectedItem(targetW);
-                                                if (typeof rg.fireOnCheck_ === 'function') rg.fireOnCheck_(targetW);
-                                                if (typeof rg.fire === 'function') rg.fire('onCheck', { items: [targetW], reference: targetW }, { toServer: true });
-                                            } catch (_) {}
-                                        }
-
-                                        if (win.zAu && typeof win.zAu.send === 'function') {
-                                            try {
-                                                win.zAu.send(new win.zk.Event(targetW, 'onCheck', { checked: true }, { toServer: true }));
-                                                if (rg) {
-                                                    win.zAu.send(new win.zk.Event(rg, 'onCheck', { items: [targetW], reference: targetW }, { toServer: true }));
-                                                }
-                                            } catch (_) {}
-                                        }
-                                    }
-                                }
-                            } catch (zkErr) {
-                                console.warn('ZK marital radio sync hatası:', zkErr);
-                            }
-
-                            addResultField(result, 'Medeni Hali', targetRadio.checked === true);
-                        }
-                    }
-
-                    function purgeErrorBoxes(targetDoc) {
-                        try {
-                            var d = targetDoc || document;
-                            var errorBoxes = d.querySelectorAll('.z-errorbox');
-                            for (var k = 0; k < errorBoxes.length; k++) {
-                                errorBoxes[k].remove();
-                            }
-                            var invalids = d.querySelectorAll('.z-datebox-invalid, .z-textbox-invalid');
-                            for (var m = 0; m < invalids.length; m++) {
-                                invalids[m].classList.remove('z-datebox-invalid');
-                                invalids[m].classList.remove('z-textbox-invalid');
-                            }
-                            var modals = d.querySelectorAll('.z-window-modal, .z-messagebox-window');
-                            for (var n = 0; n < modals.length; n++) {
-                                var modalText = (modals[n].innerText || modals[n].textContent || '');
-                                if (modalText.indexOf('Form validasyonu') !== -1 || modalText.indexOf('hata oluştu') !== -1 || modalText.indexOf('tarihinden başka') !== -1) {
-                                    modals[n].remove();
-                                    var masks = d.querySelectorAll('.z-modal-mask');
-                                    for (var p = 0; p < masks.length; p++) {
-                                        masks[p].remove();
-                                    }
-                                }
-                            }
-                        } catch (_) {}
-                    }
-
                     var allDocs = getAllDocs(document);
                     var fillResult = {
                         success: false,
@@ -1768,8 +1317,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         fillSelectByLabels(allDocs, ['Doğum Uyruğu', 'Birth Nationality'], data.uyruk, fillResult, 'Doğum Uyruğu');
                         fillSelectByLabels(allDocs, ['Doğum Yeri Ülkesi', 'Birth Country', 'Born Country'], birthCountry, fillResult, 'Doğum Yeri Ülkesi');
                         fillSelectByLabels(allDocs, ['Belgeyi Veren Ülke', 'Document Issuing Country'], data.uyruk, fillResult, 'Belgeyi Veren Ülke');
-                        fillGenderRadio(allDocs, data.cinsiyet, fillResult);
-                        fillMaritalRadio(allDocs, data.medeniHali || data.medeniHal, fillResult);
+
                         fillTextByLabels(allDocs, ['Doğum Yeri Açıklaması', 'Place of Birth Description'], birthPlace, fillResult, 'Doğum Yeri Açıklaması', false);
                         fillTextByLabels(allDocs, ['Belgeyi Veren Makam', 'Veren Makam', 'Issuing Authority'], issuingAuthority, fillResult, 'Belgeyi Veren Makam', false);
                         fillTextByLabels(allDocs, ['Telefon No', 'Telefon Numarası', 'Cep Telefonu No', 'Cep Telefonu', 'GSM', 'Telefon'], '5322431261', fillResult, 'Telefon No', false);
@@ -1802,18 +1350,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             var placeholder = norm(inp.placeholder || '');
                             var combined = rowText + ' ' + placeholder;
 
-                            if ((inp.type || '').toLowerCase() === 'radio') {
-                                // Cinsiyet ve Medeni Hali zaten yukarıda özel olarak ZK seviyesinde işlendi.
-                                // Bu genel döngüde ikinci kez rastgele commit edilmesini engelle.
-                                if (combined.indexOf('cinsiyet') !== -1 || combined.indexOf('medeni') !== -1) {
-                                    continue;
-                                }
-                                if (inp.checked) {
-                                    commitRadio(inp, win);
-                                }
-                                continue;
-                            }
-
+                            if (!isUsableControl(inp, 'input')) continue;
                             if (combined.indexOf('dogumtarih') !== -1 || combined.indexOf('kabulmektup') !== -1 || combined.indexOf('sorgula') !== -1) {
                                 continue;
                             }
@@ -1850,7 +1387,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                             }
                         }
 
-                        purgeErrorBoxes(doc);
+
 
                         // Fotoğraf Yükleme (MAIN World güvencesi)
                         if (data && data.croppedPhotoBase64 && !photoUploadAttempted) {
@@ -1860,6 +1397,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 var buttons = doc.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button');
                                 var photoBtn = null;
                                 for (var b = 0; b < buttons.length; b++) {
+                                    if (!isVisibleElement(buttons[b])) continue;
                                     var bt = norm(buttons[b].innerText || buttons[b].textContent || buttons[b].value || buttons[b].getAttribute('aria-label') || buttons[b].getAttribute('title') || buttons[b].id || '');
                                     if (bt.indexOf('fotograf') !== -1 && (bt.indexOf('yukle') !== -1 || bt.indexOf('sec') !== -1 || bt.indexOf('ekle') !== -1)) {
                                         photoBtn = buttons[b];
@@ -1870,12 +1408,13 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 if (!photoBtn) {
                                     var allLabels = doc.querySelectorAll('span, td, div, label, b');
                                     for (var l = 0; l < allLabels.length; l++) {
+                                        if (!isVisibleElement(allLabels[l])) continue;
                                         var lt = norm(allLabels[l].innerText || allLabels[l].textContent || '');
                                         if (lt.indexOf('fotografadi') !== -1 || lt === 'fotograf') {
                                             var rowEl = allLabels[l].closest('tr') || allLabels[l].closest('div') || allLabels[l].parentElement;
                                             if (rowEl) {
                                                 var btnInRow = rowEl.querySelector('button, a, input[type="button"], .z-button');
-                                                if (btnInRow) { photoBtn = btnInRow; break; }
+                                                if (isVisibleElement(btnInRow)) { photoBtn = btnInRow; break; }
                                             }
                                         }
                                     }
@@ -1929,7 +1468,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                 }
 
                                 if (!fileInput) {
-                                    var allFileInputs = doc.querySelectorAll('input[type="file"]');
+                                    var allFileInputs = Array.from(doc.querySelectorAll('input[type="file"]')).filter(function(input) { return isVisibleElement(input.parentElement); });
                                     if (allFileInputs.length === 1) {
                                         fileInput = allFileInputs[0];
                                     } else if (allFileInputs.length > 1 && photoBtn) {
@@ -2019,32 +1558,19 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                                     addResultField(fillResult, 'Fotoğraf', false);
                                 }
                             } catch (pErr) {
-                                console.warn('[YKN MAIN World Photo Upload Error]', pErr);
+                                console.warn('[YKN MAIN World Photo Upload Error]', { errorName: pErr?.name || 'Error' });
                             } finally {
                                 fillResult.photoUploadDurationMs = Math.round(performance.now() - photoUploadStartedAt);
                             }
                         }
 
-                        try {
-                            if (!doc.__ykn_save_hook_installed) {
-                                doc.__ykn_save_hook_installed = true;
-                                doc.addEventListener('click', function (e) {
-                                    var btn = e.target ? e.target.closest('button, .z-button, a, input[type="button"], input[type="submit"]') : null;
-                                    if (btn) {
-                                        var txt = norm(btn.innerText || btn.textContent || btn.value || '');
-                                        if (txt.indexOf('kaydet') !== -1 || txt.indexOf('guncelle') !== -1) {
-                                            purgeErrorBoxes(doc);
-                                        }
-                                    }
-                                }, true);
-                            }
-                        } catch (_) {}
+
                     }
 
                     fillResult.success = !data || fillResult.filledFields.length > 0;
                     return fillResult;
                 } catch (e) {
-                    console.error('[YKN MAIN World Form Sync Error]', e);
+                    console.error('[YKN MAIN World Form Sync Error]', { errorName: e?.name || 'Error' });
                     return { success: false, filledFields: [], missingFields: [], photoUploaded: false, error: e.message };
                 }
             }
@@ -2075,10 +1601,16 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
             const missingIndex = aggregate.missingFields.indexOf(label);
             if (missingIndex !== -1) aggregate.missingFields.splice(missingIndex, 1);
         }
+        for (const [field, value, label] of [['gender', studentData?.cinsiyet, 'Cinsiyet'], ['marital', studentData?.medeniHali || studentData?.medeniHal, 'Medeni Hali']]) {
+            if (!value) continue;
+            const response = await runYoksisZkCommand(tabId, { action: 'selectRadio', field, value, requestId });
+            (response?.verified ? aggregate.filledFields : aggregate.missingFields).push(label);
+        }
+        aggregate.success = aggregate.filledFields.length > 0;
         aggregate.partial = aggregate.missingFields.length > 0;
         return aggregate;
     } catch (err) {
-        console.warn('syncYoksisFormInMainWorld error:', err);
+        console.warn('syncYoksisFormInMainWorld error:', { errorName: err?.name || 'Error' });
         return { success: false, filledFields: [], missingFields: [], photoUploaded: false, error: err.message };
     }
 }
@@ -2096,8 +1628,8 @@ function getExpectedYoksisFields(studentData) {
         expected.add('Belgeyi Veren Ülke');
     }
     if (hasValue(studentData?.dogumUlkesi, studentData?.uyruk)) expected.add('Doğum Yeri Ülkesi');
-    if (hasValue(studentData?.cinsiyet)) expected.add('Cinsiyet');
-    if (hasValue(studentData?.medeniHali, studentData?.medeniHal)) expected.add('Medeni Hali');
+    if (hasValue(studentData?.cinsiyet, studentData?.genderSource)) expected.add('Cinsiyet');
+    if (hasValue(studentData?.medeniHali, studentData?.medeniHal, studentData?.maritalSource)) expected.add('Medeni Hali');
     if (hasValue(studentData?.dogumYeriAciklamasi, studentData?.dogumYeri, studentData?.birthPlace)) expected.add('Doğum Yeri Açıklaması');
     if (hasValue(studentData?.verenMakam, studentData?.issuingAuthority)) expected.add('Belgeyi Veren Makam');
     if (hasValue(studentData?.pasaportNo, studentData?.passportNo)) expected.add('Belge No');
@@ -2168,7 +1700,7 @@ async function searchYoksisFromContent(tabId, kabulId, requestId, expectedStuden
             'YÖKSİS arama zaman aşımı'
         );
     } catch (error) {
-        console.warn('[YKN] Content-script YÖKSİS araması başarısız:', error);
+        console.warn('[YKN] Content-script YÖKSİS araması başarısız:', { errorName: error?.name || 'Error' });
         return null;
     }
 }
@@ -2183,7 +1715,7 @@ async function getYoksisFormState(tabId, requestId) {
         );
         return state?.success ? state : null;
     } catch (error) {
-        console.warn('[YKN] YÖKSİS form durumu okunamadı:', error);
+        console.warn('[YKN] YÖKSİS form durumu okunamadı:', { errorName: error?.name || 'Error' });
         return null;
     }
 }
@@ -2199,7 +1731,9 @@ async function waitForYoksisFormReady(tabId, requestId, options = {}) {
                 afterFingerprint: options.afterFingerprint || '',
                 afterDomRevision: options.afterDomRevision,
                 requireFreshResult: options.requireFreshResult === true,
-                expectedStudent: options.expectedStudent || null
+                expectedStudent: options.expectedStudent || null,
+                requireBoundSearch: options.requireBoundSearch === true,
+                expectedKabulId: options.expectedKabulId || ''
             }, { frameId: 0 }),
             11_000,
             'YÖKSİS formu hazır olma zaman aşımı'
@@ -2209,7 +1743,7 @@ async function waitForYoksisFormReady(tabId, requestId, options = {}) {
         }
         return Boolean(readiness?.formReady);
     } catch (error) {
-        console.warn('[YKN] YÖKSİS form hazır olma kontrolü başarısız:', error);
+        console.warn('[YKN] YÖKSİS form hazır olma kontrolü başarısız:', { errorName: error?.name || 'Error' });
         return false;
     }
 }
@@ -2279,13 +1813,14 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         // Content-script eski sürümde yalnızca inputu bulup Enter'a basabiliyor
         // veya butonun ZK görsel parçasını kaçırabiliyor. Buton doğrulanmadıysa
         // MAIN-world taramasını kontrollü tek bir fallback olarak kullan.
+        if (response?.allowMainFallback === false) throw new Error(response.message || 'Önceki YÖKSİS formu korundu.');
         if (response?.searchTriggered !== true) {
             finishYknTiming('acceptance-id-input-and-search', searchStartedAt, 'fallback', 'content_search_not_confirmed');
             // Content script arama butonunu bulamadıysa MAIN-world fallback'inden
             // hemen önce güncel form durumunu al. Bu baseline, eski öğrenci
             // formunun fallback sonunda "hazır" sayılmasını engeller.
             const stateBeforeMainSearch = await getYoksisFormState(yoksisTab.id, request.requestId);
-            if (!stateBeforeMainSearch) {
+            if (!stateBeforeMainSearch || stateBeforeMainSearch.hasPopulatedStudentForm !== false) {
                 throw new Error('YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin.');
             }
             const mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
@@ -2296,7 +1831,8 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                     afterFingerprint: stateBeforeMainSearch.fingerprint,
                     afterDomRevision: stateBeforeMainSearch.domRevision,
                     requireFreshResult: true,
-                    expectedStudent
+                    expectedStudent,
+                    expectedKabulId: kabulId
                 });
                 if (!formReady) {
                     finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'failed', 'fresh_form_not_confirmed');
@@ -2330,6 +1866,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 && Number.isFinite(response.domRevisionBeforeSearch);
             if (hasFreshBaseline) {
                 const waitOptions = {
+                    expectedKabulId: kabulId,
                     afterFingerprint: response.formFingerprintBeforeSearch,
                     afterDomRevision: response.domRevisionBeforeSearch,
                     requireFreshResult: true,
@@ -2395,6 +1932,20 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'YOKSIS_ZK_COMMAND') {
+        const command = request.command || {};
+        const allowedValues = command.field === 'gender' ? ['Erkek', 'Kadın'] : command.field === 'marital' ? ['Bekar', 'Evli'] : [];
+        const validCommand = command.action === 'waitForIdle' || (['selectRadio', 'verifyRadio'].includes(command.action)
+            && allowedValues.includes(command.value) && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 160);
+        if (!isYoksisUrl(sender?.tab?.url || '') || sender.frameId !== 0 || !validCommand) {
+            sendResponse({ success: false, verified: false, error: 'YÖKSİS komutu doğrulanamadı.' });
+            return false;
+        }
+        void runYoksisZkCommand(sender.tab.id, command).then(sendResponse)
+            .catch(() => sendResponse({ success: false, verified: false, error: 'YÖKSİS güncellemesi doğrulanamadı.' }));
+        return true;
+    }
+
     if (request.action === 'OCR_IMAGE') {
         const isValidImage = typeof request.imageBase64 === 'string'
             && request.imageBase64.length <= 15_000_000
@@ -2602,7 +2153,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     // Doldurma, arama postback'i tamamen bitmeden başlayamaz.
                     // Önce formun kararlı olduğunu doğrula; aksi halde eksik
                     // alanları ikinci/üçüncü yazımla telafi etmeye çalışma.
-                    const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId);
+                    const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, { requireBoundSearch: true, expectedKabulId: studentData.yoksisId || studentData.kabulId || '', expectedStudent: studentData });
                     if (!formReady) {
                         throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
                     }
@@ -2611,7 +2162,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     // Tek MAIN-world turunda önce alanları, sonra fotoğrafı işle.
                     // Fotoğraf postback'i araya girip alan senkronizasyonunu kesmesin.
                     const mainFillStartedAt = startYknTiming();
-                    const rawMainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData);
+                    const rawMainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData, request.requestId);
                     let verificationResponse;
                     try {
                         verificationResponse = await sendTabMessage(yoksisTab.id, {
@@ -2699,9 +2250,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         }, studentData);
                     }
 
+                    const finalVerification = await sendTabMessage(yoksisTab.id, {
+                        action: 'verifyYoksisFields', data: studentData, requestId: request.requestId
+                    }, { frameId: 0 });
+                    const finalFields = finalVerification?.filledFields || [];
+                    const finalMissing = getExpectedYoksisFields(studentData).filter((label) => !finalFields.includes(label));
+                    const finalResponse = { ...contentResponse, filledFields: finalFields, missingFields: finalMissing };
                     finishYknTiming('content-script-fill-fallback', fallbackStartedAt,
-                        contentResponse?.success ? 'ok' : 'partial', 'main_world_incomplete');
-                    return mergeYoksisFillResponses(mainResponse, contentResponse, studentData);
+                        finalMissing.length === 0 ? 'ok' : 'partial', 'main_world_incomplete');
+                    return mergeYoksisFillResponses({ ...mainResponse, filledFields: [], missingFields: finalMissing }, finalResponse, studentData);
                 });
                 const hasCompletedAllFields = response?.success === true
                     && response.partial !== true

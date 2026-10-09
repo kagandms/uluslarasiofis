@@ -8,9 +8,73 @@ import test from 'node:test';
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const contentSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/content.js'), 'utf8');
+const zkControlsSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/zk-form-controls.js'), 'utf8');
 const backgroundSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/background.js'), 'utf8');
 const portalSecuritySource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/portal-security.js'), 'utf8');
 const storageLifecycleSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/storage-lifecycle.js'), 'utf8');
+
+for (const [label, expected] of [['Female', 'Kadın'], ['Male', 'Erkek']]) {
+    test(`Apply selected ${label} is authoritative despite a conflicting name and option code`, async () => {
+        const harness = createContentHarness(`<input name="firstName" value="ALI"><input name="lastName" value="TESTOVA">
+            <label for="gender">Gender</label><select id="gender"><option value="${expected === 'Kadın' ? '1' : '2'}" selected>${label}</option></select>`,
+        'https://apply.topkapi.edu.tr/panel/student');
+
+        try {
+            const response = await harness.send({ action: 'copyData' });
+
+            assert.equal(response.data.cinsiyet, expected);
+        } finally { harness.close(); }
+    });
+}
+
+for (const markup of ['', '<label for="gender">Gender</label><select id="gender"><option selected value="1">Select</option></select>']) {
+    test(`Apply missing or undocumented coded gender never falls back to a name (${markup ? 'coded' : 'absent'})`, async () => {
+        const harness = createContentHarness(`<input name="firstName" value="ALI"><input name="lastName" value="TESTOVA">${markup}`,
+            'https://apply.topkapi.edu.tr/panel/student');
+
+        try {
+            const response = await harness.send({ action: 'copyData' });
+
+            assert.equal(response.data.cinsiyet, '');
+        } finally { harness.close(); }
+    });
+}
+
+test('a populated prior YÖKSİS form cannot be replaced without explicit consent', async () => {
+    const harness = createContentHarness(`<table><tr><td>Kabul Mektup ID</td><td><input title="Kabul Mektup ID"></td><td><button id="search">Kabul Mektup ID ile Ara</button></td></tr>
+        <tr><td>Anne Adı</td><td><input value="PREVIOUS"></td></tr><tr><td>Belge No</td><td><input value="PREVIOUS"></td></tr></table>`, 'https://yoksis.yok.gov.tr/student');
+    let searches = 0;
+    harness.dom.window.confirm = () => false;
+    harness.dom.window.document.getElementById('search').onclick = () => { searches += 1; };
+
+    try {
+        const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-123-ID', waitForForm: false });
+
+        assert.equal(searches, 0);
+        assert.equal(response.success, false);
+        assert.equal(response.allowMainFallback, false);
+        assert.match(response.message, /onay|korundu/i);
+    } finally { harness.close(); }
+});
+
+test('approved new-record reset sends exactly one click before reacquiring the acceptance controls', async () => {
+    const harness = createContentHarness(`<table><tr><td>Anne Adı</td><td><input value="PREVIOUS"></td></tr>
+        <tr><td>Belge No</td><td><input value="PREVIOUS"></td></tr></table><button id="reset">Temizle</button>`, 'https://yoksis.yok.gov.tr/student');
+    harness.dom.window.confirm = () => true;
+    let resets = 0;
+    harness.dom.window.document.getElementById('reset').onclick = () => {
+        resets += 1;
+        harness.dom.window.document.body.innerHTML = `<table><tr><td>Kabul Mektup ID</td><td><input id="fresh-code" title="Kabul Mektup ID"></td><td><button>Kabul Mektup ID ile Ara</button></td></tr></table>`;
+    };
+
+    try {
+        const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-123-ID', waitForForm: false });
+
+        assert.equal(resets, 1);
+        assert.equal(harness.dom.window.document.getElementById('fresh-code').value, 'NEW-123-ID');
+        assert.equal(response.searchTriggered, true);
+    } finally { harness.close(); }
+});
 
 function installInnerText(window) {
     Object.defineProperty(window.Element.prototype, 'innerText', {
@@ -50,8 +114,10 @@ function createContentHarness(markup, url, storedData = {}) {
                     messageHandler = handler;
                 }
             },
-            sendMessage(_message, callback) {
-                if (callback) callback({ success: true });
+            sendMessage(message, callback) {
+                const response = message.action === 'YOKSIS_ZK_COMMAND' ? window.YknZkForm.execute(message.command) : Promise.resolve({ success: true });
+                if (callback) void response.then(callback);
+                return response;
             }
         },
         storage: {
@@ -69,6 +135,7 @@ function createContentHarness(markup, url, storedData = {}) {
     window.DataTransfer = createDataTransfer(window);
     window.PointerEvent = window.MouseEvent;
     installInnerText(window);
+    window.eval(zkControlsSource);
     window.eval(contentSource);
 
     return {
@@ -99,6 +166,7 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
     const calls = [];
     const timingLogs = [];
     let messageHandler = null;
+    let verificationCount = 0;
     let hasYoksisTab = options.hasYoksisTab !== false;
     const storageValues = {};
     const yoksisTab = {
@@ -159,6 +227,8 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         scripting: {
             async executeScript(options) {
                 calls.push({ type: 'script', options });
+                if (options.files?.includes('zk-form-controls.js')) return [];
+                if (options.func?.name === 'executeYoksisZkCommand') return [{ result: { success: true, verified: true } }];
                 if (options.world === 'MAIN') return [{ result: mainResult }];
                 return [];
             }
@@ -202,7 +272,7 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                     return;
                 }
                 if (message.action === 'GET_YOKSIS_FORM_STATE') {
-                    callback({ success: true, fingerprint: 'previous-student', domRevision: 7 });
+                    callback({ success: true, fingerprint: 'previous-student', domRevision: 7, hasPopulatedStudentForm: false });
                     return;
                 }
                 if (message.action === 'WAIT_YOKSIS_FORM') {
@@ -210,7 +280,8 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                     return;
                 }
                 if (message.action === 'verifyYoksisFields') {
-                    callback(options.verificationResult || {
+                    verificationCount += 1;
+                    callback((verificationCount > 1 ? options.finalVerificationResult : null) || options.verificationResult || {
                         success: Array.isArray(mainResult?.filledFields) && mainResult.filledFields.length > 0,
                         filledFields: mainResult?.filledFields || [],
                         missingFields: mainResult?.missingFields || []
@@ -756,6 +827,7 @@ test('photo-only MAIN result falls back to student fields and remains partial wh
         { success: true, searchTriggered: true, formReady: true },
         {
             verificationResult: { success: false, filledFields: [], missingFields: ['Adı', 'Soyadı', 'Anne Adı', 'Baba Adı'] },
+            finalVerificationResult: { success: false, filledFields: ['Adı', 'Soyadı', 'Anne Adı'], missingFields: ['Baba Adı'] },
             contentResult: {
                 success: true,
                 filledFields: ['Adı', 'Soyadı', 'Anne Adı'],
@@ -1421,4 +1493,123 @@ test('eklenti popup araması da Tek Tık ile aynı YÖKSİS aktarım yolunu kull
     assert.ok(harness.calls.some((call) => call.type === 'create-tab'));
     assert.ok(harness.calls.some((call) => call.type === 'message'
         && call.message.action === 'searchWithId'));
+});
+
+test('three students search and receive fields/photo in the same page without F5 or old controls', async () => {
+    const harness = createContentHarness('<div id="searches"></div><div id="forms"></div><button id="reset">Temizle</button>', 'https://yoksis.yok.gov.tr/student');
+    const { window } = harness.dom;
+    const codes = ['ONE-123-ID', 'TWO-123-ID', 'THR-123-ID'];
+    const searches = [];
+    const uploads = [];
+    const usedInputs = [];
+    let resets = 0;
+    let approvals = 0;
+    let index = 0;
+    function appendSearch() {
+        const host = window.document.getElementById('searches');
+        host.insertAdjacentHTML('beforeend', `<table id="search-${index}"><tr><td>Kabul Mektup ID</td><td><input title="Kabul Mektup ID"></td><td><button>Kabul Mektup ID ile Ara</button></td></tr></table>`);
+        const panel = host.lastElementChild;
+        const input = panel.querySelector('input');
+        usedInputs.push(input);
+        panel.querySelector('button').onclick = () => {
+            searches.push(input.value);
+            window.document.getElementById('forms').insertAdjacentHTML('beforeend', `<table id="form-${index}">
+                <tr><td>Adı</td><td><input value="TEST${index}"></td></tr><tr><td>Soyadı</td><td><input value="SYNTHETIC"></td></tr>
+                <tr><td>Anne Adı</td><td><input></td></tr><tr><td>Belge No</td><td><input></td></tr>
+                <tr><td>Fotoğraf Adı</td><td><button>Fotoğraf Yükle</button><input type="file"></td></tr></table>`);
+            const photo = window.document.getElementById(`form-${index}`).querySelector('input[type="file"]');
+            makeFileInputWritable(photo);
+            photo.addEventListener('change', () => uploads.push(index));
+        };
+    }
+    window.confirm = () => { approvals += 1; return true; };
+    window.document.getElementById('reset').onclick = () => {
+        resets += 1;
+        window.document.getElementById(`search-${index}`).hidden = true;
+        window.document.getElementById(`form-${index}`).hidden = true;
+        index += 1;
+        appendSearch();
+    };
+    appendSearch();
+
+    try {
+        for (const [studentIndex, code] of codes.entries()) {
+            const student = { firstName: `TEST${studentIndex}`, lastName: 'SYNTHETIC', anneAdi: `MOTHER${studentIndex}`,
+                passportNo: `FAKE${studentIndex}`, croppedPhotoBase64: 'data:image/jpeg;base64,AA==', photoFileName: 'synthetic.jpg' };
+
+            const searched = await harness.send({ action: 'searchWithId', kabulId: code, requestId: `student-${studentIndex}`, expectedStudent: student });
+            const bound = await harness.send({ action: 'WAIT_YOKSIS_FORM', requireBoundSearch: true, expectedKabulId: code, expectedStudent: student });
+            const filled = await harness.send({ action: 'fillRemainingData', data: student, requestId: `student-${studentIndex}` });
+            const repeated = await harness.send({ action: 'fillRemainingData', data: student, requestId: `student-${studentIndex}` });
+
+            assert.equal(searched.formReady, true);
+            assert.equal(bound.formReady, true);
+            assert.equal(filled.photoUploaded, true);
+            assert.equal(repeated.photoUploaded, true);
+            assert.equal(window.document.getElementById(`form-${studentIndex}`).querySelector('input').value, student.firstName);
+        }
+        assert.deepEqual(searches, codes);
+        assert.deepEqual(uploads, [0, 1, 2]);
+        assert.equal(resets, 2);
+        assert.equal(approvals, 2);
+        assert.deepEqual(usedInputs.map((input) => input.value), codes);
+    } finally { harness.close(); }
+});
+
+test('a restarted page/controller cannot fill a different student using stored old data or old form readiness', async () => {
+    const harness = createContentHarness('<table><tr><td>Anne Adı</td><td><input value="OLD"></td></tr><tr><td>Belge No</td><td><input value="OLD-DOC"></td></tr></table>',
+        'https://yoksis.yok.gov.tr/student', { studentData: { anneAdi: 'OLD', passportNo: 'OLD-DOC' } });
+
+    try {
+        const bound = await harness.send({ action: 'WAIT_YOKSIS_FORM', requireBoundSearch: true, expectedKabulId: 'NEW-123-ID' });
+        const missingPayload = await harness.send({ action: 'fillRemainingData', requestId: 'new-workflow' });
+
+        assert.equal(bound.formReady, false);
+        assert.equal(missingPayload.success, false);
+        assert.equal(harness.dom.window.document.querySelector('input').value, 'OLD');
+    } finally { harness.close(); }
+});
+
+test('Apply selected radio label and disabled marital dropdown remain authoritative without option-code mapping', async () => {
+    const harness = createContentHarness('<input name="firstName" value="SYNTHETIC"><input name="lastName" value="TEST">' +
+        '<fieldset><label><input name="gender" type="radio" value="1" checked>Female</label><label><input name="gender" type="radio" value="2">Male</label></fieldset>' +
+        '<label for="marital">Marital Status</label><select disabled id="marital"><option value="2" selected>Single</option></select>', 'https://apply.topkapi.edu.tr/panel/student');
+
+    try {
+        const result = await harness.send({ action: 'copyData' });
+
+        assert.equal(result.data.cinsiyet, 'Kadın');
+        assert.equal(result.data.genderSource, 'apply');
+        assert.equal(result.data.medeniHali, 'Bekar');
+        assert.equal(result.data.maritalSource, 'apply');
+    } finally { harness.close(); }
+});
+
+test('fallback field claims are discarded when the final AU verification finds an empty form', async () => {
+    const harness = createBackgroundHarness({ filledFields: [], photoUploaded: true }, {}, {
+        verificationResult: { filledFields: [], missingFields: ['Adı'] },
+        contentResult: { success: true, filledFields: ['Adı'], missingFields: [] },
+        finalVerificationResult: { success: false, filledFields: [], missingFields: ['Adı'] }
+    });
+
+    const result = await harness.send({ source: 'IKAMET_PORTAL', action: 'FILL_YOKSIS_FORM', requestId: 'fallback-lost',
+        data: { yoksisReady: true, yoksisTabId: 42, yoksisTabUrl: 'https://yoksis.yok.gov.tr/student', firstName: 'SYNTHETIC' } });
+
+    assert.equal(result.success, false);
+    assert.ok(result.missingFields.includes('Adı'));
+});
+
+test('unverified missing source demographics cannot be reported as a complete transfer', async () => {
+    const harness = createBackgroundHarness({ success: true, filledFields: ['Adı'] }, {}, {
+        verificationResult: { success: true, filledFields: ['Adı'], missingFields: [] },
+        contentResult: { success: true, filledFields: ['Adı'], missingFields: [] }
+    });
+
+    const result = await harness.send({ source: 'IKAMET_PORTAL', action: 'FILL_YOKSIS_FORM', requestId: 'manual-required',
+        data: { yoksisReady: true, yoksisTabId: 42, yoksisTabUrl: 'https://yoksis.yok.gov.tr/student', firstName: 'SYNTHETIC',
+            cinsiyet: '', genderSource: 'unverified', medeniHali: '', maritalSource: 'unverified' } });
+
+    assert.equal(result.partial, true);
+    assert.ok(result.missingFields.includes('Cinsiyet'));
+    assert.ok(result.missingFields.includes('Medeni Hali'));
 });

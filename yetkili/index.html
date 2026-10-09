@@ -315,7 +315,7 @@
                                             <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary);">Medeni Hali:</label>
                                             <div style="display: flex; align-items: center; gap: 10px;">
                                                 <label style="display: flex; align-items: center; gap: 4px; font-size: 0.82rem; cursor: pointer; color: var(--text-primary); font-weight: 500;">
-                                                    <input type="radio" name="ykn-medeni-hal" id="ykn-medeni-bekar" value="Bekar" checked style="accent-color: var(--accent); cursor: pointer;"> Bekar
+                                                    <input type="radio" name="ykn-medeni-hal" id="ykn-medeni-bekar" value="Bekar" style="accent-color: var(--accent); cursor: pointer;"> Bekar
                                                 </label>
                                                 <label style="display: flex; align-items: center; gap: 4px; font-size: 0.82rem; cursor: pointer; color: var(--text-primary); font-weight: 500;">
                                                     <input type="radio" name="ykn-medeni-hal" id="ykn-medeni-evli" value="Evli" style="accent-color: var(--accent); cursor: pointer;"> Evli
@@ -904,6 +904,7 @@
                     <div>
                         <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 2px;">Cinsiyet</label>
                         <select id="cropper-select-gender" style="width: 100%; padding: 6px 8px; font-size: 0.85rem; border: 1.5px solid var(--accent); border-radius: 6px; font-weight: 600; background: var(--bg-color); color: var(--text-primary); cursor: pointer;">
+                            <option value="">Seçin / elle doğrulayın</option>
                             <option value="Erkek">Erkek</option>
                             <option value="Kadın">Kadın</option>
                         </select>
@@ -911,7 +912,8 @@
                     <div>
                         <label style="font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 2px;">Medeni Hali</label>
                         <select id="cropper-select-medeni" style="width: 100%; padding: 6px 8px; font-size: 0.85rem; border: 1.5px solid var(--accent); border-radius: 6px; font-weight: 600; background: var(--bg-color); color: var(--text-primary); cursor: pointer;">
-                            <option value="Bekar" selected>Bekar</option>
+                            <option value="">Seçin / elle doğrulayın</option>
+                            <option value="Bekar">Bekar</option>
                             <option value="Evli">Evli</option>
                         </select>
                     </div>

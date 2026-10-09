@@ -6,11 +6,9 @@ import {
     parseDateValue,
     extractPassportPlaceOfBirth,
     extractPassportIssuingAuthority,
-    extractPassportGender,
-    getCountryIso3Code,
-    normalizeGender,
-    inferGenderFromName
+    getCountryIso3Code
 } from '../utils/ykn-document-parser.js';
+import { mergeApplyProfile, applyManualProfileChoices, normalizeProfileGender, normalizeProfileMaritalStatus } from '../utils/ykn-profile-state.js';
 import { selectBestPassportOrientation } from '../utils/passport-orientation.js';
 import {
     initPassportCropperModal,
@@ -455,6 +453,8 @@ export function initYknManager() {
         const authVal = (inputIssuingAuthority?.value || currentStudentData.issuingAuthority || currentStudentData.verenMakam || '').trim();
 
         const missing = [];
+        if (!normalizeProfileGender(currentStudentData.cinsiyet)) missing.push('Cinsiyet (elle doğrulayın)');
+        if (!normalizeProfileMaritalStatus(currentStudentData.medeniHali)) missing.push('Medeni Hali (elle doğrulayın)');
 
         function markField(inputEl, badgeEl, val, name) {
             const hasVal = Boolean(val);
@@ -546,28 +546,17 @@ export function initYknManager() {
         if (inputBirthDate && !inputBirthDate.value && (student.birthDate || student.dogumTarihi)) {
             inputBirthDate.value = formatDateForDisplay(student.birthDate || student.dogumTarihi);
         }
-        const medeniStatus = student.medeniHali || student.medeniHal || 'Bekar';
-        const medeniBekar = document.getElementById('ykn-medeni-bekar');
-        const medeniEvli = document.getElementById('ykn-medeni-evli');
-        if (medeniBekar && medeniEvli) {
-            if (String(medeniStatus).trim().toLowerCase().startsWith('e')) {
-                medeniEvli.checked = true;
-            } else {
-                medeniBekar.checked = true;
-            }
-        }
-        const cinsiyetVal = student.cinsiyet || '';
-        const cinsiyetErkek = document.getElementById('ykn-cinsiyet-erkek');
-        const cinsiyetKadin = document.getElementById('ykn-cinsiyet-kadin');
-        if (cinsiyetErkek && cinsiyetKadin) {
-            const resolvedGender = normalizeGender(cinsiyetVal) || inferGenderFromName(student.fullName || student.adSoyad || student.ad || '');
-            if (resolvedGender === 'Kadın') {
-                cinsiyetKadin.checked = true;
-                cinsiyetErkek.checked = false;
-            } else if (resolvedGender === 'Erkek') {
-                cinsiyetErkek.checked = true;
-                cinsiyetKadin.checked = false;
-            }
+        const choices = [
+            ['medeni', normalizeProfileMaritalStatus(student.medeniHali || student.medeniHal), ['bekar', 'evli'], ['Bekar', 'Evli'], student.maritalSource],
+            ['cinsiyet', normalizeProfileGender(student.cinsiyet), ['erkek', 'kadin'], ['Erkek', 'Kadın'], student.genderSource]
+        ];
+        for (const [field, selected, ids, values, source] of choices) {
+            ids.forEach((id, index) => {
+                const radio = document.getElementById(`ykn-${field}-${id}`);
+                if (!radio) return;
+                radio.checked = selected === values[index];
+                radio.disabled = source === 'apply';
+            });
         }
         updateMissingFieldsUI();
     }
@@ -644,25 +633,11 @@ export function initYknManager() {
                 currentStudentData.dogumTarihi = currentStudentData.birthDate;
             }
         }
-        const medeniBekar = document.getElementById('ykn-medeni-bekar');
-        const medeniEvli = document.getElementById('ykn-medeni-evli');
-        if (medeniBekar && medeniEvli) {
-            const status = medeniEvli.checked ? 'Evli' : 'Bekar';
-            currentStudentData.medeniHali = status;
-            currentStudentData.medeniHal = status;
-        } else {
-            currentStudentData.medeniHali = currentStudentData.medeniHali || 'Bekar';
-            currentStudentData.medeniHal = currentStudentData.medeniHali;
-        }
-        const cinsiyetErkek = document.getElementById('ykn-cinsiyet-erkek');
-        const cinsiyetKadin = document.getElementById('ykn-cinsiyet-kadin');
-        if (cinsiyetErkek && cinsiyetKadin) {
-            if (cinsiyetKadin.checked) {
-                currentStudentData.cinsiyet = 'Kadın';
-            } else if (cinsiyetErkek.checked) {
-                currentStudentData.cinsiyet = 'Erkek';
-            }
-        }
+        const selectedValue = (name) => document.querySelector(`input[name="${name}"]:checked`)?.value || '';
+        currentStudentData = applyManualProfileChoices(currentStudentData, {
+            cinsiyet: selectedValue('ykn-cinsiyet'),
+            medeniHali: selectedValue('ykn-medeni-hal')
+        });
         updateMissingFieldsUI();
     }
 
@@ -1118,6 +1093,10 @@ export function initYknManager() {
     }
 
     function resetStudentActions() {
+        document.querySelectorAll('input[name="ykn-cinsiyet"], input[name="ykn-medeni-hal"]').forEach((radio) => {
+            radio.checked = false;
+            radio.disabled = false;
+        });
         clearOneClickTimeout();
         documentBytesCache.clear();
         cancelButtonActions();
@@ -1629,9 +1608,6 @@ export function initYknManager() {
 
                 // Pasaport dijital metin analizi (tüm sayfalardan)
                 const fullDigitalText = renderedPages.map(p => p.text).filter(Boolean).join('\n');
-                let detectedGender = extractPassportGender(fullDigitalText, {
-                    birthDate: currentStudentData?.birthDate
-                });
                 let passportDates = extractPassportDatesFromText(fullDigitalText, { birthDate: currentStudentData?.birthDate });
 
                 if (passportDates.issueDate && !currentStudentData.issueDate) {
@@ -1696,11 +1672,6 @@ export function initYknManager() {
                                     orientedCanvas = orientation.canvas;
                                 }
                                 if (pageOcrText) {
-                                    if (!detectedGender) {
-                                        detectedGender = extractPassportGender(pageOcrText, {
-                                            birthDate: currentStudentData?.birthDate
-                                        });
-                                    }
                                     if (!currentStudentData.issueDate || !currentStudentData.expiryDate) {
                                         const ocrDates = extractPassportDatesFromText(pageOcrText, { birthDate: currentStudentData?.birthDate });
                                         if (ocrDates.issueDate && !currentStudentData.issueDate) {
@@ -1752,15 +1723,6 @@ export function initYknManager() {
                             }
                         });
                     }
-                }
-
-                // Pasaport MRZ/OCR cinsiyeti, Apply formundaki eksik değeri tamamlar.
-                if (detectedGender && !currentStudentData.cinsiyet) {
-                    currentStudentData.cinsiyet = detectedGender;
-                }
-                if (!currentStudentData.cinsiyet) {
-                    const inferred = inferGenderFromName(currentStudentData?.fullName || currentStudentData?.adSoyad || currentStudentData?.ad || '');
-                    if (inferred) currentStudentData.cinsiyet = inferred;
                 }
 
                 // Pasaport doğum yeri ve veren makam analizi
@@ -2458,18 +2420,6 @@ export function initYknManager() {
                 .map((page) => page.text || '')
                 .filter(Boolean)
                 .join('\n');
-            const passportGender = extractPassportGender(passportText, {
-                birthDate: currentStudentData.birthDate
-            });
-            if (passportGender && !currentStudentData.cinsiyet) {
-                currentStudentData.cinsiyet = passportGender;
-            }
-            if (!currentStudentData.cinsiyet) {
-                const inferred = inferGenderFromName(currentStudentData?.fullName || currentStudentData?.adSoyad || currentStudentData?.ad || '');
-                if (inferred) currentStudentData.cinsiyet = inferred;
-            }
-            currentStudentData.croppedPhotoBase64 = dataUrl;
-            currentStudentData.photoFileName = fileName;
             if (userFields) {
                 if (userFields.issueDate) {
                     const parsed = parseDateValue(userFields.issueDate);
@@ -2483,13 +2433,7 @@ export function initYknManager() {
                     currentStudentData.issuingAuthority = userFields.issuingAuthority;
                     currentStudentData.verenMakam = userFields.issuingAuthority;
                 }
-                if (userFields.cinsiyet) {
-                    currentStudentData.cinsiyet = userFields.cinsiyet;
-                }
-                if (userFields.medeniHali) {
-                    currentStudentData.medeniHali = userFields.medeniHali;
-                    currentStudentData.medeniHal = userFields.medeniHali;
-                }
+                currentStudentData = applyManualProfileChoices(currentStudentData, userFields);
             }
             syncUserEnteredPassportDates();
             populateStudentFieldsToInputs(currentStudentData);
@@ -2674,7 +2618,7 @@ export function initYknManager() {
                 && isOneClickActive(ONE_CLICK_STAGE.APPLY_DATA_READING)) {
                 clearOneClickTimeout();
                 if (response?.success && response.data) {
-                    currentStudentData = { ...currentStudentData, ...response.data };
+                    currentStudentData = mergeApplyProfile(currentStudentData, response.data);
                     applyCountryDefaultsToStudent(currentStudentData);
                     copyStudentInfoToClipboard(currentStudentData);
                     completedWorkflowSteps.add(3);
@@ -2828,7 +2772,7 @@ export function initYknManager() {
                 finishButtonAction('copy-info');
                 if (response?.success && response.data) {
                     const data = response.data;
-                    currentStudentData = { ...currentStudentData, ...data };
+                    currentStudentData = mergeApplyProfile(currentStudentData, data);
                     applyCountryDefaultsToStudent(currentStudentData);
                     copyStudentInfoToClipboard(currentStudentData);
                     setWorkflowStepStatus(3, 'success');
@@ -2990,6 +2934,7 @@ export function initYknManager() {
                 currentPassportCandidateIndex: 0,
                 yoksisId: safeYoksisId
             };
+            currentStudentData = mergeApplyProfile(null, currentStudentData);
             studentName.textContent = currentStudentData.fullName || "İsim Bulunamadı";
             updateStudentActions(currentStudentData);
             applyCountryDefaultsToStudent(currentStudentData);
@@ -3016,6 +2961,11 @@ export function initYknManager() {
             currentStudentData = {
                 ...currentStudentData,
                 ...incoming,
+                cinsiyet: currentStudentData?.cinsiyet || '',
+                genderSource: currentStudentData?.genderSource || 'unverified',
+                medeniHali: currentStudentData?.medeniHali || '',
+                medeniHal: currentStudentData?.medeniHali || '',
+                maritalSource: currentStudentData?.maritalSource || 'unverified',
                 passportNo: resolvedPassportNo,
                 pasaportNo: resolvedPassportNo,
                 acceptanceLetterUrl: candidates[0] || incoming.acceptanceLetterUrl || '',

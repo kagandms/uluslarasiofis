@@ -12,6 +12,7 @@ const extensionFiles = [
     'background.js',
     'bridge.js',
     'content.js',
+    'zk-form-controls.js',
     'portal-security.js',
     'storage-lifecycle.js',
     'document-parser.js',
