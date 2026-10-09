@@ -1,3 +1,5 @@
+> Current state: physical intake is ON for verified staff. See [live activation report](physical-intake-live.md). Gate-OFF/UAT notes below are historical.
+
 # Physical feature production deployment
 
 **PHYSICAL FEATURE DEPLOY SUCCESS — GATE OFF**

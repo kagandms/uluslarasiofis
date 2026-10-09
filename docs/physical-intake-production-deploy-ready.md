@@ -1,3 +1,5 @@
+> Current state: physical intake is ON for verified staff. See [live activation report](physical-intake-live.md). Gate-OFF/UAT notes below are historical.
+
 > Production deployed gate OFF on 2026-10-08. Minimal 0018 is now applied. See [actual deployment and health report](physical-production-deploy-success.md). The readiness notes below describe the pre-deploy state.
 
 # Minimal fiziksel başvuru aktarımı

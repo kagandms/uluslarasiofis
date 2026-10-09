@@ -1,0 +1,35 @@
+{
+  "status": "PHYSICAL INTAKE LIVE — READY FOR USE",
+  "deployment_id": "3440c2f9-97e4-48d6-8f9a-803f7f5fb175",
+  "worker_version_id": "5975e7d3-3881-476c-a4c6-13dfe79b9a0c",
+  "physical_gate": "on",
+  "PRINT_ENABLED": "true",
+  "worker_code_etag_unchanged": true,
+  "other_vars_unchanged": true,
+  "protected_bindings_unchanged": true,
+  "cron_unchanged": true,
+  "print_status_equal_before_after": true,
+  "print_available": false,
+  "authenticated_live_qr": "User confirmed QR code appears in logged-in staff panel",
+  "anonymous_qr_status": 401,
+  "anonymous_physical_status": 401,
+  "invalid_phone_claim_status": 410,
+  "phone_file_upload_test": "pending user test",
+  "agents": [
+    [
+      {
+        "health": "ready",
+        "settings_protocol": 3,
+        "seen_at": "2026-10-08T14:35:27.760Z"
+      }
+    ],
+    [
+      {
+        "health": "ready",
+        "engine_version": "1.5.4",
+        "signature_version": "28147",
+        "seen_at": "2026-10-08T14:35:13.478Z"
+      }
+    ]
+  ]
+}
