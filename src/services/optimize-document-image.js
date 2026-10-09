@@ -1,4 +1,4 @@
-import { DOCUMENT_IMAGE_LONG_EDGE, DOCUMENT_IMAGE_JPEG_QUALITY, MAX_TRANSFER_FILE_BYTES } from '../config/mobile-transfer-policy.js';
+import { DOCUMENT_IMAGE_LONG_EDGE, DOCUMENT_IMAGE_JPEG_QUALITY, DOCUMENT_IMAGE_JPEG_PASSTHROUGH_BYTES } from '../config/mobile-transfer-policy.js';
 
 function encodeCanvas(canvas, quality) {
     return new Promise((resolve, reject) => canvas.toBlob(blob => {
@@ -7,8 +7,21 @@ function encodeCanvas(canvas, quality) {
     }, 'image/jpeg', quality));
 }
 
+/** @returns {void} */
+function drawDocumentImage(image, canvas) {
+    const scale = Math.min(1, DOCUMENT_IMAGE_LONG_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Görsel işleme bu cihazda kullanılamıyor.');
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+}
+
 /**
- * Resizes a photo to at most an A4 long edge at 300 DPI, preserving aspect and color.
+ * Resizes photos to at most an A4 long edge at 300 DPI and compresses large JPEGs.
+ * Keeps smaller JPEGs intact and avoids increasing their size at unchanged dimensions.
  * @param {Blob} original Original photo.
  * @returns {Promise<Blob>} JPEG document image.
  * @throws {Error} When the photo cannot be decoded or encoded.
@@ -20,16 +33,13 @@ export async function optimizeDocumentImage(original) {
     try {
         image.src = objectUrl;
         await image.decode();
-        if (original.type === 'image/jpeg' && original.size <= MAX_TRANSFER_FILE_BYTES && Math.max(image.naturalWidth, image.naturalHeight) <= DOCUMENT_IMAGE_LONG_EDGE) return original;
-        const scale = Math.min(1, DOCUMENT_IMAGE_LONG_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
-        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-        const context = canvas.getContext('2d');
-        if (!context) throw new Error('Görsel işleme bu cihazda kullanılamıyor.');
-        context.fillStyle = '#fff';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        return await encodeCanvas(canvas, DOCUMENT_IMAGE_JPEG_QUALITY);
+        const isJpeg = original.type === 'image/jpeg';
+        const longestEdge = Math.max(image.naturalWidth, image.naturalHeight);
+        const isWithinDimensions = longestEdge <= DOCUMENT_IMAGE_LONG_EDGE;
+        if (isJpeg && isWithinDimensions && original.size <= DOCUMENT_IMAGE_JPEG_PASSTHROUGH_BYTES) return original;
+        drawDocumentImage(image, canvas);
+        const optimized = await encodeCanvas(canvas, DOCUMENT_IMAGE_JPEG_QUALITY);
+        return isJpeg && isWithinDimensions && optimized.size >= original.size ? original : optimized;
     } catch (error) {
         console.error('Document photo optimization failed.', { errorName: error.name });
         throw new Error('Fotoğraf işlenemedi; JPG veya PNG olarak tekrar seçin.', { cause: error });
