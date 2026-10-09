@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { PDFDocument, PageSizes } from 'pdf-lib';
 import worker from '../src/server/worker.js';
 import { hashSessionToken } from '../src/server/auth/sessionToken.js';
 import { readPrintUatPolicy, requirePrintUatContent } from '../src/server/domain/print-uat-policy.js';
@@ -9,11 +9,26 @@ import { runPrintCleanup } from '../src/server/services/printCleanupService.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 
-const PDF_BYTES = new Uint8Array(readFileSync(new URL('../docs/print-agent-orientation-v7/same-portrait-source.pdf', import.meta.url)));
+const PDF_BYTES = await createSyntheticPdf();
 const PRINTER_SECRET = 'A'.repeat(48);
 const STAFF_TOKEN = 'S'.repeat(43);
 const STAFF_HEADERS = { Cookie: `staff_session=${STAFF_TOKEN}` };
 const MACHINE_HEADERS = { Authorization: `Bearer ${PRINTER_SECRET}` };
+
+/**
+ * Create a deterministic portrait PDF entirely from synthetic test content.
+ * @returns {Promise<Uint8Array>} One unrotated A4 page with visible orientation markers.
+ */
+async function createSyntheticPdf() {
+    const document = await PDFDocument.create();
+    const fixtureDate = new Date('2026-01-01T00:00:00.000Z');
+    document.setCreationDate(fixtureDate);
+    document.setModificationDate(fixtureDate);
+    const page = document.addPage(PageSizes.A4);
+    page.drawText('SYNTHETIC PRINT UAT - TOP', { x: 40, y: 790, size: 14 });
+    page.drawText('BOTTOM - A4 PORTRAIT SOURCE', { x: 40, y: 40, size: 14 });
+    return await document.save({ useObjectStreams: false });
+}
 
 function request(path, options = {}) {
     const headers = new Headers({ Origin: 'https://portal.test', 'CF-Connecting-IP': '198.51.100.30', ...options.headers });
@@ -97,6 +112,18 @@ function putObject(context, jobId, bytes = PDF_BYTES) {
     const { storage_key: storageKey } = context.database.prepare('SELECT storage_key FROM print_jobs WHERE id=?').bind(jobId).first();
     context.objects.set(storageKey, Object.assign(new Blob([bytes], { type: 'application/pdf' }), { etag: 'test-etag' }));
 }
+
+test('synthetic UAT fixture is one unrotated A4 portrait page with independently selected landscape printing', async () => {
+    const document = await PDFDocument.load(PDF_BYTES);
+    const [page] = document.getPages();
+
+    assert.equal(document.getPageCount(), 1);
+    assert.deepEqual([page.getWidth(), page.getHeight()], PageSizes.A4);
+    assert.equal(page.getRotation().angle, 0);
+    assert.ok(page.getHeight() > page.getWidth());
+    assert.equal(uploadPayload().orientation, 'landscape');
+    assert.equal(uploadPayload().byte_size, PDF_BYTES.length);
+});
 
 test('UAT policy fails closed for missing, malformed, future, expired and oversized windows', () => {
     const now = Date.now();
