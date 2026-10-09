@@ -91,14 +91,114 @@ function observeYoksisDomChanges() {
 }
 
 function isZkProcessing() {
-    try {
-        const win = window;
-        if (win.zk) {
-            if (win.zk.processing) return true;
-            if (typeof win.zk.loading === 'number' && win.zk.loading > 0) return true;
-        }
-    } catch (_) {}
+    for (const doc of getAllDocs(document)) {
+        try {
+            const win = doc.defaultView;
+            if (win?.zk?.processing) return true;
+            if (typeof win?.zk?.loading === 'number' && win.zk.loading > 0) return true;
+        } catch (_) {}
+    }
     return false;
+}
+
+function waitForZkPostback(timeoutMs = 8_000) {
+    if (!isZkProcessing()) return Promise.resolve(true);
+    return new Promise((resolve) => {
+        const startedAt = Date.now();
+        const intervalId = setInterval(() => {
+            if (!isZkProcessing()) {
+                clearInterval(intervalId);
+                resolve(true);
+                return;
+            }
+            if (Date.now() - startedAt >= timeoutMs) {
+                clearInterval(intervalId);
+                resolve(false);
+            }
+        }, 50);
+    });
+}
+
+function getExpectedYoksisFieldsForVerification(studentData) {
+    const fields = [];
+    const add = (label, ...values) => {
+        if (values.some((value) => String(value ?? '').trim() !== '')) fields.push(label);
+    };
+    add('Adı', studentData.firstName, studentData.adi, studentData.ad);
+    add('Soyadı', studentData.lastName, studentData.soyadi, studentData.soyad);
+    add('Anne Adı', studentData.anneAdi);
+    add('Baba Adı', studentData.babaAdi);
+    add('Uyruğu', studentData.uyruk);
+    add('Doğum Uyruğu', studentData.uyruk);
+    add('Doğum Yeri Ülkesi', studentData.dogumUlkesi, studentData.uyruk);
+    add('Belgeyi Veren Ülke', studentData.uyruk);
+    add('Cinsiyet', studentData.cinsiyet);
+    add('Medeni Hali', studentData.medeniHali, studentData.medeniHal);
+    add('Doğum Yeri Açıklaması', studentData.dogumYeriAciklamasi, studentData.dogumYeri, studentData.birthPlace);
+    add('Belgeyi Veren Makam', studentData.verenMakam, studentData.issuingAuthority);
+    add('Belge No', studentData.pasaportNo, studentData.passportNo);
+    add('Doğum Tarihi', studentData.birthDate, studentData.dogumTarihi);
+    add('Düzenleme Tarihi', studentData.issueDate, studentData.passportIssueDate, studentData.duzenlemeTarihi,
+        studentData.pasaportDuzenlemeTarihi, studentData.verilisTarihi, studentData.belgeDuzenlemeTarihi);
+    add('Geçerlilik Tarihi', studentData.expiryDate, studentData.passportExpiryDate, studentData.gecerlilikTarihi,
+        studentData.pasaportGecerlilikTarihi, studentData.bitisTarihi, studentData.belgeGecerlilikTarihi);
+    return fields;
+}
+
+async function verifyYoksisFields(data) {
+    if (!await waitForZkPostback()) {
+        const pendingLabels = getExpectedYoksisFieldsForVerification(data);
+        return {
+            success: false,
+            filledFields: [],
+            missingFields: pendingLabels,
+            failedFields: pendingLabels,
+            error: 'YÖKSİS güncellemesi zamanında tamamlanmadı; alanlar doğrulanamadı.'
+        };
+    }
+    const hasValue = (...values) => values.some((value) => String(value ?? '').trim() !== '');
+    const expectedValues = new Map();
+    const addExpected = (label, value, aliases, tagName = 'input') => {
+        if (hasValue(value)) expectedValues.set(label, { value: String(value).trim(), aliases, tagName });
+    };
+    addExpected('Adı', data.firstName || data.adi || data.ad, ['Adı', 'Öğrenci Adı', 'Ad', 'First Name', 'Given Name']);
+    addExpected('Soyadı', data.lastName || data.soyadi || data.soyad, ['Soyadı', 'Öğrenci Soyadı', 'Soyad', 'Last Name', 'Surname']);
+    addExpected('Anne Adı', data.anneAdi, ['Anne Adı', 'Ana Adı', 'Anne İsmi', 'Ana İsmi', 'Mother Name', "Mother's Name"]);
+    addExpected('Baba Adı', data.babaAdi, ['Baba Adı', 'Baba İsmi', 'Father Name', "Father's Name"]);
+    addExpected('Doğum Yeri Açıklaması', data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace, ['Doğum Yeri Açıklaması', 'Place of Birth Description']);
+    addExpected('Belgeyi Veren Makam', data.verenMakam || data.issuingAuthority, ['Belgeyi Veren Makam', 'Veren Makam', 'Issuing Authority']);
+    addExpected('Belge No', data.pasaportNo || data.passportNo, ['Belge No']);
+    addExpected('Doğum Tarihi', data.birthDate || data.dogumTarihi, ['Doğum Tarihi', 'Date of Birth', 'Birth Date']);
+    addExpected('Düzenleme Tarihi', data.issueDate || data.passportIssueDate || data.duzenlemeTarihi || data.pasaportDuzenlemeTarihi || data.verilisTarihi || data.belgeDuzenlemeTarihi,
+        ['Belge Düzenleme Tarihi', 'Düzenleme Tarihi', 'Belgenin Düzenleme Tarihi', 'Belge Düzenlenme Tarihi', 'Düzenlenme Tarihi', 'Pasaport Düzenleme Tarihi', 'Pasaport Düzenlenme Tarihi', 'Pasaport Veriliş Tarihi', 'Belge Veriliş Tarihi', 'Veriliş Tarihi', 'Tanzim Tarihi', 'Date of Issue', 'Issue Date']);
+    addExpected('Geçerlilik Tarihi', data.expiryDate || data.passportExpiryDate || data.gecerlilikTarihi || data.pasaportGecerlilikTarihi || data.bitisTarihi || data.belgeGecerlilikTarihi,
+        ['Belge Geçerlilik Tarihi', 'Geçerlilik Tarihi', 'Belgenin Geçerlilik Tarihi', 'Pasaport Son Geçerlilik Tarihi', 'Pasaport Geçerlilik Tarihi', 'Son Geçerlilik Tarihi', 'Bitiş Tarihi', 'Date of Expiry', 'Expiry Date', 'Expiration Date']);
+    if (hasValue(data.uyruk)) {
+        addExpected('Uyruğu', data.uyruk, ['Uyruğu', 'Nationality'], 'select');
+        addExpected('Doğum Uyruğu', data.uyruk, ['Doğum Uyruğu', 'Birth Nationality'], 'select');
+        addExpected('Belgeyi Veren Ülke', data.uyruk, ['Belgeyi Veren Ülke', 'Document Issuing Country'], 'select');
+    }
+    if (hasValue(data.dogumUlkesi || data.uyruk)) {
+        addExpected('Doğum Yeri Ülkesi', data.dogumUlkesi || data.uyruk, ['Doğum Yeri Ülkesi', 'Birth Country', 'Born Country'], 'select');
+    }
+
+    const normalize = (value) => String(value ?? '').toLocaleLowerCase('tr-TR').replace(/ı/g, 'i').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+    const filledFields = [];
+    const missingFields = [];
+    for (const [label, expected] of expectedValues) {
+        const control = label === 'Belge No'
+            ? findBelgeNoInMainPanel()
+            : findTargetElementByFuzzyLabels(expected.aliases, expected.tagName);
+        const currentValue = expected.tagName === 'select'
+            ? getSelectedOptionText(control)
+            : control?.value;
+        const isDate = label.includes('Tarihi');
+        const matches = Boolean(control) && (isDate
+            ? normalize(currentValue) === normalize(formatDateForYoksisInput(control, expected.value))
+            : normalize(currentValue) === normalize(expected.value));
+        (matches ? filledFields : missingFields).push(label);
+    }
+    return { success: missingFields.length === 0, filledFields, missingFields };
 }
 
 function getAllDocs(rootDoc = document) {
@@ -150,6 +250,7 @@ function sendApplyEvent(action, requestId, payload = {}) {
 
 async function simulateInput(element, value, options = {}) {
     if (!element || value === undefined || value === null) return false;
+    if (String(element.value || '').trim() === String(value).trim()) return true;
     const win = element.ownerDocument?.defaultView || window;
 
     try {
@@ -241,6 +342,7 @@ async function simulateInput(element, value, options = {}) {
 
 async function simulateDateboxInput(element, formattedDate) {
     if (!element || !formattedDate) return false;
+    if (String(element.value || '').trim() === String(formattedDate).trim()) return true;
     const win = element.ownerDocument?.defaultView || window;
     try {
         element.scrollIntoView({ block: 'nearest', behavior: 'instant' });
@@ -418,6 +520,9 @@ function simulateSelect(element, textToMatch) {
     if (!element || !textToMatch) return false;
     let found = false;
     const targetVariants = countryNameVariants(textToMatch);
+    const currentOption = element.options?.[element.selectedIndex];
+    const currentVariants = countryNameVariants(currentOption?.text || currentOption?.value);
+    if (targetVariants.some((target) => currentVariants.some((current) => current === target))) return true;
 
     const options = element.options || [];
     for (let i = 0; i < options.length; i++) {
@@ -690,6 +795,10 @@ function simulateRadioByLabelText(labelText) {
                 : (isBekar ? ctrl.marriedWrapper : ctrl.singleWrapper);
 
             if (targetRadio || targetLabel || targetWrapper) {
+                if (targetRadio?.checked) {
+                    anySet = true;
+                    continue;
+                }
                 // 1. Zıt radyo ve wrapper kapat (DOM + CSS)
                 if (oppRadio) {
                     oppRadio.checked = false;
@@ -3868,6 +3977,19 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
         return true;
     }
 
+    else if (request.action === "verifyYoksisFields") {
+        verifyYoksisFields(request.data || {})
+            .then(sendResponse)
+            .catch((error) => sendResponse({
+                success: false,
+                filledFields: [],
+                missingFields: getExpectedYoksisFieldsForVerification(request.data || {}),
+                failedFields: getExpectedYoksisFieldsForVerification(request.data || {}),
+                error: error.message
+            }));
+        return true;
+    }
+
     else if (request.action === "fillRemainingData") {
         chrome.storage.local.get(['studentData'], async (result) => {
             const data = request.data || result.studentData;
@@ -3928,14 +4050,12 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             const lastNameVal = String(data.lastName || data.soyadi || data.soyad || '').trim();
 
             const adiInput = findTargetElementByFuzzyLabels(['Adı', 'Öğrenci Adı', 'Ad'], 'input');
-            if (adiInput && !adiInput.disabled && !adiInput.readOnly && firstNameVal) {
-                if (recordField('Adı', firstNameVal, await simulateInput(adiInput, firstNameVal))) successCount++;
-            }
+            if (recordField('Adı', firstNameVal, adiInput && !adiInput.disabled && !adiInput.readOnly
+                ? await simulateInput(adiInput, firstNameVal) : false)) successCount++;
 
             const soyadiInput = findTargetElementByFuzzyLabels(['Soyadı', 'Öğrenci Soyadı', 'Soyad'], 'input');
-            if (soyadiInput && !soyadiInput.disabled && !soyadiInput.readOnly && lastNameVal) {
-                if (recordField('Soyadı', lastNameVal, await simulateInput(soyadiInput, lastNameVal))) successCount++;
-            }
+            if (recordField('Soyadı', lastNameVal, soyadiInput && !soyadiInput.disabled && !soyadiInput.readOnly
+                ? await simulateInput(soyadiInput, lastNameVal) : false)) successCount++;
 
             const anneAdiInput = findTargetElementByFuzzyLabels(['Anne Adı', 'Ana Adı', 'Anne İsmi', 'Ana İsmi', "Mother's Name", 'Mother Name'], 'input');
             if (recordField('Anne Adı', data.anneAdi, await simulateInput(anneAdiInput, data.anneAdi))) successCount++;
@@ -3961,8 +4081,8 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             if (data.cinsiyet) {
                 if (recordField('Cinsiyet', data.cinsiyet, simulateRadioByLabelText(data.cinsiyet))) successCount++;
             }
-            const maritalStatus = data.medeniHali || data.medeniHal || 'Bekar';
-            if (recordField('Medeni Hali', maritalStatus, simulateRadioByLabelText(maritalStatus))) successCount++;
+            const maritalStatus = data.medeniHali || data.medeniHal || '';
+            if (maritalStatus && recordField('Medeni Hali', maritalStatus, simulateRadioByLabelText(maritalStatus))) successCount++;
 
             // Özel Ülke Kuralları (Türkmenistan, Afganistan, Pakistan)
             const normalizeCountry = (val) => val ? val.toLocaleLowerCase('tr-TR').replace(/\s+/g, '') : '';
@@ -4122,26 +4242,6 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 successCount++;
             }
 
-            // ZK widget'ının izole dünyada blur olayında değeri sıfırlamasını engellemek için
-            // yıkıcı blur/focusout döngüsü yerine sadece input ve change güvencesi sağlanır.
-            const priorityElements = [
-                anneAdiInput,
-                babaAdiInput,
-                dogumYeriAciklamasi,
-                verenMakam,
-                telefonNoInput,
-                belgeNoInput
-            ].filter(Boolean);
-
-            for (const el of priorityElements) {
-                try {
-                    if (el.value) {
-                        el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                        el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                    }
-                } catch (_) {}
-            }
-
             // Fotoğraf otomatik yükleme (Kırpılmış vesikalık varsa YÖKSİS'e yükle)
             if (data.croppedPhotoBase64) {
                 try {
@@ -4153,21 +4253,29 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 }
             }
 
-            if (successCount > 0) {
+            const verifiedStudentFields = Array.from(filledFields);
+            const fieldResults = [
+                ...verifiedStudentFields.map((label) => ({ label, status: 'verified' })),
+                ...Array.from(missingFields).map((label) => ({ label, status: 'missing' }))
+            ];
+
+            if (verifiedStudentFields.length > 0) {
                 const missing = Array.from(missingFields);
                 sendResponse({
                     success: true,
                     partial: missing.length > 0,
                     photoUploaded,
-                    filledFields: Array.from(filledFields),
-                    missingFields: missing
+                    filledFields: verifiedStudentFields,
+                    missingFields: missing,
+                    fieldResults
                 });
             } else {
                 sendResponse({
                     success: false,
                     message: "Hedef inputlar bulunamadı.",
                     filledFields: [],
-                    missingFields: Array.from(missingFields)
+                    missingFields: Array.from(missingFields),
+                    fieldResults
                 });
             }
         });

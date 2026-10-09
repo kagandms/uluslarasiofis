@@ -38,9 +38,10 @@ function readPackagedFile(fileName, manifest) {
     return readFileSync(join(extensionRoot, fileName));
 }
 
-function removeGeneratedArchives() {
+function removeGeneratedArchives(version) {
     for (const fileName of readdirSync(downloadsRoot)) {
         if (!fileName.startsWith('ykn-eklentisi-') || !fileName.endsWith('.zip')) continue;
+        if (!fileName.startsWith(`ykn-eklentisi-v${version}-`)) continue;
         rmSync(join(downloadsRoot, fileName), { force: true });
     }
 }
@@ -170,7 +171,7 @@ function writeDownloadMetadata(manifest, archiveName, fingerprint) {
 function packageExtension() {
     const manifest = readExtensionManifest();
     mkdirSync(downloadsRoot, { recursive: true });
-    removeGeneratedArchives();
+    removeGeneratedArchives(manifest.version);
     assertExtensionFilesExist();
 
     const fingerprint = calculateExtensionFingerprint(manifest);

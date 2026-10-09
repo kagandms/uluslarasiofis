@@ -30,6 +30,21 @@ const DOCUMENT_CACHE_MAX_ENTRIES = 8;
 const documentBytesCache = new Map();
 const documentRequestKeys = new Map();
 
+function formatYoksisFieldResults(fieldResults) {
+    const labelsByStatus = new Map([
+        ['verified', 'Doğrulandı'],
+        ['missing', 'Eksik veya doğrulanamadı'],
+        ['failed', 'Başarısız'],
+        ['pending', 'Bekleniyor']
+    ]);
+    return Array.from(labelsByStatus, ([status, title]) => {
+        const labels = (Array.isArray(fieldResults) ? fieldResults : [])
+            .filter((field) => field.status === status)
+            .map((field) => field.label);
+        return labels.length ? `${title}: ${labels.join(', ')}` : '';
+    }).filter(Boolean).join('. ');
+}
+
 function startYknUiTiming() {
     return globalThis.performance?.now?.() ?? Date.now();
 }
@@ -2686,7 +2701,11 @@ export function initYknManager() {
                     };
                     setOneClickButtonMode('ready');
                     const filledFields = response.filledFields?.length || 'alanlar';
-                    addStatus(`Tek Tık tamamlandı: ${filledFields}${photoRequired ? ' ve fotoğraf' : ''} YÖKSİS’e aktarıldı. Son kontrol ve kaydetme size aittir.`, 'success');
+                    const verifiedLabels = (response.fieldResults || [])
+                        .filter((field) => field.status === 'verified')
+                        .map((field) => field.label);
+                    const verifiedText = verifiedLabels.length ? ` Doğrulanan: ${verifiedLabels.join(', ')}.` : '';
+                    addStatus(`Tek Tık tamamlandı: ${filledFields}${photoRequired ? ' ve fotoğraf' : ''} YÖKSİS’e aktarıldı.${verifiedText} Son kontrol ve kaydetme size aittir.`, 'success');
                     showToast('Tek Tık tamamlandı. YÖKSİS formunu kontrol edin.', 'success');
                     if (response.temporaryDataCleared === false) {
                         addStatus('Aktarım tamamlandı ancak bu cihazdaki geçici öğrenci verisi temizlenemedi. Eklentiyi yeniden başlatıp tekrar kontrol edin.', 'warning');
@@ -2705,10 +2724,22 @@ export function initYknManager() {
                         status: 'completed_with_warnings'
                     };
                     setOneClickButtonMode('ready');
-                    addStatus(`Tek Tık tamamlandı, ancak kontrol gereken alanlar var.${missingText}${photoText}`, 'warning');
-                    showToast('YÖKSİS aktarımı tamamlandı; uyarılı alanları kontrol edin.', 'warning');
+                    const verifiedLabels = (response.fieldResults || [])
+                        .filter((field) => field.status === 'verified')
+                        .map((field) => field.label);
+                    const verifiedText = verifiedLabels.length ? ` Doğrulanan: ${verifiedLabels.join(', ')}.` : '';
+                    const fieldResultsText = formatYoksisFieldResults(response.fieldResults);
+                    addStatus(`Tek Tık tamamlanmadı; kontrol gereken alanlar var.${verifiedText}${missingText}${photoText}${fieldResultsText ? ` ${fieldResultsText}` : ''}`, 'warning');
+                    showToast('YÖKSİS aktarımı kısmi; eksik alanları kontrol edin.', 'warning');
                 } else {
-                    failOneClick('YOKSIS_FORM_FILL_FAILED', response?.error || response?.message || 'YÖKSİS formu doldurulamadı.');
+                    const missingText = Array.isArray(response?.missingFields) && response.missingFields.length
+                        ? ` Eksik: ${response.missingFields.join(', ')}.` : '';
+                    const failedText = Array.isArray(response?.failedFields) && response.failedFields.length
+                        ? ` Başarısız: ${response.failedFields.join(', ')}.` : '';
+                    const fieldResultsText = formatYoksisFieldResults(response?.fieldResults);
+                    failOneClick('YOKSIS_FORM_FILL_FAILED', response?.error || response?.message
+                        ? `${response.error || response.message} ${fieldResultsText}`.trim()
+                        : `YÖKSİS öğrenci alanları doğrulanamadı.${missingText}${failedText}${fieldResultsText ? ` ${fieldResultsText}` : ''}`);
                 }
                 return;
             } else if (event.data.action === 'TRANSFER_TO_YOKSIS') {
@@ -2760,12 +2791,21 @@ export function initYknManager() {
                         updateWorkflowUI(5);
                         const missingText = missingFields.length > 0 ? ` Eksik alanlar: ${missingFields.join(', ')}.` : '';
                         const photoText = photoUploadFailed ? ' Fotoğraf yüklenemedi.' : '';
-                        addStatus(`YÖKSİS formu aktarıldı; kontrol gereken alanlar var.${missingText}${photoText}`, 'warning');
-                        showToast('YÖKSİS aktarımı tamamlandı; uyarılı alanları kontrol edin.', 'warning');
+                        const verifiedLabels = (response.fieldResults || [])
+                            .filter((field) => field.status === 'verified')
+                            .map((field) => field.label);
+                        const verifiedText = verifiedLabels.length ? ` Doğrulanan: ${verifiedLabels.join(', ')}.` : '';
+                        const fieldResultsText = formatYoksisFieldResults(response.fieldResults);
+                        addStatus(`YÖKSİS aktarımı kısmi; kontrol gereken alanlar var.${verifiedText}${missingText}${photoText}${fieldResultsText ? ` ${fieldResultsText}` : ''}`, 'warning');
+                        showToast('YÖKSİS aktarımı kısmi; eksik alanları kontrol edin.', 'warning');
                     } else {
                         setWorkflowStepStatus(4, 'success');
                         updateWorkflowUI(5);
-                        addStatus('YÖKSİS sekmesine geçildi ve form alanları dolduruldu. Göndermeden önce kontrol edin.', 'success');
+                        const verifiedLabels = (response.fieldResults || [])
+                            .filter((field) => field.status === 'verified')
+                            .map((field) => field.label);
+                        const verifiedText = verifiedLabels.length ? ` Doğrulanan: ${verifiedLabels.join(', ')}.` : '';
+                        addStatus(`YÖKSİS formu dolduruldu.${verifiedText} Göndermeden önce kontrol edin.`, 'success');
                         showToast('YÖKSİS formu dolduruldu.', 'success');
                     }
                     if (response.temporaryDataCleared === false) {
@@ -2773,7 +2813,14 @@ export function initYknManager() {
                     }
                 } else {
                     setWorkflowStepStatus(4, 'error');
-                    const errMsg = response?.error || response?.message || 'YÖKSİS formu doldurulamadı. Lütfen YÖKSİS sekmesinin açık olduğunu kontrol edin.';
+                    const missingText = Array.isArray(response?.missingFields) && response.missingFields.length
+                        ? ` Eksik: ${response.missingFields.join(', ')}.` : '';
+                    const failedText = Array.isArray(response?.failedFields) && response.failedFields.length
+                        ? ` Başarısız: ${response.failedFields.join(', ')}.` : '';
+                    const fieldResultsText = formatYoksisFieldResults(response?.fieldResults);
+                    const errMsg = response?.error || response?.message
+                        ? `${response.error || response.message} ${fieldResultsText}`.trim()
+                        : `YÖKSİS öğrenci alanları doğrulanamadı.${missingText}${failedText}${fieldResultsText ? ` ${fieldResultsText}` : ''}`;
                     addStatus(errMsg, 'error');
                     showToast(errMsg, 'error');
                 }

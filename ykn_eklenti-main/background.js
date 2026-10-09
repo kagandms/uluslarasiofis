@@ -1520,7 +1520,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                     }
 
                     function fillMaritalRadio(docs, value, result) {
-                        if (value === undefined || value === null || String(value).trim() === '') value = 'Bekar';
+                        if (value === undefined || value === null || String(value).trim() === '') return;
                         var normVal = norm(value);
                         var isSingle = normVal === 'bekar' || normVal === 'single' || normVal === 'b' || normVal === '1';
                         var isMarried = normVal === 'evli' || normVal === 'married' || normVal === 'e' || normVal === '2';
@@ -1753,11 +1753,15 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                     // YÖKSİS/ZK bunu sunucu durumuna almayabilir. Bu prepass,
                     // değerleri doğrudan sayfanın gerçek JS dünyasında yazar.
                     if (data) {
+                        var firstName = data.firstName || data.adi || data.ad || '';
+                        var lastName = data.lastName || data.soyadi || data.soyad || '';
                         var passportNo = data.pasaportNo || data.passportNo || '';
                         var birthPlace = data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || '';
                         var issuingAuthority = data.verenMakam || data.issuingAuthority || '';
                         var birthCountry = data.dogumUlkesi || data.uyruk || '';
 
+                        fillTextByLabels(allDocs, ['Adı', 'Öğrenci Adı', 'Ad', 'First Name', 'Given Name'], firstName, fillResult, 'Adı', false);
+                        fillTextByLabels(allDocs, ['Soyadı', 'Öğrenci Soyadı', 'Soyad', 'Last Name', 'Surname'], lastName, fillResult, 'Soyadı', false);
                         fillTextByLabels(allDocs, ['Anne Adı', 'Ana Adı', 'Anne İsmi', 'Ana İsmi', 'Mother Name', "Mother's Name"], data.anneAdi, fillResult, 'Anne Adı', false);
                         fillTextByLabels(allDocs, ['Baba Adı', 'Baba İsmi', 'Father Name', "Father's Name"], data.babaAdi, fillResult, 'Baba Adı', false);
                         fillSelectByLabels(allDocs, ['Uyruğu', 'Nationality'], data.uyruk, fillResult, 'Uyruğu');
@@ -1784,6 +1788,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         ], data.expiryDate, fillResult, 'Geçerlilik Tarihi', true);
                     }
 
+                    var photoUploadAttempted = false;
                     for (var di = 0; di < allDocs.length; di++) {
                         var doc = allDocs[di];
                         var win = doc.defaultView || window;
@@ -1848,7 +1853,8 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         purgeErrorBoxes(doc);
 
                         // Fotoğraf Yükleme (MAIN World güvencesi)
-                        if (data && data.croppedPhotoBase64) {
+                        if (data && data.croppedPhotoBase64 && !photoUploadAttempted) {
+                            photoUploadAttempted = true;
                             var photoUploadStartedAt = performance.now();
                             try {
                                 var buttons = doc.querySelectorAll('button, a, input[type="button"], span.z-button, div.z-button');
@@ -2035,11 +2041,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
                         } catch (_) {}
                     }
 
-                    fillResult.success = Boolean(
-                        !data ||
-                        fillResult.filledFields.length > 0 ||
-                        (fillResult.missingFields.length === 0 && fillResult.photoUploaded)
-                    );
+                    fillResult.success = !data || fillResult.filledFields.length > 0;
                     return fillResult;
                 } catch (e) {
                     console.error('[YKN MAIN World Form Sync Error]', e);
@@ -2081,32 +2083,73 @@ async function syncYoksisFormInMainWorld(tabId, studentData) {
     }
 }
 
+function getExpectedYoksisFields(studentData) {
+    const expected = new Set();
+    const hasValue = (...values) => values.some((value) => String(value ?? '').trim() !== '');
+    if (hasValue(studentData?.firstName, studentData?.adi, studentData?.ad)) expected.add('Adı');
+    if (hasValue(studentData?.lastName, studentData?.soyadi, studentData?.soyad)) expected.add('Soyadı');
+    if (hasValue(studentData?.anneAdi)) expected.add('Anne Adı');
+    if (hasValue(studentData?.babaAdi)) expected.add('Baba Adı');
+    if (hasValue(studentData?.uyruk)) {
+        expected.add('Uyruğu');
+        expected.add('Doğum Uyruğu');
+        expected.add('Belgeyi Veren Ülke');
+    }
+    if (hasValue(studentData?.dogumUlkesi, studentData?.uyruk)) expected.add('Doğum Yeri Ülkesi');
+    if (hasValue(studentData?.cinsiyet)) expected.add('Cinsiyet');
+    if (hasValue(studentData?.medeniHali, studentData?.medeniHal)) expected.add('Medeni Hali');
+    if (hasValue(studentData?.dogumYeriAciklamasi, studentData?.dogumYeri, studentData?.birthPlace)) expected.add('Doğum Yeri Açıklaması');
+    if (hasValue(studentData?.verenMakam, studentData?.issuingAuthority)) expected.add('Belgeyi Veren Makam');
+    if (hasValue(studentData?.pasaportNo, studentData?.passportNo)) expected.add('Belge No');
+    if (hasValue(studentData?.birthDate, studentData?.dogumTarihi)) expected.add('Doğum Tarihi');
+    if (hasValue(studentData?.issueDate, studentData?.passportIssueDate, studentData?.duzenlemeTarihi,
+        studentData?.pasaportDuzenlemeTarihi, studentData?.verilisTarihi, studentData?.belgeDuzenlemeTarihi)) expected.add('Düzenleme Tarihi');
+    if (hasValue(studentData?.expiryDate, studentData?.passportExpiryDate, studentData?.gecerlilikTarihi,
+        studentData?.pasaportGecerlilikTarihi, studentData?.bitisTarihi, studentData?.belgeGecerlilikTarihi)) expected.add('Geçerlilik Tarihi');
+    return Array.from(expected);
+}
+
 function mergeYoksisFillResponses(mainResponse, contentResponse, studentData) {
     const mainFilledFields = Array.isArray(mainResponse?.filledFields) ? mainResponse.filledFields : [];
     const contentFilledFields = Array.isArray(contentResponse?.filledFields) ? contentResponse.filledFields : [];
     const mainMissingFields = Array.isArray(mainResponse?.missingFields) ? mainResponse.missingFields : [];
     const contentMissingFields = Array.isArray(contentResponse?.missingFields) ? contentResponse.missingFields : [];
-    const filledFields = new Set([
-        ...mainFilledFields,
-        ...contentFilledFields
-    ]);
+    const filledFields = new Set([...mainFilledFields, ...contentFilledFields]);
     const missingFields = new Set([
         ...mainMissingFields,
         ...contentMissingFields
     ]);
+    const expectedFields = getExpectedYoksisFields(studentData);
+    for (const label of expectedFields) {
+        if (!filledFields.has(label)) missingFields.add(label);
+    }
     for (const label of filledFields) missingFields.delete(label);
 
     const photoUploaded = mainResponse?.photoUploaded === true || contentResponse?.photoUploaded === true;
     const hasRequiredPhoto = !studentData?.croppedPhotoBase64 || photoUploaded;
+    const failedFields = new Set([
+        ...(Array.isArray(mainResponse?.failedFields) ? mainResponse.failedFields : []),
+        ...(Array.isArray(contentResponse?.failedFields) ? contentResponse.failedFields : [])
+    ]);
+    const fieldResults = expectedFields.map((label) => ({
+        label,
+        status: filledFields.has(label) ? 'verified' : failedFields.has(label) ? 'failed' : 'missing'
+    }));
+    if (studentData?.croppedPhotoBase64) {
+        fieldResults.push({ label: 'Fotoğraf', status: photoUploaded ? 'verified' : 'missing' });
+    }
 
     return {
         ...mainResponse,
         ...contentResponse,
-        success: mainResponse?.success === true || contentResponse?.success === true,
+        success: filledFields.size > 0,
         filledFields: Array.from(filledFields),
         missingFields: Array.from(missingFields),
+        failedFields: Array.from(failedFields),
+        fieldResults,
         photoUploaded,
         mainWorldSynced: mainResponse?.success === true,
+        ...(contentResponse?.error ? { error: contentResponse.error } : {}),
         partial: missingFields.size > 0 || !hasRequiredPhoto
     };
 }
@@ -2568,14 +2611,60 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     // Tek MAIN-world turunda önce alanları, sonra fotoğrafı işle.
                     // Fotoğraf postback'i araya girip alan senkronizasyonunu kesmesin.
                     const mainFillStartedAt = startYknTiming();
-                    const mainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData);
+                    const rawMainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData);
+                    let verificationResponse;
+                    try {
+                        verificationResponse = await sendTabMessage(yoksisTab.id, {
+                            action: 'verifyYoksisFields',
+                            data: studentData,
+                            requestId: request.requestId
+                        }, { frameId: 0 });
+                    } catch (verificationError) {
+                        verificationResponse = {
+                            success: false,
+                            filledFields: [],
+                            missingFields: getExpectedYoksisFields(studentData),
+                            failedFields: getExpectedYoksisFields(studentData),
+                            error: verificationError.message
+                        };
+                    }
+                    const verifiedFields = Array.isArray(verificationResponse?.filledFields)
+                        ? verificationResponse.filledFields : [];
+                    const verifiedMissingFields = Array.isArray(verificationResponse?.missingFields)
+                        ? verificationResponse.missingFields : getExpectedYoksisFields(studentData);
+                    const mainResponse = {
+                        ...rawMainResponse,
+                        filledFields: verifiedFields,
+                        missingFields: Array.from(new Set([
+                            ...(rawMainResponse?.missingFields || []),
+                            ...verifiedMissingFields
+                        ])).filter((label) => !verifiedFields.includes(label)),
+                        failedFields: verificationResponse?.failedFields || [],
+                        success: verifiedFields.length > 0,
+                        photoUploaded: rawMainResponse?.photoUploaded === true
+                    };
+                    const expectedFields = getExpectedYoksisFields(studentData);
+                    const mainFilledFields = new Set(verifiedFields);
+                    const missingExpectedFields = expectedFields.filter((label) => !mainFilledFields.has(label));
                     finishYknTiming('main-world-fields-and-photo-transfer', mainFillStartedAt,
-                        mainResponse?.success ? 'ok' : 'partial', mainResponse?.success ? undefined : 'main_world_incomplete');
+                        missingExpectedFields.length === 0 ? 'ok' : 'partial',
+                        missingExpectedFields.length === 0 ? undefined : 'main_world_incomplete');
                     if (hasPhoto) {
                         reportYknTiming('photo-file-preparation-and-form-assignment',
                             mainResponse?.photoUploadDurationMs,
                             mainResponse?.photoUploaded === true ? 'assigned' : 'failed',
                             mainResponse?.photoUploaded === true ? undefined : 'photo_assignment_not_confirmed');
+                    }
+                    if (verificationResponse?.error) {
+                        return {
+                            ...mergeYoksisFillResponses(mainResponse, {
+                                success: false,
+                                failedFields: getExpectedYoksisFields(studentData)
+                            }, studentData),
+                            success: false,
+                            partial: true,
+                            error: verificationResponse.error
+                        };
                     }
                     const fieldData = hasPhoto
                         ? { ...studentData, croppedPhotoBase64: '', photoFileName: '' }
@@ -2583,10 +2672,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
                     const needsFallback = !mainResponse.success
                         || (studentData?.croppedPhotoBase64 && mainResponse.photoUploaded !== true)
-                        || mainResponse.missingFields.length > 0;
+                        || mainResponse.missingFields.length > 0
+                        || missingExpectedFields.length > 0;
 
                     if (!needsFallback) {
-                        return { ...mainResponse, mainWorldSynced: true, partial: false };
+                        return mergeYoksisFillResponses(mainResponse, null, studentData);
                     }
 
                     // Fallback yalnızca ilk denemenin eksik bıraktığı durumda
@@ -2602,11 +2692,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         }, { frameId: 0 });
                     } catch (contentError) {
                         finishYknTiming('content-script-fill-fallback', fallbackStartedAt, 'failed', 'content_fallback_unavailable');
-                        return {
-                            ...mainResponse,
-                            partial: true,
-                            error: contentError.message || mainResponse?.error
-                        };
+                        return mergeYoksisFillResponses(mainResponse, {
+                            success: false,
+                            failedFields: missingExpectedFields,
+                            error: contentError.message
+                        }, studentData);
                     }
 
                     finishYknTiming('content-script-fill-fallback', fallbackStartedAt,

@@ -209,6 +209,20 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                     callback({ success: true, formReady: true });
                     return;
                 }
+                if (message.action === 'verifyYoksisFields') {
+                    callback(options.verificationResult || {
+                        success: Array.isArray(mainResult?.filledFields) && mainResult.filledFields.length > 0,
+                        filledFields: mainResult?.filledFields || [],
+                        missingFields: mainResult?.missingFields || []
+                    });
+                    return;
+                }
+                if (message.action === 'fillRemainingData') {
+                    callback(typeof options.contentResult === 'function'
+                        ? options.contentResult(message)
+                        : options.contentResult || { success: true, filledFields: [], missingFields: [] });
+                    return;
+                }
                 callback({ success: true });
             }
         },
@@ -683,6 +697,8 @@ test('YÖKSİS form readiness waits for a form that appears after the search res
 test('YÖKSİS fill reports photo upload truthfully and fills passport fields', async () => {
     const harness = createContentHarness(`
         <table>
+            <tr><td>Adı</td><td><input id="first-name"></td></tr>
+            <tr><td>Soyadı</td><td><input id="last-name"></td></tr>
             <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
             <tr><td>Baba Adı</td><td><input id="father-name"></td></tr>
             <tr><td>Uyruğu</td><td><select id="nationality"><option>Türkiye</option></select></td></tr>
@@ -704,6 +720,8 @@ test('YÖKSİS fill reports photo upload truthfully and fills passport fields', 
         const response = await harness.send({
             action: 'fillRemainingData',
             data: {
+                firstName: 'TEST',
+                lastName: 'STUDENT',
                 anneAdi: 'ANNE',
                 babaAdi: 'BABA',
                 uyruk: 'Türkiye',
@@ -720,11 +738,221 @@ test('YÖKSİS fill reports photo upload truthfully and fills passport fields', 
 
         assert.equal(response.success, true);
         assert.equal(response.photoUploaded, true);
+        assert.equal(harness.dom.window.document.getElementById('first-name').value, 'TEST');
+        assert.equal(harness.dom.window.document.getElementById('last-name').value, 'STUDENT');
         assert.equal(harness.dom.window.document.getElementById('mother-name').value, 'ANNE');
         assert.equal(harness.dom.window.document.getElementById('document-number').value, 'P123456');
         assert.equal(harness.dom.window.document.getElementById('issue-date').value, '02.01.2024');
         assert.equal(harness.dom.window.document.getElementById('expiry-date').value, '02.01.2034');
         assert.equal(harness.dom.window.document.getElementById('photo-file').files.length, 1);
+    } finally {
+        harness.close();
+    }
+});
+
+test('photo-only MAIN result falls back to student fields and remains partial when a source field is still missing', async () => {
+    const harness = createBackgroundHarness(
+        { success: true, filledFields: [], missingFields: [], photoUploaded: true },
+        { success: true, searchTriggered: true, formReady: true },
+        {
+            verificationResult: { success: false, filledFields: [], missingFields: ['Adı', 'Soyadı', 'Anne Adı', 'Baba Adı'] },
+            contentResult: {
+                success: true,
+                filledFields: ['Adı', 'Soyadı', 'Anne Adı'],
+                missingFields: ['Baba Adı'],
+                photoUploaded: false
+            }
+        }
+    );
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'FILL_YOKSIS_FORM',
+        requestId: 'photo-only-main-fallback',
+        data: {
+            yoksisReady: true,
+            yoksisTabId: 42,
+            yoksisTabUrl: 'https://yoksis.yok.gov.tr/student',
+            firstName: 'TEST',
+            lastName: 'STUDENT',
+            anneAdi: 'ANNE',
+            babaAdi: 'BABA',
+            croppedPhotoBase64: 'data:image/jpeg;base64,AA=='
+        }
+    });
+
+    const fallback = harness.calls.find((call) => call.type === 'message' && call.message.action === 'fillRemainingData');
+    assert.ok(fallback);
+    assert.equal(fallback.message.data.croppedPhotoBase64, '');
+    assert.equal(fallback.message.data.firstName, 'TEST');
+    assert.equal(response.success, true);
+    assert.equal(response.partial, true);
+    assert.equal(response.photoUploaded, true);
+    assert.deepEqual(Array.from(response.missingFields), ['Baba Adı']);
+    assert.equal(response.fieldResults.find(({ label }) => label === 'Adı').status, 'verified');
+    assert.equal(response.fieldResults.find(({ label }) => label === 'Baba Adı').status, 'missing');
+});
+
+test('photo alone never counts as a successful student-field transfer', async () => {
+    const harness = createBackgroundHarness(
+        { success: false, filledFields: [], missingFields: [], photoUploaded: true },
+        { success: true, searchTriggered: true, formReady: true },
+        {
+            verificationResult: { success: false, filledFields: [], missingFields: ['Adı', 'Soyadı'] },
+            contentResult: { success: false, filledFields: [], missingFields: ['Adı', 'Soyadı'], photoUploaded: false }
+        }
+    );
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'FILL_YOKSIS_FORM',
+        requestId: 'photo-is-not-data-success',
+        data: {
+            yoksisReady: true,
+            yoksisTabId: 42,
+            yoksisTabUrl: 'https://yoksis.yok.gov.tr/student',
+            firstName: 'TEST',
+            lastName: 'STUDENT',
+            croppedPhotoBase64: 'data:image/jpeg;base64,AA=='
+        }
+    });
+
+    assert.equal(response.success, false);
+    assert.equal(response.partial, true);
+    assert.equal(response.photoUploaded, true);
+    assert.deepEqual(Array.from(response.missingFields), ['Adı', 'Soyadı']);
+});
+
+test('unsettled ZK verification fails closed without running a competing fallback', async () => {
+    const harness = createBackgroundHarness(
+        { success: true, filledFields: ['Adı'], missingFields: [], photoUploaded: true },
+        { success: true, searchTriggered: true, formReady: true },
+        {
+            verificationResult: {
+                success: false,
+                filledFields: [],
+                missingFields: ['Adı', 'Soyadı'],
+                failedFields: ['Adı', 'Soyadı'],
+                error: 'YÖKSİS güncellemesi zamanında tamamlanmadı; alanlar doğrulanamadı.'
+            }
+        }
+    );
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'FILL_YOKSIS_FORM',
+        requestId: 'zk-update-timeout',
+        data: {
+            yoksisReady: true,
+            yoksisTabId: 42,
+            yoksisTabUrl: 'https://yoksis.yok.gov.tr/student',
+            firstName: 'TEST',
+            lastName: 'STUDENT',
+            croppedPhotoBase64: 'data:image/jpeg;base64,AA=='
+        }
+    });
+
+    assert.equal(response.success, false);
+    assert.equal(response.partial, true);
+    assert.match(response.error, /zamanında tamamlanmadı/);
+    assert.equal(harness.calls.some((call) => call.type === 'message' && call.message.action === 'fillRemainingData'), false);
+});
+
+test('YÖKSİS field verifier detects values removed by a simulated photo postback', async () => {
+    const harness = createContentHarness(`
+        <table>
+            <tr><td>Adı</td><td><input id="first-name" value="TEST"></td></tr>
+            <tr><td>Soyadı</td><td><input id="last-name" value="STUDENT"></td></tr>
+            <tr><td>Anne Adı</td><td><input id="mother-name" value="ANNE"></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const firstNameInput = harness.dom.window.document.getElementById('first-name');
+    firstNameInput.value = '';
+
+    try {
+        const response = await harness.send({
+            action: 'verifyYoksisFields',
+            data: { firstName: 'TEST', lastName: 'STUDENT', anneAdi: 'ANNE' }
+        });
+
+        assert.equal(response.success, false);
+        assert.deepEqual(Array.from(response.filledFields), ['Soyadı', 'Anne Adı']);
+        assert.deepEqual(Array.from(response.missingFields), ['Adı']);
+    } finally {
+        harness.close();
+    }
+});
+
+test('YÖKSİS field verification waits for an active ZK postback to finish', async () => {
+    const harness = createContentHarness(`
+        <table><tr><td>Adı</td><td><input id="first-name" value="TEST"></td></tr></table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    harness.dom.window.zk = { processing: true };
+    const finishPostback = setTimeout(() => { harness.dom.window.zk.processing = false; }, 120);
+    const startedAt = Date.now();
+
+    try {
+        const response = await harness.send({
+            action: 'verifyYoksisFields',
+            data: { firstName: 'TEST', croppedPhotoBase64: 'data:image/jpeg;base64,AA==' }
+        });
+
+        assert.equal(response.success, true);
+        assert.deepEqual(Array.from(response.filledFields), ['Adı']);
+        assert.ok(Date.now() - startedAt >= 100);
+    } finally {
+        clearTimeout(finishPostback);
+        harness.close();
+    }
+});
+
+test('consecutive students update the open form without reloading the YÖKSİS page', async () => {
+    const harness = createContentHarness(`
+        <table>
+            <tr><td>Adı</td><td><input id="first-name"></td></tr>
+            <tr><td>Soyadı</td><td><input id="last-name"></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+
+    try {
+        await harness.send({ action: 'fillRemainingData', data: { firstName: 'ILK', lastName: 'OGRENCI' } });
+        const secondResponse = await harness.send({ action: 'fillRemainingData', data: { firstName: 'IKINCI', lastName: 'OGRENCI' } });
+
+        assert.equal(secondResponse.success, true);
+        assert.equal(harness.dom.window.document.getElementById('first-name').value, 'IKINCI');
+        assert.equal(harness.dom.window.document.getElementById('last-name').value, 'OGRENCI');
+    } finally {
+        harness.close();
+    }
+});
+
+test('repeated YÖKSİS fill avoids duplicate field commits and duplicate photo assignment', async () => {
+    const harness = createContentHarness(`
+        <table>
+            <tr><td>Adı</td><td><input id="first-name"></td></tr>
+            <tr><td>Fotoğraf Adı</td><td><button id="photo-upload">Fotoğraf Yükle</button><input id="photo-file" type="file"></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const firstNameInput = harness.dom.window.document.getElementById('first-name');
+    const fileInput = harness.dom.window.document.getElementById('photo-file');
+    makeFileInputWritable(fileInput);
+    let fieldChanges = 0;
+    let photoChanges = 0;
+    firstNameInput.addEventListener('change', () => { fieldChanges += 1; });
+    fileInput.addEventListener('change', () => { photoChanges += 1; });
+    const data = {
+        firstName: 'TEST',
+        croppedPhotoBase64: 'data:image/jpeg;base64,AA==',
+        photoFileName: 'student.jpg'
+    };
+
+    try {
+        await harness.send({ action: 'fillRemainingData', data });
+        const firstCounts = { fieldChanges, photoChanges };
+        const repeatResponse = await harness.send({ action: 'fillRemainingData', data });
+
+        assert.equal(repeatResponse.photoUploaded, true);
+        assert.deepEqual({ fieldChanges, photoChanges }, firstCounts);
+        assert.equal(fileInput.files.length, 1);
     } finally {
         harness.close();
     }
