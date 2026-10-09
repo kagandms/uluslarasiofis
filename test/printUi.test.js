@@ -7,26 +7,45 @@ import {
     isValidCopies, normalizePrintCapabilities, summarizePrintSettings
 } from '../src/public/printSettings.js';
 
-test('print page defaults to English until browser locale detection and keeps multi-file upload', () => {
+test('print page exposes a five-language selector and a three-step guide while keeping multi-file upload', () => {
     const html = readFileSync(new URL('../yazdir/index.html', import.meta.url), 'utf8');
     const document = new JSDOM(html).window.document;
 
     assert.equal(document.documentElement.lang, 'en');
-    assert.equal(document.querySelector('#print-language'), null);
+    assert.ok(document.querySelector('#print-language'));
+    assert.equal(document.querySelectorAll('#print-language option').length, 5);
     assert.equal(document.querySelector('#print-file-input').multiple, true);
-    assert.equal(document.querySelector('#print-submit').textContent, 'Print all');
+    assert.equal(document.querySelector('#print-add-file').textContent.trim(), 'Select a file');
+    assert.equal(document.querySelector('#print-add-file').classList.contains('primary-button'), true);
+    assert.equal(document.querySelector('#print-file-input').getAttribute('aria-label'), 'Select a file');
+    assert.equal(document.querySelector('#print-basket').hidden, true);
+    assert.equal(document.querySelector('#print-message').hidden, true);
+    assert.equal(document.querySelector('#print-submit').textContent, 'Send to print queue');
     const template = document.querySelector('#print-file-template').content;
     assert.equal(template.querySelectorAll('[data-setting]').length, 4);
+    assert.equal(template.querySelectorAll('.print-settings-grid:not(.advanced-settings .print-settings-grid)').length, 0);
+    assert.equal(template.querySelectorAll('.advanced-settings [data-setting]').length, 4);
     assert.equal(template.querySelector('[data-setting="paper_size"]').value, 'A4');
+    assert.equal(template.querySelector('[data-setting="color_mode"]').value, 'monochrome');
+    assert.equal(template.querySelector('[data-setting="orientation"]').value, 'portrait');
+    assert.equal(template.querySelector('[data-setting="copies"]').value, '1');
+    assert.equal(template.querySelector('.advanced-settings').open, false);
     assert.equal(template.querySelector('[data-setting="color_mode"] option[value="color"]').disabled, true);
     assert.equal(template.querySelector('[data-pages="all"]').checked, true);
     assert.equal(template.querySelector('.page-range-input').hidden, true);
     assert.equal(template.querySelector('.page-selection-hint').hidden, true);
-    assert.match(document.querySelector('.print-guidance').textContent, /print only the pages you need/);
+    assert.deepEqual([...document.querySelectorAll('.print-stepper li')].map((step) => step.textContent.replace(/^\d+/, '').trim()),
+        ['Choose file', 'Check print', 'Send to queue']);
+    assert.equal(document.querySelector('.print-guide').open, false);
+    assert.match(document.querySelector('.print-guide').textContent, /Optional printing guide/);
+    assert.equal(document.querySelectorAll('.print-guide-steps li').length, 3);
+    assert.equal(document.querySelector('.print-help details').open, false);
+    assert.equal(template.querySelector('.advanced-settings summary').textContent, 'Change print settings');
     const stylesheet = readFileSync(new URL('../src/public/print.css', import.meta.url), 'utf8');
     const script = readFileSync(new URL('../src/public/print.js', import.meta.url), 'utf8');
-    assert.match(stylesheet, /@media \(max-width: 520px\)/);
+    assert.match(stylesheet, /@media \(max-width: 430px\)/);
     assert.match(stylesheet, /:focus-visible/);
+    assert.match(stylesheet, /\.primary-button[^\n]*min-height:\s*62px/);
     assert.doesNotMatch(script, /Document sent to the printer|Please collect your document/);
 });
 

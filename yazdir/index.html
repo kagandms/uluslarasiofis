@@ -15,46 +15,83 @@
             <img src="/logo_tr_transparent.png" data-i18n-alt="logoAlt" alt="Istanbul Topkapi University">
         </a>
         <section class="print-card" aria-labelledby="print-title">
+            <label class="print-language-control" for="print-language">
+                <span data-i18n="languageLabel">Language</span>
+                <select id="print-language">
+                    <option value="tr">Türkçe</option>
+                    <option value="en">English</option>
+                    <option value="ru">Русский</option>
+                    <option value="tk">Türkmençe</option>
+                    <option value="ar">العربية</option>
+                </select>
+            </label>
             <p class="print-eyebrow" data-i18n="eyebrow">International Student Office</p>
             <h1 id="print-title" data-i18n="title">Print a document</h1>
             <p class="print-intro" data-i18n="intro">Add the files you want to print. Each file can be up to 10 MB.</p>
+            <ol class="print-stepper" data-i18n-aria-label="stepsLabel" aria-label="Print steps">
+                <li><span class="step-number" aria-hidden="true">1</span><span data-i18n="stepSelect">Choose file</span></li>
+                <li><span class="step-number" aria-hidden="true">2</span><span data-i18n="stepCheck">Check print</span></li>
+                <li><span class="step-number" aria-hidden="true">3</span><span data-i18n="stepSend">Send to queue</span></li>
+            </ol>
+            <button id="print-add-file" class="primary-button" type="button" data-i18n="selectFile">Select a file</button>
+            <input id="print-file-input" class="visually-hidden" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" multiple data-i18n-aria-label="selectFile" aria-label="Select a file">
             <div id="print-availability" class="print-availability" role="status" aria-live="polite" data-i18n="availabilityChecking">Checking printer status…</div>
-            <p class="print-guidance" data-i18n="guidance">Choose print settings for each file. You can print only the pages you need.</p>
+            <details class="print-guide">
+                <summary id="print-guide-title" data-i18n="guideTitle">Optional printing guide</summary>
+                <ol class="print-guide-steps">
+                    <li><span class="guide-step-number" aria-hidden="true">1</span><div><h3 data-i18n="guideChooseTitle">Choose a file</h3><p data-i18n="guideChooseText">Choose PDF, JPG or PNG files from your device.</p></div></li>
+                    <li><span class="guide-step-number" aria-hidden="true">2</span><div><h3 data-i18n="guideSettingsTitle">Check the print</h3><p data-i18n="guideSettingsText">Confirm the default settings or change them for this file.</p></div></li>
+                    <li><span class="guide-step-number" aria-hidden="true">3</span><div><h3 data-i18n="guideSubmitTitle">Send to the queue</h3><p data-i18n="guideSubmitText">Send once and follow the job status below.</p></div></li>
+                </ol>
+            </details>
             <div id="print-files" class="print-files" aria-live="polite"></div>
-            <input id="print-file-input" class="visually-hidden" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" multiple>
-            <button id="print-add-file" class="secondary-button" type="button" data-i18n="addFile">+ Add files</button>
-            <section id="print-basket" class="print-basket" data-i18n-aria-label="basketLabel" aria-label="Print summary">
+            <section id="print-basket" class="print-basket" data-i18n-aria-label="basketLabel" aria-label="Print summary" hidden>
                 <p><span id="print-file-count">0 files</span><span id="print-page-total">0 print pages</span></p>
-                <button id="print-submit" type="button" data-i18n="submit" disabled>Print all</button>
+                <button id="print-submit" type="button" data-i18n="submit" disabled>Send to print queue</button>
             </section>
-            <p id="print-message" class="print-message" role="status" aria-live="polite"></p>
+            <p id="print-message" class="print-message" role="status" aria-live="polite" hidden></p>
             <section id="print-history-section" class="print-history-section" aria-labelledby="print-history-title" hidden>
                 <h2 id="print-history-title" data-i18n="historyTitle">Submission status</h2>
                 <div id="print-history" class="print-history" aria-live="polite"></div>
             </section>
+            <section class="print-help" aria-labelledby="print-help-title">
+                <details>
+                    <summary id="print-help-title" data-i18n="helpTitle">Help and print status</summary>
+                    <div class="print-help-content">
+                        <article><h3 data-i18n="helpFormatsTitle">Files and limits</h3><p data-i18n="helpFormatsText">PDF, JPG and PNG files are supported. Each file can be up to 10 MB; a job can include up to 20 pages.</p></article>
+                        <article><h3 data-i18n="helpPagesTitle">PDF pages and settings</h3><p data-i18n="helpPagesText">Use a range such as 1-5, 3,7 to print selected pages. Color and other options appear only when the printer supports them.</p></article>
+                        <article><h3 data-i18n="helpStatusTitle">What job statuses mean</h3><p data-i18n="helpStatusText">Queued means waiting to print. Sent means the Print Agent handed the job to the computer's printer queue; it does not confirm physical output. If a result is uncertain, do not send the same file again.</p></article>
+                    </div>
+                </details>
+            </section>
         </section>
         <footer data-i18n="footer">Istanbul Topkapi University International Student Office</footer>
     </main>
-    <template id="print-file-template">
+        <template id="print-file-template">
         <article class="print-file-card">
             <div class="file-heading">
                 <div class="file-name-block"><h2 class="file-name"></h2><p class="file-meta"></p></div>
             <button class="remove-file-button" type="button" data-i18n="remove">Remove</button>
             </div>
             <p class="file-error" role="status" aria-live="polite"></p>
-            <div class="print-settings-grid">
-                <div class="print-setting"><label data-i18n="paperSize">Paper size</label><select data-setting="paper_size"><option value="A4" data-i18n="paperA4">A4</option></select></div>
-                <div class="print-setting"><label data-i18n="printColor">Print color</label><select data-setting="color_mode"><option value="monochrome" data-i18n="monochrome">Black and white</option><option value="color" data-i18n="colorUnavailable" disabled>Color · unavailable</option></select></div>
-                <div class="print-setting"><label data-i18n="orientationLabel">Page orientation</label><select data-setting="orientation"><option value="portrait" data-i18n="portrait">Portrait</option><option value="landscape" data-i18n="landscape">Landscape</option></select></div>
-                <div class="print-setting"><label data-i18n="copiesLabel">Copies</label><input data-setting="copies" type="number" min="1" step="1" value="1" inputmode="numeric" dir="ltr"></div>
-            </div>
-            <fieldset class="page-selection" hidden>
-                <legend data-i18n="pdfPages">PDF pages</legend>
-                <label class="radio-option"><input type="radio" data-pages="all" checked><span data-i18n="allPages">All pages</span></label>
-                <label class="radio-option"><input type="radio" data-pages="custom"><span data-i18n="customPages">Selected pages</span></label>
-                <input class="page-range-input" type="text" inputmode="numeric" dir="ltr" data-i18n-placeholder="pageRangePlaceholder" data-i18n-aria-label="pageRangeLabel" placeholder="e.g. 1-5,8,12-15" aria-label="Pages to print" disabled hidden>
-                <p class="page-selection-hint" hidden></p>
-            </fieldset>
+            <p class="file-source-pages"></p>
+            <p class="file-print-total"></p>
+            <details class="advanced-settings">
+                <summary data-i18n="changePrintSettings">Change print settings</summary>
+                <div class="print-settings-grid">
+                    <div class="print-setting"><label data-i18n="paperSize">Paper size</label><select data-setting="paper_size"><option value="A4" data-i18n="paperA4">A4</option></select></div>
+                    <div class="print-setting"><label data-i18n="printColor">Print color</label><select data-setting="color_mode"><option value="monochrome" data-i18n="monochrome">Black and white</option><option value="color" data-i18n="colorUnavailable" disabled>Color · unavailable</option></select></div>
+                    <div class="print-setting"><label data-i18n="orientationLabel">Page orientation</label><select data-setting="orientation"><option value="portrait" data-i18n="portrait">Portrait</option><option value="landscape" data-i18n="landscape">Landscape</option></select></div>
+                    <div class="print-setting"><label data-i18n="copiesLabel">Copies</label><input data-setting="copies" type="number" min="1" step="1" value="1" inputmode="numeric" dir="ltr"></div>
+                </div>
+                <fieldset class="page-selection" hidden>
+                    <legend data-i18n="pdfPages">PDF pages</legend>
+                    <label class="radio-option"><input type="radio" data-pages="all" checked><span data-i18n="allPages">All pages</span></label>
+                    <label class="radio-option"><input type="radio" data-pages="custom"><span data-i18n="customPages">Selected pages</span></label>
+                    <input class="page-range-input" type="text" inputmode="numeric" dir="ltr" data-i18n-placeholder="pageRangePlaceholder" data-i18n-aria-label="pageRangeLabel" placeholder="e.g. 1-5,8,12-15" aria-label="Pages to print" disabled hidden>
+                    <p class="page-selection-hint" hidden></p>
+                </fieldset>
+            </details>
             <p class="print-settings-summary"></p>
         </article>
     </template>

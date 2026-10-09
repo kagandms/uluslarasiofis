@@ -3,7 +3,7 @@ import { arePrintSettingsAvailable, createPrintUploadPayload, getMaximumCopies, 
 import { parsePageSelection } from './printPageSelection.js';
 import { extractPdfPages } from './printPdf.js';
 import { submitPrintEntries } from './printQueue.js';
-import { detectPrintLocale, translatePrintMessage } from './i18n/printMessages.js';
+import { detectPrintLocale, PRINT_LOCALES, translatePrintMessage } from './i18n/printMessages.js';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_PRINT_PAGES = 20;
@@ -19,8 +19,10 @@ const fileCount = document.getElementById('print-file-count');
 const pageTotal = document.getElementById('print-page-total');
 const historySection = document.getElementById('print-history-section');
 const historyList = document.getElementById('print-history');
-const locale = detectPrintLocale(window.navigator.languages, window.navigator.language);
 const staffMode = new URLSearchParams(window.location.search).get('mode') === 'staff';
+const languageSelect = document.getElementById('print-language');
+const LOCALE_STORAGE_KEY = 'print.locale.v1';
+let locale = readInitialLocale();
 const HISTORY_KEY = staffMode ? 'print.staff.job-history.v1' : 'print.job-history.v2';
 let optionCapabilities = normalizePrintCapabilities();
 let isAvailable = false;
@@ -32,6 +34,14 @@ let currentMessage = null;
 let isQueuePaused = false;
 
 function t(key, params = {}) { return translatePrintMessage(locale, key, params); }
+
+function readInitialLocale() {
+    try {
+        const savedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+        if (PRINT_LOCALES.includes(savedLocale)) return savedLocale;
+    } catch { /* Browser locale remains available when storage is blocked. */ }
+    return detectPrintLocale(window.navigator.languages, window.navigator.language);
+}
 
 function translateElements(container) {
     for (const element of container.querySelectorAll('[data-i18n]')) {
@@ -54,12 +64,17 @@ function renderMessage() {
 
 function setMessage(key, params = {}) {
     currentMessage = key ? { key, params } : null;
+    message.hidden = currentMessage === null;
     renderMessage();
 }
 
 function applyLocale() {
     document.documentElement.lang = locale;
     document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
+    if (languageSelect) {
+        languageSelect.value = locale;
+        languageSelect.closest('.print-language-control').hidden = staffMode;
+    }
     document.title = t(staffMode ? 'staffPageTitle' : 'pageTitle');
     translateElements(document);
     translateElements(fileTemplate.content);
@@ -181,6 +196,19 @@ function renderFile(entry) {
     }
     const summary = entry.card.querySelector('.print-settings-summary');
     summary.textContent = `${summarizeSettings(settings)}${count ? ` · ${t('pagesWord', { count })}` : ''}`;
+    const sourcePages = entry.card.querySelector('.file-source-pages');
+    sourcePages.textContent = entry.file.type === 'application/pdf'
+        ? Number.isSafeInteger(entry.sourcePageCount)
+            ? t('pdfPageCount', { count: entry.sourcePageCount })
+            : t(entry.error ? 'pageCountUnavailable' : 'pdfPageCountReading')
+        : t('imagePageCount');
+    const printTotal = entry.card.querySelector('.file-print-total');
+    const hasValidCopies = isValidCopies(settings.copies, getMaximumCopies(optionCapabilities, count));
+    printTotal.textContent = count === null
+        ? t('filePrintTotalReading')
+        : count < 1 ? t('filePrintTotalChoosePages')
+            : hasValidCopies ? t('filePrintTotal', { count: count * Number(settings.copies) })
+                : t('filePrintTotalCheckCopies');
     const error = validateEntry(entry);
     entry.card.querySelector('.file-error').textContent = error;
     updateBasket();
@@ -217,6 +245,7 @@ function pageSelectionError(error, entry) {
 }
 
 function updateBasket() {
+    const hasFiles = files.length > 0;
     const total = files.reduce((sum, entry) => {
         try {
             const count = pageCountFor(entry);
@@ -224,6 +253,8 @@ function updateBasket() {
             return sum + (count && Number.isSafeInteger(copies) ? count * copies : 0);
         } catch { return sum; }
     }, 0);
+    addFileButton.textContent = t(hasFiles ? 'addAnotherFile' : 'selectFile');
+    document.getElementById('print-basket').hidden = !hasFiles;
     fileCount.textContent = t('fileCount', { count: files.length });
     pageTotal.textContent = t('pageCount', { count: total });
     submitButton.disabled = !isAvailable || isSubmitting || files.length === 0 || total > optionCapabilities.limits.max_page_copies
@@ -430,6 +461,12 @@ async function submitAll() {
 }
 
 addFileButton.addEventListener('click', () => fileInput.click());
+languageSelect?.addEventListener('change', () => {
+    if (!PRINT_LOCALES.includes(languageSelect.value)) return;
+    locale = languageSelect.value;
+    try { window.localStorage.setItem(LOCALE_STORAGE_KEY, locale); } catch { /* The current page still changes language. */ }
+    applyLocale();
+});
 fileInput.addEventListener('change', () => {
     for (const file of fileInput.files || []) addFile(file);
     fileInput.value = '';
