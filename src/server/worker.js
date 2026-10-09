@@ -31,6 +31,7 @@ import { requireStaff } from './auth/staffAuth.js';
 import { requireMethod } from './routes/shared.js';
 import { createPublicPrintUploadIntent, finalizePublicPrintUpload, readPublicPrintJobStatus,
     readPublicPrintStatus } from './routes/printRoutes.js';
+import { handleStaffPrintRequest } from './routes/staffPrintRoutes.js';
 import { handlePrinterRequest, readStaffPrintStatus } from './routes/printerRoutes.js';
 import { runPrintCleanup } from './services/printCleanupService.js';
 
@@ -80,6 +81,7 @@ async function routeApi(request, environment, requestId) {
     const printFinalizeMatch = pathname.match(/^\/api\/public\/print\/jobs\/([A-Za-z0-9_-]{1,64})\/finalize$/);
     if (printFinalizeMatch) return finalizePublicPrintUpload(request, environment, printFinalizeMatch[1]);
     if (pathname === '/api/staff/print/status') return readStaffPrintStatus(request, environment);
+    if (pathname.startsWith('/api/staff/print/')) return handleStaffPrintRequest(request, environment);
     if (pathname.startsWith('/api/scanner/')) return handleScannerRequest(request, environment);
     const documentScanMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/([^/]+)\/scan$/);
     if (documentScanMatch) {

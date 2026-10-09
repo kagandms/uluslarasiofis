@@ -8,7 +8,6 @@ import { detectPrintLocale, translatePrintMessage } from './i18n/printMessages.j
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_PRINT_PAGES = 20;
 const ACCEPTED_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
-const HISTORY_KEY = 'print.job-history.v2';
 const fileInput = document.getElementById('print-file-input');
 const fileList = document.getElementById('print-files');
 const fileTemplate = document.getElementById('print-file-template');
@@ -20,6 +19,9 @@ const fileCount = document.getElementById('print-file-count');
 const pageTotal = document.getElementById('print-page-total');
 const historySection = document.getElementById('print-history-section');
 const historyList = document.getElementById('print-history');
+const locale = detectPrintLocale(window.navigator.languages, window.navigator.language);
+const staffMode = new URLSearchParams(window.location.search).get('mode') === 'staff';
+const HISTORY_KEY = staffMode ? 'print.staff.job-history.v1' : 'print.job-history.v2';
 let optionCapabilities = normalizePrintCapabilities();
 let isAvailable = false;
 let hasCheckedAvailability = false;
@@ -27,7 +29,7 @@ let isSubmitting = false;
 const files = [];
 const jobs = readJobHistory();
 let currentMessage = null;
-const locale = detectPrintLocale(window.navigator.languages, window.navigator.language);
+let isQueuePaused = false;
 
 function t(key, params = {}) { return translatePrintMessage(locale, key, params); }
 
@@ -58,11 +60,15 @@ function setMessage(key, params = {}) {
 function applyLocale() {
     document.documentElement.lang = locale;
     document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
-    document.title = t('pageTitle');
+    document.title = t(staffMode ? 'staffPageTitle' : 'pageTitle');
     translateElements(document);
     translateElements(fileTemplate.content);
-    availability.textContent = t(hasCheckedAvailability
-        ? isAvailable ? 'availabilityReady' : 'availabilityOffline' : 'availabilityChecking');
+    if (staffMode) {
+        document.querySelector('[data-i18n="title"]').textContent = t('staffTitle');
+        document.querySelector('[data-i18n="intro"]').textContent = t('staffIntro');
+    }
+    availability.textContent = t(!hasCheckedAvailability ? 'availabilityChecking'
+        : isQueuePaused ? 'availabilityPaused' : isAvailable ? 'availabilityReady' : 'availabilityOffline');
     for (const entry of files) renderFile(entry);
     renderHistory();
     renderMessage();
@@ -112,6 +118,7 @@ async function requestAvailability() {
         const response = await fetch('/api/public/print/status', { cache: 'no-store' });
         const result = await response.json();
         isAvailable = response.ok && result.available === true;
+        isQueuePaused = result.queue_paused === true;
         optionCapabilities = normalizePrintCapabilities(result.limits
             ? { ...result.options, limits: result.limits } : result.options);
     } catch {
@@ -120,7 +127,7 @@ async function requestAvailability() {
     }
     hasCheckedAvailability = true;
     availability.dataset.state = isAvailable ? 'ready' : 'unavailable';
-    availability.textContent = t(isAvailable ? 'availabilityReady' : 'availabilityOffline');
+    availability.textContent = t(isQueuePaused ? 'availabilityPaused' : isAvailable ? 'availabilityReady' : 'availabilityOffline');
     for (const entry of files) renderFile(entry);
     updateBasket();
 }
@@ -287,12 +294,17 @@ function readOpaqueToken() {
 }
 
 async function createUpload(file, settings, tokens) {
-    const response = await fetch('/api/public/print/upload-intents', {
+    const endpoint = staffMode ? '/api/staff/print/upload-intents' : '/api/public/print/upload-intents';
+    const response = await fetch(endpoint, {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createPrintUploadPayload({ file, settings, tokens }))
     });
     if (!response.ok) {
         if (response.status === 429) throw new Error('rate_limit');
+        if (response.status === 503) {
+            const result = await response.json().catch(() => ({}));
+            if (result.error?.code === 'PRINT_QUEUE_PAUSED') throw new Error('queue_paused');
+        }
         throw new Error('upload_intent');
     }
     return { ...(await response.json()), tokens };
@@ -305,7 +317,8 @@ async function uploadFile(file, capability) {
 }
 
 async function finalizeUpload(jobId, uploadToken) {
-    const response = await fetch(`/api/public/print/jobs/${encodeURIComponent(jobId)}/finalize`, {
+    const route = staffMode ? '/api/staff/print/jobs' : '/api/public/print/jobs';
+    const response = await fetch(`${route}/${encodeURIComponent(jobId)}/finalize`, {
         method: 'POST', credentials: 'same-origin', headers: { 'X-Print-Upload-Token': uploadToken }
     });
     if (!response.ok) throw new Error('finalize');
@@ -349,7 +362,7 @@ async function submitEntry(entry) {
     try {
         upload = await createUpload(preparedFile, readSettings(entry), tokens);
     } catch (error) {
-        if (error?.message === 'rate_limit') {
+        if (['rate_limit', 'queue_paused'].includes(error?.message)) {
             jobs.splice(jobs.indexOf(job), 1);
             entry.pendingJob = null;
             saveJobHistory();
@@ -383,6 +396,10 @@ function applySubmitOutcomes(outcomes) {
 }
 
 function showSubmitOutcome(outcomes) {
+    if (outcomes.some((outcome) => outcome.status === 'queue_paused')) {
+        setMessage('queuePaused');
+        return;
+    }
     if (outcomes.some((outcome) => outcome.status === 'rate_limited')) {
         setMessage('rateLimited');
         return;

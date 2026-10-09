@@ -138,6 +138,52 @@ test('the student page keeps color disabled while the Worker capability is monoc
     }
 });
 
+test('staff print mode reuses the same basket and sends upload intent and finalize through staff APIs', async () => {
+    const dom = new JSDOM(pageHtml, { url: 'https://portal.test/yazdir/?mode=staff' });
+    const requestedPaths = [];
+    installBrowserGlobals(dom, async (url, options = {}) => {
+        requestedPaths.push(String(url));
+        if (String(url).endsWith('/api/public/print/status')) {
+            const options = createCapabilities({ allowColor: true });
+            return { ok: true, json: async () => ({ available: true, options, limits: options.limits }) };
+        }
+        if (String(url).endsWith('/api/staff/print/upload-intents')) {
+            const payload = JSON.parse(options.body);
+            assert.equal(payload.color_mode, 'color');
+            return { ok: true, json: async () => ({ job_id: 'staff-job-1', status: 'uploading', upload: {
+                url: '/staff-upload/staff-job-1', method: 'PUT', requiredHeaders: {}
+            } }) };
+        }
+        if (String(url).startsWith('/staff-upload/')) return { ok: true };
+        if (String(url).endsWith('/finalize')) return { ok: true };
+        if (String(url).endsWith('/jobs/status')) return { ok: true, json: async () => ({ status: 'queued' }) };
+        throw new Error(`Unexpected request: ${url}`);
+    });
+
+    try {
+        await import(`../src/public/print.js?staff-flow=${crypto.randomUUID()}`);
+        await waitFor(() => dom.window.document.querySelector('#print-availability').dataset.state === 'ready');
+        const imageFile = new File([new Uint8Array([1, 2, 3])], 'personel.png', { type: 'image/png' });
+        const fileInput = dom.window.document.querySelector('#print-file-input');
+        Object.defineProperty(fileInput, 'files', { configurable: true, value: [imageFile] });
+        fileInput.dispatchEvent(new dom.window.Event('change'));
+        const colorSelect = dom.window.document.querySelector('[data-setting="color_mode"]');
+        colorSelect.value = 'color';
+        colorSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        dom.window.document.querySelector('#print-submit').click();
+        await waitFor(() => requestedPaths.some((path) => path.endsWith('/api/staff/print/jobs/staff-job-1/finalize')));
+
+        assert.equal(requestedPaths.some((path) => path.endsWith('/api/public/print/upload-intents')), false);
+        assert.equal(dom.window.document.querySelector('#print-file-input').multiple, true);
+    } finally {
+        dom.window.close();
+        delete globalThis.document;
+        delete globalThis.window;
+        delete globalThis.sessionStorage;
+        delete globalThis.fetch;
+    }
+});
+
 test('refresh only checks an uncertain print job and never submits it again', async () => {
     const dom = new JSDOM(pageHtml, { url: 'https://portal.test/yazdir/' });
     let intentCount = 0;

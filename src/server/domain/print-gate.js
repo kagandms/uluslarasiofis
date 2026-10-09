@@ -22,6 +22,8 @@ export function requirePrintRequestEnabled(pathname, environment) {
         if (['/api/public/print/status', '/api/public/print/jobs/status'].includes(pathname)) return;
         throwPrintDisabled();
     }
+    if (['/api/staff/print/upload-intents'].includes(pathname)
+        || /^\/api\/staff\/print\/jobs\/[0-9a-f-]{36}\/finalize$/i.test(pathname)) throwPrintDisabled();
     if (!pathname.startsWith('/api/printer/')) return;
     if (['/api/printer/heartbeat', '/api/printer/reconcile'].includes(pathname)) return;
     if (/^\/api\/printer\/jobs\/[A-Za-z0-9_-]{1,64}\/result$/.test(pathname)) return;

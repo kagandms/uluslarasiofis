@@ -49,7 +49,7 @@ export async function readPublicPrintStatus(request, environment) {
     const options = readPrintOptionCapabilities(environment, status.settingsProtocol);
     if (!limits.isValid || !environment.PRINT_FILES || !environment.R2_ACCOUNT_ID || !environment.PRINT_BUCKET_NAME
         || !environment.PRINT_R2_ACCESS_KEY_ID || !environment.PRINT_R2_SECRET_ACCESS_KEY) return { available: false, options };
-    return { available: status.available, options, limits: status.limits };
+    return { available: status.available, queue_paused: status.queuePaused, options, limits: status.limits };
 }
 
 async function readPrintUpload(request, environment, repository) {
@@ -76,17 +76,19 @@ async function requireUatReservation(environment, reservation) {
     throw new ApiError(503, 'PRINT_UAT_EXHAUSTED', 'Tek UAT işi hakkı kullanıldı.');
 }
 
-async function preparePrintIntent(request, environment, context) {
+async function preparePrintIntent(request, environment, context, staffActor = null) {
     const { upload, now } = context;
     const id = crypto.randomUUID();
     const idempotencyHash = await hashValue(readPrintUatIdempotencyScope(environment) || context.idempotencyKey);
-    if (readPrintUatPolicy(environment)) await requireStaff(request, environment, ['reviewer', 'admin']);
+    if (readPrintUatPolicy(environment) && !staffActor) await requireStaff(request, environment, ['reviewer', 'admin']);
     await requireUatReservation(environment, { jobId: id, idempotencyHash, now });
     return {
         id, idempotencyHash, uploadTokenHash: await hashValue(context.uploadToken),
         trackingTokenHash: await hashValue(context.trackingToken), storageKey: `print/${id}`,
         mediaType: upload.mediaType, byteSize: upload.byteSize, copies: upload.copies, paperSize: upload.paperSize,
         colorMode: upload.colorMode, duplex: upload.duplex, orientation: upload.orientation,
+        source: staffActor ? 'staff' : 'student', createdByStaffId: staffActor?.id || null,
+        createdByStaffRole: staffActor?.role || null,
         requiredProtocol: upload.requiredProtocol, now,
         expiresAt: new Date(Date.parse(now) + PRINT_UPLOAD_TTL_MS).toISOString(),
         purgeAfter: new Date(Date.parse(now) + PRINT_ROW_RETENTION_MS).toISOString(),
@@ -107,22 +109,36 @@ function createUatUploadCapability(jobId, uploadToken) {
  * @returns {Promise<object>} Job state and its upload instructions.
  * @throws {ApiError} When input, availability or UAT authorization is invalid.
  */
-export async function createPublicPrintUploadIntent(request, environment) {
+async function createPrintUploadIntent(request, environment, staffActor = null) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
     const storage = createStorage(environment);
     const repository = createPrintRepository(environment.DB);
     await enforceRateLimit({ rateLimits: createRateLimitRepository(environment.DB) }, request,
-        { endpoint: 'print-upload', maxRequests: 5, windowSeconds: 300 });
+        { endpoint: staffActor ? 'staff-print-upload' : 'print-upload', maxRequests: 5, windowSeconds: 300 });
     const context = await readPrintUpload(request, environment, repository);
-    const intent = await preparePrintIntent(request, environment, context);
+    const intent = await preparePrintIntent(request, environment, context, staffActor);
     const job = await repository.createUploadIntent(intent);
-    if (!job) throw new ApiError(503, 'PRINT_UNAVAILABLE', 'Yazdırma şu anda kullanılamıyor.', true);
+    if (!job) {
+        const currentStatus = await repository.readPublicStatus(new Date().toISOString(), readPrintLimits(environment));
+        if (currentStatus.queuePaused) throw new ApiError(503, 'PRINT_QUEUE_PAUSED', 'Yazdırma kuyruğu duraklatıldı. Yeni iş alınmıyor.', true);
+        throw new ApiError(503, 'PRINT_UNAVAILABLE', 'Yazdırma şu anda kullanılamıyor.', true);
+    }
     readPrintUatDeadline(environment);
     if (job.status !== 'uploading') return { job_id: job.id, status: job.status, upload: null };
     const capability = intent.uatExpiresAt ? createUatUploadCapability(job.id, context.uploadToken)
         : await storage.createUploadCapability(job.storage_key, { contentType: job.media_type });
     return { job_id: job.id, status: job.status, upload: capability };
+}
+
+/** Creates a student print job or an authenticated staff print job using the shared upload contract. */
+export async function createPublicPrintUploadIntent(request, environment) {
+    return createPrintUploadIntent(request, environment);
+}
+
+/** Creates a print job attributed to the already-authorized staff session. */
+export async function createStaffPrintUploadIntent(request, environment, staffActor) {
+    return createPrintUploadIntent(request, environment, staffActor);
 }
 
 async function readVerifiedPrintBytes(storage, job) {
@@ -149,7 +165,7 @@ async function readVerifiedPrintBytes(storage, job) {
  * @returns {Promise<object>} Queued job acknowledgement.
  * @throws {ApiError} When tokens, bytes, authorization or expiry checks fail.
  */
-export async function finalizePublicPrintUpload(request, environment, jobId) {
+async function finalizePrintUpload(request, environment, jobId, staffActor = null) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
     await requirePrintUatJob(jobId, environment);
@@ -162,12 +178,22 @@ export async function finalizePublicPrintUpload(request, environment, jobId) {
     const job = await repository.findUploadIntent({ id: jobId, tokenHash, now });
     if (!job) throw new ApiError(404, 'PRINT_JOB_NOT_FOUND', 'Yazdırma isteği bulunamadı.');
     await requirePrintUatContent(await readVerifiedPrintBytes(storage, job), environment);
-    if (readPrintUatPolicy(environment)) await requireStaff(request, environment, ['reviewer', 'admin']);
+    if (!staffActor && readPrintUatPolicy(environment)) await requireStaff(request, environment, ['reviewer', 'admin']);
     const queued = await repository.markQueued({ id: job.id, tokenHash, now,
         expiresAt: new Date(Date.parse(now) + PRINT_FAILURE_RETENTION_MS).toISOString(),
         uatExpiresAt: readPrintUatDeadline(environment) });
     if (!queued) throw new ApiError(503, 'PRINT_UNAVAILABLE', 'Yazdırma şu anda kullanılamıyor.', true);
     return { job_id: job.id, status: 'queued' };
+}
+
+/** Finalizes a student print upload while preserving the public idempotent flow. */
+export async function finalizePublicPrintUpload(request, environment, jobId) {
+    return finalizePrintUpload(request, environment, jobId);
+}
+
+/** Finalizes an upload after the caller has authorized the staff session. */
+export async function finalizeStaffPrintUpload(request, environment, jobId, staffActor) {
+    return finalizePrintUpload(request, environment, jobId, staffActor);
 }
 
 export async function readPublicPrintJobStatus(request, environment) {

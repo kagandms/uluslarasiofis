@@ -2,12 +2,14 @@ export const PRINT_LOCALES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 
 export const PRINT_MESSAGES = Object.freeze({
     tr: Object.freeze({
-        pageTitle: 'Belge yazdır | İstanbul Topkapı Üniversitesi',
+        pageTitle: 'Belge yazdır | İstanbul Topkapı Üniversitesi', staffPageTitle: 'Personel dosya yazdırma | İstanbul Topkapı Üniversitesi',
         brandLabel: 'Portal ana sayfa', logoAlt: 'İstanbul Topkapı Üniversitesi',
         eyebrow: 'Uluslararası Öğrenci Ofisi', title: 'Belge yazdır',
         intro: 'Yazdırmak istediğiniz dosyaları ekleyin. Her dosya en fazla 10 MB olabilir.',
+        staffTitle: 'Ofis için dosya yazdır', staffIntro: 'Dosyaları ofisteki yazıcıya göndermek için ekleyin. Her dosya en fazla 10 MB olabilir.',
         availabilityChecking: 'Yazıcı durumu kontrol ediliyor…', availabilityReady: 'Yazıcı kullanıma hazır.',
         availabilityOffline: 'Yazıcı şu anda çevrimdışı veya kullanılamıyor.',
+        availabilityPaused: 'Yazdırma kuyruğu yönetici tarafından duraklatıldı.', queuePaused: 'Yazdırma kuyruğu duraklatıldı. Yeni işler kabul edilmiyor.',
         guidance: 'Her dosyanın baskı ayarlarını seçin. Yalnızca istediğiniz sayfaları yazdırabilirsiniz.',
         addFile: '+ Dosya Ekle', basketLabel: 'Yazdırma özeti', submit: 'Tümünü Yazdır', submitting: 'Dosyalar gönderiliyor…',
         historyTitle: 'Gönderim durumu', footer: 'İstanbul Topkapı Üniversitesi Uluslararası Öğrenci Ofisi',
@@ -41,12 +43,14 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Dosyanız yazıcıya gönderiliyor.', statusChecking: 'Gönderim durumu kontrol ediliyor…'
     }),
     en: Object.freeze({
-        pageTitle: 'Print a document | Istanbul Topkapi University',
+        pageTitle: 'Print a document | Istanbul Topkapi University', staffPageTitle: 'Staff file printing | Istanbul Topkapi University',
         brandLabel: 'Portal home', logoAlt: 'Istanbul Topkapi University',
         eyebrow: 'International Student Office', title: 'Print a document',
         intro: 'Add the files you want to print. Each file can be up to 10 MB.',
+        staffTitle: 'Print files for the office', staffIntro: 'Add files to send to the office printer. Each file can be up to 10 MB.',
         availabilityChecking: 'Checking printer status…', availabilityReady: 'The printer is ready.',
         availabilityOffline: 'The printer is offline or unavailable right now.',
+        availabilityPaused: 'Printing is paused by an administrator.', queuePaused: 'The print queue is paused. New jobs are not being accepted.',
         guidance: 'Choose print settings for each file. You can print only the pages you need.',
         addFile: '+ Add files', basketLabel: 'Print summary', submit: 'Print all', submitting: 'Sending files…',
         historyTitle: 'Submission status', footer: 'Istanbul Topkapi University International Student Office',
@@ -81,12 +85,14 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Your file is being sent to the printer.', statusChecking: 'Checking submission status…'
     }),
     ru: Object.freeze({
-        pageTitle: 'Печать документа | Стамбульский университет Топкапы',
+        pageTitle: 'Печать документа | Стамбульский университет Топкапы', staffPageTitle: 'Печать файлов для сотрудников | Стамбульский университет Топкапы',
         brandLabel: 'На главную портала', logoAlt: 'Стамбульский университет Топкапы',
         eyebrow: 'Офис по работе с иностранными студентами', title: 'Печать документа',
         intro: 'Добавьте файлы для печати. Размер каждого файла — не более 10 МБ.',
+        staffTitle: 'Печать файлов для офиса', staffIntro: 'Добавьте файлы для отправки на офисный принтер. Размер каждого файла — не более 10 МБ.',
         availabilityChecking: 'Проверка состояния принтера…', availabilityReady: 'Принтер готов к работе.',
         availabilityOffline: 'Принтер сейчас отключён или недоступен.',
+        availabilityPaused: 'Печать приостановлена администратором.', queuePaused: 'Очередь печати приостановлена. Новые задания не принимаются.',
         guidance: 'Выберите настройки печати для каждого файла. Можно напечатать только нужные страницы.',
         addFile: '+ Добавить файлы', basketLabel: 'Сводка печати', submit: 'Печатать всё', submitting: 'Отправка файлов…',
         historyTitle: 'Состояние отправки', footer: 'Офис по работе с иностранными студентами Стамбульского университета Топкапы',
@@ -130,12 +136,14 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Файл отправляется на принтер.', statusChecking: 'Проверка состояния отправки…'
     }),
     tk: Object.freeze({
-        pageTitle: 'Resminamany çap etmek | Stambul Topkapy uniwersiteti',
+        pageTitle: 'Resminamany çap etmek | Stambul Topkapy uniwersiteti', staffPageTitle: 'Işgärler üçin faýl çap etmek | Stambul Topkapy uniwersiteti',
         brandLabel: 'Portalyň baş sahypasy', logoAlt: 'Stambul Topkapy uniwersiteti',
         eyebrow: 'Halkara talyplar bölümi', title: 'Resminamany çap etmek',
         intro: 'Çap etmek isleýän faýllaryňyzy goşuň. Her faýlyň göwrümi 10 MB-dan köp bolmaly däl.',
+        staffTitle: 'Ofis üçin faýl çap et', staffIntro: 'Faýllary ofis printerine ibermek üçin goşuň. Her faýlyň göwrümi 10 MB-dan köp bolmaly däl.',
         availabilityChecking: 'Printeriň ýagdaýy barlanýar…', availabilityReady: 'Printer çap etmäge taýýar.',
         availabilityOffline: 'Printer häzir öçük ýa-da elýeterli däl.',
+        availabilityPaused: 'Çap etmek administrator tarapyndan wagtlaýyn togtadyldy.', queuePaused: 'Çap nobaty wagtlaýyn togtadyldy. Täze işler kabul edilmeýär.',
         guidance: 'Her faýl üçin çap sazlamalaryny saýlaň. Diňe gerek sahypalaryňyzy çap edip bilersiňiz.',
         addFile: '+ Faýl goş', basketLabel: 'Çap etmegiň gysgaça maglumaty', submit: 'Hemmesini çap et', submitting: 'Faýllar iberilýär…',
         historyTitle: 'Iberiş ýagdaýy', footer: 'Stambul Topkapy uniwersitetiniň Halkara talyplar bölümi',
@@ -169,12 +177,14 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Faýlyňyz printere iberilýär.', statusChecking: 'Iberiş ýagdaýy barlanýar…'
     }),
     ar: Object.freeze({
-        pageTitle: 'طباعة مستند | جامعة إسطنبول توبكابي',
+        pageTitle: 'طباعة مستند | جامعة إسطنبول توبكابي', staffPageTitle: 'طباعة ملفات الموظفين | جامعة إسطنبول توبكابي',
         brandLabel: 'الصفحة الرئيسية للبوابة', logoAlt: 'جامعة إسطنبول توبكابي',
         eyebrow: 'مكتب الطلاب الدوليين', title: 'طباعة مستند',
         intro: 'أضف الملفات التي تريد طباعتها. يجب ألا يتجاوز حجم كل ملف 10 ميغابايت.',
+        staffTitle: 'طباعة ملفات المكتب', staffIntro: 'أضف الملفات لإرسالها إلى طابعة المكتب. يجب ألا يتجاوز حجم كل ملف 10 ميغابايت.',
         availabilityChecking: 'جارٍ التحقق من حالة الطابعة…', availabilityReady: 'الطابعة جاهزة للاستخدام.',
         availabilityOffline: 'الطابعة غير متصلة أو غير متاحة حاليًا.',
+        availabilityPaused: 'أوقف المسؤول الطباعة مؤقتًا.', queuePaused: 'قائمة انتظار الطباعة متوقفة مؤقتًا. لا تُقبل مهام جديدة.',
         guidance: 'اختر إعدادات الطباعة لكل ملف. يمكنك طباعة الصفحات التي تحتاج إليها فقط.',
         addFile: '+ إضافة ملفات', basketLabel: 'ملخص الطباعة', submit: 'طباعة الكل', submitting: 'جارٍ إرسال الملفات…',
         historyTitle: 'حالة الإرسال', footer: 'مكتب الطلاب الدوليين في جامعة إسطنبول توبكابي',

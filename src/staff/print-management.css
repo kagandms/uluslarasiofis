@@ -1,0 +1,22 @@
+.print-management { display: grid; gap: 1rem; }
+.print-management-section { display: grid; gap: 1rem; min-width: 0; }
+.print-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.print-section-heading h3, .print-management-section h3 { margin: 0; }
+.print-status-details, .print-status-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem 1rem; margin: 0; }
+.print-status-details dt, .print-status-counts dt { color: var(--text-secondary); font-size: .82rem; }
+.print-status-details dd, .print-status-counts dd { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+.print-queue-controls { display: grid; justify-items: start; gap: .65rem; }
+.print-pause-help { max-width: 80ch; margin: 0; color: var(--text-secondary); line-height: 1.5; }
+.print-job-list { display: grid; gap: .7rem; min-width: 0; }
+.print-job-card { display: grid; gap: .35rem; padding: .85rem 1rem; border: 1px solid var(--card-border); border-radius: 12px; background: var(--card-bg); overflow-wrap: anywhere; }
+.print-job-card strong { color: var(--text-primary); }
+.print-job-card span, .print-job-card time { color: var(--text-secondary); font-size: .9rem; }
+.print-job-card .print-job-caveat { color: var(--text-primary); font-weight: 600; }
+.print-history-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); align-items: end; gap: .75rem; }
+.print-history-filters label { display: grid; gap: .35rem; min-width: 0; font-weight: 600; }
+.print-history-filters input, .print-history-filters select { width: 100%; min-height: 42px; }
+.staff-print-frame { display: block; width: 100%; min-height: 780px; border: 0; border-radius: 12px; background: #f8fafc; }
+@media (max-width: 640px) {
+    .print-section-heading { align-items: start; flex-direction: column; }
+    .staff-print-frame { min-height: 980px; }
+}

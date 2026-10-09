@@ -22,6 +22,7 @@
     <!-- CSS -->
     <link rel="stylesheet" href="/src/index.css">
     <link rel="stylesheet" href="/src/staff/archive.css">
+    <link rel="stylesheet" href="/src/staff/print-management.css">
 
     <!-- CDNs -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
@@ -458,14 +459,42 @@
                     </div>
                 </section>
 
-                <section id="view-print" class="view-panel" hidden aria-labelledby="print-status-title">
-                    <div class="card glass-card">
-                        <p class="home-eyebrow">Salt okunur izleme</p>
-                        <h3 id="print-status-title" tabindex="-1">Yazdırma durumu</h3>
+                <section id="view-print" class="view-panel print-management" hidden aria-labelledby="print-status-title">
+                    <section class="card glass-card print-management-section" aria-labelledby="print-status-title">
+                        <div class="print-section-heading">
+                            <div><p class="home-eyebrow">Yazıcı ve kuyruk yönetimi</p>
+                                <h3 id="print-status-title" tabindex="-1">Yazıcı durumu ve işler</h3></div>
+                            <button type="button" id="print-staff-refresh" class="btn btn-outline">Yenile</button>
+                        </div>
                         <p id="print-staff-status" role="status" aria-live="polite">Durum yükleniyor…</p>
-                        <dl id="print-staff-details"></dl>
-                        <button type="button" id="print-staff-refresh" class="btn btn-outline">Yenile</button>
-                    </div>
+                        <dl id="print-staff-details" class="print-status-details"></dl>
+                        <div class="print-queue-controls">
+                            <button type="button" id="print-queue-pause" class="btn btn-outline" hidden>Yeni işleri duraklat</button>
+                            <button type="button" id="print-queue-resume" class="btn btn-primary" hidden>Yeni işleri kabul et</button>
+                            <p class="print-pause-help">Duraklatma yeni gönderim isteklerini reddeder ve Agent’ın yeni iş almasını durdurur. Daha önce oluşturulmuş yükleme izinleri tamamlanırsa iş kuyrukta bekler. Agent’ın aldığı işler fiziksel olarak kesilmez; lease süresi dolan leased/ready işler en fazla üç normal denemeye göre yeniden kuyruğa alınır. Spooler’a gönderim başladıktan sonra sonucu belirsizleşen işler unknown olur ve otomatik tekrarlanmaz.</p>
+                        </div>
+                        <dl id="print-staff-counts" class="print-status-counts" aria-label="Kuyruk sayıları"></dl>
+                        <div id="print-staff-jobs" class="print-job-list" aria-live="polite"></div>
+                    </section>
+                    <section class="card glass-card print-management-section" aria-labelledby="staff-print-title">
+                        <p class="home-eyebrow">Dosya yazdır</p>
+                        <h3 id="staff-print-title">Ofis bilgisayarından dosya gönder</h3>
+                        <p>Bu sayfa öğrenci yazdırma ekranındaki dosya ve PDF ayarlarını kullanır; işi personel oturumunuzla kaydeder.</p>
+                        <iframe class="staff-print-frame" src="/yazdir/?mode=staff" title="Personel dosya yazdırma" loading="lazy"></iframe>
+                    </section>
+                    <section class="card glass-card print-management-section" aria-labelledby="print-history-title">
+                        <p class="home-eyebrow">Yazdırma geçmişi</p>
+                        <h3 id="print-history-title">İş kayıtları</h3>
+                        <form id="print-history-filters" class="print-history-filters">
+                            <label>Tarih başlangıcı<input id="print-history-from" type="date"></label>
+                            <label>Tarih bitişi<input id="print-history-to" type="date"></label>
+                            <label>Durum<select id="print-history-status"><option value="all">Tümü</option><option value="active">Bekleyen/işlenen</option><option value="submitted">Agent tarafından gönderildi</option><option value="failed">Başarısız</option><option value="unknown">Sonuç belirsiz</option><option value="cancelled">İptal edildi</option><option value="expired">Süresi doldu</option></select></label>
+                            <label>Kaynak<select id="print-history-source"><option value="all">Tümü</option><option value="student">Öğrenci QR</option><option value="staff">Personel</option><option value="unknown">Kaynağı bilinmiyor</option></select></label>
+                            <button class="btn btn-outline" type="submit">Filtrele</button>
+                        </form>
+                        <div id="print-history-list" class="print-job-list" aria-live="polite"></div>
+                        <button type="button" id="print-history-more" class="btn btn-outline" hidden>Sonraki sayfa</button>
+                    </section>
                 </section>
 
                 <section id="view-cover" class="view-panel" hidden aria-labelledby="cover-title">

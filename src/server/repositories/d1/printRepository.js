@@ -11,16 +11,18 @@ export function createPrintRepository(database) {
     if (!database) throw new TypeError('A D1 database binding is required.');
     return Object.freeze({
         async readPublicStatus(now, limits = DEFAULT_PRINT_LIMITS) {
-            const [heartbeat, queue] = await Promise.all([
+            const [heartbeat, queue, controls] = await Promise.all([
                 database.prepare(`SELECT health, seen_at, settings_protocol FROM printer_heartbeats
                     ORDER BY seen_at DESC LIMIT 1`).first(),
                 database.prepare(`SELECT count(*) AS count FROM print_jobs WHERE status IN
-                    ('uploading','queued','leased','ready','submission_started') AND cleanup_status='none'`).first()
+                    ('uploading','queued','leased','ready','submission_started') AND cleanup_status='none'`).first(),
+                database.prepare(`SELECT is_paused FROM print_queue_controls WHERE id='global'`).first()
             ]);
             const heartbeatAge = heartbeat ? Date.parse(now) - Date.parse(heartbeat.seen_at) : Infinity;
             const heartbeatIsFresh = heartbeat && heartbeat.health === 'ready' && heartbeatAge >= -30_000 && heartbeatAge <= 60_000;
             const settingsProtocol = heartbeatIsFresh ? heartbeat?.settings_protocol || 0 : 0;
-            return { available: Boolean(heartbeatIsFresh && queue.count < MAX_PENDING_PRINT_JOBS && limits.isValid),
+            return { available: Boolean(heartbeatIsFresh && queue.count < MAX_PENDING_PRINT_JOBS && limits.isValid
+                    && controls?.is_paused === 0), queuePaused: controls?.is_paused !== 0,
                 settingsProtocol, limits: { max_copies: settingsProtocol >= 2 ? limits.maxCopies : Math.min(limits.maxCopies, 3),
                     max_page_copies: limits.maxPageCopies } };
         },
@@ -28,19 +30,22 @@ export function createPrintRepository(database) {
             const orientation = input.orientation || 'portrait';
             const result = await database.prepare(`INSERT INTO print_jobs (
                 id,idempotency_key_hash,upload_token_hash,tracking_token_hash,storage_key,media_type,byte_size,copies,
-                paper_size,color_mode,duplex,orientation,
+                paper_size,color_mode,duplex,orientation,source,created_by_staff_id,created_by_staff_role,
                 status,available_at,created_at,updated_at,expires_at,purge_after
-            ) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,'uploading',?,?,?,?,?
+            ) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'uploading',?,?,?,?,?
               WHERE (SELECT count(*) FROM print_jobs WHERE status IN
                     ('uploading','queued','leased','ready','submission_started') AND cleanup_status='none') < ?
                 AND (SELECT health FROM printer_heartbeats ORDER BY seen_at DESC LIMIT 1)='ready'
                 AND (SELECT seen_at FROM printer_heartbeats ORDER BY seen_at DESC LIMIT 1)>=?
                 AND (SELECT settings_protocol FROM printer_heartbeats ORDER BY seen_at DESC LIMIT 1)>=?
+                AND (SELECT is_paused FROM print_queue_controls WHERE id='global')=0
                 AND (? IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ','now') < ?)
                 ON CONFLICT(idempotency_key_hash) DO NOTHING
             RETURNING *`).bind(input.id, input.idempotencyHash, input.uploadTokenHash, input.trackingTokenHash,
                 input.storageKey, input.mediaType, input.byteSize, input.copies, input.paperSize, input.colorMode,
-                input.duplex, orientation, input.now, input.now, input.now, input.expiresAt, input.purgeAfter,
+                input.duplex, orientation, input.source || 'student', input.createdByStaffId || null,
+                input.createdByStaffRole || null,
+                input.now, input.now, input.now, input.expiresAt, input.purgeAfter,
                 MAX_PENDING_PRINT_JOBS, input.heartbeatCutoff, input.requiredProtocol || 0,
                 input.uatExpiresAt || null, input.uatExpiresAt || null).first();
             if (result) return result;
@@ -79,6 +84,7 @@ export function createPrintRepository(database) {
                     AND (? IS NULL OR id=?)
                     AND (? IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ','now') < ?)
                     AND attempts<? AND cleanup_status='none'
+                    AND (SELECT is_paused FROM print_queue_controls WHERE id='global')=0
                     AND EXISTS (SELECT 1 FROM printer_heartbeats WHERE runner_id=? AND health='ready'
                         AND settings_protocol>=?
                         AND seen_at>=? AND ((settings_protocol>=3 AND copies<=?) OR
@@ -145,14 +151,75 @@ export function createPrintRepository(database) {
                     input.settingsProtocol || 0).run();
         },
         async readStaffStatus(now) {
-            const [heartbeat, jobs] = await Promise.all([
+            const [heartbeat, jobs, controls] = await Promise.all([
                 database.prepare(`SELECT printer_id,runner_id,health,printer_name,seen_at FROM printer_heartbeats
                     ORDER BY seen_at DESC LIMIT 1`).first(),
-                database.prepare(`SELECT status,count(*) AS count FROM print_jobs GROUP BY status`).all()
+                database.prepare(`SELECT status,count(*) AS count FROM print_jobs GROUP BY status`).all(),
+                database.prepare(`SELECT is_paused,updated_by_staff_id,updated_at,version
+                    FROM print_queue_controls WHERE id='global'`).first()
             ]);
             const heartbeatAge = heartbeat ? Date.parse(now) - Date.parse(heartbeat.seen_at) : Infinity;
             const online = Boolean(heartbeat && heartbeat.health === 'ready' && heartbeatAge >= -30_000 && heartbeatAge <= 60_000);
-            return { printer: heartbeat ? { ...heartbeat, online } : { online: false }, jobs: jobs.results };
+            const pendingStatuses = new Set(['uploading', 'queued', 'leased', 'ready', 'submission_started']);
+            const counts = Object.fromEntries(jobs.results.map(({ status, count }) => [status, count]));
+            const pending = jobs.results.reduce((sum, job) => sum + (pendingStatuses.has(job.status) ? job.count : 0), 0);
+            return { printer: heartbeat ? { ...heartbeat, online } : { online: false }, jobs: jobs.results,
+                counts: { pending, processing: (counts.leased || 0) + (counts.ready || 0) + (counts.submission_started || 0),
+                    submitted: counts.submitted || 0, queued: counts.queued || 0 },
+                queue: controls ? { paused: controls.is_paused === 1, updated_by_staff_id: controls.updated_by_staff_id,
+                    updated_at: controls.updated_at, version: controls.version }
+                    : { paused: true, updated_by_staff_id: null, updated_at: null, version: null } };
+        },
+        async listStaffJobs({ status = null, source = null, from = null, to = null, limit = 25,
+            beforeCreatedAt = null, beforeId = null, now = new Date().toISOString() }) {
+            const activeOnly = status === 'active' ? 1 : 0;
+            const selectedStatus = activeOnly ? null : status;
+            const result = await database.prepare(`SELECT id,source,status,media_type,byte_size,page_count,copies,
+                paper_size,color_mode,duplex,orientation,created_by_staff_id,created_at,updated_at,expires_at,
+                runner_id,lease_until,submission_started_at,spooler_job_id,result_code
+                FROM print_jobs WHERE purge_after>?
+                    AND (?=0 OR status IN ('uploading','queued','leased','ready','submission_started'))
+                    AND (? IS NULL OR status=?) AND (? IS NULL OR source=?)
+                    AND (? IS NULL OR created_at>=?) AND (? IS NULL OR created_at<?)
+                    AND (? IS NULL OR created_at<? OR (created_at=? AND id<?))
+                ORDER BY created_at DESC,id DESC LIMIT ?`).bind(now, activeOnly, selectedStatus, selectedStatus,
+                source, source, from, from, to, to, beforeCreatedAt, beforeCreatedAt, beforeCreatedAt,
+                beforeId, limit + 1).all();
+            const jobs = result.results.slice(0, limit);
+            const hasMore = result.results.length > limit;
+            return { jobs, hasMore, nextCursor: hasMore && jobs.length
+                ? { created_at: jobs[jobs.length - 1].created_at, id: jobs[jobs.length - 1].id } : null };
+        },
+        findStaffJobControlState(id) {
+            return database.prepare(`SELECT id,status,runner_id,lease_token_hash,submission_started_at,cleanup_status
+                FROM print_jobs WHERE id=?`).bind(id).first();
+        },
+        async setQueuePaused({ paused, actorStaffId, actorRole, now }) {
+            const eventType = paused ? 'queue_paused' : 'queue_resumed';
+            const result = await database.batch([
+                database.prepare(`UPDATE print_queue_controls SET is_paused=?,updated_by_staff_id=?,updated_at=?,version=version+1
+                    WHERE id='global' AND is_paused<>?`).bind(paused ? 1 : 0, actorStaffId, now, paused ? 1 : 0),
+                database.prepare(`INSERT INTO print_queue_audit
+                    (id,event_type,actor_staff_id,actor_role,occurred_at)
+                    SELECT ?,?,?,?,? WHERE changes()=1`).bind(crypto.randomUUID(), eventType,
+                    actorStaffId, actorRole, now)
+            ]);
+            return result[0].meta.changes === 1;
+        },
+        async cancelJob({ id, expectedStatus, actorStaffId, actorRole, now }) {
+            if (!['uploading', 'queued'].includes(expectedStatus)) return false;
+            const result = await database.batch([
+                database.prepare(`UPDATE print_jobs SET status='cancelled',result_code='cancelled_by_staff',
+                    upload_token_hash=NULL,lease_token_hash=NULL,lease_until=NULL,runner_id=NULL,updated_at=?
+                    WHERE id=? AND status=? AND status IN ('uploading','queued') AND runner_id IS NULL
+                    AND lease_token_hash IS NULL AND submission_started_at IS NULL AND cleanup_status='none'`)
+                    .bind(now, id, expectedStatus),
+                database.prepare(`INSERT INTO print_queue_audit
+                    (id,event_type,actor_staff_id,actor_role,job_id,previous_status,occurred_at)
+                    SELECT ?, 'job_cancelled', ?, ?, ?, ?, ? WHERE changes()=1`).bind(
+                    crypto.randomUUID(), actorStaffId, actorRole, id, expectedStatus, now)
+            ]);
+            return result[0].meta.changes === 1;
         },
         findByTrackingHash: (hash) => database.prepare(`SELECT status FROM print_jobs
             WHERE tracking_token_hash=? AND purge_after>?`).bind(hash, new Date().toISOString()).first(),

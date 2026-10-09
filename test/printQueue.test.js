@@ -91,9 +91,9 @@ test('public availability requires both a fresh ready heartbeat and remaining qu
     const database = createDatabase();
     const repository = createPrintRepository(database);
 
-    assert.deepEqual(await repository.readPublicStatus(NOW), { available: true, settingsProtocol: 0,
+    assert.deepEqual(await repository.readPublicStatus(NOW), { available: true, queuePaused: false, settingsProtocol: 0,
         limits: { max_copies: 3, max_page_copies: 200 } });
-    assert.deepEqual(await repository.readPublicStatus('2026-10-07T10:02:00.000Z'), { available: false, settingsProtocol: 0,
+    assert.deepEqual(await repository.readPublicStatus('2026-10-07T10:02:00.000Z'), { available: false, queuePaused: false, settingsProtocol: 0,
         limits: { max_copies: 3, max_page_copies: 200 } });
 });
 
