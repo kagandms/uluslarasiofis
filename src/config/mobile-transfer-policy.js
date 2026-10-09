@@ -1,4 +1,4 @@
-export const TRANSFER_TTL_SECONDS = 15 * 60;
+export const TRANSFER_TTL_SECONDS = 60 * 60;
 export const MAX_TRANSFER_FILES = 30;
 export const MAX_TRANSFER_FILE_BYTES = 8 * 1024 * 1024;
 export const MAX_TRANSFER_TOTAL_BYTES = 120 * 1024 * 1024;
