@@ -10,6 +10,12 @@ export function startPhysicalReceiptDraft(context) {
     context.state.isMetadataFirst=true; context.state.view='create';
     context.state.draft={application_date:context.state.receiptConfig.today,first_name:'',last_name:'',passport_number:'',student_number:'',application_type:''};
     context.state.message='Öğrenci bilgilerini girin, Başvuru No Ata ardından Oluştur ve Yazdır’a basın.';
+    context.state.receiptAssetsReady=import('../services/physical-receipt-pdf.js')
+        .then(({preloadPhysicalReceiptAssets})=>preloadPhysicalReceiptAssets())
+        .catch(error=>{
+            context.state.receiptAssetsReady=null;
+            console.error('A4 assets could not be preloaded.',{errorName:error.name});
+        });
 }
 
 /** Reserves the same draft reference on retries. @param {object} context Workspace. @returns {Promise<void>} Assigned number. @throws {Error} Allocation failure. */

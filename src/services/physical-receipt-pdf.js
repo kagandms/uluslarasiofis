@@ -5,6 +5,16 @@ import { loadDocumentLogos,waitDocumentAssets,buildDocumentAssetUrl } from './do
 import './physical-receipt.css';
 
 const RECEIPT_FONT_LOADS = new WeakMap();
+const RECEIPT_LOGO_LOADS = new WeakMap();
+
+function loadReceiptLogos(document) {
+    if (!RECEIPT_LOGO_LOADS.has(document)) {
+        const loading = loadDocumentLogos();
+        RECEIPT_LOGO_LOADS.set(document, loading);
+        void loading.catch(() => RECEIPT_LOGO_LOADS.delete(document));
+    }
+    return RECEIPT_LOGO_LOADS.get(document);
+}
 
 async function loadReceiptFonts(document) {
     if (RECEIPT_FONT_LOADS.has(document)) return RECEIPT_FONT_LOADS.get(document);
@@ -34,6 +44,12 @@ async function readReceiptFontStyles(document) {
     return styles.join('\n');
 }
 
+/** Loads A4 fonts and logos while staff enter the student details. @returns {Promise<void>} Ready render assets. @throws {Error} Asset load failure. */
+export async function preloadPhysicalReceiptAssets() {
+    const document=window.document;
+    await Promise.all([loadReceiptFonts(document), loadReceiptLogos(document)]);
+}
+
 function readFontDataUrl(blob) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -56,8 +72,8 @@ function requireVisibleCanvas(canvas) {
  * @returns {Promise<Uint8Array>} PDF bytes. @throws {Error} Missing assets, overflow or invalid size. */
 export async function renderPhysicalReceiptPdf(snapshot) {
     const document=window.document;
-    const fontStyles = await loadReceiptFonts(document);
-    const root=createPhysicalReceiptTemplate(document,snapshot,await loadDocumentLogos());
+    const [fontStyles, logos] = await Promise.all([loadReceiptFonts(document), loadReceiptLogos(document)]);
+    const root=createPhysicalReceiptTemplate(document,snapshot,logos);
     const embeddedFonts=document.createElement('style');
     embeddedFonts.textContent=fontStyles; root.prepend(embeddedFonts);
     const mount=document.createElement('div'); mount.className='physical-receipt-render-mount'; mount.append(root); document.body.append(mount);
@@ -65,7 +81,7 @@ export async function renderPhysicalReceiptPdf(snapshot) {
         await waitDocumentAssets(root);
         if (root.scrollHeight>root.clientHeight+1 || root.scrollWidth>root.clientWidth+1) throw new Error('Bilgiler tek A4’e sığmıyor; içerik kesilmedi. Ofisle kontrol edin.');
         // Foreign-object coordinates must not inherit the staff workspace scroll offset.
-        const canvas=await html2canvas(root,{scale:200/96,backgroundColor:'#ffffff',logging:false,foreignObjectRendering:true,scrollX:0,scrollY:0,
+        const canvas=await html2canvas(root,{scale:1.25,backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0,
             onclone: (_document, clonedRoot) => {
                 Object.assign(clonedRoot.style,{position:'fixed',left:'0',top:'0',margin:'0'});
             }
