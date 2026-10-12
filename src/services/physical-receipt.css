@@ -1,0 +1,11 @@
+.physical-receipt-render-mount{position:fixed;left:-10000px;top:0;pointer-events:none}
+.physical-receipt-sheet{box-sizing:border-box;width:210mm;height:297mm;padding:13mm;color:#111;background:#fff;font-family:'Receipt Sans','Receipt Arabic',sans-serif;font-size:10pt;line-height:1.4;overflow:visible}
+.physical-receipt-sheet header{display:flex;justify-content:space-between;height:19mm;margin-bottom:5mm}
+.physical-receipt-sheet header img{max-width:40mm;height:19mm;object-fit:contain}
+.physical-receipt-sheet h1{font-size:16pt;margin:0 0 5mm}
+.physical-receipt-sheet dl{display:grid;grid-template-columns:1fr 1fr;gap:2mm;margin:0 0 5mm}
+.physical-receipt-sheet dt{font-weight:600}.physical-receipt-sheet dd{margin:0;overflow-wrap:anywhere}
+.physical-receipt-sheet h2{font-size:11pt;margin:0}.physical-receipt-code{font-size:26pt;font-weight:700;letter-spacing:1px;margin:2mm 0}
+.physical-receipt-origin{font-size:12pt;margin:0 0 5mm;overflow-wrap:anywhere}
+.physical-receipt-sheet section{margin-top:3mm}.physical-receipt-sheet h3{font-size:10pt;margin:0 0 1mm}.physical-receipt-sheet section p{margin:0}
+.physical-receipt-sheet [lang=ar]{font-family:'Receipt Arabic',sans-serif}

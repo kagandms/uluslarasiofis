@@ -61,7 +61,7 @@ async function initializeTrackingAndLookup(document, root, api) {
     };
     const result = await initializeApplicationTracking(root, lookupApi);
     root.querySelector('[name="student_number"]').value = studentNumber;
-    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await flushAsync();
     return result;
 }
@@ -855,7 +855,7 @@ test('tracking view: public lookup does not mount preference controls or leak pr
     const lookupInput = root.querySelector('#tracking-student-number');
     lookupInput.value = 'PUBLIC-STU-1';
     lookupInput.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
-    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
 
     await flushAsync();
     await flushAsync();

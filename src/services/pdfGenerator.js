@@ -1,55 +1,52 @@
+import { buildDocumentAssetUrl, prepareDocumentLogos } from './document-logo-loader.js';
 import { CDN_URLS } from '../config/constants.js';
 import { getFormDataFromNode, getFormElements } from '../ui/formManager.js';
 import { historyManager } from '../managers/historyManager.js';
 import { showToast } from '../ui/toastManager.js';
 import { calculateTebligatDate } from '../utils/dateUtils.js';
 
-let pdfLibsLoaded = false;
-let isPdfLoading = false;
+let isPdfLibraryReady = false;
+let pdfLibraryLoadingPromise = null;
 
 function escapeHtml(value) {
     const htmlEntities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
     return String(value ?? '').replace(/[&<>"']/g, (character) => htmlEntities[character]);
 }
 
+/** Loads the existing cover libraries once and shares the actual completion signal.
+ * @returns {Promise<boolean>} Whether both libraries are ready.
+ */
 export async function loadPdfLibraries() {
-    if (pdfLibsLoaded) return true;
-    if (isPdfLoading) {
-        while(isPdfLoading) {
-            await new Promise(r => setTimeout(r, 100));
-        }
-        return pdfLibsLoaded;
-    }
+    if (isPdfLibraryReady) return true;
+    if (pdfLibraryLoadingPromise) return pdfLibraryLoadingPromise;
+    pdfLibraryLoadingPromise = loadCoverLibraries();
+    return pdfLibraryLoadingPromise;
+}
 
-    isPdfLoading = true;
+async function loadCoverLibraries() {
     showToast('PDF kütüphaneleri yükleniyor, lütfen bekleyin...', 'info');
-
     try {
-        await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = CDN_URLS.HTML2CANVAS;
-            script.onload = resolve;
-            script.onerror = () => reject(new Error('html2canvas yüklenemedi'));
-            document.head.appendChild(script);
-        });
-
-        await new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = CDN_URLS.JSPDF;
-            script.onload = resolve;
-            script.onerror = () => reject(new Error('jspdf yüklenemedi'));
-            document.head.appendChild(script);
-        });
-
-        pdfLibsLoaded = true;
-        isPdfLoading = false;
+        await Promise.all([
+            loadCoverScript(CDN_URLS.HTML2CANVAS, 'html2canvas'),
+            loadCoverScript(CDN_URLS.JSPDF, 'jspdf')
+        ]);
+        isPdfLibraryReady = true;
         return true;
-    } catch (e) {
-        isPdfLoading = false;
+    } catch (error) {
+        console.error('Cover libraries failed to load.', { errorName: error.name });
         showToast('PDF sistemi yüklenemedi. İnternet bağlantınızı kontrol edin.', 'error');
-        console.error(e);
         return false;
-    }
+    } finally { pdfLibraryLoadingPromise = null; }
+}
+
+function loadCoverScript(source, libraryName) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = source;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`${libraryName} yüklenemedi`));
+        document.head.append(script);
+    });
 }
 export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, isPrint = false) {
     
@@ -184,13 +181,13 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
         <div id="${isPrint ? 'pdf-content' : 'pdf-canvas-content'}" style="${wrapperStyle}">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-shrink: 0;">
                 <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-start;">
-                    <img src="topkapi_logo.jpg" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
+                    <img data-document-logo="university" src="${buildDocumentAssetUrl('topkapi_logo.jpg')}" style="height: 100%; width: auto; mix-blend-mode: multiply;" crossorigin="anonymous">
                 </div>
                 <div style="flex: 1; border: 1px solid black; margin: 0 15px; padding: 6px 0; text-align: center; font-size: 16px; font-weight: bold;">
                     İSTANBUL TOPKAPI ÜNİVERSİTESİ
                 </div>
                 <div style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: flex-end;">
-                    <img src="goc_logo.png" style="height: 100%; width: auto;" crossorigin="anonymous">
+                    <img data-document-logo="migration" src="${buildDocumentAssetUrl('goc_logo.png')}" style="height: 100%; width: auto;" crossorigin="anonymous">
                 </div>
             </div>
             <table class="pt" style="margin-bottom:6px; flex-shrink: 0;">
@@ -271,8 +268,8 @@ export async function generateAndDownloadPdf(btnDownload, formWrapper) {
 
     btnDownload.innerHTML = `<span class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin-right: 8px;"></span> Hazırlanıyor...`;
 
-    setTimeout(async () => {
-        try {
+    let renderContainer;
+    try {
             const data = getFormDataFromNode(formWrapper);
             const fields = getFormElements(formWrapper);
             
@@ -296,11 +293,13 @@ export async function generateAndDownloadPdf(btnDownload, formWrapper) {
             const vTebligatTarihi = calculateTebligatDate(vTeslim);
 
             const container = document.createElement('div');
+            renderContainer = container;
             container.style.position = 'fixed';
             container.style.left = '-9999px';
             container.innerHTML = getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, false);
             document.body.appendChild(container);
 
+            await prepareDocumentLogos(container);
             const canvas = await window.html2canvas(container.querySelector('#pdf-canvas-content'), {
                 scale: 2,
                 useCORS: true,
@@ -336,15 +335,13 @@ export async function generateAndDownloadPdf(btnDownload, formWrapper) {
             btnDownload.innerHTML = originalHtml;
             btnDownload.style.backgroundColor = originalBg;
             btnDownload.style.borderColor = originalBorder;
-        }
-    }, 100);
+    } finally { renderContainer?.remove(); }
 }
 export async function printDocument(btnPrint, formWrapper) {
     const originalText = btnPrint.innerHTML;
     btnPrint.innerHTML = `<span class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin-right: 8px;"></span> Hazırlanıyor...`;
 
-    setTimeout(() => {
-        try {
+    try {
             const data = getFormDataFromNode(formWrapper);
             const fields = getFormElements(formWrapper);
 
@@ -372,20 +369,19 @@ export async function printDocument(btnPrint, formWrapper) {
                 printArea.innerHTML = getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo, vAdi, vSoyadi, vUyrugu, vDogum, vAdres, vTel, vMail, currentYear, vTebligatTarihi, true);
             }
 
+            if (!printArea) throw new Error('Baskı alanı bulunamadı.');
+            await prepareDocumentLogos(printArea);
             historyManager.save('print', data);
-
-            setTimeout(() => {
-                window.print();
+            window.print();
                 btnPrint.innerHTML = originalText;
                 // iPhone/iOS Safari asenkron (non-blocking) çalışır.
                 // Anında temizleme yaparsak ekrana boş sayfa yansır.
                 // HTML zaten CSS ile gizli olduğu için kodun burada kalması zararsızdır.
-            }, 500);
+
 
         } catch (err) {
             console.error('Yazdırma hatası:', err);
             showToast('Yazdırma hazırlığı sırasında hata oluştu.', 'error');
             btnPrint.innerHTML = originalText;
-        }
-    }, 100);
+    }
 }

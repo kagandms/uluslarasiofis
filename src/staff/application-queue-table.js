@@ -8,13 +8,14 @@ export function formatQueueDate(value) {
 
 function createRow(document, item, options) {
     const row = document.createElement('tr');
-    const values = [item.student_number || '—', [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
+    const headers = options.headers || HEADERS;
+    const values = options.values ? options.values(item) : [item.student_number || '—', [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
         item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru', options.statusLabel(item.status),
         formatQueueDate(item.submitted_at), formatQueueDate(item.updated_at)];
     values.forEach((value, index) => {
         const cell = document.createElement('td');
         cell.textContent = value || '—';
-        cell.dataset.label = HEADERS[index];
+        cell.dataset.label = headers[index];
         row.append(cell);
     });
     const actions = document.createElement('td');
@@ -43,7 +44,7 @@ export function createApplicationQueueTable(document, items, options) {
     table.className = 'staff-applications-table';
     const head = document.createElement('thead');
     const headerRow = document.createElement('tr');
-    HEADERS.forEach(label => {
+    (options.headers || HEADERS).forEach(label => {
         const cell = document.createElement('th');
         cell.textContent = label;
         headerRow.append(cell);

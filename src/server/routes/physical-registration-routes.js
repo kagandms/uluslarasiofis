@@ -68,7 +68,7 @@ async function writeRegistration(context, payload) {
             catch (cleanupError) { console.error('Unregistered PDF cleanup failed.', { errorName: cleanupError.name }); }
         }
         if (await checkReplay(context, payload)) return payload.id;
-        if (String(error.message).includes('UNIQUE constraint')) throw new ApiError(409, 'PHYSICAL_ALREADY_EXISTS', 'Bu öğrenci için aktif kayıt var. Mevcut kaydı açın.');
+        if (/UNIQUE constraint|physical_active_passport_conflict/.test(String(error.message))) throw new ApiError(409, 'PHYSICAL_ALREADY_EXISTS', 'Bu öğrenci için aktif kayıt var. Mevcut kaydı açın.');
         throw error;
     }
     return payload.id;

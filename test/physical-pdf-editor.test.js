@@ -14,10 +14,10 @@ import worker from '../src/server/worker.js';
 function createReceiptFixture() {
     const database = new TestD1Database();
     database.exec(`CREATE TABLE physical_intakes(id TEXT PRIMARY KEY,current_pdf_id TEXT,lock_version INTEGER,
-        updated_at TEXT,deleted_at TEXT,status TEXT);
+        updated_at TEXT,deleted_at TEXT,status TEXT,processing_closed_at TEXT,legacy_status TEXT);
         CREATE TABLE audit_events(id TEXT PRIMARY KEY,event_type TEXT,actor_type TEXT,actor_staff_id TEXT,
         request_id TEXT,safe_metadata_json TEXT,created_at TEXT);
-        INSERT INTO physical_intakes VALUES('receipt','current-pdf',3,'2026-10-07',NULL,'under_review');`);
+        INSERT INTO physical_intakes VALUES('receipt','current-pdf',3,'2026-10-07',NULL,'under_review',NULL,NULL);`);
     return { database, repository: createPhysicalIntakeRepository(database) };
 }
 

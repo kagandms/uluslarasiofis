@@ -1,3 +1,5 @@
+import { lookupPhysicalTracking } from './routes/physical-tracking-routes.js';
+import { cleanupPhysicalReceipts } from './services/physical-receipt-cleanup.js';
 import { readPhysicalAccess } from './routes/physical-access-routes.js';
 import { handlePhysicalIntakes } from './routes/physical-intake-routes.js';
 import { handleMobileTransfer, cleanupMobileTransfers } from './routes/mobile-transfer-routes.js';
@@ -68,6 +70,7 @@ function withMetaWhatsAppProvider(environment) {
 async function routeApi(request, environment, requestId) {
     const { pathname } = new URL(request.url);
     if (['/api/staff/physical-access', '/api/staff/physical-access/session'].includes(pathname)) return readPhysicalAccess(request, environment);
+    if (pathname === '/api/public/physical-intakes/tracking-lookup') return lookupPhysicalTracking(request, environment);
     if (pathname.startsWith('/api/staff/physical-intakes')) return handlePhysicalIntakes(request, environment, requestId);
     if (pathname.startsWith('/api/staff/mobile-transfers') || pathname.startsWith('/api/mobile-transfer/')) return handleMobileTransfer(request, environment);
     await requirePrintRequestAccess(request, environment);
@@ -286,7 +289,9 @@ const worker = {
             return errorResponse(requestId, apiError.status, apiError.code, apiError.message, apiError.retryable);
         }
     },
-    async scheduled(controller, environment) {
+    async scheduled(controller, environment, executionContext) {
+        if (executionContext?.waitUntil) executionContext.waitUntil(runReceiptCleanupSafely(environment));
+        else await runReceiptCleanupSafely(environment);
         if (controller.cron === '* * * * *') {
             if (environment.DB && environment.PRINT_FILES) {
                 try {
@@ -318,5 +323,10 @@ const worker = {
             isEnabled: environment.NOTIFICATION_DISPATCH_ENABLED === 'true' });
     }
 };
+
+async function runReceiptCleanupSafely(environment) {
+    try { await cleanupPhysicalReceipts(environment); }
+    catch (error) { console.error('Receipt cleanup failed.', { errorName: error.name }); }
+}
 
 export default worker;

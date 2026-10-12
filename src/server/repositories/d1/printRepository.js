@@ -1,3 +1,4 @@
+import { buildPrintIntentStatement } from './print-intent-statement.js';
 import {
     DEFAULT_PRINT_LIMITS, MAX_PENDING_PRINT_JOBS, PRINT_FAILURE_RETENTION_MS, PRINT_LEASE_MS, PRINT_MAX_ATTEMPTS,
     PRINT_ROW_RETENTION_MS, PRINT_SUCCESS_RETENTION_MS
@@ -10,12 +11,13 @@ function addMilliseconds(value, amount) {
 export function createPrintRepository(database) {
     if (!database) throw new TypeError('A D1 database binding is required.');
     return Object.freeze({
-        async readPublicStatus(now, limits = DEFAULT_PRINT_LIMITS) {
+        async readPublicStatus(now, limits = DEFAULT_PRINT_LIMITS, excludedJobId = null) {
             const [heartbeat, queue, controls] = await Promise.all([
                 database.prepare(`SELECT health, seen_at, settings_protocol FROM printer_heartbeats
                     ORDER BY seen_at DESC LIMIT 1`).first(),
                 database.prepare(`SELECT count(*) AS count FROM print_jobs WHERE status IN
-                    ('uploading','queued','leased','ready','submission_started') AND cleanup_status='none'`).first(),
+                    ('uploading','queued','leased','ready','submission_started') AND cleanup_status='none'
+                    AND (? IS NULL OR id<>?)`).bind(excludedJobId, excludedJobId).first(),
                 database.prepare(`SELECT is_paused FROM print_queue_controls WHERE id='global'`).first()
             ]);
             const heartbeatAge = heartbeat ? Date.parse(now) - Date.parse(heartbeat.seen_at) : Infinity;
@@ -28,26 +30,7 @@ export function createPrintRepository(database) {
         },
         async createUploadIntent(input) {
             const orientation = input.orientation || 'portrait';
-            const result = await database.prepare(`INSERT INTO print_jobs (
-                id,idempotency_key_hash,upload_token_hash,tracking_token_hash,storage_key,media_type,byte_size,copies,
-                paper_size,color_mode,duplex,orientation,source,created_by_staff_id,created_by_staff_role,
-                status,available_at,created_at,updated_at,expires_at,purge_after
-            ) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'uploading',?,?,?,?,?
-              WHERE (SELECT count(*) FROM print_jobs WHERE status IN
-                    ('uploading','queued','leased','ready','submission_started') AND cleanup_status='none') < ?
-                AND (SELECT health FROM printer_heartbeats ORDER BY seen_at DESC LIMIT 1)='ready'
-                AND (SELECT seen_at FROM printer_heartbeats ORDER BY seen_at DESC LIMIT 1)>=?
-                AND (SELECT settings_protocol FROM printer_heartbeats ORDER BY seen_at DESC LIMIT 1)>=?
-                AND (SELECT is_paused FROM print_queue_controls WHERE id='global')=0
-                AND (? IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ','now') < ?)
-                ON CONFLICT(idempotency_key_hash) DO NOTHING
-            RETURNING *`).bind(input.id, input.idempotencyHash, input.uploadTokenHash, input.trackingTokenHash,
-                input.storageKey, input.mediaType, input.byteSize, input.copies, input.paperSize, input.colorMode,
-                input.duplex, orientation, input.source || 'student', input.createdByStaffId || null,
-                input.createdByStaffRole || null,
-                input.now, input.now, input.now, input.expiresAt, input.purgeAfter,
-                MAX_PENDING_PRINT_JOBS, input.heartbeatCutoff, input.requiredProtocol || 0,
-                input.uatExpiresAt || null, input.uatExpiresAt || null).first();
+            const result = await buildPrintIntentStatement(database, input).first();
             if (result) return result;
             const existing = await database.prepare('SELECT * FROM print_jobs WHERE idempotency_key_hash=?').bind(input.idempotencyHash).first();
             if (existing && existing.upload_token_hash === input.uploadTokenHash
@@ -61,16 +44,17 @@ export function createPrintRepository(database) {
         findUploadIntent: ({ id, tokenHash, now }) => database.prepare(`SELECT * FROM print_jobs
             WHERE id=? AND upload_token_hash=? AND status='uploading' AND expires_at>? AND cleanup_status='none'`)
             .bind(id, tokenHash, now).first(),
-        markQueued: async ({ id, tokenHash, now, expiresAt, uatExpiresAt = null }) => {
+        markQueued: async ({ id, tokenHash, now, expiresAt, uatExpiresAt = null, requiresQueueOpen = false }) => {
             const result = await database.prepare(`UPDATE print_jobs SET status='queued',page_count=NULL,
                 available_at=?,updated_at=?,expires_at=? WHERE id=? AND upload_token_hash=?
                 AND status='uploading' AND expires_at>? AND cleanup_status='none'
+                AND (?=0 OR (SELECT is_paused FROM print_queue_controls WHERE id='global')=0)
                 AND (SELECT health FROM printer_heartbeats ORDER BY seen_at DESC LIMIT 1)='ready'
                 AND (SELECT seen_at FROM printer_heartbeats ORDER BY seen_at DESC LIMIT 1)>=?
                 AND (SELECT count(*) FROM print_jobs WHERE status IN
                     ('uploading','queued','leased','ready','submission_started') AND cleanup_status='none' AND id<>?) < ?
                 AND (? IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ','now') < ?)`)
-                .bind(now, now, expiresAt, id, tokenHash, now,
+                .bind(now, now, expiresAt, id, tokenHash, now, requiresQueueOpen ? 1 : 0,
                     new Date(Date.parse(now) - 60_000).toISOString(), id, MAX_PENDING_PRINT_JOBS,
                     uatExpiresAt, uatExpiresAt).run();
             return result.meta.changes === 1;

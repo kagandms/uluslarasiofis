@@ -37,7 +37,7 @@ export function validatePhysicalIntake(body) {
         student_number: typeof body.student_number === 'string' && body.student_number.trim() ? normalizePhysicalStudentNumber(body.student_number) : '',
         first_name: requireText(body.first_name, { field: 'Ad', maxLength: 120 }),
         last_name: requireText(body.last_name, { field: 'Soyad', maxLength: 120 }),
-        passport_number: requireText(body.passport_number, { field: 'Pasaport no', maxLength: 64 }).toUpperCase(),
+        passport_number: requireText(body.passport_number, { field: 'Pasaport no', maxLength: 64 }).replace(/[a-z]/g, character => character.toUpperCase()),
         application_type: body.application_type,
         linked_application_id: body.linked_application_id == null ? null : requireText(body.linked_application_id, { field: 'Bağlı başvuru', maxLength: 64 })
     };
@@ -45,7 +45,7 @@ export function validatePhysicalIntake(body) {
 
 /** @param {object} intake Current receipt. @param {object} pdf Current file. @returns {string[]} Available transitions. */
 export function listPhysicalTransitions(intake, pdf) {
-    if (intake.deleted_at) return [];
+    if (intake.deleted_at || intake.processing_closed_at || intake.legacy_status === 'completed') return [];
     return REVIEW_STATUSES.filter(status => status !== intake.status
         && (status !== 'approved_for_processing' || pdf?.upload_status === 'finalized'));
 }

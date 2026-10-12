@@ -1,3 +1,4 @@
+import { renderPhysicalReceiptDraft, renderPhysicalReceiptControls } from './physical-receipt-view.js';
 import { createApplicationQueueTable, formatQueueDate } from './application-queue-table.js';
 import { buildPhysicalPdfUrl } from './physical-intake-client.js';
 
@@ -70,6 +71,10 @@ function renderQueue(document, panel, options) {
     panel.append(button(document, 'Fiziksel Dosya Gir', handlers.newReceipt), createFilters(document, state, handlers));
     if (!state.result?.items.length) { panel.append(text(document, 'p', 'Görüntülenecek fiziksel teslim bulunamadı.')); return; }
     panel.append(createApplicationQueueTable(document, state.result.items, { statusLabel: status => STATUS_LABELS[status] || status,
+        headers: ['Takip No','Ad Soyad','Teslim Tarihi','Ofis Durumu','PDF','A4',''],
+        values: item => [item.tracking_reference || '—', `${item.first_name} ${item.last_name}`, item.application_date || formatQueueDate(item.submitted_at),
+            item.processing_closed_at ? 'Ofis işlemi kapalı' : STATUS_LABELS[item.status], item.current_pdf_id ? 'PDF var' : 'PDF yok',
+            item.receipt_metadata_version && item.receipt_metadata_version !== item.metadata_version ? 'A4 güncel değil' : `${item.receipt_state || 'Hazırlanmadı'}${item.receipt_print_status ? ` · ${item.receipt_print_status}` : ''}`],
         actions: item => [{ label: 'Detay', action: 'open-detail', run: () => handlers.open(item.id) },
             { label: 'İndir', action: 'download-physical-pdf', isDisabled: !item.current_pdf_id || Boolean(item.deleted_at),
                 ariaLabel: 'Güncel PDF’i indir',
@@ -107,6 +112,7 @@ function createDraftPreview(document, state) {
 
 function renderCreate(document, panel, options) {
     const { state, handlers } = options;
+    if (state.isMetadataFirst) { renderPhysicalReceiptDraft(panel, state, handlers); return; }
     panel.append(button(document, 'Listeye Dön', handlers.back), text(document, 'h3', 'Öğrenci Bilgileri'));
     panel.append(createDraftPreview(document, state));
     const form = document.createElement('form');
@@ -142,7 +148,7 @@ function createFileRow(document, intake, file, handlers) {
         link.rel = 'noopener';
         actions.append(link);
     });
-    if (intake.status === 'under_review') {
+    if (intake.status === 'under_review' && !intake.processing_closed_at) {
         actions.insertBefore(button(document, 'Sil', handlers.deletePdf), actions.lastChild);
         actions.append(button(document, 'Düzenle', handlers.preparePdf));
     }
@@ -159,7 +165,7 @@ function createPdfControls(document, detail, handlers) {
     section.append(history);
     if (!currentPdf) {
         section.append(text(document, 'p', 'Bu kayda bağlı güncel PDF yok.'));
-        if (!detail.intake.deleted_at && detail.intake.status === 'under_review') {
+        if (!detail.intake.deleted_at && detail.intake.status === 'under_review' && !detail.intake.processing_closed_at) {
             section.append(button(document, 'PDF Ekle', handlers.preparePdf));
         }
     }
@@ -203,6 +209,7 @@ function renderDetail(document, panel, options) {
     panel.append(actions);
     if (intake.rejection_reason) panel.append(text(document, 'p', `Ret gerekçesi: ${intake.rejection_reason}`));
     if (state.isRejecting) panel.append(createRejectionForm(document, { state, handlers }));
+    renderPhysicalReceiptControls(panel, state, handlers);
     panel.append(createPdfControls(document, detail, handlers));
 }
 

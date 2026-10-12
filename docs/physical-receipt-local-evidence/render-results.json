@@ -1,0 +1,49 @@
+{
+  "fontRequests": 2,
+  "results": [
+    {
+      "variant": "normal",
+      "visiblePdfLogoPixels": {
+        "left": 3682,
+        "right": 366
+      },
+      "byteSize": 170929,
+      "pageCount": 1,
+      "languages": [
+        "tr",
+        "en",
+        "ru",
+        "tk",
+        "ar"
+      ],
+      "arabicDirection": "rtl"
+    },
+    {
+      "variant": "long",
+      "visiblePdfLogoPixels": {
+        "left": 3682,
+        "right": 366
+      },
+      "byteSize": 209332,
+      "pageCount": 1,
+      "languages": [
+        "tr",
+        "en",
+        "ru",
+        "tk",
+        "ar"
+      ],
+      "arabicDirection": "rtl"
+    }
+  ],
+  "missingAssetFailsClosed": true,
+  "coverLogosDecoded": [
+    484,
+    152
+  ],
+  "coverPrint": {
+    "printCalls": 1,
+    "decodedAtPrint": true,
+    "restoredButton": true
+  }
+}

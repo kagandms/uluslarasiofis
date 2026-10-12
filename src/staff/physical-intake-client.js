@@ -5,7 +5,7 @@ async function request(path, options = {}) {
         const response = await fetch(`${BASE_PATH}${path}`, { credentials: 'same-origin', ...options });
         const payload = await response.json();
         if (!response.ok) throw Object.assign(new Error(payload.error?.message || 'İşlem tamamlanamadı.'), {
-            code: payload.error?.code, status: response.status
+            code: payload.error?.code, status: response.status, matches: payload.matches
         });
         return payload;
     } catch (error) {
@@ -23,6 +23,17 @@ function sendJson(path, options) {
 /** Creates private staff receipt operations. @returns {object} Same-origin API client. */
 export function createPhysicalIntakeClient() {
     return Object.freeze({
+        config: () => request('/config'),
+        reserve: body => sendJson('/reference-reservations', { body }),
+        registerMetadata: body => sendJson('/registrations', { body }),
+        metadata: (id, body) => sendJson(`/${id}/metadata`, { method: 'PATCH', body }),
+        processing: (id, action, body) => sendJson(`/${id}/${action}`, { body }),
+        createDocument: (id, body) => sendJson(`/${id}/receipts`, { body }),
+        document: (id, receiptId) => request(`/${id}/receipts/${receiptId}`),
+        uploadDocument: (id, receiptId, bytes) => request(`/${id}/receipts/${receiptId}/content`, { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: bytes }),
+        printDocument: (id, receiptId, body) => sendJson(`/${id}/receipts/${receiptId}/print`, { body }),
+        attempts: id => request(`/${id}/print-attempts`),
+        printAction: (id, attemptId, action) => sendJson(`/${id}/print-attempts/${attemptId}/${action}`, { body: {} }),
         query: body => sendJson('/query', { body }),
         lookup: body => sendJson('/lookup', { body }),
         register: options => {

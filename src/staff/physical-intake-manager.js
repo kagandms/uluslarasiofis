@@ -1,3 +1,4 @@
+import { startPhysicalReceiptDraft, assignPhysicalReference, savePhysicalReceiptDraft, recoverPhysicalReceiptRegistration, preparePhysicalReceiptDocument, sendPhysicalReceiptPrint } from './physical-receipt-workflow.js';
 import { splitPdfPages } from '../services/split-pdf-pages.js';
 import { recognizePhysicalApplicationForm } from './physical-form-ocr.js';
 import { IS_PHYSICAL_INTAKE_ENABLED, MAX_PHYSICAL_PDF_BYTES } from '../config/physical-intake-policy.js';
@@ -35,11 +36,14 @@ async function execute(context, work) {
     try { await work(); }
     catch (error) {
         console.error('Physical workspace operation failed.', { errorName: error.name, code: error.code });
+        if (error.matches?.length) context.state.duplicateMatches = error.matches;
+        if (context.state.view === 'create' && context.state.isMetadataFirst) render(context);
         showMessage(context, error.status === 401 ? 'Oturum sona erdi. Sayfayı yenileyip tekrar giriş yapın.' : error.message);
     } finally { setBusy(context, false); }
 }
 
 async function loadQueue(context) {
+    removePhysicalPdfDialog(context);
     if (context.state.previewUrl) { URL.revokeObjectURL(context.state.previewUrl); context.state.previewUrl = null; }
     context.state.preparedPdf = null;
     const response = await fetch('/api/staff/physical-access', { credentials: 'same-origin', signal: AbortSignal.timeout(15000) });
@@ -52,6 +56,13 @@ async function loadQueue(context) {
         context.root.append(notice);
         return;
     }
+    try { context.state.receiptConfig = await context.api.config(); }
+    catch (error) {
+        if (error.code !== 'RECEIPTS_SCHEMA_NOT_READY') throw error;
+        context.state.receiptConfig = { create_enabled: false };
+    }
+    const recovered = await recoverPhysicalReceiptRegistration(context);
+    if (recovered) { await openDetail(context, recovered.intake.id); showMessage(context, 'Öğrenci kaydı kurtarıldı. A4 işlemlerine devam edebilirsiniz.'); return; }
     context.state.result = await context.api.query(context.state.query);
     context.state.view = 'queue';
     context.state.message = 'Fiziksel teslimler — son güncellenen kayıtlar önce gösterilir.';
@@ -60,14 +71,25 @@ async function loadQueue(context) {
 
 async function openDetail(context, id) {
     context.state.isRejecting = false;
+    context.state.isEditingMetadata = false;
+    if (context.state.detail?.intake.id !== id) {
+        removePhysicalPdfDialog(context);
+        context.state.receipt = null; context.state.documentCreationId = null;
+        context.state.printCreationId = null; context.state.printOperationKey = null;
+    }
     context.state.detail = await context.api.detail(id);
+    context.state.printAttempts = (await context.api.attempts(id)).attempts;
     context.state.view = 'detail';
     context.state.message = 'PDF’ler bu öğrenci kaydında saklanır; kaydedildikten sonra yeniden açılabilir.';
     render(context);
 }
 
-function openCreate(context) {
-    if (context.isBusy) return;
+async function openCreate(context) {
+    if (context.state.receiptConfig?.create_enabled) context.state.receiptConfig = await context.api.config();
+    if (context.state.receiptConfig?.create_enabled) {
+        startPhysicalReceiptDraft(context); render(context); return;
+    }
+    context.state.isMetadataFirst = false;
     openPdfMergerModal({ contextLabel: 'Önce başvuru formunu yükleyin; ardından kalan belgeleri sırayla ekleyin.',
         mergeLabel: 'PDF Oluştur', confirmLabel: 'Öğrenci Bilgilerine Geç',
         successMessage: 'PDF hazır. Öğrenci bilgilerini kontrol edip Kaydet’e basın.',
@@ -85,9 +107,24 @@ function openCreate(context) {
             render(context);
         }
     });
+    context.root.ownerDocument.getElementById('pdf-merger-modal-overlay').dataset.physicalIntakeId='draft';
 }
 
 async function createReceipt(context) {
+    if (context.state.isMetadataFirst) {
+        const registered = await savePhysicalReceiptDraft(context);
+        await openDetail(context, registered.intake.id);
+        showMessage(context, 'Öğrenci eklendi. A4 hazırlanıyor…');
+        try {
+            const attempt = await sendPhysicalReceiptPrint(context);
+            await openDetail(context, registered.intake.id);
+            showMessage(context, `Öğrenci eklendi. ${describeReceiptPrint(attempt)}`);
+        } catch (error) {
+            console.error('Saved student receipt print failed.', { errorName: error.name, code: error.code });
+            showMessage(context, `Öğrenci eklendi; A4 baskısı tamamlanmadı. ${error.message}`);
+        }
+        return;
+    }
     if (!context.state.preparedPdf) throw new Error('Önce PDF oluşturun.');
     context.state.detail = await context.api.register({ id: context.state.registrationId, receipt: { ...context.state.draft }, bytes: context.state.preparedPdf });
     URL.revokeObjectURL(context.state.previewUrl);
@@ -161,6 +198,7 @@ async function preparePdf(context) {
     openPdfMergerModal({ contextLabel: `${capture.label} · Sayfaları sıralayın veya silin; QR ve dosya seçimiyle yeni belgeler ekleyin.`,
         initialFiles, maxFiles: 300, mergeLabel: 'PDF’yi Yeniden Oluştur', confirmLabel: 'Değişiklikleri Kaydet',
         onSave: bytes => persistPdf(context, capture, bytes) });
+    context.root.ownerDocument.getElementById('pdf-merger-modal-overlay').dataset.physicalIntakeId=capture.id;
 }
 
 
@@ -170,11 +208,13 @@ function createHandlers(context) {
         back: () => {
             if (context.state.view === 'create' && !window.confirm('Henüz kaydedilmemiş PDF ve bilgiler bırakılarak listeye dönülsün mü?')) return;
             run(() => loadQueue(context));
-        }, newReceipt: () => openCreate(context),
+        }, newReceipt: () => run(() => openCreate(context)),
         open: id => run(() => openDetail(context, id)),
         search: query => run(async () => { context.state.query = { ...context.state.query, ...query, page: 1 }; await loadQueue(context); }),
         page: page => run(async () => { context.state.query.page = page; await loadQueue(context); }),
         create: () => run(() => createReceipt(context)),
+        ...createMetadataHandlers(context,run),
+        ...createPrintHandlers(context,run),
         mutate: (intake, action, status) => run(() => mutateReceipt(context, { intake, action, status })),
         reject: intake => { context.state.isRejecting = true; context.state.rejectionReason = ''; render(context); },
         cancelReject: () => { context.state.isRejecting = false; render(context); },
@@ -193,8 +233,73 @@ export function initializePhysicalIntakeManager(root) {
     context.handlers = createHandlers(context);
     root.textContent = 'Fiziksel başvuru erişimi kontrol ediliyor…';
     root.ownerDocument.addEventListener('workspace:view-changed', event => {
+        if (event.detail?.viewName !== 'physical') removePhysicalPdfDialog(context);
         if (event.detail?.viewName === 'physical' && !context.state.result && context.state.view === 'queue') {
             execute(context, () => loadQueue(context));
         }
     });
+}
+
+function describeReceiptPrint(attempt) {
+    if (attempt.status==='queued') return 'A4 kuyruğa gönderildi.';
+    if (attempt.status==='submitted') return 'A4 yazıcıya gönderildi. Kâğıt çıktısını kontrol edin.';
+    if (attempt.decision==='manual') return 'Manuel baskı kararı kaydedildi. PDF’i açıp yazdırabilirsiniz.';
+    return `A4 baskı durumu: ${attempt.status}. Yeni iş oluşturmadan mevcut denemeyi kontrol edin.`;
+}
+
+async function handleReceiptPrint(context,decision) {
+    const blocking=context.state.printAttempts?.find(attempt=>attempt.blocks_new_attempt===1);
+    const options={decision};
+    if (blocking) {
+        if (['uploading','queued'].includes(blocking.status)) throw new Error('Önce mevcut baskıyı güvenle iptal edin veya Devam Et’e basın.');
+        if (!window.confirm('Yazıcı ve spooler durumunu kontrol ettim. Yeni baskının çift kopya çıkarma riskini kabul ediyorum.')) return;
+        const reason=window.prompt('Fiziksel kontrol ve yeni baskı gerekçesi (en az 5 karakter):');
+        if (!reason) return;
+        Object.assign(options,{risk_confirmed:true,acknowledged_attempt_id:blocking.id,reason});
+    } else if (decision!=='print' && !window.confirm(decision==='manual'?'Manuel baskı kararını kaydet ve PDF’i aç?':'Yeni bir A4 baskı işi gönderilsin mi?')) return;
+    const result=await sendPhysicalReceiptPrint(context,options);
+    const intakeId=context.state.detail.intake.id;
+    if (decision==='manual') window.open(`/api/staff/physical-intakes/${intakeId}/receipts/${context.state.receipt.id}?preview=1`,'_blank','noopener');
+    await openDetail(context,intakeId);
+    showMessage(context,describeReceiptPrint(result));
+}
+
+function removePhysicalPdfDialog(context) {
+    const overlay=context.root.ownerDocument.getElementById('pdf-merger-modal-overlay');
+    if (overlay?.dataset.physicalIntakeId) overlay.remove();
+}
+
+function createMetadataHandlers(context,run) {
+    return {
+        assignReference: () => run(async () => { await assignPhysicalReference(context); render(context); }),
+        editMetadata: () => run(async () => {
+            context.state.receiptConfig = await context.api.config();
+            context.state.isEditingMetadata = true; context.state.metadataDraft = { ...context.state.detail.intake }; render(context);
+        }),
+        saveMetadata: draft => run(async () => {
+            const intake = context.state.detail.intake;
+            const keys = ['first_name','last_name','passport_number','student_number','application_type','application_date'];
+            await context.api.metadata(intake.id, { lock_version: intake.lock_version, ...Object.fromEntries(keys.map(key => [key,draft[key]])) });
+            await openDetail(context,intake.id);
+        }),
+        processing: action => run(async () => {
+            const reason = window.prompt(action === 'close' ? 'Ofis işlemi kapanış gerekçesi (ikamet izni onayı değildir):' : 'Yeniden açma gerekçesi:');
+            if (!reason) return;
+            const intake = context.state.detail.intake;
+            await context.api.processing(intake.id,action,{ lock_version:intake.lock_version,reason });
+            await openDetail(context,intake.id);
+        }),
+    };
+}
+
+function createPrintHandlers(context,run) {
+    return {
+        prepareReceipt: () => run(async () => { const intakeId=context.state.detail.intake.id; await preparePhysicalReceiptDocument(context); await openDetail(context,intakeId); showMessage(context,'A4 hazır. İndirme baskı başlatmaz.'); }),
+        printReceipt: decision => run(() => handleReceiptPrint(context,decision)),
+        printAction: (attemptId,action) => run(async () => {
+            const intakeId=context.state.detail.intake.id;
+            const result=await context.api.printAction(intakeId,attemptId,action);
+            await openDetail(context,intakeId); showMessage(context,describeReceiptPrint(result));
+        }),
+    };
 }

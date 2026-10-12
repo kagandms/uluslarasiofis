@@ -1,3 +1,4 @@
+import { createPhysicalTrackingPanel } from './physical-application-tracking.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { initializeResubmissionUpload } from './resubmissionUpload.js';
 import { mountTrackingNotificationPreferences } from './notificationPreferences.js';
@@ -242,7 +243,11 @@ function renderTracking(root, state, locale, submitLookup, api) {
 export async function initializeApplicationTracking(root, api) {
     const document = root.ownerDocument;
     const state = { kind: 'lookup', payload: null, studentNumber: '', replacementDocuments: [], notificationPreference: null, replacementSuccess: false, replacementCompleted: {} };
-    const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup, api);
+    const physicalPanel = createPhysicalTrackingPanel(document);
+    const render = () => {
+        renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup, api);
+        root.prepend(physicalPanel);
+    };
     async function submitLookup(studentNumber) {
         state.studentNumber = studentNumber.trim();
         state.kind = 'lookupLoading';

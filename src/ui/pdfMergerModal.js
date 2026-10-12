@@ -310,6 +310,8 @@ export function openPdfMergerModal(options = {}) {
     const cleanupObserver = new MutationObserver(() => {
         if (!overlay.isConnected) {
             if (previewUrl) URL.revokeObjectURL(previewUrl);
+            isContinuousCameraMode = false;
+            document.removeEventListener('keydown', handleKeydown);
             cleanupObserver.disconnect();
         }
     });

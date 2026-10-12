@@ -1,3 +1,4 @@
+import { handlePhysicalReceiptRoute } from './physical-receipt-routes.js';
 import { savePhysicalRegistration } from './physical-registration-routes.js';
 import { ApiError } from '../domain/errors.js';
 import { requirePhysicalStaff } from './physical-access-routes.js';
@@ -17,7 +18,8 @@ async function readDetail(repository, id) {
     if (!intake) throw new ApiError(404, 'PHYSICAL_NOT_FOUND', 'Fiziksel teslim kaydı bulunamadı.');
     const files = (await repository.files(id)).results;
     const currentPdf = files.find(file => file.id === intake.current_pdf_id) || null;
-    return { intake, files, current_pdf: currentPdf, allowed_transitions: listPhysicalTransitions(intake, currentPdf) };
+    const receipts = await repository.receipts(id);
+    return { intake, files, receipts: receipts.results, current_pdf: currentPdf, allowed_transitions: listPhysicalTransitions(intake, currentPdf) };
 }
 
 function readQuery(body) {
@@ -36,7 +38,7 @@ function readQuery(body) {
 
 function translateWriteError(error) {
     console.error('Physical intake write failed.', { errorName: error.name });
-    if (String(error.message).includes('UNIQUE constraint')) return new ApiError(409, 'PHYSICAL_ALREADY_EXISTS', 'Bu öğrenci için aktif fiziksel teslim kaydı var. Mevcut kaydı açın.');
+    if (/UNIQUE constraint|physical_active_passport_conflict/.test(String(error.message))) return new ApiError(409, 'PHYSICAL_ALREADY_EXISTS', 'Bu öğrenci için aktif fiziksel teslim kaydı var. Mevcut kaydı açın.');
     return error;
 }
 
@@ -100,6 +102,8 @@ export async function handlePhysicalIntakes(request, environment, requestId) {
     if (request.method !== 'GET') requireSameOrigin(request);
     const pathname = new URL(request.url).pathname;
     const context = { repository: createPhysicalIntakeRepository(environment.DB), environment, staff, requestId, now: new Date().toISOString() };
+    const receiptResult = await handlePhysicalReceiptRoute(request, context, pathname);
+    if (receiptResult !== null) return receiptResult;
     if (pathname === '/api/staff/physical-intakes/register') return readDetail(context.repository, await savePhysicalRegistration(request, context));
     if (pathname === '/api/staff/physical-intakes') throw new ApiError(400, 'PDF_REQUIRED', 'Fiziksel Dosya Gir ile PDF ve öğrenci bilgilerini birlikte kaydedin.');
     if (pathname === '/api/staff/physical-intakes/lookup') return lookupReceipt(request, context);

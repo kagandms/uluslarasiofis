@@ -48,7 +48,7 @@ async function initializeAndLookup(document, root, api) {
     const result = await initializeApplicationTracking(root, wrappedApi);
     const input = root.querySelector('input[name="student_number"]');
     input.value = 'TRACK-STUDENT-1';
-    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
     return result;
 }
@@ -112,7 +112,7 @@ test('draft owner session links back to the existing application wizard', async 
     document.defaultView.close();
 });
 
-test('missing or expired owner session renders a student-number-only lookup form', async () => {
+test('missing owner session preserves both code and online student-number lookup forms', async () => {
     const { document, root } = createTrackingRoot();
     const api = {
         async readCurrentApplicationTracking() {
@@ -124,7 +124,7 @@ test('missing or expired owner session renders a student-number-only lookup form
 
     assert.equal(result.kind, 'lookup');
     assert.match(root.textContent, /Başvurumu sorgula/i);
-    assert.equal(root.querySelectorAll('input').length, 1);
+    assert.equal(root.querySelectorAll('input:not([name=tracking_reference])').length, 1);
     assert.equal(root.querySelector('input[name="student_number"]')?.type, 'text');
     assert.equal(root.querySelector('input[name="passport_number"]'), null);
     assert.equal(root.querySelector('input[type="password"]'), null);
@@ -154,13 +154,13 @@ test('public lookup renders statuses without filenames or document controls', as
     };
     await initializeApplicationTracking(root, api);
     root.querySelector('input[name="student_number"]').value = 'TRACK-STUDENT-1';
-    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.match(root.textContent, /Gönderildi/);
     assert.match(root.textContent, /İnceleme bekliyor/);
     assert.doesNotMatch(root.textContent, /PRIVATE-FILENAME\.pdf/);
-    assert.equal(root.querySelectorAll('input').length, 0);
+    assert.equal(root.querySelectorAll('input:not([name=tracking_reference])').length, 0);
     assert.equal(root.querySelector('input[type="file"]'), null);
     assert.equal(root.querySelector('a'), null);
     assert.equal(root.querySelector('input[type="file"]'), null);
@@ -193,7 +193,7 @@ test('owner resubmission view mounts controls only for server-eligible codes and
     assert.match(root.textContent, new RegExp(officeMessage));
     assert.equal(root.querySelectorAll('input[type="file"]').length, 1);
     assert.equal(root.querySelector('input[type="file"]').accept, 'application/pdf');
-    assert.equal(root.querySelectorAll('button').length, 1);
+    assert.equal(root.querySelectorAll('.resubmission-upload-control button').length, 1);
     assert.equal(intentCalls, 0);
     document.defaultView.close();
 });
@@ -227,7 +227,7 @@ test('finalize refreshes owner tracking to waiting review while application stay
     const input = root.querySelector('input[type="file"]');
     Object.defineProperty(input, 'files', { configurable: true, value: [{ name: 'passport.pdf', type: 'application/pdf', size: 10 }] });
     input.dispatchEvent(new document.defaultView.Event('change'));
-    root.querySelector('button').click();
+    root.querySelector('.resubmission-upload-control button').click();
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(trackingReads, 2);
@@ -258,13 +258,13 @@ test('not-found lookup is neutral and allows a retry', async () => {
     await initializeApplicationTracking(root, api);
     const submit = async (studentNumber) => {
         root.querySelector('input[name="student_number"]').value = studentNumber;
-        root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+        root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
         await new Promise((resolve) => setImmediate(resolve));
     };
 
     await submit('UNKNOWN-STUDENT');
     assert.match(root.textContent, /görüntülenebilir bir başvuru bulunamadı/i);
-    assert.equal(root.querySelectorAll('input').length, 1);
+    assert.equal(root.querySelectorAll('input:not([name=tracking_reference])').length, 1);
     assert.doesNotMatch(root.textContent, /draft exists|student exists/i);
     await submit('TRACK-STUDENT-1');
     assert.equal(lookupCount, 2);
