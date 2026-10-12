@@ -24,12 +24,15 @@ export function deliverPhysicalReceiptPdf(options) {
         try { options.preview.location.replace(targetUrl); }
         catch { options.preview.location.href = targetUrl; }
     }
-    const link = options.document.createElement('a');
-    link.href = options.blobUrl || downloadUrl;
-    link.download = `${options.intake.tracking_reference}.pdf`;
-    link.hidden = true;
-    options.document.body.append(link);
-    link.click();
-    link.remove();
+    const shouldDownload = Boolean(options.autoDownload ?? !hasPreview);
+    if (shouldDownload) {
+        const link = options.document.createElement('a');
+        link.href = options.blobUrl || downloadUrl;
+        link.download = `${options.intake.tracking_reference}.pdf`;
+        link.hidden = true;
+        options.document.body.append(link);
+        link.click();
+        link.remove();
+    }
     return { previewUrl, downloadUrl, hasPreview };
 }

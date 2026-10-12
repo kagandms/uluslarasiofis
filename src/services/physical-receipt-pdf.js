@@ -101,7 +101,18 @@ async function buildReceiptPdf(canvas, createdAtValue) {
     const createdAt=new Date(createdAtValue);
     if (!Number.isFinite(createdAt.valueOf())) throw new Error('A4 snapshot zamanı eksik.');
     pdf.setCreationDate(createdAt); pdf.setModificationDate(createdAt);
-    const image=await pdf.embedPng(canvas.toDataURL('image/png'));
+    let image;
+    try {
+        const jpegUrl = canvas.toDataURL('image/jpeg', 0.95);
+        if (jpegUrl.startsWith('data:image/jpeg')) {
+            image = await pdf.embedJpg(jpegUrl);
+        }
+    } catch {
+        image = null;
+    }
+    if (!image) {
+        image = await pdf.embedPng(canvas.toDataURL('image/png'));
+    }
     pdf.addPage([595.28,841.89]).drawImage(image,{x:0,y:0,width:595.28,height:841.89});
     const bytes=await pdf.save();
     if (bytes.length>10485760) throw new Error('A4 PDF boyutu 10 MiB sınırını aşıyor.');

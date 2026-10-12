@@ -93,3 +93,39 @@ test('creation prepares the stored PDF without entering detail or sending a prin
     assert.equal(context.state.savedIntakeId, 'saved');
     assert.equal(registrations, 1);
 }));
+
+test('preloads PDF in background and reuses it if snapshot matches', async () => withStorage(async () => {
+    const { preparePhysicalReceiptDocument, buildReceiptSnapshotKey } = await import('../src/staff/physical-receipt-workflow.js');
+    const context = createContext();
+    const syntheticBytes = new Uint8Array([37, 80, 68, 70, 45]);
+    const snapshot = {
+        first_name: 'Synthetic',
+        last_name: 'Student',
+        passport_number: 'TEST',
+        application_date: '2026-10-12',
+        tracking_reference: 'ITU-26-SYNTHET',
+        portal_origin: 'https://portal.test'
+    };
+    context.state.preloadedReceiptKey = buildReceiptSnapshotKey(snapshot);
+    context.state.preloadedReceiptPromise = Promise.resolve(syntheticBytes);
+    context.state.detail = {
+        intake: { id: 'saved', metadata_version: 1, lock_version: 1 },
+        receipts: [{ id: 'receipt', state: 'awaiting_content', metadata_version: 1, snapshot }]
+    };
+    let uploadedBytes = null;
+    let deliveredBytes = null;
+    context.api.uploadDocument = async (_id, _receiptId, bytes) => {
+        uploadedBytes = bytes;
+        return { id: 'receipt', state: 'ready' };
+    };
+
+    const result = await preparePhysicalReceiptDocument(context, {
+        onBytesReady: bytes => { deliveredBytes = bytes; }
+    });
+
+    assert.equal(result.state, 'ready');
+    assert.equal(deliveredBytes, syntheticBytes);
+    assert.equal(uploadedBytes, syntheticBytes);
+    assert.equal(context.state.preloadedReceiptPromise, null);
+}));
+

@@ -147,7 +147,7 @@ async function createReceiptPdf(context, preview) {
         });
         deliver();
         message = context.state.receiptDelivery.hasPreview
-            ? 'Öğrenci eklendi. Bilgilendirme PDF’i yan sekmede açıldı ve indirme başlatıldı.'
+            ? 'Öğrenci eklendi. Bilgilendirme PDF’i yan sekmede açıldı.'
             : 'Öğrenci eklendi. İndirme başlatıldı; PDF sekmesi engellendiyse aşağıdaki PDF’i Aç bağlantısını kullanın.';
     } catch (error) {
         preview?.close();
@@ -306,6 +306,6 @@ function createMetadataHandlers(context,run) {
 async function downloadReceiptPdf(context) {
     const receipt=await preparePhysicalReceiptDocument(context);
     deliverPhysicalReceiptPdf({ document: context.root.ownerDocument, preview: null,
-        intake: context.state.detail.intake, receipt });
+        intake: context.state.detail.intake, receipt, autoDownload: true });
     showMessage(context,'A4 indirme başlatıldı.');
 }

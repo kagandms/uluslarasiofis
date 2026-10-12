@@ -6,9 +6,9 @@ echo ===================================================
 echo   Istanbul Topkapi Universitesi - ClamAV Runner
 echo ===================================================
 
-:: Default target: staging (or passed as argument %1)
+:: Default target: production (or passed as argument %1)
 if "%~1"=="" (
-    set "SCANNER_ORIGIN=https://goc-staging.topkapiuni.workers.dev"
+    set "SCANNER_ORIGIN=https://goc.topkapiuni.workers.dev"
 ) else (
     set "SCANNER_ORIGIN=%~1"
 )

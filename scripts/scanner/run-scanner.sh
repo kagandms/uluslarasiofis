@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ClamAV runner starter script for uluslarasiofis
-export SCANNER_ORIGIN="${SCANNER_ORIGIN:-https://goc-staging.topkapiuni.workers.dev}"
+export SCANNER_ORIGIN="${SCANNER_ORIGIN:-https://goc.topkapiuni.workers.dev}"
 export SCANNER_RUNNER_ID="${SCANNER_RUNNER_ID:-macbook-runner-1}"
 export SCANNER_STATE_DIR="${SCANNER_STATE_DIR:-$HOME/.local/share/uluslarasiofis-scanner}"
 export SCANNER_DATABASE_DIR="${SCANNER_DATABASE_DIR:-$SCANNER_STATE_DIR/signatures}"

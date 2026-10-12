@@ -1,12 +1,56 @@
 
 const PENDING_REGISTRATION_KEY='physical-receipt-pending-registration';
 
+export function buildReceiptSnapshotKey(data) {
+    if (!data) return null;
+    return [
+        (data.first_name || '').trim(),
+        (data.last_name || '').trim(),
+        (data.passport_number || '').trim().toUpperCase(),
+        (data.application_date || '').trim(),
+        (data.tracking_reference || '').trim(),
+        (data.portal_origin || '').trim()
+    ].join('::');
+}
+
+export function startPreloadingReceiptPdf(context) {
+    const doc = context.root?.ownerDocument || globalThis.document;
+    if (!doc) return;
+    const draft = context.state.draft;
+    const trackingReference = context.state.reservation?.tracking_reference;
+    const portalOrigin = context.state.receiptConfig?.portal_origin;
+    if (!draft || !trackingReference || !portalOrigin || !draft.first_name || !draft.last_name || !draft.passport_number || !draft.application_date) {
+        return;
+    }
+    const draftSnapshot = {
+        first_name: draft.first_name.trim(),
+        last_name: draft.last_name.trim(),
+        passport_number: draft.passport_number.trim().toUpperCase(),
+        application_date: draft.application_date.trim(),
+        tracking_reference: trackingReference.trim(),
+        portal_origin: portalOrigin.trim(),
+        created_at: new Date().toISOString()
+    };
+    const key = buildReceiptSnapshotKey(draftSnapshot);
+    if (context.state.preloadedReceiptKey === key && context.state.preloadedReceiptPromise) {
+        return;
+    }
+    context.state.preloadedReceiptKey = key;
+    context.state.preloadedReceiptPromise = import('../services/physical-receipt-pdf.js')
+        .then(({ renderPhysicalReceiptPdf }) => renderPhysicalReceiptPdf(draftSnapshot, doc))
+        .catch(error => {
+            console.error('Receipt PDF pre-rendering failed.', { errorName: error.name });
+            return null;
+        });
+}
+
 /** Starts a metadata-first draft without touching PDF/QR state. @param {object} context Workspace. @returns {void} Draft initialized. */
 export function startPhysicalReceiptDraft(context) {
     context.state.registrationId=crypto.randomUUID();
     context.state.savedIntakeId=null; context.state.receipt=null; context.state.documentCreationId=null;
     context.state.printCreationId=null; context.state.printOperationKey=null; context.state.receiptDelivery=null;
     context.state.reservation=null; context.state.registrationBody=null; context.state.duplicateMatches=[];
+    context.state.preloadedReceiptKey=null; context.state.preloadedReceiptPromise=null;
     context.state.isMetadataFirst=true; context.state.view='create';
     context.state.draft={application_date:context.state.receiptConfig.today,first_name:'',last_name:'',passport_number:'',student_number:'',application_type:''};
     context.state.message='Öğrenci bilgilerini girin, Başvuru No Ata ardından Oluştur ve Yazdır’a basın.';
@@ -21,6 +65,7 @@ export function startPhysicalReceiptDraft(context) {
 /** Reserves the same draft reference on retries. @param {object} context Workspace. @returns {Promise<void>} Assigned number. @throws {Error} Allocation failure. */
 export async function assignPhysicalReference(context) {
     context.state.reservation=await context.api.reserve({draft_id:context.state.registrationId,application_date:context.state.draft.application_date});
+    startPreloadingReceiptPdf(context);
 }
 
 /** Saves the student first, keeping identifiers stable after a lost response. @param {object} context Workspace. @returns {Promise<object>} Durable intake. @throws {Error} Invalid/failed registration. */
@@ -73,13 +118,26 @@ export async function preparePhysicalReceiptDocument(context, options = {}) {
     context.state.receipt=receipt;
     if (receipt.state==='ready') { context.state.documentCreationId=null; return receipt; }
     if (!receipt.snapshot.portal_origin) throw new Error('Portal adresi yapılandırılmalı. Öğrenci kaydı korunuyor; adres hazır olunca yeni A4 hazırlayın.');
-    const { renderPhysicalReceiptPdf }=await import('../services/physical-receipt-pdf.js');
-    const bytes=await renderPhysicalReceiptPdf(receipt.snapshot);
+    let bytes = null;
+    const snapshotKey = buildReceiptSnapshotKey(receipt.snapshot);
+    if (context.state.preloadedReceiptKey === snapshotKey && context.state.preloadedReceiptPromise) {
+        try {
+            bytes = await context.state.preloadedReceiptPromise;
+        } catch {
+            bytes = null;
+        }
+    }
+    if (!bytes) {
+        const { renderPhysicalReceiptPdf }=await import('../services/physical-receipt-pdf.js');
+        bytes = await renderPhysicalReceiptPdf(receipt.snapshot, context.root?.ownerDocument || globalThis.document);
+    }
     if (typeof options.onBytesReady === 'function') {
         options.onBytesReady(bytes);
     }
     context.state.receipt=await context.api.uploadDocument(intake.id,receipt.id,bytes);
     context.state.documentCreationId=null;
+    context.state.preloadedReceiptKey=null;
+    context.state.preloadedReceiptPromise=null;
     return context.state.receipt;
 }
 
