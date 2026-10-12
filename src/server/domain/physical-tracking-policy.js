@@ -68,6 +68,7 @@ export function readReceiptPortalOrigin(environment) {
 
 /** Returns a safe public status code with no personal information. @param {object} intake Stored record. @returns {string} Office status. */
 export function readPhysicalTrackingStatus(intake) {
+    if (['sent_to_migration','migration_approved','completed'].includes(intake.status)) return intake.status;
     if (intake.processing_closed_at || intake.legacy_status === 'completed') return 'closed';
     if (intake.status === 'rejected') return 'contact_office';
     if (intake.status === 'approved_for_processing') return 'approved_for_processing';

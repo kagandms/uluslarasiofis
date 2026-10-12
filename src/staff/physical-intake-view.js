@@ -1,10 +1,11 @@
+import { PHYSICAL_STATUS_LABELS, PHYSICAL_PDF_EDIT_STATUSES } from '../config/physical-statuses.js';
 import { renderPhysicalReceiptDialog, closePhysicalReceiptDialog } from './physical-receipt-dialog.js';
 import { renderPhysicalReceiptDraft, renderPhysicalReceiptControls } from './physical-receipt-view.js';
 import { createApplicationQueueTable, formatQueueDate } from './application-queue-table.js';
 import { buildPhysicalPdfUrl } from './physical-intake-client.js';
 
-const STATUS_LABELS = { under_review: 'İncelemede', approved_for_processing: 'Onaylandı', rejected: 'Reddedildi' };
-const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['rejected', 'Reddedildi'], ['deleted', 'Silinen']];
+const STATUS_LABELS = PHYSICAL_STATUS_LABELS;
+const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['sent_to_migration', 'Göçe Gönderildi'], ['migration_approved', 'Göç Onayladı'], ['completed', 'Tamamlandı'], ['rejected', 'Reddedildi'], ['deleted', 'Silinen']];
 
 
 function text(document, tag, value) {
@@ -155,7 +156,7 @@ function createFileRow(document, intake, file, handlers) {
         link.rel = 'noopener';
         actions.append(link);
     });
-    if (intake.status === 'under_review' && !intake.processing_closed_at) {
+    if (PHYSICAL_PDF_EDIT_STATUSES.includes(intake.status) && !intake.processing_closed_at) {
         actions.insertBefore(button(document, 'Sil', handlers.deletePdf), actions.lastChild);
         actions.append(button(document, 'Düzenle', handlers.preparePdf));
     }
@@ -172,7 +173,7 @@ function createPdfControls(document, detail, handlers) {
     section.append(history);
     if (!currentPdf) {
         section.append(text(document, 'p', 'Bu kayda bağlı güncel PDF yok.'));
-        if (!detail.intake.deleted_at && detail.intake.status === 'under_review' && !detail.intake.processing_closed_at) {
+        if (!detail.intake.deleted_at && PHYSICAL_PDF_EDIT_STATUSES.includes(detail.intake.status) && !detail.intake.processing_closed_at) {
             section.append(button(document, 'PDF Ekle', handlers.preparePdf));
         }
     }
@@ -205,15 +206,22 @@ function renderDetail(document, panel, options) {
     const { state, handlers } = options;
     const detail = state.detail;
     const intake = detail.intake;
-    panel.append(button(document, 'Listeye Dön', handlers.back), button(document, 'Kaydı Yenile', () => handlers.open(intake.id)),
-        text(document, 'h3', `${intake.student_number || 'Öğrenci no belirtilmedi'} — ${intake.first_name} ${intake.last_name}`),
+    panel.append(button(document, 'Listeye Dön', handlers.back),
+        text(document, 'h3', `${intake.first_name} ${intake.last_name}`),
         text(document, 'p', `${intake.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'} · ${STATUS_LABELS[intake.status]}${intake.deleted_at ? ' · Silinen kayıt' : ''}`),
         text(document, 'p', `Pasaport: ${intake.passport_number || '—'} · ${intake.linked_application_id ? 'Online başvuruya bağlı' : 'Bağımsız fiziksel teslim'}`));
     const actions = document.createElement('div');
     actions.className = 'physical-status-actions';
-    detail.allowed_transitions.forEach(status => actions.append(button(document, STATUS_LABELS[status], () => status === 'rejected' ? handlers.reject(intake) : handlers.mutate(intake, 'status', status))));
+    for (const [status, label] of Object.entries(STATUS_LABELS)) {
+        const action = button(document, label, () => status === 'rejected' ? handlers.reject(intake) : handlers.mutate(intake, 'status', status));
+        action.disabled = !detail.allowed_transitions.includes(status);
+        if (status === intake.status) action.setAttribute('aria-current', 'true');
+        if (action.disabled && status !== intake.status) action.title = 'Bu aşama için önce dosya PDF’ini ekleyin.';
+        actions.append(action);
+    }
     actions.append(button(document, intake.deleted_at ? 'Geri Yükle' : 'Silinenlere Taşı', () => handlers.mutate(intake, intake.deleted_at ? 'restore' : 'delete')));
     panel.append(actions);
+    if (!intake.current_pdf_id && !intake.deleted_at) panel.append(text(document, 'p', 'Fiziksel dosyayı onaylayabilirsiniz. Göçe gönderildi ve sonraki aşamalar için dosya PDF’ini ekleyin.'));
     if (intake.rejection_reason) panel.append(text(document, 'p', `Ret gerekçesi: ${intake.rejection_reason}`));
     if (state.isRejecting) panel.append(createRejectionForm(document, { state, handlers }));
     renderPhysicalReceiptControls(panel, state, handlers);

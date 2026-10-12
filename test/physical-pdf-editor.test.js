@@ -162,14 +162,14 @@ test('PDF removal denies missing sessions, cross-origin requests and stale versi
     assert.equal(fixture.database.prepare('SELECT current_pdf_id FROM physical_intakes').first().current_pdf_id, fixture.fileId);
 });
 
-test('PDF removal cannot change approved or deleted receipts', async () => {
+test('PDF removal cannot change completed or deleted receipts', async () => {
     const fixture = await createApiFixture();
-    fixture.database.prepare("UPDATE physical_intakes SET status='approved_for_processing'").run();
+    fixture.database.prepare("UPDATE physical_intakes SET status='completed'").run();
 
-    const approved = await worker.fetch(createDeleteRequest(fixture), fixture.environment);
+    const completed = await worker.fetch(createDeleteRequest(fixture), fixture.environment);
     fixture.database.prepare("UPDATE physical_intakes SET status='under_review',deleted_at=?").bind(new Date().toISOString()).run();
     const deleted = await worker.fetch(createDeleteRequest(fixture), fixture.environment);
 
-    assert.deepEqual([approved.status, deleted.status], [409, 409]);
+    assert.deepEqual([completed.status, deleted.status], [409, 409]);
     assert.equal(fixture.database.prepare('SELECT current_pdf_id FROM physical_intakes').first().current_pdf_id, fixture.fileId);
 });

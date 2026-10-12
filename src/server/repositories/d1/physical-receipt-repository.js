@@ -44,7 +44,7 @@ async function mutateMetadata(database, input) {
         database.prepare(`UPDATE physical_intakes SET first_name=?,last_name=?,passport_number=?,student_number=?,application_type=?,
             application_date=?,metadata_version=metadata_version+CASE WHEN first_name<>? OR last_name<>? OR passport_number<>?
             OR application_date IS NOT ? THEN 1 ELSE 0 END,lock_version=lock_version+1,updated_at=?
-            WHERE id=? AND lock_version=? AND deleted_at IS NULL AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed'`)
+            WHERE id=? AND lock_version=? AND deleted_at IS NULL AND status<>'completed' AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed'`)
             .bind(metadata.first_name, metadata.last_name, metadata.passport_number, metadata.student_number, metadata.application_type,
                 metadata.application_date, metadata.first_name, metadata.last_name, metadata.passport_number, metadata.application_date,
                 input.now, input.intakeId, input.version),
@@ -84,7 +84,7 @@ export function createPhysicalReceiptRepository(database) {
         mutateMetadata: input => mutateMetadata(database, input),
         closeProcessing: input => closeProcessing(database, input),
         duplicates: input => database.prepare(`SELECT id,first_name,last_name,tracking_reference,application_date FROM physical_intakes
-            WHERE deleted_at IS NULL AND status<>'rejected' AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed'
+            WHERE deleted_at IS NULL AND status NOT IN ('rejected','completed') AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed'
             AND upper(trim(passport_number))=? AND application_type=? ORDER BY submitted_at DESC`)
             .bind(input.passport_number, input.application_type).all(),
         attempts: id => database.prepare(`SELECT * FROM physical_receipt_print_attempts WHERE intake_id=? ORDER BY created_at DESC,id DESC`).bind(id).all(),

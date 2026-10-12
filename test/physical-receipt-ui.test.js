@@ -38,14 +38,15 @@ test('metadata-first creation has no PDF prerequisite and requires explicit appl
     dom.window.close();
 });
 
-test('closed intake keeps receipt download/history and hides PDF mutation controls',()=>{
+test('closed intake keeps compact A4 download and hides removed management controls',()=>{
     const dom=new JSDOM('<main></main>');const root=dom.window.document.querySelector('main');
     const intake={id:'synthetic',tracking_reference:SNAPSHOT.tracking_reference,application_date:SNAPSHOT.application_date,processing_closed_at:'2026-10-12',processing_closure_reason:'Synthetic closure',status:'under_review',metadata_version:2};
 
     renderPhysicalIntakes(root,{view:'detail',detail:{intake,files:[],allowed_transitions:[],receipts:[{id:'receipt',document_version:1,state:'ready',metadata_version:1}]},printAttempts:[{id:'attempt',status:'unknown',blocks_new_attempt:1}]},{});
 
-    assert.match(root.textContent,/bu A4 güncel değil/);assert.match(root.textContent,/unknown/);assert.match(root.textContent,/ikamet izni onayı değildir/);
-    assert.ok(root.querySelector('a[href*=download]'));
+    assert.ok(root.querySelector('button.physical-receipt-download'));
+    assert.equal(root.querySelector('button.physical-receipt-download').textContent,'A4 İndir');
+    assert.doesNotMatch(root.textContent,/A4 Hazırla|A4 Yazdır|Manuel Yazdır|Ofis İşlemini Kapat|Kaydı Yenile|awaiting_content|unknown/);
     assert.equal([...root.querySelectorAll('button')].some(button=>['PDF Ekle','Bilgileri Düzenle','Baskıyı Güvenle İptal Et'].includes(button.textContent)),false);
     dom.window.close();
 });
@@ -115,5 +116,22 @@ test('new intake dialog preserves the queue DOM and never asks for a student num
     state.view = 'queue';
     renderPhysicalIntakes(root, state, handlers);
     assert.equal(root.querySelector('dialog'), null);
+    dom.window.close();
+});
+
+test('detail shows office approval before PDF upload and only a compact A4 download', () => {
+    const dom = new JSDOM('<main></main>');
+    const root = dom.window.document.querySelector('main');
+    const intake = { id: 'synthetic', first_name: 'Synthetic', last_name: 'Student', status: 'under_review', tracking_reference: 'ITU-26-ABCDEFG', metadata_version: 1 };
+    let downloads = 0;
+
+    renderPhysicalIntakes(root, { view: 'detail', detail: { intake, files: [], receipts: [], allowed_transitions: ['approved_for_processing', 'rejected'] } }, { downloadReceipt: () => { downloads++; } });
+    root.querySelector('.physical-receipt-download').click();
+
+    const buttons = [...root.querySelectorAll('button')];
+    assert.equal(buttons.find(button => button.textContent === 'Onaylandı').disabled, false);
+    assert.equal(buttons.find(button => button.textContent === 'Göçe Gönderildi').disabled, true);
+    assert.equal(downloads, 1);
+    assert.doesNotMatch(root.textContent, /Kaydı Yenile|Ofis İşlemini Kapat|A4 Hazırla|A4 Yazdır|Manuel Yazdır|Öğrenci no belirtilmedi/);
     dom.window.close();
 });

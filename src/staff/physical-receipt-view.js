@@ -62,40 +62,20 @@ function renderMetadataEdit(panel,state,handlers) {
     form.addEventListener('submit',event=>{event.preventDefault();handlers.saveMetadata(state.metadataDraft);}); panel.append(form);
 }
 
-function renderDocumentLinks(panel,intake,receipts) {
-    for (const receipt of receipts) {
-        const isStale=receipt.metadata_version!==intake.metadata_version;
-        appendText(panel,'p',`A4 v${receipt.document_version} · ${receipt.state}${isStale?' · Bilgiler değişti; bu A4 güncel değil.':''}`);
-        if (receipt.state==='ready') {
-            const link=appendText(panel,'a',`A4 v${receipt.document_version} PDF İndir`);
-            link.href=`/api/staff/physical-intakes/${intake.id}/receipts/${receipt.id}?download=1`;
-            link.target='_blank'; link.rel='noopener'; link.className='btn btn-outline';
-        }
-    }
-}
-
-/** Renders metadata, office closure and persistent print controls. @param {HTMLElement} panel Mount. @param {object} state Detail. @param {object} handlers Actions. @returns {void} Render. */
+/** Renders only metadata editing and a compact download action.
+ * @param {HTMLElement} panel Mount. @param {object} state Detail. @param {object} handlers Actions.
+ * @returns {void} Appends the receipt actions without print/closure controls.
+ */
 export function renderPhysicalReceiptControls(panel,state,handlers) {
     const intake=state.detail.intake;
     appendText(panel,'p',`Takip No: ${intake.tracking_reference || '—'} · Teslim Tarihi: ${intake.application_date || '—'}`);
-    if (!intake.deleted_at && !intake.processing_closed_at && intake.legacy_status!=='completed') {
+    if (!intake.deleted_at && !intake.processing_closed_at && intake.legacy_status!=='completed' && intake.status!=='completed') {
         if (intake.tracking_reference) appendButton(panel,'Bilgileri Düzenle',handlers.editMetadata);
-        appendButton(panel,'Ofis İşlemini Kapat',()=>handlers.processing('close'));
-    }
-    if (intake.processing_closed_at || intake.legacy_status==='completed') {
-        appendText(panel,'p',`Ofis işlemi kapalı: ${intake.processing_closure_reason || '—'}. Bu, ikamet izni onayı değildir.`);
-        if (state.receiptConfig?.staff_role==='admin' && !intake.deleted_at) appendButton(panel,'Ofis İşlemini Yeniden Aç',()=>handlers.processing('reopen'));
     }
     if (state.isEditingMetadata) renderMetadataEdit(panel,state,handlers);
     if (!intake.tracking_reference || intake.deleted_at) return;
-    appendButton(panel,'A4 Hazırla',handlers.prepareReceipt);
-    renderDocumentLinks(panel,intake,state.detail.receipts || []);
-    const attempts=state.printAttempts || [];
-    appendButton(panel,attempts.length?'A4 Yeniden Yazdır':'A4 Yazdır',()=>handlers.printReceipt(attempts.length?'reprint':'print'));
-    appendButton(panel,'Manuel Yazdır',()=>handlers.printReceipt('manual'));
-    for (const attempt of attempts) {
-        appendText(panel,'p',`Baskı: ${attempt.status}${attempt.blocks_new_attempt?' · Yeni baskı kilitli.':''}`);
-        if (attempt.status==='uploading') appendButton(panel,'Devam Et',()=>handlers.printAction(attempt.id,'resume'));
-        if (['uploading','queued'].includes(attempt.status)) appendButton(panel,'Baskıyı Güvenle İptal Et',()=>handlers.printAction(attempt.id,'cancel'));
-    }
+    const actions=panel.ownerDocument.createElement('div'); actions.className='physical-receipt-actions';
+    const download=appendButton(actions,'A4 İndir',handlers.downloadReceipt);
+    download.classList.add('physical-receipt-download');
+    panel.append(actions);
 }

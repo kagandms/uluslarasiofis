@@ -1,3 +1,4 @@
+import { PHYSICAL_STATUS_LABELS } from '../../config/physical-statuses.js';
 import { ApiError } from './errors.js';
 import { MAX_PHYSICAL_PDF_BYTES } from '../../config/physical-document-limits.js';
 
@@ -10,9 +11,11 @@ function requireText(value, { field, maxLength }) {
 
 export { MAX_PHYSICAL_PDF_BYTES };
 export const PHYSICAL_STATUS_FILTERS = Object.freeze({
-    all: null, under_review: ['under_review'], approved: ['approved_for_processing'], rejected: ['rejected'], deleted: null
+    all: null, under_review: ['under_review'], approved: ['approved_for_processing'],
+    sent_to_migration: ['sent_to_migration'], migration_approved: ['migration_approved'], completed: ['completed'], rejected: ['rejected'], deleted: null
 });
-const REVIEW_STATUSES = ['under_review', 'approved_for_processing', 'rejected'];
+const REVIEW_STATUSES = Object.keys(PHYSICAL_STATUS_LABELS);
+const PDF_REQUIRED_STATUSES = ['sent_to_migration', 'migration_approved', 'completed'];
 
 /** @param {unknown} value Record version. @returns {number} Valid version. @throws {ApiError} Invalid version. */
 export function requirePhysicalVersion(value) {
@@ -47,7 +50,7 @@ export function validatePhysicalIntake(body) {
 export function listPhysicalTransitions(intake, pdf) {
     if (intake.deleted_at || intake.processing_closed_at || intake.legacy_status === 'completed') return [];
     return REVIEW_STATUSES.filter(status => status !== intake.status
-        && (status !== 'approved_for_processing' || pdf?.upload_status === 'finalized'));
+        && (!PDF_REQUIRED_STATUSES.includes(status) || pdf?.upload_status === 'finalized'));
 }
 
 /** Validates a rejection reason. @param {unknown} value Reason. @returns {string} Bounded reason. @throws {ApiError} Missing or short reason. */

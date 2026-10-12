@@ -83,3 +83,12 @@ body.dark-mode .physical-intake-panel {
 .physical-receipt-dialog > p { margin: 0; }
 .physical-receipt-dialog .physical-intake-form { max-width: none; }
 @media (max-width: 640px) { .physical-receipt-dialog { padding: 18px; } }
+
+.physical-receipt-actions { display: flex; align-items: center; gap: .5rem; }
+.physical-intake-panel .physical-receipt-download {
+    min-height: 36px;
+    padding: 6px 12px;
+    font-size: .875rem;
+    width: auto;
+}
+.physical-status-actions .btn[aria-current=true] { outline: 2px solid var(--physical-focus); outline-offset: 2px; }

@@ -43,7 +43,7 @@ async function updateIntake(database, input) {
         database.prepare(`INSERT INTO audit_events(id,event_type,actor_type,actor_staff_id,request_id,safe_metadata_json,created_at)
             SELECT ?,?,'staff',?,?,?,? WHERE changes()=1`)
             .bind(crypto.randomUUID(), `physical_intake.${input.action}`, input.staffId,
-                input.requestId, JSON.stringify({ physicalIntakeId: input.id }), input.now)
+                input.requestId, JSON.stringify({ physicalIntakeId: input.id, ...(input.action === 'status' ? { status: input.value } : {}) }), input.now)
     ]);
     return result[0].meta.changes === 1;
 }
@@ -53,7 +53,7 @@ async function reserveFile(database, input) {
         (id,intake_id,revision_number,storage_key,original_filename,byte_size,sha256,upload_status,uploaded_at,created_by_staff_id)
         SELECT ?,id,(SELECT coalesce(max(revision_number),0)+1 FROM physical_intake_files WHERE intake_id=?),
             ?,?,?,?,'uploading',?,? FROM physical_intakes
-        WHERE id=? AND lock_version=? AND deleted_at IS NULL AND status='under_review' AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed' RETURNING *`)
+        WHERE id=? AND lock_version=? AND deleted_at IS NULL AND status IN ('under_review','approved_for_processing') AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed' RETURNING *`)
         .bind(input.fileId, input.id, input.storageKey, input.filename, input.byteSize, input.sha256,
             input.now, input.staffId, input.id, input.version).first();
 }
@@ -61,7 +61,7 @@ async function reserveFile(database, input) {
 async function finalizeFile(database, input) {
     const result = await database.batch([
         database.prepare(`UPDATE physical_intakes SET current_pdf_id=?,lock_version=lock_version+1,updated_at=?
-            WHERE id=? AND lock_version=? AND deleted_at IS NULL AND status='under_review' AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed'
+            WHERE id=? AND lock_version=? AND deleted_at IS NULL AND status IN ('under_review','approved_for_processing') AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed'
               AND EXISTS(SELECT 1 FROM physical_intake_files WHERE id=? AND intake_id=physical_intakes.id AND upload_status='uploading')`)
             .bind(input.fileId, input.now, input.id, input.version, input.fileId),
         database.prepare(`UPDATE physical_intake_files SET upload_status='finalized' WHERE id=? AND changes()=1`).bind(input.fileId),
@@ -76,7 +76,7 @@ async function finalizeFile(database, input) {
 async function removeCurrentPdf(database, input) {
     const result = await database.batch([
         database.prepare(`UPDATE physical_intakes SET current_pdf_id=NULL,lock_version=lock_version+1,updated_at=?
-            WHERE id=? AND lock_version=? AND current_pdf_id=? AND deleted_at IS NULL AND status='under_review' AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed'`)
+            WHERE id=? AND lock_version=? AND current_pdf_id=? AND deleted_at IS NULL AND status IN ('under_review','approved_for_processing') AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed'`)
             .bind(input.now, input.id, input.version, input.fileId),
         database.prepare(`INSERT INTO audit_events(id,event_type,actor_type,actor_staff_id,request_id,safe_metadata_json,created_at)
             SELECT ?,'physical_intake.pdf_removed','staff',?,?,?,? WHERE changes()=1`)

@@ -453,7 +453,7 @@ test('forward migration preserves old duplicate passports and allows unrelated n
     const {TestD1Database}=await import('./helpers/d1-test-binding.js');
     const {readFileSync,readdirSync}=await import('node:fs');
     const database=new TestD1Database();const directory=new URL('../migrations/',import.meta.url);
-    for(const filename of readdirSync(directory).filter(name=>name.endsWith('.sql') && name!=='0020_physical_intake_receipts.sql').sort()) database.exec(readFileSync(new URL(filename,directory),'utf8'));
+    for(const filename of readdirSync(directory).filter(name=>name.endsWith('.sql') && name<'0020_physical_intake_receipts.sql').sort()) database.exec(readFileSync(new URL(filename,directory),'utf8'));
     await createPortFixture(database,{});
     for(const id of ['old-one','old-two'])database.prepare(`INSERT INTO physical_intakes(id,student_number,first_name,last_name,passport_number,application_type,submitted_at,updated_at,created_by_staff_id,status)
         VALUES(?,'','Synthetic','Legacy','PUNCT-UATED','initial','2026-01-01','2026-01-01','staff','under_review')`).bind(id).run();
@@ -551,7 +551,7 @@ test('restored local SQLite data retains legacy fields when the additive receipt
     const directory=mkdtempSync(join(tmpdir(),'physical-receipt-restore-'));const database=new TestD1Database();
     try {
         const migrations=new URL('../migrations/',import.meta.url);
-        for(const filename of readdirSync(migrations).filter(name=>name.endsWith('.sql') && name!=='0020_physical_intake_receipts.sql').sort()) database.exec(readFileSync(new URL(filename,migrations),'utf8'));
+        for(const filename of readdirSync(migrations).filter(name=>name.endsWith('.sql') && name<'0020_physical_intake_receipts.sql').sort()) database.exec(readFileSync(new URL(filename,migrations),'utf8'));
         await createPortFixture(database,{});
         database.exec(`INSERT INTO physical_intakes(id,student_number,first_name,last_name,passport_number,application_type,submitted_at,updated_at,created_by_staff_id,status,legacy_status)
             VALUES('restored','SYNTHETIC','Before','Migration','RESTORE-TEST','renewal','2026-01-01','2026-01-01','staff','approved_for_processing','completed')`);
@@ -605,4 +605,51 @@ test('a deleted intake cannot recycle its consumed reference or retain receipt s
     assert.equal(replay.status,409);
     assert.equal((await context.database.prepare('SELECT count(*) AS total FROM physical_intake_receipts').first()).total,0);
     assert.equal((await context.database.prepare('SELECT consumed_intake_id FROM physical_reference_reservations').first()).consumed_intake_id,registration.intake.id);
+});
+
+test('office approval needs no PDF and later stages appear in public tracking after PDF upload', async () => {
+    const context = await fixture();
+    const registration = await register(context);
+    const id = registration.intake.id;
+    const change = async status => {
+        const current = await context.database.prepare('SELECT lock_version FROM physical_intakes WHERE id=?').bind(id).first();
+        return json(context, `/${id}/status`, { lock_version: current.lock_version, status }, { method: 'PATCH' });
+    };
+
+    const approved = await change('approved_for_processing');
+    const premature = await change('sent_to_migration');
+    const pdfResponse = await portRequest(context, `${BASE}/${id}/pdf`, { method: 'POST', cookie: context.staffCookie,
+        headers: { 'Content-Type': 'application/pdf', 'If-Match': String((await context.database.prepare('SELECT lock_version FROM physical_intakes WHERE id=?').bind(id).first()).lock_version), 'X-Pdf-Id': crypto.randomUUID() }, body: await pdfBytes() });
+
+    assert.equal(approved.status, 200);
+    assert.equal(premature.status, 409);
+    assert.equal(pdfResponse.status, 200);
+    for (const status of ['sent_to_migration', 'migration_approved', 'completed']) {
+        const changed = await change(status);
+        assert.equal(changed.status, 200, await changed.clone().text());
+        const tracked = await portRequest(context, '/api/public/physical-intakes/tracking-lookup', { method: 'POST', json: { tracking_reference: registration.intake.tracking_reference } });
+        assert.equal((await tracked.json()).office_status, status);
+    }
+    const filter = await json(context, '/query', { status: 'completed', page: 1, page_size: 25 });
+    assert.equal((await filter.json()).items[0].id, id);
+    assert.equal((await context.database.prepare('SELECT current_pdf_id FROM physical_intakes WHERE id=?').bind(id).first()).current_pdf_id !== null, true);
+});
+
+test('completed cases release the active identity but cannot reopen over a new case', async () => {
+    const context = await fixture();
+    const first = await register(context);
+    const id = first.intake.id;
+    const fileId = crypto.randomUUID();
+    await portRequest(context, `${BASE}/${id}/pdf`, { method: 'POST', cookie: context.staffCookie,
+        headers: { 'Content-Type': 'application/pdf', 'If-Match': '1', 'X-Pdf-Id': fileId }, body: await pdfBytes() });
+    const closed = await json(context, `/${id}/status`, { lock_version: 2, status: 'completed' }, { method: 'PATCH' });
+    assert.equal(closed.status, 200);
+
+    const second = await register(context);
+    const reopened = await json(context, `/${id}/status`, { lock_version: 3, status: 'under_review' }, { method: 'PATCH' });
+
+    assert.notEqual(second.intake.id, id);
+    assert.equal(reopened.status, 409);
+    assert.equal((await context.database.prepare('SELECT status FROM physical_intakes WHERE id=?').bind(id).first()).status, 'completed');
+    assert.equal((await context.database.prepare('SELECT count(*) AS total FROM physical_intake_files').first()).total, 1);
 });
