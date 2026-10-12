@@ -129,9 +129,23 @@ async function createReceipt(context, preview) {
 async function createReceiptPdf(context, preview) {
     let message;
     try {
-        const receipt = await saveAndPreparePhysicalReceipt(context);
-        context.state.receiptDelivery = deliverPhysicalReceiptPdf({ document: context.root.ownerDocument,
-            preview, intake: context.state.detail.intake, receipt });
+        let delivered = false;
+        const deliver = bytes => {
+            if (delivered) return;
+            delivered = true;
+            const blobUrl = bytes ? URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })) : null;
+            context.state.receiptDelivery = deliverPhysicalReceiptPdf({
+                document: context.root.ownerDocument,
+                preview,
+                intake: context.state.detail.intake,
+                receipt: context.state.receipt,
+                blobUrl
+            });
+        };
+        const receipt = await saveAndPreparePhysicalReceipt(context, {
+            onBytesReady: bytes => deliver(bytes)
+        });
+        deliver();
         message = context.state.receiptDelivery.hasPreview
             ? 'Öğrenci eklendi. Bilgilendirme PDF’i yan sekmede açıldı ve indirme başlatıldı.'
             : 'Öğrenci eklendi. İndirme başlatıldı; PDF sekmesi engellendiyse aşağıdaki PDF’i Aç bağlantısını kullanın.';
@@ -248,13 +262,21 @@ export function initializePhysicalIntakeManager(root) {
         state: { view: 'queue', query: { q: '', status: 'all', page: 1, page_size: 25 }, result: null, detail: null, message: '' } };
     context.handlers = createHandlers(context);
     root.textContent = 'Fiziksel başvuru erişimi kontrol ediliyor…';
+    import('../services/physical-receipt-pdf.js')
+        .then(({ preloadPhysicalReceiptAssets }) => preloadPhysicalReceiptAssets())
+        .catch(() => {});
     root.ownerDocument.addEventListener('workspace:view-changed', event => {
         if (event.detail?.viewName !== 'physical') {
             removePhysicalPdfDialog(context); closePhysicalReceiptDialog(context.root);
             if (context.state.view === 'create' && context.state.isMetadataFirst) context.state.view = 'queue';
         }
-        if (event.detail?.viewName === 'physical' && !context.state.result && context.state.view === 'queue') {
-            execute(context, () => loadQueue(context));
+        if (event.detail?.viewName === 'physical') {
+            import('../services/physical-receipt-pdf.js')
+                .then(({ preloadPhysicalReceiptAssets }) => preloadPhysicalReceiptAssets())
+                .catch(() => {});
+            if (!context.state.result && context.state.view === 'queue') {
+                execute(context, () => loadQueue(context));
+            }
         }
     });
 }

@@ -19,9 +19,13 @@ export function deliverPhysicalReceiptPdf(options) {
     const previewUrl = `${base}?preview=1`;
     const downloadUrl = `${base}?download=1`;
     const hasPreview = Boolean(options.preview && !options.preview.closed);
-    if (hasPreview) options.preview.location.replace(previewUrl);
+    const targetUrl = options.blobUrl || previewUrl;
+    if (hasPreview) {
+        try { options.preview.location.replace(targetUrl); }
+        catch { options.preview.location.href = targetUrl; }
+    }
     const link = options.document.createElement('a');
-    link.href = downloadUrl;
+    link.href = options.blobUrl || downloadUrl;
     link.download = `${options.intake.tracking_reference}.pdf`;
     link.hidden = true;
     options.document.body.append(link);

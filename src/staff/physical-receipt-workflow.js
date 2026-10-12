@@ -58,12 +58,13 @@ export async function recoverPhysicalReceiptRegistration(context) {
     }
 }
 
-/** Prepares/resumes a stored snapshot; renderer failure never removes the student. @param {object} context Workspace. @returns {Promise<object>} Ready immutable A4. @throws {Error} Render/storage failure. */
-export async function preparePhysicalReceiptDocument(context) {
+/** Prepares/resumes a stored snapshot; renderer failure never removes the student. @param {object} context Workspace. @param {object} [options] Hooks. @returns {Promise<object>} Ready immutable A4. @throws {Error} Render/storage failure. */
+export async function preparePhysicalReceiptDocument(context, options = {}) {
     const intake=context.state.detail.intake;
     const documents=context.state.detail.receipts || [];
-    const current=documents.find(receipt=>receipt.metadata_version===intake.metadata_version && receipt.state!=='purged' && Boolean(JSON.parse(receipt.snapshot_json).portal_origin));
-    let receipt=current ? await context.api.document(intake.id,current.id) : null;
+    const readSnapshot = receipt => receipt.snapshot || (receipt.snapshot_json ? JSON.parse(receipt.snapshot_json) : null);
+    const current=documents.find(receipt=>receipt.metadata_version===intake.metadata_version && receipt.state!=='purged' && Boolean(readSnapshot(receipt)?.portal_origin));
+    let receipt=current ? (current.snapshot ? current : await context.api.document(intake.id,current.id)) : null;
     if (receipt?.is_expired) receipt=null;
     if (!receipt) {
         context.state.documentCreationId ||= crypto.randomUUID();
@@ -74,6 +75,9 @@ export async function preparePhysicalReceiptDocument(context) {
     if (!receipt.snapshot.portal_origin) throw new Error('Portal adresi yapılandırılmalı. Öğrenci kaydı korunuyor; adres hazır olunca yeni A4 hazırlayın.');
     const { renderPhysicalReceiptPdf }=await import('../services/physical-receipt-pdf.js');
     const bytes=await renderPhysicalReceiptPdf(receipt.snapshot);
+    if (typeof options.onBytesReady === 'function') {
+        options.onBytesReady(bytes);
+    }
     context.state.receipt=await context.api.uploadDocument(intake.id,receipt.id,bytes);
     context.state.documentCreationId=null;
     return context.state.receipt;
@@ -94,13 +98,20 @@ export async function sendPhysicalReceiptPrint(context,decision={decision:'print
 
 /** Saves and prepares the A4 without switching to the intake detail view or printing.
  * @param {object} context Workspace state and API.
+ * @param {object} [options] Hooks.
  * @returns {Promise<object>} Ready receipt. @throws {Error} Registration or document preparation failure.
  */
-export async function saveAndPreparePhysicalReceipt(context) {
+export async function saveAndPreparePhysicalReceipt(context, options = {}) {
     if (!context.state.savedIntakeId) {
         const registered = await savePhysicalReceiptDraft(context);
         context.state.savedIntakeId = registered.intake.id;
+        if (registered.receipts?.length) {
+            context.state.detail = registered;
+        } else {
+            context.state.detail = await context.api.detail(context.state.savedIntakeId);
+        }
+    } else {
+        context.state.detail = await context.api.detail(context.state.savedIntakeId);
     }
-    context.state.detail = await context.api.detail(context.state.savedIntakeId);
-    return preparePhysicalReceiptDocument(context);
+    return preparePhysicalReceiptDocument(context, options);
 }

@@ -37,7 +37,8 @@ async function readReceiptFontStyles(document) {
         const font = new FontFace(family, bytes, { weight: '100 900' });
         await font.load();
         document.fonts.add(font);
-        const fontUrl = await readFontDataUrl(new Blob([bytes], { type: 'font/ttf' }));
+        const blob = new Blob([bytes], { type: 'font/ttf' });
+        const fontUrl = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(blob) : await readFontDataUrl(blob);
         return `@font-face{font-family:"${family}";src:url("${fontUrl}");font-weight:100 900;}`;
     }));
     await document.fonts.ready;
@@ -61,11 +62,15 @@ function readFontDataUrl(blob) {
 
 function requireVisibleCanvas(canvas) {
     const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    const requiredVisible = canvas.width * canvas.height * 0.005;
     let visiblePixels = 0;
     for (let index = 0; index < pixels.length; index += 4) {
-        if (pixels[index] < 220 || pixels[index + 1] < 220 || pixels[index + 2] < 220) visiblePixels++;
+        if (pixels[index] < 220 || pixels[index + 1] < 220 || pixels[index + 2] < 220) {
+            visiblePixels++;
+            if (visiblePixels >= requiredVisible) return;
+        }
     }
-    if (visiblePixels < canvas.width * canvas.height * 0.005) throw new Error('A4 görüntüsü boş veya eksik. Tekrar hazırlayın.');
+    throw new Error('A4 görüntüsü boş veya eksik. Tekrar hazırlayın.');
 }
 
 /** Renders the persisted snapshot with local assets into a single portrait A4. @param {object} snapshot Server snapshot.
