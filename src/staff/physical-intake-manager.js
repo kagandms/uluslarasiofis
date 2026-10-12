@@ -1,4 +1,6 @@
-import { startPhysicalReceiptDraft, assignPhysicalReference, savePhysicalReceiptDraft, recoverPhysicalReceiptRegistration, preparePhysicalReceiptDocument, sendPhysicalReceiptPrint } from './physical-receipt-workflow.js';
+import { closePhysicalReceiptDialog } from './physical-receipt-dialog.js';
+import { reservePhysicalReceiptPreview, deliverPhysicalReceiptPdf } from './physical-receipt-delivery.js';
+import { startPhysicalReceiptDraft, assignPhysicalReference, saveAndPreparePhysicalReceipt, recoverPhysicalReceiptRegistration, preparePhysicalReceiptDocument, sendPhysicalReceiptPrint } from './physical-receipt-workflow.js';
 import { splitPdfPages } from '../services/split-pdf-pages.js';
 import { recognizePhysicalApplicationForm } from './physical-form-ocr.js';
 import { IS_PHYSICAL_INTAKE_ENABLED, MAX_PHYSICAL_PDF_BYTES } from '../config/physical-intake-policy.js';
@@ -22,7 +24,7 @@ function setBusy(context, isBusy) {
 
 function showMessage(context, message) {
     context.state.message = message;
-    const notice = context.root.querySelector('#physical-intake-notice');
+    const notice = context.root.querySelector('#physical-receipt-dialog-notice') || context.root.querySelector('#physical-intake-notice');
     if (notice) notice.textContent = message;
 }
 
@@ -62,10 +64,10 @@ async function loadQueue(context) {
         context.state.receiptConfig = { create_enabled: false };
     }
     const recovered = await recoverPhysicalReceiptRegistration(context);
-    if (recovered) { await openDetail(context, recovered.intake.id); showMessage(context, 'Öğrenci kaydı kurtarıldı. A4 işlemlerine devam edebilirsiniz.'); return; }
+    if (recovered) context.state.savedIntakeId = recovered.intake.id;
     context.state.result = await context.api.query(context.state.query);
     context.state.view = 'queue';
-    context.state.message = 'Fiziksel teslimler — son güncellenen kayıtlar önce gösterilir.';
+    context.state.message = recovered ? 'Öğrenci kaydı kurtarıldı. A4 işlemlerine listeden devam edebilirsiniz.' : 'Fiziksel teslimler — son güncellenen kayıtlar önce gösterilir.';
     render(context);
 }
 
@@ -110,19 +112,9 @@ async function openCreate(context) {
     context.root.ownerDocument.getElementById('pdf-merger-modal-overlay').dataset.physicalIntakeId='draft';
 }
 
-async function createReceipt(context) {
+async function createReceipt(context, preview) {
     if (context.state.isMetadataFirst) {
-        const registered = await savePhysicalReceiptDraft(context);
-        await openDetail(context, registered.intake.id);
-        showMessage(context, 'Öğrenci eklendi. A4 hazırlanıyor…');
-        try {
-            const attempt = await sendPhysicalReceiptPrint(context);
-            await openDetail(context, registered.intake.id);
-            showMessage(context, `Öğrenci eklendi. ${describeReceiptPrint(attempt)}`);
-        } catch (error) {
-            console.error('Saved student receipt print failed.', { errorName: error.name, code: error.code });
-            showMessage(context, `Öğrenci eklendi; A4 baskısı tamamlanmadı. ${error.message}`);
-        }
+        await createReceiptPdf(context, preview);
         return;
     }
     if (!context.state.preparedPdf) throw new Error('Önce PDF oluşturun.');
@@ -133,6 +125,25 @@ async function createReceipt(context) {
     showToast('İşlem başarılı. Başvuru ve PDF kaydedildi.', 'success');
     await loadQueue(context);
     showMessage(context, 'İşlem başarılı. Başvuru ve PDF kaydedildi. Durum: İncelemede.');
+}
+
+async function createReceiptPdf(context, preview) {
+    let message;
+    try {
+        const receipt = await saveAndPreparePhysicalReceipt(context);
+        context.state.receiptDelivery = deliverPhysicalReceiptPdf({ document: context.root.ownerDocument,
+            preview, intake: context.state.detail.intake, receipt });
+        message = context.state.receiptDelivery.hasPreview
+            ? 'Öğrenci eklendi. Bilgilendirme PDF’i yan sekmede açıldı ve indirme başlatıldı.'
+            : 'Öğrenci eklendi. İndirme başlatıldı; PDF sekmesi engellendiyse aşağıdaki PDF’i Aç bağlantısını kullanın.';
+    } catch (error) {
+        preview?.close();
+        console.error('Receipt PDF delivery failed.', { errorName: error.name, code: error.code });
+        if (!context.state.savedIntakeId) throw error;
+        message = `Öğrenci eklendi; bilgilendirme PDF’i tamamlanamadı. Kaydı listeden açıp A4 hazırlayabilirsiniz. ${error.message}`;
+    }
+    await loadQueue(context);
+    showMessage(context, message);
 }
 
 async function mutateReceipt(context, options) {
@@ -206,13 +217,19 @@ function createHandlers(context) {
     const run = work => execute(context, work);
     return {
         back: () => {
+            if (context.isBusy) return;
+            if (context.state.view === 'create' && context.state.isMetadataFirst) { context.state.view = 'queue'; render(context); return; }
             if (context.state.view === 'create' && !window.confirm('Henüz kaydedilmemiş PDF ve bilgiler bırakılarak listeye dönülsün mü?')) return;
             run(() => loadQueue(context));
         }, newReceipt: () => run(() => openCreate(context)),
         open: id => run(() => openDetail(context, id)),
         search: query => run(async () => { context.state.query = { ...context.state.query, ...query, page: 1 }; await loadQueue(context); }),
         page: page => run(async () => { context.state.query.page = page; await loadQueue(context); }),
-        create: () => run(() => createReceipt(context)),
+        create: () => {
+            if (context.isBusy) return;
+            const preview = context.state.isMetadataFirst ? reservePhysicalReceiptPreview(context.root.ownerDocument.defaultView) : null;
+            run(() => createReceipt(context, preview));
+        },
         ...createMetadataHandlers(context,run),
         ...createPrintHandlers(context,run),
         mutate: (intake, action, status) => run(() => mutateReceipt(context, { intake, action, status })),
@@ -233,7 +250,10 @@ export function initializePhysicalIntakeManager(root) {
     context.handlers = createHandlers(context);
     root.textContent = 'Fiziksel başvuru erişimi kontrol ediliyor…';
     root.ownerDocument.addEventListener('workspace:view-changed', event => {
-        if (event.detail?.viewName !== 'physical') removePhysicalPdfDialog(context);
+        if (event.detail?.viewName !== 'physical') {
+            removePhysicalPdfDialog(context); closePhysicalReceiptDialog(context.root);
+            if (context.state.view === 'create' && context.state.isMetadataFirst) context.state.view = 'queue';
+        }
         if (event.detail?.viewName === 'physical' && !context.state.result && context.state.view === 'queue') {
             execute(context, () => loadQueue(context));
         }

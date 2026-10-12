@@ -75,3 +75,21 @@ test('a lost print response retries the same attempt UUID without rendering a di
 
     assert.equal(requests[0].creation_id,requests[1].creation_id);assert.equal(result.status,'queued');assert.equal(context.state.printCreationId,null);
 });
+
+test('creation prepares the stored PDF without entering detail or sending a print job', async () => withStorage(async () => {
+    const { saveAndPreparePhysicalReceipt } = await import('../src/staff/physical-receipt-workflow.js');
+    const context = createContext();
+    let registrations = 0;
+    const receipt = { id: 'receipt', state: 'ready' };
+    context.api.registerMetadata = async () => { registrations++; return { intake: { id: 'saved' } }; };
+    context.api.detail = async () => ({ intake: { id: 'saved', metadata_version: 1 }, receipts: [{ ...receipt, metadata_version: 1, snapshot_json: JSON.stringify({ portal_origin: 'https://portal.test' }) }] });
+    context.api.document = async () => receipt;
+    context.api.printDocument = async () => { assert.fail('creation must not send a printer job'); };
+
+    assert.equal(await saveAndPreparePhysicalReceipt(context), receipt);
+    assert.equal(await saveAndPreparePhysicalReceipt(context), receipt);
+
+    assert.equal(context.state.view, 'create');
+    assert.equal(context.state.savedIntakeId, 'saved');
+    assert.equal(registrations, 1);
+}));

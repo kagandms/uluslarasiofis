@@ -1,3 +1,4 @@
+import { renderPhysicalReceiptDialog, closePhysicalReceiptDialog } from './physical-receipt-dialog.js';
 import { renderPhysicalReceiptDraft, renderPhysicalReceiptControls } from './physical-receipt-view.js';
 import { createApplicationQueueTable, formatQueueDate } from './application-queue-table.js';
 import { buildPhysicalPdfUrl } from './physical-intake-client.js';
@@ -69,6 +70,13 @@ function createPagination(document, pagination, handlers) {
 function renderQueue(document, panel, options) {
     const { state, handlers } = options;
     panel.append(button(document, 'Fiziksel Dosya Gir', handlers.newReceipt), createFilters(document, state, handlers));
+    if (state.receiptDelivery) {
+        const links = document.createElement('div'); links.className = 'physical-pdf-actions';
+        for (const [label, url] of [['PDF’i Aç', state.receiptDelivery.previewUrl], ['PDF İndir', state.receiptDelivery.downloadUrl]]) {
+            const link = text(document, 'a', label); link.href = url; link.target = '_blank'; link.rel = 'noopener'; link.className = 'btn btn-outline'; links.append(link);
+        }
+        panel.append(links);
+    }
     if (!state.result?.items.length) { panel.append(text(document, 'p', 'Görüntülenecek fiziksel teslim bulunamadı.')); return; }
     panel.append(createApplicationQueueTable(document, state.result.items, { statusLabel: status => STATUS_LABELS[status] || status,
         headers: ['Takip No','Ad Soyad','Teslim Tarihi','Ofis Durumu','PDF','A4',''],
@@ -106,7 +114,7 @@ function createDraftPreview(document, state) {
     preview.href = state.previewUrl;
     preview.target = '_blank';
     preview.rel = 'noopener';
-    section.append(preview, text(document, 'p', 'Ad, soyad ve pasaport numarasını başvuru formuyla karşılaştırın. Öğrenci numarası isteğe bağlıdır.'));
+    section.append(preview, text(document, 'p', 'Ad, soyad ve pasaport numarasını başvuru formuyla karşılaştırın.'));
     return section;
 }
 
@@ -117,7 +125,6 @@ function renderCreate(document, panel, options) {
     panel.append(createDraftPreview(document, state));
     const form = document.createElement('form');
     form.className = 'physical-intake-form';
-    createField(document, form, { name: 'student_number', label: 'Öğrenci No (isteğe bağlı)', draft: state.draft });
     [['first_name', 'Ad'], ['last_name', 'Soyad'], ['passport_number', 'Pasaport No']].forEach(([name, label]) => createField(document, form, { name, label, draft: state.draft }));
     const type = select(document, [['initial', 'İlk başvuru'], ['renewal', 'Uzatma']]);
     type.id = 'physical-application-type';
@@ -218,6 +225,8 @@ function renderDetail(document, panel, options) {
  * @returns {void} Replaces the workspace contents.
  */
 export function renderPhysicalIntakes(root, state, handlers) {
+    if (state.view === 'create' && state.isMetadataFirst) { renderPhysicalReceiptDialog(root, state, handlers); return; }
+    closePhysicalReceiptDialog(root);
     const document = root.ownerDocument;
     const panel = document.createElement('div');
     panel.className = 'staff-applications-queue physical-intake-panel';

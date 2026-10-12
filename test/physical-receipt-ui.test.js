@@ -90,3 +90,30 @@ test('metadata edits warn about future dates while preserving the assigned track
     assert.match(root.textContent,/İleri bir teslim tarihi/);assert.match(root.textContent,/ITU-26-ABCDEFG/);assert.equal(state.metadataDraft.application_date,'2027-01-01');
     dom.window.close();
 });
+
+test('new intake dialog preserves the queue DOM and never asks for a student number', () => {
+    const dom = new JSDOM('<main></main>');
+    const root = dom.window.document.querySelector('main');
+    const state = { view: 'queue', result: { items: [], pagination: {} }, query: { q: '', status: 'all' } };
+    const handlers = { newReceipt: () => {}, search: () => {}, back: () => {} };
+    renderPhysicalIntakes(root, state, handlers);
+    const background = root.firstElementChild;
+    const search = root.querySelector('input');
+    search.value = 'Preserved search';
+
+    Object.assign(state, { view: 'create', isMetadataFirst: true, draft: { application_date: '2026-10-12' }, receiptConfig: { today: '2026-10-12' } });
+    renderPhysicalIntakes(root, state, handlers);
+    state.reservation = { tracking_reference: 'ITU-26-ABCDEFG', application_date: '2026-10-12' };
+    renderPhysicalIntakes(root, state, handlers);
+
+    assert.equal(root.firstElementChild, background);
+    assert.equal(root.querySelector('input'), search);
+    assert.equal(search.value, 'Preserved search');
+    assert.ok(root.querySelector('dialog[open]'));
+    assert.equal(root.querySelector('input[name=student_number]'), null);
+    assert.equal(root.querySelectorAll('dialog').length, 1);
+    state.view = 'queue';
+    renderPhysicalIntakes(root, state, handlers);
+    assert.equal(root.querySelector('dialog'), null);
+    dom.window.close();
+});

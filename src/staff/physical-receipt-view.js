@@ -18,7 +18,7 @@ function appendMetadataField(form,options) {
 }
 
 function appendMetadataFields(form,options) {
-    for (const [name,label] of [['application_date','Başvuru / Teslim Tarihi'],['first_name','Ad'],['last_name','Soyad'],['passport_number','Pasaport No'],['student_number','Öğrenci No (isteğe bağlı)']]) appendMetadataField(form,{...options,name,label});
+    for (const [name,label] of [['application_date','Başvuru / Teslim Tarihi'],['first_name','Ad'],['last_name','Soyad'],['passport_number','Pasaport No']]) appendMetadataField(form,{...options,name,label});
     const type=form.ownerDocument.createElement('select'); type.id='receipt-application-type'; type.required=true; type.className='glass-input';
     for (const [value,label] of [['','Başvuru türünü seçin'],['initial','İlk başvuru'],['renewal','Uzatma']]) {
         const option=appendText(type,'option',label); option.value=value;
@@ -30,7 +30,8 @@ function appendMetadataFields(form,options) {
 
 /** Renders the information-first form. @param {HTMLElement} panel Mount. @param {object} state Draft. @param {object} handlers Actions. @returns {void} Render. */
 export function renderPhysicalReceiptDraft(panel,state,handlers) {
-    appendButton(panel,'Listeye Dön',handlers.back); appendText(panel,'h3','Öğrenci Bilgileri');
+    appendButton(panel,'Kapat',handlers.back);
+    const heading=appendText(panel,'h3','Öğrenci Bilgileri'); heading.id='physical-receipt-dialog-title';
     const form=panel.ownerDocument.createElement('form'); form.className='physical-intake-form';
     const warning=panel.ownerDocument.createElement('p'); warning.setAttribute('role','status');
     const reference=panel.ownerDocument.createElement('p'); reference.dir='ltr';

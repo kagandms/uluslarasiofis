@@ -4,6 +4,8 @@ const PENDING_REGISTRATION_KEY='physical-receipt-pending-registration';
 /** Starts a metadata-first draft without touching PDF/QR state. @param {object} context Workspace. @returns {void} Draft initialized. */
 export function startPhysicalReceiptDraft(context) {
     context.state.registrationId=crypto.randomUUID();
+    context.state.savedIntakeId=null; context.state.receipt=null; context.state.documentCreationId=null;
+    context.state.printCreationId=null; context.state.printOperationKey=null; context.state.receiptDelivery=null;
     context.state.reservation=null; context.state.registrationBody=null; context.state.duplicateMatches=[];
     context.state.isMetadataFirst=true; context.state.view='create';
     context.state.draft={application_date:context.state.receiptConfig.today,first_name:'',last_name:'',passport_number:'',student_number:'',application_type:''};
@@ -82,4 +84,17 @@ export async function sendPhysicalReceiptPrint(context,decision={decision:'print
     const result=await context.api.printDocument(context.state.detail.intake.id,receipt.id,{creation_id:context.state.printCreationId,...decision});
     context.state.printCreationId=null; context.state.printOperationKey=null;
     return result;
+}
+
+/** Saves and prepares the A4 without switching to the intake detail view or printing.
+ * @param {object} context Workspace state and API.
+ * @returns {Promise<object>} Ready receipt. @throws {Error} Registration or document preparation failure.
+ */
+export async function saveAndPreparePhysicalReceipt(context) {
+    if (!context.state.savedIntakeId) {
+        const registered = await savePhysicalReceiptDraft(context);
+        context.state.savedIntakeId = registered.intake.id;
+    }
+    context.state.detail = await context.api.detail(context.state.savedIntakeId);
+    return preparePhysicalReceiptDocument(context);
 }
