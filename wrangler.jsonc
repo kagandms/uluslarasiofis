@@ -93,7 +93,7 @@
       "vars": {
         "APP_ENV": "production",
         "PHYSICAL_INTAKE_MODE": "on",
-        "PHYSICAL_RECEIPTS_CREATE_ENABLED": "false",
+        "PHYSICAL_RECEIPTS_CREATE_ENABLED": "true",
         "PUBLIC_PORTAL_ORIGIN": "https://goc.topkapiuni.workers.dev",
         "PUBLIC_PORTAL_ORIGIN_ALLOWLIST": "https://goc.topkapiuni.workers.dev",
         "PRINT_ENABLED": "true",
