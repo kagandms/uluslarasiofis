@@ -34,6 +34,7 @@
 .pdf-merger-documents .pdf-merger-file-list > div > div:last-child .btn { min-height: 30px; padding: 2px 5px !important; }
 .pdf-merger-documents .pdf-merger-dropzone { padding: 10px !important; margin-bottom: 10px !important; }
 .pdf-merger-transfer { min-width: 0; min-height: 0; overflow-y: auto; padding-left: 16px; border-left: 1px solid var(--card-border, #ddd); }
+.pdf-merger-transfer [hidden] { display: none !important; }
 .pdf-merger-transfer > .btn { width: 100%; padding: 9px 12px; }
 .pdf-merger-transfer .transfer-qr canvas { display: block; width: min(100%, 220px); height: auto; margin: 8px auto; }
 .pdf-merger-transfer > p { font-size: .85rem; margin: 8px 0; }

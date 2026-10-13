@@ -70,6 +70,7 @@ test('countdown uses the server deadline and updates locally', async (context) =
     const fixture = createFixture(context);
     fixture.button.click();
     await settle();
+    assert.equal(fixture.panel.querySelectorAll('button')[1].hidden, true);
     fixture.clock.now += 18_000;
     await tick(fixture, 1000);
 
