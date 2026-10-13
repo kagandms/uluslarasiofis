@@ -8,15 +8,41 @@ function encodeCanvas(canvas, quality) {
 }
 
 /** @returns {void} */
+function getImageDimensions(image) {
+    return { width: image.width || image.naturalWidth, height: image.height || image.naturalHeight };
+}
+
 function drawDocumentImage(image, canvas) {
-    const scale = Math.min(1, DOCUMENT_IMAGE_LONG_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
-    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const { width, height } = getImageDimensions(image);
+    const scale = Math.min(1, DOCUMENT_IMAGE_LONG_EDGE / Math.max(width, height));
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Görsel işleme bu cihazda kullanılamıyor.');
     context.fillStyle = '#fff';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
+}
+
+async function decodeImage(original) {
+    if (typeof globalThis.createImageBitmap === 'function') {
+        try {
+            const bitmap = await globalThis.createImageBitmap(original);
+            return { image: bitmap, cleanup: () => bitmap.close() };
+        } catch (error) {
+            console.warn('Native image bitmap decoding failed; using image element fallback.', { errorName: error.name });
+        }
+    }
+    const objectUrl = URL.createObjectURL(original);
+    const image = new Image();
+    try {
+        image.src = objectUrl;
+        await image.decode();
+        return { image, cleanup: () => URL.revokeObjectURL(objectUrl) };
+    } catch (error) {
+        URL.revokeObjectURL(objectUrl);
+        throw error;
+    }
 }
 
 /**
@@ -27,14 +53,14 @@ function drawDocumentImage(image, canvas) {
  * @throws {Error} When the photo cannot be decoded or encoded.
  */
 export async function optimizeDocumentImage(original) {
-    const objectUrl = URL.createObjectURL(original);
-    const image = new Image();
     const canvas = document.createElement('canvas');
+    let decodedImage;
     try {
-        image.src = objectUrl;
-        await image.decode();
+        decodedImage = await decodeImage(original);
+        const image = decodedImage.image;
         const isJpeg = original.type === 'image/jpeg';
-        const longestEdge = Math.max(image.naturalWidth, image.naturalHeight);
+        const { width, height } = getImageDimensions(image);
+        const longestEdge = Math.max(width, height);
         const isWithinDimensions = longestEdge <= DOCUMENT_IMAGE_LONG_EDGE;
         if (isJpeg && isWithinDimensions && original.size <= DOCUMENT_IMAGE_JPEG_PASSTHROUGH_BYTES) return original;
         drawDocumentImage(image, canvas);
@@ -44,7 +70,7 @@ export async function optimizeDocumentImage(original) {
         console.error('Document photo optimization failed.', { errorName: error.name });
         throw new Error('Fotoğraf işlenemedi; JPG veya PNG olarak tekrar seçin.', { cause: error });
     } finally {
-        URL.revokeObjectURL(objectUrl);
+        decodedImage?.cleanup();
         canvas.width = canvas.height = 0;
     }
 }

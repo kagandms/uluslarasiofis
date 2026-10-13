@@ -97,6 +97,31 @@ test('still converts small PNGs to JPEG', async context => {
     assert.deepEqual(calls.dimensions, [{ width: 1200, height: 800 }]);
 });
 
+test('uses native bitmap decoding when image-element decoding is unavailable', async context => {
+    const { calls, canvas } = mockImageEnvironment(context, { hasDecodeError: true });
+    const priorBitmapDecoder = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap');
+    let didCloseBitmap = false;
+    Object.defineProperty(globalThis, 'createImageBitmap', { configurable: true, value: async () => ({
+        width: 1200,
+        height: 800,
+        close() { didCloseBitmap = true; }
+    }) });
+    context.after(() => {
+        if (priorBitmapDecoder) Object.defineProperty(globalThis, 'createImageBitmap', priorBitmapDecoder);
+        else delete globalThis.createImageBitmap;
+    });
+    const original = new Blob([new Uint8Array(DOCUMENT_IMAGE_JPEG_PASSTHROUGH_BYTES + 1)], { type: 'image/jpeg' });
+
+    const optimized = await optimizeDocumentImage(original);
+
+    assert.ok(optimized.size < original.size);
+    assert.deepEqual(calls.encodings, [{ type: 'image/jpeg', quality: DOCUMENT_IMAGE_JPEG_QUALITY }]);
+    assert.equal(didCloseBitmap, true);
+    assert.deepEqual(calls.revoked, []);
+    assert.equal(canvas.width, 0);
+    assert.equal(canvas.height, 0);
+});
+
 for (const failure of [{ hasDecodeError: true }, { hasContext: false }, { hasEncoding: false }]) {
     test(`rejects failed image processing and releases resources: ${JSON.stringify(failure)}`, async context => {
         const { calls, canvas } = mockImageEnvironment(context, failure);
