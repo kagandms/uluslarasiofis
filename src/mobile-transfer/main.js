@@ -9,6 +9,7 @@ const camera = document.getElementById('camera');
 const gallery = document.getElementById('gallery');
 const send = document.getElementById('send');
 const preview = document.getElementById('preview');
+const photoViews = new Map();
 let transferId;
 let batchId;
 let expiresAt = 0;
@@ -26,26 +27,47 @@ function showTransferStatus(message, state = 'ready') {
 }
 
 function renderPhotos() {
-    for (const image of preview.querySelectorAll('img')) URL.revokeObjectURL(image.src);
-    preview.replaceChildren();
+    const activePhotoIds = new Set(photos.map(photo => photo.id));
+    for (const [photoId, view] of photoViews) {
+        if (activePhotoIds.has(photoId)) continue;
+        URL.revokeObjectURL(view.image.src);
+        view.figure.remove();
+        photoViews.delete(photoId);
+    }
+    let nextFigure = preview.firstElementChild;
     photos.forEach((photo, index) => {
-        const figure = document.createElement('figure');
-        figure.dataset.state = photo.status;
-        const image = document.createElement('img');
-        image.src = URL.createObjectURL(photo.file);
-        image.alt = `${index + 1}. belge önizlemesi`;
-        image.loading = 'lazy';
-        image.decoding = 'async';
-        const caption = document.createElement('figcaption');
-        caption.textContent = `${index + 1}. fotoğraf · ${PHOTO_STATUS_LABELS[photo.status]}`;
-        figure.append(image, caption);
-        if (photo.status === 'stale') figure.append(createRemoveButton(photo));
-        preview.append(figure);
+        const view = photoViews.get(photo.id) || createPhotoView(photo);
+        view.figure.dataset.state = photo.status;
+        view.image.alt = `${index + 1}. belge önizlemesi`;
+        view.caption.textContent = `${index + 1}. fotoğraf · ${PHOTO_STATUS_LABELS[photo.status]}`;
+        if (photo.status === 'stale' && !view.removeButton) {
+            view.removeButton = createRemoveButton(photo);
+            view.figure.append(view.removeButton);
+        }
+        if (photo.status !== 'stale' && view.removeButton) {
+            view.removeButton.remove();
+            view.removeButton = null;
+        }
+        if (view.figure !== nextFigure) preview.insertBefore(view.figure, nextFigure);
+        nextFigure = view.figure.nextElementSibling;
     });
     document.getElementById('photo-count').textContent = `${photos.length} fotoğraf`;
     document.getElementById('preview-empty').hidden = photos.length > 0;
     send.hidden = !photos.some(photo => ['ready', 'failed'].includes(photo.status));
     send.disabled = isSending;
+}
+
+function createPhotoView(photo) {
+    const figure = document.createElement('figure');
+    const image = document.createElement('img');
+    image.src = URL.createObjectURL(photo.file);
+    image.loading = 'lazy';
+    image.decoding = 'async';
+    const caption = document.createElement('figcaption');
+    figure.append(image, caption);
+    const view = { figure, image, caption, removeButton: null };
+    photoViews.set(photo.id, view);
+    return view;
 }
 
 function createRemoveButton(photo) {
@@ -69,20 +91,24 @@ function markStalePhotos(activeBatchId) {
 async function refreshBatch() {
     if (!transferId || expiresAt * 1000 <= Date.now()) return;
     const result = await requestMobileTransfer(`/api/mobile-transfer/${transferId}/batch`);
-    if (result.batchId !== batchId) {
+    const hasBatchChanged = result.batchId !== batchId;
+    if (hasBatchChanged) {
         batchId = result.batchId;
         markStalePhotos(batchId);
         capture.disabled = choose.disabled = !batchId;
         if (!batchId) showTransferStatus('PC’de öğrenci aktarım penceresi hazırlanıyor…', 'sending');
         else showTransferStatus('Bağlandı. Çektiğiniz fotoğraflar otomatik gönderilecek.');
     }
+    let hasPhotoStatusChanged = false;
     for (const photo of photos) {
-        if (photo.batchId === batchId && result.receivedPhotoIds.includes(photo.id)) photo.status = 'sent';
+        if (photo.batchId !== batchId || !result.receivedPhotoIds.includes(photo.id) || photo.status === 'sent') continue;
+        photo.status = 'sent';
+        hasPhotoStatusChanged = true;
     }
     const sentCount = photos.filter(photo => photo.status === 'sent').length;
     if (sentCount === photos.length && sentCount > 0) showTransferStatus('PC’ye gönderildi. Fotoğraflar listede.', 'sent');
     else if (sentCount > 0) showTransferStatus(`${sentCount} fotoğraf PC’ye gönderildi; aktarım sürüyor.`, 'sending');
-    renderPhotos();
+    if (hasBatchChanged || hasPhotoStatusChanged) renderPhotos();
 }
 
 async function pairPhone() {

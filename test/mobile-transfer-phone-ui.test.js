@@ -49,11 +49,16 @@ test('camera photos upload immediately and show sent only after PC import confir
     assert.equal(requests.some(request => request.options.method === 'POST' && request.path.endsWith('/photos')), true);
     assert.equal(dom.window.document.querySelector('#preview figcaption').textContent, '1. fotoğraf · PC alıyor…');
     assert.equal(dom.window.document.getElementById('send').hidden, true);
+    const preview = dom.window.document.getElementById('preview');
+    const originalImage = preview.querySelector('img');
+    preview.scrollTop = 120;
 
     isPcImportConfirmed = true;
     await pollIntervals[0]();
     await settle();
 
     assert.equal(dom.window.document.querySelector('#preview figcaption').textContent, '1. fotoğraf · Gönderildi');
+    assert.equal(preview.querySelector('img'), originalImage);
+    assert.equal(preview.scrollTop, 120);
     assert.match(dom.window.document.getElementById('status').textContent, /PC’ye gönderildi/);
 });

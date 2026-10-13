@@ -40,8 +40,8 @@ function getPageSize(width, height) {
     return { pageWidth, pageHeight, drawWidth: width * scale, drawHeight: height * scale };
 }
 
-async function appendImageToPdf(pdfDoc, bytes, mediaType) {
-    const jpegBytes = await ensureJpegBytes(bytes, mediaType);
+async function appendImageToPdf(pdfDoc, bytes, mediaType, isValidatedTransferPhoto) {
+    const jpegBytes = isValidatedTransferPhoto ? bytes : await ensureJpegBytes(bytes, mediaType);
     const image = await pdfDoc.embedJpg(jpegBytes);
     const { pageWidth, pageHeight, drawWidth, drawHeight } = getPageSize(image.width, image.height);
     const page = pdfDoc.addPage([pageWidth, pageHeight]);
@@ -116,7 +116,7 @@ async function buildPdf(files, profile, onProgress) {
         onProgress?.({ current: index + 1, total: files.length, message: `İşleniyor (${index + 1}/${files.length}): ${fileName}` });
         if (isPdf && profile) await appendRasterizedPdf(mergedPdf, bytes, fileName, profile, onProgress);
         else if (isPdf) await appendVectorPdf(mergedPdf, bytes, fileName);
-        else await appendImageToPdf(mergedPdf, bytes, mediaType);
+        else await appendImageToPdf(mergedPdf, bytes, mediaType, file.isValidatedTransferPhoto === true);
     }
     if (mergedPdf.getPageCount() === 0) throw new Error('Hiçbir geçerli sayfa birleştirilemedi.');
     return mergedPdf.save({ useObjectStreams: true });
@@ -124,7 +124,7 @@ async function buildPdf(files, profile, onProgress) {
 
 /**
  * Builds an ordered PDF and rasterizes source PDF pages to target roughly 40% of input bytes.
- * @param {Array<{ name?: string, bytes?: Uint8Array|ArrayBuffer|Blob, mediaType?: string, type?: string, size?: number }|Blob>} files
+ * @param {Array<{ name?: string, bytes?: Uint8Array|ArrayBuffer|Blob, mediaType?: string, type?: string, size?: number, isValidatedTransferPhoto?: boolean }|Blob>} files
  * @param {(progress: { current?: number, total?: number, message: string }) => void} [onProgress]
  * @param {{ rasterizePdfs?: boolean }} [options]
  * @returns {Promise<{ bytes: Uint8Array, metrics: { inputBytes: number, outputBytes: number, ratio: number, targetReached: boolean, warning: string|null }>}>

@@ -109,7 +109,9 @@ async function importPhoto(state, file) {
     if (!response.ok) throw new Error('Fotoğraf PC’ye alınamadı; bağlantıyı kontrol edin.');
     const blob = await response.blob();
     if (state.lifecycle.signal.aborted) return;
-    state.receiveFiles([new File([blob], `Telefondan_${file.id}.jpg`, { type: 'image/jpeg' })]);
+    const importedFile = new File([blob], `Telefondan_${file.id}.jpg`, { type: 'image/jpeg' });
+    Object.defineProperty(importedFile, 'isValidatedTransferPhoto', { value: true });
+    state.receiveFiles([importedFile]);
     await state.session.consumePhoto(state.transfer.id, state.batchId, file.id);
     state.received.add(file.id);
     showStatus(state, `${state.received.size} fotoğraf PC’ye alındı. Listeyi kontrol edin.`);

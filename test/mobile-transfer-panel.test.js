@@ -132,6 +132,7 @@ test('only active-batch photos are imported and acknowledged', async (context) =
     await tick(fixture, 2000);
 
     assert.equal(fixture.imported.length, 1);
+    assert.equal(fixture.imported[0].isValidatedTransferPhoto, true);
     assert.ok(fixture.requests.some(request => request.path.endsWith('/files/photo-1') && request.method === 'DELETE'));
 });
 

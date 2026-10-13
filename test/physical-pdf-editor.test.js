@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { PDFDocument } from 'pdf-lib';
@@ -88,6 +89,20 @@ test('reports the actual output ratio and warns when the 40% target is missed', 
     assert.equal(result.metrics.ratio, result.bytes.length / bytes.length);
     assert.equal(result.metrics.targetReached, false);
     assert.match(result.metrics.warning, /%40 hedefe ulaşmadı/);
+});
+
+test('embeds server-validated phone JPEGs without decoding them again in the browser', async () => {
+    const jpegBytes = new Uint8Array(await readFile(new URL('../header_logo.jpg', import.meta.url)));
+
+    const result = await mergeDocumentsToPdf([{
+        bytes: jpegBytes,
+        name: 'Telefondan_test.jpg',
+        mediaType: 'image/jpeg',
+        isValidatedTransferPhoto: true
+    }]);
+    const mergedPdf = await PDFDocument.load(result.bytes);
+
+    assert.equal(mergedPdf.getPageCount(), 1);
 });
 
 test('requires the browser PDF renderer when raster compression is requested', async () => {
