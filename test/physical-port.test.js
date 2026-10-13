@@ -91,6 +91,26 @@ test('consumed photo IDs remain idempotent and cannot reappear on retry', async 
     assert.equal(context.objects.size, 0);
 });
 
+test('phone receives sent confirmation only after the PC consumes a photo', async () => {
+    const context = await createPortFixture();
+    const transfer = await pairPortPhone(context);
+    const id = crypto.randomUUID();
+    const statusPath = `/api/mobile-transfer/${transfer.id}/status`;
+
+    await uploadPhoto(context, transfer, { id });
+    const waiting = await portRequest(context, statusPath, { cookie: transfer.phoneCookie });
+    const pcReceipt = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/files/${id}`, {
+        method: 'DELETE', cookie: context.staffCookie
+    });
+    const received = await portRequest(context, statusPath, { cookie: transfer.phoneCookie });
+    const unauthorized = await portRequest(context, statusPath);
+
+    assert.deepEqual((await waiting.json()).receivedPhotoIds, []);
+    assert.deepEqual((await received.json()).receivedPhotoIds, [id]);
+    assert.equal(pcReceipt.status, 200);
+    assert.equal(unauthorized.status, 410);
+});
+
 test('rejects forged MIME, malformed JPEG, oversize payloads and cross-origin uploads', async () => {
     const context = await createPortFixture();
     const transfer = await pairPortPhone(context);

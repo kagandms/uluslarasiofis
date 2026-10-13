@@ -101,7 +101,7 @@
         "R2_BUCKET_NAME": "uluslarasiofis-documents-production",
         "PRINT_BUCKET_NAME": "uluslarasiofis-print-production",
         "PRINT_ENABLE_A3": "false",
-        "PRINT_ENABLE_COLOR": "false",
+        "PRINT_ENABLE_COLOR": "true",
         "PRINT_ENABLE_DUPLEX": "false",
         "PRINT_MAX_COPIES_PER_JOB": "50",
         "PRINT_MAX_PAGE_COPIES": "200",

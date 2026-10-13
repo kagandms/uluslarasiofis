@@ -70,6 +70,12 @@ async function listPhotos(environment, transferId) {
     return { files: files.results };
 }
 
+async function listReceivedPhotoIds(environment, transferId) {
+    const files = await environment.DB.prepare(`SELECT id FROM mobile_document_transfer_files
+        WHERE transfer_id=? AND upload_status='consumed' ORDER BY created_at,id`).bind(transferId).all();
+    return { receivedPhotoIds: files.results.map(file => file.id) };
+}
+
 async function accessPhoto(request, environment, transferId, photoId) {
     const file = await environment.DB.prepare('SELECT * FROM mobile_document_transfer_files WHERE id=? AND transfer_id=?').bind(photoId, transferId).first();
     if (!file) throw new ApiError(404, 'PHOTO_NOT_FOUND', 'Fotoğraf bulunamadı.');
@@ -129,6 +135,12 @@ export async function handleMobileTransfer(request, environment) {
     const pathname = new URL(request.url).pathname;
     if (pathname === '/api/staff/mobile-transfers') return createTransfer(request, environment);
     if (pathname === '/api/mobile-transfer/claim') return claimTransfer(request, environment);
+    const phoneStatus = pathname.match(/^\/api\/mobile-transfer\/([0-9a-f-]{36})\/status$/);
+    if (phoneStatus) {
+        requireMethod(request, 'GET');
+        await requireTransfer(request, environment, phoneStatus[1], 'phone');
+        return listReceivedPhotoIds(environment, phoneStatus[1]);
+    }
     const phoneMatch = pathname.match(/^\/api\/mobile-transfer\/([0-9a-f-]{36})\/photos$/);
     if (phoneMatch) {
         requireMethod(request, 'POST');
