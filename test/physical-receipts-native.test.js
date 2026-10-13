@@ -17,7 +17,7 @@ test('native D1/R2 receipt replay, write-once and print transactions survive res
         const context=await createPortFixture(database,documents);
         Object.assign(context.environment,{PRINT_FILES:await runtime.getR2Bucket('PRINT_FILES'),PRINT_ENABLED:'true',PHYSICAL_RECEIPTS_CREATE_ENABLED:'true',PUBLIC_PORTAL_ORIGIN:'https://portal.test',PUBLIC_PORTAL_ORIGIN_ALLOWLIST:'https://portal.test'});
         const post=(path,json)=>portRequest(context,`${BASE}${path}`,{method:'POST',cookie:context.staffCookie,json});
-        const reservationResponse=await post('/reference-reservations',{draft_id:crypto.randomUUID(),application_date:'2026-10-12'});
+        const reservationResponse=await post('/reference-reservations',{draft_id:crypto.randomUUID(),application_date:'2026-10-12',application_type:'initial'});
         assert.equal(reservationResponse.status,200,await reservationResponse.clone().text());
         const reservation=await reservationResponse.json();
         const body={registration_id:crypto.randomUUID(),reservation_id:reservation.id,application_date:'2026-10-12',first_name:'Synthetic',last_name:'Student',passport_number:'NATIVE-TEST',application_type:'initial'};

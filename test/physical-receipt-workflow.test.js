@@ -21,9 +21,16 @@ test('fresh drafts use server today, explicit type and never copy the previous s
     const context={state:{receiptConfig:{today:'2027-01-01'},detail:{intake:{first_name:'Previous',passport_number:'OLD'}}},api:{}};
 
     startPhysicalReceiptDraft(context);
-    context.api.reserve=async body=>({id:'reserved',...body});await assignPhysicalReference(context);
+    let reservationRequest;
+    context.api.reserve=async body=>{reservationRequest=body;return {id:'reserved',...body};};
 
-    assert.equal(context.state.draft.application_date,'2027-01-01');assert.equal(context.state.draft.application_type,'');
+    await assert.rejects(()=>assignPhysicalReference(context),/Önce başvuru türünü seçin/);
+    assert.equal(reservationRequest,undefined);
+    context.state.draft.application_type='renewal';
+    await assignPhysicalReference(context);
+
+    assert.equal(context.state.draft.application_date,'2027-01-01');assert.equal(context.state.draft.application_type,'renewal');
+    assert.equal(reservationRequest.application_type,'renewal');
     assert.equal(context.state.draft.first_name,'');assert.equal(context.state.draft.passport_number,'');assert.equal(context.state.reservation.draft_id,context.state.registrationId);
 });
 
@@ -131,7 +138,7 @@ test('preloads PDF in background and reuses it if snapshot matches', async () =>
 
 
 test('reference allocation ignores repeated and concurrent actions until a new draft', async () => {
-    const context = { state: { draft: { application_date: '2026-10-12' }, registrationId: 'draft' }, api: {} };
+    const context = { state: { draft: { application_date: '2026-10-12', application_type: 'initial' }, registrationId: 'draft' }, api: {} };
     let allocations = 0;
     let resolveReservation;
     context.api.reserve = () => { allocations++; return new Promise(resolve => { resolveReservation = resolve; }); };
@@ -147,7 +154,7 @@ test('reference allocation ignores repeated and concurrent actions until a new d
 });
 
 test('failed reference allocation can be retried', async () => {
-    const context = { state: { draft: { application_date: '2026-10-12' } }, api: { reserve: async () => { throw new Error('Unavailable'); } } };
+    const context = { state: { draft: { application_date: '2026-10-12', application_type: 'initial' } }, api: { reserve: async () => { throw new Error('Unavailable'); } } };
 
     await assert.rejects(() => assignPhysicalReference(context), /Unavailable/);
     context.api.reserve = async () => ({ tracking_reference: 'ITU-26-ABCDEFG' });

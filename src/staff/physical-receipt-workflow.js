@@ -65,9 +65,11 @@ export function startPhysicalReceiptDraft(context) {
 /** Reserves the same draft reference on retries. @param {object} context Workspace. @returns {Promise<void>} Assigned number. @throws {Error} Allocation failure. */
 export async function assignPhysicalReference(context) {
     if (context.state.reservation || context.state.isAssigningReference) return;
+    if (!['initial','renewal'].includes(context.state.draft?.application_type)) throw new Error('Önce başvuru türünü seçin.');
     context.state.isAssigningReference=true;
     try {
-        context.state.reservation=await context.api.reserve({draft_id:context.state.registrationId,application_date:context.state.draft.application_date});
+        context.state.reservation=await context.api.reserve({draft_id:context.state.registrationId,application_date:context.state.draft.application_date,
+            application_type:context.state.draft.application_type});
         startPreloadingReceiptPdf(context);
     } finally { context.state.isAssigningReference=false; }
 }

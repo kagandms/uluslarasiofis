@@ -27,7 +27,8 @@ async function json(context,path,body,options={}) {
 }
 
 async function reserve(context,options={}) {
-    const response=await json(context,'/reference-reservations',{draft_id:options.draftId || crypto.randomUUID(),application_date:options.day || METADATA.application_date},options);
+    const response=await json(context,'/reference-reservations',{draft_id:options.draftId || crypto.randomUUID(),application_date:options.day || METADATA.application_date,
+        application_type:options.applicationType || METADATA.application_type},options);
     assert.equal(response.status,200,await response.clone().text());
     return response.json();
 }
@@ -101,18 +102,27 @@ test('allocation is session-bound and replayable; year changes retire a code for
     assert.equal((await context.database.prepare('SELECT count(*) AS total FROM physical_reference_reservations').first()).total,3);
 });
 
+test('reference allocation rejects a missing or invalid application type before reserving a number',async()=>{
+    const context=await fixture();
+    const response=await json(context,'/reference-reservations',{draft_id:crypto.randomUUID(),application_date:METADATA.application_date});
+
+    assert.equal(response.status,400);
+    assert.equal((await response.json()).error.message,'Önce başvuru türünü seçin.');
+    assert.equal((await context.database.prepare('SELECT count(*) AS total FROM physical_reference_reservations').first()).total,0);
+});
+
 test('reference collision retries only its UNIQUE constraint and does not hide database faults',async()=>{
     const context=await fixture();
     const random=crypto.getRandomValues;
     crypto.getRandomValues=bytes=>bytes.fill(0);
     try {
         await reserve(context);
-        const response=await json(context,'/reference-reservations',{draft_id:crypto.randomUUID(),application_date:METADATA.application_date});
+        const response=await json(context,'/reference-reservations',{draft_id:crypto.randomUUID(),application_date:METADATA.application_date,application_type:METADATA.application_type});
         assert.equal(response.status,503);
         assert.equal((await response.json()).error.code,'REFERENCE_UNAVAILABLE');
     } finally {crypto.getRandomValues=random;}
     context.database.exec(`CREATE TRIGGER fail_reference BEFORE INSERT ON physical_reference_reservations BEGIN SELECT RAISE(ABORT,'synthetic_database_failure'); END;`);
-    const failed=await json(context,'/reference-reservations',{draft_id:crypto.randomUUID(),application_date:METADATA.application_date});
+    const failed=await json(context,'/reference-reservations',{draft_id:crypto.randomUUID(),application_date:METADATA.application_date,application_type:METADATA.application_type});
     assert.equal(failed.status,500);
 });
 
@@ -120,7 +130,7 @@ test('one session has at most five active reservations',async()=>{
     const context=await fixture();
     for (let count=0;count<5;count++) await reserve(context);
 
-    const response=await json(context,'/reference-reservations',{draft_id:crypto.randomUUID(),application_date:METADATA.application_date});
+    const response=await json(context,'/reference-reservations',{draft_id:crypto.randomUUID(),application_date:METADATA.application_date,application_type:METADATA.application_type});
 
     assert.equal(response.status,429);
 });
@@ -598,7 +608,7 @@ test('partial migrations never advertise receipt creation or issue new student r
     const context=await fixture();context.database.exec('DELETE FROM physical_receipt_schema');
 
     const config=await portRequest(context,`${BASE}/config`,{cookie:context.staffCookie});
-    const reservation=await json(context,'/reference-reservations',{draft_id:crypto.randomUUID(),application_date:METADATA.application_date});
+    const reservation=await json(context,'/reference-reservations',{draft_id:crypto.randomUUID(),application_date:METADATA.application_date,application_type:METADATA.application_type});
     const lookup=await portRequest(context,'/api/public/physical-intakes/tracking-lookup',{method:'POST',json:{tracking_reference:'ITU-26-ABCDEFG'}});
 
     assert.equal(config.status,503);assert.equal(reservation.status,503);assert.equal((await lookup.json()).found,false);

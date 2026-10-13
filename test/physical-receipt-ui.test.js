@@ -32,9 +32,13 @@ test('metadata-first creation has no PDF prerequisite and requires explicit appl
     const state={view:'create',isMetadataFirst:true,receiptConfig:{today:'2026-10-12'},draft:{application_date:'2026-10-13',application_type:''},message:'Synthetic'};
 
     renderPhysicalIntakes(root,state,{assignReference:()=>{allocations++;},back:()=>{},create:()=>{}});
-    [...root.querySelectorAll('button')].find(button=>button.textContent==='Başvuru No Ata').click();
+    const assign=root.querySelector('.physical-receipt-assign');
+    assert.equal(assign.disabled,true);
+    assign.click();
 
-    assert.equal(allocations,1);assert.match(root.textContent,/İleri bir teslim tarihi/);assert.equal(root.querySelector('select').value,'');
+    assert.equal(allocations,0);assert.match(root.textContent,/İleri bir teslim tarihi/);assert.equal(root.querySelector('select').value,'');
+    root.querySelector('select').value='initial';root.querySelector('select').dispatchEvent(new dom.window.Event('change'));
+    assert.equal(assign.disabled,false);assign.click();assert.equal(allocations,1);
     assert.equal(root.querySelector('a[href^=blob]'),null);assert.equal(root.querySelector('input[type=file]'),null);
     assert.equal([...root.querySelectorAll('button')].find(button=>button.textContent==='Oluştur ve Yazdır').disabled,true);
     dom.window.close();
@@ -137,6 +141,22 @@ test('new intake dialog preserves the queue DOM and never asks for a student num
     state.view = 'queue';
     renderPhysicalIntakes(root, state, handlers);
     assert.equal(root.querySelector('dialog'), null);
+    dom.window.close();
+});
+
+test('physical queue displays delivery date as day.month.year and Istanbul time on a second line', () => {
+    const dom = new JSDOM('<main></main>');
+    const root = dom.window.document.querySelector('main');
+    const item = { id: 'synthetic', tracking_reference: 'ITU-26-ABCDEFG', first_name: 'Synthetic', last_name: 'Student',
+        application_date: '2026-10-13', submitted_at: '2026-10-13T08:30:00.000Z', status: 'under_review', receipt_state: 'ready', metadata_version: 1 };
+
+    renderPhysicalIntakes(root, { view: 'queue', result: { items: [item], pagination: { page: 1, page_size: 25, total_pages: 1, total: 1 } },
+        query: { q: '', status: 'all' } }, { newReceipt: () => {}, search: () => {}, page: () => {}, open: () => {}, mutate: () => {} });
+
+    const deliveryCell = [...root.querySelectorAll('tbody td')].find(cell => cell.dataset.label === 'Teslim Tarihi');
+    assert.equal(deliveryCell.querySelector('.physical-delivery-date').textContent, '13.10.2026');
+    assert.equal(deliveryCell.querySelector('small').textContent, '11:30');
+    assert.equal(deliveryCell.querySelector('br') !== null, true);
     dom.window.close();
 });
 

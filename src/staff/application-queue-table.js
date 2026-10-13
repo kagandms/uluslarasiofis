@@ -20,7 +20,8 @@ function createRow(document, item, options, index) {
         formatQueueDate(item.submitted_at), formatQueueDate(item.updated_at)];
     values.forEach((value, index) => {
         const cell = document.createElement('td');
-        cell.textContent = value || '—';
+        if (value?.nodeType) cell.append(value);
+        else cell.textContent = value || '—';
         cell.dataset.label = headers[index + (options.rowNumber ? 1 : 0)];
         row.append(cell);
     });

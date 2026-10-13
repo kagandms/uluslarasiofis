@@ -41,6 +41,25 @@ function filterField(document, label, input, className) {
     return field;
 }
 
+function formatDeliveryDate(document, item) {
+    const cell = document.createElement('span');
+    const date = String(item.application_date || item.submitted_at || '').slice(0, 10);
+    const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const dateLabel = match ? `${match[3]}.${match[2]}.${match[1]}` : '—';
+    const dateText = text(document, 'span', dateLabel);
+    dateText.className = 'physical-delivery-date';
+    cell.append(dateText);
+    const instant = new Date(item.submitted_at || '');
+    if (Number.isFinite(instant.valueOf())) {
+        const timeText = text(document, 'small', new Intl.DateTimeFormat('tr-TR', {
+            hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul'
+        }).format(instant));
+        timeText.className = 'physical-delivery-time';
+        cell.append(document.createElement('br'), timeText);
+    }
+    return cell;
+}
+
 function createFilters(document, state, handlers) {
     const form = document.createElement('form');
     form.className = 'staff-applications-filters';
@@ -108,7 +127,7 @@ function renderQueue(document, panel, options) {
     panel.append(createApplicationQueueTable(document, state.result.items, { statusLabel: status => STATUS_LABELS[status] || status,
         headers: ['Sıra','Takip No','Ad Soyad','Teslim Tarihi','Ofis Durumu','PDF','A4',''],
         rowNumber: (_item, index) => String((state.result.pagination.page - 1) * (state.result.pagination.page_size || state.query.page_size || 25) + index + 1),
-        values: item => [item.tracking_reference || '—', `${item.first_name} ${item.last_name}`, item.application_date || formatQueueDate(item.submitted_at),
+        values: item => [item.tracking_reference || '—', `${item.first_name} ${item.last_name}`, formatDeliveryDate(document, item),
             item.processing_closed_at ? 'Ofis işlemi kapalı' : STATUS_LABELS[item.status], item.current_pdf_id ? 'PDF var' : 'PDF yok',
             item.receipt_metadata_version && item.receipt_metadata_version !== item.metadata_version ? 'A4 güncel değil' : `${item.receipt_state === 'ready' ? 'Hazır' : item.receipt_state || 'Hazırlanmadı'}${item.receipt_print_status ? ` · ${item.receipt_print_status}` : ''}`],
         actions: item => [{ label: 'Detay', action: 'open-detail', run: () => handlers.open(item.id) },

@@ -49,6 +49,7 @@ body.dark-mode .physical-intake-panel {
 .physical-intake-form { display: grid; gap: .6rem; max-width: 680px; }
 .physical-intake-form label { font-weight: 600; }
 .physical-pdf-history { list-style: none; padding: 0; display: grid; gap: 1rem; }
+.physical-delivery-time { display: inline-block; margin-top: .15rem; color: var(--text-secondary); }
 .physical-pdf-history li { padding: 1rem; border: 1px solid var(--card-border); border-radius: 12px; background: var(--card-bg); }
 .physical-pdf-upload-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: 1rem; }
 .physical-pdf-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }

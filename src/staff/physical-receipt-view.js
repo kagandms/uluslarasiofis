@@ -31,7 +31,7 @@ function appendMetadataFields(form,options) {
     type.value=options.draft.application_type; type.disabled=Boolean(options.isLocked);
     const field=appendText(form,'div',''); field.className='physical-receipt-field';
     appendText(field,'label','Başvuru Türü').htmlFor=type.id;
-    type.addEventListener('change',()=>{options.draft.application_type=type.value;}); field.append(type);
+    type.addEventListener('change',()=>{options.draft.application_type=type.value; options.onTypeChange?.();}); field.append(type);
 }
 
 /** Renders the information-first form. @param {HTMLElement} panel Mount. @param {object} state Draft. @param {object} handlers Actions. @returns {void} Render. */
@@ -48,8 +48,10 @@ export function renderPhysicalReceiptDraft(panel,state,handlers) {
         const hasYearChanged=state.reservation && state.draft.application_date.slice(0,4)!==state.reservation.application_date.slice(0,4);
         warning.textContent=hasYearChanged?'Tarih yılı değişti. Formu kapatıp yeniden açın.':isFuture?'İleri bir teslim tarihi seçtiniz. Tarihi kontrol edin.':'';
     };
-    appendMetadataFields(form,{draft:state.draft,isLocked:Boolean(state.registrationBody),onChange:refreshWarning});
-    const assign=appendButton(form,'Başvuru No Ata',handlers.assignReference); assign.disabled=Boolean(state.reservation || state.registrationBody);
+    let assign;
+    appendMetadataFields(form,{draft:state.draft,isLocked:Boolean(state.registrationBody),onChange:refreshWarning,
+        onTypeChange:()=>{ if (assign) assign.disabled=Boolean(state.reservation || state.registrationBody || !state.draft.application_type); }});
+    assign=appendButton(form,'Başvuru No Ata',handlers.assignReference); assign.disabled=Boolean(state.reservation || state.registrationBody || !state.draft.application_type);
     assign.classList.add('physical-receipt-assign');
     reference.textContent=state.reservation?`Başvuru Takip No: ${state.reservation.tracking_reference} · Başarıyla atandı`:'Henüz numara ayrılmadı.';
     form.append(reference,warning); refreshWarning();
