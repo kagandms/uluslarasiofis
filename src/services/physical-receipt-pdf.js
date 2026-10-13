@@ -1,5 +1,7 @@
 import html2canvas from 'html2canvas';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFString } from 'pdf-lib';
+import QRCode from 'qrcode';
+import { MAX_PHYSICAL_RECEIPT_PDF_BYTES } from '../config/physical-document-limits.js';
 import { createPhysicalReceiptTemplate } from './physical-receipt-template.js';
 import { loadDocumentLogos,waitDocumentAssets,buildDocumentAssetUrl } from './document-logo-loader.js';
 import './physical-receipt.css';
@@ -78,7 +80,8 @@ function requireVisibleCanvas(canvas) {
 export async function renderPhysicalReceiptPdf(snapshot) {
     const document=window.document;
     const [fontStyles, logos] = await Promise.all([loadReceiptFonts(document), loadReceiptLogos(document)]);
-    const root=createPhysicalReceiptTemplate(document,snapshot,logos);
+    const trackingQr=await QRCode.toDataURL(snapshot.portal_origin,{width:300,margin:2,errorCorrectionLevel:'M'});
+    const root=createPhysicalReceiptTemplate(document,snapshot,{...logos,trackingQr});
     const embeddedFonts=document.createElement('style');
     embeddedFonts.textContent=fontStyles; root.prepend(embeddedFonts);
     const mount=document.createElement('div'); mount.className='physical-receipt-render-mount'; mount.append(root); document.body.append(mount);
@@ -92,13 +95,17 @@ export async function renderPhysicalReceiptPdf(snapshot) {
             }
         });
         requireVisibleCanvas(canvas);
-        return buildReceiptPdf(canvas, snapshot.created_at);
+        const bounds=root.getBoundingClientRect();
+        const link=root.querySelector('.physical-receipt-origin').getBoundingClientRect();
+        return buildReceiptPdf(canvas,{createdAt:snapshot.created_at,portalOrigin:snapshot.portal_origin,
+            linkRect:[(link.left-bounds.left)/bounds.width*595.28,(bounds.bottom-link.bottom)/bounds.height*841.89,
+                (link.right-bounds.left)/bounds.width*595.28,(bounds.bottom-link.top)/bounds.height*841.89]});
     } finally { mount.remove(); }
 }
 
-async function buildReceiptPdf(canvas, createdAtValue) {
+async function buildReceiptPdf(canvas, options) {
     const pdf=await PDFDocument.create();
-    const createdAt=new Date(createdAtValue);
+    const createdAt=new Date(options.createdAt);
     if (!Number.isFinite(createdAt.valueOf())) throw new Error('A4 snapshot zamanı eksik.');
     pdf.setCreationDate(createdAt); pdf.setModificationDate(createdAt);
     let image;
@@ -113,8 +120,12 @@ async function buildReceiptPdf(canvas, createdAtValue) {
     if (!image) {
         image = await pdf.embedPng(canvas.toDataURL('image/png'));
     }
-    pdf.addPage([595.28,841.89]).drawImage(image,{x:0,y:0,width:595.28,height:841.89});
+    const page=pdf.addPage([595.28,841.89]);
+    page.drawImage(image,{x:0,y:0,width:595.28,height:841.89});
+    const annotation=pdf.context.obj({Type:'Annot',Subtype:'Link',Rect:options.linkRect,Border:[0,0,0],
+        A:{Type:'Action',S:'URI',URI:PDFString.of(options.portalOrigin)}});
+    page.node.addAnnot(pdf.context.register(annotation));
     const bytes=await pdf.save();
-    if (bytes.length>10485760) throw new Error('A4 PDF boyutu 10 MiB sınırını aşıyor.');
+    if (bytes.length > MAX_PHYSICAL_RECEIPT_PDF_BYTES) throw new Error('A4 PDF boyutu 10 MiB sınırını aşıyor.');
     return bytes;
 }

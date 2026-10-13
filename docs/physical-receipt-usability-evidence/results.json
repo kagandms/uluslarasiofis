@@ -1,0 +1,137 @@
+{
+  "environment": "Local Chrome, synthetic data, no server API or upload latency",
+  "layouts": [
+    {
+      "width": 1470,
+      "height": 725,
+      "scrollHeight": 480,
+      "clientHeight": 480,
+      "hasOverflow": false,
+      "submitVisible": true,
+      "uppercase": "SELİN",
+      "successColor": "rgb(22, 101, 52)"
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "scrollHeight": 480,
+      "clientHeight": 480,
+      "hasOverflow": false,
+      "submitVisible": true,
+      "uppercase": "SELİN",
+      "successColor": "rgb(22, 101, 52)"
+    },
+    {
+      "width": 1024,
+      "height": 600,
+      "scrollHeight": 480,
+      "clientHeight": 480,
+      "hasOverflow": false,
+      "submitVisible": true,
+      "uppercase": "SELİN",
+      "successColor": "rgb(22, 101, 52)"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "scrollHeight": 709,
+      "clientHeight": 709,
+      "hasOverflow": false,
+      "submitVisible": true,
+      "uppercase": "SELİN",
+      "successColor": "rgb(22, 101, 52)"
+    }
+  ],
+  "mergerLayouts": [
+    {
+      "width": 1470,
+      "height": 725,
+      "fileCount": 0,
+      "bodyOverflow": false,
+      "cardOverflow": false,
+      "qrVisible": true,
+      "footerVisible": true,
+      "listScrolls": false
+    },
+    {
+      "width": 1470,
+      "height": 725,
+      "fileCount": 30,
+      "bodyOverflow": false,
+      "cardOverflow": false,
+      "qrVisible": true,
+      "footerVisible": true,
+      "listScrolls": true
+    },
+    {
+      "width": 1024,
+      "height": 600,
+      "fileCount": 0,
+      "bodyOverflow": false,
+      "cardOverflow": false,
+      "qrVisible": true,
+      "footerVisible": true,
+      "listScrolls": false
+    },
+    {
+      "width": 1024,
+      "height": 600,
+      "fileCount": 30,
+      "bodyOverflow": false,
+      "cardOverflow": false,
+      "qrVisible": true,
+      "footerVisible": true,
+      "listScrolls": true
+    }
+  ],
+  "timings": [
+    {
+      "run": 0,
+      "generationMs": 336,
+      "firstPageRenderMs": 332.8999999985099,
+      "totalLocalMs": 668.8999999985099,
+      "byteSize": 176355,
+      "hasPortalLink": true
+    },
+    {
+      "run": 1,
+      "generationMs": 107.19999999925494,
+      "firstPageRenderMs": 172.69999999925494,
+      "totalLocalMs": 279.8999999985099,
+      "byteSize": 176355,
+      "hasPortalLink": true
+    },
+    {
+      "run": 2,
+      "generationMs": 95.29999999888241,
+      "firstPageRenderMs": 169.40000000037253,
+      "totalLocalMs": 264.69999999925494,
+      "byteSize": 176355,
+      "hasPortalLink": true
+    },
+    {
+      "run": 3,
+      "generationMs": 92.09999999962747,
+      "firstPageRenderMs": 172.60000000149012,
+      "totalLocalMs": 264.7000000011176,
+      "byteSize": 176355,
+      "hasPortalLink": true
+    },
+    {
+      "run": 4,
+      "generationMs": 100,
+      "firstPageRenderMs": 180.90000000037253,
+      "totalLocalMs": 280.90000000037253,
+      "byteSize": 176355,
+      "hasPortalLink": true
+    },
+    {
+      "run": 5,
+      "generationMs": 92.40000000037253,
+      "firstPageRenderMs": 171.59999999962747,
+      "totalLocalMs": 264,
+      "byteSize": 176355,
+      "hasPortalLink": true
+    }
+  ]
+}

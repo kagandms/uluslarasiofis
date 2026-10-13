@@ -1,4 +1,5 @@
 import './staff-modal.css';
+import './pdf-merger-modal.css';
 import { mountMobileTransferPanel } from './mobile-transfer-panel.js';
 import { mergeDocumentsToPdf, downloadPdfFile } from '../services/pdfMergerService.js';
 import { showToast } from './toastManager.js';
@@ -67,7 +68,7 @@ export function openPdfMergerModal(options = {}) {
     const modal = document.createElement('div');
     modal.className = 'staff-modal-card pdf-merger-modal-card';
     if (options.onSave) modal.classList.add('physical-intake-panel');
-    modal.style.maxWidth = '720px';
+    modal.style.maxWidth = '980px';
     modal.style.width = '94%';
     modal.style.maxHeight = '92vh';
     modal.style.display = 'flex';
@@ -112,6 +113,7 @@ export function openPdfMergerModal(options = {}) {
 
     // Body
     const body = document.createElement('div');
+    body.className = 'pdf-merger-body';
     body.style.flex = '1';
     body.style.overflowY = 'auto';
     body.style.padding = '16px 0';
@@ -273,8 +275,14 @@ export function openPdfMergerModal(options = {}) {
     fileListEl.style.maxHeight = '300px';
     fileListEl.style.overflowY = 'auto';
 
-    body.append(actionGrid, cameraBanner, dropZone, listHeader, fileListEl);
-    mountMobileTransferPanel(body, files => {
+    const documentsPanel=document.createElement('div');
+    documentsPanel.className='pdf-merger-documents';
+    documentsPanel.append(actionGrid, cameraBanner, dropZone, listHeader, fileListEl);
+    const transferPanel=document.createElement('aside');
+    transferPanel.className='pdf-merger-transfer';
+    transferPanel.setAttribute('aria-label','Telefondan belge ekle');
+    body.append(documentsPanel,transferPanel);
+    mountMobileTransferPanel(transferPanel, files => {
         if (selectedFiles.length + files.length > maxFiles) throw new Error('PC listesi dolu; yeni birleştirici açın.');
         addFiles(files);
     });
@@ -582,31 +590,28 @@ export function openPdfMergerModal(options = {}) {
         buildControls.forEach(({ node }) => { node.disabled = true; });
 
         try {
-            progressMsg.textContent = 'Dosyalar okunuyor ve A4 sayfalarına ölçekleniyor...';
-            const filePayloads = [];
-
-            for (const file of selectedFiles) {
-                const arrayBuffer = await file.arrayBuffer();
-                filePayloads.push({
-                    name: file.name,
-                    bytes: new Uint8Array(arrayBuffer),
-                    mediaType: file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
-                });
-            }
-
+            progressMsg.textContent = 'Belgeler sırayla işleniyor; PDF sayfaları yaklaşık %40 boyut hedefiyle sıkıştırılıyor...';
             if (options.onPrepare) {
                 progressMsg.textContent = 'Başvuru formundan öğrenci bilgileri okunuyor…';
                 preparedFields = await options.onPrepare([...selectedFiles]);
             }
-            const mergedBytes = await mergeDocumentsToPdf(filePayloads, (prog) => {
+            const result = await mergeDocumentsToPdf(selectedFiles, (prog) => {
                 progressMsg.textContent = prog.message;
             });
 
+            const mergedBytes = result.bytes;
             readyPdf = mergedBytes;
             previewUrl = URL.createObjectURL(new Blob([mergedBytes], { type: 'application/pdf' }));
             previewLink.href = previewUrl;
             previewLink.hidden = false;
-            progressMsg.textContent = `PDF boyutu: ${formatBytes(mergedBytes.length)}. Küçük yazı ve QR/barkodları kontrol edin.`;
+            const compressionRatio = `${Math.round(result.metrics.ratio * 100)}%`;
+            const targetMessage = result.metrics.targetReached
+                ? `Hedefe ulaşıldı: kaynakların ${compressionRatio}’i.`
+                : result.metrics.warning;
+            const rasterNotice = result.metrics.rasterizedPdfs
+                ? ' PDF sayfaları görüntüye çevrildi; seçilebilir metin ve form alanları korunmaz.'
+                : '';
+            progressMsg.textContent = `PDF ${formatBytes(result.metrics.inputBytes)} → ${formatBytes(result.metrics.outputBytes)} (${compressionRatio}). ${targetMessage}${rasterNotice} Açıp okunabilirliği kontrol edin.`;
             btnMerge.textContent = options.onSave ? (options.confirmLabel || 'Kontrol ettim, öğrenci kaydına ekle') : 'Kontrol ettim, PDF’i indir';
             btnMerge.disabled = false;
             closeBtn.disabled = false;

@@ -1,10 +1,22 @@
 .print-management:not([hidden]) { display: grid; gap: 1rem; }
+.print-management [hidden] { display: none; }
 .print-management-section { display: grid; gap: 1rem; min-width: 0; }
 .print-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .print-section-heading h3, .print-management-section h3 { margin: 0; }
 .print-status-details, .print-status-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem 1rem; margin: 0; }
 .print-status-details dt, .print-status-counts dt { color: var(--text-secondary); font-size: .82rem; }
 .print-status-details dd, .print-status-counts dd { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+.print-status-field { display: grid; align-content: start; gap: .3rem; }
+.print-status-counts .print-status-field { padding: .9rem 1rem; border: 1px solid var(--card-border); border-radius: 12px; }
+.print-status-counts dd { font-size: 1.5rem; }
+#print-staff-status { margin: 0; padding: .85rem 1rem; border-radius: 10px; background: #f0f3f6; font-weight: 700; }
+#print-staff-status[data-state="ready"] { color: #166534; background: #ecfdf3; }
+#print-staff-status[data-state="paused"] { color: #854d0e; background: #fef9c3; }
+#print-staff-status[data-state="unavailable"] { color: #8f1d3c; background: #fff1f2; }
+.print-technical-disclosure { padding-top: .75rem; border-top: 1px solid var(--card-border); }
+.print-technical-disclosure summary { min-height: 44px; cursor: pointer; color: var(--text-secondary); font-weight: 650; }
+.print-technical-disclosure summary:focus-visible { outline: 3px solid #d8a6b6; outline-offset: 2px; }
+.print-technical-disclosure[open] { display: grid; gap: .75rem; }
 .print-queue-controls { display: grid; justify-items: start; gap: .65rem; }
 .print-pause-help { max-width: 80ch; margin: 0; color: var(--text-secondary); line-height: 1.5; }
 .print-job-list { display: grid; gap: .7rem; min-width: 0; }

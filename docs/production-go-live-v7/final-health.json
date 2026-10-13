@@ -1,0 +1,79 @@
+{
+  "checked_at_utc": "2026-10-08T14:09:05.861386+00:00",
+  "flags": {
+    "PRINT_ENABLE_A3": "false",
+    "PRINT_ENABLE_COLOR": "false",
+    "PRINT_ENABLED": "true",
+    "PRINT_ENABLE_DUPLEX": "false",
+    "PRINT_MAX_COPIES_PER_JOB": "50",
+    "PRINT_MAX_PAGE_COPIES": "200",
+    "PRINT_UAT_ENABLED": "false"
+  },
+  "health": {
+    "printer": [
+      {
+        "printer_id": "office-printer-01",
+        "runner_id": "office-runner-01",
+        "printer_name": "Uluslararas\u0131 Ofis",
+        "health": "ready",
+        "settings_protocol": 3,
+        "seen_at": "2026-10-08T14:09:02.175Z"
+      }
+    ],
+    "scanner": [
+      {
+        "health": "ready",
+        "engine_version": "1.5.4",
+        "signature_version": "28147",
+        "seen_at": "2026-10-08T14:08:47.983Z"
+      }
+    ],
+    "print_rows": [
+      {
+        "count": 0
+      }
+    ],
+    "active_jobs": [
+      {
+        "count": 0
+      }
+    ]
+  },
+  "public_status_http": 200,
+  "public_status": {
+    "available": true,
+    "options": {
+      "paper_sizes": [
+        "A4"
+      ],
+      "color_modes": [
+        "monochrome"
+      ],
+      "duplex_modes": [
+        "simplex"
+      ],
+      "orientations": [
+        "portrait",
+        "landscape"
+      ],
+      "limits": {
+        "max_copies": 50,
+        "max_page_copies": 200
+      }
+    },
+    "limits": {
+      "max_copies": 50,
+      "max_page_copies": 200
+    },
+    "requestId": "req_f5b360ac-6cfa-4c7f-a532-b9bfec0e7108"
+  },
+  "printer_heartbeat_age_seconds": 3.686386,
+  "heartbeat_advanced": true,
+  "deployment_versions": [
+    {
+      "version_id": "cf84967e-e813-4e09-9146-17e3109c52c5",
+      "percentage": 100
+    }
+  ],
+  "probe_note": "One GET with default Python user-agent returned HTTP 403; dedicated health UA, browser UA and actual student browser returned HTTP 200/available:true. No security rules changed."
+}

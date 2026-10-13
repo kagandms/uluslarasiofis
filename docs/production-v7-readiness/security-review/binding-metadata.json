@@ -1,0 +1,42 @@
+[
+  {
+    "name": "DB",
+    "type": "d1",
+    "value_present": null
+  },
+  {
+    "name": "PRINT_BUCKET_NAME",
+    "type": "plain_text",
+    "value_present": true
+  },
+  {
+    "name": "PRINT_ENABLED",
+    "type": "plain_text",
+    "value_present": true
+  },
+  {
+    "name": "PRINTER_SECRET",
+    "type": "secret_text",
+    "value_present": null
+  },
+  {
+    "name": "PRINT_FILES",
+    "type": "r2_bucket",
+    "value_present": null
+  },
+  {
+    "name": "PRINT_R2_ACCESS_KEY_ID",
+    "type": "secret_text",
+    "value_present": null
+  },
+  {
+    "name": "PRINT_R2_SECRET_ACCESS_KEY",
+    "type": "secret_text",
+    "value_present": null
+  },
+  {
+    "name": "R2_ACCOUNT_ID",
+    "type": "secret_text",
+    "value_present": null
+  }
+]

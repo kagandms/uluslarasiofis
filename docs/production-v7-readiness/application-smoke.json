@@ -1,0 +1,18 @@
+[
+  {
+    "path": "/",
+    "status": 200
+  },
+  {
+    "path": "/basvuru/",
+    "status": 200
+  },
+  {
+    "path": "/basvurum/",
+    "status": 200
+  },
+  {
+    "path": "/yetkili/",
+    "status": 200
+  }
+]

@@ -6,6 +6,9 @@
 .physical-receipt-sheet dl{display:grid;grid-template-columns:1fr 1fr;gap:2mm;margin:0 0 5mm}
 .physical-receipt-sheet dt{font-weight:600}.physical-receipt-sheet dd{margin:0;overflow-wrap:anywhere}
 .physical-receipt-sheet h2{font-size:11pt;margin:0}.physical-receipt-code{font-size:26pt;font-weight:700;letter-spacing:1px;margin:2mm 0}
-.physical-receipt-origin{font-size:12pt;margin:0 0 5mm;overflow-wrap:anywhere}
+.physical-receipt-portal{display:flex;align-items:center;justify-content:space-between;gap:4mm;border:1.5pt solid #111;border-radius:2mm;padding:3mm;margin:2mm 0 4mm}
+.physical-receipt-portal>div{min-width:0;flex:1}.physical-receipt-portal strong{font-size:11pt;display:block;margin-bottom:2mm}
+.physical-receipt-portal img{width:25mm;height:25mm;flex-shrink:0}
+.physical-receipt-origin{display:block;color:#111;font-size:15pt;font-weight:700;line-height:1.2;overflow-wrap:anywhere;text-decoration:underline}
 .physical-receipt-sheet section{margin-top:3mm}.physical-receipt-sheet h3{font-size:10pt;margin:0 0 1mm}.physical-receipt-sheet section p{margin:0}
 .physical-receipt-sheet [lang=ar]{font-family:'Receipt Arabic',sans-serif}

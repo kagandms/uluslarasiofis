@@ -1,0 +1,93 @@
+✔ UAT policy fails closed for missing, malformed, future, expired and oversized windows (8.148083ms)
+✔ UAT requires real staff sessions even when students forge browser or machine headers (41.4405ms)
+✔ UAT rejects inactive, revoked, idle, expired and non-shared staff identities (51.147334ms)
+✖ UAT availability and job tracking require staff while machine claims still require the printer secret (12.591333ms)
+✔ UAT rejects cross-origin creation and finalization with a valid staff cookie (12.580167ms)
+✔ UAT accepts only one PDF copy with A4 monochrome simplex settings (49.550708ms)
+Worker request failed. {
+  requestId: 'req_d05b637b-179c-4cb5-ae83-8a8d9359604a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UNAVAILABLE'
+}
+✔ concurrent UAT intents reserve only one job regardless of supplied idempotency keys (14.900292ms)
+✔ repeated UAT submission reuses the same intent rather than adding another job (11.592416ms)
+✔ a wrong synthetic PDF cannot be finalized or claimed (13.6875ms)
+✔ staff UAT follows the existing complete lifecycle with protocol 3 while public printing remains false (14.585209ms)
+✔ UAT rejects content replaced after finalization before it can reach the Agent (12.222166ms)
+Worker request failed. {
+  requestId: 'req_2f31c7f0-44f2-4e2c-a4a4-5c45beb75d29',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_d65a67af-def9-41fd-9a85-5ae042ee6745',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expired UAT windows stop work and preserve authenticated recovery (9.716042ms)
+✔ enabling normal production disables UAT restrictions and keeps existing public behavior (10.300417ms)
+✖ staff UAT upload capabilities point to the authenticated Worker rather than R2 signed URLs (9.947541ms)
+✖ changing UAT windows and purging a test row cannot reserve a second v7 job (11.973958ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 12
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 400.418875
+
+✖ failing tests:
+
+test at test/print-uat.test.js:131:1
+✖ UAT availability and job tracking require staff while machine claims still require the printer secret (12.591333ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  404 !== 200
+  
+      at TestContext.<anonymous> (file:///Users/kagansmtdms/Downloads/%D0%9F%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D1%8B/uluslarasiofis-main/test/print-uat.test.js:139:12)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/print-uat.test.js:284:1
+✖ staff UAT upload capabilities point to the authenticated Worker rather than R2 signed URLs (9.947541ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'https://account.r2.cloudflarestorage.com/test-print/print/7434083f-bdf1-44a7-b745-139bb4c546e7?X-Amz-Expires=300&X-Amz-Date=20261008T122836Z&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=test-access%2F20261008%2Fauto%2Fs3%2Faws4_request&X-Amz-SignedHeaders=content-type%3Bhost%3Bif-none-match&X-Amz-Signature=2f23226cee64d54a7d18465f9ec2aba3fd95c064a7f172aaf9dea3e008a90c12'
+  - '/api/public/print/jobs/7434083f-bdf1-44a7-b745-139bb4c546e7/upload'
+  
+      at TestContext.<anonymous> (file:///Users/kagansmtdms/Downloads/%D0%9F%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D1%8B/uluslarasiofis-main/test/print-uat.test.js:289:12)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'https://account.r2.cloudflarestorage.com/test-print/print/7434083f-bdf1-44a7-b745-139bb4c546e7?X-Amz-Expires=300&X-Amz-Date=20261008T122836Z&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=test-access%2F20261008%2Fauto%2Fs3%2Faws4_request&X-Amz-SignedHeaders=content-type%3Bhost%3Bif-none-match&X-Amz-Signature=2f23226cee64d54a7d18465f9ec2aba3fd95c064a7f172aaf9dea3e008a90c12',
+    expected: '/api/public/print/jobs/7434083f-bdf1-44a7-b745-139bb4c546e7/upload',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/print-uat.test.js:294:1
+✖ changing UAT windows and purging a test row cannot reserve a second v7 job (11.973958ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  200 !== 503
+  
+      at TestContext.<anonymous> (file:///Users/kagansmtdms/Downloads/%D0%9F%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D1%8B/uluslarasiofis-main/test/print-uat.test.js:303:12)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 200,
+    expected: 503,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

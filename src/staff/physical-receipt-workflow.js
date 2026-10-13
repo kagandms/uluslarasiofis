@@ -64,15 +64,19 @@ export function startPhysicalReceiptDraft(context) {
 
 /** Reserves the same draft reference on retries. @param {object} context Workspace. @returns {Promise<void>} Assigned number. @throws {Error} Allocation failure. */
 export async function assignPhysicalReference(context) {
-    context.state.reservation=await context.api.reserve({draft_id:context.state.registrationId,application_date:context.state.draft.application_date});
-    startPreloadingReceiptPdf(context);
+    if (context.state.reservation || context.state.isAssigningReference) return;
+    context.state.isAssigningReference=true;
+    try {
+        context.state.reservation=await context.api.reserve({draft_id:context.state.registrationId,application_date:context.state.draft.application_date});
+        startPreloadingReceiptPdf(context);
+    } finally { context.state.isAssigningReference=false; }
 }
 
 /** Saves the student first, keeping identifiers stable after a lost response. @param {object} context Workspace. @returns {Promise<object>} Durable intake. @throws {Error} Invalid/failed registration. */
 export async function savePhysicalReceiptDraft(context) {
     const state=context.state;
     if (!state.reservation) throw new Error('Önce Başvuru No Ata’ya basın.');
-    if (state.draft.application_date.slice(0,4)!==state.reservation.application_date.slice(0,4)) throw new Error('Tarih yılı değişti. Yeni başvuru numarası ayırın.');
+    if (state.draft.application_date.slice(0,4)!==state.reservation.application_date.slice(0,4)) throw new Error('Tarih yılı değişti. Formu kapatıp yeniden açın.');
     state.registrationBody ||= {registration_id:state.registrationId,reservation_id:state.reservation.id,...state.draft};
     sessionStorage.setItem(PENDING_REGISTRATION_KEY,state.registrationId);
     try {

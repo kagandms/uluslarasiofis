@@ -1,0 +1,124 @@
+{
+  "upload": {
+    "id": "goc",
+    "deployment_id": "6d9b67ed675e4d63a3ee460c8162cfba",
+    "modified_on": "2026-10-08T10:45:02.09471Z"
+  },
+  "sha256": "7eed30d20d47825151a76a6c6af8d26b775f8faa2ac0af35d11fef8ddfe681ac",
+  "assets_unchanged": true,
+  "pages": {
+    "/": {
+      "status": 200,
+      "sha256": "26b9ac0bc389eccc3784bbfe7c290a622ac2a0fd49afde52e6e715be15624d78"
+    },
+    "/basvuru/": {
+      "status": 200,
+      "sha256": "2f53bbbebdb866e59aef7b42913ba81736fcc7f65fd71a6501d1e2cd4067221d"
+    },
+    "/basvurum/": {
+      "status": 200,
+      "sha256": "27baa2fdf61a1165c0430078dfdd677d04662cc0d6ec2f2804daa26f48ceb43b"
+    },
+    "/yetkili/": {
+      "status": 200,
+      "sha256": "677c84ba6d036483c05963bc3b52294a252da3bb45646ef5659b8ab23a9ec485"
+    },
+    "/yazdir/": {
+      "status": 200,
+      "sha256": "500302969947e7b9e4ec812c7e996516074fc1058d90c76324f4b6e08fc19bdc"
+    },
+    "/downloads/ykn-eklentisi.json": {
+      "status": 200,
+      "sha256": "58db227e435b230e022ad4e80b4881ff7dbfe9c425610b5141481b32a47ca2aa"
+    }
+  },
+  "schedules_unchanged": true,
+  "schedules": {
+    "schedules": [
+      {
+        "cron": "* * * * *",
+        "created_on": "2026-10-08T08:52:04.595687Z",
+        "modified_on": "2026-10-08T10:44:13.701625Z"
+      },
+      {
+        "cron": "0 0 * * *",
+        "created_on": "2026-10-05T13:47:29.02502Z",
+        "modified_on": "2026-10-08T10:44:13.701625Z"
+      }
+    ]
+  },
+  "credential_names": [
+    "PRINTER_SECRET",
+    "PRINT_R2_ACCESS_KEY_ID",
+    "PRINT_R2_SECRET_ACCESS_KEY"
+  ],
+  "credential_types": "secret_text",
+  "credential_values_preserved": true,
+  "existing_secret_names_preserved": [
+    "APPS_SCRIPT_API_KEY",
+    "APPS_SCRIPT_URL",
+    "AZURE_VISION_ENDPOINT",
+    "AZURE_VISION_KEY",
+    "R2_ACCESS_KEY_ID",
+    "R2_ACCOUNT_ID",
+    "R2_SECRET_ACCESS_KEY",
+    "SCANNER_SECRET",
+    "STAFF_BOOTSTRAP_TOKEN"
+  ],
+  "live_gate_probes": [
+    {
+      "path": "/api/public/print/upload-intents",
+      "status": 503,
+      "code": "PRINT_DISABLED"
+    },
+    {
+      "path": "/api/public/print/jobs/gate-probe/finalize",
+      "status": 503,
+      "code": "PRINT_DISABLED"
+    },
+    {
+      "path": "/api/printer/claim",
+      "status": 503,
+      "code": "PRINT_DISABLED"
+    },
+    {
+      "path": "/api/printer/jobs/gate-probe/content",
+      "status": 503,
+      "code": "PRINT_DISABLED"
+    },
+    {
+      "path": "/api/printer/jobs/gate-probe/validation-result",
+      "status": 503,
+      "code": "PRINT_DISABLED"
+    },
+    {
+      "path": "/api/printer/jobs/gate-probe/submission-started",
+      "status": 503,
+      "code": "PRINT_DISABLED"
+    }
+  ],
+  "public_status": {
+    "available": false,
+    "options": {
+      "paper_sizes": [
+        "A4"
+      ],
+      "color_modes": [
+        "monochrome"
+      ],
+      "duplex_modes": [
+        "simplex"
+      ],
+      "orientations": [
+        "portrait"
+      ],
+      "limits": {
+        "max_copies": 3,
+        "max_page_copies": 200
+      }
+    },
+    "requestId": "req_9c88dbfe-cb54-494d-aa49-a0b84ca0494f"
+  },
+  "printer_auth_preserved": true,
+  "reconcile_jobs": 0
+}

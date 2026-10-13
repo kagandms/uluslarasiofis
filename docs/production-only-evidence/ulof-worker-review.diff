@@ -1,0 +1,66 @@
+--- 
+
++++ 
+
+@@ -30,4 +30,35 @@
+
+ 	}
+ };
++//#endregion
++//#region src/server/domain/print-gate.js
++/**
++* Check the explicit operator switch; missing or malformed values fail closed.
++* @param {Readonly<Record<string, unknown>>} environment Worker bindings.
++* @returns {boolean} Whether new print work is enabled.
++*/
++function isPrintEnabled(environment) {
++	return environment.PRINT_ENABLED === "true";
++}
++/**
++* Gate all print work while preserving status and authenticated recovery.
++* @param {string} pathname API request path.
++* @param {Readonly<Record<string, unknown>>} environment Worker bindings.
++* @returns {void}
++* @throws {ApiError} When print work is disabled.
++*/
++function requirePrintRequestEnabled(pathname, environment) {
++	if (isPrintEnabled(environment)) return;
++	if (pathname.startsWith("/api/public/print/")) {
++		if (["/api/public/print/status", "/api/public/print/jobs/status"].includes(pathname)) return;
++		throwPrintDisabled();
++	}
++	if (!pathname.startsWith("/api/printer/")) return;
++	if (["/api/printer/heartbeat", "/api/printer/reconcile"].includes(pathname)) return;
++	if (/^\/api\/printer\/jobs\/[A-Za-z0-9_-]{1,64}\/result$/.test(pathname)) return;
++	throwPrintDisabled();
++}
++function throwPrintDisabled() {
++	throw new ApiError(503, "PRINT_DISABLED", "Yazdırma şu anda kapalı.", true);
++}
+ //#endregion
+ //#region src/config/constants.js
+@@ -3411,5 +3442,5 @@
+
+ }
+ //#endregion
+-//#region node_modules/aws4fetch/dist/aws4fetch.esm.mjs
++//#region ../../../Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main/node_modules/aws4fetch/dist/aws4fetch.esm.mjs
+ /**
+ * @license MIT <https://opensource.org/licenses/MIT>
+@@ -8023,4 +8054,8 @@
+
+ async function readPublicPrintStatus(request, environment) {
+ 	requireMethod(request, "GET");
++	if (!isPrintEnabled(environment)) return {
++		available: false,
++		options: readPrintOptionCapabilities(environment)
++	};
+ 	const repository = createPrintRepository(environment.DB);
+ 	await enforceRateLimit({ rateLimits: createRateLimitRepository(environment.DB) }, request, {
+@@ -8424,4 +8459,5 @@
+
+ async function routeApi(request, environment, requestId) {
+ 	const { pathname } = new URL(request.url);
++	requirePrintRequestEnabled(pathname, environment);
+ 	if (pathname.startsWith("/api/printer/")) return handlePrinterRequest(request, environment);
+ 	if (pathname === "/api/public/print/status") return readPublicPrintStatus(request, environment);

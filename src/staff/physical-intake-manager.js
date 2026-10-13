@@ -96,7 +96,7 @@ async function openCreate(context) {
         successMessage: 'PDF hazır. Öğrenci bilgilerini kontrol edip Kaydet’e basın.',
         onPrepare: files => recognizePhysicalApplicationForm(files),
         onSave: async (bytes, fields) => {
-            if (bytes.length > MAX_PHYSICAL_PDF_BYTES) throw new Error('PDF en fazla 10 MB olabilir. Belgeleri küçültüp tekrar oluşturun.');
+            if (bytes.length > MAX_PHYSICAL_PDF_BYTES) throw new Error('PDF en fazla 50 MB olabilir. Belgeleri küçültüp tekrar oluşturun.');
             if (context.state.previewUrl) URL.revokeObjectURL(context.state.previewUrl);
             context.state.previewUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
             context.state.preparedPdf = bytes;
@@ -175,7 +175,7 @@ async function mutateReceipt(context, options) {
 
 async function persistPdf(context, capture, bytes) {
     if (context.isBusy) throw new Error('Başka bir işlem devam ediyor. Tamamlanınca tekrar deneyin.');
-    if (bytes.byteLength > MAX_PHYSICAL_PDF_BYTES) throw new Error('PDF en fazla 10 MB olabilir. Sayfa sayısını azaltın veya PDF’i küçültün.');
+    if (bytes.byteLength > MAX_PHYSICAL_PDF_BYTES) throw new Error('PDF en fazla 50 MB olabilir. Sayfa sayısını azaltın veya PDF’i küçültün.');
     if (capture.bytes && capture.bytes !== bytes) capture.fileId = crypto.randomUUID();
     capture.bytes = bytes;
     setBusy(context, true);
@@ -220,7 +220,7 @@ async function preparePdf(context) {
     const capture = captureReceipt(context);
     const initialFiles = await fetchCurrentPdf(context.state.detail.intake);
     openPdfMergerModal({ contextLabel: `${capture.label} · Sayfaları sıralayın veya silin; QR ve dosya seçimiyle yeni belgeler ekleyin.`,
-        initialFiles, maxFiles: 300, mergeLabel: 'PDF’yi Yeniden Oluştur', confirmLabel: 'Değişiklikleri Kaydet',
+        initialFiles, maxFiles: 300, mergeLabel: 'PDF Oluştur', confirmLabel: 'Değişiklikleri Kaydet',
         onSave: bytes => persistPdf(context, capture, bytes) });
     context.root.ownerDocument.getElementById('pdf-merger-modal-overlay').dataset.physicalIntakeId=capture.id;
 }
@@ -259,7 +259,7 @@ function createHandlers(context) {
 export function initializePhysicalIntakeManager(root) {
     if (!IS_PHYSICAL_INTAKE_ENABLED) return;
     const context = { root, api: createPhysicalIntakeClient(), isBusy: false, controls: [], handlers: null,
-        state: { view: 'queue', query: { q: '', status: 'all', page: 1, page_size: 25 }, result: null, detail: null, message: '' } };
+        state: { view: 'queue', query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }, result: null, detail: null, message: '' } };
     context.handlers = createHandlers(context);
     root.textContent = 'Fiziksel başvuru erişimi kontrol ediliyor…';
     import('../services/physical-receipt-pdf.js')

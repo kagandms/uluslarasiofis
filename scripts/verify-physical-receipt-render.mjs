@@ -71,7 +71,10 @@ try {
         assert.ok(visibleLogos.left > 20 && visibleLogos.right > 10, 'Both logos must survive the actual PDF raster, including a scrolled workspace');
         results.push({ variant, visiblePdfLogoPixels: visibleLogos, byteSize: bytes.length, pageCount: pdf.getPageCount(), languages: rendered.languages, arabicDirection: rendered.arabicDirection });
     }
-    const missingAsset = await page.evaluate(async () => {
+    // A fresh document avoids the successful-render logo cache masking a missing asset.
+    const missingAssetPage = await browser.newPage();
+    await missingAssetPage.goto('http://127.0.0.1:5199/receipt-qa');
+    const missingAsset = await missingAssetPage.evaluate(async () => {
         const { renderPhysicalReceiptPdf } = await import('/src/services/physical-receipt-pdf.js');
         const original = window.fetch;
         window.fetch = async (...args) => String(args[0]).includes('goc_logo.png') ? new Response('', { status: 404 }) : original(...args);
@@ -81,6 +84,7 @@ try {
         } catch { return true; }
         finally { window.fetch = original; }
     });
+    await missingAssetPage.close();
     assert.equal(missingAsset, true);
     const cover = await page.evaluate(async () => {
         const { getDocumentHtml } = await import('/src/services/pdfGenerator.js');

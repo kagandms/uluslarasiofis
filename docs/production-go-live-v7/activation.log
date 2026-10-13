@@ -1,0 +1,57 @@
+{
+  "status": "GO-LIVE SUCCESS",
+  "versions": [
+    {
+      "version_id": "cf84967e-e813-4e09-9146-17e3109c52c5",
+      "percentage": 100
+    }
+  ],
+  "public_status": {
+    "available": true,
+    "options": {
+      "paper_sizes": [
+        "A4"
+      ],
+      "color_modes": [
+        "monochrome"
+      ],
+      "duplex_modes": [
+        "simplex"
+      ],
+      "orientations": [
+        "portrait",
+        "landscape"
+      ],
+      "limits": {
+        "max_copies": 50,
+        "max_page_copies": 200
+      }
+    },
+    "limits": {
+      "max_copies": 50,
+      "max_page_copies": 200
+    },
+    "requestId": "req_ca7db36c-a930-4f2e-a2e1-340060d9ca06"
+  },
+  "final_health": {
+    "printer": [
+      {
+        "printer_id": "office-printer-01",
+        "runner_id": "office-runner-01",
+        "printer_name": "Uluslararas\u0131 Ofis",
+        "health": "ready",
+        "settings_protocol": 3,
+        "seen_at": "2026-10-08T14:05:17.067Z"
+      }
+    ],
+    "scanner": [
+      {
+        "health": "ready",
+        "engine_version": "1.5.4",
+        "signature_version": "28147",
+        "seen_at": "2026-10-08T14:05:12.599Z"
+      }
+    ],
+    "queue": []
+  }
+}

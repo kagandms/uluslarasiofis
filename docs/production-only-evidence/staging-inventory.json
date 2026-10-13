@@ -1,0 +1,208 @@
+{
+  "/workers/scripts": [
+    {
+      "id": "goc",
+      "modified_on": "2026-10-08T10:45:02.09471Z"
+    },
+    {
+      "id": "goc-staging",
+      "modified_on": "2026-10-08T10:52:27.857455Z"
+    }
+  ],
+  "/d1/database": [
+    {
+      "uuid": "74b45974-8665-4616-bce0-3380da71c22f",
+      "name": "uluslarasiofis-production",
+      "created_at": "2026-10-04T12:49:25.179Z"
+    },
+    {
+      "uuid": "8f034e90-17fc-43d7-aa5d-125571019612",
+      "name": "uluslarasiofis-staging",
+      "created_at": "2026-09-28T19:32:16.644Z"
+    }
+  ],
+  "/r2/buckets": {
+    "buckets": [
+      {
+        "name": "uluslarasiofis-documents-local",
+        "creation_date": "2026-10-04T17:58:13.920Z"
+      },
+      {
+        "name": "uluslarasiofis-documents-production",
+        "creation_date": "2026-10-04T12:49:32.802Z"
+      },
+      {
+        "name": "uluslarasiofis-documents-staging",
+        "creation_date": "2026-09-28T19:35:07.475Z"
+      },
+      {
+        "name": "uluslarasiofis-print-production",
+        "creation_date": "2026-10-08T08:24:34.765Z"
+      },
+      {
+        "name": "uluslarasiofis-print-staging",
+        "creation_date": "2026-10-07T18:40:38.397Z"
+      }
+    ]
+  },
+  "/workers/scripts/goc-staging/settings": {
+    "bindings": [
+      {
+        "name": "APP_ENV",
+        "type": "plain_text"
+      },
+      {
+        "name": "APPS_SCRIPT_API_KEY",
+        "type": "secret_text"
+      },
+      {
+        "name": "APPS_SCRIPT_URL",
+        "type": "secret_text"
+      },
+      {
+        "name": "ASSETS",
+        "type": "assets"
+      },
+      {
+        "name": "AZURE_VISION_ENDPOINT",
+        "type": "secret_text"
+      },
+      {
+        "name": "AZURE_VISION_KEY",
+        "type": "secret_text"
+      },
+      {
+        "database_id": "8f034e90-17fc-43d7-aa5d-125571019612",
+        "id": "8f034e90-17fc-43d7-aa5d-125571019612",
+        "name": "DB",
+        "type": "d1"
+      },
+      {
+        "bucket_name": "uluslarasiofis-documents-staging",
+        "name": "DOCUMENTS",
+        "type": "r2_bucket"
+      },
+      {
+        "name": "GOOGLE_VISION_API_KEY",
+        "type": "secret_text"
+      },
+      {
+        "name": "PRINTER_SECRET",
+        "type": "secret_text"
+      },
+      {
+        "name": "PRINT_R2_ACCESS_KEY_ID",
+        "type": "secret_text"
+      },
+      {
+        "name": "PRINT_R2_SECRET_ACCESS_KEY",
+        "type": "secret_text"
+      },
+      {
+        "name": "PUBLIC_DECLARATION_VERSION",
+        "type": "plain_text"
+      },
+      {
+        "name": "R2_ACCESS_KEY_ID",
+        "type": "secret_text"
+      },
+      {
+        "name": "R2_ACCOUNT_ID",
+        "type": "secret_text"
+      },
+      {
+        "name": "R2_BUCKET_NAME",
+        "type": "plain_text"
+      },
+      {
+        "name": "R2_SECRET_ACCESS_KEY",
+        "type": "secret_text"
+      },
+      {
+        "name": "SCANNER_SECRET",
+        "type": "secret_text"
+      },
+      {
+        "name": "STAFF_BOOTSTRAP_TOKEN",
+        "type": "secret_text"
+      },
+      {
+        "name": "STAFF_SHARED_USERNAME",
+        "type": "plain_text"
+      }
+    ]
+  },
+  "/workers/scripts/goc-staging/schedules": {
+    "schedules": [
+      {
+        "cron": "0 0 * * *",
+        "created_on": "2026-10-05T13:43:06.194636Z",
+        "modified_on": "2026-10-08T10:52:28.887245Z"
+      }
+    ]
+  },
+  "remote_branches": [
+    "9d055bf4f9f0e723bae2762d31d18c6395ed01ca\trefs/heads/main",
+    "16cc28f0ef9e66b925b8e7eb1774c72a2e15b3dd\trefs/heads/production",
+    "a6c9fd1518aa9b09fa47b8bae92629ddfd55f32f\trefs/heads/staging"
+  ],
+  "staging_local_status": [
+    " M index.html",
+    " M package-lock.json",
+    " M package.json",
+    " M src/managers/yknManager.js",
+    " M src/public/i18n/messages.js",
+    " M src/public/main.js",
+    " M src/public/public.css",
+    " M src/server/worker.js",
+    " M src/staff/applicationsManager.js",
+    " M src/staff/main.js",
+    " M src/ui/passportCropperModal.js",
+    " M src/ui/workspaceNavigation.js",
+    " M src/utils/ykn-document-parser.js",
+    " M vite.config.js",
+    " M yetkili/index.html",
+    " M ykn_eklenti-main/background.js",
+    " M ykn_eklenti-main/content.js",
+    " M ykn_eklenti-main/document-parser.js",
+    " M ykn_eklenti-main/manifest.json",
+    "?? .DS_Store",
+    "?? docs/mobile-document-transfer-design.md",
+    "?? docs/physical-intake-design.md",
+    "?? migrations/0011_mobile_document_transfers.sql",
+    "?? migrations/0012_physical_intakes.sql",
+    "?? migrations/0013_physical_intake_review.sql",
+    "?? mobile-transfer/",
+    "?? public/topkapi_logo.png",
+    "?? src/config/mobile-transfer-policy.js",
+    "?? src/config/physical-document-limits.js",
+    "?? src/config/physical-intake-policy.js",
+    "?? src/mobile-transfer/",
+    "?? src/public/publicGuideModal.js",
+    "?? src/server/domain/physical-intake-policy.js",
+    "?? src/server/repositories/d1/physical-intake-repository.js",
+    "?? src/server/repositories/d1/physical-registration-repository.js",
+    "?? src/server/routes/mobile-transfer-routes.js",
+    "?? src/server/routes/physical-intake-routes.js",
+    "?? src/server/routes/physical-pdf-routes.js",
+    "?? src/server/routes/physical-registration-routes.js",
+    "?? src/services/mobile-transfer-client.js",
+    "?? src/services/optimize-document-image.js",
+    "?? src/services/pdfMergerService.js",
+    "?? src/services/split-pdf-pages.js",
+    "?? src/staff/application-queue-table.js",
+    "?? src/staff/physical-form-ocr.js",
+    "?? src/staff/physical-intake-client.js",
+    "?? src/staff/physical-intake-manager.js",
+    "?? src/staff/physical-intake-view.js",
+    "?? src/staff/physical-intake.css",
+    "?? src/ui/mobile-transfer-panel.js",
+    "?? src/ui/pdfMergerModal.js",
+    "?? src/ui/staff-modal.css",
+    "?? src/ui/staffGuideModal.js",
+    "?? test/.DS_Store",
+    "?? test/physical-pdf-editor.test.js"
+  ],
+  "staging_exclusive_commits": "19",
+  "staging_unmerged_patch_count": 3
+}

@@ -1,0 +1,35 @@
+{
+  "/r2/buckets/uluslarasiofis-documents-production": {
+    "name": "uluslarasiofis-documents-production",
+    "creation_date": "2026-10-04T12:49:32.802Z",
+    "location": "EEUR",
+    "storage_class": "Standard",
+    "jurisdiction": "default"
+  },
+  "/r2/buckets/uluslarasiofis-print-production": {
+    "name": "uluslarasiofis-print-production",
+    "creation_date": "2026-10-08T08:24:34.765Z",
+    "location": "EEUR",
+    "storage_class": "Standard",
+    "jurisdiction": "default"
+  },
+  "/workers/scripts/goc/deployments": [
+    {
+      "id": "3eab9951-6626-40f9-800b-8d9534898fa0",
+      "source": "api",
+      "strategy": "percentage",
+      "author_email": "kagan.durmus61@mail.ru",
+      "annotations": {
+        "workers/message": "Fail-closed production print gate; PRINT_ENABLE...",
+        "workers/triggered_by": "upload"
+      },
+      "versions": [
+        {
+          "version_id": "6d9b67ed-675e-4d63-a3ee-460c8162cfba",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-08T10:45:02.09471Z"
+    }
+  ]
+}

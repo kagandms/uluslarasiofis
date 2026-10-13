@@ -1,0 +1,10 @@
+✔ local Workers R2 condition prevents replayed or racing UAT uploads from replacing the fixture (324.926583ms)
+✔ native local D1 preserves one persistent UAT reservation across racing sessions and job cleanup (156.943542ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 763.688458

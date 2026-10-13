@@ -5,6 +5,17 @@ body { margin: 0; min-width: 320px; }
 .print-brand { align-self: center; margin-bottom: 20px; }
 .print-brand img { display: block; width: 180px; max-height: 72px; object-fit: contain; }
 .print-card { padding: clamp(18px, 4vw, 32px); background: white; border: 1px solid #dfe3e8; border-radius: 18px; box-shadow: 0 10px 30px #1720330c; }
+.print-language-picker { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.print-language-picker label { font-size: .9rem; font-weight: 650; }
+.print-language-picker select { min-height: 44px; max-width: 100%; padding: 8px 32px 8px 12px; border: 1px solid #cbd1da; border-radius: 9px; background: #fff; color: inherit; font: inherit; }
+.print-quick-guide { margin-top: 18px; padding: 16px; border-radius: 12px; background: #f8f4f5; }
+.print-quick-guide h2 { margin: 0 0 12px; font-size: 1rem; }
+.print-quick-guide ol { list-style: none; counter-reset: print-step; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; }
+.print-quick-guide li { counter-increment: print-step; display: flex; align-items: flex-start; gap: 8px; line-height: 1.45; font-size: .9rem; }
+.print-quick-guide li::before { content: counter(print-step); display: grid; place-items: center; flex: 0 0 24px; height: 24px; border-radius: 50%; background: #861b3a; color: #fff; font-size: .8rem; font-weight: 700; }
+.print-quick-guide p, .print-collection-hint { margin: 12px 0 0; color: #5b6471; font-size: .86rem; line-height: 1.5; }
+.print-guide-download { margin: 14px 0; text-align: center; }
+.print-guide-download a { color: #7e1533; font-weight: 700; text-underline-offset: 3px; }
 .print-eyebrow { margin: 0 0 8px; color: #7e1533; font-size: .82rem; font-weight: 700; }
 h1 { margin: 0; font-size: clamp(1.7rem, 7vw, 2.2rem); }
 .print-intro, .print-guidance { color: #5b6471; line-height: 1.5; }
@@ -58,6 +69,8 @@ footer { margin-top: auto; padding-top: 24px; color: #687587; text-align: center
     .print-brand img { width: 150px; }
     .print-card { padding: 16px 12px; border-radius: 14px; }
     .print-file-card { padding: 12px; }
+    .print-quick-guide { padding: 12px; }
+    .print-quick-guide ol { grid-template-columns: 1fr; }
     .print-settings-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
     .print-setting label { min-height: 2.5em; font-size: .84rem; }
     .print-setting select, .print-setting input { min-height: 46px; padding: 8px 6px; font-size: .9rem; }

@@ -1,0 +1,329 @@
+{
+  "checked_at_utc": "2026-10-08T12:04:14.136540+00:00",
+  "safe_vars": {
+    "APP_ENV": "production",
+    "PRINT_BUCKET_NAME": "uluslarasiofis-print-production",
+    "PRINT_ENABLE_A3": "false",
+    "PRINT_ENABLE_COLOR": "false",
+    "PRINT_ENABLED": "false",
+    "PRINT_ENABLE_DUPLEX": "false",
+    "PRINT_MAX_COPIES_PER_JOB": "50",
+    "PRINT_MAX_PAGE_COPIES": "200"
+  },
+  "credential_bindings": [
+    {
+      "name": "PRINTER_SECRET",
+      "type": "secret_text"
+    },
+    {
+      "name": "PRINT_R2_ACCESS_KEY_ID",
+      "type": "secret_text"
+    },
+    {
+      "name": "PRINT_R2_SECRET_ACCESS_KEY",
+      "type": "secret_text"
+    }
+  ],
+  "resource_bindings": [
+    {
+      "name": "DB",
+      "type": "d1",
+      "id": "74b45974-8665-4616-bce0-3380da71c22f",
+      "database_id": "74b45974-8665-4616-bce0-3380da71c22f"
+    },
+    {
+      "name": "DOCUMENTS",
+      "type": "r2_bucket",
+      "bucket_name": "uluslarasiofis-documents-production"
+    },
+    {
+      "name": "PRINT_FILES",
+      "type": "r2_bucket",
+      "bucket_name": "uluslarasiofis-print-production"
+    }
+  ],
+  "deployments": [
+    {
+      "id": "9fc38cb1-5487-47a8-bc05-462511ea63be",
+      "versions": [
+        {
+          "version_id": "0e8dec4b-4cd2-40f6-ac1c-0879954a261d",
+          "percentage": 100
+        }
+      ],
+      "created_on": "2026-10-08T11:56:09.351424Z"
+    }
+  ],
+  "schedules": {
+    "schedules": [
+      {
+        "cron": "* * * * *",
+        "created_on": "2026-10-08T08:52:04.595687Z",
+        "modified_on": "2026-10-08T11:56:15.271938Z"
+      },
+      {
+        "cron": "0 0 * * *",
+        "created_on": "2026-10-05T13:47:29.02502Z",
+        "modified_on": "2026-10-08T11:56:15.271938Z"
+      }
+    ]
+  },
+  "d1": {
+    "queue_counts": [
+      {
+        "results": [],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "EEUR",
+          "served_by_colo": "PRG",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.2036
+          },
+          "duration": 0.2036,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 647168,
+          "rows_read": 2,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ],
+    "active_queue": [
+      {
+        "results": [
+          {
+            "count": 0
+          }
+        ],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "EEUR",
+          "served_by_colo": "PRG",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.179
+          },
+          "duration": 0.179,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 647168,
+          "rows_read": 0,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ],
+    "pending_cleanup": [
+      {
+        "results": [
+          {
+            "count": 0
+          }
+        ],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "EEUR",
+          "served_by_colo": "PRG",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.2065
+          },
+          "duration": 0.2065,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 647168,
+          "rows_read": 0,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ],
+    "heartbeat": [
+      {
+        "results": [],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "EEUR",
+          "served_by_colo": "PRG",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.1777
+          },
+          "duration": 0.1777,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 647168,
+          "rows_read": 2,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ],
+    "schema": [
+      {
+        "results": [
+          {
+            "name": "print_jobs",
+            "sql": "CREATE TABLE print_jobs (\n    id TEXT PRIMARY KEY NOT NULL,\n    idempotency_key_hash TEXT NOT NULL UNIQUE,\n    upload_token_hash TEXT,\n    tracking_token_hash TEXT NOT NULL,\n    storage_key TEXT UNIQUE,\n    media_type TEXT NOT NULL CHECK (media_type IN ('application/pdf', 'image/jpeg', 'image/png')),\n    byte_size INTEGER NOT NULL CHECK (byte_size > 0 AND byte_size <= 10485760),\n    page_count INTEGER CHECK (page_count IS NULL OR page_count BETWEEN 1 AND 20),\n    copies INTEGER NOT NULL DEFAULT 1 CHECK (copies BETWEEN 1 AND 50),\n    orientation TEXT NOT NULL DEFAULT 'portrait' CHECK (orientation IN ('portrait', 'landscape')),\n    paper_size TEXT NOT NULL DEFAULT 'A4' CHECK (paper_size IN ('A4', 'A3')),\n    color_mode TEXT NOT NULL DEFAULT 'monochrome' CHECK (color_mode IN ('monochrome', 'color')),\n    duplex TEXT NOT NULL DEFAULT 'simplex' CHECK (duplex IN ('simplex', 'duplexlong')),\n    status TEXT NOT NULL DEFAULT 'uploading' CHECK (status IN (\n        'uploading', 'queued', 'leased', 'ready', 'submission_started',\n        'submitted', 'failed', 'unknown', 'cancelled', 'expired'\n    )),\n    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 3),\n    available_at TEXT NOT NULL,\n    runner_id TEXT,\n    lease_until TEXT,\n    lease_token_hash TEXT,\n    submission_started_at TEXT,\n    spooler_job_id TEXT,\n    result_code TEXT,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    expires_at TEXT NOT NULL,\n    purge_after TEXT NOT NULL,\n    cleanup_status TEXT NOT NULL DEFAULT 'none' CHECK (cleanup_status IN ('none', 'pending', 'complete')),\n    cleanup_attempts INTEGER NOT NULL DEFAULT 0 CHECK (cleanup_attempts >= 0),\n    storage_deleted_at TEXT,\n    CHECK (page_count IS NULL OR page_count * copies <= 1000)\n)"
+          },
+          {
+            "name": "printer_heartbeats",
+            "sql": "CREATE TABLE \"printer_heartbeats\" (\n    printer_id TEXT PRIMARY KEY NOT NULL,\n    runner_id TEXT NOT NULL,\n    health TEXT NOT NULL CHECK (health IN ('ready', 'unavailable')),\n    printer_name TEXT NOT NULL CHECK (length(printer_name) BETWEEN 1 AND 128),\n    seen_at TEXT NOT NULL,\n    settings_protocol INTEGER NOT NULL DEFAULT 0 CHECK (settings_protocol IN (0, 1, 2, 3))\n)"
+          }
+        ],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "EEUR",
+          "served_by_colo": "PRG",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.2577
+          },
+          "duration": 0.2577,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 647168,
+          "rows_read": 134,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ],
+    "migrations": [
+      {
+        "results": [
+          {
+            "name": "0002_session3_fingerprint_and_birth_certificate.sql"
+          },
+          {
+            "name": "0011_print_queue.sql"
+          },
+          {
+            "name": "0012_print_options.sql"
+          },
+          {
+            "name": "0013_print_orientation_volume.sql"
+          },
+          {
+            "name": "0014_print_orientation_devmode.sql"
+          }
+        ],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "EEUR",
+          "served_by_colo": "PRG",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.1845
+          },
+          "duration": 0.1845,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 647168,
+          "rows_read": 17,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ],
+    "scanner_health": [
+      {
+        "results": [
+          {
+            "name": "scanner_heartbeats"
+          },
+          {
+            "name": "sqlite_autoindex_scanner_heartbeats_1"
+          }
+        ],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "EEUR",
+          "served_by_colo": "PRG",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.2057
+          },
+          "duration": 0.2057,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 647168,
+          "rows_read": 134,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ]
+  },
+  "r2": {
+    "uluslarasiofis-documents-production": {
+      "name": "uluslarasiofis-documents-production",
+      "creation_date": "2026-10-04T12:49:32.802Z",
+      "location": "EEUR",
+      "storage_class": "Standard"
+    },
+    "uluslarasiofis-print-production": {
+      "name": "uluslarasiofis-print-production",
+      "creation_date": "2026-10-08T08:24:34.765Z",
+      "location": "EEUR",
+      "storage_class": "Standard"
+    }
+  },
+  "worker_modules": [
+    {
+      "name": "index.js",
+      "sha256": "22c50f1d60541599cc35fc7391f4c58b17d88d0669edea049c1e45aa26e32866",
+      "path": "/private/tmp/ulof-v7-live-worker.js"
+    }
+  ],
+  "d1_metadata": {
+    "uuid": "74b45974-8665-4616-bce0-3380da71c22f",
+    "name": "uluslarasiofis-production",
+    "version": "production",
+    "num_tables": 32
+  },
+  "print_r2_cors": {
+    "rules": [
+      {
+        "allowed": {
+          "origins": [
+            "https://goc.topkapiuni.workers.dev"
+          ],
+          "methods": [
+            "PUT"
+          ],
+          "headers": [
+            "Content-Type",
+            "If-None-Match"
+          ]
+        },
+        "maxAgeSeconds": 300
+      }
+    ]
+  },
+  "scanner_heartbeat": [
+    {
+      "health": "ready",
+      "engine_version": "1.5.4",
+      "signature_version": "28147",
+      "signature_updated_at": "2026-10-08T06:24:12.000Z",
+      "seen_at": "2026-10-08T12:18:05.084Z"
+    }
+  ]
+}

@@ -8,6 +8,10 @@
 export async function requestMobileTransfer(path, options = {}) {
     const response = await fetch(path, { ...options, credentials: 'same-origin', cache: 'no-store' });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error?.message || 'Aktarım tamamlanamadı.');
+    if (!response.ok) {
+        const error = new Error(payload.error?.message || 'Aktarım tamamlanamadı.');
+        error.code = payload.error?.code || 'TRANSFER_FAILED';
+        throw error;
+    }
     return payload;
 }

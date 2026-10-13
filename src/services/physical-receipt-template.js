@@ -30,7 +30,7 @@ export function createPhysicalReceiptTemplate(document,snapshot,logos) {
     root.append(fields);
     appendText(root,'h2','Başvuru Takip No / Tracking No');
     const code=appendText(root,'p',snapshot.tracking_reference); code.className='physical-receipt-code'; code.dir='ltr';
-    appendText(root,'p',snapshot.portal_origin).className='physical-receipt-origin';
+    appendTrackingPortal(root,snapshot.portal_origin,logos.trackingQr);
     for (const [locale,messages] of Object.entries(PHYSICAL_RECEIPT_MESSAGES)) {
         const section=document.createElement('section'); section.lang=locale; section.dir=locale==='ar'?'rtl':'ltr';
         appendText(section,'h3',LANGUAGE_NAMES[locale]);
@@ -38,4 +38,16 @@ export function createPhysicalReceiptTemplate(document,snapshot,logos) {
         root.append(section);
     }
     return root;
+}
+
+function appendTrackingPortal(root,portalOrigin,trackingQr) {
+    const panel=appendText(root,'div',''); panel.className='physical-receipt-portal';
+    const instructions=appendText(panel,'div','');
+    appendText(instructions,'strong','Başvurunu takip et / Track your application');
+    const link=appendText(instructions,'a',portalOrigin);
+    link.href=portalOrigin; link.className='physical-receipt-origin'; link.dir='ltr';
+    if (!trackingQr) return;
+    const image=root.ownerDocument.createElement('img');
+    image.src=trackingQr; image.alt='Başvuru takip sitesi QR kodu';
+    panel.append(image);
 }

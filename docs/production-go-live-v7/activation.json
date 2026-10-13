@@ -1,0 +1,140 @@
+{
+  "before_health": {
+    "printer": [
+      {
+        "printer_id": "office-printer-01",
+        "runner_id": "office-runner-01",
+        "printer_name": "Uluslararas\u0131 Ofis",
+        "health": "ready",
+        "settings_protocol": 3,
+        "seen_at": "2026-10-08T14:05:17.067Z"
+      }
+    ],
+    "scanner": [
+      {
+        "health": "ready",
+        "engine_version": "1.5.4",
+        "signature_version": "28147",
+        "seen_at": "2026-10-08T14:05:12.599Z"
+      }
+    ],
+    "queue": []
+  },
+  "pages_before": {
+    "/": {
+      "status": 200,
+      "sha256": "26b9ac0bc389eccc3784bbfe7c290a622ac2a0fd49afde52e6e715be15624d78"
+    },
+    "/basvuru/": {
+      "status": 200,
+      "sha256": "2f53bbbebdb866e59aef7b42913ba81736fcc7f65fd71a6501d1e2cd4067221d"
+    },
+    "/basvurum/": {
+      "status": 200,
+      "sha256": "27baa2fdf61a1165c0430078dfdd677d04662cc0d6ec2f2804daa26f48ceb43b"
+    },
+    "/yetkili/": {
+      "status": 200,
+      "sha256": "0a2b65a7547ae9d36a18840f568f8b901e01fa3a21274932bc8ddfeb18f96993"
+    },
+    "/yazdir/": {
+      "status": 200,
+      "sha256": "500302969947e7b9e4ec812c7e996516074fc1058d90c76324f4b6e08fc19bdc"
+    },
+    "/downloads/ykn-eklentisi.json": {
+      "status": 200,
+      "sha256": "511aa69346f47dce903567ac22f7218155a7d5f082aede1d26ecff953d92f0f9"
+    }
+  },
+  "worker_sha256": "4b0e72eeb2346ff5cf3f1687f126d4a4507bb8bfe2228856628b7faf0958a045",
+  "new_physical_print_sent": false,
+  "status": "GO-LIVE SUCCESS",
+  "public_status_http": 200,
+  "public_status": {
+    "available": true,
+    "options": {
+      "paper_sizes": [
+        "A4"
+      ],
+      "color_modes": [
+        "monochrome"
+      ],
+      "duplex_modes": [
+        "simplex"
+      ],
+      "orientations": [
+        "portrait",
+        "landscape"
+      ],
+      "limits": {
+        "max_copies": 50,
+        "max_page_copies": 200
+      }
+    },
+    "limits": {
+      "max_copies": 50,
+      "max_page_copies": 200
+    },
+    "requestId": "req_ca7db36c-a930-4f2e-a2e1-340060d9ca06"
+  },
+  "deployment_id": "5d1689a2-4ed4-471a-bd18-1fe649e25183",
+  "versions": [
+    {
+      "version_id": "cf84967e-e813-4e09-9146-17e3109c52c5",
+      "percentage": 100
+    }
+  ],
+  "final_health": {
+    "printer": [
+      {
+        "printer_id": "office-printer-01",
+        "runner_id": "office-runner-01",
+        "printer_name": "Uluslararas\u0131 Ofis",
+        "health": "ready",
+        "settings_protocol": 3,
+        "seen_at": "2026-10-08T14:05:17.067Z"
+      }
+    ],
+    "scanner": [
+      {
+        "health": "ready",
+        "engine_version": "1.5.4",
+        "signature_version": "28147",
+        "seen_at": "2026-10-08T14:05:12.599Z"
+      }
+    ],
+    "queue": []
+  },
+  "assets_unchanged": true,
+  "bindings_preserved": true,
+  "secret_names_preserved": [
+    "APPS_SCRIPT_API_KEY",
+    "APPS_SCRIPT_URL",
+    "AZURE_VISION_ENDPOINT",
+    "AZURE_VISION_KEY",
+    "PRINTER_SECRET",
+    "PRINT_R2_ACCESS_KEY_ID",
+    "PRINT_R2_SECRET_ACCESS_KEY",
+    "R2_ACCESS_KEY_ID",
+    "R2_ACCOUNT_ID",
+    "R2_SECRET_ACCESS_KEY",
+    "SCANNER_SECRET",
+    "STAFF_BOOTSTRAP_TOKEN"
+  ],
+  "crons_preserved": true,
+  "schedules": {
+    "schedules": [
+      {
+        "cron": "* * * * *",
+        "created_on": "2026-10-08T08:52:04.595687Z",
+        "modified_on": "2026-10-08T13:07:49.253135Z"
+      },
+      {
+        "cron": "0 0 * * *",
+        "created_on": "2026-10-05T13:47:29.02502Z",
+        "modified_on": "2026-10-08T13:07:49.253135Z"
+      }
+    ]
+  },
+  "checked_at_utc": "2026-10-08T14:05:43.244275+00:00"
+}

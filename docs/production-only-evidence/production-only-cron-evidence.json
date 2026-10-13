@@ -1,0 +1,9 @@
+[
+  {
+    "cron": "* * * * *",
+    "scheduledTime": 1791456384000,
+    "outcome": "ok",
+    "exception_count": 0,
+    "log_count": 0
+  }
+]

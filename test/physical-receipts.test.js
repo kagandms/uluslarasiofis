@@ -134,6 +134,9 @@ test('PDF-free registration atomically consumes a reservation and replay survive
     const changed=await json(context,'/registrations',{...registration.body,first_name:'Other'});
 
     assert.equal(replay.status,200);assert.equal(changed.status,409);assert.equal(registration.intake.current_pdf_id,null);
+    assert.equal(registration.intake.status,'under_review');
+    const detail=await portRequest(context,`${BASE}/${registration.intake.id}`,{cookie:context.staffCookie});
+    assert.equal((await detail.json()).intake.status,'under_review');
     assert.equal((await context.database.prepare('SELECT count(*) AS total FROM physical_intakes').first()).total,1);
     assert.equal((await context.database.prepare('SELECT count(*) AS total FROM physical_intake_receipts').first()).total,1);
     assert.equal((await context.database.prepare('SELECT count(*) AS total FROM physical_intake_files').first()).total,0);
@@ -404,6 +407,23 @@ test('public lookup exposes no PII or internal IDs and expired reservations do n
     const hidden=await portRequest(context,'/api/public/physical-intakes/tracking-lookup',{method:'POST',json:{tracking_reference:registration.intake.tracking_reference}});assert.equal((await hidden.json()).found,false);
 });
 
+test('public physical tracking returns the staff rejection reason only for rejected records',async()=>{
+    const context=await fixture();const registration=await register(context);
+    const reason='Pasaport kopyası okunaklı değil.';
+    context.database.prepare("UPDATE physical_intakes SET status='rejected',rejection_reason=? WHERE id=?")
+        .bind(reason,registration.intake.id).run();
+
+    const response=await portRequest(context,'/api/public/physical-intakes/tracking-lookup',{
+        method:'POST',json:{tracking_reference:registration.intake.tracking_reference}
+    });
+    const payload=await response.json();
+
+    assert.equal(response.status,200);assert.equal(payload.office_status,'contact_office');
+    assert.equal(payload.rejection_reason,reason);
+    assert.equal(Object.hasOwn(payload,'rejection_reason'),true);
+    assert.equal(Object.hasOwn(payload,'student_number'),false);
+});
+
 test('public rate limits are per-IP and per-IP/code, never a global code lock',async()=>{
     const context=await fixture();const registration=await register(context);const path='/api/public/physical-intakes/tracking-lookup';
     const lookup=ip=>portRequest(context,path,{method:'POST',json:{tracking_reference:registration.intake.tracking_reference},headers:{'CF-Connecting-IP':ip}});
@@ -633,6 +653,23 @@ test('office approval needs no PDF and later stages appear in public tracking af
     const filter = await json(context, '/query', { status: 'completed', page: 1, page_size: 25 });
     assert.equal((await filter.json()).items[0].id, id);
     assert.equal((await context.database.prepare('SELECT current_pdf_id FROM physical_intakes WHERE id=?').bind(id).first()).current_pdf_id !== null, true);
+});
+
+test('physical intake query filters inclusively by delivery date and validates range', async () => {
+    const context = await fixture();
+    const older = await register(context, { day: '2026-10-10', metadata: { application_date: '2026-10-10', passport_number: 'older-test' } });
+    const matching = await register(context, { day: '2026-10-12', metadata: { application_date: '2026-10-12', passport_number: 'match-test' } });
+    const newer = await register(context, { day: '2026-10-14', metadata: { application_date: '2026-10-14', passport_number: 'newer-test' } });
+
+    const response = await json(context, '/query', { from_date: '2026-10-12', to_date: '2026-10-14', page: 1, page_size: 25 });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).items.map(item => item.id).sort(), [matching.intake.id, newer.intake.id].sort());
+    const invalid = await json(context, '/query', { from_date: '2026-10-15', to_date: '2026-10-14', page: 1, page_size: 25 });
+    assert.equal(invalid.status, 400);
+    const malformed = await json(context, '/query', { from_date: '2026-02-30', page: 1, page_size: 25 });
+    assert.equal(malformed.status, 400);
+    assert.notEqual(older.intake.id, matching.intake.id);
 });
 
 test('completed cases release the active identity but cannot reopen over a new case', async () => {

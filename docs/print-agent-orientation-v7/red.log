@@ -1,0 +1,125 @@
+FFFFFFFFFFFF
+======================================================================
+FAIL: test_landscape_jpeg_preserves_raster_text_and_arrow (__main__.OrientationNormalizationTests.test_landscape_jpeg_preserves_raster_text_and_arrow) (paper='A4', orientation='portrait', suffix='jpg')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 122, in verify_image_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.822618185579808 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_landscape_jpeg_preserves_raster_text_and_arrow (__main__.OrientationNormalizationTests.test_landscape_jpeg_preserves_raster_text_and_arrow) (paper='A3', orientation='portrait', suffix='jpg')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 122, in verify_image_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.8288379664412724 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_landscape_png_preserves_raster_text_and_arrow (__main__.OrientationNormalizationTests.test_landscape_png_preserves_raster_text_and_arrow) (paper='A4', orientation='portrait', suffix='png')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 122, in verify_image_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.821886245372408 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_landscape_png_preserves_raster_text_and_arrow (__main__.OrientationNormalizationTests.test_landscape_png_preserves_raster_text_and_arrow) (paper='A3', orientation='portrait', suffix='png')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 122, in verify_image_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.827323075380914 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_portrait_jpeg_preserves_raster_text_and_arrow (__main__.OrientationNormalizationTests.test_portrait_jpeg_preserves_raster_text_and_arrow) (paper='A4', orientation='landscape', suffix='jpg')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 122, in verify_image_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.832939894679499 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_portrait_jpeg_preserves_raster_text_and_arrow (__main__.OrientationNormalizationTests.test_portrait_jpeg_preserves_raster_text_and_arrow) (paper='A3', orientation='landscape', suffix='jpg')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 122, in verify_image_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.8332790132123247 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_portrait_png_preserves_raster_text_and_arrow (__main__.OrientationNormalizationTests.test_portrait_png_preserves_raster_text_and_arrow) (paper='A4', orientation='landscape', suffix='png')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 122, in verify_image_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.832727367163559 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_portrait_png_preserves_raster_text_and_arrow (__main__.OrientationNormalizationTests.test_portrait_png_preserves_raster_text_and_arrow) (paper='A3', orientation='landscape', suffix='png')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 122, in verify_image_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.831514786665663 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_same_landscape_pdf_preserves_text_and_arrow_on_both_paper_orientations (__main__.OrientationNormalizationTests.test_same_landscape_pdf_preserves_text_and_arrow_on_both_paper_orientations) (paper='A4', orientation='portrait')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 99, in verify_pdf_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.840437464946719 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_same_landscape_pdf_preserves_text_and_arrow_on_both_paper_orientations (__main__.OrientationNormalizationTests.test_same_landscape_pdf_preserves_text_and_arrow_on_both_paper_orientations) (paper='A3', orientation='portrait')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 99, in verify_pdf_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.799878726234254 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_same_portrait_pdf_preserves_text_and_arrow_on_both_paper_orientations (__main__.OrientationNormalizationTests.test_same_portrait_pdf_preserves_text_and_arrow_on_both_paper_orientations) (paper='A4', orientation='landscape')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 99, in verify_pdf_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.9150734554236264 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+======================================================================
+FAIL: test_same_portrait_pdf_preserves_text_and_arrow_on_both_paper_orientations (__main__.OrientationNormalizationTests.test_same_portrait_pdf_preserves_text_and_arrow_on_both_paper_orientations) (paper='A3', orientation='landscape')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 99, in verify_pdf_outputs
+    self.assert_preserved_raster(source_raster, target)
+  File "/private/tmp/ulof-production-only-20261008/scripts/print_agent/test-orientation.py", line 67, in assert_preserved_raster
+    self.assertLess(mismatched / expected_ink, 0.20,
+AssertionError: 2.763613958219232 not less than 0.2 : Raster text/arrow must retain source direction and centered proportional placement
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.178s
+
+FAILED (failures=12)

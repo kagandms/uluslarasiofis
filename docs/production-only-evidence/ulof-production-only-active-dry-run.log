@@ -1,0 +1,28 @@
+
+ ⛅️ wrangler 4.143.0 (update available 4.148.0)
+───────────────────────────────────────────────
+Using redirected Wrangler configuration.
+ - Configuration being used: "dist/uluslarasiofis_local/wrangler.json"
+ - Original user's configuration: "wrangler.jsonc"
+ - Deploy configuration file: ".wrangler/deploy/config.json"
+✨ Read 237 files from the assets directory /Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main/dist/client
+Total Upload: 440.62 KiB / gzip: 87.10 KiB
+Your Worker has access to the following bindings:
+Binding                                                                          Resource                  
+env.DB (uluslarasiofis-production)                                               D1 Database               
+env.DOCUMENTS (uluslarasiofis-documents-production)                              R2 Bucket                 
+env.PRINT_FILES (uluslarasiofis-print-production)                                R2 Bucket                 
+env.ASSETS                                                                       Assets                    
+env.APP_ENV ("production")                                                       Environment Variable      
+env.PRINT_ENABLED ("false")                                                      Environment Variable      
+env.R2_BUCKET_NAME ("uluslarasiofis-documents-production")                       Environment Variable      
+env.PRINT_BUCKET_NAME ("uluslarasiofis-print-production")                        Environment Variable      
+env.PRINT_ENABLE_A3 ("false")                                                    Environment Variable      
+env.PRINT_ENABLE_COLOR ("false")                                                 Environment Variable      
+env.PRINT_ENABLE_DUPLEX ("false")                                                Environment Variable      
+env.PRINT_MAX_COPIES_PER_JOB ("50")                                              Environment Variable      
+env.PRINT_MAX_PAGE_COPIES ("200")                                                Environment Variable      
+env.PUBLIC_DECLARATION_VERSION ("student-information-accuracy-v1")               Environment Variable      
+env.STAFF_SHARED_USERNAME ("international.office.topkapi@topkapi....")           Environment Variable      
+
+--dry-run: exiting now.

@@ -1,11 +1,11 @@
 import { PDFDocument } from 'pdf-lib';
 import { ApiError } from '../domain/errors.js';
 import { hashScannerValue } from '../domain/scanner-policy.js';
-import { MAX_PHYSICAL_PDF_BYTES } from '../domain/physical-intake-policy.js';
+import { MAX_PHYSICAL_RECEIPT_PDF_BYTES } from '../../config/physical-document-limits.js';
 
 /** Parses a real single-page portrait A4 PDF. @param {Uint8Array} bytes PDF. @returns {Promise<void>} Validation. @throws {ApiError} Invalid PDF. */
 export async function validateReceiptPdf(bytes) {
-    if (!bytes.length || bytes.length > MAX_PHYSICAL_PDF_BYTES || new TextDecoder().decode(bytes.slice(0,5)) !== '%PDF-') throw new ApiError(400, 'INVALID_RECEIPT_PDF', 'Tek sayfalık A4 PDF gerekli.');
+    if (!bytes.length || bytes.length > MAX_PHYSICAL_RECEIPT_PDF_BYTES || new TextDecoder().decode(bytes.slice(0,5)) !== '%PDF-') throw new ApiError(400, 'INVALID_RECEIPT_PDF', 'Tek sayfalık A4 PDF gerekli.');
     try {
         const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
         if (pdf.getPageCount() !== 1) throw new Error('Single page required');
@@ -29,7 +29,7 @@ export async function readReceiptPdfBody(request) {
             const chunk = await reader.read();
             if (chunk.done) break;
             size += chunk.value.length;
-            if (size>MAX_PHYSICAL_PDF_BYTES) { await reader.cancel(); throw new ApiError(413,'PDF_TOO_LARGE','PDF en fazla 10 MiB olabilir.'); }
+            if (size>MAX_PHYSICAL_RECEIPT_PDF_BYTES) { await reader.cancel(); throw new ApiError(413,'PDF_TOO_LARGE','PDF en fazla 10 MiB olabilir.'); }
             chunks.push(chunk.value);
         }
     } finally { reader.releaseLock(); }

@@ -1,0 +1,7 @@
+{
+  "source_thread": "01a11745-5ad1-7f31-b5ee-b0d82b702d02",
+  "source_turn": "01a11afc-ae4c-7d32-9c92-a306d9596e04",
+  "automatic_cleanup_verified": true,
+  "observed_transition": "failed:pending:present:0:object-present -> failed:complete:null:0:object-absent",
+  "test_artifacts_removed": true
+}

@@ -1,0 +1,127 @@
+✔ UAT policy fails closed for missing, malformed, future, expired and oversized windows (8.386416ms)
+✔ UAT requires real staff sessions even when students forge browser or machine headers (51.905167ms)
+✔ UAT rejects inactive, revoked, idle, expired and non-shared staff identities (46.2015ms)
+✔ UAT availability and job tracking require staff while machine claims still require the printer secret (10.746791ms)
+✔ UAT rejects cross-origin creation and finalization with a valid staff cookie (9.759833ms)
+✔ UAT accepts only one PDF copy with A4 monochrome simplex settings (44.877083ms)
+Worker request failed. {
+  requestId: 'req_824e8ddf-07b4-4616-a21b-caf6321e3624',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ concurrent UAT intents reserve only one job regardless of supplied idempotency keys (11.56825ms)
+✔ repeated UAT submission reuses the same intent rather than adding another job (10.263542ms)
+✔ a wrong synthetic PDF cannot be finalized or claimed (10.758417ms)
+✔ staff UAT follows the existing complete lifecycle with protocol 3 while public printing remains false (13.9425ms)
+✔ UAT rejects content replaced after finalization before it can reach the Agent (13.463958ms)
+Worker request failed. {
+  requestId: 'req_55666b04-befa-4a29-90ec-5cb19083f0f4',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c2996c68-587a-44b4-8e34-01e32fd619f2',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expired UAT windows stop work and preserve authenticated recovery (9.949167ms)
+✔ enabling normal production disables UAT restrictions and keeps existing public behavior (12.287583ms)
+✔ staff UAT upload capabilities point to the authenticated Worker rather than R2 signed URLs (9.524291ms)
+Worker request failed. {
+  requestId: 'req_34de78af-956d-46a2-b0ca-ebad13bc46ee',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ changing UAT windows and purging a test row cannot reserve a second v7 job (10.698417ms)
+✔ UAT upload rechecks staff authorization, origin and upload token at the actual byte-write boundary (10.726416ms)
+✔ only real fixture bytes can reach R2 and replayed or concurrent PUTs cannot overwrite them (11.168875ms)
+✔ a revoked session during streaming upload is rejected before R2 stores any bytes (9.957708ms)
+Worker request failed. {
+  requestId: 'req_0558d165-fc9a-4a39-9a06-6d525bd6d475',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expiry during streaming upload rejects the bytes before R2 storage (9.772125ms)
+Worker request failed. {
+  requestId: 'req_6ae6dcab-03c7-40bf-818e-19e87149f8d1',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expiry while the final upload-intent lookup is pending prevents the R2 write (9.812291ms)
+Worker request failed. {
+  requestId: 'req_85c9ded4-2e15-4aad-8671-fda141fc4991',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ revocation or expiry during finalize cannot move an uploaded job into the queue (21.138875ms)
+Worker request failed. {
+  requestId: 'req_89440838-0d33-4c4c-aa6e-d0c073e20df1',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ different valid staff sessions share one atomic UAT reservation (10.717584ms)
+Worker request failed. {
+  requestId: 'req_1495317c-5e9d-4dbe-8bab-a44a4f494ea6',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_7092815c-1389-4c1d-a239-b5e984f9d617',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_497df4c7-d91a-4d93-9913-4d58f81e68a5',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ closing UAT preserves retention cleanup and its permanent one-job reservation (10.830334ms)
+✔ database clock rejects expired queue, ready and submission transitions even with a stale handler timestamp (11.490958ms)
+✔ UAT machine work cannot target unrelated jobs or an older settings protocol (15.832708ms)
+✔ public status stays available and closed independently of staff cookies and UAT configuration (9.038541ms)
+✔ the server enforces the exact 15 minute boundary and rejects client hash and filename claims (9.521ms)
+Worker request failed. {
+  requestId: 'req_926cc016-5d2d-4706-af98-ec0a2c68242e',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_12d30da1-c8d9-4279-a524-9d7d50ac3002',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_de35b8dc-cc0e-4d0d-8a29-36bf372999d1',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_3ae4afed-8852-4e64-bee3-4f689eb617c4',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ff575003-3b24-4349-9257-e28bef44a64a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_94bec1da-168b-4c33-8ac9-e5ecaa310063',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_85727b76-6dc9-428b-a3bc-10c0ecc1db1a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expired UAT windows reject all mutation stages while keeping public status and authenticated heartbeat (9.191875ms)
+✔ database clock prevents job creation after UAT expiry even if a stale request time is supplied (9.09075ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 546.52225

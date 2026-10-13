@@ -1,0 +1,209 @@
+✔ UAT policy fails closed for missing, malformed, future, expired and oversized windows (1.644083ms)
+✔ UAT requires real staff sessions even when students forge browser or machine headers (28.770916ms)
+✔ UAT rejects inactive, revoked, idle, expired and non-shared staff identities (51.15325ms)
+✔ UAT availability and job tracking require staff while machine claims still require the printer secret (10.804167ms)
+✔ UAT rejects cross-origin creation and finalization with a valid staff cookie (11.048167ms)
+✔ UAT accepts only one PDF copy with A4 monochrome simplex settings (48.60925ms)
+Worker request failed. {
+  requestId: 'req_2a94e1e5-816e-4435-bcb2-6cef4bf5ad6d',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ concurrent UAT intents reserve only one job regardless of supplied idempotency keys (11.470291ms)
+✔ repeated UAT submission reuses the same intent rather than adding another job (11.475667ms)
+✔ a wrong synthetic PDF cannot be finalized or claimed (11.396708ms)
+✔ staff UAT follows the existing complete lifecycle with protocol 3 while public printing remains false (14.593666ms)
+✔ UAT rejects content replaced after finalization before it can reach the Agent (11.811084ms)
+Worker request failed. {
+  requestId: 'req_2bad5a2a-242d-4633-8e4e-fb2c8271ca00',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_34881c40-c62e-40a3-b59d-dcbaf1100f32',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expired UAT windows stop work and preserve authenticated recovery (10.261708ms)
+✔ enabling normal production disables UAT restrictions and keeps existing public behavior (11.472083ms)
+✔ staff UAT upload capabilities point to the authenticated Worker rather than R2 signed URLs (10.349458ms)
+Worker request failed. {
+  requestId: 'req_73dac201-e859-4ea4-aa08-27a3f5453c4d',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ changing UAT windows and purging a test row cannot reserve a second v7 job (10.637ms)
+✔ UAT upload rechecks staff authorization, origin and upload token at the actual byte-write boundary (11.593667ms)
+✔ only real fixture bytes can reach R2 and replayed or concurrent PUTs cannot overwrite them (12.9305ms)
+✔ a revoked session during streaming upload is rejected before R2 stores any bytes (11.635792ms)
+Worker request failed. {
+  requestId: 'req_95d96dd1-7c43-45ce-83f3-c8f490f85768',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expiry during streaming upload rejects the bytes before R2 storage (10.709917ms)
+Worker request failed. {
+  requestId: 'req_8894e12a-77f8-43a4-b1fb-0c28c32c6589',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ revocation or expiry during finalize cannot move an uploaded job into the queue (24.046ms)
+Worker request failed. {
+  requestId: 'req_8ad8f27c-267f-465c-9feb-d0d3a950163f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ different valid staff sessions share one atomic UAT reservation (9.844542ms)
+Worker request failed. {
+  requestId: 'req_4815a73c-bcd8-4a15-9771-3f7d9b12a12f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e3728e6a-9b76-4694-b954-1bc22e232cb0',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e5ac5233-a366-40ab-a1f1-426be22e55e2',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ closing UAT preserves retention cleanup and its permanent one-job reservation (10.981166ms)
+✔ database clock rejects expired queue, ready and submission transitions even with a stale handler timestamp (10.939083ms)
+✔ UAT machine work cannot target unrelated jobs or an older settings protocol (11.151708ms)
+✔ public status stays available and closed independently of staff cookies and UAT configuration (9.819042ms)
+✔ the server enforces the exact 15 minute boundary and rejects client hash and filename claims (9.548667ms)
+Worker request failed. {
+  requestId: 'req_7784fc63-3ceb-4a95-b1d2-c2c5f287307a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_b99fbfff-940f-470a-95b4-01bc5c35d865',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_dd2365c7-68af-4484-b456-54fb191ef9ea',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_b56d93dc-552a-44cd-bb94-4c9b4a44be30',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c46d8bc7-a9c4-46a3-89bc-1ec68160d7f8',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_2a5c4285-cbbf-417f-8d92-c1cebcbad402',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_166cd806-53c5-4534-a73d-23942bf027b0',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expired UAT windows reject all mutation stages while keeping public status and authenticated heartbeat (9.31925ms)
+✔ database clock prevents job creation after UAT expiry even if a stale request time is supplied (9.153666ms)
+✖ local Workers R2 condition prevents replayed or racing UAT uploads from replacing the fixture (2.009334ms)
+✖ native local D1 preserves one persistent UAT reservation across racing sessions and job cleanup (0.187542ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 28
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 471.271209
+
+✖ failing tests:
+
+test at test/printUatStorage.test.js:6:1
+✖ local Workers R2 condition prevents replayed or racing UAT uploads from replacing the fixture (2.009334ms)
+  MiniflareCoreError [ERR_VALIDATION]: Unexpected options passed to `new Miniflare()` constructor:
+  ✖ Unrecognized keys: "modules", "script", "compatibilityDate", "r2Buckets"
+  ✖ Invalid input: expected array, received undefined
+    → at workers
+      at validateOptions (/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main/node_modules/miniflare/dist/src/index.js:122693:24)
+      at new _Miniflare (/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main/node_modules/miniflare/dist/src/index.js:123084:38)
+      ... 4 lines matching cause stack trace ...
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17) {
+    code: 'ERR_VALIDATION',
+    cause: ZodError: [
+      {
+        "expected": "array",
+        "code": "invalid_type",
+        "path": [
+          "workers"
+        ],
+        "message": "Invalid input: expected array, received undefined"
+      },
+      {
+        "code": "unrecognized_keys",
+        "keys": [
+          "modules",
+          "script",
+          "compatibilityDate",
+          "r2Buckets"
+        ],
+        "path": [],
+        "message": "Unrecognized keys: \"modules\", \"script\", \"compatibilityDate\", \"r2Buckets\""
+      }
+    ]
+        at validateOptions (/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main/node_modules/miniflare/dist/src/index.js:122655:37)
+        at new _Miniflare (/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main/node_modules/miniflare/dist/src/index.js:123084:38)
+        at TestContext.<anonymous> (file:///Users/kagansmtdms/Downloads/%D0%9F%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D1%8B/uluslarasiofis-main/test/printUatStorage.test.js:7:21)
+        at Test.runInAsyncScope (node:async_hooks:214:14)
+        at Test.run (node:internal/test_runner/test:1106:25)
+        at Test.start (node:internal/test_runner/test:1003:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17)
+  }
+
+test at test/printUatStorage.test.js:25:1
+✖ native local D1 preserves one persistent UAT reservation across racing sessions and job cleanup (0.187542ms)
+  MiniflareCoreError [ERR_VALIDATION]: Unexpected options passed to `new Miniflare()` constructor:
+  ✖ Unrecognized keys: "modules", "script", "compatibilityDate", "d1Databases"
+  ✖ Invalid input: expected array, received undefined
+    → at workers
+      at validateOptions (/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main/node_modules/miniflare/dist/src/index.js:122693:24)
+      at new _Miniflare (/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main/node_modules/miniflare/dist/src/index.js:123084:38)
+      ... 6 lines matching cause stack trace ...
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    code: 'ERR_VALIDATION',
+    cause: ZodError: [
+      {
+        "expected": "array",
+        "code": "invalid_type",
+        "path": [
+          "workers"
+        ],
+        "message": "Invalid input: expected array, received undefined"
+      },
+      {
+        "code": "unrecognized_keys",
+        "keys": [
+          "modules",
+          "script",
+          "compatibilityDate",
+          "d1Databases"
+        ],
+        "path": [],
+        "message": "Unrecognized keys: \"modules\", \"script\", \"compatibilityDate\", \"d1Databases\""
+      }
+    ]
+        at validateOptions (/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main/node_modules/miniflare/dist/src/index.js:122655:37)
+        at new _Miniflare (/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main/node_modules/miniflare/dist/src/index.js:123084:38)
+        at TestContext.<anonymous> (file:///Users/kagansmtdms/Downloads/%D0%9F%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D1%8B/uluslarasiofis-main/test/printUatStorage.test.js:26:21)
+        at Test.runInAsyncScope (node:async_hooks:214:14)
+        at Test.run (node:internal/test_runner/test:1106:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+        at Test.postRun (node:internal/test_runner/test:1235:19)
+        at Test.run (node:internal/test_runner/test:1163:12)
+        at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3)
+  }

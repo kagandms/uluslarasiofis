@@ -1,0 +1,340 @@
+Worker request failed. {
+  requestId: 'req_ae9db359-361d-4227-a9b8-50cd7cd5b672',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_1e99a16f-d2b7-4cff-b1a7-667f1d319eae',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_3d4c72ea-aad1-45e3-9ca7-f11dfcb30172',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_0586afc5-e853-4a91-abf6-cfa03b775026',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_2bfcef42-0d9e-44e2-9eb2-627b8d9b7988',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_4a09a463-3865-4222-87c8-2cc2369ec990',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_af63ced1-2841-43ce-bf6e-af206b62f6c2',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e298eb38-3ab5-4f01-8aad-7128f8172025',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_aad30e09-c64a-4a2a-ae3c-96ed5110eb17',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_1d0b05a9-0f53-4961-96d0-b9571b6ad0ad',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_791c20a1-6d66-404f-a647-38b43437f04f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_6a12480c-539f-4e41-a968-f1f3f41cc655',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_6e80ed73-8f77-4a12-8309-cd99378008d5',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f2274dbe-ba40-4132-a6f9-a21fc6845148',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_4c5a109c-60af-4109-b2ac-65ce0da29f3f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_3fd39384-c1f1-4a9c-9616-9276510c0ea5',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f97db46a-abef-41ce-b701-4d4d5fe8ffe5',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c4df8976-1acf-4fd1-aa57-92c5e5da6a01',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ee924102-12bd-4f1d-a5b7-40abf320caae',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ccb773f7-1dfd-44fc-928f-f9877ee57018',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_04e73942-ef99-44c7-b432-81d43de1b923',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_d726687e-dfb7-4f73-b4e3-ef8473d68c78',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c810df45-970c-43e3-b5f5-c536f24a89c4',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ffb83599-3908-4630-9cfd-878f9bb1fe5e',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_7737b863-9c94-4a0b-b120-90c8099f1b17',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_40c551a8-d44e-473b-ae3c-d74daf4bb28e',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_7b073f98-b794-4213-bfa6-9958cbd96b87',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_7d2ecb3b-03f9-42b1-8566-ce55ae6ce434',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_1efefc80-eace-4b45-a049-b82935c63fc1',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e745c99e-bc5b-49f8-9e9f-6a48a0c4fa82',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_4e7f4275-4497-456e-a25c-a1ea57f4a4c0',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_70ebaf92-b942-4964-8548-4c548414ae36',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_86115942-2a86-4562-9d1f-69fa0c14de62',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_1e07650a-3b39-42eb-817f-6f998db96ab4',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_fb463c3e-2049-453f-8015-71d13346ff24',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_90607e3d-4857-489c-bac1-90d8a6b24c19',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f7fbfaf8-b603-4929-8785-b27f920914cb',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_46e9d6a8-f036-4d77-b588-3111b83d5362',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ad854620-d13e-482f-9219-49946b03d751',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_a976e275-cf60-4907-a282-b31565b5572f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_88133615-c317-4369-85d2-02d9c1ec1764',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_8716604a-5e28-4502-8455-e63628aa8d75',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_82faaf24-d29f-4512-932b-510793f9cb32',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_9afd6738-d650-42f3-bac1-9fe99e78edb6',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_d37346eb-3eed-4c24-a191-3c4a32c8b649',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_b9f5b381-a254-4a5a-b7ab-f82e1f4b887b',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_280b70d1-2aa7-47de-b39d-584980e72dcc',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_978c7a27-c10f-4c20-9de7-daf499ab2885',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_93dd1368-eef4-445a-a42b-7c40eb78b312',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ccd37d3e-8a24-4042-b685-6b734e2bb767',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_fdd16de7-7c65-46bb-bbfd-fe3c5eef9bfd',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_8c8fea3b-b536-44af-b22e-b24820768f7e',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e75db711-9adf-4216-95cd-2d7437e097ce',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f77be53f-546b-41ae-97fb-fa66e8e1d31e',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_4652a2fb-1ead-4fa7-bacb-9491a8f61902',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_8f6c56bd-15d1-4063-b7e0-28fa062c9006',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c40e823e-1ed0-4287-a207-2c08295a1567',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_d8c5dc14-9a9a-4738-a9e3-a5d62b0b5f5c',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_944e7b5e-c5ae-4bb8-ab35-0194f6cfdd2e',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_c92e44ac-0811-4ccc-8dba-d0c022235a21',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+✔ print gate rejects work without side effects for undefined (18.383083ms)
+✔ print gate rejects work without side effects for "false" (3.995083ms)
+✔ print gate rejects work without side effects for "" (0.694125ms)
+✔ print gate rejects work without side effects for "TRUE" (0.583042ms)
+✔ print gate rejects work without side effects for " true " (0.952625ms)
+✔ print gate rejects work without side effects for true (0.597125ms)
+✔ print gate rejects work without side effects for 1 (0.572625ms)
+✔ disabled public status is available without database or storage bindings (0.293709ms)
+✔ explicit true permits route authorization to run (0.236541ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/heartbeat (0.164708ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/reconcile (0.1055ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/jobs/job-1/result (0.0945ms)
+(node:24826) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ public print upload, machine validation, page count, and status follow the constrained job lifecycle (46.206833ms)
+✔ printer machine endpoints reject absent and invalid secrets (11.672583ms)
+✔ heartbeat protocol 3 is accepted while unsupported future protocols are rejected (11.62725ms)
+✔ public availability stays false when the isolated print bucket is not configured (9.485459ms)
+✔ upload intent rejects altered or disabled print settings before creating a job (11.116333ms)
+✔ configured print settings are stored and returned to the printer claim (12.799917ms)
+✔ protocol 3 carries landscape and higher copies while protocol 2 cannot claim landscape jobs (12.832333ms)
+✔ Worker rejects a verified page count that exceeds the configured impression budget (12.910625ms)
+✔ upload intent rejects tampered orientation and copy values before creating a job (11.038167ms)
+(node:24827) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[Print cleanup] Object deletion failed. { jobId: 'print-job-1', errorName: 'Error' }
+✔ print cleanup deletes R2 object idempotently and marks the queue row complete (21.0735ms)
+✔ minute scheduled event runs print cleanup (10.184083ms)
+✔ print cleanup retains failed deletion for a later retry (12.645625ms)
+✔ production print deployment accepts secret metadata without reading values (0.469459ms)
+✔ production print deployment rejects plaintext credentials without disclosing their value (0.277583ms)
+✔ production print deployment rejects missing or plaintext remote secret bindings (0.082917ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 234.266625

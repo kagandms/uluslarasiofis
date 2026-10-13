@@ -1,0 +1,494 @@
+--- /dev/null
++++ b/src/server/domain/print-uat-policy.js
+@@ -0,0 +1,80 @@
++import { ApiError } from './errors.js';
++import { isPrintEnabled } from './print-gate.js';
++
++const MAX_UAT_WINDOW_MS = 15 * 60_000;
++
++/**
++ * Read a bounded staff UAT policy; malformed settings fail closed.
++ * @param {Readonly<Record<string, unknown>>} environment Worker bindings.
++ * @param {number} now Current epoch milliseconds.
++ * @returns {Readonly<{startedAt: number, expiresAt: number, documentHash: string}>|null} Active policy.
++ */
++export function readPrintUatPolicy(environment, now = Date.now()) {
++    if (environment.PRINT_ENABLED !== 'false' || environment.PRINT_UAT_ENABLED !== 'true') return null;
++    const startedAt = parseUatTimestamp(environment.PRINT_UAT_STARTED_AT);
++    const expiresAt = parseUatTimestamp(environment.PRINT_UAT_EXPIRES_AT);
++    const documentHash = environment.PRINT_UAT_DOCUMENT_SHA256;
++    if (!Number.isFinite(now) || !Number.isFinite(startedAt) || !Number.isFinite(expiresAt)
++        || expiresAt <= startedAt || expiresAt - startedAt > MAX_UAT_WINDOW_MS
++        || now < startedAt || now >= expiresAt
++        || typeof documentHash !== 'string' || !/^[a-f0-9]{64}$/.test(documentHash)) return null;
++    return Object.freeze({ startedAt, expiresAt, documentHash });
++}
++
++/**
++ * Restrict staff UAT without changing production limits.
++ * @param {Readonly<Record<string, unknown>>} input Browser upload settings.
++ * @param {Readonly<Record<string, unknown>>} environment Worker bindings.
++ * @returns {void}
++ * @throws {ApiError} When settings or the UAT window are invalid.
++ */
++export function requirePrintUatUpload(input, environment) {
++    if (!requireActivePrintUatPolicy(environment)) return;
++    if (input.media_type !== 'application/pdf' || input.copies !== 1 || input.paper_size !== 'A4'
++        || input.color_mode !== 'monochrome' || input.duplex !== 'simplex') {
++        throw new ApiError(400, 'PRINT_UAT_INPUT_INVALID', 'UAT yalnız tek sentetik PDF kopyasını kabul eder.');
++    }
++}
++
++/**
++ * Bind UAT attempts to one unique D1 idempotency slot per window.
++ * @param {Readonly<Record<string, unknown>>} environment Worker bindings.
++ * @returns {string|null} Server-controlled idempotency scope.
++ * @throws {ApiError} When a configured UAT window has expired.
++ */
++export function readPrintUatIdempotencyScope(environment) {
++    const policy = requireActivePrintUatPolicy(environment);
++    if (!policy) return null;
++    return `staff-print-uat:${policy.startedAt}:${policy.expiresAt}:${policy.documentHash}`;
++}
++
++/**
++ * Verify the synthetic file before queueing and delivering its bytes to the Agent.
++ * @param {Uint8Array} bytes Uploaded document bytes.
++ * @param {Readonly<Record<string, unknown>>} environment Worker bindings.
++ * @returns {Promise<void>}
++ * @throws {ApiError} When content differs or the UAT window has expired.
++ */
++export async function requirePrintUatContent(bytes, environment) {
++    const policy = requireActivePrintUatPolicy(environment);
++    if (!policy) return;
++    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
++    const contentHash = [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
++    if (contentHash !== policy.documentHash) {
++        throw new ApiError(415, 'PRINT_UAT_DOCUMENT_INVALID', 'UAT sentetik dosyası doğrulanamadı.');
++    }
++}
++
++function requireActivePrintUatPolicy(environment) {
++    const policy = readPrintUatPolicy(environment);
++    if (!policy && !isPrintEnabled(environment) && environment.PRINT_UAT_ENABLED === 'true') {
++        throw new ApiError(503, 'PRINT_DISABLED', 'Yazdırma şu anda kapalı.', true);
++    }
++    return policy;
++}
++
++function parseUatTimestamp(value) {
++    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return NaN;
++    const parsed = Date.parse(value);
++    return Number.isFinite(parsed) && new Date(parsed).toISOString() === value ? parsed : NaN;
++}
+--- /dev/null
++++ b/src/server/services/print-access.js
+@@ -0,0 +1,25 @@
++import { requireStaff } from '../auth/staffAuth.js';
++import { isPrintEnabled, requirePrintRequestEnabled } from '../domain/print-gate.js';
++import { readPrintUatPolicy } from '../domain/print-uat-policy.js';
++
++/**
++ * Require a real staff session for every browser print API during bounded UAT.
++ * @param {Request} request Incoming API request.
++ * @param {Readonly<Record<string, unknown>>} environment Worker bindings.
++ * @returns {Promise<void>}
++ * @throws {ApiError} When printing is closed or staff authentication fails.
++ */
++export async function requirePrintRequestAccess(request, environment) {
++    const { pathname } = new URL(request.url);
++    if (isPrintEnabled(environment) || !readPrintUatPolicy(environment)) {
++        requirePrintRequestEnabled(pathname, environment);
++        return;
++    }
++    if (pathname.startsWith('/api/public/print/')) {
++        await requireStaff(request, environment, ['reviewer', 'admin']);
++        return;
++    }
++    // Machine routes still pass through their existing PRINTER_SECRET authentication.
++    if (pathname.startsWith('/api/printer/')) return;
++    requirePrintRequestEnabled(pathname, environment);
++}
+--- a/src/server/worker.js
++++ b/src/server/worker.js
+@@ -1,4 +1,4 @@
+-import { requirePrintRequestEnabled } from './domain/print-gate.js';
++import { requirePrintRequestAccess } from './services/print-access.js';
+ import { handleScannerRequest, handleStaffScannerRequest, prioritizeStaffDocumentScan } from './routes/scanner-routes.js';
+ import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
+ import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
+@@ -62,7 +62,7 @@
+ 
+ async function routeApi(request, environment, requestId) {
+     const { pathname } = new URL(request.url);
+-    requirePrintRequestEnabled(pathname, environment);
++    await requirePrintRequestAccess(request, environment);
+     if (pathname.startsWith('/api/printer/')) return handlePrinterRequest(request, environment);
+     if (pathname === '/api/public/print/status') return readPublicPrintStatus(request, environment);
+     if (pathname === '/api/public/print/upload-intents') return createPublicPrintUploadIntent(request, environment);
+--- a/src/server/routes/printRoutes.js
++++ b/src/server/routes/printRoutes.js
+@@ -1,4 +1,6 @@
+ import { isPrintEnabled } from '../domain/print-gate.js';
++import { readPrintUatPolicy, readPrintUatIdempotencyScope, requirePrintUatUpload,
++    requirePrintUatContent } from '../domain/print-uat-policy.js';
+ import { ApiError } from '../domain/errors.js';
+ import {
+     MAX_PRINT_BYTES, PRINT_FAILURE_RETENTION_MS, PRINT_HEARTBEAT_MAX_AGE_MS, PRINT_ROW_RETENTION_MS,
+@@ -35,13 +37,17 @@
+ 
+ export async function readPublicPrintStatus(request, environment) {
+     requireMethod(request, 'GET');
+-    if (!isPrintEnabled(environment)) return { available: false, options: readPrintOptionCapabilities(environment) };
++    if (!isPrintEnabled(environment) && !readPrintUatPolicy(environment)) {
++        return { available: false, options: readPrintOptionCapabilities(environment) };
++    }
+     const repository = createPrintRepository(environment.DB);
+     await enforceRateLimit({ rateLimits: createRateLimitRepository(environment.DB) }, request,
+         { endpoint: 'print-status', maxRequests: 60, windowSeconds: 60 });
+-    const limits = readPrintLimits(environment);
++    const printEnvironment = readPrintUatPolicy(environment)
++        ? { ...environment, PRINT_MAX_COPIES_PER_JOB: '1' } : environment;
++    const limits = readPrintLimits(printEnvironment);
+     const status = await repository.readPublicStatus(new Date().toISOString(), limits);
+-    const options = readPrintOptionCapabilities(environment, status.settingsProtocol);
++    const options = readPrintOptionCapabilities(printEnvironment, status.settingsProtocol);
+     if (!limits.isValid || !environment.PRINT_FILES || !environment.R2_ACCOUNT_ID || !environment.PRINT_BUCKET_NAME
+         || !environment.PRINT_R2_ACCESS_KEY_ID || !environment.PRINT_R2_SECRET_ACCESS_KEY) return { available: false, options };
+     return { available: status.available, options, limits: status.limits };
+@@ -65,13 +71,15 @@
+     if (!limits.isValid) throw new ApiError(503, 'PRINT_UNAVAILABLE', 'Yazdırma şu anda kullanılamıyor.', true);
+     const status = await repository.readPublicStatus(now, limits);
+     const upload = validatePrintUpload(body, readPrintOptionCapabilities(environment, status.settingsProtocol));
++    requirePrintUatUpload(body, environment);
+     const idempotencyKey = requireToken(body.idempotency_key);
+     const uploadToken = requireToken(body.upload_token);
+     const trackingToken = requireToken(body.tracking_token);
+     const id = crypto.randomUUID();
+     const storageKey = `print/${id}`;
+     const job = await repository.createUploadIntent({
+-        id, idempotencyHash: await hashValue(idempotencyKey), uploadTokenHash: await hashValue(uploadToken),
++        id, idempotencyHash: await hashValue(readPrintUatIdempotencyScope(environment) || idempotencyKey),
++        uploadTokenHash: await hashValue(uploadToken),
+         trackingTokenHash: await hashValue(trackingToken), storageKey, mediaType: upload.mediaType,
+         byteSize: upload.byteSize, copies: upload.copies, paperSize: upload.paperSize,
+         colorMode: upload.colorMode, duplex: upload.duplex, orientation: upload.orientation,
+@@ -109,6 +117,7 @@
+     if (bytes.length > MAX_PRINT_BYTES || !validatePrintMagicBytes(job.media_type, bytes)) {
+         throw new ApiError(415, 'PRINT_UPLOAD_INVALID', 'PDF, JPG veya PNG dosyası seçin.');
+     }
++    await requirePrintUatContent(bytes, environment);
+     const queued = await repository.markQueued({ id: job.id, tokenHash, now,
+         expiresAt: new Date(Date.parse(now) + PRINT_FAILURE_RETENTION_MS).toISOString() });
+     if (!queued) throw new ApiError(503, 'PRINT_UNAVAILABLE', 'Yazdırma şu anda kullanılamıyor.', true);
+--- a/src/server/routes/printerRoutes.js
++++ b/src/server/routes/printerRoutes.js
+@@ -1,4 +1,5 @@
+ import { ApiError } from '../domain/errors.js';
++import { requirePrintUatContent } from '../domain/print-uat-policy.js';
+ import { MAX_PRINT_BYTES, MAX_PRINT_PAGES, readPrintLimits, validatePrintResult } from '../domain/printPolicy.js';
+ import { createPrintRepository } from '../repositories/d1/printRepository.js';
+ import { createPrintStorage } from '../storage/printStorage.js';
+@@ -98,6 +99,7 @@
+         throw new ApiError(409, 'PRINT_CONTENT_INVALID', 'Yazdırma dosyası doğrulanamadı.');
+     }
+     const bytes = new Uint8Array(await content.arrayBuffer());
++    await requirePrintUatContent(bytes, environment);
+     if (bytes.length !== job.byte_size || !await repository.touchLease({ id: job.id, tokenHash, now: new Date().toISOString() })) {
+         throw new ApiError(409, 'PRINT_LEASE_INVALID', 'Yazdırma işi artık bu agent tarafından sahiplenilemiyor.');
+     }
+--- /dev/null
++++ b/test/print-uat.test.js
+@@ -0,0 +1,280 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import { readFileSync } from 'node:fs';
++import worker from '../src/server/worker.js';
++import { hashSessionToken } from '../src/server/auth/sessionToken.js';
++import { readPrintUatPolicy, requirePrintUatContent } from '../src/server/domain/print-uat-policy.js';
++import { applyAllMigrations } from './helpers/apply-migrations.js';
++import { TestD1Database } from './helpers/d1-test-binding.js';
++
++const PDF_BYTES = new Uint8Array(readFileSync(new URL('../docs/print-agent-orientation-v7/same-portrait-source.pdf', import.meta.url)));
++const PRINTER_SECRET = 'A'.repeat(48);
++const STAFF_TOKEN = 'S'.repeat(43);
++const STAFF_HEADERS = { Cookie: `staff_session=${STAFF_TOKEN}` };
++const MACHINE_HEADERS = { Authorization: `Bearer ${PRINTER_SECRET}` };
++
++function request(path, options = {}) {
++    const headers = new Headers({ Origin: 'https://portal.test', 'CF-Connecting-IP': '198.51.100.30', ...options.headers });
++    if (options.body !== undefined) headers.set('Content-Type', 'application/json');
++    return new Request(`https://portal.test${path}`, { method: options.method || 'GET', headers,
++        body: options.body === undefined ? undefined : JSON.stringify(options.body) });
++}
++
++function wrapAsyncStatement(statement) {
++    return { bind: (...values) => wrapAsyncStatement(statement.bind(...values)),
++        first: () => statement.first(), run: () => statement.run(),
++        async all() { return statement.all(); } };
++}
++
++function createTestDatabase() {
++    const database = new TestD1Database();
++    applyAllMigrations(database);
++    const prepareStatement = database.prepare.bind(database);
++    // Real D1 all() returns a Promise; the shared SQLite adapter is synchronous.
++    database.prepare = (sql) => wrapAsyncStatement(prepareStatement(sql));
++    return database;
++}
++
++async function seedStaff(database) {
++    await database.prepare(`INSERT INTO staff_users(id,username,normalized_username,password_hash,display_name,role)
++        VALUES('uat-staff','uat-staff','uat-staff','test-hash','UAT Staff','reviewer')`).run();
++    await database.prepare(`INSERT INTO staff_sessions(id,staff_user_id,token_hash,expires_at)
++        VALUES('uat-session','uat-staff',?,?)`).bind(await hashSessionToken(STAFF_TOKEN),
++        new Date(Date.now() + 3_600_000).toISOString()).run();
++}
++
++async function createEnvironment() {
++    const database = createTestDatabase();
++    const objects = new Map();
++    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', PDF_BYTES));
++    const environment = { DB: database, PRINT_FILES: {
++        async head(key) { const object = objects.get(key); return object ? { size: object.size,
++            etag: object.etag, httpMetadata: { contentType: object.type } } : null; },
++        async get(key) { return objects.get(key) || null; }, async delete(key) { objects.delete(key); }
++    }, APP_ENV: 'test', STAFF_SHARED_USERNAME: 'uat-staff', PRINT_ENABLED: 'false', PRINTER_SECRET,
++    PRINT_BUCKET_NAME: 'test-print', R2_ACCOUNT_ID: 'account', PRINT_R2_ACCESS_KEY_ID: 'test-access',
++    PRINT_R2_SECRET_ACCESS_KEY: 'test-secret', PRINT_UAT_ENABLED: 'true',
++    PRINT_UAT_STARTED_AT: new Date(Date.now() - 1000).toISOString(),
++    PRINT_UAT_EXPIRES_AT: new Date(Date.now() + 600_000).toISOString(),
++    PRINT_UAT_DOCUMENT_SHA256: [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('') };
++    await seedStaff(database);
++    await worker.fetch(request('/api/printer/heartbeat', { method: 'POST', headers: MACHINE_HEADERS,
++        body: { printer_id: 'uat-printer', runner_id: 'uat-runner', printer_name: 'Mock Kyocera',
++            health: 'ready', settings_protocol: 3 } }), environment);
++    return { environment, database, objects };
++}
++
++function uploadPayload(overrides = {}) {
++    return { byte_size: PDF_BYTES.length, media_type: 'application/pdf', copies: 1, paper_size: 'A4',
++        color_mode: 'monochrome', duplex: 'simplex', orientation: 'landscape',
++        idempotency_key: 'a'.repeat(64), upload_token: 'b'.repeat(64), tracking_token: 'c'.repeat(64), ...overrides };
++}
++
++async function createIntent(context, overrides = {}) {
++    return worker.fetch(request('/api/public/print/upload-intents', { method: 'POST',
++        headers: STAFF_HEADERS, body: uploadPayload(overrides) }), context.environment);
++}
++
++async function finalize(context, jobId) {
++    return worker.fetch(request(`/api/public/print/jobs/${jobId}/finalize`, { method: 'POST',
++        headers: { ...STAFF_HEADERS, 'X-Print-Upload-Token': 'b'.repeat(64) }, body: {} }), context.environment);
++}
++
++function putObject(context, jobId, bytes = PDF_BYTES) {
++    const { storage_key: storageKey } = context.database.prepare('SELECT storage_key FROM print_jobs WHERE id=?').bind(jobId).first();
++    context.objects.set(storageKey, Object.assign(new Blob([bytes], { type: 'application/pdf' }), { etag: 'test-etag' }));
++}
++
++test('UAT policy fails closed for missing, malformed, future, expired and oversized windows', () => {
++    const now = Date.now();
++    const base = { PRINT_ENABLED: 'false', PRINT_UAT_ENABLED: 'true', PRINT_UAT_DOCUMENT_SHA256: 'a'.repeat(64),
++        PRINT_UAT_STARTED_AT: new Date(now - 1000).toISOString(), PRINT_UAT_EXPIRES_AT: new Date(now + 1000).toISOString() };
++    const invalid = [{ PRINT_ENABLED: undefined }, { PRINT_ENABLED: false }, { PRINT_ENABLED: 'TRUE' }, { PRINT_UAT_ENABLED: true }, { PRINT_UAT_ENABLED: 'TRUE' }, { PRINT_UAT_ENABLED: undefined },
++        { PRINT_UAT_STARTED_AT: undefined }, { PRINT_UAT_EXPIRES_AT: 'invalid' }, { PRINT_UAT_EXPIRES_AT: 123 },
++        { PRINT_UAT_STARTED_AT: '2026-01-01 12:00:00' },
++        { PRINT_UAT_STARTED_AT: new Date(now + 500).toISOString() },
++        { PRINT_UAT_EXPIRES_AT: new Date(now).toISOString() },
++        { PRINT_UAT_EXPIRES_AT: new Date(now + 900_000).toISOString() }, { PRINT_UAT_DOCUMENT_SHA256: 'wrong' }];
++
++    for (const override of invalid) assert.equal(readPrintUatPolicy({ ...base, ...override }, now), null);
++    assert.ok(readPrintUatPolicy(base, now));
++    assert.equal(readPrintUatPolicy(base, NaN), null);
++});
++
++test('UAT requires real staff sessions even when students forge browser or machine headers', async () => {
++    const { environment, database } = await createEnvironment();
++
++    for (const headers of [{}, MACHINE_HEADERS, { 'X-Print-UAT': 'true' },
++        { Cookie: `application_session=${STAFF_TOKEN}` }, { Cookie: 'staff_session=forged' }]) {
++        const response = await worker.fetch(request('/api/public/print/upload-intents', {
++            method: 'POST', headers, body: uploadPayload() }), environment);
++        assert.equal(response.status, 401);
++    }
++    assert.equal(database.prepare('SELECT count(*) AS count FROM print_jobs').first().count, 0);
++});
++
++test('UAT rejects inactive, revoked, idle, expired and non-shared staff identities', async () => {
++    for (const mutation of ["UPDATE staff_users SET is_active=0", "UPDATE staff_sessions SET revoked_at=datetime('now')",
++        "UPDATE staff_sessions SET last_seen_at='2000-01-01T00:00:00.000Z'",
++        "UPDATE staff_sessions SET expires_at='2000-01-01T00:00:00.000Z'",
++        "UPDATE staff_users SET username='other-staff'"]) {
++        const context = await createEnvironment();
++        await context.database.prepare(mutation).run();
++
++        const response = await createIntent(context);
++
++        assert.equal(response.status, 401, mutation);
++        assert.equal(context.database.prepare('SELECT count(*) AS count FROM print_jobs').first().count, 0);
++    }
++});
++
++test('UAT availability and job tracking require staff while machine claims still require the printer secret', async () => {
++    const { environment } = await createEnvironment();
++
++    const staff = await worker.fetch(request('/api/public/print/status', { headers: STAFF_HEADERS }), environment);
++    const anonymous = await worker.fetch(request('/api/public/print/status'), environment);
++    const tracking = await worker.fetch(request('/api/public/print/jobs/status'), environment);
++    const machine = await worker.fetch(request('/api/printer/claim', { method: 'POST', body: { runner_id: 'uat-runner' } }), environment);
++
++    assert.equal(staff.status, 200);
++    const status = await staff.json();
++    assert.equal(status.available, true);
++    assert.equal(status.options.limits.max_copies, 1);
++    assert.equal(status.options.limits.max_page_copies, 200);
++    assert.equal(anonymous.status, 401);
++    assert.equal(tracking.status, 401);
++    assert.equal(machine.status, 401);
++});
++
++test('UAT rejects cross-origin creation and finalization with a valid staff cookie', async () => {
++    const context = await createEnvironment();
++
++    for (const path of ['/api/public/print/upload-intents', '/api/public/print/jobs/job-1/finalize']) {
++        const response = await worker.fetch(request(path, { method: 'POST',
++            headers: { ...STAFF_HEADERS, Origin: 'https://attacker.test' }, body: uploadPayload() }), context.environment);
++        assert.equal(response.status, 403);
++    }
++    assert.equal(context.database.prepare('SELECT count(*) AS count FROM print_jobs').first().count, 0);
++});
++
++test('UAT accepts only one PDF copy with A4 monochrome simplex settings', async () => {
++    for (const overrides of [{ copies: 2 }, { media_type: 'image/png' }, { paper_size: 'A3' },
++        { color_mode: 'color' }, { duplex: 'duplexlong' }]) {
++        const context = await createEnvironment();
++
++        const response = await createIntent(context, overrides);
++
++        assert.equal(response.status, 400);
++        assert.equal(context.database.prepare('SELECT count(*) AS count FROM print_jobs').first().count, 0);
++    }
++});
++
++test('concurrent UAT intents reserve only one job regardless of supplied idempotency keys', async () => {
++    const context = await createEnvironment();
++
++    const responses = await Promise.all([createIntent(context), createIntent(context, {
++        idempotency_key: 'd'.repeat(64), upload_token: 'e'.repeat(64), tracking_token: 'f'.repeat(64) })]);
++
++    assert.deepEqual(responses.map((response) => response.status).sort(), [200, 503]);
++    assert.equal(context.database.prepare('SELECT count(*) AS count FROM print_jobs').first().count, 1);
++});
++
++test('repeated UAT submission reuses the same intent rather than adding another job', async () => {
++    const context = await createEnvironment();
++
++    const first = await (await createIntent(context)).json();
++    const second = await (await createIntent(context)).json();
++
++    assert.equal(first.job_id, second.job_id);
++    assert.equal(context.database.prepare('SELECT count(*) AS count FROM print_jobs').first().count, 1);
++});
++
++test('a wrong synthetic PDF cannot be finalized or claimed', async () => {
++    const context = await createEnvironment();
++    const { job_id: jobId } = await (await createIntent(context)).json();
++    const changed = PDF_BYTES.slice();
++    changed[changed.length - 1] ^= 1;
++    putObject(context, jobId, changed);
++
++    const response = await finalize(context, jobId);
++    const claim = await worker.fetch(request('/api/printer/claim', { method: 'POST', headers: MACHINE_HEADERS,
++        body: { runner_id: 'uat-runner' } }), context.environment);
++
++    assert.equal(response.status, 415);
++    assert.equal((await response.json()).error.code, 'PRINT_UAT_DOCUMENT_INVALID');
++    assert.equal((await claim.json()).job, null);
++});
++
++test('staff UAT follows the existing complete lifecycle with protocol 3 while public printing remains false', async () => {
++    const context = await createEnvironment();
++    const { job_id: jobId } = await (await createIntent(context)).json();
++    putObject(context, jobId);
++
++    assert.equal((await finalize(context, jobId)).status, 200);
++    const claimed = await worker.fetch(request('/api/printer/claim', { method: 'POST', headers: MACHINE_HEADERS,
++        body: { runner_id: 'uat-runner' } }), context.environment);
++    const job = (await claimed.json()).job;
++    const headers = { ...MACHINE_HEADERS, 'X-Print-Lease': job.lease_token };
++    const content = await worker.fetch(request(`/api/printer/jobs/${jobId}/content`, { headers }), context.environment);
++    assert.deepEqual(new Uint8Array(await content.arrayBuffer()), PDF_BYTES);
++    for (const [action, body] of [['validation-result', { status: 'ready', page_count: 1 }],
++        ['submission-started', {}], ['result', { status: 'submitted', result_code: 'submitted', spooler_job_id: 'mock-spool-1' }]]) {
++        const response = await worker.fetch(request(`/api/printer/jobs/${jobId}/${action}`, {
++            method: 'POST', headers, body }), context.environment);
++        assert.equal(response.status, 200, action);
++    }
++    const repeated = await worker.fetch(request(`/api/printer/jobs/${jobId}/submission-started`, {
++        method: 'POST', headers, body: {} }), context.environment);
++
++    assert.equal(job.orientation, 'landscape');
++    assert.equal(job.copies, 1);
++    assert.equal(context.environment.PRINT_ENABLED, 'false');
++    assert.equal(context.database.prepare('SELECT status FROM print_jobs WHERE id=?').bind(jobId).first().status, 'submitted');
++    assert.equal(repeated.status, 409);
++});
++
++test('UAT rejects content replaced after finalization before it can reach the Agent', async () => {
++    const context = await createEnvironment();
++    const { job_id: jobId } = await (await createIntent(context)).json();
++    putObject(context, jobId);
++    await finalize(context, jobId);
++    const claim = await worker.fetch(request('/api/printer/claim', { method: 'POST', headers: MACHINE_HEADERS,
++        body: { runner_id: 'uat-runner' } }), context.environment);
++    const job = (await claim.json()).job;
++    const changed = PDF_BYTES.slice();
++    changed[changed.length - 1] ^= 1;
++    putObject(context, jobId, changed);
++
++    const response = await worker.fetch(request(`/api/printer/jobs/${jobId}/content`, {
++        headers: { ...MACHINE_HEADERS, 'X-Print-Lease': job.lease_token } }), context.environment);
++
++    assert.equal(response.status, 415);
++});
++
++test('expired UAT windows stop work and preserve authenticated recovery', async () => {
++    const { environment } = await createEnvironment();
++    environment.PRINT_UAT_EXPIRES_AT = new Date(Date.now() - 1).toISOString();
++
++    const creation = await worker.fetch(request('/api/public/print/upload-intents', {
++        method: 'POST', headers: STAFF_HEADERS, body: uploadPayload() }), environment);
++    const claim = await worker.fetch(request('/api/printer/claim', { method: 'POST', headers: MACHINE_HEADERS,
++        body: { runner_id: 'uat-runner' } }), environment);
++    const recovery = await worker.fetch(request('/api/printer/reconcile', {
++        headers: { ...MACHINE_HEADERS, 'X-Printer-Runner': 'uat-runner' } }), environment);
++
++    assert.equal(creation.status, 503);
++    assert.equal(claim.status, 503);
++    assert.equal(recovery.status, 200);
++    await assert.rejects(requirePrintUatContent(PDF_BYTES, environment), { code: 'PRINT_DISABLED' });
++});
++
++test('enabling normal production disables UAT restrictions and keeps existing public behavior', async () => {
++    const context = await createEnvironment();
++    context.environment.PRINT_ENABLED = 'true';
++
++    const response = await worker.fetch(request('/api/public/print/upload-intents', {
++        method: 'POST', body: uploadPayload({ copies: 2 }) }), context.environment);
++
++    assert.equal(response.status, 200);
++    assert.equal(readPrintUatPolicy(context.environment), null);
++});
+--- a/test/printCleanup.test.js
++++ b/test/printCleanup.test.js
+@@ -45,6 +45,9 @@
+ 
+ test('minute scheduled event runs print cleanup', async () => {
+     const { database, environment, objects } = createCleanupFixture();
++    // This invocation uses the real clock; retain the row while checking object cleanup.
++    database.prepare('UPDATE print_jobs SET purge_after=? WHERE id=?')
++        .bind(new Date(Date.now() + 24 * 60 * 60_000).toISOString(), 'print-job-1').run();
+ 
+     await worker.scheduled({ cron: '* * * * *' }, environment);
+ 

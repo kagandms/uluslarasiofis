@@ -1,0 +1,42 @@
+{
+  "comparison": "Top-level AST declarations as multisets per base name; generated numeric suffixes and positions normalized",
+  "live_worker_sha256": "22c50f1d60541599cc35fc7391f4c58b17d88d0669edea049c1e45aa26e32866",
+  "candidate_worker_sha256": "4b0e72eeb2346ff5cf3f1687f126d4a4507bb8bfe2228856628b7faf0958a045",
+  "unchanged_declarations": 471,
+  "changed": [
+    "function:claim",
+    "function:readContent",
+    "function:createPrintRepository",
+    "function:createPublicPrintUploadIntent",
+    "function:finalizePublicPrintUpload",
+    "function:handleJobRequest",
+    "function:routeApi"
+  ],
+  "missing": [],
+  "added": [
+    "variable:MAX_UAT_WINDOW_MS",
+    "variable:PRINT_UAT_SLOT_ID",
+    "function:readPrintUatPolicy",
+    "function:requirePrintUatUpload",
+    "function:readPrintUatIdempotencyScope",
+    "function:readPrintUatDeadline",
+    "function:requirePrintUatContent",
+    "function:requireActivePrintUatPolicy",
+    "function:parseUatTimestamp",
+    "function:requirePrintRequestAccess",
+    "function:reservePrintUatSlot",
+    "function:readPrintUatJobId",
+    "function:requirePrintUatJob",
+    "function:readPrintUpload",
+    "function:requireUatReservation",
+    "function:preparePrintIntent",
+    "function:createUatUploadCapability",
+    "function:readVerifiedPrintBytes",
+    "function:requireActiveUat",
+    "function:readUatUpload",
+    "function:readUploadBytes",
+    "function:readStaffPrintUatStatus",
+    "function:uploadPrintUatDocument",
+    "function:invalidUpload"
+  ]
+}

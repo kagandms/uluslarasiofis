@@ -7,6 +7,14 @@ import { requireTransferOwner, ACTIVE_TRANSFER_STAFF, enforceTransferRate } from
 import { readSharedStaffUsername } from '../config/sharedStaffAccount.js';
 import { MAX_TRANSFER_FILE_BYTES, MAX_TRANSFER_FILES, MAX_TRANSFER_TOTAL_BYTES, MAX_TRANSFER_UPLOAD_REQUESTS_PER_MINUTE, MAX_TRANSFER_IMAGE_PIXELS } from '../../config/mobile-transfer-policy.js';
 
+async function requireCurrentBatch(environment, transferId, batchId) {
+    const active = await environment.DB.prepare(`SELECT t.active_batch_id,b.status FROM mobile_document_transfers t
+        LEFT JOIN mobile_document_transfer_batches b ON b.id=t.active_batch_id WHERE t.id=?`).bind(transferId).first();
+    if (!active || active.active_batch_id !== batchId || active.status !== 'active') {
+        throw new ApiError(409, 'TRANSFER_BATCH_STALE', 'Öğrenci değişti. Bu fotoğraf yeni öğrenciye gönderilmedi; telefondaki eski seçimi kaldırın.');
+    }
+}
+
 async function readPhotoBytes(request) {
     if (request.headers.get('Content-Type') !== 'image/jpeg' || !request.body) throw new ApiError(415, 'PHOTO_FORMAT', 'JPG fotoğraf gerekli.');
     const reader = request.body.getReader();
@@ -42,23 +50,36 @@ async function reservePhoto(context, payload) {
     const { environment, transferId } = context;
     const existing = await environment.DB.prepare('SELECT * FROM mobile_document_transfer_files WHERE id=?').bind(payload.id).first();
     if (existing) {
-        if (existing.transfer_id !== transferId || existing.sha256 !== payload.sha256) throw new ApiError(409, 'PHOTO_CONFLICT', 'Fotoğraf kimliği farklı içerikle kullanılmış.');
+        if (existing.transfer_id !== transferId || existing.batch_id !== payload.batchId || existing.sha256 !== payload.sha256) throw new ApiError(409, 'PHOTO_CONFLICT', 'Fotoğraf kimliği farklı içerikle kullanılmış.');
         if (['finalized', 'consumed'].includes(existing.upload_status)) return { isReplay: true, file: existing };
         if (existing.upload_status === 'failed') {
             const resumed = await environment.DB.prepare(`UPDATE mobile_document_transfer_files SET upload_status='uploading'
-                WHERE id=? AND upload_status='failed' RETURNING *`).bind(payload.id).first();
+                WHERE id=? AND upload_status='failed' AND batch_id=? AND EXISTS (
+                    SELECT 1 FROM mobile_document_transfers JOIN mobile_document_transfer_batches b ON b.id=mobile_document_transfers.active_batch_id
+                    WHERE mobile_document_transfers.id=? AND mobile_document_transfers.active_batch_id=? AND mobile_document_transfers.expires_at>unixepoch() AND b.status='active'
+                    AND b.file_count<? AND b.byte_count+?<=? AND ${ACTIVE_TRANSFER_STAFF}) RETURNING *`)
+                .bind(payload.id, payload.batchId, transferId, payload.batchId, MAX_TRANSFER_FILES,
+                    payload.bytes.length, MAX_TRANSFER_TOTAL_BYTES, readSharedStaffUsername(environment)).first();
             if (resumed) return { isReplay: false, file: resumed };
+            await requireCurrentBatch(environment, transferId, payload.batchId);
+            throw new ApiError(409, 'TRANSFER_LIMIT', 'Aktarım fotoğraf sınırına ulaştı.');
         }
         throw new ApiError(409, 'UPLOAD_IN_PROGRESS', 'Fotoğraf işleniyor. Biraz sonra tekrar deneyin.');
     }
     const storageKey = `quarantine/${crypto.randomUUID()}`;
     const file = await environment.DB.prepare(`INSERT INTO mobile_document_transfer_files
-        (id,transfer_id,storage_key,byte_size,created_at,upload_status,sha256)
-        SELECT ?,id,?,?,?,'uploading',? FROM mobile_document_transfers
-        WHERE id=? AND expires_at>unixepoch() AND file_count<? AND byte_count+?<=? AND ${ACTIVE_TRANSFER_STAFF} RETURNING *`)
-        .bind(payload.id, storageKey, payload.bytes.length, Date.now(), payload.sha256, transferId,
-            MAX_TRANSFER_FILES, payload.bytes.length, MAX_TRANSFER_TOTAL_BYTES, readSharedStaffUsername(environment)).first();
-    if (!file) throw new ApiError(409, 'TRANSFER_LIMIT', 'Aktarım kapandı veya fotoğraf sınırına ulaştı.');
+        (id,transfer_id,batch_id,storage_key,byte_size,created_at,upload_status,sha256)
+        SELECT ?,mobile_document_transfers.id,b.id,?,?,?,'uploading',? FROM mobile_document_transfers
+        JOIN mobile_document_transfer_batches b ON b.id=mobile_document_transfers.active_batch_id
+        WHERE mobile_document_transfers.id=? AND mobile_document_transfers.active_batch_id=? AND mobile_document_transfers.expires_at>unixepoch() AND b.status='active'
+        AND b.file_count<? AND b.byte_count+?<=? AND ${ACTIVE_TRANSFER_STAFF} RETURNING *`)
+        .bind(payload.id, storageKey, payload.bytes.length, Date.now(), payload.sha256,
+            transferId, payload.batchId, MAX_TRANSFER_FILES, payload.bytes.length, MAX_TRANSFER_TOTAL_BYTES,
+            readSharedStaffUsername(environment)).first();
+    if (!file) {
+        await requireCurrentBatch(environment, transferId, payload.batchId);
+        throw new ApiError(409, 'TRANSFER_LIMIT', 'Aktarım fotoğraf sınırına ulaştı.');
+    }
     return { isReplay: false, file };
 }
 
@@ -77,10 +98,15 @@ async function storePhoto(context, payload) {
         await environment.DOCUMENTS.put(file.storage_key, payload.bytes, { httpMetadata: { contentType: 'image/jpeg' } });
         await requireTransferOwner(environment, transferId);
         const saved = await environment.DB.prepare(`UPDATE mobile_document_transfer_files SET upload_status='finalized'
-            WHERE id=? AND upload_status='uploading' AND EXISTS (SELECT 1 FROM mobile_document_transfers
-            WHERE id=? AND expires_at>unixepoch() AND ${ACTIVE_TRANSFER_STAFF})`)
-            .bind(file.id, transferId, readSharedStaffUsername(environment)).run();
-        if (saved.meta.changes !== 1) throw new ApiError(410, 'TRANSFER_EXPIRED', 'Aktarım kapandı.');
+            WHERE id=? AND upload_status='uploading' AND batch_id=? AND EXISTS (
+                SELECT 1 FROM mobile_document_transfers JOIN mobile_document_transfer_batches b ON b.id=mobile_document_transfers.active_batch_id
+                WHERE mobile_document_transfers.id=? AND mobile_document_transfers.active_batch_id=? AND mobile_document_transfers.expires_at>unixepoch() AND b.status='active'
+                AND ${ACTIVE_TRANSFER_STAFF})`)
+            .bind(file.id, payload.batchId, transferId, payload.batchId, readSharedStaffUsername(environment)).run();
+        if (saved.meta.changes !== 1) {
+            await requireCurrentBatch(environment, transferId, payload.batchId);
+            throw new ApiError(410, 'TRANSFER_EXPIRED', 'Aktarım kapandı.');
+        }
     } catch (error) {
         console.error('Mobile photo storage failed.', { errorName: error.name });
         await environment.DOCUMENTS.delete(file.storage_key);
@@ -99,7 +125,9 @@ export async function uploadMobilePhoto(request, context) {
     await enforceTransferRate({ request, environment: context.environment }, `photo:${context.transferId}`, MAX_TRANSFER_UPLOAD_REQUESTS_PER_MINUTE);
     const id = request.headers.get('X-Photo-Id')?.toLowerCase();
     if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id || '')) throw new ApiError(400, 'PHOTO_ID', 'Fotoğraf kimliği geçersiz.');
+    const batchId = request.headers.get('X-Transfer-Batch-ID')?.toLowerCase();
+    if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(batchId || '')) throw new ApiError(400, 'TRANSFER_BATCH_ID', 'Öğrenci aktarım partisi geçersiz.');
     const bytes = await readPhotoBytes(request);
-    await storePhoto(context, { id, bytes, sha256: await hashScannerValue(bytes) });
+    await storePhoto(context, { id, batchId, bytes, sha256: await hashScannerValue(bytes) });
     return { id, received: true };
 }

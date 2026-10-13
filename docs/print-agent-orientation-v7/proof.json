@@ -1,0 +1,32 @@
+{
+  "same_source": true,
+  "synthetic_fixture": true,
+  "outputs": [
+    {
+      "orientation": "portrait",
+      "source_sha256": "bbb32becd02165be13ef8f62075741ed5999a46cdb1c4495c7c40c30177b4d0d",
+      "width_pt": 595.2755737304688,
+      "height_pt": 841.8897705078125,
+      "page_rotation": 0,
+      "text_direction": [
+        1.0,
+        0.0
+      ],
+      "raster_ink_mismatch_ratio": 0.0116970503090525,
+      "source_bytes_unchanged": true
+    },
+    {
+      "orientation": "landscape",
+      "source_sha256": "bbb32becd02165be13ef8f62075741ed5999a46cdb1c4495c7c40c30177b4d0d",
+      "width_pt": 841.8897705078125,
+      "height_pt": 595.2755737304688,
+      "page_rotation": 0,
+      "text_direction": [
+        1.0,
+        0.0
+      ],
+      "raster_ink_mismatch_ratio": 0.13765345139867177,
+      "source_bytes_unchanged": true
+    }
+  ]
+}

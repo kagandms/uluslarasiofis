@@ -29,7 +29,7 @@ export function createPhysicalTrackingPanel(document) {
 function renderPanel(panel,state,submit) {
     const locale=panel.ownerDocument.documentElement.lang || 'tr';
     const messages=PHYSICAL_RECEIPT_MESSAGES[locale] || PHYSICAL_RECEIPT_MESSAGES.tr;
-    panel.replaceChildren(); appendText(panel,'h2',messages.heading);
+    panel.replaceChildren(); appendText(panel,'h2',messages.heading);appendText(panel,'p',messages.explanation);
     const form=panel.ownerDocument.createElement('form'); form.className='physical-tracking-form';
     const label=appendText(form,'label',messages.label);label.htmlFor='physical-tracking-reference';
     const input=panel.ownerDocument.createElement('input');input.id='physical-tracking-reference';input.name='tracking_reference';
@@ -41,6 +41,10 @@ function renderPanel(panel,state,submit) {
     if (state.payload) {
         appendText(panel,'p',state.payload.tracking_reference).dir='ltr';
         appendText(panel,'p',messages[state.payload.office_status] || messages.error);
+        if (typeof state.payload.rejection_reason === 'string' && state.payload.rejection_reason.trim()) {
+            appendText(panel,'strong',messages.rejectionReasonLabel);
+            appendText(panel,'p',state.payload.rejection_reason);
+        }
         appendText(panel,'p',state.payload.application_date);
         appendText(panel,'time',state.payload.updated_at).dateTime=state.payload.updated_at;
     }

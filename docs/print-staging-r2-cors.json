@@ -1,0 +1,12 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://goc-staging.topkapiuni.workers.dev"],
+        "methods": ["PUT"],
+        "headers": ["Content-Type", "If-None-Match"]
+      },
+      "maxAgeSeconds": 300
+    }
+  ]
+}

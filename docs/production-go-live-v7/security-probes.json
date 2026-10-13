@@ -1,0 +1,52 @@
+[
+  {
+    "path": "/api/public/print/upload-intents",
+    "method": "POST",
+    "http": 400,
+    "code": "INVALID_PRINT_INPUT",
+    "expected": 400
+  },
+  {
+    "path": "/api/public/print/upload-intents",
+    "method": "POST",
+    "http": 403,
+    "code": "CROSS_ORIGIN_REQUEST",
+    "expected": 403
+  },
+  {
+    "path": "/api/printer/claim",
+    "method": "POST",
+    "http": 401,
+    "code": "UNAUTHORIZED",
+    "expected": 401
+  },
+  {
+    "path": "/api/staff/print/status",
+    "method": "GET",
+    "http": 401,
+    "code": "UNAUTHORIZED",
+    "expected": 401
+  },
+  {
+    "path": "/api/staff/print/uat/status",
+    "method": "GET",
+    "http": 401,
+    "code": "UNAUTHORIZED",
+    "expected": 401
+  },
+  {
+    "path": "/api/public/print/jobs/health-probe/upload",
+    "method": "PUT",
+    "http": 401,
+    "code": "UNAUTHORIZED",
+    "expected": 401,
+    "expectation": "Anonymous request must fail existing staff authentication before UAT handler activation check"
+  },
+  {
+    "path": "/api/public/print/jobs/health-probe/finalize",
+    "method": "POST",
+    "http": 400,
+    "code": "INVALID_PRINT_INPUT",
+    "expected": 400
+  }
+]

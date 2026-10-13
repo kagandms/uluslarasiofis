@@ -1,0 +1,183 @@
+Worker request failed. {
+  requestId: 'req_bd4625be-d9d9-413f-9eca-9e7977f31d4a',
+  errorName: 'TypeError',
+  errorCode: 'INTERNAL_ERROR'
+}
+Worker request failed. {
+  requestId: 'req_07788d9c-3901-41ff-8e1d-138725ecad17',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_a8606825-9d6b-4e4b-a19c-76b9e7bd92af',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_8e1ae417-2a18-4f46-8722-d4ca7575396b',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_9ece70ba-ee22-4654-8475-4c16759435c1',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+✖ print gate rejects work without side effects for undefined (11.029291ms)
+✖ print gate rejects work without side effects for "false" (0.252875ms)
+✖ print gate rejects work without side effects for "" (0.227459ms)
+✖ print gate rejects work without side effects for "TRUE" (0.2135ms)
+✖ print gate rejects work without side effects for " true " (0.197958ms)
+✖ print gate rejects work without side effects for true (0.181667ms)
+✖ print gate rejects work without side effects for 1 (0.156708ms)
+✖ disabled public status is available without database or storage bindings (0.800625ms)
+✔ explicit true permits route authorization to run (1.465083ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/heartbeat (0.339167ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/reconcile (0.193958ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/jobs/job-1/result (0.170334ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 4
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 82.89425
+
+✖ failing tests:
+
+test at test/print-gate.test.js:17:5
+✖ print gate rejects work without side effects for undefined (11.029291ms)
+  AssertionError [ERR_ASSERTION]: /api/public/print/upload-intents
+  
+  403 !== 503
+  
+      at TestContext.<anonymous> (file:///private/tmp/ulof-production-only-20261008/test/print-gate.test.js:24:20)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 403,
+    expected: 503,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/print-gate.test.js:17:5
+✖ print gate rejects work without side effects for "false" (0.252875ms)
+  AssertionError [ERR_ASSERTION]: /api/public/print/upload-intents
+  
+  403 !== 503
+  
+      at TestContext.<anonymous> (file:///private/tmp/ulof-production-only-20261008/test/print-gate.test.js:24:20)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 403,
+    expected: 503,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/print-gate.test.js:17:5
+✖ print gate rejects work without side effects for "" (0.227459ms)
+  AssertionError [ERR_ASSERTION]: /api/public/print/upload-intents
+  
+  403 !== 503
+  
+      at TestContext.<anonymous> (file:///private/tmp/ulof-production-only-20261008/test/print-gate.test.js:24:20)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 403,
+    expected: 503,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/print-gate.test.js:17:5
+✖ print gate rejects work without side effects for "TRUE" (0.2135ms)
+  AssertionError [ERR_ASSERTION]: /api/public/print/upload-intents
+  
+  403 !== 503
+  
+      at TestContext.<anonymous> (file:///private/tmp/ulof-production-only-20261008/test/print-gate.test.js:24:20)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 403,
+    expected: 503,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/print-gate.test.js:17:5
+✖ print gate rejects work without side effects for " true " (0.197958ms)
+  AssertionError [ERR_ASSERTION]: /api/public/print/upload-intents
+  
+  403 !== 503
+  
+      at TestContext.<anonymous> (file:///private/tmp/ulof-production-only-20261008/test/print-gate.test.js:24:20)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 403,
+    expected: 503,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/print-gate.test.js:17:5
+✖ print gate rejects work without side effects for true (0.181667ms)
+  AssertionError [ERR_ASSERTION]: /api/public/print/upload-intents
+  
+  403 !== 503
+  
+      at TestContext.<anonymous> (file:///private/tmp/ulof-production-only-20261008/test/print-gate.test.js:24:20)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 403,
+    expected: 503,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/print-gate.test.js:17:5
+✖ print gate rejects work without side effects for 1 (0.156708ms)
+  AssertionError [ERR_ASSERTION]: /api/public/print/upload-intents
+  
+  403 !== 503
+  
+      at TestContext.<anonymous> (file:///private/tmp/ulof-production-only-20261008/test/print-gate.test.js:24:20)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 403,
+    expected: 503,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test/print-gate.test.js:30:1
+✖ disabled public status is available without database or storage bindings (0.800625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  500 !== 200
+  
+      at TestContext.<anonymous> (file:///private/tmp/ulof-production-only-20261008/test/print-gate.test.js:35:12)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

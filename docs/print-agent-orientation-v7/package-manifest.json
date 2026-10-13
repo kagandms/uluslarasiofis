@@ -1,0 +1,19 @@
+{
+  "package": "print-agent-windows-v7.zip",
+  "sha256": "f732c59ca6d04b49bfd450553e890d2359ad0efb5e47c8e04d6c5417103b6a9f",
+  "settings_protocol": 3,
+  "files": {
+    "scripts/print_agent/print_agent.py": "72d2b0ec3cfdd74ea38f7d62d854d80c5d8c36ff87db08add341eec1a8f1b319",
+    "scripts/print_agent/test_print_agent.py": "3c1be3fb5b8c14625e3d70fecd23d6c2d1b157f1cf282cd32f1ada1cc569c2de",
+    "scripts/print_agent/README.md": "07a0e25b2830c10c785d1343837c3e550a9b2d4d4f9b9e5ac32e6c0cf6600adb",
+    "scripts/print_agent/.env.example": "a76b539f570dc1facb8ec1127bba078e1680ab9edb915304f936d6da258b1278",
+    "scripts/print_agent/requirements.txt": "8657ac3c3fa2c85c4352942e4f1b644667a459361db30a3f73663ae5e8d7264f",
+    "docs/print-agent-orientation-v7/same-portrait-source.pdf": "bbb32becd02165be13ef8f62075741ed5999a46cdb1c4495c7c40c30177b4d0d",
+    "docs/print-agent-orientation-v7/a4-portrait.pdf": "be25a4bd75933ac48f884157c5c9dcaf951fa38d30e22e990aeb223d465d7b1b",
+    "docs/print-agent-orientation-v7/a4-landscape.pdf": "e4e1616b0b149d23397b2da73fd9875e3d2c0336e85e1f26166d1195786e4fa2",
+    "docs/print-agent-orientation-v7/a4-portrait.png": "588cc60288b4fc94ec8bc6372ef9be26fac9dd64c494e045ac76b8b9eafe5132",
+    "docs/print-agent-orientation-v7/a4-landscape.png": "1234f990bf398699118a37aa566f8b7d96a5e176dce117885c06ac4aed501f56",
+    "docs/print-agent-orientation-v7/comparison.png": "c573c40693e050dba6bd558a0421f56c55647634fbcc4eca69d565977f02aa15",
+    "docs/print-agent-orientation-v7/proof.json": "ec0f9594e633c28ff7b2369b44d14a4034cf2658bc2183ca19bae14ec61bf903"
+  }
+}

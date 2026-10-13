@@ -9,7 +9,7 @@ const MANAGEMENT_MIGRATION = '0019_print_staff_management.sql';
 test('print management migration preserves legacy rows with unknown source and initializes an open queue', () => {
     const database = new TestD1Database();
     const previousMigrations = readdirSync(MIGRATION_DIRECTORY).filter((name) => name.endsWith('.sql')
-        && name !== MANAGEMENT_MIGRATION).sort();
+        && name !== MANAGEMENT_MIGRATION && name < '0022_physical_pdf_50mb.sql').sort();
     for (const migration of previousMigrations) {
         database.exec(readFileSync(new URL(migration, MIGRATION_DIRECTORY), 'utf8'));
     }

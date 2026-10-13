@@ -1,0 +1,65 @@
+[
+  {
+    "path": "/yazdir/",
+    "http_status": 200
+  },
+  {
+    "path": "/api/public/print/status",
+    "http_status": 200,
+    "error_code": null,
+    "available": false,
+    "options": {
+      "paper_sizes": [
+        "A4"
+      ],
+      "color_modes": [
+        "monochrome"
+      ],
+      "duplex_modes": [
+        "simplex"
+      ],
+      "orientations": [
+        "portrait"
+      ],
+      "limits": {
+        "max_copies": 3,
+        "max_page_copies": 200
+      }
+    }
+  },
+  {
+    "path": "/api/public/print/upload-intents",
+    "http_status": 503,
+    "error_code": "PRINT_DISABLED"
+  },
+  {
+    "path": "/api/public/print/jobs/uat-readiness-probe/finalize",
+    "http_status": 503,
+    "error_code": "PRINT_DISABLED"
+  },
+  {
+    "path": "/api/printer/claim",
+    "http_status": 503,
+    "error_code": "PRINT_DISABLED"
+  },
+  {
+    "path": "/api/printer/jobs/uat-readiness-probe/content",
+    "http_status": 503,
+    "error_code": "PRINT_DISABLED"
+  },
+  {
+    "path": "/api/printer/jobs/uat-readiness-probe/validation-result",
+    "http_status": 503,
+    "error_code": "PRINT_DISABLED"
+  },
+  {
+    "path": "/api/printer/jobs/uat-readiness-probe/submission-started",
+    "http_status": 503,
+    "error_code": "PRINT_DISABLED"
+  },
+  {
+    "path": "/api/staff/print/status",
+    "http_status": 401,
+    "error_code": "UNAUTHORIZED"
+  }
+]

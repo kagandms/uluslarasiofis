@@ -21,9 +21,10 @@ export async function lookupPhysicalTracking(request, environment) {
         nowSeconds: Math.floor(Date.now()/1000), maxRequests: 15, windowSeconds: 300 });
     if (!allowed) throw new ApiError(429, 'RATE_LIMITED', 'Bir süre sonra tekrar deneyin.', true);
     if (!await hasPhysicalReceiptSchema(environment)) return { found: false };
-    const intake = await environment.DB.prepare(`SELECT tracking_reference,application_date,status,current_pdf_id,
+    const intake = await environment.DB.prepare(`SELECT tracking_reference,application_date,status,current_pdf_id,rejection_reason,
         processing_closed_at,legacy_status,updated_at FROM physical_intakes WHERE tracking_reference=? AND deleted_at IS NULL`).bind(reference).first();
     if (!intake) return { found: false };
     return { found: true, tracking_reference: intake.tracking_reference, application_date: intake.application_date,
-        office_status: readPhysicalTrackingStatus(intake), updated_at: intake.updated_at };
+        office_status: readPhysicalTrackingStatus(intake), updated_at: intake.updated_at,
+        ...(intake.status === 'rejected' ? { rejection_reason: intake.rejection_reason } : {}) };
 }

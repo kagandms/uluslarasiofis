@@ -23,17 +23,29 @@ async function readDetail(repository, id) {
 }
 
 function readQuery(body) {
-    requireKeys(body, ['q', 'status', 'page', 'page_size']);
+    requireKeys(body, ['q', 'status', 'page', 'page_size', 'from_date', 'to_date']);
     const q = body.q ?? '';
     const status = body.status ?? 'all';
     const page = body.page ?? 1;
     const pageSize = body.page_size ?? 25;
+    const fromDate = readOptionalDate(body.from_date, 'Başlangıç tarihi');
+    const toDate = readOptionalDate(body.to_date, 'Bitiş tarihi');
     if (typeof q !== 'string' || q.length > 120 || typeof status !== 'string' || !Object.hasOwn(PHYSICAL_STATUS_FILTERS, status)
         || !Number.isSafeInteger(page) || page < 1 || page > 100_000
-        || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+        || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100
+        || (fromDate && toDate && fromDate > toDate)) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Arama ve sayfalama alanlarını kontrol edin.');
     }
-    return { q: q.trim(), statuses: PHYSICAL_STATUS_FILTERS[status], isDeleted: status === 'deleted', page, pageSize };
+    return { q: q.trim(), statuses: PHYSICAL_STATUS_FILTERS[status], isDeleted: status === 'deleted', fromDate, toDate, page, pageSize };
+}
+
+function readOptionalDate(value, label) {
+    if (value === undefined || value === '') return '';
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)
+        || new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value) {
+        throw new ApiError(400, 'VALIDATION_ERROR', `${label} geçerli bir tarih olmalıdır.`);
+    }
+    return value;
 }
 
 function translateWriteError(error) {

@@ -9,6 +9,7 @@ import { readPhysicalGate, hasPhysicalTransferSchema } from '../config/physical-
 import { createOpaqueSessionToken, hashSessionToken, readCookie } from '../auth/sessionToken.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
 import { MAX_TRANSFER_CLAIM_REQUESTS_PER_MINUTE, TRANSFER_TTL_SECONDS } from '../../config/mobile-transfer-policy.js';
+import { closeMobileTransferBatch, createMobileTransferBatch } from './mobile-transfer-batches.js';
 
 const PHONE_COOKIE = 'mobile_transfer_session';
 const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -65,25 +66,25 @@ async function claimTransfer(request, environment) {
     } });
 }
 
-async function listPhotos(environment, transferId) {
-    const files = await environment.DB.prepare(`SELECT id,byte_size FROM mobile_document_transfer_files WHERE transfer_id=? AND upload_status='finalized' ORDER BY created_at,id`).bind(transferId).all();
-    return { files: files.results };
+async function listPhotos(environment, transfer) {
+    const phonePaired = Boolean(transfer.phone_token_hash);
+    if (!transfer.active_batch_id) return { batchId: null, files: [], phonePaired };
+    const files = await environment.DB.prepare(`SELECT id,byte_size FROM mobile_document_transfer_files
+        WHERE transfer_id=? AND batch_id=? AND upload_status='finalized' ORDER BY created_at,id`)
+        .bind(transfer.id, transfer.active_batch_id).all();
+    return { batchId: transfer.active_batch_id, files: files.results, phonePaired };
 }
 
-async function listReceivedPhotoIds(environment, transferId) {
-    const files = await environment.DB.prepare(`SELECT id FROM mobile_document_transfer_files
-        WHERE transfer_id=? AND upload_status='consumed' ORDER BY created_at,id`).bind(transferId).all();
-    return { receivedPhotoIds: files.results.map(file => file.id) };
-}
-
-async function accessPhoto(request, environment, transferId, photoId) {
-    const file = await environment.DB.prepare('SELECT * FROM mobile_document_transfer_files WHERE id=? AND transfer_id=?').bind(photoId, transferId).first();
+async function accessPhoto(request, environment, transfer, photoId) {
+    const file = await environment.DB.prepare('SELECT * FROM mobile_document_transfer_files WHERE id=? AND transfer_id=? AND batch_id=?')
+        .bind(photoId, transfer.id, transfer.active_batch_id).first();
     if (!file) throw new ApiError(404, 'PHOTO_NOT_FOUND', 'Fotoğraf bulunamadı.');
     if (file.upload_status !== 'finalized') throw new ApiError(409, 'PHOTO_NOT_READY', 'Fotoğraf yüklemesi tamamlanmadı.');
     if (request.method === 'DELETE') {
         requireSameOrigin(request);
         await environment.DOCUMENTS.delete(file.storage_key);
-        await environment.DB.prepare("UPDATE mobile_document_transfer_files SET upload_status='consumed' WHERE id=? AND transfer_id=?").bind(photoId, transferId).run();
+        await environment.DB.prepare("UPDATE mobile_document_transfer_files SET upload_status='consumed' WHERE id=? AND transfer_id=? AND batch_id=?")
+            .bind(photoId, transfer.id, transfer.active_batch_id).run();
         return { received: true };
     }
     requireMethod(request, 'GET');
@@ -109,15 +110,32 @@ async function removeTransfer(environment, transferId) {
 async function routeStaffTransfer(request, environment, pathname) {
     const staffMatch = pathname.match(/^\/api\/staff\/mobile-transfers\/([0-9a-f-]{36})(?:\/files\/([0-9a-f-]{36}))?$/);
     if (!staffMatch) throw new ApiError(404, 'NOT_FOUND', 'Aktarım bulunamadı.');
-    await requireTransfer(request, environment, staffMatch[1], 'staff');
-    if (staffMatch[2]) return accessPhoto(request, environment, staffMatch[1], staffMatch[2]);
+    const transfer = await requireTransfer(request, environment, staffMatch[1], 'staff');
+    if (staffMatch[2]) return accessPhoto(request, environment, transfer, staffMatch[2]);
     if (request.method === 'DELETE') {
         requireSameOrigin(request);
         await removeTransfer(environment, staffMatch[1]);
         return { closed: true };
     }
     requireMethod(request, 'GET');
-    return listPhotos(environment, staffMatch[1]);
+    return listPhotos(environment, transfer);
+}
+
+async function routeStaffBatch(request, environment, pathname) {
+    const match = pathname.match(/^\/api\/staff\/mobile-transfers\/([0-9a-f-]{36})\/batches(?:\/([0-9a-f-]{36})\/close)?$/);
+    if (!match) return null;
+    requireSameOrigin(request);
+    const transfer = await requireTransfer(request, environment, match[1], 'staff');
+    if (match[2]) {
+        requireMethod(request, 'POST');
+        return closeMobileTransferBatch(environment, transfer, match[2]);
+    }
+    requireMethod(request, 'POST');
+    const body = await readJsonBody(request, 512);
+    if (body.discardPending !== undefined && typeof body.discardPending !== 'boolean') {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Bekleyen fotoğraf seçimi geçersiz.');
+    }
+    return createMobileTransferBatch(environment, transfer, { discardPending: body.discardPending === true });
 }
 
 /**
@@ -135,11 +153,17 @@ export async function handleMobileTransfer(request, environment) {
     const pathname = new URL(request.url).pathname;
     if (pathname === '/api/staff/mobile-transfers') return createTransfer(request, environment);
     if (pathname === '/api/mobile-transfer/claim') return claimTransfer(request, environment);
-    const phoneStatus = pathname.match(/^\/api\/mobile-transfer\/([0-9a-f-]{36})\/status$/);
-    if (phoneStatus) {
+    const batchPath = await routeStaffBatch(request, environment, pathname);
+    if (batchPath) return batchPath;
+    const phoneBatch = pathname.match(/^\/api\/mobile-transfer\/([0-9a-f-]{36})\/(?:batch|status)$/);
+    if (phoneBatch) {
         requireMethod(request, 'GET');
-        await requireTransfer(request, environment, phoneStatus[1], 'phone');
-        return listReceivedPhotoIds(environment, phoneStatus[1]);
+        const transfer = await requireTransfer(request, environment, phoneBatch[1], 'phone');
+        if (!transfer.active_batch_id) return { batchId: null, receivedPhotoIds: [] };
+        const received = await environment.DB.prepare(`SELECT id FROM mobile_document_transfer_files
+            WHERE transfer_id=? AND batch_id=? AND upload_status='consumed' ORDER BY created_at,id`)
+            .bind(transfer.id, transfer.active_batch_id).all();
+        return { batchId: transfer.active_batch_id, receivedPhotoIds: received.results.map(file => file.id) };
     }
     const phoneMatch = pathname.match(/^\/api\/mobile-transfer\/([0-9a-f-]{36})\/photos$/);
     if (phoneMatch) {

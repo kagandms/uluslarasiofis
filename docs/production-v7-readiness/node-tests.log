@@ -1,0 +1,1078 @@
+
+> ikamet-main@2.2.1 pretest
+> npm run package:extension
+
+
+> ikamet-main@2.2.1 package:extension
+> node scripts/package-extension.mjs
+
+YKN eklentisi paketlendi: ykn-eklentisi-v1.2.90-e23cad053e39.zip
+
+> ikamet-main@2.2.1 test
+> node --disable-warning=ExperimentalWarning --test test/**/*.test.js
+
+✔ application reference complies with format ITU-XXXX-XXXX and unconfusable alphabet (4.596416ms)
+✔ normalizeApplicationReference trims and uppercases input (0.089333ms)
+✔ access code generates formatted 128+ bit entropy string with hyphenated blocks (1.000042ms)
+✔ normalizeAccessCode strips hyphens, non-alphanumerics, and normalizes to uppercase (0.073625ms)
+✔ hashAccessCode produces consistent SHA-256 hex digest regardless of formatting/casing (5.478417ms)
+✔ verifyAccessCode verifies correct code and rejects wrong or malformed codes (1.007416ms)
+✔ constantTimeCompare securely compares strings without short-circuiting on content (0.177833ms)
+✔ constantTimeCompare delegates to crypto.subtle.timingSafeEqual when running in Cloudflare Workers (0.160041ms)
+✔ age calculation treats the eighteenth birthday as adult on that date (0.819541ms)
+✔ age calculation returns unknown for invalid or future calendar dates (0.18925ms)
+✔ submit API uses the owner session POST and returns the student-safe application (23.983541ms)
+✔ tracking API uses only the same-origin owner session and sends no application selector (0.788834ms)
+✔ resubmission API sends only stable document code and safe file metadata for intent creation (1.093667ms)
+✔ resubmission eligibility and finalize use dedicated owner-session endpoints (1.068584ms)
+✔ public lookup remains a separate read-only API call (0.231458ms)
+✔ document access explanations distinguish pending, unsafe, failed and other access gates (0.491ms)
+✔ fallback archive is a valid STORE zip with stable code names and no source filenames (35.129958ms)
+✔ fallback aborts and produces no download when streamed bytes do not match manifest (5.076083ms)
+✔ fallback refuses totals above its limit before requesting file bytes (0.119833ms)
+✔ streaming picker saves a real source above the Blob limit without accumulating source bytes (99.02575ms)
+✔ streaming mode rejects a manifest above its source limit before requesting file bytes (0.27125ms)
+✔ streaming failure aborts the file save and never reports success (3.720792ms)
+✔ streaming mode treats writable close failure as failure and never reports success (3.282917ms)
+✔ streaming mode rejects excess source bytes before closing or saving the ZIP (1.603791ms)
+✔ an empty current-document manifest reports that no secure current files are available (0.359625ms)
+✔ manifest security error rejects before opening file picker and touches no disk file (0.121209ms)
+✔ user cancellation at the file picker creates no archive (0.4625ms)
+✔ in-progress cancellation aborts the private-file request and emits no downloadable ZIP (2.299375ms)
+✔ createArchiveFilename formats student names and fallback values safely (0.268209ms)
+✔ Blob archive output passes macOS ZIP and CRC readers (61.044125ms)
+✔ streaming archive output passes macOS ZIP and CRC readers (20.868708ms)
+✔ draft creation generates 130-bit access code, unique reference number, and stores only sha-256 hash (47.859375ms)
+✔ reference number is unique and database enforces uniqueness constraint (18.6635ms)
+✔ two devices access the same application concurrently without invalidating existing sessions (49.933125ms)
+✔ access code verification rejects invalid code and unknown reference with 401 (20.326334ms)
+✔ anti-brute-force rate limiting: 5 failed attempts per reference triggers 429 without permanent lock (30.982167ms)
+✔ per-IP rate limiting: broad limit protects without locking out campus NAT addresses (44.949208ms)
+✔ controlled code regeneration from authenticated owner session (27.779458ms)
+✔ code regeneration is rejected on terminal applications (12.435417ms)
+✔ staff reset access code after physical ID check revokes all active sessions while preserving reference number (20.609625ms)
+✔ optimistic concurrency control: lock_version mismatch returns 409 APPLICATION_UPDATE_CONFLICT (14.628291ms)
+✔ public tracking lookup by student number does not leak reference number, access code, or sessions (25.885875ms)
+✔ backward compatibility: migration 0008 backfills reference_number for legacy applications matching unconfusable charset (6.911ms)
+✔ old access code is rejected after a completed staff reset (22.411875ms)
+✔ concurrent edits across two devices: second save with stale lock_version receives 409 conflict and recovers on refresh (21.194917ms)
+✔ application state machine accepts only the specified forward transitions (1.291833ms)
+✔ application state machine accepts single-step rollback transitions for active processing states (0.107667ms)
+✔ application state machine rejects invalid reverse, skipped, terminal, and arbitrary transitions (0.094541ms)
+✔ application state machine guards review completion against unresolved document state (0.062458ms)
+✔ tracking UI and persisted application statuses have translations in all supported locales (0.613583ms)
+✔ tracking is owner-session scoped and returns only the student-safe application DTO (49.856583ms)
+✔ tracking rejects missing, expired, revoked, or non-GET sessions (19.221375ms)
+✔ tracking returns current policy requirements and localized-status keys for finalized document states (33.731333ms)
+✔ tracking reflects initial and renewal policy branches without inactive legacy requirements (29.062167ms)
+✔ public lookup returns submitted tracking with a strict DTO and creates no applicant authority (26.244292ms)
+✔ public lookup hides unknown and draft-only records behind the same valid-number response (22.063458ms)
+✔ public lookup selects an active non-draft application, or the newest terminal history (27.017459ms)
+✔ public lookup enforces method, same-origin, and canonical student-number validation (31.338291ms)
+✔ public lookup does not grant owner-session mutations or private document access (22.138625ms)
+✔ public tracking lookup rate-limits the 301st valid attempt in its campus address window (124.3765ms)
+✔ submitted owner session renders localized application and current document statuses safely (152.803833ms)
+✔ student tracking renders document-specific office messages as plain text (10.922292ms)
+✔ draft owner session links back to the existing application wizard (18.9405ms)
+✔ missing or expired owner session renders a student-number-only lookup form (6.089583ms)
+✔ public lookup renders statuses without filenames or document controls (26.720625ms)
+✔ owner resubmission view mounts controls only for server-eligible codes and preserves office message (25.278875ms)
+✔ finalize refreshes owner tracking to waiting review while application stays in resubmission status (20.62875ms)
+✔ not-found lookup is neutral and allows a retry (17.199375ms)
+✔ tracking supports all locales and the public main entry keeps Arabic right-to-left (75.108292ms)
+✔ direct R2 upload uses signed headers including write-once conditions and reports progress (2.000875ms)
+✔ direct upload maps capability expiry, network failure, timeout and cancellation to safe codes (0.72875ms)
+✔ contact step keeps Continue disabled until valid contact fields and the separate acknowledgement are present (282.56675ms)
+✔ new application is never marked saved before a server draft exists and warns before losing unsaved fields (99.649541ms)
+✔ valid contact details create a server draft and survive a wizard refresh without Continue (591.888708ms)
+✔ contact submit handler rejects a programmatic submission after a required email is cleared (47.99825ms)
+✔ registered fingerprint state shows the dedicated code input and preserves a safe code value (9.24875ms)
+✔ not-registered fingerprint state shows the required action without inventing a code (5.18325ms)
+✔ registered fingerprint state with no code remains an explicit incomplete action (10.297542ms)
+✔ not-registered fingerprint state saves but blocks Continue with the Migration Authority instruction (17.124667ms)
+✔ residence Continue is disabled when an ordinary required field is missing (13.29775ms)
+✔ residence step requires one address evidence branch and persists the selected choice (43.359792ms)
+✔ draft application type remains editable and is autosaved (44.579625ms)
+✔ not-registered blocking alert disappears when registration is changed to registered (12.753375ms)
+✔ selecting not-registered immediately shows the blocking alert and disables Continue (14.23325ms)
+✔ registered fingerprint with a valid code enables Continue until a required field is cleared (27.811458ms)
+✔ resumed valid fingerprint and residence fields initialize Continue enabled (13.110833ms)
+✔ registered fingerprint with missing or whitespace-only code cannot Continue (54.422583ms)
+✔ registered fingerprint with a non-empty code can Continue to passport and residence-card uploads (17.250458ms)
+✔ required documents block Continue until the current server revision is finalized (16.627667ms)
+✔ declaration Continue uses native disabled state and rejects programmatic unchecked submit (22.912875ms)
+✔ public home navigation flushes autosave and retains fields when the save fails (11.49675ms)
+✔ not-registered fingerprint status blocks progression without adding a fingerprint document (7.750375ms)
+✔ under-18 review requirements show the required birth certificate and current upload state (5.425084ms)
+✔ finalized upload status is a success while non-finalized pending status stays neutral (8.519458ms)
+✔ under-18 answer is derived from the birth date and cannot be manually changed (16.240458ms)
+✔ under-18 question and answer placeholder have complete translations in every supported locale (31.590375ms)
+✔ wizard saves under-18 and fingerprint state before loading the server requirement set (19.735709ms)
+✔ wizard autosaves editable fields, requires the current acknowledgement, and resumes at the saved draft (593.402792ms)
+✔ wizard retries an ambiguous finalize on the same intent and exposes progress and replacement actions (36.175583ms)
+✔ failed browser upload gets an error status and retains its retry action (16.487083ms)
+✔ failed finalize gets an error status and retains its retry action (14.70225ms)
+✔ closeout translations have parity and the wizard rerenders in Arabic RTL (6.751417ms)
+✔ Review submits once, keeps five steps, and shows student-safe confirmation (25.255917ms)
+✔ readiness rejection stays on Review and shows the localized actionable error (28.953625ms)
+✔ unsafe and failed scans show translated error states instead of upload success (3.629708ms)
+✔ new draft creation presents credentials banner with reference number and copy action (36.739125ms)
+✔ optimistic locking conflict during autosave surfaces localized conflict alert (11.524583ms)
+✔ submission confirmation displays reference number and access credentials reminder across all supported languages (26.15225ms)
+✔ typing during an in-flight autosave advances the version without replacing newer form values (10.6605ms)
+✔ an existing resubmission owner session opens the owner tracking replacement flow (3.81525ms)
+✔ reference and student number login routes a resubmission application to owner tracking (35.214625ms)
+✔ draft-only document controls stay hidden and inert for non-draft applications (13.31175ms)
+✔ step 0 contact inputs persist to storage across reloads and clear on new application (128.920709ms)
+✔ step 0 contact inputs display autosave_saving and autosave_saved status indicators (467.957291ms)
+Worker request failed. {
+  requestId: 'req_15e3e992-67ed-4aa2-80da-4c9974cb1854',
+  errorName: 'RepositoryConfigurationError',
+  errorCode: 'SERVICE_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_84cbb8a7-5eaa-442e-95b0-eedaa59a506d',
+  errorName: 'ApiError',
+  errorCode: 'SERVICE_UNAVAILABLE'
+}
+✔ staff login uses the configured shared D1 account and sets an opaque HttpOnly cookie (59.377833ms)
+✔ staff APIs reject bearer tokens and requests without a session cookie (4.699ms)
+✔ staff APIs report a missing D1 binding as service unavailable (1.125ms)
+✔ staff auth rejects malformed session cookies (3.812792ms)
+✔ staff login fails safely when the database binding is unavailable (1.3665ms)
+✔ staff session endpoint authenticates only an active D1 session cookie (3.296333ms)
+✔ logout revokes the D1 session and expires its secure cookie (2.549625ms)
+✔ cross-origin staff mutations are rejected before calling upstream services (5.255583ms)
+✔ all existing protected APIs reject missing sessions before upstream requests (4.024083ms)
+✔ legacy session route remains backed by individual staff sessions (2.414167ms)
+✔ staff password verification rejects malformed and legacy hashes without exposing errors (88.510167ms)
+✔ new staff password hashes use salted PBKDF2-SHA-256 with 100000 iterations (20.837084ms)
+✔ hashing the same staff password generates a unique random salt (27.090667ms)
+✔ staff password verification accepts correct passwords and rejects incorrect passwords (45.5245ms)
+✔ staff password verification rejects hashes below the 100000 iteration floor (17.566667ms)
+✔ staff password verification supports valid historical hashes above the new baseline (313.436542ms)
+✔ staff password hashing preserves minimum and maximum input bounds (32.249125ms)
+✔ malformed staff password hashes fail safely (70.024167ms)
+✔ staff login creates a D1-backed HttpOnly session and returns no bearer token (57.886292ms)
+✔ staff login rejects invalid credentials with the safe error contract (29.875125ms)
+Worker request failed. {
+  requestId: 'req_417fe053-e216-4bb7-9cae-f5d154f148f2',
+  errorName: 'ApiError',
+  errorCode: 'SERVICE_UNAVAILABLE'
+}
+✔ only the configured shared staff account can create a session or reuse an old individual session (25.244208ms)
+✔ staff authentication fails closed when the common account username is not configured (23.644833ms)
+✔ disabled staff cannot create a session (30.111292ms)
+✔ staff login refuses cross-origin requests before credential checks (14.622333ms)
+✔ staff account management endpoints are unavailable in the shared-account model (14.2055ms)
+✔ staff login applies a temporary D1-backed failed-attempt limit (110.064541ms)
+✔ staff APIs reject requests without a D1-backed session (14.6925ms)
+✔ public routes remain available without a staff password or session (17.242375ms)
+✔ application API creates an opaque owner session and enforces the active application constraint (17.058875ms)
+Worker request failed. {
+  requestId: 'req_7122b975-2123-4be4-af47-1a021ac89984',
+  errorName: 'Error',
+  errorCode: 'INTERNAL_ERROR'
+}
+✔ application draft and owner session roll back when their audit event cannot be recorded (18.787958ms)
+✔ applicant logout revokes the owner session and expires its secure cookie (135.441208ms)
+✔ private documents require a staff session and clean finalized metadata (18.483584ms)
+✔ unknown API errors include a correlation id and no provider details (13.834083ms)
+✔ initial admin bootstrap requires a secret and closes after the first account (31.41925ms)
+✔ staff bootstrap and login support case-insensitive usernames containing at and hash (56.624291ms)
+✔ initial admin bootstrap stays closed when any staff account already exists (12.37425ms)
+✔ current application status is available only through its owner session (25.870625ms)
+✔ application submit endpoint requires owner session, same origin, and current readiness (23.762375ms)
+✔ ready application submits once through its owner session and returns only student-safe fields (22.644708ms)
+✔ staff idle timeout refreshes active sessions without touching every request (18.038542ms)
+✔ idle-expired, absolute-expired, and disabled staff sessions are unauthorized and never revived (21.739583ms)
+✔ staff logout records one safe audit event and remains idempotent for expired sessions (20.093166ms)
+Worker request failed. {
+  requestId: 'req_de4ead96-7517-4399-89fb-e463ace6f1af',
+  errorName: 'Error',
+  errorCode: 'INTERNAL_ERROR'
+}
+✔ staff logout audit failure rolls back revocation (14.874208ms)
+✔ staff bootstrap rejects a username different from the configured common account (9.47075ms)
+✔ shared staff account can read application queue and detail while drafts remain excluded (53.096417ms)
+✔ staff application queue maps every supported status filter and paginates deterministically (62.968333ms)
+✔ staff application search matches student number, names, and passport literally without echoing the query (43.126125ms)
+✔ staff application detail reuses policy and excludes legacy person-assignment data (24.219791ms)
+✔ staff current-document preview and download share application-scoped authorization and audit safe access (24.100208ms)
+✔ staff current-document access rejects unsafe, incomplete, stale, missing, and inapplicable documents (55.101834ms)
+Worker request failed. {
+  requestId: 'req_c5f26b8b-b4c5-4a2e-b577-595c83f068c5',
+  errorName: 'ApiError',
+  errorCode: 'SERVICE_UNAVAILABLE'
+}
+✔ staff preview signing failure returns a safe service error and issues no audited capability (13.627708ms)
+✔ application status rejects expired sessions and student numbers never authorize access (10.540875ms)
+✔ application draft updates ignore fields outside the public allowlist (13.118167ms)
+✔ owner session can change draft application type and reload preserves it (22.278459ms)
+✔ draft address evidence is server-validated and restored after reload (25.570583ms)
+✔ non-draft applications cannot enter the submit path (16.3075ms)
+✔ archive manifest and pinned file stream require shared staff and reject revision or object changes (22.88025ms)
+✔ archive manifest blocks pending, unsafe, cleanup-pending and missing private objects (84.088875ms)
+✔ archive body fails closed if its revision changes before the private stream completes (19.299542ms)
+✔ backend migration creates the complete Session 2 data foundation (13.437084ms)
+✔ public portal migration adds persisted address evidence and archives superseded requirements safely (20.40425ms)
+✔ forward migration preserves a pre-existing renewal UETS document and seeds its inactive initial compatibility row (11.010375ms)
+✔ Session 3 migration adds nullable fingerprint fields and only the new conditional certificate requirement (2.099875ms)
+✔ database allows only one active application per normalized student number (12.612417ms)
+✔ database rejects unsupported application types and duplicate student numbers (10.774375ms)
+✔ database preserves document revisions and rejects orphaned records (11.457083ms)
+✔ database enforces staff roles and unique notification idempotency keys (15.733458ms)
+✔ document-scoped notes migration preserves existing rows and enforces its nullable document reference (16.015792ms)
+✔ backupD1ToR2 captures all user tables into dated and latest JSON files in R2 (20.743208ms)
+✔ backupD1ToR2 rejects invalid database or storage bindings (0.963834ms)
+✔ staff usernames normalize case and outer whitespace while accepting at and hash (0.533458ms)
+✔ staff usernames reject whitespace, path separators, controls, and unexpected punctuation (0.229417ms)
+✔ student repository finds students by normalized student number (18.195334ms)
+✔ staff repository does not expose individual account management operations (14.054083ms)
+✔ application repository maps duplicate active applications to a domain conflict (11.14375ms)
+✔ draft application type changes work in both directions without creating a second application (20.688459ms)
+✔ repeated application type switches preserve shared and renewal-only document history (19.299209ms)
+✔ application type remap aborts without changing a draft when a requirement code has no explicit compatibility mapping (17.00425ms)
+✔ draft application type audit contains only the previous and new types and ignores unchanged values (20.979875ms)
+✔ non-draft applications reject application type changes (100.838625ms)
+✔ document repository exposes only finalized clean current revision files (36.596083ms)
+✔ application submission transitions and audit are atomic and repeated calls have no duplicate effect (14.128958ms)
+✔ application submission audit failure rolls back the state transition (16.173584ms)
+✔ should return the following Wednesday for a Monday delivery (3.996916ms)
+✔ should return the following Wednesday for a Friday delivery (0.105ms)
+✔ should return the following Wednesday for a Wednesday delivery (0.061584ms)
+✔ document policies expose separate passport and residence-card uploads without fingerprint files (0.562416ms)
+✔ address policy exposes exactly the selected one-of-three evidence branch (0.425917ms)
+✔ renewal-only UETS and under-18 certificate applicability stay canonical (0.096916ms)
+✔ public overview derives the new concise policy and address alternatives without legacy uploads (0.65025ms)
+✔ application type remapping explicitly recognizes every legacy and current stable document code (0.087875ms)
+✔ R2 storage uses generated quarantine keys without student identifiers or public URLs (1.443541ms)
+✔ R2 storage rejects keys outside the generated private quarantine prefix (0.714333ms)
+✔ R2 upload and read capabilities are method-bound, object-bound, and short-lived (26.973042ms)
+✔ Worker R2 signing no longer imports the AWS SDK S3Client path (0.323291ms)
+✔ R2 signing diagnostics preserve the failure stage and redact credentials and signed URLs (0.689792ms)
+✔ R2 signed capabilities reject expiry outside the documented 30 to 300 second range (4.161958ms)
+✔ invalid R2 signing configuration fails safely at AwsClient creation (0.351584ms)
+✔ application-facing storage facade requires private bindings and has no public URL fallback (0.20425ms)
+✔ office document cards show a first-page PDF preview with quick print, preview, and download actions (154.3785ms)
+✔ draft autosave debounces and coalesces rapid edits into one patch (32.476708ms)
+✔ continue flush waits for the pending patch and avoids a duplicate patch (0.375458ms)
+✔ failed autosave keeps pending values and reports failure for an explicit flush retry (0.186916ms)
+✔ older response does not replace latest canonical state and writes stay serialized (1.809292ms)
+✔ rescheduling the same selected value during a save still publishes the saved draft state (0.239458ms)
+✔ extension accepts only an exact HTTPS portal origin on the authorized staff route (2.381208ms)
+✔ extension rejects unknown portal actions and malformed high-impact payloads (1.024292ms)
+✔ extension accepts Apply events only from the Apply applications origin (0.349208ms)
+✔ temporary student data cleanup retains fresh data and expires data after the configured TTL (0.731792ms)
+✔ extension manifest and bridge contain no broad preview or university-subdomain permissions (4.925083ms)
+✔ passport OCR uses the staff session cookie and accepts requests only from Apply (1.761834ms)
+✔ stored history fields, IDs, dates, and search text render without executable markup (126.463917ms)
+✔ owner session controls WhatsApp consent and consent responses do not expose recipient hashes (46.917375ms)
+✔ staff notification history GET accepts an authenticated browser request without Origin (22.858875ms)
+✔ preference response flags stale consent and an invalid current phone without exposing its hash (20.5645ms)
+✔ preference response requires new consent when its version is stale but the phone remains valid (15.961458ms)
+✔ Meta template configuration gates staff preview and enqueue per language (23.456792ms)
+✔ staff preview and enqueue require owner consent and a configured provider (28.620292ms)
+✔ staff enqueue is manual, recipient-free, same-application, and idempotent (45.186583ms)
+✔ email preview masks both local and domain names while the adapter remains disabled (24.628458ms)
+✔ staff routes reject missing sessions and cross-origin mutations (16.829916ms)
+Worker request failed. {
+  requestId: 'req_19e98dd5-a59d-4f73-ba5b-de6bf80c4545',
+  errorName: 'Error',
+  errorCode: 'INTERNAL_ERROR'
+}
+✔ notification enqueue rolls back atomically if its audit insert fails (17.388541ms)
+✔ dispatcher remains inactive without an explicitly injected provider (53.551958ms)
+✔ background consumer is disabled by default and caps each enabled batch at five (37.984958ms)
+✔ dispatcher distinguishes provider acceptance from confirmed send (40.41325ms)
+✔ dispatch rechecks WhatsApp consent and the current phone before calling a provider (18.770583ms)
+✔ dispatch blocks an outbox item when the applicant consent version becomes stale (31.580167ms)
+✔ ambiguous provider results become unknown and are dead-lettered without blind retry (31.182917ms)
+✔ transient failures are scheduled with bounded attempts and manual retry is recorded (16.829208ms)
+✔ provider failures at the attempt ceiling stop retrying (17.071875ms)
+✔ outbox claim is atomic across concurrent dispatcher invocations (16.963959ms)
+✔ stale leases recover before provider I/O but ambiguous in-flight leases become unknown (44.823666ms)
+✔ staff notification panel previews allowlisted content and explains blocked channels (160.251333ms)
+✔ staff panel retains the same idempotency key after an ambiguous enqueue failure (33.484083ms)
+✔ staff panel calls enqueue only after explicit click and reports queued separately from delivered (26.954708ms)
+✔ history refresh failure after enqueue does not invite a duplicate send (32.841708ms)
+✔ selection changes invalidate a pending preview response (36.691375ms)
+✔ notification migrations use unique ordered Wrangler migration versions (1.038541ms)
+✔ parseNotificationPreferences rejects legacy API responses missing new contract fields: no active consent or save success assumed (2.387541ms)
+✔ application_id missing or different blocks management in tracking view and wizard (111.464916ms)
+✔ unknown current consent version blocks opt-in and does not auto-accept (44.761875ms)
+✔ Contact step renders WhatsApp preference checkbox unchecked by default and does not block progression (162.290334ms)
+✔ pre-session visitor: toggling preference does not call PUT; calls PUT only on draft creation if checked (81.752833ms)
+✔ pre-session visitor: if WhatsApp preference is left unchecked, PUT is never called on step advance (55.323542ms)
+✔ pending phone save: phone is persisted before preference PUT is sent in existing draft (29.896958ms)
+✔ changing the international calling prefix invalidates the previous WhatsApp consent (27.0075ms)
+✔ failed phone save prevents preference PUT; preserves user selection and shows retry option (31.041084ms)
+✔ phone changed while preference PUT is in flight: stale response is not shown as valid consent for new phone (38.545417ms)
+✔ explicit re-consent after phone save succeeds and records verified opt-in (34.59975ms)
+✔ initial draft creation: preference PUT failure allows wizard to advance, displays warning banner with retry button without re-creating draft (82.535584ms)
+✔ language change updates all labels and explanations without calling PUT (84.399958ms)
+✔ tracking view: ready owner session mounts preferences card, supports opt-out and re-opt-in (9.436ms)
+✔ tracking view: public lookup does not mount preference controls or leak preference data (11.46ms)
+✔ tracking view: can_opt_in = false explains phone required and hides action button (11.09825ms)
+✔ error handling displays user-safe alert messages on 401, 400 and 409 (8.209125ms)
+✔ rapid repeated clicking does not create conflicting writes or out-of-order state (47.773458ms)
+✔ requires_reconsent: true ve eski kayıtlı izin varken opt-out mümkün (24.104875ms)
+✔ can_opt_in: false iken kayıtlı izni opt-out etmek mümkün (19.876667ms)
+✔ Bilinmeyen izin sürümünde yeni opt-in engellenirken opt-out mümkün (11.630791ms)
+✔ Bozuk/eksik yanıt veya başka application_id için kaydedildi gösterilmiyor (12.119167ms)
+✔ Opt-out PUT yanıtı izin durumunu hâlâ etkin gösterirse başarı gösterilmiyor (5.644208ms)
+✔ Opt-out payload’ı yalnızca { whatsapp_opt_in: false } olarak kalıyor (3.966166ms)
+✔ consent PUT locks phone input until response settles; field re-enables on completion (5.339417ms)
+✔ phone change during autosave aborts workflow; consent PUT is never sent (5.574667ms)
+✔ consent PUT rejection unlocks the phone field and keeps failure visible (4.14225ms)
+✔ opt-out PUT does not lock the phone field (6.412417ms)
+✔ Meta adapter sends only the configured approved template to the fixed Graph API endpoint (30.97625ms)
+✔ Meta adapter stays unavailable until credentials and approved template map exist (0.261917ms)
+✔ Meta adapter classifies explicit rejection separately from an uncertain server outcome (0.647ms)
+✔ Meta adapter fails closed when the selected template is not institutionally mapped (0.111042ms)
+✔ notification catalogue defines five approved-for-local-use categories in all supported languages (1.664167ms)
+✔ notification messages use only the normal same-origin tracking page (0.209625ms)
+✔ status-specific templates cannot make a false application claim (0.087667ms)
+✔ Meta webhook verifies subscription challenge and rejects an incorrect verification token (42.611458ms)
+✔ Meta webhook rejects invalid signatures and a foreign sender phone number ID (22.82ms)
+✔ Meta webhook rejects validly signed status events for unknown provider IDs (29.010291ms)
+✔ Meta webhook bounds raw request bytes before parsing or verification (15.196917ms)
+✔ Meta webhook acknowledges unsupported status types without altering application delivery state (17.604042ms)
+✔ Meta webhook records status events once and prevents status regression (23.865958ms)
+✔ Meta webhook may move a sent message to failed, then treats failure as terminal (17.77275ms)
+✔ should extract a registration number from its label line (1.915167ms)
+✔ should extract a registration number when its label and value are on separate lines (0.494292ms)
+✔ should not append barcode digits to a label-linked registration number (0.093084ms)
+✔ should normalize OCR confusion in numeric registration number segments (0.433625ms)
+✔ should leave the registration number empty when no registration label exists (0.070959ms)
+✔ should prefer the value located right of the registration label over barcode text (0.691709ms)
+✔ should preserve the OCR year while formatting a registration number input (0.088458ms)
+✔ Russian bilingual passport place of birth and authority extraction (59.428292ms)
+✔ Arabic bilingual passport place of birth and authority extraction (2.857417ms)
+✔ Arabic passport with multiline labels and values (13.175583ms)
+✔ Arabic passport with combined date and place of birth (1.247625ms)
+✔ Central Asian Cyrillic/bilingual formats (Kazakh, Kyrgyz, Uzbek, Tajik) (9.105292ms)
+✔ Russian passport with abbreviation and city prefix (1.982708ms)
+✔ French bilingual formats (1.620375ms)
+✔ Turkmenistan passport always overrides to TKM for YOKSIS (0.207584ms)
+✔ Chained bilingual labels never capture secondary label as city value (0.886ms)
+✔ Date parsing: Eastern Arabic digits convert and parse correctly (24.404833ms)
+✔ Date parsing: Roman numeral months in Eastern European and CIS passports (0.862667ms)
+✔ Date parsing: Russian full month names (nominative and genitive) (0.245083ms)
+✔ Date parsing: Arabic month names (0.128ms)
+✔ Passport gender extraction across MRZ and text labels (3.517041ms)
+✔ Administrative prefix stripping in place of birth and authority (1.214958ms)
+✔ Complete passport metadata extraction with gender and authority (4.795792ms)
+✔ Multi-line and bilingual authority extraction with RTL and fallback support (7.843417ms)
+✔ Date parsing: US MM/DD/YYYY auto-detection when day > 12 (0.491791ms)
+✔ Date parsing: Ordinal suffixes (1st, 2nd, 3rd, 15th, etc.) (1.083ms)
+✔ Date parsing: Bilingual month slashes in Cyrillic and Latin (0.827208ms)
+✔ Date parsing: OCR confusion characters (O/0, l/1, Z/2, S/5, B/8) (1.57325ms)
+✔ Date parsing: Compact month formats without spaces (0.330792ms)
+✔ Date parsing: Swapped dates recovery when issue > expiry (0.198834ms)
+✔ Date parsing: Portuguese, Spanish, Italian, and Central Asian month names (0.120125ms)
+✔ Pakistani passport place of birth and authority extraction (5.029542ms)
+✔ Afghan passport place of birth and authority extraction (Dari, Pashto, English) (6.989209ms)
+✔ Russian and CIS passport place of birth and authority optimizations (6.439875ms)
+✔ Gender normalization and name-based gender inference (7.987125ms)
+✔ PDF.js stays pinned to the patched package and same-origin support assets (3.149459ms)
+✔ untrusted student fields remain text in generated PDF and print markup (216.296542ms)
+✔ initial unsafe recovery preserves another current approved document (78.571459ms)
+✔ staff can request initial unsafe recovery while file access and approval remain blocked (40.058541ms)
+✔ staff can request initial failed recovery while file access and approval remain blocked (41.079959ms)
+✔ initial pending scan cannot be replaced even by an authenticated reviewer (24.573625ms)
+Worker request failed. {
+  requestId: 'req_f48aae1a-1982-404d-8c37-fdbdd9292614',
+  errorName: 'Error',
+  errorCode: 'INTERNAL_ERROR'
+}
+✔ initial unsafe recovery rolls back all state and messages when its audit fails (31.31475ms)
+✔ initial recovery rejects at commit when scanner changed the verdict (29.364291ms)
+✔ initial recovery rejects at commit when application became terminal (30.479583ms)
+✔ initial recovery rejects at commit when revision stopped being current (35.396667ms)
+✔ initial unsafe recovery rejects no staff session (40.283166ms)
+✔ initial unsafe recovery rejects cross origin (38.284958ms)
+✔ initial unsafe recovery rejects deactivated staff (23.095125ms)
+✔ initial unsafe recovery rejects stale revision (20.404625ms)
+✔ initial unsafe recovery rejects empty reason (45.735208ms)
+✔ initial unsafe recovery rejects incomplete intent (36.934709ms)
+✔ initial unsafe recovery rejects cleanup pending (22.940708ms)
+✔ initial unsafe recovery rejects submitted before Start Review (27.424625ms)
+✔ verified operator reference lookup recovers a hidden draft using only the staff reset API (56.121875ms)
+✔ verified operator student-number lookup recovers a hidden draft using only the staff reset API (36.774041ms)
+✔ support lookup treats SQL metacharacters as literal identity text and never changes a record (24.328791ms)
+✔ support lookup rejects malformed identifiers and unsupported lookup requests (0.339291ms)
+✔ operator CLI writes a private SELECT file without logging identity and refuses overwrite (124.661875ms)
+✔ operator CLI refuses a shared directory before writing identity text (56.820333ms)
+✔ twenty distinct students can create drafts through one campus address while the single-active-application rule remains (81.016875ms)
+✔ campus creation allows 120 attempts, rejects excess without a new draft, and recovers after the finite window (253.319583ms)
+✔ twenty students can read their public status through one campus address without receiving owner credentials (42.806625ms)
+✔ campus status lookup is bounded at 300 requests per address and its block expires (220.694791ms)
+✔ 0008 and 0009 are distinct migrations and a fresh schema has both access and durable scanner tables (17.004625ms)
+✔ upgrade from 0001 through 0007 preserves legacy sessions and queues pending files without inventing a clean verdict or access code (12.231334ms)
+✔ an owner rotation authenticated before staff reset cannot overwrite the reset after its session is revoked (46.316625ms)
+✔ only one reset with the same observed code version can commit and a stale reset has no revocation or audit effect (19.35775ms)
+✔ terminal transition between code verification and session insertion cannot create an owner session (16.888334ms)
+✔ a login whose code was verified before reset cannot insert a session after reset commits (29.424417ms)
+✔ application type switch is fenced at commit when another device changes fields after its version precheck (19.202917ms)
+✔ successful credential logins from campus NAT and a guessed-reference flood cannot lock out a valid owner (78.85775ms)
+✔ failed reset audit rolls back hash, version and every session revocation (12.719542ms)
+✔ public draft updates require a positive integer observed version and cannot bypass stale-write protection (15.025ms)
+✔ draft field, phone, address and type writes authenticated before reset cannot mutate with the revoked owner at SQL commit (103.963ms)
+✔ phone choices include translated labels and all supported calling regions (10.141ms)
+✔ phone parsing canonicalizes Turkish local input without duplicating its trunk zero (1.908209ms)
+✔ international parsing retains Italy significant leading zero and avoids a second prefix (1.5315ms)
+✔ editing a phone with a selected country creates one canonical E.164 value (94.456625ms)
+✔ legacy local phone values remain unchanged until the student edits the phone field (44.650875ms)
+✔ incomplete shared calling code input stays explicit and requests country review (0.757834ms)
+✔ nationality search handles Turkish accent variants and includes both Turk countries (0.392792ms)
+✔ nationality suggestions preserve an existing free-text value (6.151541ms)
+✔ nationality suggestions can be selected with the keyboard and then close (11.862833ms)
+✔ document readiness allows finalized pending scans and ignores missing optional uploads (0.262167ms)
+✔ document readiness blocks unsafe, cleanup-pending, and in-flight required revisions (0.099083ms)
+✔ review readiness requires declaration but does not require a clean scan verdict (0.541625ms)
+✔ public route contains no staff workspace and links to the planned student routes (261.790833ms)
+✔ public landing exposes the requested student entry points and information sections (45.693125ms)
+✔ landing document guidance renders policy-derived titles and highlights the under-18 requirement (18.952625ms)
+✔ document policy copy is localized, source-free, and treats utility evidence as one choice (0.467ms)
+✔ public locale dictionaries have matching keys for all five supported languages (2.7785ms)
+✔ public locale selection applies Arabic RTL direction and persists the selected locale (140.786541ms)
+Worker request failed. {
+  requestId: 'req_0ada9fca-8070-4f5d-a9d2-e43ccd339d18',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_13fc0931-ec7e-4c84-abe0-ca4d85eb56c6',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_686b1d65-398a-492a-baf7-e16554ecc7d9',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_44180a75-a7a5-4331-a86a-8a845486255e',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_4edfb093-a7cf-4c57-87df-bd0dc8a506c2',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_0c094065-4dea-44e5-af8c-6d0e9d0f4e04',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_1a18925e-a683-4e28-8612-b0881827c2bf',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_87923eff-5c94-4de6-a1b7-2e3cf033208e',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_d1e7d2e0-b890-4f43-976b-41e436b35228',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_d0f37618-e28d-4e64-8d18-ba6aa2b605c3',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_9a522d5c-549f-4900-b087-e7f43f5be325',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_465c0f4d-1d80-4481-9785-13acdeff4141',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_b804828b-8dc2-4637-a651-b09f4218c88f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c55efcf7-516e-49b4-8018-1bbbb9866c57',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_eb3fca50-db4e-4904-9eba-594b64a4f32a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_03826d5b-95fb-4830-aecf-d37f6a7de1c5',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_602d28c4-9377-47df-8b02-5594b31969fa',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_3452b0cb-6c65-4397-97ec-4368507434bf',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_918a2264-b8b9-43ed-b36a-4925c504b477',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_22909879-85cd-4c0e-ac14-ed2aee9e6224',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ff5e289a-8c1a-4b67-9933-b89d74754042',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_82a33826-9db1-4f74-9992-c8d8ea85f685',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_928ccb24-6b96-4c60-a055-8e74235cc078',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f56b3ac3-2855-40de-8bda-b0ec0133b240',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_65719585-d12a-4dd8-9ecf-63435a72aeef',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ea6d39f8-1e56-4593-ac4e-673d2a8f5617',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_27bf6cf7-66c8-4c1a-9b50-7c7d36bfa600',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_b1691390-2129-4e83-843a-0410d2f611de',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_7d52a037-ffb3-4977-b15a-89aa3df8ba42',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_fa5a00ce-d443-41b1-9d21-1f15c3b20141',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_4cd19f2b-af5c-4a2c-b045-6a7c71ebb854',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_3a539087-3577-4eed-8aa6-e1bfa28a7a11',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e55884aa-5db5-4d91-b9d4-43892d3c79ad',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f18e8e1f-809a-4497-83f1-31ff005c1b5c',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_6f5f3eb8-474d-42d8-9b26-a9a673aba7dd',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_d4deb909-b35d-48f2-8b71-f487242db3aa',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c9c215fe-1552-4e6b-9a94-44200e42d45e',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_397cb21d-f2bf-46a7-afa1-98196e307d31',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_7263ccb3-8db7-4989-8257-5efffc9516ee',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ab55dbb1-e5fe-4f17-816d-4c99078923e6',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_0bbebf7c-f3d3-4488-a6ad-247ae57eb20f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_2d1fcdc8-f225-4846-8088-acc8cfc6059b',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_00470dec-5fec-44e3-a318-17934982a90f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_a3236a0a-7da9-4508-858f-c1983185db26',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_36f52aae-0562-4c94-a0e8-025b21246cdb',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_2ab4c90c-b13c-478f-a8d1-7d6226318dc4',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ad4386a4-58eb-40a2-b270-bb3a2e9f6e95',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_117e34d5-9632-4e92-ba34-60edb84e7f3a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_7c8f8f8f-9b56-4b98-967d-275f5ee92060',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_bb36eb93-8e6d-4daf-a8b9-b3773b238acd',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ac8e4255-2aea-4947-a26b-923b129e209a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_6ba08e84-0782-4336-9da7-0bad1f82fb47',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_ae46e9b7-ad9a-480c-b8bd-bf4a5efb81e8',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f81f3535-4515-4eac-ade4-2ebd00d59725',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_79f03247-f850-42e9-9591-d0bbbd5a7436',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f0a9dde2-2576-4e5b-bf08-c382105a280c',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_42e99e82-2ccc-4eca-aef0-8a93eb65d485',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_209261b9-3362-411a-af35-6a59a251fb37',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_bc6a9a91-c4be-4daf-9194-c3c7d3b5b72f',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_0579cdde-b0cf-49e2-aa39-83a1967a0e0f',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+✔ print gate rejects work without side effects for undefined (25.737416ms)
+✔ print gate rejects work without side effects for "false" (6.145125ms)
+✔ print gate rejects work without side effects for "" (0.914209ms)
+✔ print gate rejects work without side effects for "TRUE" (0.768083ms)
+✔ print gate rejects work without side effects for " true " (0.871125ms)
+✔ print gate rejects work without side effects for true (0.639333ms)
+✔ print gate rejects work without side effects for 1 (0.569792ms)
+✔ disabled public status is available without database or storage bindings (0.297667ms)
+✔ explicit true permits route authorization to run (0.21475ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/heartbeat (0.163459ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/reconcile (0.119ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/jobs/job-1/result (0.094833ms)
+✔ UAT policy fails closed for missing, malformed, future, expired and oversized windows (1.913708ms)
+✔ UAT requires real staff sessions even when students forge browser or machine headers (39.6755ms)
+✔ UAT rejects inactive, revoked, idle, expired and non-shared staff identities (75.814834ms)
+✔ UAT availability and job tracking require staff while machine claims still require the printer secret (21.478375ms)
+✔ UAT rejects cross-origin creation and finalization with a valid staff cookie (17.150333ms)
+✔ UAT accepts only one PDF copy with A4 monochrome simplex settings (96.69325ms)
+Worker request failed. {
+  requestId: 'req_6c64d5ed-feb1-4c77-be44-be923763612b',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UNAVAILABLE'
+}
+✔ concurrent UAT intents reserve only one job regardless of supplied idempotency keys (18.353792ms)
+✔ repeated UAT submission reuses the same intent rather than adding another job (19.366167ms)
+✔ a wrong synthetic PDF cannot be finalized or claimed (21.943084ms)
+✔ staff UAT follows the existing complete lifecycle with protocol 3 while public printing remains false (30.634584ms)
+✔ UAT rejects content replaced after finalization before it can reach the Agent (29.310708ms)
+Worker request failed. {
+  requestId: 'req_7e1ef3ad-ae61-44ce-ac44-4b58ded57253',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_1c5d6ba9-06bf-4259-8bbd-017d7c088ddd',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expired UAT windows stop work and preserve authenticated recovery (33.243625ms)
+✔ enabling normal production disables UAT restrictions and keeps existing public behavior (19.78575ms)
+✔ public print upload, machine validation, page count, and status follow the constrained job lifecycle (55.489917ms)
+✔ printer machine endpoints reject absent and invalid secrets (13.6925ms)
+✔ heartbeat protocol 3 is accepted while unsupported future protocols are rejected (18.947583ms)
+✔ public availability stays false when the isolated print bucket is not configured (14.013375ms)
+✔ upload intent rejects altered or disabled print settings before creating a job (19.592125ms)
+✔ configured print settings are stored and returned to the printer claim (19.718833ms)
+✔ protocol 3 carries landscape and higher copies while protocol 2 cannot claim landscape jobs (19.375833ms)
+✔ Worker rejects a verified page count that exceeds the configured impression budget (20.492584ms)
+✔ upload intent rejects tampered orientation and copy values before creating a job (19.758292ms)
+[Print cleanup] Object deletion failed. { jobId: 'print-job-1', errorName: 'Error' }
+✔ print cleanup deletes R2 object idempotently and marks the queue row complete (14.647375ms)
+✔ minute scheduled event runs print cleanup (10.733875ms)
+✔ print cleanup retains failed deletion for a later retry (15.143333ms)
+✔ print jobs store requested settings and create a queued-ready upload intent (13.6635ms)
+✔ only one concurrent print agent can claim a job (16.681541ms)
+✔ idempotency replay cannot change print settings (11.826958ms)
+✔ verified page count is written only when the agent marks the job ready (15.157875ms)
+✔ submission-started jobs become unknown after lease expiry and are never requeued (14.930666ms)
+✔ public availability requires both a fresh ready heartbeat and remaining queue capacity (10.804292ms)
+✔ print settings whitelist permits only configured options (0.349125ms)
+✔ print settings reject unsupported values and options disabled for this environment (0.575792ms)
+✔ protocol 3 enables orientations while limits remain configurable and fail closed (0.44875ms)
+✔ protocol 3 accepts copy boundaries and rejects invalid or over-limit counts (0.229375ms)
+✔ print settings migration preserves jobs, defaults, and existing indexes (2.930083ms)
+✔ print settings migration accepts only supported persisted values (2.633916ms)
+✔ print page exposes mobile-friendly setting controls with safe defaults (92.058959ms)
+✔ public settings capabilities only enable known options and fail closed (0.5015ms)
+✔ upload request carries the exact displayed print settings (0.210958ms)
+✔ print summary states paper, color, sides, and copies (0.092542ms)
+✔ copy input accepts only positive integers within both volume limits (0.151333ms)
+✔ production print deployment accepts secret metadata without reading values (0.462958ms)
+✔ production print deployment rejects plaintext credentials without disclosing their value (0.278834ms)
+✔ production print deployment rejects missing or plaintext remote secret bindings (0.0905ms)
+✔ public messages have strict parity across all five supported languages (1.449ms)
+✔ public HTML templates contain localized aria-label keys instead of hardcoded strings (0.260541ms)
+✔ CSS rules enforce word wrapping, touch targets, focus-visible, and stepper states (1.110667ms)
+✔ application tracking lookup preserves student number input across language switches (76.253458ms)
+✔ application tracking lookup sets aria-busy during lookup and role="alert" on errors (20.691833ms)
+✔ wizard form fields have associated labels, IDs, and aria-required attributes (49.346417ms)
+✔ wizard document upload controls connect input to help text via aria-describedby (19.31525ms)
+✔ resubmission upload control links file input to status via aria-describedby and sets busy state (7.027375ms)
+✔ resubmission routes require a valid owner session and reject lookup-shaped mutation bodies (49.415ms)
+✔ owner eligibility hint and replacement intent keep reviewed revision current until finalize (24.595667ms)
+✔ application, document, record, message, and active-policy state independently gate intent creation (25.923208ms)
+✔ direct R2 PUT alone is not success; verified finalize changes current revision atomically (44.370666ms)
+✔ replaying a finalized resubmission PUT capability cannot overwrite the verified object (26.673709ms)
+✔ owner-session revocation after capability issuance blocks finalize without mutating current state (21.141708ms)
+✔ lookup remains read-only and cannot access owner eligibility or create an upload capability (25.037ms)
+✔ public passport OCR route remains absent (13.289875ms)
+✔ missing and mismatched R2 objects are invalidated without touching the reviewed current file (22.511542ms)
+✔ missing R2 object invalidates the non-current replacement and preserves the reviewed revision (16.711292ms)
+✔ expired abandoned intent is closed before cleanup and cannot become current (32.363125ms)
+✔ allows a first replacement only for the exact current persisted resubmission request (3.138375ms)
+✔ reasoned first replacement accepts completed unsafe/failed files but rejects pending or incomplete intent (0.325917ms)
+✔ does not let a student-visible message alone authorize replacement (0.17175ms)
+✔ rejects first replacement for an unrelated, approved, stale, non-current, or inapplicable document (0.246333ms)
+✔ allows another replacement only when the current submitted revision scan is unsafe or failed (0.223208ms)
+✔ denies retry for pending/clean scan, approved/under-review state, or pending cleanup (0.196458ms)
+✔ allows a fresh replacement while cleanup for an invalidated non-current attempt remains pending (0.144875ms)
+✔ sanitizes upload filenames while preserving policy code and verified metadata shape (0.456375ms)
+✔ rejects upload metadata outside the active centralized policy (0.610459ms)
+✔ creates the next pending revision on the same record without changing the reviewed current revision (13.341416ms)
+✔ a newer intent invalidates the previous non-current attempt but preserves the requested current revision (12.113917ms)
+✔ replacement cleanup waits until the invalidated capability expiry and lists only non-current replacement files (11.545917ms)
+✔ finalize atomically swaps the current revision, updates application state, completes intent, and writes safe audit (10.040209ms)
+▶ a guarded finalize step miss rolls back every earlier D1 mutation
+  ✔ rolls back when old current revision guard misses (20.8595ms)
+  ✔ rolls back when replacement revision guard misses (19.857916ms)
+  ✔ rolls back when replacement file guard misses (15.242292ms)
+  ✔ rolls back when document state guard misses (17.079916ms)
+  ✔ rolls back when application state guard misses (11.757416ms)
+  ✔ rolls back when intent state guard misses (10.740791ms)
+✔ a guarded finalize step miss rolls back every earlier D1 mutation (96.264958ms)
+✔ an audit insert failure rolls back revision, document, application, and intent mutations (14.165167ms)
+✔ invalid file selection cannot request a replacement intent (122.980958ms)
+✔ PUT success stays verifying until finalize succeeds, then refreshes owner tracking (44.611ms)
+✔ session failure aborts the private flow and never reuses the issued capability (19.538542ms)
+✔ safe network and conflict failures invite a new attempt without capability reuse (9.720417ms)
+✔ tracking refresh failure after successful finalize does not misreport the upload as failed (17.036542ms)
+✔ replacement messages exist in all five locales and Arabic remains right-to-left (7.251125ms)
+✔ scanner requires dedicated secret; staff or anonymous callers cannot claim or submit results (38.460833ms)
+✔ authorized exact-content clean result is durable; replay and a different lease are rejected (28.841625ms)
+✔ mismatched file, digest, object, old revision, stale signatures and incomplete scan cannot become clean (141.118667ms)
+✔ unsafe result blocks file; engine failure retries then persists failed without content download (29.918083ms)
+✔ unsupported content is terminal for the current revision and cannot be operator-retried (18.293792ms)
+✔ a lease that expires during result I/O is rejected at the database commit boundary (41.33725ms)
+✔ ready heartbeat requires real, fresh signature time and complete engine metadata (15.185542ms)
+✔ finalize atomically creates one durable scan job and rollback leaves no job (14.858916ms)
+✔ only one runner claims a job and expired lease is fenced from the next attempt (14.597667ms)
+✔ retry exhaustion marks failed and explicit retry requeues without declaring clean (16.037333ms)
+✔ reconciliation recovers pending finalized files and rejects noncurrent files (23.21ms)
+✔ migration backfills historical pending files and keeps upload-capability expiry before eligibility (12.538834ms)
+✔ scanner migration preserves finalize row-count guards by avoiding metadata-changing triggers (9.813292ms)
+﹣ real MacBook ClamAV scans via HTTPS job protocol and preserves staff/review/ZIP/replacement gates (0.757708ms) # SKIP
+✔ staff scanner panel exposes backlog, stale host and controlled failed-job retry (98.742083ms)
+✔ staff scanner panel does not offer replay for deterministic unsupported content (13.582541ms)
+✔ declaration acceptance uses current configured version, server timestamp, audit and safe DTO (41.331333ms)
+✔ declaration rejects missing owner, cross origin, false acceptance, stale version and client timestamp (25.988875ms)
+✔ student requirements expose the safe policy contract and never leak D1 identifiers or storage keys (18.212125ms)
+✔ autosave permits incomplete edits but remains owner-scoped and same-origin (17.664375ms)
+Student document cleanup remains pending. { errorName: 'Error', errorCode: 'STORAGE_DELETE_ERROR' }
+✔ document delete marks current revision unavailable before R2 cleanup and retries cleanup safely (66.004584ms)
+✔ document delete denies cross origin and unknown policy codes without changing another application (36.137791ms)
+✔ document delete preserves files while staff has locked a document for review (16.780167ms)
+✔ document upload metadata uses policy MIME and byte limits before signing (14.961417ms)
+✔ Student A can delete only A document while Student B current revision remains visible (15.575167ms)
+✔ non-draft applications cannot accept declarations or delete documents (19.642875ms)
+✔ new and Session 2 drafts expose an empty student-safe fingerprint state (57.409208ms)
+✔ contact acknowledgement is accepted only explicitly, is versioned, and is idempotent (63.583ms)
+✔ contact acknowledgement rejects a malformed persisted phone without recording acceptance (20.772917ms)
+✔ registered fingerprint status persists a trimmed code without adding authorization fields (22.410125ms)
+✔ not-registered status clears an earlier fingerprint code and remains outstanding data (14.906ms)
+✔ fingerprint state rejects undocumented statuses and overlong codes (22.067625ms)
+✔ switching from not registered to registered leaves a missing code incomplete (25.592125ms)
+✔ fingerprint updates are owner-session and same-origin protected (20.341625ms)
+✔ student number and fingerprint code do not authorize cross-application access (22.493167ms)
+✔ expired application sessions cannot change fingerprint state (44.537916ms)
+✔ server-calculated document requirements change with the saved under-18 state (51.803125ms)
+✔ address evidence choices select one server-enforced branch and branch changes preserve an uploaded object (50.313375ms)
+✔ inactive compatibility requirements stay hidden and cannot start uploads (22.080041ms)
+✔ adult sessions cannot create a birth certificate upload intent by supplying its code (22.463708ms)
+✔ fingerprint registration stays separate from document uploads (43.294292ms)
+✔ student document requirements and upload intents are scoped to the current application session (49.566042ms)
+✔ document upload intents reject cross-origin mutations and expired student sessions (25.670042ms)
+✔ staging signing diagnostics stay server-side while upload intent keeps its safe error contract (14.748417ms)
+✔ passport uploads use direct R2 capabilities and replacement creates a new current revision (29.631667ms)
+✔ draft application-type changes preserve finalized document metadata and the R2 object (24.088125ms)
+✔ host residence certificate accepts PDF only (19.29225ms)
+✔ finalize rejects a wrong-size object and does not mark the document complete (33.178459ms)
+✔ birth certificate uploaded by an under-18 student cannot be finalized after age state changes (31.943208ms)
+✔ staff can request unsafe replacement without preview, download or approve actions (314.011542ms)
+✔ staff can request failed replacement without preview, download or approve actions (99.306334ms)
+✔ applications workspace is prominent and opening it loads a queue without disturbing existing views (136.846375ms)
+✔ applications manager shows loading, empty, and safe recoverable error states (42.232334ms)
+✔ applications manager submits filters, changes pages, renders detail safely, and returns to the queue (42.238959ms)
+✔ document preview is lazy and closable while unsafe direct downloads are replaced by a gated ZIP action (308.99325ms)
+✔ document preview errors show safe recovery without provider details (34.820375ms)
+✔ leaving applications for YKN removes a ready document preview from the DOM (42.3415ms)
+✔ leaving applications invalidates a pending document preview request (52.767792ms)
+✔ staff starts review explicitly and resubmission reasons render as plain text (56.531291ms)
+✔ document approval disables repeat action and refreshes detail after a conflict (46.351459ms)
+✔ manual scan queues the selected file and reports when the PC ClamAV runner is offline (36.325ms)
+✔ document approval announces success and exposes a guarded undo action (29.879542ms)
+✔ approved documents and terminal applications remain read-only with preview and a scan-gated ZIP action (30.541375ms)
+✔ staff application review does not expose an access-code reset action (26.364ms)
+✔ staff application workflow renders rollback action with outline style and revert label (29.960334ms)
+✔ staff application workflow renders rollback action when application is completed (24.220209ms)
+✔ archive workspace is accessible in navigation without disturbing active applications or other views (296.524666ms)
+✔ archive keeps terminal filters and adds the Silinen view (55.280292ms)
+✔ archive search and filter resets pagination to page 1 and paginates consistently with server results (48.360917ms)
+✔ stale late requests do not overwrite newer search results (36.525625ms)
+✔ late detail responses cannot replace the current archive view or another application (44.33925ms)
+✔ late query and preview responses cannot update an exited or newly queried workspace (45.9105ms)
+✔ late detail and preview responses are discarded when leaving the archive workspace (35.317958ms)
+✔ archive queue and detail expose one read-only ZIP action using the selected application id (32.687333ms)
+✔ archive ZIP actions from queue and detail cancel the correct application stream (30.130333ms)
+✔ archive ZIP close failure never displays the completed-download message (41.422292ms)
+✔ archive ZIP reports pending safety review clearly without requesting or skipping documents (26.072958ms)
+✔ user fields and search input render safely as text and never execute HTML/XSS or leak into URL/localStorage/console (34.306ms)
+✔ archive displays loading, empty, and session expired / generic error states properly (35.112625ms)
+✔ archive application detail is strictly read-only with no approval, resubmission or transition controls (65.244583ms)
+✔ backend route accepts cancelled and rejected status filters and preserves auth/validation (17.00825ms)
+✔ staff session accepts only the authenticated JSON response (16.404042ms)
+✔ staff session rejects a successful HTML fallback response (2.124333ms)
+✔ staff session reports an unauthenticated API response (0.138083ms)
+✔ staff identity-check detail includes the stable reference without exposing access credentials (50.69875ms)
+✔ staff starts review explicitly and application status updates use optimistic concurrency (30.936792ms)
+✔ approved workflow transitions require all applicable current required documents to be approved (44.1425ms)
+✔ completion succeeds when an application has no owner sessions (19.667583ms)
+Worker request failed. {
+  requestId: 'req_669f141a-ff45-468b-9950-093a63e5ffb3',
+  errorName: 'Error',
+  errorCode: 'INTERNAL_ERROR'
+}
+✔ failed completion audit rolls back application retention and all owner-session revocations (23.963792ms)
+✔ staff approves only the current clean revision and records safe audit metadata (34.479875ms)
+✔ reviewer can safely undo a current document approval and the action is audited (16.863292ms)
+✔ admin approval is allowed while stale, incomplete, unsafe, and cleanup-pending revisions are rejected (27.413542ms)
+✔ staff may flag another submitted document during resubmission, but cannot resume review while any flag remains (15.070916ms)
+✔ resubmission reason, document note, application state, and audit are one atomic operation (23.950875ms)
+Worker request failed. {
+  requestId: 'req_e2e22410-5e0a-4962-b7d3-a1840a7e9af8',
+  errorName: 'Error',
+  errorCode: 'INTERNAL_ERROR'
+}
+✔ resubmission audit failure rolls back document, application, and student note changes (12.688166ms)
+✔ staff reads, previews, downloads, and re-requests the finalized replacement current revision (56.877292ms)
+✔ replacing one requested document does not resume review; staff must clear remaining requests explicitly (41.449542ms)
+✔ staff soft-delete hides an application, revokes its applicant session, and restore returns the prior status (30.762916ms)
+✔ permanent purge is administrator-only and keeps only a non-identifying audit record (35.686167ms)
+Worker request failed. {
+  requestId: 'req_9e5b7603-6712-4c17-9113-83ec59afa792',
+  errorName: 'ApiError',
+  errorCode: 'APPLICATION_PURGE_RETRY_REQUIRED'
+}
+✔ failed object removal leaves purge pending, blocks restore, and retries safely (24.8655ms)
+✔ staff scan action expedites the current pending document for the PC ClamAV runner (11.714125ms)
+✔ staff can roll back an accidental status progression and student tracking reflects it immediately (64.418708ms)
+✔ complete persisted application and current finalized required documents are ready (3.726291ms)
+✔ a finalized current document requiring resubmission is not ready (0.241166ms)
+✔ an approved current finalized revision remains ready (0.088209ms)
+✔ incomplete application fields, acknowledgement, declaration, fingerprint and address choice are not ready (0.153ms)
+✔ a missing declaration acceptance is not ready (0.126583ms)
+✔ only the selected address branch and its undertaking dependencies are required (0.110292ms)
+✔ renewal requires current UETS while initial applications do not (0.138875ms)
+✔ under-18 applications require the birth certificate and adults do not (0.128209ms)
+✔ incomplete, stale, deleted, cleanup-pending or unsafe current document states are not ready (0.298875ms)
+✔ not-ready reasons contain stable public codes and no internal identifiers (0.221792ms)
+✔ foldText strips Turkish accents, punctuation, and trims text (1.049417ms)
+✔ fastLevenshtein calculates exact edit distance within maxDist (0.154458ms)
+✔ Apps Script proxy sends its credential in a server-side POST body (24.53925ms)
+✔ Apps Script proxy follows 302 redirect location to fetch echo payload (0.511875ms)
+✔ Apps Script proxy rejects unknown actions and missing server configuration (0.261958ms)
+✔ browser tebligat code uses same-origin APIs and contains no Apps Script endpoint or key (9.145333ms)
+✔ Apps Script GET endpoint cannot invoke mutations and POST dispatch is allowlisted (2.199334ms)
+✔ untrusted tebligat fields render as text and never create executable markup (134.414625ms)
+✔ tebligat result renderer preserves mark and unmark control state (17.203083ms)
+✔ Tebliğ search scans the newest sixteen date sheets and collects all matches (0.613166ms)
+✔ local Tebliğ search uses the same newest sixteen date-sheet window (0.709875ms)
+✔ staff logo returns to the protected workspace home without resetting tool state (76.515917ms)
+✔ extracts a labeled YÖKSİS ID from acceptance letter text (1.137875ms)
+✔ extracts Topkapı YOKSIS ID from real acceptance letter text (0.510583ms)
+✔ rejects SVG-ICON-3HX and css artifacts from YOKSIS ID candidates (0.304542ms)
+✔ extracts passport issue and expiry dates from labeled text (15.491167ms)
+✔ rejects invalid passport date order instead of guessing (2.188458ms)
+✔ extracts passport dates written with English month names (0.223583ms)
+✔ extracts passport dates separated by spaces after OCR (1.138666ms)
+✔ extracts passport dates with two-digit years (0.162541ms)
+✔ extracts passport dates without separators in day-first and year-first formats (0.254458ms)
+✔ extracts passport dates with bilingual slash month names (0.206834ms)
+✔ extracts passport dates with French labels (1.927958ms)
+✔ extracts passport dates with Russian labels (2.080708ms)
+✔ extracts expiry date from passport MRZ line when visual label is missing (1.54675ms)
+✔ extracts YOKSIS ID from various acceptance letter formats (0.060417ms)
+✔ extracts passport dates with Uzbek labels (0.151708ms)
+✔ strictly rejects year 5552 or random numbers like 03045552 (2.268666ms)
+✔ extracts Uzbek passport MRZ expiry using birthDate hint (0.709958ms)
+✔ extracts Ethiopian passport dates with English and Amharic labels (0.161541ms)
+✔ extracts passport dates with spaces around slashes and two-digit year (0.114792ms)
+✔ recovers passport dates when OCR confuses letters with digits (0.341583ms)
+✔ recovers passport dates when OCR separates every digit (0.104834ms)
+✔ recovers YÖKSİS ID when OCR drops the hyphens (0.040125ms)
+✔ falls back to candidate pair (earliest=issue, latest=expiry) when labels are missing or degraded (1.142833ms)
+✔ rejects student birthDate or dates before 2010 from being selected as issueDate (0.137542ms)
+✔ extracts place of birth from English, Turkish, Russian and Uzbek passport text (24.240167ms)
+✔ extracts issuing authority from English, Turkish, French and Russian passport text (17.987375ms)
+✔ uses issuing-country ISO code when passport authority is missing (5.891542ms)
+✔ extractPassportMetadata returns comprehensive object with dates, place of birth, and authority (1.956792ms)
+✔ MRZ with OCR noise, brackets, spaces and sanitization (0.062291ms)
+✔ extracts German passport (Reisepass) dates (0.744333ms)
+✔ extracts Arabic passport dates (0.699959ms)
+✔ extracts Kazakh / Kyrgyz passport dates (0.437916ms)
+✔ extracts Azerbaijani passport dates (0.695292ms)
+✔ extracts place of birth with Central Asian and stopWords cleanly (0.444125ms)
+✔ distributed YKN package supports only staging, production, Apply, and YÖKSİS origins (12.045ms)
+✔ extension rejects staff bridge messages from an untrusted page before running workflows (2.48325ms)
+✔ YÖKSİS search handles ZK-labelled controls and confirms delayed form readiness (570.642583ms)
+✔ YÖKSİS search uses the ZK button cell beside the acceptance input once (476.515375ms)
+✔ YÖKSİS search ignores hidden controls left by the previous student (483.400667ms)
+✔ YÖKSİS araması, onChange sonrası yeniden oluşturulan kabul alanına kodu tekrar yazar (734.509417ms)
+✔ YÖKSİS ikinci aramada aynı parmak izli formun gerçekten yenilendiğini doğrular (382.174375ms)
+✔ YÖKSİS hazır kontrolü önceki formu yeni aramanın sonucu saymaz (270.954666ms)
+✔ Apply pasaport araması, yan sekmedeki arama alanına tam Enter zincirini gönderir (116.954083ms)
+✔ YÖKSİS form readiness waits for a form that appears after the search response (189.806625ms)
+[YKN] Fotoğraf başarıyla hazırlandı/yüklendi: student.jpg
+✔ YÖKSİS fill reports photo upload truthfully and fills passport fields (399.700709ms)
+✔ YÖKSİS form readiness recognizes Ana Adı and photo button immediately without 10s delay (185.400667ms)
+✔ YÖKSİS fillRemainingData fills open form immediately without 10s timeout (187.375042ms)
+✔ Apply document discovery returns real acceptance and passport candidates (20.909041ms)
+✔ background transfer accepts only a fresh content-search result or a fresh MAIN-world fallback (3.879791ms)
+✔ background transfer waits for a delayed fresh form after the search click (0.58575ms)
+✔ Tek Tık aktarımı açık YÖKSİS sekmesi yoksa güvenli biçimde yeni sekme açar (0.791458ms)
+✔ son YÖKSİS doldurma adımı sekmeyi öne alır (1.146375ms)
+✔ ardışık YÖKSİS aramaları requestId ile birbirine karışmaz (1.749375ms)
+✔ YÖKSİS popup araması da arka planda çalışır (0.967917ms)
+✔ eklenti popup araması da Tek Tık ile aynı YÖKSİS aktarım yolunu kullanır (0.519084ms)
+✔ selects the rotated passport orientation with the strongest OCR evidence (1.625958ms)
+✔ keeps upright orientation when OCR scores are tied (0.2215ms)
+✔ YKN extension uses a readiness handshake before Apply search (15.9925ms)
+✔ YKN transport does not return fabricated document links (3.636709ms)
+✔ YKN bridge preserves request correlation IDs (1.635459ms)
+✔ YKN one-click workflow keeps the required ordered transport stages (7.589208ms)
+✔ YKN one-click excludes cropper canvases from extension messages (1.1255ms)
+✔ YKN one-click waits for crop confirmation before final YÖKSİS fill (1.975583ms)
+✔ YÖKSİS search and fill are single-flight operations, not all-frame retries (2.572667ms)
+✔ YÖKSİS fill is blocked until a fresh acceptance-code search has opened its form (2.5955ms)
+✔ final YÖKSİS işlemi fotoğraf kırpma onayından önce başlatılamaz (1.924583ms)
+✔ Türkmenistan için veren makam fallback değeri SMST olarak korunur (1.330792ms)
+✔ YKN waits for Apply document discovery before acceptance-code automation (0.930375ms)
+✔ portal accepts document discovery results without treating profile discovery as complete (0.879584ms)
+✔ starting a new YKN student search clears the prior student document-byte cache (0.762917ms)
+ℹ tests 683
+ℹ suites 0
+ℹ pass 682
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 8842.57225

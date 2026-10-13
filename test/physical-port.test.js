@@ -1,9 +1,11 @@
 import { requireSingleJpegContainer } from '../src/server/domain/jpeg-container-policy.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { PDFDocument } from 'pdf-lib';
 import { cleanupMobileTransfers } from '../src/server/routes/mobile-transfer-routes.js';
 import { listPhysicalTransitions, validatePhysicalIntake } from '../src/server/domain/physical-intake-policy.js';
 import { validatePhysicalPdf } from '../src/server/routes/physical-pdf-routes.js';
+import { MAX_PHYSICAL_PDF_BYTES } from '../src/config/physical-document-limits.js';
 import { createPortFixture, pairPortPhone, portRequest, uploadPhoto, registerPortPdf } from './physical-port-fixtures.js';
 test('QR claims are single-use and bound to the creating PC session', async () => {
     const context = await createPortFixture();
@@ -31,6 +33,33 @@ test('validated phone photos reach only the owning PC without a scanner job', as
     assert.equal((await context.database.prepare('SELECT count(*) AS total FROM document_scan_jobs').first()).total, 0);
     assert.equal(other.status, 410);
     assert.equal((await portRequest(context, `${base}/files/${id}`)).status, 401);
+});
+
+test('physical application PDF uploads accept files above 10 MiB and reject files above 50 MiB', async () => {
+    const context = await createPortFixture();
+    const registration = await registerPortPdf(context);
+    const pdf = await PDFDocument.create();
+    pdf.addPage();
+    const baseBytes = await pdf.save();
+    const largeBytes = new Uint8Array(11 * 1024 * 1024);
+    largeBytes.set(baseBytes);
+    largeBytes.fill(32, baseBytes.length);
+
+    const accepted = await portRequest(context, `/api/staff/physical-intakes/${registration.detail.intake.id}/pdf`, {
+        method: 'POST', cookie: context.staffCookie,
+        headers: { 'Content-Type': 'application/pdf', 'If-Match': '1', 'X-Pdf-Id': crypto.randomUUID() }, body: largeBytes
+    });
+
+    assert.equal(accepted.status, 200, await accepted.clone().text());
+    const savedFile = await accepted.json();
+    assert.equal((await context.database.prepare('SELECT byte_size FROM physical_intake_files WHERE id=?').bind(savedFile.file_id).first()).byte_size, largeBytes.byteLength);
+    const tooLarge = await portRequest(context, `/api/staff/physical-intakes/${registration.detail.intake.id}/pdf`, {
+        method: 'POST', cookie: context.staffCookie,
+        headers: { 'Content-Type': 'application/pdf', 'Content-Length': String(MAX_PHYSICAL_PDF_BYTES + 1),
+            'If-Match': '2', 'X-Pdf-Id': crypto.randomUUID() }, body: new Uint8Array([37])
+    });
+
+    assert.equal(tooLarge.status, 413);
 });
 
 test('logout, staff deactivation, idle timeout and transfer expiry revoke the phone too', async () => {
@@ -72,7 +101,7 @@ test('duplicate simultaneous uploads never overwrite or delete the winning objec
     assert.ok(results.every(response => [200,409].includes(response.status)));
     assert.equal(replay.status, 200);
     assert.equal(context.objects.size, 1);
-    assert.equal((await context.database.prepare('SELECT file_count FROM mobile_document_transfers').first()).file_count, 1);
+    assert.equal((await context.database.prepare('SELECT file_count FROM mobile_document_transfer_batches').first()).file_count, 1);
 });
 
 test('consumed photo IDs remain idempotent and cannot reappear on retry', async () => {
@@ -80,35 +109,92 @@ test('consumed photo IDs remain idempotent and cannot reappear on retry', async 
     const transfer = await pairPortPhone(context);
     const id = crypto.randomUUID();
     await uploadPhoto(context, transfer, { id });
+    const beforePcImport = await portRequest(context, `/api/mobile-transfer/${transfer.id}/batch`, { cookie: transfer.phoneCookie });
 
     const consumed = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/files/${id}`, { method:'DELETE', cookie:context.staffCookie });
     const replay = await uploadPhoto(context, transfer, { id });
     const list = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}`, { cookie:context.staffCookie });
+    const afterPcImport = await portRequest(context, `/api/mobile-transfer/${transfer.id}/batch`, { cookie: transfer.phoneCookie });
+    const legacyStatus = await portRequest(context, `/api/mobile-transfer/${transfer.id}/status`, { cookie: transfer.phoneCookie });
 
+    assert.deepEqual((await beforePcImport.json()).receivedPhotoIds, []);
     assert.equal(consumed.status, 200);
     assert.equal(replay.status, 200);
     assert.deepEqual((await list.json()).files, []);
+    assert.deepEqual((await afterPcImport.json()).receivedPhotoIds, [id]);
+    assert.deepEqual((await legacyStatus.json()).receivedPhotoIds, [id]);
     assert.equal(context.objects.size, 0);
 });
 
-test('phone receives sent confirmation only after the PC consumes a photo', async () => {
+test('student batches isolate uploads and require explicit discard of unimported photos', async () => {
     const context = await createPortFixture();
     const transfer = await pairPortPhone(context);
-    const id = crypto.randomUUID();
-    const statusPath = `/api/mobile-transfer/${transfer.id}/status`;
+    const oldPhotoId = crypto.randomUUID();
+    await uploadPhoto(context, transfer, { id: oldPhotoId });
 
-    await uploadPhoto(context, transfer, { id });
-    const waiting = await portRequest(context, statusPath, { cookie: transfer.phoneCookie });
-    const pcReceipt = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/files/${id}`, {
+    const blocked = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/batches`, {
+        method: 'POST', cookie: context.staffCookie, json: {}
+    });
+    assert.equal(blocked.status, 409);
+    assert.equal((await blocked.json()).error.code, 'BATCH_PENDING_PHOTOS');
+
+    const discarded = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/batches`, {
+        method: 'POST', cookie: context.staffCookie, json: { discardPending: true }
+    });
+    assert.equal(discarded.status, 200);
+    const { batchId } = await discarded.json();
+    assert.notEqual(batchId, transfer.batchId);
+    assert.equal(context.objects.size, 0);
+
+    const stale = await uploadPhoto(context, { ...transfer, batchId: transfer.batchId }, { id: crypto.randomUUID() });
+    const current = await uploadPhoto(context, { ...transfer, batchId }, { id: crypto.randomUUID() });
+    const listed = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}`, { cookie: context.staffCookie });
+    const phoneBatch = await portRequest(context, `/api/mobile-transfer/${transfer.id}/batch`, { cookie: transfer.phoneCookie });
+
+    assert.equal(stale.status, 409);
+    assert.equal(current.status, 200);
+    assert.equal((await listed.json()).files.length, 1);
+    assert.equal((await phoneBatch.json()).batchId, batchId);
+    assert.equal(context.objects.size, 1);
+});
+
+test('closing a student batch pauses phone uploads without ending its paired QR session', async () => {
+    const context = await createPortFixture();
+    const transfer = await pairPortPhone(context);
+
+    const closed = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/batches/${transfer.batchId}/close`, {
+        method: 'POST', cookie: context.staffCookie
+    });
+    const upload = await uploadPhoto(context, transfer);
+    const state = await portRequest(context, `/api/mobile-transfer/${transfer.id}/batch`, { cookie: transfer.phoneCookie });
+    const transferRow = context.database.prepare('SELECT phone_token_hash,expires_at FROM mobile_document_transfers WHERE id=?')
+        .bind(transfer.id).first();
+
+    assert.equal(closed.status, 200);
+    assert.equal(upload.status, 409);
+    assert.equal((await state.json()).batchId, null);
+    assert.ok(transferRow.phone_token_hash);
+    assert.ok(transferRow.expires_at > Math.floor(Date.now() / 1000));
+});
+
+test('a new student batch receives a fresh photo quota after imported files are consumed', async () => {
+    const context = await createPortFixture();
+    const transfer = await pairPortPhone(context);
+    const photoId = crypto.randomUUID();
+    await uploadPhoto(context, transfer, { id: photoId });
+    await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/files/${photoId}`, {
         method: 'DELETE', cookie: context.staffCookie
     });
-    const received = await portRequest(context, statusPath, { cookie: transfer.phoneCookie });
-    const unauthorized = await portRequest(context, statusPath);
 
-    assert.deepEqual((await waiting.json()).receivedPhotoIds, []);
-    assert.deepEqual((await received.json()).receivedPhotoIds, [id]);
-    assert.equal(pcReceipt.status, 200);
-    assert.equal(unauthorized.status, 410);
+    const nextBatchResponse = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/batches`, {
+        method: 'POST', cookie: context.staffCookie, json: {}
+    });
+    const { batchId } = await nextBatchResponse.json();
+    const count = context.database.prepare('SELECT file_count FROM mobile_document_transfer_batches WHERE id=?').bind(batchId).first().file_count;
+
+    assert.equal(nextBatchResponse.status, 200);
+    assert.equal(count, 0);
+    assert.equal((await uploadPhoto(context, { ...transfer, batchId })).status, 200);
 });
 
 test('rejects forged MIME, malformed JPEG, oversize payloads and cross-origin uploads', async () => {
@@ -137,7 +223,7 @@ test('upload and claim rate limits are enforced by atomic database counters', as
 test('file quotas and simultaneous PC transfer quotas are enforced', async () => {
     const context = await createPortFixture();
     const transfer = await pairPortPhone(context);
-    await context.database.prepare('UPDATE mobile_document_transfers SET file_count=30').run();
+    await context.database.prepare('UPDATE mobile_document_transfer_batches SET file_count=30').run();
 
     const denied = await uploadPhoto(context, transfer);
     const results = await Promise.all(Array.from({length:6}, () => portRequest(context, '/api/staff/mobile-transfers', {method:'POST',cookie:context.staffCookie})));
@@ -172,7 +258,12 @@ test('physical registration and approval work without a verdict and never change
 
     assert.equal(approved.status,200);
     assert.equal(opened.status,200);
+    assert.match(opened.headers.get('Content-Disposition'), /^attachment; filename="Synthetic Student\.pdf"; filename\*=UTF-8''Synthetic%20Student\.pdf$/);
     assert.deepEqual(new Uint8Array(await opened.arrayBuffer()),receipt.bytes);
+    await context.database.prepare('UPDATE physical_intakes SET first_name=?,last_name=? WHERE id=?').bind('Çağrı','Öğrenci',receipt.id).run();
+    const localizedDownload = await portRequest(context, `${base}/files/${receipt.id}/download`, {cookie:context.staffCookie});
+
+    assert.match(localizedDownload.headers.get('Content-Disposition'), /filename\*=UTF-8''%C3%87a%C4%9Fr%C4%B1%20%C3%96%C4%9Frenci\.pdf$/);
     assert.equal((await context.database.prepare('SELECT scan_status FROM physical_intake_files').first()).scan_status,'pending');
     assert.equal((await context.database.prepare("SELECT status FROM applications WHERE id='online'").first()).status,'under_review');
     assert.equal((await context.database.prepare('SELECT count(*) AS total FROM document_scan_jobs').first()).total,0);
@@ -237,7 +328,7 @@ test('failed storage writes can retry the same phone photo without consuming ano
     assert.equal(failed.status,500);
     assert.equal(retried.status,200);
     assert.equal(context.objects.size,1);
-    assert.equal((await context.database.prepare('SELECT file_count FROM mobile_document_transfers').first()).file_count,1);
+    assert.equal((await context.database.prepare('SELECT file_count FROM mobile_document_transfer_batches').first()).file_count,1);
 });
 
 test('single JPEG validation rejects concatenated images and content after the image end', async () => {

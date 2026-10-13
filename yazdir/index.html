@@ -15,9 +15,30 @@
             <img src="/logo_tr_transparent.png" data-i18n-alt="logoAlt" alt="Istanbul Topkapi University">
         </a>
         <section class="print-card" aria-labelledby="print-title">
+            <div class="print-language-picker">
+                <label for="print-language" data-i18n="languageLabel">Language</label>
+                <select id="print-language" dir="ltr">
+                    <option value="tr" lang="tr">Türkçe</option>
+                    <option value="tk" lang="tk">Türkmençe</option>
+                    <option value="ru" lang="ru">Русский</option>
+                    <option value="en" lang="en">English</option>
+                    <option value="ar" lang="ar" dir="rtl">العربية</option>
+                </select>
+            </div>
             <p class="print-eyebrow" data-i18n="eyebrow">International Student Office</p>
             <h1 id="print-title" data-i18n="title">Print a document</h1>
             <p class="print-intro" data-i18n="intro">Add the files you want to print. Each file can be up to 10 MB.</p>
+            <section class="print-quick-guide" aria-labelledby="print-guide-title">
+                <h2 id="print-guide-title" data-i18n="quickGuideTitle">How to print</h2>
+                <ol>
+                    <li data-i18n="guideAdd">Tap “Add files” and select your document.</li>
+                    <li data-i18n="guideSettings">Choose the pages and number of copies.</li>
+                    <li data-i18n="guidePrint">Tap “Print all” once and wait.</li>
+                    <li data-i18n="guideCollect">Check the printer and collect your pages.</li>
+                </ol>
+                <p data-i18n="fileFormats">PDF, JPG or PNG · Up to 10 MB per file · Up to 20 pages per job</p>
+            </section>
+            <p class="print-guide-download"><a href="/documents/student-print-guide-a4.pdf" data-i18n="downloadGuide">Download the A4 guide in five languages</a></p>
             <div id="print-availability" class="print-availability" role="status" aria-live="polite" data-i18n="availabilityChecking">Checking printer status…</div>
             <p class="print-guidance" data-i18n="guidance">Choose print settings for each file. You can print only the pages you need.</p>
             <div id="print-files" class="print-files" aria-live="polite"></div>
@@ -28,6 +49,7 @@
                 <button id="print-submit" type="button" data-i18n="submit" disabled>Print all</button>
             </section>
             <p id="print-message" class="print-message" role="status" aria-live="polite"></p>
+            <p class="print-collection-hint" data-i18n="repeatWarning">If the result is unclear, ask the office before sending the same file again.</p>
             <section id="print-history-section" class="print-history-section" aria-labelledby="print-history-title" hidden>
                 <h2 id="print-history-title" data-i18n="historyTitle">Submission status</h2>
                 <div id="print-history" class="print-history" aria-live="polite"></div>

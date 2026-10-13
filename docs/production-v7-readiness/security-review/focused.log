@@ -1,0 +1,456 @@
+Worker request failed. {
+  requestId: 'req_1e085eab-5ecc-4178-b835-bf730c73ffc2',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_66afc783-1b6e-4ae0-b255-7e57aa4b7f44',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_5ff25f5f-c0c6-456c-80ee-96f3bf87cdf4',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c5bdd4e2-2f02-4718-a175-87e308c8b0fe',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_0466abed-da77-47f5-8908-88296d9653ef',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_4e2ce619-4625-4a7d-bec7-f55b89da6ff3',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f3da4fbb-e00a-4b6d-a4f2-742c76884ab0',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_0d1d2f08-2bd7-4949-b7d2-624861670672',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c1b05fc5-dd32-4973-8e25-b8496929dbf4',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_863e3414-f5f7-4cfb-b091-d5cf0fbd08e9',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_3132af99-650e-442d-8dc2-9ee7dec72e5a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_493b8395-4c6d-4f84-b3da-6bf04bde3980',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c24b77cf-0b20-45db-9969-aa8906147f4a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_59bc4706-010b-4c5d-9315-b9ae60eff535',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f467ac97-42c3-4a69-a6bc-116ac6e8fcdb',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_aaab1511-7529-4e7f-ba20-590b90230cff',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e2481a2e-6745-46f8-8b80-6908589502c3',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_4b1cd14e-8163-47f4-9c5b-49e83d5569aa',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_9ffc4edb-f0de-47dc-b7a4-2ee9573d930a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_79aadb86-03e7-4ee3-89db-c0656918cde3',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e5f58b1e-8882-4311-9538-a8e1b781e175',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_046ce723-987b-4cca-8f09-f7d59ab6d39f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_35e0b41e-fea0-40c5-af6c-3c4d9a74c992',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_43f6a2cb-4118-4cf6-bf14-bad4568e7e7f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_a8b7d3d3-8ef1-4393-8ada-6baa120e6aee',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_3353286b-b37f-47c6-a793-1068ad9fce36',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_5271c847-93ce-4e2f-ab76-d483be48ee27',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_04f70839-731b-4622-80cd-225f41c99912',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_4281ee1a-b270-4b2e-a8ac-1cfbe749a7eb',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_36a1360f-6f58-4bd6-ba17-3398678d7689',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e47feb57-a5e3-4bbc-8d0a-11dc0cb6e240',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_952500e5-8016-49ea-9819-644262dcad24',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f1c177f5-0abd-4c88-b704-100b8f06c03b',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_26a3f71a-19cc-4412-b491-a0d2ae321771',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_5dc10058-80b3-4bfe-b2c3-cb671fd2393c',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_75373b78-b063-4e57-82ea-2b7c8fa4b639',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_bb38d642-9a23-4b63-9e4c-3e8b70e2f227',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_d1f6a644-6c4b-4474-b887-90ff945d69a1',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_694833a3-53bf-4269-8e56-25cba7d5f993',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_573eb016-2744-4baf-8c73-5c00676c93c7',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_2b337569-b9d0-43f4-9935-5962a81a23c9',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e02b86f4-09bf-41a1-ad54-b0d3e5091ed5',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_d174cf53-4a6e-465b-94f9-5d3ea8e7b8cb',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_fe4b87d5-a7ee-4d20-b4df-630765b51536',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e6381950-ecd5-4120-b568-325e57dac9b6',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_89c773a5-1622-4d12-b5eb-0d1900f321f2',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c0b87aab-25c5-4118-863e-df9ba3218053',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_976765b2-87ed-4a02-8ff4-eec76fe767e3',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_3afb1926-b104-4a6d-a657-ae3fb2444545',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_e3275a9d-d670-4b00-8a1c-9e9b9d638037',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_a6302562-c375-47b6-9b51-3f352c098ecb',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_0fcfcc3c-ee2d-49fd-9735-c7fe88f31b5c',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_6a0a53de-99fa-4ecc-a911-fc4bd10f8f0f',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_dcd3fd94-86a8-480b-a707-7ff0d011b8bb',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_c9905a15-1b8a-44ba-a4ab-429597ac3df8',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_4ef36d53-713f-4461-b0dc-122b999bb8c3',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_913f559a-990a-484d-9e5e-5bc12a0ea2b4',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_2dc172cc-7d7b-4be2-9ecd-e16fd3d0e02b',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_0bc1c0b5-fdb2-4574-bb9e-b889e759c92b',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+Worker request failed. {
+  requestId: 'req_1f32a076-763b-4aca-a0ac-9c33820d8fbd',
+  errorName: 'ApiError',
+  errorCode: 'PRINTER_UNAVAILABLE'
+}
+✔ print gate rejects work without side effects for undefined (25.22625ms)
+✔ print gate rejects work without side effects for "false" (1.186584ms)
+✔ print gate rejects work without side effects for "" (0.765958ms)
+✔ print gate rejects work without side effects for "TRUE" (0.731584ms)
+✔ print gate rejects work without side effects for " true " (0.742417ms)
+✔ print gate rejects work without side effects for true (0.554709ms)
+✔ print gate rejects work without side effects for 1 (0.561375ms)
+✔ disabled public status is available without database or storage bindings (0.544917ms)
+✔ explicit true permits route authorization to run (0.285375ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/heartbeat (0.191458ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/reconcile (0.12975ms)
+✔ disabled printing retains authenticated recovery endpoint /api/printer/jobs/job-1/result (0.104ms)
+✔ UAT policy fails closed for missing, malformed, future, expired and oversized windows (8.335959ms)
+✔ UAT requires real staff sessions even when students forge browser or machine headers (38.887834ms)
+✔ UAT rejects inactive, revoked, idle, expired and non-shared staff identities (49.471375ms)
+✔ UAT availability and job tracking require staff while machine claims still require the printer secret (10.615166ms)
+✔ UAT rejects cross-origin creation and finalization with a valid staff cookie (10.500666ms)
+✔ UAT accepts only one PDF copy with A4 monochrome simplex settings (45.649375ms)
+Worker request failed. {
+  requestId: 'req_f71415e8-237c-486c-b87f-e8f1f11a1061',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ concurrent UAT intents reserve only one job regardless of supplied idempotency keys (10.471042ms)
+✔ repeated UAT submission reuses the same intent rather than adding another job (10.537958ms)
+✔ a wrong synthetic PDF cannot be finalized or claimed (11.002375ms)
+✔ staff UAT follows the existing complete lifecycle with protocol 3 while public printing remains false (13.089583ms)
+✔ UAT rejects content replaced after finalization before it can reach the Agent (10.660417ms)
+Worker request failed. {
+  requestId: 'req_4a0453d8-48d2-4b0e-8a03-d1ea9862ba53',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_19866bff-347d-49ff-b98d-3544b93e3d90',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expired UAT windows stop work and preserve authenticated recovery (9.903708ms)
+✔ enabling normal production disables UAT restrictions and keeps existing public behavior (11.221667ms)
+✔ staff UAT upload capabilities point to the authenticated Worker rather than R2 signed URLs (9.450292ms)
+Worker request failed. {
+  requestId: 'req_a8a84d93-62a0-4b9d-8eca-5ac9b3c43df5',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ changing UAT windows and purging a test row cannot reserve a second v7 job (10.243792ms)
+✔ UAT upload rechecks staff authorization, origin and upload token at the actual byte-write boundary (11.947291ms)
+✔ only real fixture bytes can reach R2 and replayed or concurrent PUTs cannot overwrite them (11.687625ms)
+✔ a revoked session during streaming upload is rejected before R2 stores any bytes (10.557375ms)
+Worker request failed. {
+  requestId: 'req_c71cbd79-c41b-4d9f-b116-7920de07101a',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expiry during streaming upload rejects the bytes before R2 storage (9.640542ms)
+Worker request failed. {
+  requestId: 'req_70bff1b8-c01e-4674-913f-1e7f6d28590c',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ revocation or expiry during finalize cannot move an uploaded job into the queue (21.401292ms)
+Worker request failed. {
+  requestId: 'req_37a953ed-8fe8-4af2-ad8b-6a90752fee0b',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ different valid staff sessions share one atomic UAT reservation (9.705208ms)
+Worker request failed. {
+  requestId: 'req_69d237c3-5a2c-4f77-87f9-577b3d0f6743',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_f76ce1b4-c355-483f-8258-1676a84162d4',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_88e64ebd-b2bf-49b1-a322-9a74a9591fee',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_UAT_EXHAUSTED'
+}
+✔ closing UAT preserves retention cleanup and its permanent one-job reservation (10.948125ms)
+✔ database clock rejects expired queue, ready and submission transitions even with a stale handler timestamp (10.964417ms)
+✔ UAT machine work cannot target unrelated jobs or an older settings protocol (11.686791ms)
+✔ public status stays available and closed independently of staff cookies and UAT configuration (9.74675ms)
+✔ the server enforces the exact 15 minute boundary and rejects client hash and filename claims (9.470292ms)
+Worker request failed. {
+  requestId: 'req_7dedfeb2-9c4b-4db3-8c84-067afd28b1e5',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_8ecd5414-2ab3-4e94-8930-861857600a9c',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_1463bd13-eb00-477c-8463-cd8c9408de90',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_520c8c28-9352-4539-bf16-b2c87b334bb4',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_22d0947a-adc6-4fc5-8c4c-bd6089aa6064',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_af659c37-43d4-4007-9862-33948bc015e1',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+Worker request failed. {
+  requestId: 'req_3e7025f3-7395-44d7-9cc4-517a6709d653',
+  errorName: 'ApiError',
+  errorCode: 'PRINT_DISABLED'
+}
+✔ expired UAT windows reject all mutation stages while keeping public status and authenticated heartbeat (9.932292ms)
+✔ database clock prevents job creation after UAT expiry even if a stale request time is supplied (9.29775ms)
+✔ public print upload, machine validation, page count, and status follow the constrained job lifecycle (41.18625ms)
+✔ printer machine endpoints reject absent and invalid secrets (9.948958ms)
+✔ heartbeat protocol 3 is accepted while unsupported future protocols are rejected (10.749584ms)
+✔ public availability stays false when the isolated print bucket is not configured (9.31425ms)
+✔ upload intent rejects altered or disabled print settings before creating a job (9.705042ms)
+✔ configured print settings are stored and returned to the printer claim (12.084625ms)
+✔ protocol 3 carries landscape and higher copies while protocol 2 cannot claim landscape jobs (12.764584ms)
+✔ Worker rejects a verified page count that exceeds the configured impression budget (10.995417ms)
+✔ upload intent rejects tampered orientation and copy values before creating a job (10.436459ms)
+[Print cleanup] Object deletion failed. { jobId: 'print-job-1', errorName: 'Error' }
+✔ print cleanup deletes R2 object idempotently and marks the queue row complete (14.904042ms)
+✔ minute scheduled event runs print cleanup (12.223916ms)
+✔ print cleanup retains failed deletion for a later retry (10.451291ms)
+✔ print jobs store requested settings and create a queued-ready upload intent (27.84675ms)
+✔ only one concurrent print agent can claim a job (19.255666ms)
+✔ idempotency replay cannot change print settings (12.350042ms)
+✔ verified page count is written only when the agent marks the job ready (10.473958ms)
+✔ submission-started jobs become unknown after lease expiry and are never requeued (12.420166ms)
+✔ public availability requires both a fresh ready heartbeat and remaining queue capacity (9.443542ms)
+✔ print settings whitelist permits only configured options (0.139875ms)
+✔ print settings reject unsupported values and options disabled for this environment (0.262125ms)
+✔ protocol 3 enables orientations while limits remain configurable and fail closed (0.189958ms)
+✔ protocol 3 accepts copy boundaries and rejects invalid or over-limit counts (0.2005ms)
+ℹ tests 62
+ℹ suites 0
+ℹ pass 62
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 511.327917

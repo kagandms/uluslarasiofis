@@ -1,7 +1,7 @@
 const REFRESH_INTERVAL_MS = 15_000;
 const TERMINAL_STATUS_LABELS = Object.freeze({
-    uploading: 'Yükleniyor', queued: 'Bekliyor', leased: 'Agent aldı', ready: 'Yazdırmaya hazır',
-    submission_started: 'Spooler’a gönderiliyor', submitted: 'Agent spooler’a gönderdi; fiziksel çıktı doğrulanmadı',
+    uploading: 'Dosya yükleniyor', queued: 'Sırada bekliyor', leased: 'Dosya kontrol ediliyor', ready: 'Yazdırmaya hazır',
+    submission_started: 'Yazıcıya gönderiliyor', submitted: 'Yazıcıya gönderildi; kağıt çıktısını kontrol edin',
     failed: 'Başarısız', unknown: 'Sonuç belirsiz; otomatik tekrarlanmadı', cancelled: 'İptal edildi', expired: 'Süresi doldu'
 });
 
@@ -21,7 +21,9 @@ function formatDate(value) {
 function appendDefinitionList(document, target, fields) {
     target.replaceChildren();
     for (const [label, value] of fields) {
-        target.append(textElement(document, 'dt', label), textElement(document, 'dd', value));
+        const field = textElement(document, 'div', '', 'print-status-field');
+        field.append(textElement(document, 'dt', label), textElement(document, 'dd', value));
+        target.append(field);
     }
 }
 
@@ -60,7 +62,7 @@ function renderJob(document, job, options = {}) {
         cancel.disabled = !options.canManage || !canSafelyCancel(job);
         if (cancel.disabled) {
             cancel.title = options.canManage
-                ? 'İş Agent tarafından alınmış veya yazdırma aşamasına geçmiş. Güvenli iptal yapılamaz.'
+                ? 'Dosya işleme alınmış veya yazıcıya gönderilmeye başlamış. Güvenli iptal yapılamaz.'
                 : 'Yalnız admin işleri iptal edebilir.';
         }
         cancel.dataset.jobId = job.id;
@@ -69,25 +71,38 @@ function renderJob(document, job, options = {}) {
     return card;
 }
 
+function renderPrinterStatus(root, payload) {
+    const printer = payload.printer || {};
+    const isPaused = payload.queue?.paused === true;
+    const isPrinterReady = printer.online === true && printer.health === 'ready';
+    const status = root.getElementById('print-staff-status');
+    status.textContent = isPaused ? 'Yazdırma duraklatıldı'
+        : !printer.online ? 'Yazıcıya bağlantı yok'
+            : printer.health === 'ready' ? 'Yazıcı bağlı ve hazır' : 'Yazıcı bağlı, ancak yazdırmaya hazır değil';
+    status.dataset.state = isPaused ? 'paused' : isPrinterReady ? 'ready' : 'unavailable';
+    const document = root.ownerDocument || root;
+    appendDefinitionList(document, root.getElementById('print-staff-details'), [
+        ['Yazıcı', printer.printer_name || 'Tanımlı değil'], ['Son bağlantı', formatDate(printer.seen_at)],
+        ['Yazdırma', isPaused ? 'Yeni dosyalar kabul edilmiyor' : isPrinterReady ? 'Yeni dosyalar kabul ediliyor' : 'Yazıcı hazır olana kadar bekleyin'],
+        ['Hazırlık durumu', !printer.online ? 'Bağlantı bekleniyor' : printer.health === 'ready' ? 'Hazır' : printer.health === 'unavailable' ? 'Hazır değil' : 'Bilinmiyor']
+    ]);
+    appendDefinitionList(document, root.getElementById('print-staff-technical-details'), [
+        ['Agent bağlantısı', printer.runner_id || 'Bağlı değil'], ['Agent durum kodu', printer.health || 'Bilinmiyor']
+    ]);
+    root.getElementById('print-queue-pause').hidden = !payload.canManage || isPaused;
+    root.getElementById('print-queue-resume').hidden = !payload.canManage || !isPaused;
+}
+
 function renderManagement(root, payload) {
     const document = root.ownerDocument || root;
-    const printer = payload.printer || {};
-    const status = root.getElementById('print-staff-status');
-    status.textContent = printer.online ? 'Yazıcı çevrimiçi' : 'Yazıcı çevrimdışı';
-    appendDefinitionList(document, root.getElementById('print-staff-details'), [
-        ['Yazıcı', printer.printer_name || 'Tanımlı değil'], ['Son Agent heartbeat', formatDate(printer.seen_at)],
-        ['Agent bağlantısı', printer.runner_id || 'Bağlı değil'], ['Agent durumu', printer.health || 'Bilinmiyor'],
-        ['Kuyruk', payload.queue?.paused ? 'Duraklatıldı' : 'Devam ediyor']
-    ]);
+    renderPrinterStatus(root, payload);
     appendDefinitionList(document, root.getElementById('print-staff-counts'), [
-        ['Bekleyen', String(payload.counts?.queued || 0)], ['İşlenen', String(payload.counts?.processing || 0)],
-        ['Agent tarafından gönderilen', String(payload.counts?.submitted || 0)], ['Toplam etkin', String(payload.counts?.pending || 0)]
+        ['Sırada bekleyen', String(payload.counts?.queued || 0)], ['Hazırlanan / gönderilen', String(payload.counts?.processing || 0)],
+        ['Yazıcıya iletilen', String(payload.counts?.submitted || 0)], ['Devam eden toplam', String(payload.counts?.pending || 0)]
     ]);
-    root.getElementById('print-queue-pause').hidden = !payload.canManage || payload.queue?.paused === true;
-    root.getElementById('print-queue-resume').hidden = !payload.canManage || payload.queue?.paused !== true;
     const jobs = root.getElementById('print-staff-jobs');
     jobs.replaceChildren();
-    if (!payload.jobs?.length) jobs.append(textElement(document, 'p', 'Etkin yazdırma işi yok.'));
+    if (!payload.jobs?.length) jobs.append(textElement(document, 'p', 'Şu anda sırada bekleyen veya hazırlanan dosya yok.'));
     for (const job of payload.jobs || []) jobs.append(renderJob(document, job, { allowCancel: true, canManage: payload.canManage }));
 }
 
@@ -106,6 +121,11 @@ function readFilterQuery(root, cursor = null) {
     return params.toString();
 }
 
+/**
+ * Connects staff printer status, queue controls and history to authenticated APIs.
+ * @param {Document} root Staff document.
+ * @returns {void} Event handlers installed when the print view exists.
+ */
 export function initializeStaffPrintStatus(root = document) {
     const document = root.ownerDocument || root;
     const view = document.defaultView || globalThis;
@@ -165,16 +185,16 @@ export function initializeStaffPrintStatus(root = document) {
 
     refreshButton.addEventListener('click', () => void refresh());
     root.getElementById('print-queue-pause').addEventListener('click', () => void mutate(
-        '/api/staff/print/queue/pause', 'Kuyruk duraklatılsın mı? Mevcut Agent işleri devam eder; yeni işler kabul edilmez.'
+        '/api/staff/print/queue/pause', 'Yeni yazdırma istekleri durdurulsun mu? İşleme alınmış dosyalar devam edebilir.'
     ));
     root.getElementById('print-queue-resume').addEventListener('click', () => void mutate(
-        '/api/staff/print/queue/resume', 'Kuyruk devam ettirilsin mi? Bekleyen işler sırayla işlenebilir.'
+        '/api/staff/print/queue/resume', 'Yazdırma yeniden açılsın mı? Yeni dosyalar kabul edilir ve bekleyen işler devam eder.'
     ));
     root.getElementById('print-staff-jobs').addEventListener('click', (event) => {
         const button = event.target.closest('.print-job-cancel');
         if (!button || button.disabled) return;
         void mutate(`/api/staff/print/jobs/${encodeURIComponent(button.dataset.jobId)}/cancel`,
-            'Bu bekleyen iş iptal edilsin mi? İş yalnızca Agent henüz almamışsa iptal edilir.');
+            'Bu bekleyen dosya iptal edilsin mi? Yalnızca henüz işleme alınmamış dosyalar iptal edilebilir.');
     });
     root.getElementById('print-history-filters').addEventListener('submit', (event) => {
         event.preventDefault();

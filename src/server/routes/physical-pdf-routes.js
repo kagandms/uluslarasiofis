@@ -12,8 +12,13 @@ async function readBoundedPdf(request) {
     if (request.headers.get('Content-Type')?.split(';')[0] !== 'application/pdf' || !request.body) {
         throw new ApiError(415, 'PDF_REQUIRED', 'PDF dosyası seçin.');
     }
-    if (Number(request.headers.get('Content-Length')) > MAX_PHYSICAL_PDF_BYTES) throw new ApiError(413, 'PDF_TOO_LARGE', 'PDF en fazla 10 MB olabilir.');
+    const contentLengthHeader = request.headers.get('Content-Length');
+    const contentLength = contentLengthHeader && /^\d+$/.test(contentLengthHeader) ? Number(contentLengthHeader) : null;
+    if (contentLength !== null && contentLength > MAX_PHYSICAL_PDF_BYTES) {
+        throw new ApiError(413, 'PDF_TOO_LARGE', 'PDF en fazla 50 MB olabilir.');
+    }
     const reader = request.body.getReader();
+    if (contentLength !== null) return readPdfToKnownLength(reader, contentLength);
     const chunks = [];
     let total = 0;
     try {
@@ -21,13 +26,34 @@ async function readBoundedPdf(request) {
             const chunk = await reader.read();
             if (chunk.done) break;
             total += chunk.value.byteLength;
-            if (total > MAX_PHYSICAL_PDF_BYTES) { await reader.cancel(); throw new ApiError(413, 'PDF_TOO_LARGE', 'PDF en fazla 10 MB olabilir.'); }
+            if (total > MAX_PHYSICAL_PDF_BYTES) { await reader.cancel(); throw new ApiError(413, 'PDF_TOO_LARGE', 'PDF en fazla 50 MB olabilir.'); }
             chunks.push(chunk.value);
         }
     } finally { reader.releaseLock(); }
     const bytes = new Uint8Array(total);
     let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    return bytes;
+}
+
+async function readPdfToKnownLength(reader, contentLength) {
+    const bytes = new Uint8Array(contentLength);
+    let offset = 0;
+    try {
+        while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            offset += chunk.value.byteLength;
+            if (offset > contentLength) {
+                await reader.cancel();
+                throw new ApiError(400, 'PDF_LENGTH_MISMATCH', 'PDF içeriği belirtilen boyutla eşleşmiyor.');
+            }
+            bytes.set(chunk.value, offset - chunk.value.byteLength);
+        }
+    } finally {
+        reader.releaseLock();
+    }
+    if (offset !== contentLength) throw new ApiError(400, 'PDF_LENGTH_MISMATCH', 'PDF içeriği belirtilen boyutla eşleşmiyor.');
     return bytes;
 }
 
@@ -94,6 +120,15 @@ async function storeReservedPdf(context, payload) {
     return context.repository.file(payload.fileId);
 }
 
+function createStudentPdfDisposition(intake) {
+    const studentName = [intake.first_name, intake.last_name].filter(Boolean).join(' ').trim();
+    if (!studentName) return `attachment; filename="${createSafeFilename('document.pdf')}"`;
+    const filename = `${studentName}.pdf`;
+    const fallback = createSafeFilename(filename);
+    const encoded = encodeURIComponent(filename).replace(/[!'()*]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+    return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
 /** Persists an immutable staff PDF version after PDF validation.
  * @param {Request} request Authorized same-origin request. @param {object} context Intake, staff and bindings.
  * @returns {Promise<object>} Confirmed file identity. @throws {ApiError} Invalid, stale or unavailable upload.
@@ -125,8 +160,11 @@ export async function openPhysicalPdf(context, options) {
     if (bytes.length !== file.byte_size || await hashScannerValue(bytes) !== file.sha256) {
         throw new ApiError(409, 'PDF_CHANGED', 'PDF içeriği kayıtla eşleşmiyor. Dosya şu anda açılamıyor.');
     }
+    const disposition = options.action === 'download'
+        ? createStudentPdfDisposition(context.intake)
+        : `inline; filename="${createSafeFilename(file.original_filename)}"`;
     return new Response(bytes, { headers: { 'Content-Type': 'application/pdf',
-        'Content-Disposition': `${options.action === 'download' ? 'attachment' : 'inline'}; filename="${createSafeFilename(file.original_filename)}"`,
+        'Content-Disposition': disposition,
         'Content-Length': String(file.byte_size), 'Cache-Control': 'private, no-store',
         'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "sandbox; default-src 'none'" } });
 }

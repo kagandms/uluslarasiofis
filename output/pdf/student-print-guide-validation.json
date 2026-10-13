@@ -1,0 +1,22 @@
+{
+  "printUrl": "https://goc.topkapiuni.workers.dev/yazdir/",
+  "pageCount": 1,
+  "dimensions": {
+    "width": 594.95996,
+    "height": 841.91998
+  },
+  "height": 1122.515625,
+  "languages": [
+    "tr",
+    "tk",
+    "ru",
+    "en",
+    "ar"
+  ],
+  "arabicDirection": "rtl",
+  "logoLoaded": true,
+  "fontsLoaded": true,
+  "qrDecodedFromPdfRaster": "https://goc.topkapiuni.workers.dev/yazdir/",
+  "qrDecoder": "macOS Vision VNDetectBarcodesRequest (QR)",
+  "productionPrintPageHttpStatus": 200
+}

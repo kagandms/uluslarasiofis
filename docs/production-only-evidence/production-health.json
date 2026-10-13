@@ -1,0 +1,89 @@
+[
+  {
+    "results": [
+      {
+        "health": "ready",
+        "engine_version": "1.5.4",
+        "signature_version": "28147",
+        "signature_updated_at": "2026-10-08T06:24:12.000Z",
+        "seen_at": "2026-10-08T10:46:38.886Z"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "EEUR",
+      "served_by_colo": "PRG",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.5499
+      },
+      "duration": 0.5499,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 647168,
+      "rows_read": 2,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [
+      {
+        "status": "complete",
+        "outcome": "clean",
+        "count": 9
+      },
+      {
+        "status": "failed",
+        "outcome": "failed",
+        "count": 1
+      },
+      {
+        "status": "stale",
+        "outcome": null,
+        "count": 1
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "EEUR",
+      "served_by_colo": "PRG",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.15
+      },
+      "duration": 0.15,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 647168,
+      "rows_read": 22,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "EEUR",
+      "served_by_colo": "PRG",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.1077
+      },
+      "duration": 0.1077,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 647168,
+      "rows_read": 2,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

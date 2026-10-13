@@ -9,16 +9,15 @@ const camera = document.getElementById('camera');
 const gallery = document.getElementById('gallery');
 const send = document.getElementById('send');
 const preview = document.getElementById('preview');
-const photoCount = document.getElementById('photo-count');
-const previewEmpty = document.getElementById('preview-empty');
 let transferId;
+let batchId;
 let expiresAt = 0;
 let photos = [];
 let isSending = false;
 
 const PHOTO_STATUS_LABELS = {
     ready: 'Gönderilmeyi bekliyor', queued: 'Sırada', uploading: 'Gönderiliyor…',
-    waiting_pc: 'PC alıyor…', sent: 'Gönderildi', failed: 'Gönderilemedi'
+    waiting_pc: 'PC alıyor…', sent: 'Gönderildi', failed: 'Gönderilemedi', stale: 'Önceki öğrenci'
 };
 
 function showTransferStatus(message, state = 'ready') {
@@ -40,29 +39,50 @@ function renderPhotos() {
         const caption = document.createElement('figcaption');
         caption.textContent = `${index + 1}. fotoğraf · ${PHOTO_STATUS_LABELS[photo.status]}`;
         figure.append(image, caption);
+        if (photo.status === 'stale') figure.append(createRemoveButton(photo));
         preview.append(figure);
     });
-    photoCount.textContent = `${photos.length} fotoğraf`;
-    previewEmpty.hidden = photos.length > 0;
+    document.getElementById('photo-count').textContent = `${photos.length} fotoğraf`;
+    document.getElementById('preview-empty').hidden = photos.length > 0;
     send.hidden = !photos.some(photo => ['ready', 'failed'].includes(photo.status));
     send.disabled = isSending;
 }
 
-async function refreshReceivedPhotos() {
-    if (!transferId || expiresAt * 1000 <= Date.now()) return;
-    const result = await requestMobileTransfer(`/api/mobile-transfer/${transferId}/status`);
-    let hasChanges = false;
+function createRemoveButton(photo) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'remove-photo';
+    button.textContent = 'Kaldır';
+    button.addEventListener('click', () => {
+        photos = photos.filter(item => item !== photo);
+        renderPhotos();
+    });
+    return button;
+}
+
+function markStalePhotos(activeBatchId) {
     for (const photo of photos) {
-        if (photo.status === 'waiting_pc' && result.receivedPhotoIds.includes(photo.id)) {
-            photo.status = 'sent';
-            hasChanges = true;
-        }
+        if (photo.batchId !== activeBatchId && photo.status !== 'sent') photo.status = 'stale';
     }
-    if (!hasChanges) return;
-    renderPhotos();
+}
+
+async function refreshBatch() {
+    if (!transferId || expiresAt * 1000 <= Date.now()) return;
+    const result = await requestMobileTransfer(`/api/mobile-transfer/${transferId}/batch`);
+    if (result.batchId !== batchId) {
+        batchId = result.batchId;
+        markStalePhotos(batchId);
+        capture.disabled = choose.disabled = !batchId;
+        if (!batchId) showTransferStatus('PC’de öğrenci aktarım penceresi hazırlanıyor…', 'sending');
+        else showTransferStatus('Bağlandı. Çektiğiniz fotoğraflar otomatik gönderilecek.');
+    }
+    for (const photo of photos) {
+        if (photo.batchId === batchId && result.receivedPhotoIds.includes(photo.id)) photo.status = 'sent';
+    }
     const sentCount = photos.filter(photo => photo.status === 'sent').length;
-    if (sentCount === photos.length) showTransferStatus('PC’ye gönderildi. Fotoğraflar listede.', 'sent');
-    else showTransferStatus(`${sentCount} fotoğraf PC’ye gönderildi; aktarım sürüyor.`, 'sending');
+    if (sentCount === photos.length && sentCount > 0) showTransferStatus('PC’ye gönderildi. Fotoğraflar listede.', 'sent');
+    else if (sentCount > 0) showTransferStatus(`${sentCount} fotoğraf PC’ye gönderildi; aktarım sürüyor.`, 'sending');
+    renderPhotos();
 }
 
 async function pairPhone() {
@@ -82,32 +102,37 @@ async function pairPhone() {
             expiresAt = paired?.expiresAt || 0;
         }
         if (!transferId || expiresAt * 1000 <= Date.now()) throw new Error('PC’den yeni QR açıp okutun.');
-        capture.disabled = choose.disabled = false;
-        showTransferStatus('Bilgisayara bağlandı. Fotoğraf çekince otomatik gönderilir.');
+        showTransferStatus('Bağlantı ve öğrenci aktarımı doğrulanıyor…', 'sending');
+        await refreshBatch();
     } catch (error) {
         console.error('Phone pairing failed.', { errorName: error.name });
         showTransferStatus(error.message, 'error');
     }
 }
 
-function queuePhotos(input, shouldSendImmediately = false) {
-    const files = Array.from(input.files || []);
-    if (photos.length + files.length > MAX_TRANSFER_FILES) {
+function queuePhotos(input, isCameraCapture = false) {
+    if (photos.length + input.files.length > MAX_TRANSFER_FILES) {
         showTransferStatus('Tek aktarımda en fazla 30 fotoğraf gönderilebilir.', 'error');
-        input.value = '';
         return;
     }
-    photos.push(...files.map(file => ({ file, id: crypto.randomUUID(), status: shouldSendImmediately ? 'queued' : 'ready' })));
+    const added = Array.from(input.files || []).map(file => ({
+        file, id: crypto.randomUUID(), batchId,
+        status: isCameraCapture ? 'queued' : 'ready'
+    }));
+    photos.push(...added);
     input.value = '';
     renderPhotos();
-    if (shouldSendImmediately) void drainUploads();
+    if (isCameraCapture) void drainUploads();
 }
 
 async function uploadPhoto(photo) {
+    if (!batchId || photo.batchId !== batchId) throw new Error('Öğrenci aktarımı değişti; bu fotoğraf gönderilmedi.');
     const jpeg = await optimizeDocumentImage(photo.file);
     await requestMobileTransfer(`/api/mobile-transfer/${transferId}/photos`, {
-        method: 'POST', body: jpeg, headers: { 'Content-Type': 'image/jpeg', 'X-Photo-Id': photo.id }
+        method: 'POST', body: jpeg,
+        headers: { 'Content-Type': 'image/jpeg', 'X-Photo-Id': photo.id, 'X-Transfer-Batch-ID': photo.batchId }
     });
+    photo.status = 'waiting_pc';
 }
 
 async function drainUploads() {
@@ -118,14 +143,13 @@ async function drainUploads() {
         let photo = photos.find(item => item.status === 'queued');
         while (photo) {
             photo.status = 'uploading';
-            showTransferStatus('Fotoğraf bilgisayara gönderiliyor…', 'sending');
+            showTransferStatus('Fotoğraf PC’ye gönderiliyor…', 'sending');
             renderPhotos();
             try {
                 await uploadPhoto(photo);
-                photo.status = 'waiting_pc';
-                showTransferStatus('Yükleme tamamlandı. PC’nin listeye alması bekleniyor.', 'sending');
+                showTransferStatus('Yükleme tamamlandı. PC’nin alması bekleniyor.', 'sending');
             } catch (error) {
-                photo.status = 'failed';
+                photo.status = error.code === 'TRANSFER_BATCH_STALE' ? 'stale' : 'failed';
                 console.error('Photo transfer failed.', { errorName: error.name });
             }
             renderPhotos();
@@ -146,7 +170,7 @@ async function sendGalleryPhotos() {
         showTransferStatus('Gönderilemeyen fotoğraf kaldı. Tekrar deneyebilirsiniz.', 'error');
         return;
     }
-    showTransferStatus('Fotoğraflar PC’ye aktarılıyor; listeye alınması bekleniyor.', 'sending');
+    showTransferStatus('Fotoğraflar PC’ye aktarılıyor; alım teyidi bekleniyor.', 'sending');
 }
 
 capture.addEventListener('click', () => camera.click());
@@ -155,6 +179,6 @@ camera.addEventListener('change', () => queuePhotos(camera, true));
 gallery.addEventListener('change', () => queuePhotos(gallery));
 send.addEventListener('click', () => void sendGalleryPhotos());
 setInterval(() => {
-    void refreshReceivedPhotos().catch(error => console.warn('Transfer status check failed.', { errorName: error.name }));
+    void refreshBatch().catch(error => console.warn('Transfer status check failed.', { errorName: error.name }));
 }, 1500);
 void pairPhone();

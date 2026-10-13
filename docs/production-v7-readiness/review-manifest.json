@@ -1,0 +1,138 @@
+{
+  "status": "APPLIED_LOCALLY_NOT_DEPLOYED",
+  "source_directory": "/Users/kagansmtdms/Downloads/\u041f\u0440\u043e\u0435\u043a\u0442\u044b/uluslarasiofis-main",
+  "baseline_type": "Pre-task working files; includes existing user-owned changes, not Git HEAD",
+  "physical_uat": "A/B/C PASSED, Job #208 exactly 2 outputs (user-confirmed)",
+  "files": [
+    {
+      "path": "src/server/domain/print-uat-policy.js",
+      "base_sha256": null,
+      "proposed_sha256": "a26a578899bf9f1b86fef4e10e9249235434eadd8d261fe6cf522af34481a4ea",
+      "review_sha256": "a26a578899bf9f1b86fef4e10e9249235434eadd8d261fe6cf522af34481a4ea",
+      "review_redacted": false
+    },
+    {
+      "path": "src/server/services/print-access.js",
+      "base_sha256": null,
+      "proposed_sha256": "ca6338f1d9badcd781d9fc7e7da1305e18813e53a17ef004e82172b3e23d167f",
+      "review_sha256": "ca6338f1d9badcd781d9fc7e7da1305e18813e53a17ef004e82172b3e23d167f",
+      "review_redacted": false
+    },
+    {
+      "path": "src/server/repositories/d1/print-uat-repository.js",
+      "base_sha256": null,
+      "proposed_sha256": "fd454cfac64edd2d45b21ca1ba37fee13cb249d7ff93fad3c882554976ddc3a1",
+      "review_sha256": "fd454cfac64edd2d45b21ca1ba37fee13cb249d7ff93fad3c882554976ddc3a1",
+      "review_redacted": false
+    },
+    {
+      "path": "src/server/services/print-uat-job.js",
+      "base_sha256": null,
+      "proposed_sha256": "af4a653e9f9c42023bf8a852f17d08d1c6a28088433b82ab0e4e83217ab28f79",
+      "review_sha256": "af4a653e9f9c42023bf8a852f17d08d1c6a28088433b82ab0e4e83217ab28f79",
+      "review_redacted": false
+    },
+    {
+      "path": "src/server/routes/print-uat-routes.js",
+      "base_sha256": null,
+      "proposed_sha256": "4abc265399b8e13768eb96389f5bbf17044588fb31f9ce9ebbc522d16713bf54",
+      "review_sha256": "4abc265399b8e13768eb96389f5bbf17044588fb31f9ce9ebbc522d16713bf54",
+      "review_redacted": false
+    },
+    {
+      "path": "src/server/worker.js",
+      "base_sha256": "a4398a07fa60d015eca46c142252484d663585ee862349fcfbfd88c533e61cc9",
+      "proposed_sha256": "a11bdde145e1360c621b55bc00594fe89ce03c2087506afbb32425944715b95d",
+      "review_sha256": "a11bdde145e1360c621b55bc00594fe89ce03c2087506afbb32425944715b95d",
+      "review_redacted": false
+    },
+    {
+      "path": "src/server/routes/printRoutes.js",
+      "base_sha256": "c78601411b85fb7b74693244758bdf912d918085f9281e9597d4b03be2ca67c7",
+      "proposed_sha256": "43499996d443415b58577ecd20d0d4d8d19a05feeb0adcbbd584d34ca471d122",
+      "review_sha256": "43499996d443415b58577ecd20d0d4d8d19a05feeb0adcbbd584d34ca471d122",
+      "review_redacted": false
+    },
+    {
+      "path": "src/server/routes/printerRoutes.js",
+      "base_sha256": "f98745a57ef381d4e236edc13579ffb4914e507927db3eddb5a41bd4a827fb6f",
+      "proposed_sha256": "18f29b204e79a934d337cf3cceee846cc4cabf0a848fefa111bbacf83fa9510f",
+      "review_sha256": "18f29b204e79a934d337cf3cceee846cc4cabf0a848fefa111bbacf83fa9510f",
+      "review_redacted": false
+    },
+    {
+      "path": "src/server/repositories/d1/printRepository.js",
+      "base_sha256": "4cfa39188b201f2974cd1f396a58c0d9a61008075038f5a29e57d1ea2ddf8c92",
+      "proposed_sha256": "ab83316161e5ff9695e5f1e25300557156c07ef7133ed647b5b39554568fed23",
+      "review_sha256": "ab83316161e5ff9695e5f1e25300557156c07ef7133ed647b5b39554568fed23",
+      "review_redacted": false
+    },
+    {
+      "path": "wrangler.jsonc",
+      "base_sha256": "477f0977bbf7ce209f694d3d4e3224f894e529972ac860a422adb8c95df4e15d",
+      "proposed_sha256": "87bbcc5e5dcdf76a4bfdcc0da1b4103a786c5c986dcb0035c2eb3aaa9b26cc62",
+      "review_sha256": "2ba0d09cd885eb0fa42a05bfc1c411118d6c2e685509a45779e95163c1b5e2dc",
+      "review_redacted": true
+    },
+    {
+      "path": "test/print-uat.test.js",
+      "base_sha256": null,
+      "proposed_sha256": "82932ff9b80b3cf10139441fc54b34f55ed1cc5130ebd7e7b372cadd89621e62",
+      "review_sha256": "82932ff9b80b3cf10139441fc54b34f55ed1cc5130ebd7e7b372cadd89621e62",
+      "review_redacted": false
+    },
+    {
+      "path": "test/printUatStorage.test.js",
+      "base_sha256": null,
+      "proposed_sha256": "162410a8be43564037e6418c37e0dbc775c81dee4980561a9a60aff71486b2dc",
+      "review_sha256": "162410a8be43564037e6418c37e0dbc775c81dee4980561a9a60aff71486b2dc",
+      "review_redacted": false
+    },
+    {
+      "path": "test/printCleanup.test.js",
+      "base_sha256": "d9be38849f227ce6f142e9831313f41bbcc5100830bfcb41cd02830a5d46293b",
+      "proposed_sha256": "a2f413d53f5be87b40bb9aa6b0b73d22ab3be8330d96a0514927e58942da7057",
+      "review_sha256": "a2f413d53f5be87b40bb9aa6b0b73d22ab3be8330d96a0514927e58942da7057",
+      "review_redacted": false
+    }
+  ],
+  "patch_sha256": "c98d83c35ea6e7f98b6c3143a65b6b75ccddb8c6596e7fe3b931b916c6cdf7d2",
+  "candidate_worker_sha256": "4b0e72eeb2346ff5cf3f1687f126d4a4507bb8bfe2228856628b7faf0958a045",
+  "expected_live_version": "0e8dec4b-4cd2-40f6-ac1c-0879954a261d",
+  "expected_live_worker_sha256": "22c50f1d60541599cc35fc7391f4c58b17d88d0669edea049c1e45aa26e32866",
+  "deployment_constraints": [
+    "Explicit user approval required",
+    "Worker module only; preserve existing assets",
+    "PRINT_ENABLED=false",
+    "PRINT_UAT_ENABLED=false",
+    "Preserve all remote secret bindings; never read secret values",
+    "Preserve production D1/R2/crons",
+    "No staging changes",
+    "No test document submission"
+  ],
+  "agent_v7_zip_sha256": "f732c59ca6d04b49bfd450553e890d2359ad0efb5e47c8e04d6c5417103b6a9f",
+  "validation": {
+    "node": {
+      "total": 701,
+      "passed": 700,
+      "failed": 0,
+      "skipped": 1
+    },
+    "uat": {
+      "passed": 29
+    },
+    "native_storage": {
+      "passed": 2
+    },
+    "agent_python": {
+      "passed": 45
+    },
+    "scanner_mock_python": {
+      "passed": 14
+    },
+    "production_build_dry_run": "PASS; no deploy",
+    "patch_reverse_check": "PASS; whitespace=error",
+    "live_readonly": "print_rows=0; queue=0; UAT slot=0; no production printer heartbeat",
+    "physical_uat": "PASSED A/B/C, user-confirmed, no physical print in this task"
+  }
+}

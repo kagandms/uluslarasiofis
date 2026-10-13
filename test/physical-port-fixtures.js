@@ -60,16 +60,22 @@ export async function pairPortPhone(context) {
     const created = await portRequest(context, '/api/staff/mobile-transfers', { method: 'POST', cookie: context.staffCookie });
     assert.equal(created.status, 200, await created.clone().text());
     const transfer = await created.json();
+    const batchResponse = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/batches`, {
+        method: 'POST', cookie: context.staffCookie, json: {}
+    });
+    assert.equal(batchResponse.status, 200, await batchResponse.clone().text());
+    const { batchId } = await batchResponse.json();
     const claimed = await portRequest(context, '/api/mobile-transfer/claim', { method: 'POST', json: { token: transfer.claimToken } });
     assert.equal(claimed.status, 200, await claimed.clone().text());
-    return { ...transfer, phoneCookie: claimed.headers.get('Set-Cookie').split(';')[0] };
+    return { ...transfer, batchId, phoneCookie: claimed.headers.get('Set-Cookie').split(';')[0] };
 }
 
 const JPEG = Uint8Array.from(Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=', 'base64'));
 
 export function uploadPhoto(context, transfer, options = {}) {
     return portRequest(context, `/api/mobile-transfer/${transfer.id}/photos`, { method: 'POST', cookie: transfer.phoneCookie,
-        body: options.bytes || JPEG, headers: { 'Content-Type': 'image/jpeg', 'X-Photo-Id': options.id || crypto.randomUUID(), ...options.headers } });
+        body: options.bytes || JPEG, headers: { 'Content-Type': 'image/jpeg', 'X-Photo-Id': options.id || crypto.randomUUID(),
+            'X-Transfer-Batch-ID': options.batchId || transfer.batchId, ...options.headers } });
 }
 
 /** Creates a valid synthetic PDF registration request. */

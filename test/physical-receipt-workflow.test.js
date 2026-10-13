@@ -129,3 +129,29 @@ test('preloads PDF in background and reuses it if snapshot matches', async () =>
     assert.equal(context.state.preloadedReceiptPromise, null);
 }));
 
+
+test('reference allocation ignores repeated and concurrent actions until a new draft', async () => {
+    const context = { state: { draft: { application_date: '2026-10-12' }, registrationId: 'draft' }, api: {} };
+    let allocations = 0;
+    let resolveReservation;
+    context.api.reserve = () => { allocations++; return new Promise(resolve => { resolveReservation = resolve; }); };
+
+    const first = assignPhysicalReference(context);
+    await assignPhysicalReference(context);
+    resolveReservation({ tracking_reference: 'ITU-26-ABCDEFG' });
+    await first;
+    await assignPhysicalReference(context);
+
+    assert.equal(allocations, 1);
+    assert.equal(context.state.isAssigningReference, false);
+});
+
+test('failed reference allocation can be retried', async () => {
+    const context = { state: { draft: { application_date: '2026-10-12' } }, api: { reserve: async () => { throw new Error('Unavailable'); } } };
+
+    await assert.rejects(() => assignPhysicalReference(context), /Unavailable/);
+    context.api.reserve = async () => ({ tracking_reference: 'ITU-26-ABCDEFG' });
+    await assignPhysicalReference(context);
+
+    assert.equal(context.state.reservation.tracking_reference, 'ITU-26-ABCDEFG');
+});

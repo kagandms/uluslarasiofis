@@ -3,6 +3,7 @@ import { renderPhysicalReceiptDialog, closePhysicalReceiptDialog } from './physi
 import { renderPhysicalReceiptDraft, renderPhysicalReceiptControls } from './physical-receipt-view.js';
 import { createApplicationQueueTable, formatQueueDate } from './application-queue-table.js';
 import { buildPhysicalPdfUrl } from './physical-intake-client.js';
+import { bindPhysicalUppercaseInput } from './physical-uppercase-input.js';
 
 const STATUS_LABELS = PHYSICAL_STATUS_LABELS;
 const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['sent_to_migration', 'Göçe Gönderildi'], ['migration_approved', 'Göç Onayladı'], ['completed', 'Tamamlandı'], ['rejected', 'Reddedildi'], ['deleted', 'Silinen']];
@@ -33,6 +34,13 @@ function select(document, options) {
     return node;
 }
 
+function filterField(document, label, input, className) {
+    const field = document.createElement('div');
+    field.className = className;
+    field.append(label, input);
+    return field;
+}
+
 function createFilters(document, state, handlers) {
     const form = document.createElement('form');
     form.className = 'staff-applications-filters';
@@ -49,11 +57,29 @@ function createFilters(document, state, handlers) {
     status.id = 'staff-physical-status';
     const statusLabel = text(document, 'label', 'Durum');
     statusLabel.htmlFor = status.id;
+    const startDate = document.createElement('input');
+    startDate.type = 'date';
+    startDate.className = 'glass-input';
+    startDate.value = state.query.from_date || '';
+    startDate.id = 'staff-physical-from-date';
+    const startDateLabel = text(document, 'label', 'Başlangıç tarihi');
+    startDateLabel.htmlFor = startDate.id;
+    const endDate = document.createElement('input');
+    endDate.type = 'date';
+    endDate.className = 'glass-input';
+    endDate.value = state.query.to_date || '';
+    endDate.id = 'staff-physical-to-date';
+    const endDateLabel = text(document, 'label', 'Bitiş tarihi');
+    endDateLabel.htmlFor = endDate.id;
     const submit = button(document, 'Filtrele', () => {});
     submit.type = 'submit';
     submit.className = 'btn btn-primary';
-    form.addEventListener('submit', event => { event.preventDefault(); handlers.search({ q: search.value, status: status.value }); });
-    form.append(searchLabel, search, statusLabel, status, submit);
+    form.addEventListener('submit', event => { event.preventDefault(); handlers.search({ q: search.value, status: status.value,
+        from_date: startDate.value, to_date: endDate.value }); });
+    form.append(filterField(document, searchLabel, search, 'physical-filter-search'),
+        filterField(document, statusLabel, status, 'physical-filter-status'),
+        filterField(document, startDateLabel, startDate, 'physical-filter-start-date'),
+        filterField(document, endDateLabel, endDate, 'physical-filter-end-date'), submit);
     return form;
 }
 
@@ -80,10 +106,11 @@ function renderQueue(document, panel, options) {
     }
     if (!state.result?.items.length) { panel.append(text(document, 'p', 'Görüntülenecek fiziksel teslim bulunamadı.')); return; }
     panel.append(createApplicationQueueTable(document, state.result.items, { statusLabel: status => STATUS_LABELS[status] || status,
-        headers: ['Takip No','Ad Soyad','Teslim Tarihi','Ofis Durumu','PDF','A4',''],
+        headers: ['Sıra','Takip No','Ad Soyad','Teslim Tarihi','Ofis Durumu','PDF','A4',''],
+        rowNumber: (_item, index) => String((state.result.pagination.page - 1) * (state.result.pagination.page_size || state.query.page_size || 25) + index + 1),
         values: item => [item.tracking_reference || '—', `${item.first_name} ${item.last_name}`, item.application_date || formatQueueDate(item.submitted_at),
             item.processing_closed_at ? 'Ofis işlemi kapalı' : STATUS_LABELS[item.status], item.current_pdf_id ? 'PDF var' : 'PDF yok',
-            item.receipt_metadata_version && item.receipt_metadata_version !== item.metadata_version ? 'A4 güncel değil' : `${item.receipt_state || 'Hazırlanmadı'}${item.receipt_print_status ? ` · ${item.receipt_print_status}` : ''}`],
+            item.receipt_metadata_version && item.receipt_metadata_version !== item.metadata_version ? 'A4 güncel değil' : `${item.receipt_state === 'ready' ? 'Hazır' : item.receipt_state || 'Hazırlanmadı'}${item.receipt_print_status ? ` · ${item.receipt_print_status}` : ''}`],
         actions: item => [{ label: 'Detay', action: 'open-detail', run: () => handlers.open(item.id) },
             { label: 'İndir', action: 'download-physical-pdf', isDisabled: !item.current_pdf_id || Boolean(item.deleted_at),
                 ariaLabel: 'Güncel PDF’i indir',
@@ -103,7 +130,7 @@ function createField(document, form, options) {
     input.maxLength = options.name.includes('name') ? 120 : 64;
     input.required = options.name !== 'student_number';
     label.htmlFor = input.id;
-    input.addEventListener('input', () => { options.draft[options.name] = input.value; });
+    bindPhysicalUppercaseInput(input, value => { options.draft[options.name] = value; });
     form.append(label, input);
     return input;
 }
@@ -213,9 +240,13 @@ function renderDetail(document, panel, options) {
     const actions = document.createElement('div');
     actions.className = 'physical-status-actions';
     for (const [status, label] of Object.entries(STATUS_LABELS)) {
+        if (status === 'approved_for_processing') continue;
         const action = button(document, label, () => status === 'rejected' ? handlers.reject(intake) : handlers.mutate(intake, 'status', status));
         action.disabled = !detail.allowed_transitions.includes(status);
-        if (status === intake.status) action.setAttribute('aria-current', 'true');
+        if (status === intake.status) {
+            action.setAttribute('aria-current', 'true');
+            action.classList.add('is-current');
+        }
         if (action.disabled && status !== intake.status) action.title = 'Bu aşama için önce dosya PDF’ini ekleyin.';
         actions.append(action);
     }

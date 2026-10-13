@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createPhysicalReceiptTemplate } from '../src/services/physical-receipt-template.js';
 import { renderPhysicalIntakes } from '../src/staff/physical-intake-view.js';
 import { initializeApplicationTracking } from '../src/public/applicationTracking.js';
+import { createPhysicalTrackingPanel } from '../src/public/physical-application-tracking.js';
 import { PHYSICAL_RECEIPT_MESSAGES } from '../src/public/i18n/physical-receipt-messages.js';
 import { PUBLIC_MESSAGES } from '../src/public/i18n/messages.js';
 import { buildDocumentAssetUrl,waitDocumentAssets } from '../src/services/document-logo-loader.js';
@@ -20,6 +21,7 @@ test('receipt HTML escapes student content and shares exactly five localized hom
     assert.equal(root.querySelector('.physical-receipt-code').dir,'ltr');assert.equal(root.querySelectorAll('img').length,2);
     for(const [locale,messages] of Object.entries(PHYSICAL_RECEIPT_MESSAGES)) {
         assert.equal(PUBLIC_MESSAGES[locale].homeTrackAction,messages.action);
+        assert.ok(messages.heading);assert.ok(messages.explanation);assert.ok(messages.rejectionReasonLabel);
         assert.ok(root.querySelector(`[lang=${locale}]`).textContent.includes(messages.action));
     }
     dom.window.close();
@@ -61,9 +63,28 @@ test('physical code form remains first through an online owner session and local
     await new Promise(resolve=>setImmediate(resolve));
 
     assert.equal(root.firstElementChild.classList.contains('physical-tracking-panel'),true);assert.ok(root.querySelector('input[name=tracking_reference]'));
+    assert.match(root.textContent,/Başvuru Takip No/);
     document.documentElement.lang='ar';document.dispatchEvent(new dom.window.Event('public:locale-changed'));
     assert.ok(root.querySelector('input[name=tracking_reference]'));assert.match(root.firstElementChild.textContent,/رقم متابعة الطلب/);
     dom.window.close();
+});
+
+test('physical tracking renders a rejection reason as plain text',async()=>{
+    const dom=new JSDOM('<main></main>',{url:'https://portal.test'});const panel=createPhysicalTrackingPanel(dom.window.document);
+    const originalFetch=globalThis.fetch;
+    globalThis.fetch=async()=>({ok:true,json:async()=>({found:true,tracking_reference:'ITU-26-ABCDEFG',application_date:'2026-10-12',
+        office_status:'contact_office',rejection_reason:'<script>unsafe</script>',updated_at:'2026-10-12T13:00:00Z'})});
+    try {
+        panel.querySelector('input[name=tracking_reference]').value='ITU-26-ABCDEFG';
+        panel.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
+        await new Promise(resolve=>setImmediate(resolve));
+
+        assert.match(panel.textContent,/Ret gerekçesi/);
+        assert.match(panel.textContent,/<script>unsafe<\/script>/);
+        assert.equal(panel.querySelector('script'),null);
+    } finally {
+        globalThis.fetch=originalFetch;dom.window.close();
+    }
 });
 
 test('shared logo readiness waits for both image decodes and rejects missing dimensions',async()=>{
@@ -119,7 +140,7 @@ test('new intake dialog preserves the queue DOM and never asks for a student num
     dom.window.close();
 });
 
-test('detail shows office approval before PDF upload and only a compact A4 download', () => {
+test('detail keeps the current status selected, hides Onaylandı action, and shows a compact A4 download', () => {
     const dom = new JSDOM('<main></main>');
     const root = dom.window.document.querySelector('main');
     const intake = { id: 'synthetic', first_name: 'Synthetic', last_name: 'Student', status: 'under_review', tracking_reference: 'ITU-26-ABCDEFG', metadata_version: 1 };
@@ -129,9 +150,72 @@ test('detail shows office approval before PDF upload and only a compact A4 downl
     root.querySelector('.physical-receipt-download').click();
 
     const buttons = [...root.querySelectorAll('button')];
-    assert.equal(buttons.find(button => button.textContent === 'Onaylandı').disabled, false);
+    assert.equal(buttons.some(button => button.textContent === 'Onaylandı'), false);
     assert.equal(buttons.find(button => button.textContent === 'Göçe Gönderildi').disabled, true);
+    assert.equal(buttons.find(button => button.textContent === 'İncelemede').classList.contains('is-current'), true);
+    assert.equal(buttons.find(button => button.textContent === 'İncelemede').disabled, true);
     assert.equal(downloads, 1);
     assert.doesNotMatch(root.textContent, /Kaydı Yenile|Ofis İşlemini Kapat|A4 Hazırla|A4 Yazdır|Manuel Yazdır|Öğrenci no belirtilmedi/);
+    dom.window.close();
+});
+
+test('assigned reference announces success and enables creation', () => {
+    const dom = new JSDOM('<main></main>');
+    const root = dom.window.document.querySelector('main');
+    const state = { view: 'create', isMetadataFirst: true, draft: { application_date: '2026-10-12' }, receiptConfig: { today: '2026-10-12' }, reservation: { tracking_reference: 'ITU-26-ABCDEFG', application_date: '2026-10-12' } };
+
+    renderPhysicalIntakes(root, state, {});
+
+    assert.match(root.querySelector('.physical-receipt-reference.is-success[role=status]').textContent, /Başarıyla atandı/);
+    assert.equal(root.querySelector('.physical-receipt-submit').disabled, false);
+    assert.equal(root.querySelector('.physical-receipt-assign').disabled, true);
+    dom.window.close();
+});
+
+test('new intake detail identifies İncelemede as the current status', () => {
+    const dom = new JSDOM('<main></main>');
+    const root = dom.window.document.querySelector('main');
+    const intake = { id: 'new', first_name: 'TEST', last_name: 'TEST', status: 'under_review', metadata_version: 1 };
+
+    renderPhysicalIntakes(root, { view: 'detail', detail: { intake, files: [], receipts: [], allowed_transitions: ['approved_for_processing', 'rejected'] } }, {});
+
+    assert.equal(root.querySelector('.physical-status-actions [aria-current=true]').textContent, 'İncelemede');
+    assert.equal(root.querySelector('.physical-status-actions [aria-current=true]').classList.contains('is-current'), true);
+    assert.equal([...root.querySelectorAll('.physical-status-actions button')].some(button => button.textContent === 'Onaylandı'), false);
+    dom.window.close();
+});
+
+test('tracking panel prominently links the configured site and includes its QR image', () => {
+    const dom = new JSDOM('<main></main>');
+
+    const root = createPhysicalReceiptTemplate(dom.window.document, SNAPSHOT, { university: 'data:image/png;base64,test', migration: 'data:image/png;base64,test', trackingQr: 'data:image/png;base64,qr' });
+
+    assert.equal(root.querySelector('.physical-receipt-portal a').href, SNAPSHOT.portal_origin + '/');
+    assert.equal(root.querySelector('.physical-receipt-portal img').src, 'data:image/png;base64,qr');
+    assert.match(root.querySelector('.physical-receipt-portal').textContent, /Başvurunu takip et/);
+    dom.window.close();
+});
+
+test('queue translates ready A4 state and preserves stale document warning', () => {
+    const dom = new JSDOM('<main></main>');
+    const root = dom.window.document.querySelector('main');
+    const items = [1, 2].map(version => ({ id: String(version), first_name: 'TEST', last_name: 'TEST', status: 'under_review', receipt_state: 'ready', receipt_metadata_version: 1, metadata_version: version }));
+    let appliedFilters;
+
+    renderPhysicalIntakes(root, { view: 'queue', query: { q: '', status: 'all', page: 1, page_size: 25 }, result: { items, pagination: { page: 1, page_size: 25, total_pages: 1, total: 2 } } }, {
+        search: filters => { appliedFilters = filters; }
+    });
+
+    assert.match(root.textContent, /Hazır/);
+    assert.match(root.textContent, /A4 güncel değil/);
+    assert.doesNotMatch(root.textContent, /ready/);
+    assert.equal(root.querySelector('tbody tr td').textContent, '1');
+    assert.equal(root.querySelector('tbody tr td').dataset.label, 'Sıra');
+    assert.equal(root.querySelectorAll('input[type=date]').length, 2);
+    root.querySelector('#staff-physical-from-date').value = '2026-10-01';
+    root.querySelector('#staff-physical-to-date').value = '2026-10-13';
+    root.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(appliedFilters.from_date, '2026-10-01');
+    assert.equal(appliedFilters.to_date, '2026-10-13');
     dom.window.close();
 });

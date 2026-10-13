@@ -15,7 +15,7 @@ async function readMultipart(request) {
             const chunk = await reader.read();
             if (chunk.done) break;
             byteLength += chunk.value.byteLength;
-            if (byteLength > MAX_PHYSICAL_PDF_BYTES + 16384) { await reader.cancel(); throw new ApiError(413, 'PDF_TOO_LARGE', 'PDF en fazla 10 MB olabilir.'); }
+            if (byteLength > MAX_PHYSICAL_PDF_BYTES + 16384) { await reader.cancel(); throw new ApiError(413, 'PDF_TOO_LARGE', 'PDF en fazla 50 MB olabilir.'); }
             chunks.push(chunk.value);
         }
     } finally { reader.releaseLock(); }

@@ -1,0 +1,195 @@
+{
+  "checked_at_utc": "2026-10-08T14:02:33.860118+00:00",
+  "d1": {
+    "printer": [
+      {
+        "results": [
+          {
+            "printer_id": "office-printer-01",
+            "runner_id": "office-runner-01",
+            "printer_name": "Uluslararas\u0131 Ofis",
+            "health": "ready",
+            "settings_protocol": 3,
+            "seen_at": "2026-10-08T14:02:13.632Z"
+          }
+        ],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "EEUR",
+          "served_by_colo": "PRG",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.2865
+          },
+          "duration": 0.2865,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 647168,
+          "rows_read": 2,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ],
+    "scanner": [
+      {
+        "results": [
+          {
+            "health": "ready",
+            "engine_version": "1.5.4",
+            "signature_version": "28147",
+            "seen_at": "2026-10-08T14:02:07.718Z"
+          }
+        ],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "EEUR",
+          "served_by_colo": "PRG",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.2113
+          },
+          "duration": 0.2113,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 647168,
+          "rows_read": 2,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ],
+    "queue": [
+      {
+        "results": [],
+        "success": true,
+        "meta": {
+          "served_by": "v3-prod",
+          "served_by_region": "EEUR",
+          "served_by_colo": "PRG",
+          "served_by_primary": true,
+          "timings": {
+            "sql_duration_ms": 0.1817
+          },
+          "duration": 0.1817,
+          "changes": 0,
+          "last_row_id": 0,
+          "changed_db": false,
+          "size_after": 647168,
+          "rows_read": 1,
+          "rows_written": 0,
+          "total_attempts": 1
+        }
+      }
+    ]
+  },
+  "safe_vars": {
+    "PRINT_BUCKET_NAME": "uluslarasiofis-print-production",
+    "PRINT_ENABLE_A3": "false",
+    "PRINT_ENABLE_COLOR": "false",
+    "PRINT_ENABLED": "false",
+    "PRINT_ENABLE_DUPLEX": "false",
+    "PRINT_MAX_COPIES_PER_JOB": "50",
+    "PRINT_MAX_PAGE_COPIES": "200",
+    "PRINT_UAT_ENABLED": "false"
+  },
+  "secret_bindings": [
+    {
+      "name": "APPS_SCRIPT_API_KEY",
+      "type": "secret_text"
+    },
+    {
+      "name": "APPS_SCRIPT_URL",
+      "type": "secret_text"
+    },
+    {
+      "name": "AZURE_VISION_ENDPOINT",
+      "type": "secret_text"
+    },
+    {
+      "name": "AZURE_VISION_KEY",
+      "type": "secret_text"
+    },
+    {
+      "name": "PRINTER_SECRET",
+      "type": "secret_text"
+    },
+    {
+      "name": "PRINT_R2_ACCESS_KEY_ID",
+      "type": "secret_text"
+    },
+    {
+      "name": "PRINT_R2_SECRET_ACCESS_KEY",
+      "type": "secret_text"
+    },
+    {
+      "name": "R2_ACCESS_KEY_ID",
+      "type": "secret_text"
+    },
+    {
+      "name": "R2_ACCOUNT_ID",
+      "type": "secret_text"
+    },
+    {
+      "name": "R2_SECRET_ACCESS_KEY",
+      "type": "secret_text"
+    },
+    {
+      "name": "SCANNER_SECRET",
+      "type": "secret_text"
+    },
+    {
+      "name": "STAFF_BOOTSTRAP_TOKEN",
+      "type": "secret_text"
+    }
+  ],
+  "resources": [
+    {
+      "name": "DB",
+      "type": "d1",
+      "id": "74b45974-8665-4616-bce0-3380da71c22f",
+      "database_id": "74b45974-8665-4616-bce0-3380da71c22f"
+    },
+    {
+      "name": "DOCUMENTS",
+      "type": "r2_bucket",
+      "bucket_name": "uluslarasiofis-documents-production"
+    },
+    {
+      "name": "PRINT_FILES",
+      "type": "r2_bucket",
+      "bucket_name": "uluslarasiofis-print-production"
+    }
+  ],
+  "schedules": {
+    "schedules": [
+      {
+        "cron": "* * * * *",
+        "created_on": "2026-10-08T08:52:04.595687Z",
+        "modified_on": "2026-10-08T13:07:49.253135Z"
+      },
+      {
+        "cron": "0 0 * * *",
+        "created_on": "2026-10-05T13:47:29.02502Z",
+        "modified_on": "2026-10-08T13:07:49.253135Z"
+      }
+    ]
+  },
+  "deployment": {
+    "id": "68dc11e3-adc6-43c6-8531-2ea28b065e58",
+    "source": "wrangler",
+    "strategy": "percentage",
+    "versions": [
+      {
+        "version_id": "7ab86b48-ce3b-462d-b206-da6ed6f1e534",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T13:07:44.239869Z"
+  },
+  "worker_sha256": "4b0e72eeb2346ff5cf3f1687f126d4a4507bb8bfe2228856628b7faf0958a045"
+}

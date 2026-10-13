@@ -6,16 +6,22 @@ export function formatQueueDate(value) {
     return new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
-function createRow(document, item, options) {
+function createRow(document, item, options, index) {
     const row = document.createElement('tr');
     const headers = options.headers || HEADERS;
+    if (options.rowNumber) {
+        const number = document.createElement('td');
+        number.textContent = options.rowNumber(item, index);
+        number.dataset.label = headers[0];
+        row.append(number);
+    }
     const values = options.values ? options.values(item) : [item.student_number || '—', [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
         item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru', options.statusLabel(item.status),
         formatQueueDate(item.submitted_at), formatQueueDate(item.updated_at)];
     values.forEach((value, index) => {
         const cell = document.createElement('td');
         cell.textContent = value || '—';
-        cell.dataset.label = headers[index];
+        cell.dataset.label = headers[index + (options.rowNumber ? 1 : 0)];
         row.append(cell);
     });
     const actions = document.createElement('td');
@@ -51,7 +57,7 @@ export function createApplicationQueueTable(document, items, options) {
     });
     head.append(headerRow);
     const body = document.createElement('tbody');
-    items.forEach(item => body.append(createRow(document, item, options)));
+    items.forEach((item, index) => body.append(createRow(document, item, options, index)));
     table.append(head, body);
     return table;
 }

@@ -459,17 +459,23 @@
                     <section class="card glass-card print-management-section" aria-labelledby="print-status-title">
                         <div class="print-section-heading">
                             <div><p class="home-eyebrow">Yazıcı ve kuyruk yönetimi</p>
-                                <h3 id="print-status-title" tabindex="-1">Yazıcı durumu ve işler</h3></div>
+                                <h3 id="print-status-title" tabindex="-1">Yazıcı ve bekleyen dosyalar</h3></div>
                             <button type="button" id="print-staff-refresh" class="btn btn-outline">Yenile</button>
                         </div>
                         <p id="print-staff-status" role="status" aria-live="polite">Durum yükleniyor…</p>
                         <dl id="print-staff-details" class="print-status-details"></dl>
                         <div class="print-queue-controls">
-                            <button type="button" id="print-queue-pause" class="btn btn-outline" hidden>Yeni işleri duraklat</button>
-                            <button type="button" id="print-queue-resume" class="btn btn-primary" hidden>Yeni işleri kabul et</button>
-                            <p class="print-pause-help">Duraklatma yeni gönderim isteklerini reddeder ve Agent’ın yeni iş almasını durdurur. Daha önce oluşturulmuş yükleme izinleri tamamlanırsa iş kuyrukta bekler. Agent’ın aldığı işler fiziksel olarak kesilmez; lease süresi dolan leased/ready işler en fazla üç normal denemeye göre yeniden kuyruğa alınır. Spooler’a gönderim başladıktan sonra sonucu belirsizleşen işler unknown olur ve otomatik tekrarlanmaz.</p>
+                            <button type="button" id="print-queue-pause" class="btn btn-outline" hidden>Yazdırmayı duraklat</button>
+                            <button type="button" id="print-queue-resume" class="btn btn-primary" hidden>Yazdırmayı yeniden aç</button>
+                            <p class="print-pause-help">Duraklatıldığında yeni dosyalar kabul edilmez, bekleyen dosyalar sırada kalır. İşleme alınmış dosyalar yazdırılmaya devam edebilir.</p>
                         </div>
                         <dl id="print-staff-counts" class="print-status-counts" aria-label="Kuyruk sayıları"></dl>
+                        <p class="print-pause-help">“Yazıcıya iletilen” sayısı, kağıt çıktısının alındığını doğrulamaz. Çıktıyı yazıcıdan kontrol edin.</p>
+                        <details class="print-technical-disclosure">
+                            <summary>Teknik ayrıntılar</summary>
+                            <dl id="print-staff-technical-details" class="print-status-details"></dl>
+                            <p class="print-pause-help">Agent, ofis bilgisayarındaki yazdırma uygulamasıdır. Son bağlantı, bu uygulamanın sisteme en son haber verdiği zamandır. Duraklatma hem yeni gönderim isteklerini hem de Agent’ın sıradan yeni iş almasını durdurur. Daha önce izin verilmiş yüklemeler tamamlanabilir ve sırada bekler. İşleme alınmış dosyalar fiziksel olarak kesilmez. İşleme alma süresi (lease) dolan leased/ready işler, en fazla üç normal deneme sınırıyla yeniden sıraya alınır. Windows yazdırma kuyruğuna (spooler) gönderim başladıktan sonra sonucu belirsizleşen işler “unknown” olarak kaydedilir ve çift baskıyı önlemek için otomatik tekrarlanmaz.</p>
+                        </details>
                         <div id="print-staff-jobs" class="print-job-list" aria-live="polite"></div>
                     </section>
                     <section class="card glass-card print-management-section" aria-labelledby="staff-print-title">

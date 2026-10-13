@@ -1,0 +1,26 @@
+.pdf-merger-modal-card .pdf-merger-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 20px;
+    height: min(480px, calc(100dvh - 220px));
+    flex: none !important;
+    overflow: hidden !important;
+    padding-block: 12px !important;
+    box-sizing: border-box;
+}
+.pdf-merger-documents { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.pdf-merger-documents > :not(.pdf-merger-file-list) { flex-shrink: 0; }
+.pdf-merger-documents .pdf-merger-file-list { flex: 1; min-height: 0; max-height: none !important; }
+.pdf-merger-documents .pdf-merger-dropzone { padding: 10px !important; margin-bottom: 10px !important; }
+.pdf-merger-transfer { min-width: 0; min-height: 0; overflow-y: auto; padding-left: 16px; border-left: 1px solid var(--card-border, #ddd); }
+.pdf-merger-transfer > .btn { width: 100%; padding: 9px 12px; }
+.pdf-merger-transfer .transfer-qr canvas { display: block; width: min(100%, 220px); height: auto; margin: 8px auto; }
+.pdf-merger-transfer > p { font-size: .85rem; margin: 8px 0; }
+.pdf-merger-transfer .transfer-instructions { margin: 10px 0 0; padding: 8px; }
+.pdf-merger-modal-card .staff-modal-header, .pdf-merger-modal-card .staff-modal-footer { padding: 12px 16px; }
+.pdf-merger-modal-card .staff-modal-footer .btn { padding: 9px 14px; }
+@media (max-width: 760px) {
+    .pdf-merger-modal-card .pdf-merger-body { grid-template-columns: 1fr; height: auto; flex: 1 !important; overflow-y: auto !important; }
+    .pdf-merger-documents .pdf-merger-file-list { flex: none; max-height: 180px !important; }
+    .pdf-merger-transfer { overflow: visible; padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--card-border, #ddd); }
+}

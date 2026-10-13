@@ -2,6 +2,13 @@ export const PRINT_LOCALES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 
 export const PRINT_MESSAGES = Object.freeze({
     tr: Object.freeze({
+        languageLabel: 'Dil', quickGuideTitle: 'Nasıl yazdırırım?', downloadGuide: 'Beş dilde A4 rehberini indir',
+        guideAdd: '“Dosya Ekle”ye dokunun, belgenizi seçin.',
+        guideSettings: 'Sayfaları ve kopya sayısını seçin.',
+        guidePrint: '“Tümünü Yazdır”a bir kez dokunun, bekleyin.',
+        guideCollect: 'Yazıcıyı kontrol edin, çıktınızı alın.',
+        fileFormats: 'PDF, JPG veya PNG · Dosya başına en fazla 10 MB · İş başına en fazla 20 sayfa',
+        repeatWarning: 'Sonuç belirsizse aynı dosyayı yeniden göndermeden önce ofise danışın.',
         pageTitle: 'Belge yazdır | İstanbul Topkapı Üniversitesi', staffPageTitle: 'Personel dosya yazdırma | İstanbul Topkapı Üniversitesi',
         brandLabel: 'Portal ana sayfa', logoAlt: 'İstanbul Topkapı Üniversitesi',
         eyebrow: 'Uluslararası Öğrenci Ofisi', title: 'Belge yazdır',
@@ -43,6 +50,13 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Dosyanız yazıcıya gönderiliyor.', statusChecking: 'Gönderim durumu kontrol ediliyor…'
     }),
     en: Object.freeze({
+        languageLabel: 'Language', quickGuideTitle: 'How to print', downloadGuide: 'Download the A4 guide in five languages',
+        guideAdd: 'Tap “Add files” and select your document.',
+        guideSettings: 'Choose the pages and number of copies.',
+        guidePrint: 'Tap “Print all” once and wait.',
+        guideCollect: 'Check the printer and collect your pages.',
+        fileFormats: 'PDF, JPG or PNG · Up to 10 MB per file · Up to 20 pages per job',
+        repeatWarning: 'If the result is unclear, ask the office before sending the same file again.',
         pageTitle: 'Print a document | Istanbul Topkapi University', staffPageTitle: 'Staff file printing | Istanbul Topkapi University',
         brandLabel: 'Portal home', logoAlt: 'Istanbul Topkapi University',
         eyebrow: 'International Student Office', title: 'Print a document',
@@ -85,6 +99,13 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Your file is being sent to the printer.', statusChecking: 'Checking submission status…'
     }),
     ru: Object.freeze({
+        languageLabel: 'Язык', quickGuideTitle: 'Как распечатать документ', downloadGuide: 'Скачать инструкцию A4 на пяти языках',
+        guideAdd: 'Нажмите «Добавить файлы» и выберите документ.',
+        guideSettings: 'Выберите страницы и количество копий.',
+        guidePrint: 'Нажмите «Печатать всё» один раз и подождите.',
+        guideCollect: 'Проверьте принтер и заберите распечатку.',
+        fileFormats: 'PDF, JPG или PNG · До 10 МБ на файл · До 20 страниц на задание',
+        repeatWarning: 'Если результат неизвестен, обратитесь в офис перед повторной отправкой файла.',
         pageTitle: 'Печать документа | Стамбульский университет Топкапы', staffPageTitle: 'Печать файлов для сотрудников | Стамбульский университет Топкапы',
         brandLabel: 'На главную портала', logoAlt: 'Стамбульский университет Топкапы',
         eyebrow: 'Офис по работе с иностранными студентами', title: 'Печать документа',
@@ -136,6 +157,13 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Файл отправляется на принтер.', statusChecking: 'Проверка состояния отправки…'
     }),
     tk: Object.freeze({
+        languageLabel: 'Dil', quickGuideTitle: 'Nädip çap etmeli?', downloadGuide: 'A4 gollanmasyny bäş dilde ýükläň',
+        guideAdd: '“Faýl goş” düwmesine basyň, resminamany saýlaň.',
+        guideSettings: 'Sahypalary we nusga sanyny saýlaň.',
+        guidePrint: '“Hemmesini çap et” düwmesine bir gezek basyň, garaşyň.',
+        guideCollect: 'Printeri barlaň, çap edilen sahypalaryňyzy alyň.',
+        fileFormats: 'PDF, JPG ýa-da PNG · Her faýl iň köp 10 MB · Her iş iň köp 20 sahypa',
+        repeatWarning: 'Netije näbell bolsa, şol faýly gaýtadan ibermezden öň ofise ýüz tutuň.',
         pageTitle: 'Resminamany çap etmek | Stambul Topkapy uniwersiteti', staffPageTitle: 'Işgärler üçin faýl çap etmek | Stambul Topkapy uniwersiteti',
         brandLabel: 'Portalyň baş sahypasy', logoAlt: 'Stambul Topkapy uniwersiteti',
         eyebrow: 'Halkara talyplar bölümi', title: 'Resminamany çap etmek',
@@ -177,6 +205,13 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Faýlyňyz printere iberilýär.', statusChecking: 'Iberiş ýagdaýy barlanýar…'
     }),
     ar: Object.freeze({
+        languageLabel: 'اللغة', quickGuideTitle: 'كيف أطبع مستندي؟', downloadGuide: 'حمّل دليل A4 بخمس لغات',
+        guideAdd: 'اضغط على «إضافة ملفات» واختر مستندك.',
+        guideSettings: 'اختر الصفحات وعدد النسخ.',
+        guidePrint: 'اضغط على «طباعة الكل» مرة واحدة وانتظر.',
+        guideCollect: 'تحقق من الطابعة وخذ أوراقك المطبوعة.',
+        fileFormats: 'PDF أو JPG أو PNG · حتى 10 ميغابايت لكل ملف · حتى 20 صفحة لكل مهمة',
+        repeatWarning: 'إذا كانت النتيجة غير واضحة، اسأل المكتب قبل إرسال الملف نفسه مرة أخرى.',
         pageTitle: 'طباعة مستند | جامعة إسطنبول توبكابي', staffPageTitle: 'طباعة ملفات الموظفين | جامعة إسطنبول توبكابي',
         brandLabel: 'الصفحة الرئيسية للبوابة', logoAlt: 'جامعة إسطنبول توبكابي',
         eyebrow: 'مكتب الطلاب الدوليين', title: 'طباعة مستند',

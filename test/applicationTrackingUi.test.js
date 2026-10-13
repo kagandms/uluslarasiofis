@@ -124,6 +124,8 @@ test('missing owner session preserves both code and online student-number lookup
 
     assert.equal(result.kind, 'lookup');
     assert.match(root.textContent, /Başvurumu sorgula/i);
+    assert.match(root.textContent, /Fiziksel teslim yapanlar/);
+    assert.match(root.textContent, /Online başvuru yapanlar/);
     assert.equal(root.querySelectorAll('input:not([name=tracking_reference])').length, 1);
     assert.equal(root.querySelector('input[name="student_number"]')?.type, 'text');
     assert.equal(root.querySelector('input[name="passport_number"]'), null);

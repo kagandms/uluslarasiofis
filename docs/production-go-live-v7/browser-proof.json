@@ -1,0 +1,46 @@
+{
+  "availability": "Yazıcı kullanıma hazır.",
+  "colorModes": [
+    {
+      "disabled": false,
+      "value": "monochrome"
+    },
+    {
+      "disabled": true,
+      "value": "color"
+    }
+  ],
+  "copyLimits": "en fazla 50 kopya seçilebilir. Toplam baskı sınırı 200 sayfadır.",
+  "copyMaximum": "50",
+  "duplexModes": [
+    {
+      "disabled": false,
+      "value": "simplex"
+    },
+    {
+      "disabled": true,
+      "value": "duplexlong"
+    }
+  ],
+  "fileTypes": "application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png",
+  "orientations": [
+    {
+      "disabled": false,
+      "value": "portrait"
+    },
+    {
+      "disabled": false,
+      "value": "landscape"
+    }
+  ],
+  "paperSizes": [
+    {
+      "disabled": false,
+      "value": "A4"
+    },
+    {
+      "disabled": true,
+      "value": "A3"
+    }
+  ]
+}

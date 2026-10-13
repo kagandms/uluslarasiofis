@@ -248,7 +248,7 @@ test('automatic Arabic selection sets page RTL while keeping page-number fields 
         assert.equal(dom.window.document.documentElement.lang, 'ar');
         assert.equal(dom.window.document.documentElement.dir, 'rtl');
         assert.equal(dom.window.document.querySelector('#print-title').textContent, 'طباعة مستند');
-        assert.equal(dom.window.document.querySelector('#print-language'), null);
+        assert.equal(dom.window.document.querySelector('#print-language').value, dom.window.document.documentElement.lang);
         assert.equal(dom.window.document.querySelector('#print-file-input').multiple, true);
         const sourcePdf = await PDFDocument.create();
         sourcePdf.addPage([595, 842]);
@@ -285,7 +285,7 @@ test('a legacy saved manual locale is ignored and browser preferences are sample
         assert.equal(dom.window.document.documentElement.lang, 'ar');
         assert.equal(dom.window.document.documentElement.dir, 'rtl');
         assert.equal(dom.window.document.querySelector('#print-title').textContent, 'طباعة مستند');
-        assert.equal(dom.window.document.querySelector('#print-language'), null);
+        assert.equal(dom.window.document.querySelector('#print-language').value, dom.window.document.documentElement.lang);
         Object.defineProperty(dom.window.navigator, 'languages', { configurable: true, value: ['ru-RU'] });
         assert.equal(dom.window.document.documentElement.lang, 'ar');
     } finally {
@@ -297,7 +297,7 @@ test('a legacy saved manual locale is ignored and browser preferences are sample
     }
 });
 
-test('browser locale stays fixed during submission while files and print settings remain intact', async () => {
+test('manual language changes preserve files and settings even during submission', async () => {
     const dom = new JSDOM(pageHtml, { url: 'https://portal.test/yazdir/' });
     dom.window.localStorage.setItem('print.locale.v1', 'tk');
     let releaseIntent;
@@ -339,26 +339,39 @@ test('browser locale stays fixed during submission while files and print setting
 
         assert.equal(dom.window.document.documentElement.lang, 'ru');
         assert.equal(dom.window.document.documentElement.dir, 'ltr');
-        assert.equal(dom.window.document.querySelector('#print-language'), null);
+        assert.equal(dom.window.document.querySelector('#print-language').value, dom.window.document.documentElement.lang);
         assert.equal(dom.window.document.querySelector('.print-file-card'), originalCard);
         assert.equal(originalCard.querySelector('[data-pages="custom"]').checked, true);
         assert.equal(originalCard.querySelector('.page-range-input').value, '2');
         assert.equal(originalCard.querySelector('[data-setting="color_mode"]').value, 'color');
         assert.equal(originalCard.querySelector('[data-setting="copies"]').value, '4');
         assert.equal(dom.window.localStorage.getItem('print.locale.v1'), 'tk');
+        const languageSelect = dom.window.document.querySelector('#print-language');
+        languageSelect.value = 'en';
+        languageSelect.dispatchEvent(new dom.window.Event('change'));
+        assert.equal(dom.window.document.documentElement.lang, 'en');
+        assert.equal(dom.window.document.querySelector('.print-file-card'), originalCard);
+        assert.equal(originalCard.querySelector('.page-range-input').value, '2');
+        assert.equal(originalCard.querySelector('[data-setting="copies"]').value, '4');
+        assert.equal(dom.window.localStorage.getItem('print.locale.v2'), 'en');
 
         dom.window.document.querySelector('#print-submit').click();
         await waitFor(() => intents.length === 1);
-        Object.defineProperty(dom.window.navigator, 'languages', { configurable: true, value: ['ar-SA'] });
-        assert.equal(dom.window.document.documentElement.lang, 'ru');
-        assert.equal(dom.window.document.documentElement.dir, 'ltr');
-        assert.match(dom.window.document.querySelector('#print-message').textContent, /Загрузка файла/);
-        assert.equal(dom.window.document.querySelector('#print-submit').textContent, 'Отправка файлов…');
+        languageSelect.value = 'ar';
+        languageSelect.dispatchEvent(new dom.window.Event('change'));
+        assert.equal(dom.window.document.documentElement.lang, 'ar');
+        assert.equal(dom.window.document.documentElement.dir, 'rtl');
+        assert.match(dom.window.document.querySelector('#print-message').textContent, /جارٍ تحميل/);
+        assert.equal(dom.window.document.querySelector('#print-submit').textContent, 'جارٍ إرسال الملفات…');
+        assert.equal(originalCard.querySelector('[data-setting="copies"]').disabled, true);
+        assert.equal(originalCard.querySelector('[data-setting="color_mode"]').disabled, true);
+        assert.equal(dom.window.document.querySelector('.print-file-card'), originalCard);
+        assert.equal(dom.window.document.querySelector('#print-submit').disabled, true);
 
         releaseIntent({ ok: true, json: async () => ({ job_id: 'job-locale', status: 'uploading', upload: {
             url: '/upload/job-locale', method: 'PUT', requiredHeaders: {}
         } }) });
-        await waitFor(() => dom.window.document.querySelector('#print-message').textContent === 'Задания на печать добавлены в очередь.');
+        await waitFor(() => dom.window.document.querySelector('#print-message').textContent === 'أُضيفت مهام الطباعة إلى قائمة الانتظار.');
         assert.equal(intents[0].color_mode, 'color');
         assert.equal(intents[0].copies, 4);
         assert.equal(intents[0].media_type, 'application/pdf');

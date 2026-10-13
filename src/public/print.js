@@ -3,7 +3,8 @@ import { arePrintSettingsAvailable, createPrintUploadPayload, getMaximumCopies, 
 import { parsePageSelection } from './printPageSelection.js';
 import { extractPdfPages } from './printPdf.js';
 import { submitPrintEntries } from './printQueue.js';
-import { detectPrintLocale, translatePrintMessage } from './i18n/printMessages.js';
+import { PRINT_LOCALES, translatePrintMessage } from './i18n/printMessages.js';
+import { readPrintLocale, savePrintLocale } from './i18n/print-locale.js';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_PRINT_PAGES = 20;
@@ -19,7 +20,8 @@ const fileCount = document.getElementById('print-file-count');
 const pageTotal = document.getElementById('print-page-total');
 const historySection = document.getElementById('print-history-section');
 const historyList = document.getElementById('print-history');
-const locale = detectPrintLocale(window.navigator.languages, window.navigator.language);
+const languageSelect = document.getElementById('print-language');
+let locale = readPrintLocale(window);
 const staffMode = new URLSearchParams(window.location.search).get('mode') === 'staff';
 const HISTORY_KEY = staffMode ? 'print.staff.job-history.v1' : 'print.job-history.v2';
 let optionCapabilities = normalizePrintCapabilities();
@@ -63,6 +65,7 @@ function applyLocale() {
     document.title = t(staffMode ? 'staffPageTitle' : 'pageTitle');
     translateElements(document);
     translateElements(fileTemplate.content);
+    languageSelect.value = locale;
     if (staffMode) {
         document.querySelector('[data-i18n="title"]').textContent = t('staffTitle');
         document.querySelector('[data-i18n="intro"]').textContent = t('staffIntro');
@@ -430,6 +433,13 @@ async function submitAll() {
 }
 
 addFileButton.addEventListener('click', () => fileInput.click());
+languageSelect.addEventListener('change', () => {
+    const selectedLocale = languageSelect.value;
+    if (!PRINT_LOCALES.includes(selectedLocale)) return;
+    locale = selectedLocale;
+    savePrintLocale(window, locale);
+    applyLocale();
+});
 fileInput.addEventListener('change', () => {
     for (const file of fileInput.files || []) addFile(file);
     fileInput.value = '';

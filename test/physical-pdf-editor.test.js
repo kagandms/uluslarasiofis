@@ -66,13 +66,45 @@ test('saved PDF pages can be reordered, removed and combined with a new page', a
     added.addPage([500, 400]);
 
     const pages = await splitPdfPages(await original.save());
-    const editedBytes = await mergeDocumentsToPdf([pages[2], pages[0], { bytes: await added.save(), name: 'new.pdf' }]
-        .map(page => ({ ...page, mediaType: 'application/pdf' })));
-    const edited = await PDFDocument.load(editedBytes);
+    const result = await mergeDocumentsToPdf([pages[2], pages[0], { bytes: await added.save(), name: 'new.pdf' }]
+        .map(page => ({ ...page, mediaType: 'application/pdf' })), undefined, { rasterizePdfs: false });
+    const edited = await PDFDocument.load(result.bytes);
 
     assert.deepEqual(pages.map(page => page.name), ['Sayfa-001.pdf', 'Sayfa-002.pdf', 'Sayfa-003.pdf']);
     assert.deepEqual(edited.getPages().map(page => page.getWidth()), [300, 100, 500]);
     assert.equal((await PDFDocument.load(await original.save())).getPageCount(), 3);
+});
+
+test('reports the actual output ratio and warns when the 40% target is missed', async () => {
+    const sourcePdf = await PDFDocument.create();
+    sourcePdf.addPage([595, 842]);
+    const bytes = await sourcePdf.save();
+    const result = await mergeDocumentsToPdf([
+        { bytes, name: 'student.pdf', mediaType: 'application/pdf' }
+    ], undefined, { rasterizePdfs: false });
+
+    assert.equal(result.metrics.inputBytes, bytes.length);
+    assert.equal(result.metrics.outputBytes, result.bytes.length);
+    assert.equal(result.metrics.ratio, result.bytes.length / bytes.length);
+    assert.equal(result.metrics.targetReached, false);
+    assert.match(result.metrics.warning, /%40 hedefe ulaşmadı/);
+});
+
+test('requires the browser PDF renderer when raster compression is requested', async () => {
+    const sourcePdf = await PDFDocument.create();
+    sourcePdf.addPage([595, 842]);
+    const bytes = await sourcePdf.save();
+    const priorWindow = globalThis.window;
+    delete globalThis.window;
+
+    try {
+        await assert.rejects(
+            mergeDocumentsToPdf([{ bytes, name: 'student.pdf', mediaType: 'application/pdf' }]),
+            /PDF sıkıştırma bileşeni hazır değil/
+        );
+    } finally {
+        if (priorWindow) globalThis.window = priorWindow;
+    }
 });
 
 test('rejects unreadable saved PDFs instead of opening an empty editor', async () => {

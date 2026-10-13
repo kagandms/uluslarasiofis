@@ -1,3 +1,5 @@
+import { bindPhysicalUppercaseInput } from './physical-uppercase-input.js';
+
 function appendText(parent,tag,value) {
     const node=parent.ownerDocument.createElement(tag); node.textContent=value; parent.append(node); return node;
 }
@@ -7,14 +9,17 @@ function appendButton(parent,label,run) {
 }
 
 function appendMetadataField(form,options) {
+    const field=appendText(form,'div',''); field.className='physical-receipt-field';
     const input=form.ownerDocument.createElement('input');
     input.id=`receipt-${options.name}`; input.name=options.name; input.className='glass-input';
     input.value=options.draft[options.name] || ''; input.type=options.name==='application_date'?'date':'text';
     input.maxLength=options.name.includes('name')?120:64; input.required=options.name!=='student_number';
     input.disabled=Boolean(options.isLocked);
-    appendText(form,'label',options.label).htmlFor=input.id;
-    input.addEventListener('input',()=>{ options.draft[options.name]=input.value; options.onChange?.(); });
-    form.append(input);
+    appendText(field,'label',options.label).htmlFor=input.id;
+    const update=value=>{ options.draft[options.name]=value; options.onChange?.(); };
+    if (input.type==='text') bindPhysicalUppercaseInput(input,update);
+    else input.addEventListener('input',()=>update(input.value));
+    field.append(input);
 }
 
 function appendMetadataFields(form,options) {
@@ -24,28 +29,32 @@ function appendMetadataFields(form,options) {
         const option=appendText(type,'option',label); option.value=value;
     }
     type.value=options.draft.application_type; type.disabled=Boolean(options.isLocked);
-    appendText(form,'label','Başvuru Türü').htmlFor=type.id;
-    type.addEventListener('change',()=>{options.draft.application_type=type.value;}); form.append(type);
+    const field=appendText(form,'div',''); field.className='physical-receipt-field';
+    appendText(field,'label','Başvuru Türü').htmlFor=type.id;
+    type.addEventListener('change',()=>{options.draft.application_type=type.value;}); field.append(type);
 }
 
 /** Renders the information-first form. @param {HTMLElement} panel Mount. @param {object} state Draft. @param {object} handlers Actions. @returns {void} Render. */
 export function renderPhysicalReceiptDraft(panel,state,handlers) {
     appendButton(panel,'Kapat',handlers.back);
     const heading=appendText(panel,'h3','Öğrenci Bilgileri'); heading.id='physical-receipt-dialog-title';
-    const form=panel.ownerDocument.createElement('form'); form.className='physical-intake-form';
+    const form=panel.ownerDocument.createElement('form'); form.className='physical-intake-form physical-receipt-form';
     const warning=panel.ownerDocument.createElement('p'); warning.setAttribute('role','status');
     const reference=panel.ownerDocument.createElement('p'); reference.dir='ltr';
+    reference.className=state.reservation?'physical-receipt-reference is-success':'physical-receipt-reference';
+    reference.setAttribute('role','status');
     const refreshWarning=()=>{
         const isFuture=state.draft.application_date>state.receiptConfig.today;
         const hasYearChanged=state.reservation && state.draft.application_date.slice(0,4)!==state.reservation.application_date.slice(0,4);
-        warning.textContent=hasYearChanged?'Tarih yılı değişti. Başvuru No Ata’ya tekrar basın.':isFuture?'İleri bir teslim tarihi seçtiniz. Tarihi kontrol edin.':'';
+        warning.textContent=hasYearChanged?'Tarih yılı değişti. Formu kapatıp yeniden açın.':isFuture?'İleri bir teslim tarihi seçtiniz. Tarihi kontrol edin.':'';
     };
     appendMetadataFields(form,{draft:state.draft,isLocked:Boolean(state.registrationBody),onChange:refreshWarning});
-    const assign=appendButton(form,'Başvuru No Ata',handlers.assignReference); assign.disabled=Boolean(state.registrationBody);
-    reference.textContent=state.reservation?`Başvuru Takip No: ${state.reservation.tracking_reference}`:'Henüz numara ayrılmadı.';
+    const assign=appendButton(form,'Başvuru No Ata',handlers.assignReference); assign.disabled=Boolean(state.reservation || state.registrationBody);
+    assign.classList.add('physical-receipt-assign');
+    reference.textContent=state.reservation?`Başvuru Takip No: ${state.reservation.tracking_reference} · Başarıyla atandı`:'Henüz numara ayrılmadı.';
     form.append(reference,warning); refreshWarning();
     const save=appendButton(form,state.registrationBody?'Aynı Kaydı Kontrol Et / Devam Et':'Oluştur ve Yazdır',()=>{});
-    save.type='submit'; save.className='btn btn-primary'; save.disabled=!state.reservation;
+    save.type='submit'; save.className='btn btn-primary physical-receipt-submit'; save.disabled=!state.reservation;
     form.addEventListener('submit',event=>{event.preventDefault();handlers.create();}); panel.append(form);
     if (state.duplicateMatches?.length) {
         appendText(panel,'p','Aktif kayıtlar bulundu. Birini açın; otomatik birleştirme yapılmaz.');

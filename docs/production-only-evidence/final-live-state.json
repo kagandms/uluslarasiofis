@@ -1,0 +1,29 @@
+{
+  "print_enabled": "false",
+  "credential_types": {
+    "PRINTER_SECRET": "secret_text",
+    "PRINT_R2_ACCESS_KEY_ID": "secret_text",
+    "PRINT_R2_SECRET_ACCESS_KEY": "secret_text"
+  },
+  "active_deployment": {
+    "id": "3eab9951-6626-40f9-800b-8d9534898fa0",
+    "source": "api",
+    "strategy": "percentage",
+    "author_email": "kagan.durmus61@mail.ru",
+    "annotations": {
+      "workers/message": "Fail-closed production print gate; PRINT_ENABLE...",
+      "workers/triggered_by": "upload"
+    },
+    "versions": [
+      {
+        "version_id": "6d9b67ed-675e-4d63-a3ee-460c8162cfba",
+        "percentage": 100
+      }
+    ],
+    "created_on": "2026-10-08T10:45:02.09471Z"
+  },
+  "staging_subdomain": {
+    "enabled": true,
+    "previews_enabled": true
+  }
+}

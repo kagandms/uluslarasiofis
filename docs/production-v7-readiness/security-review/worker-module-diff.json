@@ -1,0 +1,24 @@
+{
+  "live_base_sha256": "22c50f1d60541599cc35fc7391f4c58b17d88d0669edea049c1e45aa26e32866",
+  "candidate_sha256": "3760c26ba44eac9d380795dcb84ba7f4044939d82aa825e2de3bd8f61cb6fa4d",
+  "unchanged_existing_server_modules": 58,
+  "changed_existing_server_modules": [
+    "src/server/auth/staffAuth.js",
+    "src/server/storage/r2DocumentStorage.js",
+    "src/server/services/d1BackupService.js",
+    "src/server/repositories/d1/printRepository.js",
+    "src/server/storage/printStorage.js",
+    "src/server/routes/printRoutes.js",
+    "src/server/routes/printerRoutes.js",
+    "src/server/worker.js"
+  ],
+  "added_server_modules": [
+    "src/server/domain/print-uat-policy.js",
+    "src/server/repositories/d1/print-uat-repository.js",
+    "src/server/routes/print-uat-routes.js",
+    "src/server/services/print-access.js",
+    "src/server/services/print-uat-job.js"
+  ],
+  "missing_server_modules": [],
+  "interpretation": "Noncanonical region comparison; bundler reordering causes false differences. Use worker-ast-diff.json for declaration comparison."
+}

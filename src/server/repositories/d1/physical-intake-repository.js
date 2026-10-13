@@ -18,6 +18,15 @@ function buildWhere(query) {
         const term = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
         bindings.push(term, term, term, term, term);
     }
+    const deliveryDate = "coalesce(nullif(application_date, ''), substr(submitted_at, 1, 10))";
+    if (query.fromDate) {
+        clauses.push(`${deliveryDate} >= ?`);
+        bindings.push(query.fromDate);
+    }
+    if (query.toDate) {
+        clauses.push(`${deliveryDate} <= ?`);
+        bindings.push(query.toDate);
+    }
     return { sql: clauses.join(' AND '), bindings };
 }
 

@@ -40,6 +40,12 @@ body.dark-mode .physical-intake-panel {
     opacity: 1;
 }
 .physical-intake-panel > button { justify-self: start; }
+.physical-intake-panel .staff-applications-filters {
+    grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(140px, 1fr)) auto;
+}
+.physical-intake-panel .staff-applications-filters > div { min-width: 0; }
+.physical-intake-panel .staff-applications-filters > div label { display: block; }
+.physical-intake-panel .staff-applications-filters > div .glass-input { box-sizing: border-box; }
 .physical-intake-form { display: grid; gap: .6rem; max-width: 680px; }
 .physical-intake-form label { font-weight: 600; }
 .physical-pdf-history { list-style: none; padding: 0; display: grid; gap: 1rem; }
@@ -67,7 +73,8 @@ body.dark-mode .physical-intake-panel {
 @media (max-width: 640px) { #view-intake .home-actions { grid-template-columns: 1fr; } }
 
 .physical-receipt-dialog {
-    width: min(640px, calc(100vw - 32px));
+    box-sizing: border-box;
+    width: min(760px, calc(100vw - 32px));
     max-height: calc(100dvh - 48px);
     margin: auto;
     padding: 24px;
@@ -77,12 +84,28 @@ body.dark-mode .physical-intake-panel {
     color: var(--text-primary, #202124);
     box-shadow: 0 16px 56px rgb(0 0 0 / 22%);
     overflow-y: auto;
+    gap: .65rem;
 }
 .physical-receipt-dialog::backdrop { background: transparent; }
 .physical-receipt-dialog h3 { margin: 0; }
 .physical-receipt-dialog > p { margin: 0; }
 .physical-receipt-dialog .physical-intake-form { max-width: none; }
+.physical-receipt-field { display: grid; gap: .3rem; min-width: 0; }
+.physical-receipt-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem 1rem; }
+.physical-receipt-form > p, .physical-receipt-submit { grid-column: 1 / -1; }
+.physical-receipt-form > p { margin: 0; }
+.physical-receipt-form > p:empty { display: none; }
+.physical-receipt-assign { align-self: end; }
+.physical-receipt-dialog .glass-input { box-sizing: border-box; min-width: 0; width: 100%; padding: 9px 12px; min-height: 42px; }
+.physical-receipt-dialog .btn { padding: 9px 16px; margin: 0; }
+.physical-receipt-reference.is-success { color: #166534; background: #dcfce7; border: 1px solid #86efac; border-radius: 8px; padding: 9px 12px; font-weight: 700; }
+body.dark-mode .physical-receipt-reference.is-success { color: #bbf7d0; background: #143b26; border-color: #4ade80; }
 @media (max-width: 640px) { .physical-receipt-dialog { padding: 18px; } }
+@media (max-width: 480px) { .physical-receipt-form { grid-template-columns: 1fr; } }
+@media (max-width: 900px) {
+    .physical-intake-panel .staff-applications-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .physical-intake-panel .physical-filter-search { grid-column: 1 / -1; }
+}
 
 .physical-receipt-actions { display: flex; align-items: center; gap: .5rem; }
 .physical-intake-panel .physical-receipt-download {
@@ -91,4 +114,11 @@ body.dark-mode .physical-intake-panel {
     font-size: .875rem;
     width: auto;
 }
-.physical-status-actions .btn[aria-current=true] { outline: 2px solid var(--physical-focus); outline-offset: 2px; }
+.physical-status-actions .btn[aria-current=true] {
+    background: var(--physical-button-bg);
+    color: var(--physical-button-text);
+    border-color: var(--physical-button-border);
+    outline: 2px solid var(--physical-focus);
+    outline-offset: 2px;
+    cursor: default;
+}

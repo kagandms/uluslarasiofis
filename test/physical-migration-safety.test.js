@@ -8,7 +8,7 @@ const migration = readFileSync(new URL(`../migrations/${MIGRATION_NAME}`, import
 
 function createExistingDatabase() {
     const database = new TestD1Database();
-    for (const name of readdirSync(new URL('../migrations/', import.meta.url)).filter(name => name.endsWith('.sql') && name !== MIGRATION_NAME).sort()) {
+    for (const name of readdirSync(new URL('../migrations/', import.meta.url)).filter(name => name.endsWith('.sql') && name < MIGRATION_NAME).sort()) {
         database.exec(readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8'));
     }
     database.exec(`CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
