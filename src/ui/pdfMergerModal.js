@@ -5,6 +5,7 @@ import { mergeDocumentsToPdf, downloadPdfFile } from '../services/pdfMergerServi
 import { showToast } from './toastManager.js';
 
 const DEFAULT_MAX_FILES = 30;
+const YOKSIS_SAFE_LIMIT_BYTES = 9 * 1024 * 1024;
 
 function formatBytes(bytes) {
     if (!Number.isFinite(bytes) || bytes === 0) return '0 B';
@@ -51,6 +52,7 @@ export function openPdfMergerModal(options = {}) {
     const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
     if (!Number.isSafeInteger(maxFiles) || maxFiles < 1 || maxFiles > 300) throw new Error('Belge sınırı geçersiz.');
     let readyPdf = null;
+    let readyPdfCanBeUsed = false;
     let preparedFields = null;
     let isSaving = false;
     let isBuilding = false;
@@ -332,7 +334,7 @@ export function openPdfMergerModal(options = {}) {
     function updateCount() {
         countBadge.textContent = `Eklenen Belgeler: ${selectedFiles.length} / ${maxFiles}`;
         clearBtn.style.display = selectedFiles.length > 0 ? 'inline-block' : 'none';
-        btnMerge.disabled = selectedFiles.length === 0;
+        btnMerge.disabled = selectedFiles.length === 0 || Boolean(readyPdf && !readyPdfCanBeUsed);
         btnCameraMode.disabled = selectedFiles.length >= maxFiles;
     }
 
@@ -449,6 +451,7 @@ export function openPdfMergerModal(options = {}) {
 
     function renderList() {
         readyPdf = null;
+        readyPdfCanBeUsed = false;
         preparedFields = null;
         if (previewUrl) URL.revokeObjectURL(previewUrl);
         previewUrl = null;
@@ -551,6 +554,10 @@ export function openPdfMergerModal(options = {}) {
     }
 
     async function saveReadyPdf() {
+        if (!readyPdfCanBeUsed || !readyPdf || readyPdf.byteLength > YOKSIS_SAFE_LIMIT_BYTES) {
+            progressMsg.textContent = 'PDF %40 boyut hedefine ve YÖKSİS için güvenli 9 MB sınırına ulaşmadı. Sayfaları azaltıp yeniden oluşturun.';
+            return;
+        }
         const controls = [...overlay.querySelectorAll('button,input,select')].map(node => ({ node, wasDisabled: node.disabled }));
         isSaving = true;
         overlay.dataset.isProcessing = 'true';
@@ -576,6 +583,7 @@ export function openPdfMergerModal(options = {}) {
         if (selectedFiles.length === 0) return;
         if (isSaving) return;
         if (readyPdf) {
+            if (!readyPdfCanBeUsed) return;
             if (typeof options.onSave === 'function') { await saveReadyPdf(); return; }
             downloadPdfFile(readyPdf, `Birlestirilmis_Belgeler_${new Date().toISOString().slice(0, 10)}.pdf`);
             return;
@@ -590,7 +598,7 @@ export function openPdfMergerModal(options = {}) {
         buildControls.forEach(({ node }) => { node.disabled = true; });
 
         try {
-            progressMsg.textContent = 'Belgeler sırayla işleniyor; PDF sayfaları yaklaşık %40 boyut hedefiyle sıkıştırılıyor...';
+            progressMsg.textContent = 'Belgeler sırayla işleniyor; PDF sayfaları ve fotoğraflar %40 boyut hedefine sıkıştırılıyor...';
             if (options.onPrepare) {
                 progressMsg.textContent = 'Başvuru formundan öğrenci bilgileri okunuyor…';
                 preparedFields = await options.onPrepare([...selectedFiles]);
@@ -601,6 +609,7 @@ export function openPdfMergerModal(options = {}) {
 
             const mergedBytes = result.bytes;
             readyPdf = mergedBytes;
+            readyPdfCanBeUsed = result.metrics.targetReached;
             previewUrl = URL.createObjectURL(new Blob([mergedBytes], { type: 'application/pdf' }));
             previewLink.href = previewUrl;
             previewLink.hidden = false;
@@ -613,19 +622,20 @@ export function openPdfMergerModal(options = {}) {
                 : '';
             progressMsg.textContent = `PDF ${formatBytes(result.metrics.inputBytes)} → ${formatBytes(result.metrics.outputBytes)} (${compressionRatio}). ${targetMessage}${rasterNotice} Açıp okunabilirliği kontrol edin.`;
             btnMerge.textContent = options.onSave ? (options.confirmLabel || 'Kontrol ettim, öğrenci kaydına ekle') : 'Kontrol ettim, PDF’i indir';
-            btnMerge.disabled = false;
+            btnMerge.disabled = !readyPdfCanBeUsed;
+            if (!readyPdfCanBeUsed) btnMerge.title = 'YÖKSİS için PDF hedef boyutuna ulaşmalı.';
             closeBtn.disabled = false;
         } catch (err) {
             console.error('[PDF Merger Modal] Hata:', err);
             showToast(`PDF birleştirme başarısız: ${err.message}`, 'error');
             progressMsg.textContent = 'Hata oluştu.';
-            btnMerge.disabled = false;
+            btnMerge.disabled = Boolean(readyPdf && !readyPdfCanBeUsed);
             closeBtn.disabled = false;
         } finally {
             isBuilding = false;
             overlay.dataset.isProcessing = 'false';
             buildControls.forEach(({ node, wasDisabled }) => { node.disabled = wasDisabled; });
-            btnMerge.disabled = false;
+            btnMerge.disabled = selectedFiles.length === 0 || Boolean(readyPdf && !readyPdfCanBeUsed);
             closeBtn.disabled = false;
         }
     });

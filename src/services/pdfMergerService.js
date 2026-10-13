@@ -1,14 +1,19 @@
 import { optimizeDocumentImage } from './optimize-document-image.js';
 import { PDFDocument, PageSizes } from 'pdf-lib';
+import { DOCUMENT_IMAGE_LONG_EDGE } from '../config/mobile-transfer-policy.js';
 
 const A4_PORTRAIT = PageSizes.A4;
 const A4_LANDSCAPE = [PageSizes.A4[1], PageSizes.A4[0]];
 const PAGE_MARGIN = 20;
 const TARGET_RATIO = 0.4;
+const YOKSIS_SAFE_LIMIT_BYTES = 9 * 1024 * 1024;
 const COMPRESSION_PROFILES = [
-    { dpi: 180, quality: 0.78 },
-    { dpi: 160, quality: 0.68 },
-    { dpi: 144, quality: 0.58 }
+    { dpi: 180, quality: 0.68 },
+    { dpi: 144, quality: 0.55 },
+    { dpi: 120, quality: 0.45 },
+    { dpi: 96, quality: 0.35 },
+    { dpi: 72, quality: 0.25 },
+    { dpi: 60, quality: 0.18 }
 ];
 
 async function readBytes(input) {
@@ -32,9 +37,10 @@ function getInputSize(file) {
     return input.byteLength ?? 0;
 }
 
-async function ensureJpegBytes(bytesOrBlob, mediaType = 'image/jpeg') {
+async function ensureJpegBytes(bytesOrBlob, mediaType = 'image/jpeg', profile) {
     const blob = bytesOrBlob instanceof Blob ? bytesOrBlob : new Blob([bytesOrBlob], { type: mediaType });
-    const optimized = await optimizeDocumentImage(blob);
+    const longEdge = profile ? Math.round(DOCUMENT_IMAGE_LONG_EDGE * profile.dpi / 300) : DOCUMENT_IMAGE_LONG_EDGE;
+    const optimized = await optimizeDocumentImage(blob, { longEdge, quality: profile?.quality, forceCompression: Boolean(profile) });
     return new Uint8Array(await optimized.arrayBuffer());
 }
 
@@ -48,8 +54,8 @@ function getPageSize(width, height) {
     return { pageWidth, pageHeight, drawWidth: width * scale, drawHeight: height * scale };
 }
 
-async function appendImageToPdf(pdfDoc, bytes, mediaType, isValidatedTransferPhoto) {
-    const jpegBytes = isValidatedTransferPhoto ? bytes : await ensureJpegBytes(bytes, mediaType);
+async function appendImageToPdf(pdfDoc, bytes, mediaType, profile) {
+    const jpegBytes = await ensureJpegBytes(bytes, mediaType, profile);
     const image = await pdfDoc.embedJpg(jpegBytes);
     const { pageWidth, pageHeight, drawWidth, drawHeight } = getPageSize(image.width, image.height);
     const page = pdfDoc.addPage([pageWidth, pageHeight]);
@@ -113,25 +119,29 @@ function canvasToJpeg(canvas, quality) {
     });
 }
 
-async function buildPdf(files, profile, onProgress) {
+function isPdfFile(file) {
+    return (file.mediaType || file.type || '').toLowerCase().includes('pdf') || (file.name || '').toLowerCase().endsWith('.pdf');
+}
+
+async function buildPdf(files, profile, onProgress, options) {
     const mergedPdf = await PDFDocument.create();
     for (let index = 0; index < files.length; index += 1) {
         const file = files[index];
         const bytes = await readBytes(getFilePayload(file));
         const mediaType = (file.mediaType || file.type || '').toLowerCase();
         const fileName = file.name || 'Belge';
-        const isPdf = mediaType.includes('pdf') || fileName.toLowerCase().endsWith('.pdf');
+        const isPdf = isPdfFile(file);
         onProgress?.({ current: index + 1, total: files.length, message: `İşleniyor (${index + 1}/${files.length}): ${fileName}` });
-        if (isPdf && profile) await appendRasterizedPdf(mergedPdf, bytes, fileName, profile, onProgress);
+        if (isPdf && profile && options.rasterizePdfs !== false) await appendRasterizedPdf(mergedPdf, bytes, fileName, profile, onProgress);
         else if (isPdf) await appendVectorPdf(mergedPdf, bytes, fileName);
-        else await appendImageToPdf(mergedPdf, bytes, mediaType, file.isValidatedTransferPhoto === true);
+        else await appendImageToPdf(mergedPdf, bytes, mediaType, profile);
     }
     if (mergedPdf.getPageCount() === 0) throw new Error('Hiçbir geçerli sayfa birleştirilemedi.');
     return mergedPdf.save({ useObjectStreams: true });
 }
 
 /**
- * Builds an ordered PDF and rasterizes source PDF pages to target roughly 40% of input bytes.
+ * Builds an ordered PDF and compresses its pages and images to 40% of source bytes and a safe YÖKSİS size.
  * @param {Array<{ name?: string, bytes?: Uint8Array|ArrayBuffer|Blob, mediaType?: string, type?: string, size?: number, isValidatedTransferPhoto?: boolean }|Blob>} files
  * @param {(progress: { current?: number, total?: number, message: string }) => void} [onProgress]
  * @param {{ rasterizePdfs?: boolean }} [options]
@@ -140,16 +150,23 @@ async function buildPdf(files, profile, onProgress) {
 export async function mergeDocumentsToPdf(files, onProgress, options = {}) {
     if (!Array.isArray(files) || files.length === 0) throw new Error('Birleştirilecek dosya bulunamadı.');
     const inputBytes = files.reduce((total, file) => total + getInputSize(file), 0);
-    const containsPdf = files.some(file => (file.mediaType || file.type || '').toLowerCase().includes('pdf')
-        || (file.name || '').toLowerCase().endsWith('.pdf'));
-    const profiles = !containsPdf || options.rasterizePdfs === false ? [null] : COMPRESSION_PROFILES;
+    const containsPdf = files.some(isPdfFile);
+    const containsImages = files.some(file => !isPdfFile(file));
+    const shouldRasterizePdfs = containsPdf && options.rasterizePdfs !== false;
+    const profiles = shouldRasterizePdfs || containsImages ? COMPRESSION_PROFILES : [null];
+    const targetBytes = Math.min(inputBytes * TARGET_RATIO, YOKSIS_SAFE_LIMIT_BYTES);
     let bytes;
     for (const profile of profiles) {
-        bytes = await buildPdf(files, profile, onProgress);
-        if (!profile || bytes.byteLength <= inputBytes * TARGET_RATIO) break;
+        bytes = await buildPdf(files, profile, onProgress, options);
+        if (!profile || bytes.byteLength <= targetBytes) break;
     }
     const ratio = inputBytes > 0 ? bytes.byteLength / inputBytes : 1;
-    const targetReached = ratio <= TARGET_RATIO;
+    const sizeRatioReached = ratio <= TARGET_RATIO;
+    const yoksisLimitReached = bytes.byteLength <= YOKSIS_SAFE_LIMIT_BYTES;
+    const targetReached = sizeRatioReached && yoksisLimitReached;
+    const warning = targetReached ? null : !yoksisLimitReached
+        ? 'PDF 9 MB güvenli sınırın altında değil. YÖKSİS yüklemesi için sayfa veya fotoğraf sayısını azaltın.'
+        : 'PDF %40 hedefe ulaşmadı. Sayfa sayısını azaltıp yeniden deneyin.';
     return {
         bytes,
         metrics: {
@@ -157,8 +174,9 @@ export async function mergeDocumentsToPdf(files, onProgress, options = {}) {
             outputBytes: bytes.byteLength,
             ratio,
             targetReached,
+            yoksisLimitReached,
             rasterizedPdfs: containsPdf && options.rasterizePdfs !== false,
-            warning: targetReached ? null : 'Okunabilirlik için en düşük kalite korunmuştur; PDF %40 hedefe ulaşmadı. Kaydetmeden önce sayfaları kontrol edin.'
+            warning
         }
     };
 }

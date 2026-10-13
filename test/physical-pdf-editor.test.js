@@ -22,6 +22,25 @@ function createReceiptFixture() {
     return { database, repository: createPhysicalIntakeRepository(database) };
 }
 
+async function withMockImageCodec(jpegBytes, work) {
+    const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    const originalBitmap = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap');
+    let decodeCount = 0;
+    globalThis.createImageBitmap = async () => ({ width: 2400, height: 3400, close() { decodeCount += 1; } });
+    globalThis.document = { createElement: () => ({
+        getContext: () => ({ fillRect() {}, drawImage() {} }),
+        toBlob(callback, mediaType) { callback(new Blob([jpegBytes], { type: mediaType })); }
+    }) };
+    try {
+        return await work(() => decodeCount);
+    } finally {
+        if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
+        else delete globalThis.document;
+        if (originalBitmap) Object.defineProperty(globalThis, 'createImageBitmap', originalBitmap);
+        else delete globalThis.createImageBitmap;
+    }
+}
+
 test('shows only the current PDF with open, delete, download and edit actions', () => {
     const dom = new JSDOM('<main></main>');
     const root = dom.window.document.querySelector('main');
@@ -91,18 +110,53 @@ test('reports the actual output ratio and warns when the 40% target is missed', 
     assert.match(result.metrics.warning, /%40 hedefe ulaşmadı/);
 });
 
-test('embeds server-validated phone JPEGs without decoding them again in the browser', async () => {
+test('re-encodes server-validated phone JPEGs before embedding them in the PDF', async () => {
     const jpegBytes = new Uint8Array(await readFile(new URL('../header_logo.jpg', import.meta.url)));
 
-    const result = await mergeDocumentsToPdf([{
-        bytes: jpegBytes,
-        name: 'Telefondan_test.jpg',
-        mediaType: 'image/jpeg',
-        isValidatedTransferPhoto: true
-    }]);
-    const mergedPdf = await PDFDocument.load(result.bytes);
+    await withMockImageCodec(jpegBytes, async readDecodeCount => {
+        const result = await mergeDocumentsToPdf([{
+            bytes: jpegBytes,
+            name: 'Telefondan_test.jpg',
+            mediaType: 'image/jpeg',
+            isValidatedTransferPhoto: true
+        }]);
+        const mergedPdf = await PDFDocument.load(result.bytes);
 
-    assert.equal(mergedPdf.getPageCount(), 1);
+        assert.equal(mergedPdf.getPageCount(), 1);
+        assert.ok(readDecodeCount() > 0);
+    });
+});
+
+test('compresses phone JPEGs to the fixed 40 percent size target', async () => {
+    const jpegBytes = new Uint8Array(await readFile(new URL('../header_logo.jpg', import.meta.url)));
+    const qualities = [];
+    const sourceBytes = new Uint8Array(jpegBytes.length * 3);
+    sourceBytes.set(jpegBytes);
+    sourceBytes.set(jpegBytes, jpegBytes.length);
+    sourceBytes.set(jpegBytes, jpegBytes.length * 2);
+    const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    const originalBitmap = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap');
+    globalThis.createImageBitmap = async () => ({ width: 2400, height: 3400, close() {} });
+    globalThis.document = { createElement: () => ({
+        getContext: () => ({ fillRect() {}, drawImage() {} }),
+        toBlob(callback, mediaType, quality) { qualities.push(quality); callback(new Blob([jpegBytes], { type: mediaType })); }
+    }) };
+
+    try {
+        const result = await mergeDocumentsToPdf([{ bytes: sourceBytes, size: sourceBytes.length, name: 'phone.jpg',
+            mediaType: 'image/jpeg', isValidatedTransferPhoto: true }]);
+
+        assert.ok(qualities.length > 0);
+        assert.ok(qualities[0] < 0.7);
+        assert.equal(result.metrics.targetReached, true);
+        assert.equal(result.metrics.yoksisLimitReached, true);
+        assert.ok(result.metrics.outputBytes <= sourceBytes.length * 0.4);
+    } finally {
+        if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
+        else delete globalThis.document;
+        if (originalBitmap) Object.defineProperty(globalThis, 'createImageBitmap', originalBitmap);
+        else delete globalThis.createImageBitmap;
+    }
 });
 
 test('reads Blob content instead of mistaking Blob.bytes() for an image payload', async () => {
@@ -110,10 +164,12 @@ test('reads Blob content instead of mistaking Blob.bytes() for an image payload'
     const phonePhoto = new Blob([jpegBytes], { type: 'image/jpeg' });
     Object.defineProperty(phonePhoto, 'isValidatedTransferPhoto', { value: true });
 
-    const result = await mergeDocumentsToPdf([phonePhoto]);
-    const mergedPdf = await PDFDocument.load(result.bytes);
+    await withMockImageCodec(jpegBytes, async () => {
+        const result = await mergeDocumentsToPdf([phonePhoto]);
+        const mergedPdf = await PDFDocument.load(result.bytes);
 
-    assert.equal(mergedPdf.getPageCount(), 1);
+        assert.equal(mergedPdf.getPageCount(), 1);
+    });
 });
 
 test('requires the browser PDF renderer when raster compression is requested', async () => {

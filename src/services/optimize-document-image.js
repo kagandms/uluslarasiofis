@@ -12,9 +12,9 @@ function getImageDimensions(image) {
     return { width: image.width || image.naturalWidth, height: image.height || image.naturalHeight };
 }
 
-function drawDocumentImage(image, canvas) {
+function drawDocumentImage(image, canvas, longEdge) {
     const { width, height } = getImageDimensions(image);
-    const scale = Math.min(1, DOCUMENT_IMAGE_LONG_EDGE / Math.max(width, height));
+    const scale = Math.min(1, longEdge / Math.max(width, height));
     canvas.width = Math.max(1, Math.round(width * scale));
     canvas.height = Math.max(1, Math.round(height * scale));
     const context = canvas.getContext('2d');
@@ -49,10 +49,11 @@ async function decodeImage(original) {
  * Resizes photos to at most an A4 long edge at 300 DPI and compresses large JPEGs.
  * Keeps smaller JPEGs intact and avoids increasing their size at unchanged dimensions.
  * @param {Blob} original Original photo.
+ * @param {{ longEdge?: number, quality?: number, forceCompression?: boolean }} [options] Compression profile.
  * @returns {Promise<Blob>} JPEG document image.
  * @throws {Error} When the photo cannot be decoded or encoded.
  */
-export async function optimizeDocumentImage(original) {
+export async function optimizeDocumentImage(original, options = {}) {
     const canvas = document.createElement('canvas');
     let decodedImage;
     try {
@@ -61,10 +62,12 @@ export async function optimizeDocumentImage(original) {
         const isJpeg = original.type === 'image/jpeg';
         const { width, height } = getImageDimensions(image);
         const longestEdge = Math.max(width, height);
-        const isWithinDimensions = longestEdge <= DOCUMENT_IMAGE_LONG_EDGE;
-        if (isJpeg && isWithinDimensions && original.size <= DOCUMENT_IMAGE_JPEG_PASSTHROUGH_BYTES) return original;
-        drawDocumentImage(image, canvas);
-        const optimized = await encodeCanvas(canvas, DOCUMENT_IMAGE_JPEG_QUALITY);
+        const longEdge = options.longEdge ?? DOCUMENT_IMAGE_LONG_EDGE;
+        const quality = options.quality ?? DOCUMENT_IMAGE_JPEG_QUALITY;
+        const isWithinDimensions = longestEdge <= longEdge;
+        if (!options.forceCompression && isJpeg && isWithinDimensions && original.size <= DOCUMENT_IMAGE_JPEG_PASSTHROUGH_BYTES) return original;
+        drawDocumentImage(image, canvas, longEdge);
+        const optimized = await encodeCanvas(canvas, quality);
         return isJpeg && isWithinDimensions && optimized.size >= original.size ? original : optimized;
     } catch (error) {
         console.error('Document photo optimization failed.', { errorName: error.name });
