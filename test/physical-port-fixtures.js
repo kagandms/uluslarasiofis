@@ -30,7 +30,10 @@ export async function createPortFixture(database = new QueryDatabase(), bucket) 
             arrayBuffer: async () => object.bytes.slice().buffer };
     };
     const storage = bucket || {
-        put: async (key, bytes, options) => { objects.set(key, { bytes: new Uint8Array(bytes), options }); },
+        put: async (key, bytes, options) => {
+            objects.set(key, { bytes: new Uint8Array(bytes), options });
+            return objectFor(key);
+        },
         head: async key => objectFor(key),
         get: async (key, options) => { const object = objectFor(key); return options?.onlyIf?.etagMatches && options.onlyIf.etagMatches !== object?.etag ? null : object; },
         delete: async keys => { for (const key of Array.isArray(keys) ? keys : [keys]) objects.delete(key); }

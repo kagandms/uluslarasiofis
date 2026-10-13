@@ -104,9 +104,12 @@ async function storeReservedPdf(context, payload) {
     const reserved = await reservePdf(context, payload);
     if (reserved.isReplay) return reserved.file;
     try {
-        await context.environment.DOCUMENTS.put(reserved.file.storage_key, payload.bytes, { httpMetadata: { contentType: 'application/pdf' } });
-        const metadata = await context.environment.DOCUMENTS.head(reserved.file.storage_key);
-        if (!metadata || metadata.size !== payload.bytes.length) throw new ApiError(502, 'PDF_STORAGE_FAILED', 'PDF saklanamadı. Tekrar deneyin.');
+        const storedObject = await context.environment.DOCUMENTS.put(reserved.file.storage_key, payload.bytes, {
+            httpMetadata: { contentType: 'application/pdf' }
+        });
+        if (!storedObject || storedObject.size !== payload.bytes.length) {
+            throw new ApiError(502, 'PDF_STORAGE_FAILED', 'PDF saklanamadı. Tekrar deneyin.');
+        }
         const saved = await context.repository.finalizeFile({ id: context.intake.id, version: payload.version,
             fileId: payload.fileId, now: context.now, staffId: context.staff.id, requestId: context.requestId });
         if (!saved) throw conflict();
@@ -117,7 +120,7 @@ async function storeReservedPdf(context, payload) {
         await discardIncompletePdf(context, reserved.file);
         throw error;
     }
-    return context.repository.file(payload.fileId);
+    return reserved.file;
 }
 
 function createStudentPdfDisposition(intake) {
@@ -137,8 +140,8 @@ export async function savePhysicalPdf(request, context) {
     const fileId = requireFileIdentity(request);
     const version = requirePhysicalVersion(Number(request.headers.get('If-Match')));
     const bytes = await readBoundedPdf(request);
-    await validatePhysicalPdf(bytes);
-    const file = await storeReservedPdf(context, { fileId, version, bytes, sha256: await hashScannerValue(bytes) });
+    const [sha256] = await Promise.all([hashScannerValue(bytes), validatePhysicalPdf(bytes)]);
+    const file = await storeReservedPdf(context, { fileId, version, bytes, sha256 });
     return { saved: true, file_id: file.id };
 }
 

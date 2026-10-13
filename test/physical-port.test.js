@@ -62,6 +62,59 @@ test('physical application PDF uploads accept files above 10 MiB and reject file
     assert.equal(tooLarge.status, 413);
 });
 
+test('physical PDF save uses R2 write metadata and keeps the verified version link', async () => {
+    const context = await createPortFixture();
+    const registration = await registerPortPdf(context);
+    const pdf = await PDFDocument.create();
+    pdf.addPage();
+    const bytes = await pdf.save();
+    const originalHead = context.storage.head;
+    let headCalls = 0;
+    context.storage.head = async key => {
+        headCalls += 1;
+        return originalHead(key);
+    };
+
+    const response = await portRequest(context, `/api/staff/physical-intakes/${registration.detail.intake.id}/pdf`, {
+        method: 'POST', cookie: context.staffCookie,
+        headers: { 'Content-Type': 'application/pdf', 'If-Match': '1', 'X-Pdf-Id': crypto.randomUUID() }, body: bytes
+    });
+
+    assert.equal(response.status, 200, await response.clone().text());
+    const saved = await response.json();
+    const intake = await context.database.prepare('SELECT current_pdf_id FROM physical_intakes WHERE id=?')
+        .bind(registration.detail.intake.id).first();
+    assert.equal(saved.file_id, intake.current_pdf_id);
+    assert.equal(headCalls, 0);
+});
+
+test('physical PDF save does not finalize an R2 write with mismatched size metadata', async () => {
+    const context = await createPortFixture();
+    const registration = await registerPortPdf(context);
+    const previousPdfId = registration.detail.intake.current_pdf_id;
+    const pdf = await PDFDocument.create();
+    pdf.addPage();
+    const bytes = await pdf.save();
+    const originalPut = context.storage.put;
+    context.storage.put = async (key, content, options) => {
+        await originalPut(key, content, options);
+        return { size: content.byteLength + 1 };
+    };
+
+    const response = await portRequest(context, `/api/staff/physical-intakes/${registration.detail.intake.id}/pdf`, {
+        method: 'POST', cookie: context.staffCookie,
+        headers: { 'Content-Type': 'application/pdf', 'If-Match': '1', 'X-Pdf-Id': crypto.randomUUID() }, body: bytes
+    });
+
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error.code, 'PDF_STORAGE_FAILED');
+    assert.equal((await context.database.prepare('SELECT current_pdf_id FROM physical_intakes WHERE id=?')
+        .bind(registration.detail.intake.id).first()).current_pdf_id, previousPdfId);
+    const failedFile = await context.database.prepare("SELECT * FROM physical_intake_files WHERE upload_status='failed'").first();
+    assert.ok(failedFile);
+    assert.equal(context.objects.has(failedFile.storage_key), false);
+});
+
 test('logout, staff deactivation, idle timeout and transfer expiry revoke the phone too', async () => {
     for (const state of ['logout','inactive','idle','expired']) {
         const context = await createPortFixture();
