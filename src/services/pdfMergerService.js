@@ -14,12 +14,20 @@ const COMPRESSION_PROFILES = [
 async function readBytes(input) {
     if (input instanceof Blob) return new Uint8Array(await input.arrayBuffer());
     if (input instanceof ArrayBuffer) return new Uint8Array(input);
+    if (ArrayBuffer.isView(input)) return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
     return new Uint8Array(input);
 }
 
+function getFilePayload(file) {
+    if (file instanceof Blob) return file;
+    const payload = file.bytes;
+    if (payload instanceof Blob || payload instanceof ArrayBuffer || ArrayBuffer.isView(payload)) return payload;
+    return file;
+}
+
 function getInputSize(file) {
-    const input = file.bytes ?? file;
     if (Number.isSafeInteger(file.size)) return file.size;
+    const input = getFilePayload(file);
     if (input instanceof Blob) return input.size;
     return input.byteLength ?? 0;
 }
@@ -109,7 +117,7 @@ async function buildPdf(files, profile, onProgress) {
     const mergedPdf = await PDFDocument.create();
     for (let index = 0; index < files.length; index += 1) {
         const file = files[index];
-        const bytes = await readBytes(file.bytes ?? file);
+        const bytes = await readBytes(getFilePayload(file));
         const mediaType = (file.mediaType || file.type || '').toLowerCase();
         const fileName = file.name || 'Belge';
         const isPdf = mediaType.includes('pdf') || fileName.toLowerCase().endsWith('.pdf');

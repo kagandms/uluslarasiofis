@@ -105,6 +105,17 @@ test('embeds server-validated phone JPEGs without decoding them again in the bro
     assert.equal(mergedPdf.getPageCount(), 1);
 });
 
+test('reads Blob content instead of mistaking Blob.bytes() for an image payload', async () => {
+    const jpegBytes = await readFile(new URL('../header_logo.jpg', import.meta.url));
+    const phonePhoto = new Blob([jpegBytes], { type: 'image/jpeg' });
+    Object.defineProperty(phonePhoto, 'isValidatedTransferPhoto', { value: true });
+
+    const result = await mergeDocumentsToPdf([phonePhoto]);
+    const mergedPdf = await PDFDocument.load(result.bytes);
+
+    assert.equal(mergedPdf.getPageCount(), 1);
+});
+
 test('requires the browser PDF renderer when raster compression is requested', async () => {
     const sourcePdf = await PDFDocument.create();
     sourcePdf.addPage([595, 842]);
