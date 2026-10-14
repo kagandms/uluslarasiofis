@@ -20,7 +20,8 @@ function createFixture(context, seconds = 3600, options = {}) {
     installGlobals(context, dom.window);
     const panel = dom.window.document.querySelector('main');
     const fixture = { dom, panel, clock: { now: 1_800_000_000_000 }, intervals: new Map(), requests: [],
-        photos: [], imported: [], transferCount: 0, batchCount: 0, activeBatchId: null,
+        photos: [], imported: [], downloadMetrics: { active: 0, max: 0 }, downloadDelays: new Map(),
+        transferCount: 0, batchCount: 0, activeBatchId: null,
         phonePaired: options.phonePaired === true, pending: options.pending === true };
     let timerId = 0;
     context.mock.method(Date, 'now', () => fixture.clock.now);
@@ -48,8 +49,24 @@ function createFixture(context, seconds = 3600, options = {}) {
             return Response.json({ batchId: fixture.activeBatchId });
         }
         if (path.endsWith('/close')) return Response.json({ closed: true });
+        if (method === 'DELETE' && !path.includes('/files/')) {
+            const closeStatus = options.closeStatuses?.shift() || (fixture.photos.length ? 409 : 200);
+            if (closeStatus !== 200) return Response.json({ error: {
+                code: closeStatus === 409 ? 'BATCH_PENDING_PHOTOS' : closeStatus === 410 ? 'TRANSFER_EXPIRED' : 'INTERNAL_ERROR',
+                message: 'Bağlantı kapatılamadı.'
+            } }, { status: closeStatus });
+            return Response.json({ closed: true });
+        }
         if (path.includes('/files/')) {
-            if (method === 'GET') return new Response(new Uint8Array([1, 2, 3]));
+            if (method === 'GET') {
+                const photoId = path.split('/').pop();
+                fixture.downloadMetrics.active += 1;
+                fixture.downloadMetrics.max = Math.max(fixture.downloadMetrics.max, fixture.downloadMetrics.active);
+                try {
+                    await new Promise(resolve => setTimeout(resolve, fixture.downloadDelays.get(photoId) || 0));
+                    return new Response(new Uint8Array([1, 2, 3]));
+                } finally { fixture.downloadMetrics.active -= 1; }
+            }
             fixture.photos = fixture.photos.filter(photo => !path.endsWith(photo.id));
             return Response.json({ received: true });
         }
@@ -62,7 +79,8 @@ function createFixture(context, seconds = 3600, options = {}) {
 }
 
 async function tick(fixture, delay) {
-    for (const interval of [...fixture.intervals.values()]) if (interval.delay === delay) interval.callback();
+    const callbacks = [...fixture.intervals.values()].filter(interval => interval.delay === delay).map(interval => interval.callback());
+    await Promise.all(callbacks);
     await settle();
 }
 
@@ -129,11 +147,27 @@ test('only active-batch photos are imported and acknowledged', async (context) =
     fixture.button.click();
     await settle();
     fixture.photos.push({ id: 'photo-1', byte_size: 3 });
-    await tick(fixture, 2000);
+    assert.ok([...fixture.intervals.values()].some(interval => interval.delay === 1000));
+    await tick(fixture, 1000);
 
     assert.equal(fixture.imported.length, 1);
     assert.equal(fixture.imported[0].isValidatedTransferPhoto, true);
     assert.ok(fixture.requests.some(request => request.path.endsWith('/files/photo-1') && request.method === 'DELETE'));
+});
+
+test('pending photos download two at a time while the PC import order stays stable', async (context) => {
+    const fixture = createFixture(context);
+    fixture.button.click();
+    await settle();
+    fixture.photos.push({ id: 'photo-1', byte_size: 3 }, { id: 'photo-2', byte_size: 3 }, { id: 'photo-3', byte_size: 3 });
+    fixture.downloadDelays.set('photo-1', 20);
+
+    await tick(fixture, 1000);
+
+    assert.equal(fixture.downloadMetrics.max, 2);
+    assert.deepEqual(fixture.imported.map(file => file.name), [
+        'Telefondan_photo-1.jpg', 'Telefondan_photo-2.jpg', 'Telefondan_photo-3.jpg'
+    ]);
 });
 
 test('closing a modal closes its batch but preserves the unexpired transfer', async (context) => {
@@ -149,4 +183,89 @@ test('closing a modal closes its batch but preserves the unexpired transfer', as
     assert.equal(fixture.requests.some(request => request.path === `/api/staff/mobile-transfers/${transferId}` && request.method === 'DELETE'), false);
     assert.equal(fixture.session.getSnapshot().transfer.id, transferId);
     assert.equal(fixture.intervals.size, 0);
+});
+
+test('ending a transfer stops PC requests and requires a newly created QR', async (context) => {
+    const fixture = createFixture(context, 3600, { phonePaired: true });
+    fixture.button.click();
+    await settle();
+    const oldTransferId = fixture.session.getSnapshot().transfer.id;
+    const endButton = fixture.panel.querySelector('[data-action="end-transfer"]');
+    assert.equal(endButton.nextElementSibling.textContent, 'İşiniz bittiyse bağlantıyı kapatın.');
+    assert.equal(endButton.nextElementSibling.hidden, false);
+
+    endButton.click();
+    await settle();
+    const requestCount = fixture.requests.length;
+    await tick(fixture, 1000);
+
+    assert.equal(fixture.session.getSnapshot().transfer, null);
+    assert.equal(fixture.requests.length, requestCount);
+    assert.equal(endButton.hidden, true);
+    assert.equal(endButton.nextElementSibling.hidden, true);
+    assert.match(fixture.panel.textContent, /Yeniden bağlanmak için yeni QR/);
+    fixture.button.click();
+    await settle();
+    assert.notEqual(fixture.session.getSnapshot().transfer.id, oldTransferId);
+    assert.equal(fixture.requests.filter(request => request.path === '/api/staff/mobile-transfers').length, 2);
+});
+
+test('failed transfer closure preserves the session so staff can retry', async (context) => {
+    const fixture = createFixture(context, 3600, { closeStatuses: [503, 200] });
+    fixture.button.click();
+    await settle();
+    const transferId = fixture.session.getSnapshot().transfer.id;
+    const endButton = fixture.panel.querySelector('[data-action="end-transfer"]');
+
+    endButton.click();
+    await settle();
+
+    assert.equal(fixture.session.getSnapshot().transfer.id, transferId);
+    assert.match(fixture.panel.textContent, /Bağlantı kapatılmadı/);
+    assert.equal(endButton.disabled, false);
+    endButton.click();
+    await settle();
+    assert.equal(fixture.session.getSnapshot().transfer, null);
+});
+
+test('ending a transfer preserves files already imported into the PC', async (context) => {
+    const fixture = createFixture(context);
+    fixture.button.click();
+    await settle();
+    fixture.photos.push({ id: 'photo-1', byte_size: 3 });
+    await tick(fixture, 1000);
+    const importedFile = fixture.imported[0];
+
+    fixture.panel.querySelector('[data-action="end-transfer"]').click();
+    await settle();
+
+    assert.equal(fixture.session.getSnapshot().transfer, null);
+    assert.equal(fixture.imported[0], importedFile);
+});
+
+test('pending server photos keep the QR connection open', async (context) => {
+    const fixture = createFixture(context);
+    fixture.button.click();
+    await settle();
+    const transferId = fixture.session.getSnapshot().transfer.id;
+    fixture.photos.push({ id: 'photo-1', byte_size: 3 });
+
+    fixture.panel.querySelector('[data-action="end-transfer"]').click();
+    await settle();
+
+    assert.equal(fixture.session.getSnapshot().transfer.id, transferId);
+    assert.equal(fixture.photos.length, 1);
+    assert.match(fixture.panel.textContent, /Bağlantı kapatılmadı/);
+});
+
+test('retrying after the server already ended a transfer clears the old connection', async (context) => {
+    const fixture = createFixture(context, 3600, { closeStatuses: [410] });
+    fixture.button.click();
+    await settle();
+
+    fixture.panel.querySelector('[data-action="end-transfer"]').click();
+    await settle();
+
+    assert.equal(fixture.session.getSnapshot().transfer, null);
+    assert.match(fixture.button.textContent, /Yeni QR/);
 });

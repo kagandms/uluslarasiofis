@@ -1,5 +1,7 @@
 import { DOCUMENT_IMAGE_LONG_EDGE, DOCUMENT_IMAGE_JPEG_QUALITY, DOCUMENT_IMAGE_JPEG_PASSTHROUGH_BYTES } from '../config/mobile-transfer-policy.js';
 
+const OCR_MAX_LONG_EDGE = 2048;
+
 function encodeCanvas(canvas, quality) {
     return new Promise((resolve, reject) => canvas.toBlob(blob => {
         if (!blob) return reject(new Error('Belge görseli oluşturulamadı.'));
@@ -75,5 +77,22 @@ export async function optimizeDocumentImage(original, options = {}) {
     } finally {
         decodedImage?.cleanup();
         canvas.width = canvas.height = 0;
+    }
+}
+
+/** Encodes an OCR canvas within Safari's working-size limit without changing the source.
+ * @param {HTMLCanvasElement} sourceCanvas Source document canvas.
+ * @returns {Promise<Blob>} JPEG at a maximum long edge of 2048 pixels.
+ * @throws {Error} When dimensions, canvas context or encoding are unavailable.
+ */
+export async function encodeOcrCanvas(sourceCanvas) {
+    if (!(sourceCanvas?.width > 0) || !(sourceCanvas?.height > 0)) throw new Error('OCR görsel boyutları geçersiz.');
+    const isOversized = Math.max(sourceCanvas.width, sourceCanvas.height) > OCR_MAX_LONG_EDGE;
+    const canvas = isOversized ? document.createElement('canvas') : sourceCanvas;
+    try {
+        if (isOversized) drawDocumentImage(sourceCanvas, canvas, OCR_MAX_LONG_EDGE);
+        return await encodeCanvas(canvas, 0.85);
+    } finally {
+        if (isOversized) canvas.width = canvas.height = 0;
     }
 }

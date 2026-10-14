@@ -9,8 +9,11 @@ import { rolldown } from 'rolldown';
 
 async function loadMerger() {
     const bundle = await rolldown({ platform:'browser', input:fileURLToPath(new URL('../src/ui/pdfMergerModal.js', import.meta.url)),
-        plugins:[{ name:'test-css', resolveId:source => source.endsWith('.css') ? 'virtual:css' : null,
-            load:id => id === 'virtual:css' ? 'export default ""' : null }] });
+        plugins:[{ name:'test-browser-assets', resolveId:source => {
+            if (source.endsWith('.css')) return 'virtual:css';
+            if (source.endsWith('pdfjs-bootstrap.js')) return 'virtual:pdfjs';
+            return null;
+        }, load:id => ['virtual:css', 'virtual:pdfjs'].includes(id) ? 'export default ""' : null }] });
     try {
         const {output} = await bundle.generate({format:'esm'});
         const directory = mkdtempSync(join(tmpdir(),'physical-modal-test-'));
@@ -23,7 +26,9 @@ async function loadMerger() {
 test('PC file and camera selection append documents and expose the separate phone transfer control', async () => {
     const dom = new JSDOM('<body></body>',{pretendToBeVisual:true});
     const originals = new Map();
-    for (const [key,value] of Object.entries({document:dom.window.document,window:dom.window,MutationObserver:dom.window.MutationObserver,requestAnimationFrame:dom.window.requestAnimationFrame.bind(dom.window)})) {
+    for (const [key,value] of Object.entries({document:dom.window.document,window:dom.window,MutationObserver:dom.window.MutationObserver,
+        IntersectionObserver:class { observe() {} unobserve() {} disconnect() {} },
+        requestAnimationFrame:dom.window.requestAnimationFrame.bind(dom.window)})) {
         originals.set(key,Object.getOwnPropertyDescriptor(globalThis,key));
         Object.defineProperty(globalThis,key,{configurable:true,value});
     }

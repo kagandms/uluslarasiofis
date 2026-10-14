@@ -21,21 +21,40 @@
     max-height: none !important;
     overflow: visible !important;
 }
-.pdf-merger-documents .pdf-merger-file-list > div {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    padding: 2px 8px !important;
-    min-width: 0;
-}
-.pdf-merger-documents .pdf-merger-file-list > div > div:first-child { min-width: 0; gap: 5px !important; }
-.pdf-merger-documents .pdf-merger-file-list > div > div:first-child > span:last-child { display: none; }
-.pdf-merger-documents .pdf-merger-file-list > div > div:last-child { gap: 2px !important; }
-.pdf-merger-documents .pdf-merger-file-list > div > div:last-child .btn { min-height: 30px; padding: 2px 5px !important; }
+.pdf-merger-file-card { position: relative; display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--card-border, #ddd); border-radius: 8px; background: var(--card-bg, #faf8f9); }
+.pdf-merger-list-hint { margin: 0 0 10px; color: var(--text-secondary, #64748b); font-size: .8rem; }
+.pdf-merger-file-position { position: absolute; z-index: 1; top: 7px; left: 7px; min-width: 22px; padding: 2px 4px; border-radius: 5px; background: var(--accent, #7e1830); color: #fff; font-size: .75rem; text-align: center; pointer-events: none; }
+.pdf-merger-thumbnail { display: grid; place-items: center; width: 72px; height: 96px; min-height: 0; padding: 0; border: 1px solid var(--card-border, #ddd); border-radius: 5px; background: #fff; color: #64748b; overflow: hidden; font-size: .75rem; }
+.pdf-merger-thumbnail img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.pdf-merger-file-details { display: flex; flex-direction: column; justify-content: center; gap: 7px; min-width: 0; }
+.pdf-merger-file-details strong { font-size: .9rem; }
+.pdf-merger-file-source { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary, #64748b); font-size: .75rem; }
+.pdf-merger-file-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.pdf-merger-file-actions .btn { min-width: 32px; min-height: 34px; padding: 4px 7px; font-size: .9rem; }
+.pdf-merger-file-actions .pdf-merger-drag-handle { cursor: grab; touch-action: auto; }
+.pdf-merger-file-card.is-dragging { opacity: .45; }
+.pdf-merger-file-card.drop-before { box-shadow: 0 -4px var(--accent, #7e1830); }
+.pdf-merger-file-card.drop-after { box-shadow: 0 4px var(--accent, #7e1830); }
+.pdf-merger-empty-list { grid-column: 1 / -1; padding: 22px; text-align: center; color: var(--text-secondary, #64748b); }
+.pdf-merger-modal-card { position: relative; }
+.pdf-merger-preview { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; gap: 12px; padding: 16px; background: var(--card-bg, #fff); }
+.pdf-merger-preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pdf-merger-preview-header button { min-height: 40px; padding: 8px 12px; font-size: .85rem; }
+.pdf-merger-preview-content { display: block; width: 100%; min-height: 0; flex: 1; object-fit: contain; border: 0; }
 .pdf-merger-documents .pdf-merger-dropzone { padding: 10px !important; margin-bottom: 10px !important; }
 .pdf-merger-transfer { min-width: 0; min-height: 0; overflow-y: auto; padding-left: 16px; border-left: 1px solid var(--card-border, #ddd); }
 .pdf-merger-transfer [hidden] { display: none !important; }
 .pdf-merger-transfer > .btn { width: 100%; padding: 9px 12px; }
+.pdf-merger-transfer > .btn[data-action="end-transfer"] {
+    margin-top: 12px;
+    min-height: 40px;
+    padding: 7px 12px;
+    font-size: .85rem;
+    background: transparent;
+    color: var(--text-secondary, #64748b);
+    border: 1px solid var(--card-border, #ddd);
+}
+.pdf-merger-transfer .transfer-end-hint { display: block; margin: 6px 0 12px; }
 .pdf-merger-transfer .transfer-qr canvas { display: block; width: min(100%, 220px); height: auto; margin: 8px auto; }
 .pdf-merger-transfer > p { font-size: .85rem; margin: 8px 0; }
 .pdf-merger-transfer .transfer-instructions { margin: 10px 0 0; padding: 8px; }

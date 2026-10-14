@@ -88,10 +88,8 @@ async function accessPhoto(request, environment, transfer, photoId) {
         return { received: true };
     }
     requireMethod(request, 'GET');
-    const head = await environment.DOCUMENTS.head(file.storage_key);
-    if (!head || head.size !== file.byte_size) throw new ApiError(404, 'PHOTO_NOT_FOUND', 'Fotoğraf bulunamadı.');
-    const object = await environment.DOCUMENTS.get(file.storage_key, { onlyIf: { etagMatches: head.etag } });
-    if (!object || object.etag !== head.etag) throw new ApiError(409, 'PHOTO_CHANGED', 'Fotoğraf değişti.');
+    const object = await environment.DOCUMENTS.get(file.storage_key);
+    if (!object || object.size !== file.byte_size) throw new ApiError(404, 'PHOTO_NOT_FOUND', 'Fotoğraf bulunamadı.');
     const bytes = new Uint8Array(await object.arrayBuffer());
     if (bytes.length !== file.byte_size || await hashScannerValue(bytes) !== file.sha256) throw new ApiError(409, 'PHOTO_CHANGED', 'Fotoğraf değişti.');
     return new Response(bytes, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
@@ -114,6 +112,13 @@ async function routeStaffTransfer(request, environment, pathname) {
     if (staffMatch[2]) return accessPhoto(request, environment, transfer, staffMatch[2]);
     if (request.method === 'DELETE') {
         requireSameOrigin(request);
+        const closed = await environment.DB.prepare(`UPDATE mobile_document_transfers SET expires_at=0
+            WHERE id=? AND expires_at>? AND NOT EXISTS (
+                SELECT 1 FROM mobile_document_transfer_files WHERE transfer_id=?
+                AND upload_status IN ('uploading','finalized'))`)
+            .bind(transfer.id, nowSeconds(), transfer.id).run();
+        if (closed.meta.changes !== 1) throw new ApiError(409, 'BATCH_PENDING_PHOTOS',
+            'Aktarılan veya PC’ye alınmamış fotoğraflar var. Önce aktarımı tamamlayın.');
         await removeTransfer(environment, staffMatch[1]);
         return { closed: true };
     }
@@ -182,8 +187,7 @@ export async function handleMobileTransfer(request, environment) {
  */
 export async function cleanupMobileTransfers(environment) {
     if (!['staging', 'production'].includes(environment.APP_ENV) || !environment.DB || !environment.DOCUMENTS) return;
-    const schema = await environment.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='mobile_transfer_rate_limits'").first();
-    if (!schema) return;
+    if (!await hasPhysicalTransferSchema(environment)) return;
     await environment.DB.prepare('DELETE FROM mobile_transfer_rate_limits WHERE window<?').bind(Math.floor(Date.now()/60000)-60).run();
     const expired = await environment.DB.prepare('SELECT id FROM mobile_document_transfers WHERE expires_at<=? LIMIT 20').bind(nowSeconds()).all();
     for (const transfer of expired.results) await removeTransfer(environment, transfer.id);

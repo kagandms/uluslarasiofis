@@ -1,3 +1,5 @@
+import { readSynchronizedNow, synchronizeClock } from '../shared/clock.js';
+
 /**
  * Live Digital Clock for Header
  * Updates every second with current time (HH:mm:ss) and localized date.
@@ -9,10 +11,9 @@
  * @returns {string} e.g. "14:05:09"
  */
 export function formatClockTime(date = new Date()) {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    return `${hours}:${minutes}:${seconds}`;
+    return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+    }).format(date);
 }
 
 /**
@@ -22,15 +23,11 @@ export function formatClockTime(date = new Date()) {
  * @returns {string} e.g. "5 Ekim 2026, Pazartesi"
  */
 export function formatClockDate(date = new Date(), locale = 'tr-TR') {
-    try {
-        const day = date.getDate();
-        const month = date.toLocaleDateString(locale, { month: 'long' });
-        const year = date.getFullYear();
-        const weekday = date.toLocaleDateString(locale, { weekday: 'long' });
-        return `${day} ${month} ${year}, ${weekday}`;
-    } catch {
-        return date.toLocaleDateString(locale);
-    }
+    const parts = new Intl.DateTimeFormat(locale, {
+        timeZone: 'Europe/Istanbul', day: 'numeric', month: 'long', year: 'numeric', weekday: 'long'
+    }).formatToParts(date);
+    const calendar = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+    return `${calendar.day} ${calendar.month} ${calendar.year}, ${calendar.weekday}`;
 }
 
 /**
@@ -82,7 +79,7 @@ export function initLiveClock(options = {}) {
 
     function render() {
         if (isDestroyed) return;
-        const now = new Date();
+        const now = readSynchronizedNow();
         const timeStr = formatClockTime(now);
         timeEls.forEach((el) => {
             if (el && el.textContent !== timeStr) el.textContent = timeStr;
@@ -97,13 +94,26 @@ export function initLiveClock(options = {}) {
         }
     }
 
-    // Initial immediate render
+    const clockController = new AbortController();
+    async function synchronizeServerTime() {
+        const startedAt = Date.now();
+        try {
+            const response = await fetch('/', { method: 'HEAD', cache: 'no-store', signal: clockController.signal });
+            if (!isDestroyed && response.ok) {
+                synchronizeClock(response.headers.get('Date'), { startedAt, receivedAt: Date.now() });
+                render();
+            }
+        } catch (error) {
+            if (error.name !== 'AbortError') console.warn('Server clock synchronization unavailable.', { errorName: error.name });
+        }
+    }
     render();
+    void synchronizeServerTime();
 
     // Synchronize interval with exact second roll-over
     function startTicker() {
         if (isDestroyed) return;
-        const now = new Date();
+        const now = readSynchronizedNow();
         const msUntilNextSecond = 1000 - now.getMilliseconds();
 
         timeoutId = setTimeout(() => {
@@ -137,6 +147,7 @@ export function initLiveClock(options = {}) {
 
     return function destroy() {
         isDestroyed = true;
+        clockController.abort();
         if (intervalId) clearInterval(intervalId);
         if (timeoutId) clearTimeout(timeoutId);
         if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {

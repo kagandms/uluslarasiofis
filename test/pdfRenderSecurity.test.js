@@ -35,3 +35,20 @@ test('untrusted student fields remain text in generated PDF and print markup', a
         dom.window.close();
     }
 });
+
+test('cover markup preserves Cyrillic, Arabic and Turkish names in both PDF and print paths', async context => {
+    const dom = new JSDOM('<html><body></body></html>');
+    const restoreDocument = setGlobal('document', dom.window.document);
+    const restoreWindow = setGlobal('window', dom.window);
+    context.after(() => { restoreWindow(); restoreDocument(); dom.window.close(); });
+    const { getDocumentHtml } = await import('../src/services/pdfGenerator.js');
+    const names = 'Александр أحمد Çağrı';
+
+    for (const isPrint of [false, true]) {
+        const markup = getDocumentHtml('', '', '', '', names, names, '', '', '', '', '', 2026, '', isPrint);
+        const output = new JSDOM(markup);
+
+        assert.ok(output.window.document.body.textContent.includes(names));
+        output.window.close();
+    }
+});

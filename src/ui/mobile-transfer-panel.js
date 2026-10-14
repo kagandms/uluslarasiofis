@@ -1,6 +1,9 @@
 import QRCode from 'qrcode';
 import { mobileTransferSession } from '../services/mobile-transfer-session.js';
 
+const PHOTO_POLL_INTERVAL_MS = 1000;
+const PHOTO_DOWNLOAD_CONCURRENCY = 2;
+
 function showStatus(state, message) {
     state.status.textContent = message;
 }
@@ -80,7 +83,7 @@ function showBatchError(state, error) {
 }
 
 async function openPairing(state, options = {}) {
-    if (state.isOpening || state.lifecycle.signal.aborted) return;
+    if (state.isOpening || state.isClosing || state.lifecycle.signal.aborted) return;
     const current = state.session.getSnapshot();
     if (!options.discardPending && current.transfer?.expiresAt * 1000 > Date.now() && state.batchId) {
         await renderPairing(state);
@@ -94,6 +97,8 @@ async function openPairing(state, options = {}) {
         const activated = await state.session.activateBatch(options);
         state.transfer = activated.transfer;
         state.batchId = activated.batchId;
+        state.endButton.hidden = false;
+        state.endHint.hidden = false;
         if (!state.container.isConnected || state.lifecycle.signal.aborted) return closeBatch(state, state.batchId);
         await renderPairing(state);
     } catch (error) {
@@ -103,13 +108,48 @@ async function openPairing(state, options = {}) {
     } finally { state.isOpening = false; }
 }
 
-async function importPhoto(state, file) {
+function resetClosedTransfer(state) {
+    stopCountdown(state);
+    state.transfer = null;
+    state.batchId = null;
+    state.received.clear();
+    state.qr.replaceChildren();
+    state.countdown.hidden = state.endButton.hidden = state.discardButton.hidden = true;
+    state.endHint.hidden = true;
+    state.button.textContent = '📱 Yeni QR oluştur';
+    showStatus(state, 'QR bağlantısı bitirildi. Yeniden bağlanmak için yeni QR oluşturun.');
+}
+
+async function endTransfer(state) {
+    if (state.isClosing || state.isOpening || !state.transfer || state.lifecycle.signal.aborted) return;
+    if (state.isPolling) {
+        showStatus(state, 'Fotoğraf kontrolü veya alımı sürüyor. Tamamlandıktan sonra bağlantıyı bitirin.');
+        return;
+    }
+    state.isClosing = state.button.disabled = state.endButton.disabled = true;
+    try {
+        await state.session.closeTransfer();
+        if (!state.lifecycle.signal.aborted) resetClosedTransfer(state);
+    } catch (error) {
+        console.warn('Phone transfer close failed.', { errorName: error.name, code: error.code });
+        if (!state.lifecycle.signal.aborted) showStatus(state, `${error.message} Bağlantı kapatılmadı.`);
+    } finally {
+        state.isClosing = state.endButton.disabled = false;
+        state.button.disabled = Boolean(state.transfer && state.session.getSnapshot().isPhonePaired);
+    }
+}
+
+async function downloadPhoto(state, file) {
     const path = `/api/staff/mobile-transfers/${state.transfer.id}/files/${file.id}`;
     const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal: state.lifecycle.signal });
     if (!response.ok) throw new Error('Fotoğraf PC’ye alınamadı; bağlantıyı kontrol edin.');
     const blob = await response.blob();
-    if (state.lifecycle.signal.aborted) return;
-    const importedFile = new File([blob], `Telefondan_${file.id}.jpg`, { type: 'image/jpeg' });
+    if (state.lifecycle.signal.aborted) return null;
+    return new File([blob], `Telefondan_${file.id}.jpg`, { type: 'image/jpeg' });
+}
+
+async function importPhoto(state, file, importedFile) {
+    if (!importedFile || state.lifecycle.signal.aborted) return;
     Object.defineProperty(importedFile, 'isValidatedTransferPhoto', { value: true });
     state.receiveFiles([importedFile]);
     await state.session.consumePhoto(state.transfer.id, state.batchId, file.id);
@@ -117,8 +157,19 @@ async function importPhoto(state, file) {
     showStatus(state, `${state.received.size} fotoğraf PC’ye alındı. Listeyi kontrol edin.`);
 }
 
+async function importPhotos(state, files) {
+    for (let offset = 0; offset < files.length; offset += PHOTO_DOWNLOAD_CONCURRENCY) {
+        const batch = files.slice(offset, offset + PHOTO_DOWNLOAD_CONCURRENCY);
+        const downloads = await Promise.allSettled(batch.map(async file => ({ file, importedFile: await downloadPhoto(state, file) })));
+        for (const download of downloads) {
+            if (download.status === 'rejected') throw download.reason;
+            await importPhoto(state, download.value.file, download.value.importedFile);
+        }
+    }
+}
+
 async function pollPhotos(state) {
-    if (state.isPolling || !state.transfer || !state.batchId || !state.container.isConnected) return;
+    if (state.isPolling || state.isClosing || !state.transfer || !state.batchId || !state.container.isConnected) return;
     state.isPolling = true;
     try {
         if (state.transfer.expiresAt * 1000 <= Date.now()) {
@@ -131,10 +182,7 @@ async function pollPhotos(state) {
             showStatus(state, 'Öğrenci aktarım partisi değişti. Bu pencereyi yenileyin.');
             return;
         }
-        for (const file of payload.files) {
-            if (state.lifecycle.signal.aborted || state.batchId !== payload.batchId) break;
-            await importPhoto(state, file);
-        }
+        if (!state.lifecycle.signal.aborted && state.batchId === payload.batchId) await importPhotos(state, payload.files);
     } catch (error) {
         if (!state.lifecycle.signal.aborted) {
             console.warn('Phone photo polling failed.', { errorName: error.name });
@@ -161,7 +209,7 @@ function createTransferInstructions() {
         steps.append(step);
     }
     const hint = document.createElement('p');
-    hint.textContent = 'Telefon bağlantısı QR oluşturulduktan sonra 1 saat sürer. Öğrenci değişince eski seçili fotoğrafları telefondan kaldırın.';
+    hint.textContent = 'Telefon bağlantısı QR oluşturulduktan sonra 1 saat sürer. İşiniz bitince “QR bağlantısını bitir” ile kapatın; tekrar bağlanmak için yeni QR gerekir. Öğrenci değişince eski seçili fotoğrafları telefondan kaldırın.';
     instructions.append(title, steps, hint);
     return instructions;
 }
@@ -176,6 +224,17 @@ function createPanelState(container, receiveFiles, session) {
     discardButton.className = 'btn btn-outline';
     discardButton.textContent = 'Bekleyen fotoğrafları silip devam et';
     discardButton.hidden = true;
+    const endButton = document.createElement('button');
+    endButton.type = 'button';
+    endButton.className = 'btn btn-outline';
+    endButton.textContent = 'QR bağlantısını bitir';
+    endButton.dataset.action = 'end-transfer';
+    endButton.hidden = true;
+    const endHint = document.createElement('small');
+    endHint.className = 'transfer-end-hint';
+    endHint.textContent = 'İşiniz bittiyse bağlantıyı kapatın.';
+    endHint.style.color = '#6b7280';
+    endHint.hidden = true;
     const qr = document.createElement('div');
     qr.className = 'transfer-qr';
     const countdown = document.createElement('small');
@@ -190,9 +249,9 @@ function createPanelState(container, receiveFiles, session) {
     qrSection.className = 'transfer-qr-section';
     qrSection.style.textAlign = 'center';
     qrSection.append(qr, countdown);
-    container.append(button, discardButton, qrSection, status, createTransferInstructions());
-    return { container, receiveFiles, session, button, discardButton, qr, countdown, status, transfer: null, batchId: null,
-        countdownTimer: null, received: new Set(), lifecycle: new AbortController(), isPolling: false, isOpening: false };
+    container.append(button, discardButton, endButton, endHint, qrSection, status, createTransferInstructions());
+    return { container, receiveFiles, session, button, discardButton, endButton, endHint, qr, countdown, status, transfer: null, batchId: null,
+        countdownTimer: null, received: new Set(), lifecycle: new AbortController(), isPolling: false, isOpening: false, isClosing: false };
 }
 
 /** Connects a phone to the active student batch and reuses its paired session between modal instances. */
@@ -200,11 +259,13 @@ export function mountMobileTransferPanel(container, receiveFiles, session = mobi
     const state = createPanelState(container, receiveFiles, session);
     const openQr = () => openPairing(state);
     const discardPending = () => openPairing(state, { discardPending: true });
+    const endConnection = () => endTransfer(state);
     const refreshCountdown = () => updateCountdown(state);
     state.button.addEventListener('click', openQr);
     state.discardButton.addEventListener('click', discardPending);
+    state.endButton.addEventListener('click', endConnection);
     document.addEventListener('visibilitychange', refreshCountdown);
-    const timer = setInterval(() => pollPhotos(state), 2000);
+    const timer = setInterval(() => pollPhotos(state), PHOTO_POLL_INTERVAL_MS);
     const observer = new MutationObserver(() => {
         if (container.isConnected) return;
         observer.disconnect();
@@ -218,6 +279,7 @@ export function mountMobileTransferPanel(container, receiveFiles, session = mobi
         stopCountdown(state);
         state.button.removeEventListener('click', openQr);
         state.discardButton.removeEventListener('click', discardPending);
+        state.endButton.removeEventListener('click', endConnection);
         document.removeEventListener('visibilitychange', refreshCountdown);
     }, { once: true });
     if (state.session.getSnapshot().transfer?.expiresAt * 1000 > Date.now()) void openPairing(state);

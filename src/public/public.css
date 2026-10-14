@@ -113,8 +113,8 @@ a { color: inherit; }
     font-size: 0.82rem;
     color: #667085;
     font-weight: 500;
-    border-left: 1px solid #e5e7eb;
-    padding-left: 10px;
+    border-inline-start: 1px solid #e5e7eb;
+    padding-inline-start: 10px;
     white-space: nowrap;
     line-height: 1;
 }
@@ -422,7 +422,7 @@ html[dir="rtl"] input[name="passport_number"],
 html[dir="rtl"] input[name="student_number"],
 html[dir="rtl"] input[name="fingerprint_code"] {
     direction: ltr;
-    text-align: right;
+    text-align: end;
     unicode-bidi: plaintext;
 }
 
@@ -1013,7 +1013,7 @@ body[data-page="home"] .status-timeline-step.scroll-reveal-item.is-revealed .sta
 .public-modal-overlay {
     position: fixed;
     top: 0;
-    left: 0;
+    inset-inline-start: 0;
     width: 100%;
     height: 100%;
     background: rgba(15, 23, 42, 0.65);

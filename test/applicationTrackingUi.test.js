@@ -315,3 +315,34 @@ test('tracking supports all locales and the public main entry keeps Arabic right
         dom.window.close();
     }
 });
+
+test('language changes preserve unsent physical codes and cached online tracking without new lookups', async () => {
+    const { document, root } = createTrackingRoot();
+    let lookups = 0;
+    const api = { lookupApplicationTracking: async () => { lookups += 1; return { found: true, ...createTrackingDto() }; } };
+    await initializeApplicationTracking(root, api);
+    const physical = root.querySelector('#physical-tracking-reference');
+    physical.value = 'ITU-26-ABCDEFG';
+    physical.dispatchEvent(new document.defaultView.Event('input'));
+    const online = root.querySelector('#tracking-student-number');
+    online.value = 'TRACK-STUDENT-1';
+    online.dispatchEvent(new document.defaultView.Event('input'));
+
+    for (const locale of ['en', 'ar']) {
+        document.documentElement.lang = locale;
+        document.dispatchEvent(new document.defaultView.Event('public:locale-changed'));
+        assert.equal(root.querySelector('#physical-tracking-reference').value, 'ITU-26-ABCDEFG');
+        assert.equal(root.querySelector('#tracking-student-number').value, 'TRACK-STUDENT-1');
+    }
+    root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { cancelable: true }));
+    await new Promise(resolve => setImmediate(resolve));
+    for (const locale of ['tr', 'en', 'ar']) {
+        document.documentElement.lang = locale;
+        document.dispatchEvent(new document.defaultView.Event('public:locale-changed'));
+        assert.match(root.querySelector('.tracking-summary').textContent, /TRACK-STUDENT-1/);
+        assert.equal(root.querySelector('#physical-tracking-reference').value, 'ITU-26-ABCDEFG');
+    }
+
+    assert.equal(lookups, 1);
+    document.defaultView.close();
+});

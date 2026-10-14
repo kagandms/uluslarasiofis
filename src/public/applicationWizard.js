@@ -425,7 +425,8 @@ function isFingerprintUploadEligible(application) {
 }
 
 function canContinueResidenceStep(form, fields) {
-    return Boolean(form?.checkValidity() && isFingerprintUploadEligible(fields));
+    const birthDate = form?.querySelector('[name="date_of_birth"]')?.value;
+    return Boolean(form?.checkValidity() && calculateCurrentUnder18(birthDate) !== null && isFingerprintUploadEligible(fields));
 }
 
 function getAddressEvidenceMessageKey(value) {
@@ -931,9 +932,7 @@ function isReviewFieldValid(field, application) {
     if (field === 'student_phone') return isValidPhoneNumber(value) && value.trim().length <= 40;
     if (field === 'address_evidence_type') return ['rental_contract', 'residence_certificate', 'undertaking'].includes(value);
     if (field === 'date_of_birth') {
-        if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
-        const date = new Date(`${value}T00:00:00.000Z`);
-        return Number.isFinite(date.valueOf()) && date.toISOString().slice(0, 10) === value && date.valueOf() <= Date.now();
+        return calculateCurrentUnder18(value) !== null;
     }
     if (field === 'student_number') return typeof value === 'string' && value.trim().length > 0 && value.length <= 64;
     return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 255;

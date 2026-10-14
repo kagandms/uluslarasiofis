@@ -135,3 +135,23 @@ for (const failure of [{ hasDecodeError: true }, { hasContext: false }, { hasEnc
         assert.equal(canvas.height, 0);
     });
 }
+
+test('OCR encoding caps its long edge at 2048 and releases only its temporary canvas', async context => {
+    const { calls, canvas } = mockImageEnvironment(context);
+    const source = { width: 8000, height: 6000 };
+    const { encodeOcrCanvas } = await import('../src/services/optimize-document-image.js');
+
+    const blob = await encodeOcrCanvas(source);
+
+    assert.equal(blob.type, 'image/jpeg');
+    assert.deepEqual(calls.dimensions, [{ width: 2048, height: 1536 }]);
+    assert.deepEqual(source, { width: 8000, height: 6000 });
+    assert.equal(canvas.width, 0);
+});
+
+test('OCR encoding rejects null blobs and empty canvases before upload', async () => {
+    const { encodeOcrCanvas } = await import('../src/services/optimize-document-image.js');
+
+    await assert.rejects(encodeOcrCanvas({ width: 100, height: 100, toBlob: callback => callback(null) }), /oluşturulamadı/);
+    await assert.rejects(encodeOcrCanvas({ width: 0, height: 100 }), /boyutları geçersiz/);
+});

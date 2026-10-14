@@ -2,7 +2,7 @@ export const PRINT_LOCALES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 
 export const PRINT_MESSAGES = Object.freeze({
     tr: Object.freeze({
-        languageLabel: 'Dil', quickGuideTitle: 'Nasıl yazdırırım?', downloadGuide: 'Beş dilde A4 rehberini indir',
+        languageLabel: 'Dil', quickGuideTitle: 'Nasıl yazdırırım?',
         guideAdd: '“Dosya Ekle”ye dokunun, belgenizi seçin.',
         guideSettings: 'Sayfaları ve kopya sayısını seçin.',
         guidePrint: '“Tümünü Yazdır”a bir kez dokunun, bekleyin.',
@@ -50,7 +50,7 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Dosyanız yazıcıya gönderiliyor.', statusChecking: 'Gönderim durumu kontrol ediliyor…'
     }),
     en: Object.freeze({
-        languageLabel: 'Language', quickGuideTitle: 'How to print', downloadGuide: 'Download the A4 guide in five languages',
+        languageLabel: 'Language', quickGuideTitle: 'How to print',
         guideAdd: 'Tap “Add files” and select your document.',
         guideSettings: 'Choose the pages and number of copies.',
         guidePrint: 'Tap “Print all” once and wait.',
@@ -99,7 +99,7 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Your file is being sent to the printer.', statusChecking: 'Checking submission status…'
     }),
     ru: Object.freeze({
-        languageLabel: 'Язык', quickGuideTitle: 'Как распечатать документ', downloadGuide: 'Скачать инструкцию A4 на пяти языках',
+        languageLabel: 'Язык', quickGuideTitle: 'Как распечатать документ',
         guideAdd: 'Нажмите «Добавить файлы» и выберите документ.',
         guideSettings: 'Выберите страницы и количество копий.',
         guidePrint: 'Нажмите «Печатать всё» один раз и подождите.',
@@ -157,7 +157,7 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Файл отправляется на принтер.', statusChecking: 'Проверка состояния отправки…'
     }),
     tk: Object.freeze({
-        languageLabel: 'Dil', quickGuideTitle: 'Nädip çap etmeli?', downloadGuide: 'A4 gollanmasyny bäş dilde ýükläň',
+        languageLabel: 'Dil', quickGuideTitle: 'Nädip çap etmeli?',
         guideAdd: '“Faýl goş” düwmesine basyň, resminamany saýlaň.',
         guideSettings: 'Sahypalary we nusga sanyny saýlaň.',
         guidePrint: '“Hemmesini çap et” düwmesine bir gezek basyň, garaşyň.',
@@ -205,7 +205,7 @@ export const PRINT_MESSAGES = Object.freeze({
         statusSending: 'Faýlyňyz printere iberilýär.', statusChecking: 'Iberiş ýagdaýy barlanýar…'
     }),
     ar: Object.freeze({
-        languageLabel: 'اللغة', quickGuideTitle: 'كيف أطبع مستندي؟', downloadGuide: 'حمّل دليل A4 بخمس لغات',
+        languageLabel: 'اللغة', quickGuideTitle: 'كيف أطبع مستندي؟',
         guideAdd: 'اضغط على «إضافة ملفات» واختر مستندك.',
         guideSettings: 'اختر الصفحات وعدد النسخ.',
         guidePrint: 'اضغط على «طباعة الكل» مرة واحدة وانتظر.',

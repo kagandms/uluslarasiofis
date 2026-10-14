@@ -19,6 +19,10 @@ export function updateCropperRotation() {
 export function showCropperForFile(img, options) {
     if (!cropperModal || !cropperImage) return;
 
+    if (cropperInstance) {
+        cropperInstance.destroy();
+        cropperInstance = null;
+    }
     currentImageObj = img;
     cropperImage.src = img.src;
     cropperModal.classList.add('show');

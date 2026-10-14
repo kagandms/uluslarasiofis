@@ -9,7 +9,9 @@ let inMemoryCache = [];
 
 function parseDateStr(sayfaStr) {
     if (!sayfaStr) return 0;
-    const match = sayfaStr.match(/(\d{2})\.(\d{2})(?:\.(\d{4}))?/);
+    const isoMatch = String(sayfaStr).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) return Number(isoMatch[1]) * 10000 + Number(isoMatch[2]) * 100 + Number(isoMatch[3]);
+    const match = String(sayfaStr).match(/(\d{2})\.(\d{2})(?:\.(\d{4}))?/);
     if (!match) return 0;
     const d = parseInt(match[1], 10);
     const m = parseInt(match[2], 10);
@@ -19,7 +21,7 @@ function parseDateStr(sayfaStr) {
 
 function getSheetYear(sheetName) {
     if (!sheetName) return String(new Date().getFullYear());
-    const match = sheetName.match(/(?:^|\.)(\d{4})(?:$|\.)/);
+    const match = String(sheetName).match(/(?:^|\.)(\d{4})(?:$|\.|-)/);
     return match ? match[1] : String(new Date().getFullYear());
 }
 
@@ -528,14 +530,16 @@ export function initTebligatSearch() {
             renderResults([], false, null, query);
         }
 
-        // 2. ADIM (500 ms Debounced): Arka Planda Canlı Sunucu Kontrolü
-        networkAbortController = new AbortController();
+        // 2. ADIM (250 ms Debounced): Arka Planda Canlı Sunucu Kontrolü
+        const searchController = new AbortController();
+        networkAbortController = searchController;
         networkDebounceTimeout = setTimeout(async () => {
             try {
                 const response = await fetch(`/api/search-tebligat?q=${encodeURIComponent(query)}&year=${encodeURIComponent(currYear)}`, {
-                    signal: networkAbortController.signal
+                    signal: searchController.signal
                 });
                 const data = await response.json();
+                if (searchController.signal.aborted || networkAbortController !== searchController) return;
 
                 if (!response.ok || !Array.isArray(data.results)) throw new Error('SEARCH_FAILED');
 
@@ -563,10 +567,10 @@ export function initTebligatSearch() {
                     renderResults(localMatches, true, null, query);
                 }
             } catch (err) {
-                if (err.name === 'AbortError') return;
+                if (err.name === 'AbortError' || searchController.signal.aborted || networkAbortController !== searchController) return;
                 renderResults(localMatches, true, true, query);
             }
-        }, 500);
+        }, 250);
     };
 
     // Otomatik Büyük Harf Dönüşümü (Türkçe uyumlu: i -> İ, ı -> I) + İmleç Pozisyonunu Koruma

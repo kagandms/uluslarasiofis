@@ -35,7 +35,17 @@ function createRow(document, item, options, index) {
         button.dataset.action = action.action;
         button.disabled = Boolean(action.isDisabled);
         if (action.ariaLabel) button.setAttribute('aria-label', action.ariaLabel);
-        button.addEventListener('click', action.run);
+        button.addEventListener('click', async (event) => {
+            if (button.disabled) return;
+            button.disabled = true;
+            try {
+                await action.run(event);
+            } catch (error) {
+                console.error('Queue action failed.', { errorName: error.name });
+            } finally {
+                button.disabled = Boolean(action.isDisabled);
+            }
+        });
         actions.append(button);
     });
     row.append(actions);

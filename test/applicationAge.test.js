@@ -13,3 +13,9 @@ test('age calculation returns unknown for invalid or future calendar dates', () 
     assert.equal(calculateUnder18('2008-02-30', '2026-10-04'), null);
     assert.equal(calculateUnder18('2027-01-01', '2026-10-04'), null);
 });
+
+test('February 29 reaches eighteen on February 28 in a non-leap year', () => {
+    assert.equal(calculateUnder18('2008-02-29', '2026-02-27'), true);
+    assert.equal(calculateUnder18('2008-02-29', '2026-02-28'), false);
+    assert.equal(calculateUnder18('2008-02-29', '2026-03-01'), false);
+});

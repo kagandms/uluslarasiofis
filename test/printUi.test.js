@@ -15,7 +15,7 @@ test('print page defaults to English until browser locale detection and keeps mu
     assert.equal(document.querySelector('#print-language').options.length, 5);
     assert.equal(document.querySelector('.print-language-picker label').htmlFor, 'print-language');
     assert.equal(document.querySelectorAll('.print-quick-guide li').length, 4);
-    assert.equal(document.querySelector('.print-guide-download a').getAttribute('href'), '/documents/student-print-guide-a4.pdf');
+    assert.equal(document.querySelector('a[href="/documents/student-print-guide-a4.pdf"]'), null);
     assert.equal(readFileSync(new URL('../public/documents/student-print-guide-a4.pdf', import.meta.url)).subarray(0, 5).toString(), '%PDF-');
     assert.equal(document.querySelector('#print-file-input').multiple, true);
     assert.equal(document.querySelector('#print-submit').textContent, 'Print all');

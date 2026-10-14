@@ -100,3 +100,42 @@ test('rescheduling the same selected value during a save still publishes the sav
     assert.deepEqual(savedApplications, ['undertaking']);
     autosave.dispose();
 });
+
+test('equivalent nested values do not write and later input mutation cannot change a pending patch', async () => {
+    const patches = [];
+    const autosave = createDraftAutosave({ delayMs: 1000, initialValues: { choices: { a: [1], b: 2 } },
+        save: async (patch) => { patches.push(patch); return {}; } });
+
+    autosave.schedule({ choices: { b: 2, a: [1] } });
+    await autosave.flush();
+    const choices = { a: [2], b: 2 };
+    autosave.schedule({ choices });
+    choices.a.push(3);
+    await autosave.flush();
+
+    assert.deepEqual(patches, [{ choices: { a: [2], b: 2 } }]);
+    autosave.dispose();
+});
+
+test('online reconnect retries the pending patch and disposal removes its listener', async () => {
+    const eventTarget = new EventTarget();
+    let attempts = 0;
+    let resolveSaved;
+    const saved = new Promise(resolve => { resolveSaved = resolve; });
+    const autosave = createDraftAutosave({ eventTarget, delayMs: 1000, save: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('offline');
+        resolveSaved();
+        return {};
+    } });
+
+    autosave.schedule({ first_name: 'A' });
+    await autosave.flush();
+    eventTarget.dispatchEvent(new Event('online'));
+    await Promise.race([saved, wait(100)]);
+
+    assert.equal(attempts, 2);
+    autosave.dispose();
+    eventTarget.dispatchEvent(new Event('online'));
+    assert.equal(attempts, 2);
+});

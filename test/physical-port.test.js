@@ -35,6 +35,22 @@ test('validated phone photos reach only the owning PC without a scanner job', as
     assert.equal((await portRequest(context, `${base}/files/${id}`)).status, 401);
 });
 
+test('photo retrieval rejects changed R2 bytes using the stored SHA-256', async () => {
+    const context = await createPortFixture();
+    const transfer = await pairPortPhone(context);
+    const id = crypto.randomUUID();
+    assert.equal((await uploadPhoto(context, transfer, { id })).status, 200);
+    const storedPhoto = context.objects.values().next().value;
+    storedPhoto.bytes[storedPhoto.bytes.length - 3] ^= 1;
+
+    const response = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/files/${id}`, {
+        cookie: context.staffCookie
+    });
+
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error.code, 'PHOTO_CHANGED');
+});
+
 test('physical application PDF uploads accept files above 10 MiB and reject files above 50 MiB', async () => {
     const context = await createPortFixture();
     const registration = await registerPortPdf(context);

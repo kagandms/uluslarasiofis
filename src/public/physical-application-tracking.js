@@ -34,6 +34,7 @@ function renderPanel(panel,state,submit) {
     const label=appendText(form,'label',messages.label);label.htmlFor='physical-tracking-reference';
     const input=panel.ownerDocument.createElement('input');input.id='physical-tracking-reference';input.name='tracking_reference';
     input.className='glass-input';input.dir='ltr';input.required=true;input.maxLength=64;input.value=state.reference;input.placeholder='ITU-YY-XXXXXXX';
+    input.addEventListener('input',()=>{state.reference=input.value;});
     input.autocomplete='off';input.disabled=state.isBusy;label.append(input);
     const button=appendText(form,'button',messages.submit);button.type='submit';button.className='application-button application-button-primary';button.disabled=state.isBusy;
     form.addEventListener('submit',event=>{event.preventDefault();submit(input.value);});panel.append(form);

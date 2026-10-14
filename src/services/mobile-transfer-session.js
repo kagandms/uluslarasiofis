@@ -50,11 +50,17 @@ export function createMobileTransferSession() {
 
     async function closeTransfer() {
         const currentTransfer = transfer;
+        if (!currentTransfer) return;
+        try {
+            await requestMobileTransfer(`/api/staff/mobile-transfers/${currentTransfer.id}`, { method: 'DELETE' });
+        } catch (error) {
+            // A lost close response can be retried after the server has already expired the transfer.
+            if (error.code !== 'TRANSFER_EXPIRED') throw error;
+        }
+        if (transfer?.id !== currentTransfer.id) return;
         transfer = null;
         batchId = null;
         isPhonePaired = false;
-        if (!currentTransfer) return;
-        await requestMobileTransfer(`/api/staff/mobile-transfers/${currentTransfer.id}`, { method: 'DELETE' });
     }
 
     function getSnapshot() {

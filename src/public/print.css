@@ -14,8 +14,6 @@ body { margin: 0; min-width: 320px; }
 .print-quick-guide li { counter-increment: print-step; display: flex; align-items: flex-start; gap: 8px; line-height: 1.45; font-size: .9rem; }
 .print-quick-guide li::before { content: counter(print-step); display: grid; place-items: center; flex: 0 0 24px; height: 24px; border-radius: 50%; background: #861b3a; color: #fff; font-size: .8rem; font-weight: 700; }
 .print-quick-guide p, .print-collection-hint { margin: 12px 0 0; color: #5b6471; font-size: .86rem; line-height: 1.5; }
-.print-guide-download { margin: 14px 0; text-align: center; }
-.print-guide-download a { color: #7e1533; font-weight: 700; text-underline-offset: 3px; }
 .print-eyebrow { margin: 0 0 8px; color: #7e1533; font-size: .82rem; font-weight: 700; }
 h1 { margin: 0; font-size: clamp(1.7rem, 7vw, 2.2rem); }
 .print-intro, .print-guidance { color: #5b6471; line-height: 1.5; }

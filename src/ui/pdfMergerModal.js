@@ -1,6 +1,9 @@
 import './staff-modal.css';
 import './pdf-merger-modal.css';
 import { mountMobileTransferPanel } from './mobile-transfer-panel.js';
+import { createDocumentPreviewStore } from './document-preview-store.js';
+import { createDocumentPreviewDialog } from './document-preview-dialog.js';
+import { createPdfMergerGallery } from './pdf-merger-gallery.js';
 import { mergeDocumentsToPdf, downloadPdfFile } from '../services/pdfMergerService.js';
 import { showToast } from './toastManager.js';
 
@@ -279,7 +282,10 @@ export function openPdfMergerModal(options = {}) {
 
     const documentsPanel=document.createElement('div');
     documentsPanel.className='pdf-merger-documents';
-    documentsPanel.append(actionGrid, cameraBanner, dropZone, listHeader, fileListEl);
+    const listHint = document.createElement('p');
+    listHint.className = 'pdf-merger-list-hint';
+    listHint.textContent = 'Önizlemeye tıklayın; ⠿ ile sürükleyip sıralayın.';
+    documentsPanel.append(actionGrid, cameraBanner, dropZone, listHeader, listHint, fileListEl);
     const transferPanel=document.createElement('aside');
     transferPanel.className='pdf-merger-transfer';
     transferPanel.setAttribute('aria-label','Telefondan belge ekle');
@@ -317,8 +323,19 @@ export function openPdfMergerModal(options = {}) {
     previewLink.rel = 'noopener';
     previewLink.hidden = true;
     footer.append(progressMsg, previewLink, btnMerge);
+    const previews = createDocumentPreviewStore();
+    const previewDialog = createDocumentPreviewDialog({ modal, previews, canInteract: () => !isSaving && !isBuilding });
+    const gallery = createPdfMergerGallery({
+        container: fileListEl, previews, previewDialog, canInteract: () => !isSaving && !isBuilding,
+        onMove: moveItem, onRemove: index => {
+            if (isSaving || isBuilding) return;
+            selectedFiles.splice(index, 1);
+            renderList();
+        }
+    });
     const cleanupObserver = new MutationObserver(() => {
         if (!overlay.isConnected) {
+            gallery.dispose();
             if (previewUrl) URL.revokeObjectURL(previewUrl);
             isContinuousCameraMode = false;
             document.removeEventListener('keydown', handleKeydown);
@@ -443,13 +460,15 @@ export function openPdfMergerModal(options = {}) {
     });
 
     function moveItem(fromIndex, toIndex) {
-        if (toIndex < 0 || toIndex >= selectedFiles.length) return;
+        if (isSaving || isBuilding || fromIndex === toIndex || toIndex < 0 || toIndex >= selectedFiles.length) return;
         const [moved] = selectedFiles.splice(fromIndex, 1);
         selectedFiles.splice(toIndex, 0, moved);
         renderList();
     }
 
     function renderList() {
+        progressMsg.textContent = '';
+        btnMerge.removeAttribute('title');
         readyPdf = null;
         readyPdfCanBeUsed = false;
         preparedFields = null;
@@ -458,99 +477,7 @@ export function openPdfMergerModal(options = {}) {
         previewLink.hidden = true;
         btnMerge.textContent = options.mergeLabel || 'PDF oluştur ve boyutu göster';
         updateCount();
-        fileListEl.replaceChildren();
-
-        if (selectedFiles.length === 0) {
-            const emptyEl = document.createElement('div');
-            emptyEl.style.textAlign = 'center';
-            emptyEl.style.padding = '22px';
-            emptyEl.style.opacity = '0.65';
-            emptyEl.style.fontSize = '0.85rem';
-            emptyEl.textContent = 'Henüz hiçbir belge eklenmedi. Fotoğraf çekebilir veya dosya seçebilirsiniz.';
-            fileListEl.append(emptyEl);
-            return;
-        }
-
-        selectedFiles.forEach((file, index) => {
-            const row = document.createElement('div');
-            row.style.display = 'flex';
-            row.style.alignItems = 'center';
-            row.style.justifyContent = 'space-between';
-            row.style.padding = '8px 12px';
-            row.style.background = 'rgba(126, 24, 48, 0.04)';
-            row.style.borderRadius = '6px';
-            row.style.border = '1px solid var(--border-color, rgba(0, 0, 0, 0.08))';
-
-            // Left: Order index + Name + Size
-            const info = document.createElement('div');
-            info.style.display = 'flex';
-            info.style.alignItems = 'center';
-            info.style.gap = '8px';
-            info.style.overflow = 'hidden';
-
-            const num = document.createElement('span');
-            num.textContent = `${index + 1}.`;
-            num.style.fontWeight = 'bold';
-            num.style.minWidth = '24px';
-            num.style.opacity = '0.8';
-
-            const iconSpan = document.createElement('span');
-            iconSpan.textContent = file.type?.includes('pdf') || file.name.endsWith('.pdf') ? '📄' : '🖼️';
-
-            const name = document.createElement('span');
-            name.textContent = file.name;
-            name.style.whiteSpace = 'nowrap';
-            name.style.overflow = 'hidden';
-            name.style.textOverflow = 'ellipsis';
-            name.style.maxWidth = '300px';
-            name.style.fontSize = '0.9rem';
-
-            const size = document.createElement('span');
-            size.textContent = `(${formatBytes(file.size)})`;
-            size.style.fontSize = '0.78rem';
-            size.style.opacity = '0.6';
-
-            info.append(num, iconSpan, name, size);
-
-            // Right: Up, Down, Delete buttons
-            const actions = document.createElement('div');
-            actions.style.display = 'flex';
-            actions.style.gap = '4px';
-
-            const upBtn = document.createElement('button');
-            upBtn.type = 'button';
-            upBtn.className = 'btn btn-outline';
-            upBtn.textContent = '↑';
-            upBtn.style.padding = '2px 6px';
-            upBtn.disabled = index === 0;
-            upBtn.addEventListener('click', () => moveItem(index, index - 1));
-
-            const downBtn = document.createElement('button');
-            downBtn.type = 'button';
-            downBtn.className = 'btn btn-outline';
-            downBtn.textContent = '↓';
-            downBtn.style.padding = '2px 6px';
-            downBtn.disabled = index === selectedFiles.length - 1;
-            downBtn.addEventListener('click', () => moveItem(index, index + 1));
-
-            const delBtn = document.createElement('button');
-            delBtn.type = 'button';
-            delBtn.className = 'btn btn-outline';
-            delBtn.textContent = '✕';
-            delBtn.style.padding = '2px 6px';
-            delBtn.style.color = '#e74c3c';
-            delBtn.addEventListener('click', () => {
-                selectedFiles.splice(index, 1);
-                renderList();
-            });
-
-            actions.append(upBtn, downBtn, delBtn);
-            row.append(info, actions);
-            fileListEl.append(row);
-        });
-
-        // Auto-scroll to latest item
-        fileListEl.scrollTop = fileListEl.scrollHeight;
+        gallery.sync(selectedFiles);
     }
 
     async function saveReadyPdf() {

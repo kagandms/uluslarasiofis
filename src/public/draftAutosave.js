@@ -1,6 +1,15 @@
+function areValuesEqual(left, right) {
+    if (Object.is(left, right)) return true;
+    if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+    if (Array.isArray(left) !== Array.isArray(right)) return false;
+    const keys = Object.keys(left);
+    return keys.length === Object.keys(right).length
+        && keys.every(key => Object.hasOwn(right, key) && areValuesEqual(left[key], right[key]));
+}
+
 function createPatch(latestValues, savedValues) {
     return Object.fromEntries(Object.entries(latestValues)
-        .filter(([key, value]) => savedValues[key] !== value));
+        .filter(([key, value]) => !areValuesEqual(savedValues[key], value)));
 }
 
 /**
@@ -10,14 +19,15 @@ function createPatch(latestValues, savedValues) {
  */
 export function createDraftAutosave({
     save,
+    eventTarget = globalThis.window,
     delayMs = 500,
     initialValues = {},
     onStatus = () => {},
     onSaved = () => {},
     onError = () => {}
 }) {
-    let latestValues = { ...initialValues };
-    let savedValues = { ...initialValues };
+    let latestValues = structuredClone(initialValues);
+    let savedValues = structuredClone(initialValues);
     let pendingValues = {};
     let timer = null;
     let activeSave = null;
@@ -32,7 +42,7 @@ export function createDraftAutosave({
 
     function schedule(values) {
         if (disposed) return;
-        latestValues = { ...latestValues, ...values };
+        latestValues = { ...latestValues, ...structuredClone(values) };
         revision += 1;
         pendingValues = createPatch(latestValues, savedValues);
         if (Object.keys(pendingValues).length === 0) {
@@ -52,7 +62,7 @@ export function createDraftAutosave({
         pendingValues = {};
         updateStatus('saving');
         try {
-            const application = await save(patch);
+            const application = await save(structuredClone(patch));
             savedValues = { ...savedValues, ...patch };
             pendingValues = createPatch(latestValues, savedValues);
             if (requestRevision === revision || Object.keys(pendingValues).length === 0) onSaved(application);
@@ -85,8 +95,12 @@ export function createDraftAutosave({
         return false;
     }
 
+    const handleOnline = () => { void flush(); };
+    eventTarget?.addEventListener('online', handleOnline);
+
     function dispose() {
         disposed = true;
+        eventTarget?.removeEventListener('online', handleOnline);
         clearTimeout(timer);
     }
 

@@ -717,6 +717,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         archiveError: null, archiveMessage: null,
         query: { q: '', status: 'all', page: 1, page_size: 25 }
     };
+    let queueRequestId = 0;
     let previewTimer = null;
     let scanPollTimer = null;
     let scanPollStartedAt = 0;
@@ -731,6 +732,10 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         scanPollTimer = null;
     };
     const render = () => {
+        if (state.view === 'queue' && state.actionPending) {
+            root.querySelectorAll('button, input, select').forEach(element => { element.disabled = true; });
+            return;
+        }
         const dismissToast = () => {
             state.archiveMessage = null;
             state.archiveError = null;
@@ -865,17 +870,24 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         root.querySelector('[data-action="retry-document-preview"]')?.focus();
     }
     async function loadQueue() {
+        if (state.actionPending) return;
+        const requestId = ++queueRequestId;
         state.loading = true;
         state.error = false;
         render();
         try {
-            state.result = await api.queryApplications({ ...state.query });
+            const result = await api.queryApplications({ ...state.query });
+            if (requestId !== queueRequestId) return;
+            state.result = result;
         } catch (error) {
+            if (requestId !== queueRequestId) return;
             state.error = true;
             state.errorStatus = error?.status ?? null;
         }
-        state.loading = false;
-        render();
+        if (requestId === queueRequestId) {
+            state.loading = false;
+            render();
+        }
     }
     async function archiveApplication(applicationId) {
         if (state.actionPending || typeof api.archiveApplication !== 'function') return;
@@ -886,23 +898,26 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         try {
             await api.archiveApplication(applicationId);
             state.archiveMessage = 'Başvuru Silinen arşivine taşındı.';
+        } catch (error) {
+            console.error('Application archive failed.', { errorName: error.name });
+            state.archiveError = 'Başvuru arşive taşınamadı. Listeyi yenileyip tekrar deneyin.';
+        } finally {
             state.actionPending = null;
             await loadQueue();
-        } catch {
-            state.archiveError = 'Başvuru arşive taşınamadı. Listeyi yenileyip tekrar deneyin.';
-            state.actionPending = null;
-            render();
         }
     }
     async function submitSearch({ q, status }) {
+        if (state.actionPending) return;
         state.query = { ...state.query, q, status, page: 1 };
         await loadQueue();
     }
     async function changePage(page) {
+        if (state.actionPending) return;
         state.query = { ...state.query, page };
         await loadQueue();
     }
     async function openDetail(applicationId) {
+        if (state.actionPending) return;
         discardPreview();
         state.view = 'detail';
         state.loading = true;
@@ -950,6 +965,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         return 'İşlem tamamlanamadı. Güncel durumu kontrol edip tekrar deneyin.';
     }
     async function completeAction(actionKey, operation) {
+        if (state.actionPending) return;
         const scrollY = document.defaultView?.scrollY ?? 0;
         state.actionPending = actionKey;
         state.actionError = null;
@@ -968,17 +984,16 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             discardPreview();
             await refreshDetail();
             await refreshQueueSnapshot();
-            state.actionPending = null;
-            render();
         } catch (error) {
             state.actionError = readActionError(error);
-            state.actionPending = null;
             if (error?.status === 409) {
                 state.resubmissionDocument = null;
                 discardPreview();
                 await refreshDetail();
                 await refreshQueueSnapshot();
             }
+        } finally {
+            state.actionPending = null;
             render();
         }
         if (scrollY > 0) document.defaultView?.scrollTo?.({ top: scrollY, behavior: 'instant' });
@@ -1016,9 +1031,10 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             }
         } catch {
             state.actionError = 'Tarama başlatılamadı. PC’deki ClamAV çalıştırıcısının bağlı olduğunu kontrol edin.';
+        } finally {
+            state.actionPending = null;
+            render();
         }
-        state.actionPending = null;
-        render();
     }
     function scheduleScanResultPoll(documentCode) {
         scanPollTimer = document.defaultView.setTimeout(async () => {
@@ -1026,6 +1042,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 clearScanPoll();
                 return;
             }
+            if (state.actionPending) { scheduleScanResultPoll(documentCode); return; }
             await refreshDetail();
             const currentDocument = state.detail?.documents.find((item) => item.code === documentCode);
             if (!currentDocument || currentDocument.scan_status !== 'pending') {
@@ -1063,6 +1080,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         ));
     }
     function returnToQueue() {
+        if (state.actionPending) return;
         clearScanPoll();
         discardPreview();
         state.view = 'queue';

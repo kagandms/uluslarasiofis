@@ -1,3 +1,5 @@
+import { readSynchronizedNow } from './clock.js';
+
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function readCalendarDate(value) {
@@ -25,7 +27,10 @@ export function calculateUnder18(dateOfBirth, currentDate) {
     const birthKey = `${String(birthDate.year).padStart(4, '0')}-${String(birthDate.month).padStart(2, '0')}-${String(birthDate.day).padStart(2, '0')}`;
     const currentKey = `${String(asOfDate.year).padStart(4, '0')}-${String(asOfDate.month).padStart(2, '0')}-${String(asOfDate.day).padStart(2, '0')}`;
     if (birthKey > currentKey) return null;
-    const eighteenthBirthday = `${String(birthDate.year + 18).padStart(4, '0')}-${String(birthDate.month).padStart(2, '0')}-${String(birthDate.day).padStart(2, '0')}`;
+    const targetYear = birthDate.year + 18;
+    const isTargetLeapYear = (targetYear % 4 === 0 && targetYear % 100 !== 0) || targetYear % 400 === 0;
+    const targetDay = birthDate.month === 2 && birthDate.day === 29 && !isTargetLeapYear ? 28 : birthDate.day;
+    const eighteenthBirthday = `${String(targetYear).padStart(4, '0')}-${String(birthDate.month).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
     return currentKey < eighteenthBirthday;
 }
 
@@ -34,7 +39,7 @@ export function calculateUnder18(dateOfBirth, currentDate) {
  * @param {Date} now Current instant.
  * @returns {string} ISO date-only value for Europe/Istanbul.
  */
-export function readIstanbulDate(now = new Date()) {
+export function readIstanbulDate(now = readSynchronizedNow()) {
     const parts = new Intl.DateTimeFormat('en-GB', {
         timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit'
     }).formatToParts(now);

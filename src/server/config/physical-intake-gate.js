@@ -1,4 +1,5 @@
 import { ApiError } from '../domain/errors.js';
+import { readCachedSchemaReadiness } from './schemaReadinessCache.js';
 
 export const MAX_PHYSICAL_UAT_SECONDS = 3600;
 
@@ -44,6 +45,8 @@ export function requirePhysicalSessionAllowed(environment, sessionHash) {
  */
 export async function hasPhysicalTransferSchema(environment) {
     if (!environment.DB) return false;
-    const guard = await environment.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='mobile_transfer_rate_limits'").first();
-    return Boolean(guard);
+    return readCachedSchemaReadiness(environment.DB, 'physical-transfer', async () => {
+        const guard = await environment.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='mobile_transfer_rate_limits'").first();
+        return Boolean(guard);
+    });
 }

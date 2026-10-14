@@ -1,5 +1,5 @@
 import { extractFromCoordinates, extractPage2FromCoordinates, extractFields } from '../utils/parser.js';
-import { prepareImageForOCR } from './imageProcessor.js';
+import { encodeOcrCanvas } from './optimize-document-image.js';
 import { showToast } from '../ui/toastManager.js';
 import { setActiveStep, STEP_IDS } from '../ui/stepWizard.js';
 
@@ -46,9 +46,7 @@ export async function runOCR(sourceCanvas, skipStep3 = false, isPage2 = false, i
         
         // Canvas üzerinden Blob oluştur (Base64'ten %33 daha ufak payload)
         // Azure JPEG formatını sorunsuz desteklediği için image/jpeg kullanıyoruz
-        const blob = await new Promise(resolve => {
-            sourceCanvas.toBlob(resolve, 'image/jpeg', 0.85);
-        });
+        const blob = await encodeOcrCanvas(sourceCanvas);
         
         let response = null;
         let data = null;
@@ -93,7 +91,7 @@ export async function runOCR(sourceCanvas, skipStep3 = false, isPage2 = false, i
 
         updateProgress('Metinler okunuyor...', 90);
 
-        if (!data || !data.responses || !data.responses[0].textAnnotations || data.responses[0].textAnnotations.length === 0) {
+        if (!data || !data.responses || !data.responses[0]?.textAnnotations || data.responses[0].textAnnotations.length === 0) {
             throw new Error('Görselde okunabilir bir metin bulunamadı. Lütfen daha net bir fotoğraf çekin.');
         }
 

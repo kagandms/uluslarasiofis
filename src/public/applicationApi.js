@@ -1,5 +1,8 @@
+import { synchronizeClock } from '../shared/clock.js';
+
 async function requestJson(path, { method = 'GET', body } = {}) {
     let response;
+    const startedAt = Date.now();
     try {
         response = await fetch(path, {
             method,
@@ -10,6 +13,7 @@ async function requestJson(path, { method = 'GET', body } = {}) {
     } catch {
         throw Object.assign(new Error('Application request could not reach the service.'), { code: 'NETWORK_ERROR' });
     }
+    synchronizeClock(response.headers?.get('Date'), { startedAt, receivedAt: Date.now() });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
         const error = new Error('Application request failed.');

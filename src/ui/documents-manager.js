@@ -1,7 +1,10 @@
+import { PDFJS_VERSION } from '../config/pdfjs-version.js';
+import { loadPdfJs } from '../services/pdfjs-loader.js';
 import { DOCUMENT_CATEGORIES, OFFICE_DOCUMENTS } from '../config/documents-config.js';
 
 const thumbnailCache = new Map();
 let isRenderingThumbnails = false;
+let shouldRenderThumbnails = false;
 
 function drawCachedImage(canvas, box, dataUrl) {
     if (typeof Image === 'undefined') return;
@@ -21,21 +24,12 @@ function drawCachedImage(canvas, box, dataUrl) {
  * Belgelerin ilk sayfasını arka planda küçük önizleme olarak canvas üzerine çizer.
  */
 async function renderThumbnails() {
-    if (isRenderingThumbnails) return;
-    if (typeof window === 'undefined' || !window.pdfjsLib) return;
-
-    if (!window.pdfjsLib.GlobalWorkerOptions?.workerSrc) {
-        try {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
-        } catch (_) {}
-    }
-
-    const boxes = document.querySelectorAll('.documents-preview-box');
-    if (!boxes.length) return;
-
+    if (typeof window === 'undefined') return;
+    if (isRenderingThumbnails) { shouldRenderThumbnails = true; return; }
     isRenderingThumbnails = true;
-
     try {
+        const pdfjs = await loadPdfJs();
+        const boxes = document.querySelectorAll('.documents-preview-box');
         for (const box of boxes) {
             const url = box.dataset.url;
             const canvas = box.querySelector('.documents-preview-canvas');
@@ -59,9 +53,11 @@ async function renderThumbnails() {
 
             // 3. pdfjsLib ile ilk sayfayı render et
             try {
-                const pdf = await window.pdfjsLib.getDocument({
+                const pdf = await pdfjs.getDocument({
                     url,
-                    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+                    isEvalSupported: false,
+                    cMapUrl: `/pdfjs-support/${PDFJS_VERSION}/cmaps/`,
+                    standardFontDataUrl: `/pdfjs-support/${PDFJS_VERSION}/standard_fonts/`,
                     cMapPacked: true
                 }).promise;
 
@@ -91,8 +87,14 @@ async function renderThumbnails() {
                 box.classList.add('is-error');
             }
         }
+    } catch (error) {
+        console.warn('Office document previews unavailable.', { errorName: error.name });
     } finally {
         isRenderingThumbnails = false;
+        if (shouldRenderThumbnails) {
+            shouldRenderThumbnails = false;
+            void renderThumbnails();
+        }
     }
 }
 
@@ -223,17 +225,7 @@ function renderDocuments(grid, emptyState, countBadge, searchInput, categoryFilt
     emptyState.hidden = filteredDocuments.length > 0;
     countBadge.textContent = `${filteredDocuments.length} belge`;
 
-    if (typeof window !== 'undefined' && window.pdfjsLib) {
-        setTimeout(renderThumbnails, 20);
-    } else if (typeof window !== 'undefined') {
-        const interval = setInterval(() => {
-            if (window.pdfjsLib) {
-                clearInterval(interval);
-                renderThumbnails();
-            }
-        }, 150);
-        setTimeout(() => clearInterval(interval), 4000);
-    }
+    void renderThumbnails();
 }
 
 function populateCategoryFilter(categoryFilter) {

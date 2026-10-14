@@ -797,3 +797,31 @@ test('staff application workflow renders rollback action when application is com
     assert.equal(revertButton.dataset.isRevert, 'true');
     assert.equal(revertButton.textContent, '◀ Durumu Geri Al: Göç İdaresi Onayladı');
 });
+
+test('queue preserves row DOM while archiving and releases controls after an API rejection', async context => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let rejectArchive;
+    let archiveCalls = 0;
+    const api = {
+        queryApplications: async () => createQueuePayload([QUEUE_ITEM]),
+        archiveApplication: () => { archiveCalls += 1; return new Promise((resolve, reject) => { rejectArchive = reject; }); }
+    };
+    initializeStaffApplicationsManager(root, api);
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise(resolve => setImmediate(resolve));
+    const table = root.querySelector('table');
+    const archive = root.querySelector('[data-action="archive-application"]');
+
+    archive.click();
+    archive.click();
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    assert.equal(root.querySelector('table'), table);
+    assert.equal(archive.disabled, true);
+    rejectArchive(new Error('offline'));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(archiveCalls, 1);
+    assert.equal(root.querySelector('[data-action="archive-application"]').disabled, false);
+    assert.match(root.textContent, /arşive taşınamadı/);
+});

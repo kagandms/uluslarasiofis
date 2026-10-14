@@ -12,11 +12,18 @@ test('native D1/R2 validated photo import and physical PDF access work without s
     try {
         const database = await runtime.getD1Database('DB');
         const bucket = await runtime.getR2Bucket('DOCUMENTS');
+        const objectReads = { head: 0, get: 0 };
+        const storage = {
+            put: (...args) => bucket.put(...args),
+            async head(...args) { objectReads.head += 1; return bucket.head(...args); },
+            async get(...args) { objectReads.get += 1; return bucket.get(...args); },
+            delete: (...args) => bucket.delete(...args)
+        };
         for (const filename of readdirSync(new URL('../migrations/',import.meta.url)).filter(name=>name.endsWith('.sql')).sort()) {
             const migration = readFileSync(new URL(`../migrations/${filename}`,import.meta.url),'utf8').replace(/--[^\n]*/g,'').replaceAll('\n',' ');
             await database.exec(migration);
         }
-        const context = await createPortFixture(database, bucket);
+        const context = await createPortFixture(database, storage);
         const transfer = await pairPortPhone(context);
         const photoId = crypto.randomUUID();
         const photos = await Promise.all([uploadPhoto(context,transfer,{id:photoId}),uploadPhoto(context,transfer,{id:photoId})]);
@@ -24,6 +31,7 @@ test('native D1/R2 validated photo import and physical PDF access work without s
         assert.ok(photos.every(response=>[200,409].includes(response.status)));
         const photo = await portRequest(context, `/api/staff/mobile-transfers/${transfer.id}/files/${photoId}`, {cookie:context.staffCookie});
         assert.equal(photo.status,200,await photo.clone().text());
+        assert.deepEqual(objectReads, { head: 0, get: 1 });
         const receipt = await registerPortPdf(context);
 
         const opened = await portRequest(context, `/api/staff/physical-intakes/${receipt.id}/files/${receipt.id}/download`,{cookie:context.staffCookie});

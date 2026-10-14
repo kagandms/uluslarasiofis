@@ -1,3 +1,4 @@
+import { loadPdfJs } from './pdfjs-loader.js';
 import { optimizeDocumentImage } from './optimize-document-image.js';
 import { PDFDocument, PageSizes } from 'pdf-lib';
 import { DOCUMENT_IMAGE_LONG_EDGE } from '../config/mobile-transfer-policy.js';
@@ -62,21 +63,18 @@ async function appendImageToPdf(pdfDoc, bytes, mediaType, profile) {
     page.drawImage(image, { x: (pageWidth - drawWidth) / 2, y: (pageHeight - drawHeight) / 2, width: drawWidth, height: drawHeight });
 }
 
-function getPdfJs() {
-    const pdfjs = globalThis.window?.pdfjsLib;
-    if (!pdfjs?.getDocument) throw new Error('PDF sıkıştırma bileşeni hazır değil. Sayfayı yenileyip tekrar deneyin.');
-    return pdfjs;
-}
-
 async function appendRasterizedPdf(pdfDoc, bytes, fileName, profile, onProgress) {
-    const pdfjs = getPdfJs();
+    const pdfjs = await loadPdfJs();
     const loadingTask = pdfjs.getDocument({ data: bytes });
-    const sourcePdf = await loadingTask.promise;
     try {
+        const sourcePdf = await loadingTask.promise;
         for (let pageNumber = 1; pageNumber <= sourcePdf.numPages; pageNumber += 1) {
             onProgress?.({ message: `${fileName}: sayfa ${pageNumber}/${sourcePdf.numPages} sıkıştırılıyor…` });
             await appendRasterPage(pdfDoc, sourcePdf, pageNumber, profile);
         }
+    } catch (error) {
+        console.error('PDF input could not be rendered.', { errorName: error.name });
+        throw new Error(`${fileName} okunamadı; hiçbir belge atlanarak PDF oluşturulmadı.`, { cause: error });
     } finally {
         await loadingTask.destroy?.();
     }

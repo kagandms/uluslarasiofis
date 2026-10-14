@@ -417,9 +417,9 @@
     ];
 
     function findLabeledDate(text, labels, options = {}) {
-        const minYear = options.minYear || 1920;
-        const maxYear = options.maxYear || 2045;
-        const birthDate = options.birthDate || '';
+        const minYear = options?.minYear || 1920;
+        const maxYear = options?.maxYear || 2045;
+        const birthDate = options?.birthDate || '';
         const normalizedText = normalizeDateText(text);
         const ocrNormalizedText = normalizeOcrNumericText(normalizedText);
 
@@ -528,7 +528,7 @@
     function extractPassportDates(text, options = {}) {
         const normalizedText = normalizeText(text);
         const mrz = extractDatesFromMrz(text);
-        const birthDate = options.birthDate || mrz.birthDate || '';
+        const birthDate = options?.birthDate || mrz.birthDate || '';
 
         let issueDate = findLabeledDate(normalizedText, ISSUE_DATE_LABELS, {
             minYear: 2010,
@@ -1015,7 +1015,7 @@
         const normalized = text.replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
         const upperText = normalized.toUpperCase();
 
-        const nationalityCheck = String(options.nationality || options.country || options.uyruk || options.dogumUlkesi || '').toUpperCase();
+        const nationalityCheck = String(options?.nationality || options?.country || options?.uyruk || options?.dogumUlkesi || '').toUpperCase();
         const isTurkmen = nationalityCheck.includes('TÜRKMEN') ||
             nationalityCheck.includes('TURKMEN') ||
             nationalityCheck === 'TKM' ||
@@ -1146,7 +1146,7 @@
     function extractPassportIssuingAuthority(text, options = {}) {
         if (!text || typeof text !== 'string') {
             const fallbackIso = getCountryIso3Code(
-                options.uyruk || options.nationality || options.country || options.dogumUlkesi
+                options?.uyruk || options?.nationality || options?.country || options?.dogumUlkesi
             );
             if (fallbackIso === 'PAK') return 'PAKISTAN';
             if (fallbackIso === 'AFG') return 'PASSPORT DEPARTMENT';
@@ -1289,7 +1289,7 @@
         const mrzIso = (mrzMatch && mrzMatch[1] !== 'UTO' && mrzMatch[1] !== 'XXX') ? mrzMatch[1] : '';
 
         const fallbackIso = mrzIso || getCountryIso3Code(
-            options.uyruk || options.nationality || options.country || options.dogumUlkesi
+            options?.uyruk || options?.nationality || options?.country || options?.dogumUlkesi
         );
 
         if (fallbackIso === 'PAK') return 'PAKISTAN';
@@ -1495,7 +1495,7 @@
         const mrzNames = extractMrzNames(text);
         let cinsiyet = extractPassportGender(text, options) || mrz.cinsiyet || '';
         if (!cinsiyet) {
-            const studentName = options.fullName || options.studentName || `${mrzNames.givenNames || ''} ${mrzNames.surname || ''}`.trim();
+            const studentName = options?.fullName || options?.studentName || `${mrzNames.givenNames || ''} ${mrzNames.surname || ''}`.trim();
             if (studentName) {
                 cinsiyet = inferGenderFromName(studentName);
             }

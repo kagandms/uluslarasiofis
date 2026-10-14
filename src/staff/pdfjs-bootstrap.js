@@ -3,3 +3,5 @@ import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 window.pdfjsLib = pdfjsLib;
+
+export const pdfjsReady = Promise.resolve(pdfjsLib);

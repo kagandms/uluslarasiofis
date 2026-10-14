@@ -78,6 +78,10 @@ function postAppMessage(payload) {
     window.postMessage(payload, origin);
 }
 
+function readProfileText(value) {
+    return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
 function scorePassportPageText(text, studentName = '', passportNo = '') {
     if (!text || typeof text !== 'string') return 0;
     let score = 0;
@@ -104,7 +108,7 @@ function scorePassportPageText(text, studentName = '', passportNo = '') {
 
     // 3. Student Passport Number Match
     if (passportNo) {
-        const cleanNo = passportNo.replace(/\s+/g, '').toUpperCase();
+        const cleanNo = readProfileText(passportNo).replace(/\s+/g, '').toUpperCase();
         if (cleanNo.length >= 5 && upperText.replace(/\s+/g, '').includes(cleanNo)) {
             score += 50;
         }
@@ -112,7 +116,7 @@ function scorePassportPageText(text, studentName = '', passportNo = '') {
 
     // 4. Student Name Token Match
     if (studentName) {
-        const nameTokens = studentName.toUpperCase().split(/\s+/).filter(t => t.length >= 3);
+        const nameTokens = readProfileText(studentName).toUpperCase().split(/\s+/).filter(t => t.length >= 3);
         let matchedTokens = 0;
         for (const token of nameTokens) {
             if (upperText.includes(token)) matchedTokens++;
@@ -447,10 +451,10 @@ export function initYknManager() {
         }
         panelFields.style.display = 'block';
 
-        const issueVal = (inputIssueDate?.value || currentStudentData.issueDate || '').trim();
-        const expiryVal = (inputExpiryDate?.value || currentStudentData.expiryDate || '').trim();
-        const bpVal = (inputBirthPlace?.value || currentStudentData.birthPlace || currentStudentData.dogumYeriAciklamasi || currentStudentData.dogumYeri || '').trim();
-        const authVal = (inputIssuingAuthority?.value || currentStudentData.issuingAuthority || currentStudentData.verenMakam || '').trim();
+        const issueVal = readProfileText(inputIssueDate?.value || currentStudentData.issueDate || '').trim();
+        const expiryVal = readProfileText(inputExpiryDate?.value || currentStudentData.expiryDate || '').trim();
+        const bpVal = readProfileText(inputBirthPlace?.value || currentStudentData.birthPlace || currentStudentData.dogumYeriAciklamasi || currentStudentData.dogumYeri || '').trim();
+        const authVal = readProfileText(inputIssuingAuthority?.value || currentStudentData.issuingAuthority || currentStudentData.verenMakam || '').trim();
 
         const missing = [];
         if (!normalizeProfileGender(currentStudentData.cinsiyet)) missing.push('Cinsiyet (elle doğrulayın)');
@@ -524,7 +528,7 @@ export function initYknManager() {
     }
 
     function populateStudentFieldsToInputs(student) {
-        if (!student) return;
+        if (!student || typeof student !== 'object') return;
         if (inputIssueDate && !inputIssueDate.value && student.issueDate) {
             inputIssueDate.value = formatDateForDisplay(student.issueDate);
         }
@@ -532,10 +536,10 @@ export function initYknManager() {
             inputExpiryDate.value = formatDateForDisplay(student.expiryDate);
         }
         if (inputBirthPlace && !inputBirthPlace.value && (student.birthPlace || student.dogumYeriAciklamasi || student.dogumYeri)) {
-            inputBirthPlace.value = (student.birthPlace || student.dogumYeriAciklamasi || student.dogumYeri).toUpperCase();
+            inputBirthPlace.value = readProfileText(student.birthPlace || student.dogumYeriAciklamasi || student.dogumYeri).toUpperCase();
         }
         if (inputIssuingAuthority && !inputIssuingAuthority.value && (student.issuingAuthority || student.verenMakam)) {
-            inputIssuingAuthority.value = (student.issuingAuthority || student.verenMakam).toUpperCase();
+            inputIssuingAuthority.value = readProfileText(student.issuingAuthority || student.verenMakam).toUpperCase();
         }
         if (inputMotherName && !inputMotherName.value && student.anneAdi) {
             inputMotherName.value = student.anneAdi;
@@ -1732,7 +1736,7 @@ export function initYknManager() {
                     currentStudentData.dogumYeriAciklamasi = detectedBirthPlace;
                     if (inputBirthPlace) inputBirthPlace.value = detectedBirthPlace;
                 } else if (currentStudentData?.dogumUlkesi && inputBirthPlace && !inputBirthPlace.value) {
-                    const fallbackCountry = currentStudentData.dogumUlkesi.toUpperCase();
+                    const fallbackCountry = readProfileText(currentStudentData.dogumUlkesi).toUpperCase();
                     currentStudentData.dogumYeriAciklamasi = fallbackCountry;
                     inputBirthPlace.value = fallbackCountry;
                 }
@@ -2050,7 +2054,7 @@ export function initYknManager() {
     if (btnReadAcceptance) {
         btnReadAcceptance.addEventListener('click', async () => {
             const enteredPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
-            const currentPassport = (currentStudentData?.passportNo || currentStudentData?.pasaportNo || '').trim().toUpperCase();
+            const currentPassport = readProfileText(currentStudentData?.passportNo || currentStudentData?.pasaportNo || '').trim().toUpperCase();
             const cleanEntered = enteredPassport.replace(/[^A-Z0-9]/gi, '');
             const cleanCurrent = currentPassport.replace(/[^A-Z0-9]/gi, '');
 
@@ -2141,7 +2145,7 @@ export function initYknManager() {
     if (btnCopy) {
         btnCopy.addEventListener('click', async () => {
             const enteredPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
-            const currentPassport = (currentStudentData?.passportNo || currentStudentData?.pasaportNo || '').trim().toUpperCase();
+            const currentPassport = readProfileText(currentStudentData?.passportNo || currentStudentData?.pasaportNo || '').trim().toUpperCase();
             const cleanEntered = enteredPassport.replace(/[^A-Z0-9]/gi, '');
             const cleanCurrent = currentPassport.replace(/[^A-Z0-9]/gi, '');
 
@@ -2925,7 +2929,7 @@ export function initYknManager() {
                 ? incoming.passportCandidates
                 : (incoming.passportDocumentUrl || incoming.passportImageUrl ? [incoming.passportDocumentUrl || incoming.passportImageUrl] : []);
             const currentSearchPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
-            const resolvedPassportNo = (incoming.passportNo || incoming.pasaportNo || currentSearchPassport || '').trim().toUpperCase();
+            const resolvedPassportNo = readProfileText(incoming.passportNo || incoming.pasaportNo || currentSearchPassport || '').trim().toUpperCase();
             currentStudentData = {
                 ...incoming,
                 passportNo: resolvedPassportNo,
@@ -2957,7 +2961,7 @@ export function initYknManager() {
                 ? incoming.passportCandidates
                 : (incoming.passportDocumentUrl || incoming.passportImageUrl ? [incoming.passportDocumentUrl || incoming.passportImageUrl] : (currentStudentData?.passportCandidates || []));
             const currentSearchPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
-            const resolvedPassportNo = (currentStudentData?.passportNo || currentStudentData?.pasaportNo || incoming.passportNo || incoming.pasaportNo || currentSearchPassport || '').trim().toUpperCase();
+            const resolvedPassportNo = readProfileText(currentStudentData?.passportNo || currentStudentData?.pasaportNo || incoming.passportNo || incoming.pasaportNo || currentSearchPassport || '').trim().toUpperCase();
             currentStudentData = {
                 ...currentStudentData,
                 ...incoming,

@@ -46,6 +46,9 @@ function applyLocale(locale) {
         const messageKey = element.dataset.i18n;
         element.textContent = getMessage(selectedLocale, messageKey);
     });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => {
+        element.placeholder = getMessage(selectedLocale, element.dataset.i18nPlaceholder);
+    });
     document.querySelectorAll('[data-i18n-aria-label]').forEach((element) => {
         const messageKey = element.dataset.i18nAriaLabel;
         element.setAttribute('aria-label', getMessage(selectedLocale, messageKey));

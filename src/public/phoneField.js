@@ -1,6 +1,6 @@
-import { getCountries, getCountryCallingCode, parsePhoneNumberFromString } from 'libphonenumber-js/min';
+import { getCountries, getCountryCallingCode, parsePhoneNumberFromString } from 'libphonenumber-js/max';
 import { getCountryName } from './countryData.js';
-import { isValidPhoneNumber } from '../shared/phoneNumber.js';
+import { isValidPhoneNumber, normalizePhoneNumber } from '../shared/phoneNumber.js';
 
 /** @param {string} locale @returns {Array<{code: string, callingCode: string, label: string}>} */
 export function listPhoneCountryOptions(locale) {
@@ -12,7 +12,7 @@ export function listPhoneCountryOptions(locale) {
 
 /** @param {string} value @param {string} defaultCountry @returns {{e164: string, country: string|null, formattedNational: string, isPossible: boolean, isInternational: boolean, needsCountryReview: boolean}} */
 export function parsePhoneInput(value, defaultCountry = 'TR') {
-    const input = String(value || '').trim();
+    const input = normalizePhoneNumber(value);
     const isInternational = input.startsWith('+');
     const parsed = isInternational
         ? parsePhoneNumberFromString(input, { extract: false })
@@ -101,7 +101,7 @@ export function createPhoneField(document, { value, locale, messages, country = 
             : !parsed.needsCountryReview || Boolean(callingCodeMatches);
         const isValid = isUnchangedLegacyValue
             ? isValidPhoneNumber(canonicalInput.value)
-            : parsed.isPossible && hasResolvedCountry && Boolean(selectedCountry);
+            : parsed.isPossible && isValidPhoneNumber(parsed.e164) && hasResolvedCountry && Boolean(selectedCountry);
         canonicalInput.value = isValid && parsed.isPossible ? parsed.e164 : phoneInput.value.trim();
         canonicalInput.dataset.phonePossible = String(isValid);
         phoneInput.dataset.phonePossible = String(isValid);
@@ -137,7 +137,7 @@ export function createPhoneField(document, { value, locale, messages, country = 
         }
     });
     if (initialPhone?.isPossible) canonicalInput.value = initialPhone.e164;
-    const isInitialValueValid = initialPhone?.isPossible && (!initialPhone.needsCountryReview || initialCountryMatchesCallingCode)
+    const isInitialValueValid = initialPhone?.isPossible && isValidPhoneNumber(initialPhone.e164) && (!initialPhone.needsCountryReview || initialCountryMatchesCallingCode)
         || (isExistingValue && !storedPhone.startsWith('+') && isValidPhoneNumber(storedPhone));
     canonicalInput.dataset.phonePossible = String(Boolean(isInitialValueValid));
     phoneInput.dataset.phonePossible = String(Boolean(isInitialValueValid));
