@@ -1748,6 +1748,41 @@ async function waitForYoksisFormReady(tabId, requestId, options = {}) {
     }
 }
 
+function isUnchangedEmptyYoksisForm(state, fingerprint, domRevision) {
+    return state?.hasPopulatedStudentForm === false
+        && typeof fingerprint === 'string'
+        && fingerprint.length > 0
+        && state.fingerprint === fingerprint
+        && Number.isFinite(domRevision)
+        && state.domRevision === domRevision;
+}
+
+async function runVerifiedMainWorldSearch(tabId, kabulId, requestId, expectedStudent, baseline) {
+    const results = await executeYoksisSearchInMainWorld(tabId, kabulId);
+    const searchDispatched = Boolean(results?.some((result) => result.result?.searchTriggered === true));
+    if (!searchDispatched) return null;
+
+    const formReady = await waitForYoksisFormReady(tabId, requestId, {
+        afterFingerprint: baseline.fingerprint,
+        afterDomRevision: baseline.domRevision,
+        requireFreshResult: true,
+        expectedStudent,
+        expectedKabulId: kabulId
+    });
+    if (!formReady) {
+        throw new Error('YÖKSİS arama komutu gönderildi ancak yeni öğrenci formu doğrulanmadı. Önceki form korunarak işlem durduruldu.');
+    }
+
+    return {
+        success: true,
+        transferred: true,
+        searchTriggered: true,
+        formReady: true,
+        ...(await getVerifiedYoksisTarget(tabId)),
+        message: 'Kabul mektup kodu YÖKSİS’e aktarıldı ve yeni öğrenci formu doğrulandı.'
+    };
+}
+
 
 async function transferToYoksis(request) {
     const totalStartedAt = startYknTiming();
@@ -1823,31 +1858,19 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             if (!stateBeforeMainSearch || stateBeforeMainSearch.hasPopulatedStudentForm !== false) {
                 throw new Error('YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin.');
             }
-            const mainResults = await executeYoksisSearchInMainWorld(yoksisTab.id, kabulId);
-            mainTriggered = Boolean(mainResults?.some(r => r.result?.searchTriggered === true));
-            if (mainTriggered) {
-                const formValidationStartedAt = startYknTiming();
-                const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, {
-                    afterFingerprint: stateBeforeMainSearch.fingerprint,
-                    afterDomRevision: stateBeforeMainSearch.domRevision,
-                    requireFreshResult: true,
-                    expectedStudent,
-                    expectedKabulId: kabulId
-                });
-                if (!formReady) {
-                    finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'failed', 'fresh_form_not_confirmed');
-                    throw new Error('YÖKSİS arama komutu gönderildi ancak yeni öğrenci formu doğrulanmadı. Önceki form korunarak işlem durduruldu.');
-                }
+            const formValidationStartedAt = startYknTiming();
+            const mainSearch = await runVerifiedMainWorldSearch(
+                yoksisTab.id,
+                kabulId,
+                request.requestId,
+                expectedStudent,
+                stateBeforeMainSearch
+            );
+            mainTriggered = mainSearch !== null;
+            if (mainSearch) {
                 finishYknTiming('fresh-student-form-validation', formValidationStartedAt);
                 finishYknTiming('yoksis-transfer-total', totalStartedAt);
-                return {
-                    success: true,
-                    transferred: true,
-                    searchTriggered: true,
-                    formReady: true,
-                    ...(await getVerifiedYoksisTarget(yoksisTab.id)),
-                    message: 'Kabul mektup kodu YÖKSİS’e aktarıldı ve yeni öğrenci formu doğrulandı.'
-                };
+                return mainSearch;
             }
         }
 
@@ -1887,6 +1910,27 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                     };
                 }
                 finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'failed', 'fresh_form_not_confirmed');
+                const currentFormState = await getYoksisFormState(yoksisTab.id, request.requestId);
+                if (isUnchangedEmptyYoksisForm(
+                    currentFormState,
+                    response.formFingerprintBeforeSearch,
+                    response.domRevisionBeforeSearch
+                )) {
+                    const fallbackStartedAt = startYknTiming();
+                    const fallbackSearch = await runVerifiedMainWorldSearch(
+                        yoksisTab.id,
+                        kabulId,
+                        request.requestId,
+                        expectedStudent,
+                        currentFormState
+                    );
+                    if (fallbackSearch) {
+                        finishYknTiming('acceptance-id-input-and-search', fallbackStartedAt, 'fallback', 'content_click_not_applied');
+                        finishYknTiming('yoksis-transfer-total', totalStartedAt);
+                        return fallbackSearch;
+                    }
+                    finishYknTiming('acceptance-id-input-and-search', fallbackStartedAt, 'failed', 'main_search_not_dispatched');
+                }
                 if (waitOptions.lastErrorMessage) {
                     throw new Error(waitOptions.lastErrorMessage);
                 }

@@ -36,6 +36,7 @@ import { createPublicPrintUploadIntent, finalizePublicPrintUpload, readPublicPri
 import { handleStaffPrintRequest } from './routes/staffPrintRoutes.js';
 import { handlePrinterRequest, readStaffPrintStatus } from './routes/printerRoutes.js';
 import { runPrintCleanup } from './services/printCleanupService.js';
+import { readD1UsageMetrics } from './services/d1-usage-metrics.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -67,8 +68,13 @@ function withMetaWhatsAppProvider(environment) {
     } };
 }
 
-async function routeApi(request, environment, requestId) {
+async function routeApi(request, environment, requestId, cache) {
     const { pathname } = new URL(request.url);
+    if (pathname === '/api/staff/admin/d1-usage') {
+        requireMethod(request, 'GET');
+        await requireStaff(request, environment);
+        return readD1UsageMetrics({ environment, cache });
+    }
     if (['/api/staff/physical-access', '/api/staff/physical-access/session'].includes(pathname)) return readPhysicalAccess(request, environment);
     if (pathname === '/api/public/physical-intakes/tracking-lookup') return lookupPhysicalTracking(request, environment);
     if (pathname.startsWith('/api/staff/physical-intakes')) return handlePhysicalIntakes(request, environment, requestId);
@@ -276,7 +282,7 @@ const worker = {
         }
 
         try {
-            return safeRouteResponse(await routeApi(request, environment, requestId), requestId);
+            return safeRouteResponse(await routeApi(request, environment, requestId, globalThis.caches?.default), requestId);
         } catch (error) {
             const apiError = apiErrorFromUnknown(error);
             if (apiError.status >= 500) {

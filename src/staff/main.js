@@ -20,6 +20,7 @@ import { initDocumentsManager } from '../ui/documents-manager.js';
 import { initLiveClock } from '../ui/liveClock.js';
 import { openStaffGuideModal } from '../ui/staffGuideModal.js';
 import { initializeStaffPrintStatus } from './print-status.js';
+import { initD1UsageCounter } from '../ui/d1-usage-counter.js';
 
 const staffAuthReady = document.readyState === 'loading'
     ? new Promise((resolve) => {
@@ -85,6 +86,7 @@ let updateState = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!await staffAuthReady) return;
+    initD1UsageCounter();
     try {
         await import('./pdfjs-bootstrap.js');
     } catch (error) {

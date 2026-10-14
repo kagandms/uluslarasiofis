@@ -96,6 +96,7 @@
         "PHYSICAL_RECEIPTS_CREATE_ENABLED": "true",
         "PUBLIC_PORTAL_ORIGIN": "https://goc.topkapiuni.workers.dev",
         "PUBLIC_PORTAL_ORIGIN_ALLOWLIST": "https://goc.topkapiuni.workers.dev",
+        "D1_ANALYTICS_ACCOUNT_ID": "1500828651b1e7541978c7203e56e822",
         "PRINT_ENABLED": "true",
         "PRINT_UAT_ENABLED": "false",
         "R2_BUCKET_NAME": "uluslarasiofis-documents-production",

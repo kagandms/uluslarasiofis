@@ -268,6 +268,31 @@ body.dark-mode .header-live-clock:hover {
     padding: 2rem 0;
 }
 
+.d1-usage-counter {
+    position: fixed;
+    z-index: 30;
+    inset-inline-end: 1rem;
+    inset-block-end: 1rem;
+    display: grid;
+    gap: 0.38rem;
+    width: min(17rem, calc(100vw - 2rem));
+    padding: 0.8rem 0.9rem;
+    border: 1px solid var(--card-border);
+    border-radius: 0.8rem;
+    background: var(--card-bg);
+    box-shadow: 0 8px 28px rgb(32 35 42 / 14%);
+}
+
+.d1-usage-counter-title { color: var(--text-secondary); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.03em; }
+.d1-usage-counter-value { color: var(--accent); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 0.95rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.d1-usage-counter-track { position: relative; display: block; height: 0.35rem; overflow: hidden; border-radius: 99px; background: var(--card-border); }
+.d1-usage-counter-fill { display: block; width: var(--d1-usage-progress, 0%); height: 100%; border-radius: inherit; background: var(--accent); transition: width 0.35s ease; }
+.d1-usage-counter-note { color: var(--text-secondary); font-size: 0.68rem; line-height: 1.3; }
+
+@media (max-width: 480px) {
+    .d1-usage-counter { inset-inline-end: 0.65rem; inset-block-end: 0.65rem; width: min(15rem, calc(100vw - 1.3rem)); padding: 0.65rem 0.75rem; }
+}
+
 .home-intro {
     text-align: center;
     margin-bottom: 2rem;

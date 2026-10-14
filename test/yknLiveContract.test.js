@@ -183,6 +183,7 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         windowId: 8
     };
     const sessionStorage = options.sessionStorage || {};
+    let readinessCallCount = 0;
 
     const chrome = {
         runtime: {
@@ -272,11 +273,14 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                     return;
                 }
                 if (message.action === 'GET_YOKSIS_FORM_STATE') {
-                    callback({ success: true, fingerprint: 'previous-student', domRevision: 7, hasPopulatedStudentForm: false });
+                    callback(options.formState || { success: true, fingerprint: 'previous-student', domRevision: 7, hasPopulatedStudentForm: false });
                     return;
                 }
                 if (message.action === 'WAIT_YOKSIS_FORM') {
-                    callback({ success: true, formReady: true });
+                    const responses = options.formReadyResponses || [];
+                    const response = responses[Math.min(readinessCallCount, responses.length - 1)];
+                    readinessCallCount += 1;
+                    callback(response || { success: true, formReady: true });
                     return;
                 }
                 if (message.action === 'verifyYoksisFields') {
@@ -1152,6 +1156,58 @@ test('background transfer accepts only a fresh content-search result or a fresh 
     const readinessCall = mainHarness.calls.find((call) => call.type === 'message' && call.message.action === 'WAIT_YOKSIS_FORM');
     assert.equal(readinessCall.message.requireFreshResult, true);
     assert.equal(readinessCall.message.afterFingerprint, 'previous-student');
+});
+
+test('background retries a claimed content click only when the form is unchanged and still empty', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: true, buttonFound: true, searchTriggered: true },
+        {
+            success: false,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'previous-student',
+            domRevisionBeforeSearch: 7
+        },
+        { formReadyResponses: [{ success: true, formReady: false }, { success: true, formReady: true }] }
+    );
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'workflow-click-not-applied',
+        data: { yoksisId: 'AB-123-CD' }
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.searchTriggered, true);
+    assert.ok(harness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
+});
+
+test('background does not retry when YÖKSİS changed after the content click', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: true, buttonFound: true, searchTriggered: true },
+        {
+            success: false,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'previous-student',
+            domRevisionBeforeSearch: 7
+        },
+        {
+            formState: { success: true, fingerprint: 'changed-dom', domRevision: 8, hasPopulatedStudentForm: false },
+            formReadyResponses: [{ success: true, formReady: false }]
+        }
+    );
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'workflow-no-duplicate-search',
+        data: { yoksisId: 'AB-123-CD' }
+    });
+
+    assert.equal(response.success, false);
+    assert.ok(!harness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
 });
 
 test('YKN timing diagnostics report stage metrics without acceptance or student data', async () => {
