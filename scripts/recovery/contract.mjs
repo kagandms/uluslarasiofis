@@ -4,8 +4,8 @@ const need = ok => { if (!ok) throw new Error('RECOVERY_INVALID_CONTRACT_METADAT
 const sorted = items => [...items].sort((a, b) => canonical(a) < canonical(b) ? -1 : canonical(a) > canonical(b) ? 1 : 0);
 const unique = items => { need(new Set(items.map(item => item.name)).size === items.length); return sorted(items); };
 
-// Adapter for an approved read-only observer. It accepts schema/metadata, never table rows or secret values.
-// Worker and asset bytes must already have been verified against their immutable version IDs by that observer.
+// Adapter for the approved maintenance metadata check. It accepts schema/metadata, never table rows or secret values.
+// Worker and asset bytes must already have been verified against their immutable version IDs by the maintenance check.
 export function contractFromMetadata(input) {
     need(input && Object.keys(input).sort().join('|') === ['assets', 'bindings', 'crons', 'migrations', 'schema', 'secrets', 'vars', 'worker'].join('|'));
     for (const field of ['worker', 'assets']) need(typeof input[field] === 'string' && /^[a-f0-9]{64}$/.test(input[field]));

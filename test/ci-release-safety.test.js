@@ -124,6 +124,9 @@ test('production release workflow stays manual, serialized, environment-gated an
     assert.match(workflow, /scripts\/ci\/check-backup-evidence\.mjs/);
     assert.match(workflow, /scripts\/ci\/check-rollback-evidence\.mjs/);
     assert.match(workflow, /publication remains locked/);
+    assert.match(workflow, /artifact-dry-run\.mjs/);
+    assert.doesNotMatch(workflow, /npm run (?:build|deploy:dry-run:production)/);
+    assert.match(workflow, /CURRENT_WORKER_VERSION: \$\{\{ steps\.cloudflare\.outputs\.current_version \}\}/);
     assert.match(workflow, /sha256sum --check "\$ARTIFACT_ROOT\/candidate-config\.sha256"/);
     assert.doesNotMatch(workflow, /wrangler deploy --env production(?! --dry-run)/);
     assert.doesNotMatch(workflow, /d1 migrations apply .*--remote/);

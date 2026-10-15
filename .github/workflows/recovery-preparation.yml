@@ -1,4 +1,4 @@
-name: Recovery preparation (synthetic data only)
+name: Recovery maintenance readiness (synthetic data only)
 
 on:
   workflow_dispatch:
@@ -45,3 +45,5 @@ jobs:
       - name: Exercise local SQL and R2 restore with synthetic data
         run: node --disable-warning=ExperimentalWarning scripts/recovery/synthetic-restore.mjs
       # This produces console summaries only. It cannot create production recovery evidence.
+      # Real backup and periodic restore belong to this separate maintenance process.
+      # No schedule or data operation until scope, retention, credentials and costs are approved.

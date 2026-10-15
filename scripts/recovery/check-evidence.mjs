@@ -7,7 +7,7 @@ export function checkEvidence(mode) {
         // Stop before reading evidence while recovery authority/targets remain unapproved.
         if (policy.enabled !== true) throw new Error('RECOVERY_POLICY_NOT_APPROVED');
         const config = JSON.parse(readFileSync(new URL('../../wrangler.jsonc', import.meta.url), 'utf8')).env.production;
-        const context = { releaseSha: process.env.RELEASE_SHA, source: {
+        const context = { releaseSha: process.env.RELEASE_SHA, currentVersion: process.env.CURRENT_WORKER_VERSION, runId: process.env.RECOVERY_RUN_ID, source: {
             environment: 'production', repository: 'kagandms/uluslarasiofis', worker: config.name,
             account_id: process.env.CLOUDFLARE_ACCOUNT_ID,
             database_id: config.d1_databases.find(item => item.binding === 'DB').database_id,

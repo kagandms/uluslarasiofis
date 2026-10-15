@@ -106,3 +106,8 @@ jobs:
           test "$(cat "$ARTIFACT_ROOT/candidate-sha.txt")" = "$EXPECTED_SHA"
           sha256sum --check "$ARTIFACT_ROOT/candidate-config.sha256"
           node scripts/ci/candidate-artifact.mjs verify "$EXPECTED_SHA" "$ARTIFACT_ROOT"
+      - name: Rehearse exact downloaded artifact without rebuilding or credentials
+        env:
+          RELEASE_SHA: ${{ inputs.sha || github.sha }}
+          ARTIFACT_ROOT: ${{ runner.temp }}/candidate-roundtrip
+        run: node scripts/ci/artifact-dry-run.mjs
