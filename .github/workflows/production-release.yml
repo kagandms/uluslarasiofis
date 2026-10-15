@@ -73,11 +73,14 @@ jobs:
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate-release
       - name: Verify artifact contents and source SHA
+        env:
+          ARTIFACT_ROOT: ${{ runner.temp }}/candidate-release
         run: |
-          test "$(cat candidate-sha.txt)" = "$RELEASE_SHA"
-          node scripts/ci/candidate-artifact.mjs verify "$RELEASE_SHA"
-          sha256sum -c candidate-config.sha256
+          test "$(cat "$ARTIFACT_ROOT/candidate-sha.txt")" = "$RELEASE_SHA"
+          node scripts/ci/candidate-artifact.mjs verify "$RELEASE_SHA" "$ARTIFACT_ROOT"
+          (cd "$ARTIFACT_ROOT" && sha256sum --check candidate-config.sha256)
       - name: Verify Cloudflare token, account, Worker bindings, runtime secrets and cron
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -96,9 +99,10 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          ARTIFACT_ROOT: ${{ runner.temp }}/candidate-release
         run: |
           npm run deploy:dry-run:production
-          node scripts/ci/candidate-artifact.mjs verify "$RELEASE_SHA"
+          node scripts/ci/candidate-artifact.mjs verify "$RELEASE_SHA" "$ARTIFACT_ROOT"
       - name: Keep publication locked until independent implementation and recovery review
         run: |
           echo '::error::Preflight complete. Publication remains locked until the exact-artifact deploy path and rollback compatibility gates receive a separate reviewed change.'
