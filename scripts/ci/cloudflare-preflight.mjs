@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { assertProductionRuntimeSecretMetadata } from './runtime-secret-metadata.mjs';
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -64,18 +65,6 @@ const expectedCrons = [...(production.triggers?.crons || [])].sort();
 const actualCrons = (schedules?.schedules || []).map(item => item.cron).sort();
 assert.deepEqual(actualCrons, expectedCrons, 'Production cron schedules differ from the reviewed configuration.');
 
-const expectedSecretNames = [
-    'APPS_SCRIPT_API_KEY', 'APPS_SCRIPT_URL', 'AZURE_VISION_ENDPOINT', 'AZURE_VISION_KEY',
-    'PRINTER_SECRET', 'PRINT_R2_ACCESS_KEY_ID', 'PRINT_R2_SECRET_ACCESS_KEY',
-    'R2_ACCESS_KEY_ID', 'R2_ACCOUNT_ID', 'R2_SECRET_ACCESS_KEY', 'SCANNER_SECRET', 'STAFF_BOOTSTRAP_TOKEN'
-].sort();
-const actualSecrets = (Array.isArray(secrets) ? secrets : secrets?.secrets || [])
-    .map(secret => ({ name: secret.name, type: secret.type }))
-    .sort((left, right) => left.name.localeCompare(right.name));
-assert.deepEqual(actualSecrets.map(secret => secret.name), expectedSecretNames, 'Production runtime secret metadata differs from the reviewed baseline.');
-for (const requiredName of production.secrets?.required || []) {
-    const secret = actualSecrets.find(item => item.name === requiredName);
-    assert.equal(secret?.type, 'secret_text', `Required production secret metadata is missing or has the wrong type: ${requiredName}.`);
-}
+const actualSecrets = assertProductionRuntimeSecretMetadata(secrets, production.secrets?.required || []);
 
 console.log(`Cloudflare preflight passed for account scope, Worker ${production.name}, D1/R2 bindings, ${actualCrons.length} cron schedules, and ${actualSecrets.length} runtime secret names/types. Secret values were not requested or logged.`);
