@@ -1,4 +1,4 @@
-name: Production release rehearsal (publication locked)
+name: Production release preflight (publication locked)
 
 # Deliberately no push, workflow_run, schedule or deployment trigger.
 on:
@@ -29,9 +29,6 @@ jobs:
           ref: ${{ inputs.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '24.19.0'
       - name: Bind review and checkout to the same SHA
         id: candidate
         env:
@@ -46,19 +43,64 @@ jobs:
     with:
       sha: ${{ needs.candidate.outputs.sha }}
     # No secrets: inherit. Validation has no production environment or credentials.
-  publication-locked:
-    name: Publication locked pending separate implementation review
+  preflight-locked:
+    name: Approved identity and release preflight (publication remains locked)
     needs: [candidate, validate]
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 30
     environment: Production
     env:
       RELEASE_SHA: ${{ needs.candidate.outputs.sha }}
     steps:
-      - name: Fail closed even if environment approval is absent or misconfigured
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.19.0'
+      - name: Install locked deployment tooling
         run: |
-          echo "Validated candidate: $RELEASE_SHA"
-          echo '::error::Publication is intentionally unavailable. Complete the reviewed authorization, backup, schema and rollback gates before adding any deploy operation.'
+          npm install --global npm@11.9.0
+          npm ci --ignore-scripts
+      - name: Confirm production HEAD still matches the reviewed SHA
+        run: |
+          git fetch --no-tags origin production
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(git rev-parse refs/remotes/origin/production)" = "$RELEASE_SHA"
+      - name: Download artifact produced by exact-SHA CI
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: candidate-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Verify artifact contents and source SHA
+        run: |
+          test "$(cat candidate-sha.txt)" = "$RELEASE_SHA"
+          node scripts/ci/candidate-artifact.mjs verify "$RELEASE_SHA"
+          sha256sum -c candidate-config.sha256
+      - name: Verify Cloudflare token, account, Worker bindings, runtime secrets and cron
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/ci/cloudflare-preflight.mjs
+      - name: Check remote D1 migration ledger without applying migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/ci/check-migration-ledger.mjs
+      - name: Require current backup and recent restore drill evidence
+        run: node scripts/ci/check-backup-evidence.mjs
+      - name: Require rollback compatibility evidence for schema, secrets, bindings and cron
+        run: node scripts/ci/check-rollback-evidence.mjs
+      - name: Check production deploy dry run and secret metadata guard
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npm run deploy:dry-run:production
+          node scripts/ci/candidate-artifact.mjs verify "$RELEASE_SHA"
+      - name: Keep publication locked until independent implementation and recovery review
+        run: |
+          echo '::error::Preflight complete. Publication remains locked until the exact-artifact deploy path and rollback compatibility gates receive a separate reviewed change.'
           exit 1
-    # There is no Cloudflare credential reference or deploy/remote migration command.
-    # Enabling publication requires a new reviewed code change, not a dispatch flag.
+    # This job intentionally has no deploy, remote migration, rollback, D1/R2 write or secret-value read command.

@@ -67,6 +67,10 @@ jobs:
         run: npm run ci:local
       - name: Build production candidate without credentials
         run: npm run build:production
+      - name: Create immutable candidate artifact manifest
+        env:
+          EXPECTED_SHA: ${{ inputs.sha || github.sha }}
+        run: node scripts/ci/candidate-artifact.mjs create "$EXPECTED_SHA"
       - name: Record tested source and configuration checksums
         env:
           EXPECTED_SHA: ${{ inputs.sha || github.sha }}
@@ -81,6 +85,7 @@ jobs:
           name: candidate-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             dist/
+            candidate-artifact.json
             candidate-sha.txt
             candidate-config.sha256
           retention-days: 7
