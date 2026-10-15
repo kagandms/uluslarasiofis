@@ -26,7 +26,9 @@
     "deploy:production": "npm run build:production && wrangler deploy --env production",
     "deploy:dry-run:production": "npm run build:production && wrangler deploy --env production --dry-run",
     "predeploy:production": "node scripts/check-production-print-secrets.mjs",
-    "predeploy:dry-run:production": "node scripts/check-production-print-secrets.mjs"
+    "predeploy:dry-run:production": "node scripts/check-production-print-secrets.mjs",
+    "ci:local": "node scripts/ci/local-worker-smoke.mjs",
+    "test:receipt-stability": "node scripts/ci/receipt-stability.mjs"
   },
   "repository": {
     "type": "git",
@@ -41,11 +43,11 @@
   },
   "homepage": "https://github.com/kagandms/uluslarasiofis#readme",
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.62.0",
+    "@cloudflare/vite-plugin": "1.64.0",
     "jsdom": "^29.1.1",
     "pdfjs-dist": "6.3.289",
     "vite": "^8.2.2",
-    "wrangler": "^4.143.0"
+    "wrangler": "4.151.0"
   },
   "overrides": {
     "undici": "7.30.0"
