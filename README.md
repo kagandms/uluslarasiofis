@@ -9,6 +9,10 @@ Run `npm ci`, `npm test`, `npm run build:production`, and `npm run deploy:dry-ru
 Publish to Worker `goc` only when deployment is requested, using `npm run deploy:production`.
 Git pushes do not require a Cloudflare deployment. Remote migrations require explicit scope review.
 
+For the cloud checkout, isolated GitHub Actions CI, and the intentionally locked manual
+production release rehearsal, see [Cloud CI and release preparation](docs/deployment/cloud-ci-release.md).
+The cloud workflow uses `/workspace/uluslarasiofis` and does not require the MacBook path above.
+
 The staging commands and Wrangler environment below are historical and retained during the
 approved cleanup process. They are not the development or deployment target. Existing Codex
 worktrees and historical integration evidence remain preserved.

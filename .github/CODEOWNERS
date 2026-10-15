@@ -1,0 +1,9 @@
+# Effective only after the owner enables required code-owner review on production.
+/.github/ @kagandms
+/scripts/ci/ @kagandms
+/scripts/*production* @kagandms
+/scripts/lib/production-print-config.mjs @kagandms
+/package.json @kagandms
+/package-lock.json @kagandms
+/wrangler.jsonc @kagandms
+/migrations/ @kagandms
