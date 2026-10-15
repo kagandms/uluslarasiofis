@@ -50,21 +50,24 @@ export async function registerPhysicalReceipt(request, context) {
     const { id, reservationUuid, metadata, bodyHash } = await readMetadataRegistration(request);
     const replay = await checkRegistrationReplay(context,{id,bodyHash});
     if (replay) return replay;
-    const reservation = await context.receipts.reservation(reservationUuid);
-    if (!reservation || reservation.staff_id !== context.staff.id || reservation.session_hash !== context.sessionHash
-        || reservation.consumed_intake_id || reservation.expires_at<=context.now || reservation.application_date.slice(0,4)!==metadata.application_date.slice(0,4)) {
-        throw new ApiError(409,'RESERVATION_EXPIRED','Numara tahsisi geçersiz; yeni numara ayırın.');
-    }
     try {
+        const reservation = await context.receipts.reservation(reservationUuid);
+        if (!reservation || reservation.staff_id !== context.staff.id || reservation.session_hash !== context.sessionHash
+            || reservation.consumed_intake_id || reservation.expires_at<=context.now || reservation.application_date.slice(0,4)!==metadata.application_date.slice(0,4)) {
+            throw new ApiError(409,'RESERVATION_EXPIRED','Numara tahsisi geçersiz; yeni numara ayırın.');
+        }
         const intake = await context.receipts.register({ id, metadata, bodyHash, reservation, receiptId:crypto.randomUUID(), creationId:id,
             sessionHash:context.sessionHash,staffId:context.staff.id,requestId:context.requestId,now:context.now,
             portalOrigin:readReceiptPortalOrigin(context.environment) });
         if (!intake) throw new ApiError(409,'RESERVATION_EXPIRED','Numara tahsisi sona erdi.');
         return intake;
     } catch (error) {
-        console.error('Physical metadata registration failed.', { errorName:error.name });
+        // A concurrent request may commit after the initial replay read and
+        // consume the reservation before our validation. Recheck the same UUID
+        // and body hash for validation failures as well as transaction failures.
         const saved = await checkRegistrationReplay(context,{id,bodyHash});
         if (saved) return saved;
+        console.error('Physical metadata registration failed.', { errorName:error.name });
         if (/physical_active_passport_conflict|UNIQUE constraint/.test(String(error.message))) {
             const duplicates = (await context.receipts.duplicates(metadata)).results;
             return { conflict:true, matches:duplicates };
