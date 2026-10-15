@@ -90,3 +90,17 @@ jobs:
             candidate-config.sha256
           retention-days: 7
           if-no-files-found: error
+          include-hidden-files: true
+      - name: Download uploaded candidate for round-trip verification
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate-roundtrip
+      - name: Verify actual uploaded artifact round trip
+        env:
+          EXPECTED_SHA: ${{ inputs.sha || github.sha }}
+          ARTIFACT_ROOT: ${{ runner.temp }}/candidate-roundtrip
+        run: |
+          test "$(cat "$ARTIFACT_ROOT/candidate-sha.txt")" = "$EXPECTED_SHA"
+          sha256sum --check "$ARTIFACT_ROOT/candidate-config.sha256"
+          node scripts/ci/candidate-artifact.mjs verify "$EXPECTED_SHA" "$ARTIFACT_ROOT"

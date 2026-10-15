@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,20 +41,62 @@ test('release SHA guard rejects another repository, dispatch branch, input or ch
     }
 });
 
-test('release artifact manifest binds all built files to one exact source SHA', () => {
+test('release artifact manifest binds allowlisted hidden build files and rejects sensitive or unexpected files', () => {
     const root = mkdtempSync(join(tmpdir(), 'release-artifact-'));
     const dist = join(root, 'dist');
     const sha = 'a'.repeat(40);
+    const roundtrip = join(root, 'uploaded-artifact');
     try {
         mkdirSync(join(dist, 'assets'), { recursive: true });
+        mkdirSync(join(dist, 'client'), { recursive: true });
+        mkdirSync(join(dist, 'uluslarasiofis_local', '.vite'), { recursive: true });
         writeFileSync(join(dist, 'index.html'), '<main>candidate</main>');
         writeFileSync(join(dist, 'assets', 'app.js'), 'export default 1;');
+        writeFileSync(join(dist, 'client', '.assetsignore'), '/index.html\n');
+        writeFileSync(join(dist, 'uluslarasiofis_local', '.vite', 'manifest.json'), '{}\n');
+        writeFileSync(join(root, 'candidate-sha.txt'), `${sha}\n`);
+        writeFileSync(join(root, 'candidate-config.sha256'), '');
         const run = (...args) => spawnSync(process.execPath, [artifactGuard, ...args], { cwd: root, encoding: 'utf8' });
         assert.equal(run('create', sha).status, 0);
         assert.equal(run('verify', sha).status, 0);
+        const manifest = JSON.parse(readFileSync(join(root, 'candidate-artifact.json'), 'utf8'));
+        assert.deepEqual(manifest.files.filter(file => file.path.startsWith('client/.') || file.path.includes('/.vite/')).map(file => file.path), [
+            'client/.assetsignore', 'uluslarasiofis_local/.vite/manifest.json'
+        ]);
         assert.notEqual(run('verify', 'b'.repeat(40)).status, 0);
+
+        // Model the artifact service's default hidden-file exclusion: verification must reject the incomplete download.
+        mkdirSync(roundtrip);
+        cpSync(dist, join(roundtrip, 'dist'), { recursive: true, filter: source => !source.includes(`${join('client', '.assetsignore')}`) && !source.includes(`${join('uluslarasiofis_local', '.vite')}`) });
+        cpSync(join(root, 'candidate-artifact.json'), join(roundtrip, 'candidate-artifact.json'));
+        cpSync(join(root, 'candidate-sha.txt'), join(roundtrip, 'candidate-sha.txt'));
+        cpSync(join(root, 'candidate-config.sha256'), join(roundtrip, 'candidate-config.sha256'));
+        assert.notEqual(run('verify', sha, roundtrip).status, 0, 'A hidden-file-dropping artifact round trip must fail verification.');
+
+        // Model include-hidden-files: true; the exact downloaded tree must verify successfully.
+        rmSync(roundtrip, { recursive: true, force: true });
+        mkdirSync(roundtrip);
+        cpSync(dist, join(roundtrip, 'dist'), { recursive: true });
+        cpSync(join(root, 'candidate-artifact.json'), join(roundtrip, 'candidate-artifact.json'));
+        cpSync(join(root, 'candidate-sha.txt'), join(roundtrip, 'candidate-sha.txt'));
+        cpSync(join(root, 'candidate-config.sha256'), join(roundtrip, 'candidate-config.sha256'));
+        assert.equal(run('verify', sha, roundtrip).status, 0);
+
         writeFileSync(join(dist, 'index.html'), '<main>modified</main>');
         assert.notEqual(run('verify', sha).status, 0);
+        writeFileSync(join(dist, 'index.html'), '<main>candidate</main>');
+        unlinkSync(join(root, 'candidate-artifact.json'));
+        writeFileSync(join(dist, 'client', '.env'), 'MUST_NOT_UPLOAD=1');
+        assert.notEqual(run('create', sha).status, 0, 'Environment files must fail closed before upload.');
+        unlinkSync(join(dist, 'client', '.env'));
+        writeFileSync(join(dist, 'assets', 'backup.sql'), 'MUST_NOT_UPLOAD');
+        assert.notEqual(run('create', sha).status, 0, 'Database exports must fail closed before upload.');
+        unlinkSync(join(dist, 'assets', 'backup.sql'));
+        writeFileSync(join(dist, 'assets', 'private.txt'), '-----BEGIN PRIVATE KEY-----\nMUST_NOT_UPLOAD');
+        assert.notEqual(run('create', sha).status, 0, 'Private key content must fail closed before upload.');
+        unlinkSync(join(dist, 'assets', 'private.txt'));
+        writeFileSync(join(dist, 'client', '.unreviewed-hidden-file'), 'unexpected');
+        assert.notEqual(run('create', sha).status, 0, 'Unknown hidden files must fail closed before upload.');
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
@@ -145,8 +187,13 @@ test('production release workflow stays manual, serialized, environment-gated an
     assert.match(workflow, /scripts\/ci\/check-backup-evidence\.mjs/);
     assert.match(workflow, /scripts\/ci\/check-rollback-evidence\.mjs/);
     assert.match(workflow, /publication remains locked/);
+    assert.match(workflow, /sha256sum --check "\$ARTIFACT_ROOT\/candidate-config\.sha256"/);
     assert.doesNotMatch(workflow, /wrangler deploy --env production(?! --dry-run)/);
     assert.doesNotMatch(workflow, /d1 migrations apply .*--remote/);
     assert.match(ci, /candidate-artifact\.mjs create/);
     assert.match(ci, /candidate-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
+    assert.match(ci, /include-hidden-files: true/);
+    assert.match(ci, /actions\/download-artifact@[\da-f]{40}/);
+    assert.match(ci, /candidate-artifact\.mjs verify "\$EXPECTED_SHA" "\$ARTIFACT_ROOT"/);
+    assert.match(ci, /sha256sum --check "\$ARTIFACT_ROOT\/candidate-config\.sha256"/);
 });
