@@ -102,5 +102,5 @@ jobs:
           ARTIFACT_ROOT: ${{ runner.temp }}/candidate-roundtrip
         run: |
           test "$(cat "$ARTIFACT_ROOT/candidate-sha.txt")" = "$EXPECTED_SHA"
-          (cd "$ARTIFACT_ROOT" && sha256sum --check candidate-config.sha256)
+          sha256sum --check "$ARTIFACT_ROOT/candidate-config.sha256"
           node scripts/ci/candidate-artifact.mjs verify "$EXPECTED_SHA" "$ARTIFACT_ROOT"

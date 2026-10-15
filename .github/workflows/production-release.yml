@@ -80,7 +80,7 @@ jobs:
         run: |
           test "$(cat "$ARTIFACT_ROOT/candidate-sha.txt")" = "$RELEASE_SHA"
           node scripts/ci/candidate-artifact.mjs verify "$RELEASE_SHA" "$ARTIFACT_ROOT"
-          (cd "$ARTIFACT_ROOT" && sha256sum --check candidate-config.sha256)
+          sha256sum --check "$ARTIFACT_ROOT/candidate-config.sha256"
       - name: Verify Cloudflare token, account, Worker bindings, runtime secrets and cron
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

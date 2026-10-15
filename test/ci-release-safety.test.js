@@ -187,6 +187,7 @@ test('production release workflow stays manual, serialized, environment-gated an
     assert.match(workflow, /scripts\/ci\/check-backup-evidence\.mjs/);
     assert.match(workflow, /scripts\/ci\/check-rollback-evidence\.mjs/);
     assert.match(workflow, /publication remains locked/);
+    assert.match(workflow, /sha256sum --check "\$ARTIFACT_ROOT\/candidate-config\.sha256"/);
     assert.doesNotMatch(workflow, /wrangler deploy --env production(?! --dry-run)/);
     assert.doesNotMatch(workflow, /d1 migrations apply .*--remote/);
     assert.match(ci, /candidate-artifact\.mjs create/);
@@ -194,4 +195,5 @@ test('production release workflow stays manual, serialized, environment-gated an
     assert.match(ci, /include-hidden-files: true/);
     assert.match(ci, /actions\/download-artifact@[\da-f]{40}/);
     assert.match(ci, /candidate-artifact\.mjs verify "\$EXPECTED_SHA" "\$ARTIFACT_ROOT"/);
+    assert.match(ci, /sha256sum --check "\$ARTIFACT_ROOT\/candidate-config\.sha256"/);
 });
