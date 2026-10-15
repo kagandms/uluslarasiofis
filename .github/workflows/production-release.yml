@@ -92,8 +92,12 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/ci/check-migration-ledger.mjs
       - name: Require current backup and recent restore drill evidence
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/ci/check-backup-evidence.mjs
       - name: Require rollback compatibility evidence for schema, secrets, bindings and cron
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/ci/check-rollback-evidence.mjs
       - name: Check production deploy dry run and secret metadata guard
         env:

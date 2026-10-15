@@ -65,6 +65,8 @@ jobs:
         run: rm -rf .ci-venv
       - name: Empty local D1 migrations and synthetic Worker smoke
         run: npm run ci:local
+      - name: Synthetic local D1 and R2 recovery preparation
+        run: node --disable-warning=ExperimentalWarning scripts/recovery/synthetic-restore.mjs
       - name: Build production candidate without credentials
         run: npm run build:production
       - name: Create immutable candidate artifact manifest

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "enabled": false,
+  "keys": [],
+  "vault": null,
+  "restore_target": null,
+  "minimum_retention_hours": null
+}
