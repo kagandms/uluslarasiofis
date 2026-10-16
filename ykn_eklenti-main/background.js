@@ -93,6 +93,14 @@ function saveTemporaryStudentData(studentData) {
     });
 }
 
+function getTemporaryStudentData() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['studentData'], (res) => {
+            resolve(res?.studentData || null);
+        });
+    });
+}
+
 function clearTemporaryStudentData() {
     return new Promise((resolve) => {
         chrome.storage.local.remove([...TEMPORARY_STUDENT_DATA_KEYS, TEMPORARY_STORAGE_TIMESTAMP_KEY], () => {
@@ -1482,6 +1490,15 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
                                     }
                                 }
 
+                                if (!photoBtn) {
+                                    var uploadEl = doc.querySelector('[upload], .z-upload, .z-fileupload');
+                                    if (uploadEl && isVisibleElement(uploadEl)) {
+                                        photoBtn = uploadEl.matches('button, a, input[type="button"], .z-button')
+                                            ? uploadEl
+                                            : (uploadEl.querySelector('button, a, input[type="button"], .z-button') || uploadEl);
+                                    }
+                                }
+
                                 if (photoBtn) {
                                     ['mouseover', 'mouseenter'].forEach(function(evt) {
                                         photoBtn.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: win }));
@@ -1615,6 +1632,20 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
                                         fileInput.setAttribute('data-ykn-photo-status', 'submitted');
                                         fillResult.photoUploaded = Boolean(fileInput.files && fileInput.files.length > 0);
                                         console.info('[YKN MAIN World] Fotoğraf dosyası forma eklendi.');
+                                        try {
+                                            var photoNameInputs = doc.querySelectorAll('input');
+                                            for (var pni = 0; pni < photoNameInputs.length; pni++) {
+                                                var pInp = photoNameInputs[pni];
+                                                var pRow = pInp.closest('tr');
+                                                var pText = pRow ? norm(pRow.innerText || pRow.textContent) : '';
+                                                if (pText.indexOf('fotografadi') !== -1 || pText === 'fotograf' || (pInp.placeholder && norm(pInp.placeholder).indexOf('fotograf') !== -1)) {
+                                                    if (!pInp.value) {
+                                                        pInp.value = photoName;
+                                                        commitTextbox(pInp, win);
+                                                    }
+                                                }
+                                            }
+                                        } catch (_) {}
                                     }
                                 } else {
                                     addResultField(fillResult, 'Fotoğraf', false);
@@ -2084,6 +2115,71 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
+    if (request.action === 'CROPPED_PHOTO_CONFIRMED') {
+        (async () => {
+            try {
+                const stored = await getTemporaryStudentData() || {};
+                stored.croppedPhotoBase64 = request.photoBase64;
+                stored.photoBase64 = request.photoBase64;
+                stored.photoFileName = request.fileName || 'ogrenci_foto.jpg';
+                await saveTemporaryStudentData(stored);
+
+                const yoksisTab = await resolveExpectedYoksisTab(
+                    stored.yoksisTabId,
+                    stored.yoksisTabUrl
+                );
+                await updateTab(yoksisTab.id, { active: true });
+                if (yoksisTab.windowId) {
+                    await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch(() => {});
+                }
+
+                const fillResult = await runYoksisOperation(yoksisTab.id, 'fill', request.requestId, async () => {
+                    const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, { requireBoundSearch: true, expectedKabulId: stored.yoksisId || stored.kabulId || '', expectedStudent: stored });
+                    if (!formReady) {
+                        throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
+                    }
+                    return await syncYoksisFormInMainWorld(yoksisTab.id, stored, request.requestId);
+                });
+                sendResponse({ success: fillResult?.success === true, photoUploaded: fillResult?.photoUploaded === true, partial: fillResult?.partial, missingFields: fillResult?.missingFields });
+            } catch (err) {
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+
+    if (request.action === 'FILL_YOKSIS_WITHOUT_PHOTO') {
+        (async () => {
+            try {
+                const stored = await getTemporaryStudentData() || {};
+                stored.croppedPhotoBase64 = '';
+                stored.photoBase64 = '';
+                await saveTemporaryStudentData(stored);
+
+                const yoksisTab = await resolveExpectedYoksisTab(
+                    stored.yoksisTabId,
+                    stored.yoksisTabUrl
+                );
+                await updateTab(yoksisTab.id, { active: true });
+                if (yoksisTab.windowId) {
+                    await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch(() => {});
+                }
+
+                const fillResult = await runYoksisOperation(yoksisTab.id, 'fill', request.requestId, async () => {
+                    const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, { requireBoundSearch: true, expectedKabulId: stored.yoksisId || stored.kabulId || '', expectedStudent: stored });
+                    if (!formReady) {
+                        throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
+                    }
+                    return await syncYoksisFormInMainWorld(yoksisTab.id, stored, request.requestId);
+                });
+                sendResponse({ success: fillResult?.success === true, manualPhotoRequired: true, missingFields: fillResult?.missingFields });
+            } catch (err) {
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true;
+    }
+
     // Mesaj İkamet Portalından geliyorsa
     if (request.source === 'IKAMET_PORTAL') {
         if (!isAllowedPortalUrl(sender?.tab?.url || '') || !portalSecurity?.isValidPortalMessage(request)) {
@@ -2238,9 +2334,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return true;
         }
         else if (request.action === 'FILL_YOKSIS_FORM') {
-            const studentData = request.data;
+            const rawStudentData = request.data || {};
             const totalStartedAt = startYknTiming();
             (async () => {
+                let studentData = { ...rawStudentData };
+                if (!studentData.croppedPhotoBase64) {
+                    const temp = await getTemporaryStudentData();
+                    if (temp?.croppedPhotoBase64) {
+                        studentData.croppedPhotoBase64 = temp.croppedPhotoBase64;
+                        if (!studentData.photoFileName && temp.photoFileName) {
+                            studentData.photoFileName = temp.photoFileName;
+                        }
+                    }
+                }
                 if (studentData?.yoksisReady !== true) {
                     throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
                 }
@@ -2322,7 +2428,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             error: verificationResponse.error
                         };
                     }
-                    const fieldData = hasPhoto
+                    const fieldData = mainResponse.photoUploaded === true
                         ? { ...studentData, croppedPhotoBase64: '', photoFileName: '' }
                         : studentData;
 

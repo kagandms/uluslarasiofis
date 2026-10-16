@@ -6,6 +6,8 @@ import {
     parseDateValue,
     extractPassportPlaceOfBirth,
     extractPassportIssuingAuthority,
+    extractPassportGender,
+    inferGenderFromName,
     getCountryIso3Code
 } from '../utils/ykn-document-parser.js';
 import { mergeApplyProfile, applyManualProfileChoices, normalizeProfileGender, normalizeProfileMaritalStatus } from '../utils/ykn-profile-state.js';
@@ -1711,6 +1713,17 @@ export function initYknManager() {
                                         const auth = extractPassportIssuingAuthority(pageOcrText);
                                         if (auth) detectedAuthority = auth;
                                     }
+
+                                    if (!currentStudentData.cinsiyet) {
+                                        const detectedSex = extractPassportGender(pageOcrText, {
+                                            birthDate: currentStudentData?.birthDate,
+                                            studentName: currentStudentData?.fullName
+                                        }) || (currentStudentData?.fullName ? inferGenderFromName(currentStudentData.fullName) : '');
+                                        if (detectedSex) {
+                                            currentStudentData.cinsiyet = detectedSex;
+                                            currentStudentData.genderSource = 'passport';
+                                        }
+                                    }
                                 }
                             } catch (pageOcrErr) {
                                 console.warn(`[YKN] Sayfa ${pIdx + 1} OCR atlandı:`, pageOcrErr.message);
@@ -2429,6 +2442,10 @@ export function initYknManager() {
         if (!dataUrl) return;
 
         if (currentStudentData) {
+            currentStudentData.croppedPhotoBase64 = dataUrl;
+            currentStudentData.photoBase64 = dataUrl;
+            currentStudentData.photoFileName = fileName || 'ogrenci_foto.jpg';
+
             const passportText = (currentStudentData.passportPages || [])
                 .map((page) => page.text || '')
                 .filter(Boolean)
@@ -2446,10 +2463,30 @@ export function initYknManager() {
                     currentStudentData.issuingAuthority = userFields.issuingAuthority;
                     currentStudentData.verenMakam = userFields.issuingAuthority;
                 }
+                if (userFields.cinsiyet) {
+                    currentStudentData.cinsiyet = normalizeProfileGender(userFields.cinsiyet);
+                    currentStudentData.genderSource = 'manual';
+                }
+                if (userFields.medeniHali) {
+                    currentStudentData.medeniHali = normalizeProfileMaritalStatus(userFields.medeniHali);
+                    currentStudentData.medeniHal = currentStudentData.medeniHali;
+                    currentStudentData.maritalSource = 'manual';
+                }
                 currentStudentData = applyManualProfileChoices(currentStudentData, userFields);
             }
             syncUserEnteredPassportDates();
             populateStudentFieldsToInputs(currentStudentData);
+        } else {
+            currentStudentData = {
+                croppedPhotoBase64: dataUrl,
+                photoBase64: dataUrl,
+                photoFileName: fileName || 'ogrenci_foto.jpg',
+                cinsiyet: userFields?.cinsiyet ? normalizeProfileGender(userFields.cinsiyet) : '',
+                genderSource: userFields?.cinsiyet ? 'manual' : 'unverified',
+                medeniHali: userFields?.medeniHali ? normalizeProfileMaritalStatus(userFields.medeniHali) : '',
+                medeniHal: userFields?.medeniHali ? normalizeProfileMaritalStatus(userFields.medeniHali) : '',
+                maritalSource: userFields?.medeniHali ? 'manual' : 'unverified'
+            };
         }
 
         if (btnCopy) {
@@ -2948,6 +2985,13 @@ export function initYknManager() {
                 yoksisId: safeYoksisId
             };
             currentStudentData = mergeApplyProfile(null, currentStudentData);
+            if (!currentStudentData.cinsiyet && currentStudentData.fullName) {
+                const inferred = inferGenderFromName(currentStudentData.fullName);
+                if (inferred) {
+                    currentStudentData.cinsiyet = inferred;
+                    currentStudentData.genderSource = 'inferred';
+                }
+            }
             studentName.textContent = currentStudentData.fullName || "İsim Bulunamadı";
             updateStudentActions(currentStudentData);
             applyCountryDefaultsToStudent(currentStudentData);
@@ -2971,14 +3015,18 @@ export function initYknManager() {
                 : (incoming.passportDocumentUrl || incoming.passportImageUrl ? [incoming.passportDocumentUrl || incoming.passportImageUrl] : (currentStudentData?.passportCandidates || []));
             const currentSearchPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
             const resolvedPassportNo = readProfileText(currentStudentData?.passportNo || currentStudentData?.pasaportNo || incoming.passportNo || incoming.pasaportNo || currentSearchPassport || '').trim().toUpperCase();
+            const resolvedGender = incoming.cinsiyet || currentStudentData?.cinsiyet || (incoming.fullName || currentStudentData?.fullName ? inferGenderFromName(incoming.fullName || currentStudentData?.fullName) : '');
+            const resolvedGenderSource = incoming.cinsiyet ? (incoming.genderSource || 'apply') : (currentStudentData?.cinsiyet ? currentStudentData.genderSource : (resolvedGender ? 'inferred' : 'unverified'));
+            const resolvedMarital = incoming.medeniHali || incoming.medeniHal || currentStudentData?.medeniHali || '';
+            const resolvedMaritalSource = (incoming.medeniHali || incoming.medeniHal) ? (incoming.maritalSource || 'apply') : (currentStudentData?.maritalSource || 'unverified');
             currentStudentData = {
                 ...currentStudentData,
                 ...incoming,
-                cinsiyet: currentStudentData?.cinsiyet || '',
-                genderSource: currentStudentData?.genderSource || 'unverified',
-                medeniHali: currentStudentData?.medeniHali || '',
-                medeniHal: currentStudentData?.medeniHali || '',
-                maritalSource: currentStudentData?.maritalSource || 'unverified',
+                cinsiyet: resolvedGender,
+                genderSource: resolvedGenderSource,
+                medeniHali: resolvedMarital,
+                medeniHal: resolvedMarital,
+                maritalSource: resolvedMaritalSource,
                 passportNo: resolvedPassportNo,
                 pasaportNo: resolvedPassportNo,
                 acceptanceLetterUrl: candidates[0] || incoming.acceptanceLetterUrl || '',
