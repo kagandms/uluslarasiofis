@@ -1,8 +1,14 @@
-name: Recovery maintenance readiness (synthetic data only)
+name: Recovery maintenance (operations locked)
 
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: Inventory is read-only; backup/restore remain locked until separate approval
+        required: true
+        default: synthetic
+        type: choice
+        options: [synthetic, inventory, backup, restore]
       sha:
         description: Full production HEAD SHA to exercise locally with synthetic data only
         required: true
@@ -17,7 +23,7 @@ concurrency:
 
 jobs:
   synthetic:
-    if: github.ref == 'refs/heads/production'
+    if: github.ref == 'refs/heads/production' && inputs.operation == 'synthetic'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -26,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ inputs.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Verify selected production SHA
@@ -47,3 +53,53 @@ jobs:
       # This produces console summaries only. It cannot create production recovery evidence.
       # Real backup and periodic restore belong to this separate maintenance process.
       # No schedule or data operation until scope, retention, credentials and costs are approved.
+
+  inventory:
+    if: github.ref == 'refs/heads/production' && inputs.operation == 'inventory'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: Production
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.19.0'
+      - name: Verify reviewed production SHA before metadata access
+        env:
+          RELEASE_SHA: ${{ inputs.sha }}
+        run: |
+          git fetch --no-tags origin production
+          node scripts/ci/check-release-sha.mjs
+      - name: Read D1 and R2 metadata only (no SQL, object content, export or writes)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/recovery/inventory.mjs
+
+  operation-approval:
+    if: github.ref == 'refs/heads/production' && (inputs.operation == 'backup' || inputs.operation == 'restore')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.19.0'
+      - name: Verify source and stop at unapproved operation policy before credentials
+        env:
+          RELEASE_SHA: ${{ inputs.sha }}
+          RECOVERY_OPERATION: ${{ inputs.operation }}
+        run: |
+          git fetch --no-tags origin production
+          node scripts/ci/check-release-sha.mjs
+          node scripts/recovery/operations.mjs "$RECOVERY_OPERATION"
+    # No operation can run: execution_enabled:false, targets/budget/approval are null,
+    # and a private-storage adapter is not configured. No schedule or successful evidence upload.

@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "execution_enabled": false,
+  "approval_ref": null,
+  "monthly_budget_usd": null,
+  "retention_days": 30,
+  "backup_interval_hours": 24,
+  "restore_interval_days": 30,
+  "scope": {
+    "d1": "full-sql",
+    "documents": "full-bucket",
+    "print_files": "pending-live-verification"
+  },
+  "deletion_policy_approved": false,
+  "print_exclusion_evidence_sha256": null,
+  "vault": null,
+  "restore_target": null
+}

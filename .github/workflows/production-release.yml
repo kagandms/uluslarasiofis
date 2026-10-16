@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ inputs.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Bind review and checkout to the same SHA
@@ -131,4 +131,15 @@ jobs:
         run: |
           echo '::error::Preflight complete. Publication remains locked until the exact-artifact deploy path and rollback compatibility gates receive a separate reviewed change.'
           exit 1
-    # This job intentionally has no deploy, remote migration, rollback, D1/R2 write or secret-value read command.
+      - name: Prepared exact-artifact publication (unreachable while unconditional lock remains)
+        if: success()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          ARTIFACT_ROOT: ${{ runner.temp }}/candidate-release
+          CURRENT_WORKER_VERSION: ${{ steps.cloudflare.outputs.current_version }}
+          RECOVERY_RUN_ID: ${{ steps.recovery.outputs.run_id }}
+          RECOVERY_EVIDENCE_PATH: ${{ runner.temp }}/recovery-metadata/production-evidence.json
+        run: node scripts/ci/exact-artifact-release.mjs
+    # The step above is unreachable after exit 1 and has a second disabled code policy.
+    # No remote migration, rollback, D1/R2 data write or secret-value command exists.

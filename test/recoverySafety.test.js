@@ -219,11 +219,15 @@ test('native local synthetic SQL and two R2 buckets restore with schema, ledger,
     assert.equal(result.migrations, 23); assert.equal(result.objects, 2); assert.ok(result.tables > 30);
 });
 
-test('synthetic workflow has no credentials, production environment, data upload, remote command or automatic trigger', () => {
+test('synthetic maintenance job has no credentials and real operations remain manual and guarded', () => {
     const workflow = readFileSync(new URL('../.github/workflows/recovery-preparation.yml', import.meta.url), 'utf8');
     assert.match(workflow, /^  workflow_dispatch:/m);
     assert.doesNotMatch(workflow, /^  (?:push|pull_request|schedule|workflow_run):/m);
-    assert.doesNotMatch(workflow, /secrets\.|environment:|upload-artifact|--remote|wrangler deploy|rollback/);
+    const synthetic = workflow.slice(workflow.indexOf('  synthetic:'), workflow.indexOf('  inventory:'));
+    assert.doesNotMatch(synthetic, /secrets\.|environment:|upload-artifact|--remote|wrangler deploy/);
+    assert.match(workflow, /environment: Production/);
+    assert.match(workflow, /execution_enabled:false/);
+    assert.doesNotMatch(workflow, /ref: \$\{\{ inputs\.sha \}\}/);
     assert.match(workflow, /contents: read/); assert.match(workflow, /check-release-sha\.mjs/);
     assert.match(workflow, /synthetic-restore\.mjs/);
 });
