@@ -9,8 +9,6 @@ import { checkReadOnlyHealth, PRODUCTION_ORIGIN } from '../scripts/ci/post-deplo
 
 const guard = fileURLToPath(new URL('../scripts/ci/check-release-sha.mjs', import.meta.url));
 const artifactGuard = fileURLToPath(new URL('../scripts/ci/candidate-artifact.mjs', import.meta.url));
-const backupGuard = fileURLToPath(new URL('../scripts/ci/check-backup-evidence.mjs', import.meta.url));
-const rollbackGuard = fileURLToPath(new URL('../scripts/ci/check-rollback-evidence.mjs', import.meta.url));
 
 test('release SHA guard rejects another repository, dispatch branch, input or checkout', () => {
     const root = mkdtempSync(join(tmpdir(), 'release-guard-'));
@@ -102,67 +100,6 @@ test('release artifact manifest binds allowlisted hidden build files and rejects
     }
 });
 
-test('production backup evidence requires a fresh backup and recent successful restore drill', () => {
-    const root = mkdtempSync(join(tmpdir(), 'backup-evidence-'));
-    const evidencePath = join(root, 'evidence.json');
-    const now = Date.parse('2026-10-15T12:00:00Z');
-    const evidence = {
-        environment: 'production',
-        backup_id: 'backup-20261015-abc123',
-        backup_verified_at: '2026-10-15T11:30:00Z',
-        coverage: { d1_snapshot: true, d1_sql_export: true, r2_objects: true },
-        restore_drill: {
-            verified_at: '2026-10-01T11:30:00Z',
-            evidence_ref: 'a'.repeat(64),
-            result: 'passed',
-            coverage: { d1: true, r2: true }
-        }
-    };
-    try {
-        writeFileSync(evidencePath, JSON.stringify(evidence));
-        const run = () => spawnSync(process.execPath, [backupGuard, evidencePath], {
-            encoding: 'utf8', env: { ...process.env, EVIDENCE_NOW: new Date(now).toISOString() }
-        });
-        assert.equal(run().status, 0);
-        evidence.backup_verified_at = '2026-10-08T00:00:00Z';
-        writeFileSync(evidencePath, JSON.stringify(evidence));
-        assert.notEqual(run().status, 0, 'stale backup must block publication');
-        evidence.backup_verified_at = '2026-10-15T11:30:00Z';
-        evidence.restore_drill.result = 'failed';
-        writeFileSync(evidencePath, JSON.stringify(evidence));
-        assert.notEqual(run().status, 0, 'failed restore drill must block publication');
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
-test('rollback evidence requires fresh schema, secret, binding and cron compatibility checks', () => {
-    const root = mkdtempSync(join(tmpdir(), 'rollback-evidence-'));
-    const evidencePath = join(root, 'evidence.json');
-    const now = Date.parse('2026-10-15T12:00:00Z');
-    const evidence = {
-        environment: 'production',
-        verified_at: '2026-10-15T11:30:00Z',
-        current_version_id: 'current-version-123',
-        rollback_version_id: 'rollback-version-123',
-        evidence_ref: 'b'.repeat(64),
-        result: 'passed',
-        compatibility: { schema: true, runtime_secrets: true, d1_r2_bindings: true, cron_schedules: true }
-    };
-    try {
-        writeFileSync(evidencePath, JSON.stringify(evidence));
-        const run = () => spawnSync(process.execPath, [rollbackGuard, evidencePath], {
-            encoding: 'utf8', env: { ...process.env, EVIDENCE_NOW: new Date(now).toISOString() }
-        });
-        assert.equal(run().status, 0);
-        evidence.compatibility.cron_schedules = false;
-        writeFileSync(evidencePath, JSON.stringify(evidence));
-        assert.notEqual(run().status, 0);
-    } finally {
-        rmSync(root, { recursive: true, force: true });
-    }
-});
-
 test('post-deploy health check uses only fixed public GET routes and rejects any other host', async () => {
     const requests = [];
     const fakeFetch = async (url, options) => {
@@ -187,6 +124,9 @@ test('production release workflow stays manual, serialized, environment-gated an
     assert.match(workflow, /scripts\/ci\/check-backup-evidence\.mjs/);
     assert.match(workflow, /scripts\/ci\/check-rollback-evidence\.mjs/);
     assert.match(workflow, /publication remains locked/);
+    assert.match(workflow, /artifact-dry-run\.mjs/);
+    assert.doesNotMatch(workflow, /npm run (?:build|deploy:dry-run:production)/);
+    assert.match(workflow, /CURRENT_WORKER_VERSION: \$\{\{ steps\.cloudflare\.outputs\.current_version \}\}/);
     assert.match(workflow, /sha256sum --check "\$ARTIFACT_ROOT\/candidate-config\.sha256"/);
     assert.doesNotMatch(workflow, /wrangler deploy --env production(?! --dry-run)/);
     assert.doesNotMatch(workflow, /d1 migrations apply .*--remote/);

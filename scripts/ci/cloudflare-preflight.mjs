@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, appendFileSync } from 'node:fs';
+import { singleWorkerVersion } from './worker-version.mjs';
 import { assertProductionRuntimeSecretMetadata } from './runtime-secret-metadata.mjs';
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
@@ -66,5 +67,10 @@ const actualCrons = (schedules?.schedules || []).map(item => item.cron).sort();
 assert.deepEqual(actualCrons, expectedCrons, 'Production cron schedules differ from the reviewed configuration.');
 
 const actualSecrets = assertProductionRuntimeSecretMetadata(secrets, production.secrets?.required || []);
+
+
+// Bind rollback evidence to the currently active immutable version; reject gradual deployments.
+const version = singleWorkerVersion(await cloudflare(`${workerPath}/deployments`));
+if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `current_version=${version}\n`);
 
 console.log(`Cloudflare preflight passed for account scope, Worker ${production.name}, D1/R2 bindings, ${actualCrons.length} cron schedules, and ${actualSecrets.length} runtime secret names/types. Secret values were not requested or logged.`);
