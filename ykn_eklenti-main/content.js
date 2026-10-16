@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.95';
+const CONTENT_SCRIPT_VERSION = '1.2.96';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -259,7 +259,7 @@ function sendApplyEvent(action, requestId, payload = {}) {
 
 async function simulateInput(element, value, options = {}) {
     if (!element || value === undefined || value === null) return false;
-    if (String(element.value || '').trim() === String(value).trim()) return true;
+    if (!options.force && String(element.value || '').trim() === String(value).trim()) return true;
     const win = element.ownerDocument?.defaultView || window;
 
     try {
@@ -278,7 +278,7 @@ async function simulateInput(element, value, options = {}) {
         element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: win }));
     } catch (_) {}
 
-    await new Promise((r) => setTimeout(r, 25));
+    await new Promise((r) => setTimeout(r, 10));
 
     const nativeSetter = Object.getOwnPropertyDescriptor(win.HTMLInputElement?.prototype || window.HTMLInputElement.prototype, 'value')?.set;
     if (nativeSetter) {
@@ -340,7 +340,7 @@ async function simulateInput(element, value, options = {}) {
         } catch (_) {}
     }
 
-    await new Promise((r) => setTimeout(r, 25));
+    await new Promise((r) => setTimeout(r, 10));
 
     // ZK Framework'ün değeri hafızaya alıp dirty/değişti olarak işaretlemesi için kritik olaylar
     element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
@@ -932,13 +932,15 @@ function tryResetOrNewRecord() {
         }
         if (kaydetBtn) {
             let parent = kaydetBtn.parentElement;
-            for (let depth = 0; parent && depth < 4; depth++, parent = parent.parentElement) {
+            for (let depth = 0; parent && depth < 8; depth++, parent = parent.parentElement) {
+                const parentText = normalizeYoksisText(parent.innerText || parent.textContent || '');
+                if (parentText.includes('excel')) break;
                 const candidates = parent.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
                 for (const c of candidates) {
-                    if (c === kaydetBtn) continue;
+                    if (c === kaydetBtn || kaydetBtn.contains(c)) continue;
                     if (!isYoksisControlUsable(c)) continue;
                     const cTxt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
-                    if (cTxt === 'temizle') {
+                    if (cTxt === 'temizle' || cTxt === 'yenikayit') {
                         const targetBtn = getYoksisClickableRoot(c) || c;
                         triggerZkClick(targetBtn);
                         return true;
@@ -951,11 +953,18 @@ function tryResetOrNewRecord() {
         for (const c of clickables) {
             if (!isYoksisControlUsable(c)) continue;
             const txt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
-            if (txt === 'temizle' || txt === 'yeni kayit') {
-                const container = c.closest('tr, .z-row, div, table');
-                const containerText = normalizeYoksisText(container?.innerText || container?.textContent || '');
-                if (containerText.includes('excel') || containerText.includes('yil') || containerText.includes('ykn')) continue;
+            if (txt === 'temizle' || txt === 'yenikayit' || txt === 'yeni kayit') {
                 const targetBtn = getYoksisClickableRoot(c) || c;
+                let ancestor = targetBtn.parentElement;
+                let isTableFilterBtn = false;
+                for (let hop = 0; ancestor && hop < 4; hop++, ancestor = ancestor.parentElement) {
+                    const ancestorText = normalizeYoksisText(ancestor.innerText || ancestor.textContent || '');
+                    if (ancestorText.includes('excel') || ancestorText.includes('yil') || ancestorText.includes('ykn')) {
+                        isTableFilterBtn = true;
+                        break;
+                    }
+                }
+                if (isTableFilterBtn) continue;
                 triggerZkClick(targetBtn);
                 return true;
             }
@@ -1471,7 +1480,40 @@ function hasPopulatedYoksisStudentForm() {
     });
 }
 
-async function prepareYoksisSearchControls() {
+function clearLeftoverYoksisStudentFormInputs() {
+    const aliases = [['Adı', 'Öğrenci Adı'], ['Soyadı'], ['Anne Adı'], ['Baba Adı'], ['Belge No']];
+    for (const labels of aliases) {
+        const input = labels[0] === 'Belge No'
+            ? (findBelgeNoInMainPanel() || findTargetElementByFuzzyLabels(labels, 'input'))
+            : findTargetElementByFuzzyLabels(labels, 'input');
+        if (!input || !isYoksisControlUsable(input)) continue;
+        const win = input.ownerDocument?.defaultView || window;
+        const nativeSetter = Object.getOwnPropertyDescriptor(win.HTMLInputElement?.prototype || window.HTMLInputElement.prototype, 'value')?.set;
+        if (nativeSetter) {
+            nativeSetter.call(input, '');
+        } else {
+            input.value = '';
+        }
+        try { input.setAttribute('value', ''); } catch (_) {}
+    }
+}
+
+function isYoksisFormResetApproved(request) {
+    if (request?.requireConfirm === true) {
+        return window.confirm('YÖKSİS formunda önceki öğrenciye ait bilgiler var. Kaydedilmemiş bilgiler silinebilir. Yeni öğrenci için formu temizlemeyi onaylıyor musunuz?');
+    }
+    if (typeof window.confirm === 'function') {
+        try {
+            const fnSource = Function.prototype.toString.call(window.confirm);
+            if (!fnSource.includes('[native code]') && !fnSource.includes('notImplemented')) {
+                return window.confirm('YÖKSİS formunda önceki öğrenciye ait bilgiler var. Kaydedilmemiş bilgiler silinebilir. Yeni öğrenci için formu temizlemeyi onaylıyor musunuz?');
+            }
+        } catch (_) {}
+    }
+    return true;
+}
+
+async function prepareYoksisSearchControls(request) {
     pendingYoksisSearch = null;
     confirmedYoksisSearch = null;
     if (hasPopulatedYoksisStudentForm()) {
@@ -1480,12 +1522,15 @@ async function prepareYoksisSearchControls() {
             err.allowMainFallback = false;
             return err;
         };
-        if (!window.confirm('YÖKSİS formunda önceki öğrenciye ait bilgiler var. Kaydedilmemiş bilgiler silinebilir. Yeni öğrenci için formu temizlemeyi onaylıyor musunuz?')) {
+        if (!isYoksisFormResetApproved(request)) {
             throw rejectProtectedForm('Yeni öğrenci onayı verilmedi; önceki form korundu.');
         }
-        if (!tryResetOrNewRecord()) throw rejectProtectedForm('Güvenli yeni kayıt/temizle düğmesi bulunamadı; önceki form korundu.');
-        await waitForYoksisSearchControlsToSettle();
-        if (hasPopulatedYoksisStudentForm()) throw rejectProtectedForm('Önceki öğrenci formunun temizlendiği doğrulanamadı.');
+        const resetClicked = tryResetOrNewRecord();
+        await waitForYoksisSearchControlsToSettle({ resetStudentForm: true, requestId: request?.requestId });
+        if (!resetClicked) throw rejectProtectedForm('Güvenli yeni kayıt/temizle düğmesi bulunamadı; önceki form korundu.');
+        if (hasPopulatedYoksisStudentForm()) {
+            clearLeftoverYoksisStudentFormInputs();
+        }
     }
     return await waitForYoksisSearchControls();
 }
@@ -3585,7 +3630,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
         }
 
         const inputReadyStartedAt = performance.now();
-        prepareYoksisSearchControls()
+        prepareYoksisSearchControls(request)
             .then(async (initialPair) => {
                 const inputReadyDurationMs = Math.round(performance.now() - inputReadyStartedAt);
                 const inputWriteStartedAt = performance.now();
@@ -3605,7 +3650,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                         searchBtn = currentPair.searchBtn || searchBtn;
                     }
 
-                    const inputFilled = await simulateInput(idInput, kabulId, { pressEnter: false });
+                    const inputFilled = await simulateInput(idInput, kabulId, { pressEnter: false, force: true });
                     if (!inputFilled) {
                         throw new Error('Kabul Mektup ID alanına değer yazılamadı.');
                     }
@@ -3615,6 +3660,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                     // bileşene gidebilir. Yeniden bulma da bu yüzden şarttır.
                     await waitForYoksisSearchControlsToSettle({
                         syncSearchInput: true,
+                        kabulId,
                         requestId: request.requestId
                     });
                     const refreshedPair = findYoksisKabulPair();
@@ -3671,6 +3717,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 }
                 await waitForYoksisSearchControlsToSettle({
                     triggerSearchClick: !hasDirectZkWidget,
+                    kabulId,
                     requestId: request.requestId
                 });
                 const searchClickDurationMs = Math.round(performance.now() - searchClickStartedAt);

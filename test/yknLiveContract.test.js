@@ -1842,3 +1842,147 @@ test('background, ilk boş YÖKSİS arama ekranında (fingerprint === "") tıkla
     assert.ok(harness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
 });
 
+test('önceki öğrencinin salt okunur alanları Temizle sonrası kalsa bile yeni öğrenci araması bloklanmadan devam eder', async () => {
+    const harness = createContentHarness(`
+        <div id="search-box">
+            <table><tr>
+                <td>Kabul Mektup Id</td>
+                <td><input id="kabul-id" class="z-textbox" value=""></td>
+                <td><button id="search-btn">Kabul Mektup Id İle Ara</button></td>
+            </tr></table>
+        </div>
+        <div id="student-container">
+            <table>
+                <tr><td>Adı</td><td><input id="ad" value="GULJEMAL"></td></tr>
+                <tr><td>Soyadı</td><td><input id="soyad" value="SOYEKOVA"></td></tr>
+                <tr><td>Belge No</td><td><input id="belge-no" value="A2697635"></td></tr>
+                <tr>
+                    <td><button id="kaydet-btn" class="z-button">Kaydet</button></td>
+                    <td><button id="temizle-btn" class="z-button">Temizle</button></td>
+                </tr>
+            </table>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const { window } = harness.dom;
+    let resetClicked = 0;
+    let searchClicked = 0;
+
+    // YÖKSİS'te Temizle'ye basıldığında editable alanlar temizlenirken
+    // soyad ve belge-no gibi kabul mektubundan gelen salt-okunur alanlar DOM'da kalabilir
+    window.document.getElementById('temizle-btn').addEventListener('click', () => {
+        resetClicked += 1;
+        window.document.getElementById('ad').value = '';
+        // soyad ve belge-no bilerek bırakılıyor (kullanıcının karşılaştığı YÖKSİS durumu)
+    });
+
+    window.document.getElementById('search-btn').addEventListener('click', () => {
+        searchClicked += 1;
+        setTimeout(() => {
+            window.document.getElementById('student-container').innerHTML = `
+                <table>
+                    <tr><td>Adı</td><td><input id="ad" value="NEWSTUDENT"></td></tr>
+                    <tr><td>Soyadı</td><td><input id="soyad" value="NEWSURNAME"></td></tr>
+                    <tr><td>Belge No</td><td><input id="belge-no" value="B9999999"></td></tr>
+                    <tr>
+                        <td><button id="kaydet-btn" class="z-button">Kaydet</button></td>
+                        <td><button id="temizle-btn" class="z-button">Temizle</button></td>
+                    </tr>
+                </table>
+            `;
+        }, 20);
+    });
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: 'NEW-999-ID',
+            requestId: 'second-student-transition',
+            expectedStudent: { studentName: 'NEWSTUDENT', studentSurname: 'NEWSURNAME', passportNo: 'B9999999' }
+        });
+
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+        assert.equal(response.formReady, true);
+        assert.equal(resetClicked, 1);
+        assert.equal(searchClicked, 1);
+        assert.equal(window.document.getElementById('kabul-id').value, 'NEW-999-ID');
+        assert.equal(window.document.getElementById('ad').value, 'NEWSTUDENT');
+    } finally {
+        harness.close();
+    }
+});
+
+test('ZK AU kuyruğunda ertelenmiş onChange olsa bile arama butonu 8 saniye beklemeden hemen tetiklenir', async () => {
+    const harness = createContentHarness(`
+        <div class="z-groupbox">
+            <table>
+                <tr>
+                    <td>Kabul Mektup Id</td>
+                    <td><input id="kabul-id" class="z-textbox" value=""></td>
+                </tr>
+                <tr>
+                    <td colspan="2"><span id="search-btn" class="z-button">Kabul Mektup Id İle Ara</span></td>
+                </tr>
+            </table>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const { window } = harness.dom;
+    const desktop = {};
+    window.zAu = {
+        processing: () => false,
+        getAuRequests: () => [{ cmd: 'onChange', data: { value: 'CODE-123' } }] // deferrable queued request
+    };
+    window.zk = {
+        processing: false,
+        mounting: false,
+        loading: 0,
+        Desktop: { all: { d1: desktop } },
+        Widget: {
+            $: (el) => {
+                if (el.id === 'kabul-id') {
+                    return {
+                        _value: '',
+                        setValue(v) { this._value = v; },
+                        fire(evt, data) {}
+                    };
+                }
+                if (el.id === 'search-btn' || el.closest('#search-btn')) {
+                    return {
+                        fire(evt) {
+                            if (evt === 'onClick') {
+                                searchTriggered += 1;
+                                window.document.body.insertAdjacentHTML('beforeend', `
+                                    <table id="student-form">
+                                        <tr><td>Adı</td><td><input id="ad" value="FAST"></td></tr>
+                                        <tr><td>Belge No</td><td><input id="belge" value="P123"></td></tr>
+                                    </table>
+                                `);
+                            }
+                        }
+                    };
+                }
+                return null;
+            }
+        }
+    };
+    let searchTriggered = 0;
+    const start = Date.now();
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: 'CODE-123',
+            requestId: 'fast-search-test',
+            expectedStudent: { studentName: 'FAST', passportNo: 'P123' }
+        });
+
+        const elapsed = Date.now() - start;
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+        assert.ok(searchTriggered >= 1);
+        assert.ok(elapsed < 2000, `Expected search to trigger rapidly under 2000ms, took ${elapsed}ms`);
+    } finally {
+        harness.close();
+    }
+});
+
