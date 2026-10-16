@@ -13,10 +13,10 @@ import { releaseWithPorts } from '../scripts/ci/exact-artifact-release.mjs';
 const hash = 'a'.repeat(64);
 const source = { account_id: 'a'.repeat(32), database_id: randomUUID(), document_bucket: 'synthetic-documents', print_bucket: 'synthetic-print' };
 const policy = () => ({ schema: 1, execution_enabled: true, approval_ref: hash, monthly_budget_usd: 10,
-    retention_days: 30, backup_interval_hours: 24, restore_interval_days: 30,
-    scope: { d1: 'full-sql', documents: 'full-bucket', print_files: 'include' }, deletion_policy_approved: true,
-    vault: { account_id: 'b'.repeat(32), bucket: 'synthetic-vault' },
-    restore_target: { account_id: 'c'.repeat(32), database_id: randomUUID(), document_bucket: 'synthetic-restore-documents', print_bucket: 'synthetic-restore-print' } });
+    retention_days: 30, backup_interval_hours: 24, restore_interval_days: 30, resource_placement: 'same-account-private-isolated',
+    scope: { d1: 'full-sql', documents: 'exclude-backup-prefixes', document_exclude_prefixes: ['backups/'], print_files: 'include' }, deletion_policy_approved: true,
+    vault: { account_id: source.account_id, bucket: 'synthetic-vault' },
+    restore_target: { account_id: source.account_id, database_id: randomUUID(), document_bucket: 'synthetic-restore-documents', print_bucket: 'synthetic-restore-print' } });
 
 test('inventory transport permits only fixed metadata GETs and a literal read-only GraphQL query', async () => {
     const calls = [];
@@ -63,13 +63,15 @@ test('missing/denied metrics stay unknown and are never substituted with zero', 
 });
 
 test('cost requires measured SQL bytes and explicit free-tier assumptions, and rounds billing units', () => {
-    assert.throws(() => recoveryCost({ documentBytes: 1e9, objects: 1000 }), /MEASUREMENTS/);
-    const paid = recoveryCost({ sqlBytes: 1e6, documentBytes: 1e9, objects: 1000 });
+    assert.throws(() => recoveryCost({ documentBytes: 1e9, objects: 1000, printBytes: 0, printObjects: 0 }), /MEASUREMENTS/);
+    const paid = recoveryCost({ sqlBytes: 1e6, documentBytes: 1e9, objects: 1000, printBytes: 0, printObjects: 0 });
     assert.equal(paid.r2_usd, 5.325);
-    assert.equal(recoveryCost({ sqlBytes: 1e6, documentBytes: 1e9, objects: 1000, remainingFree: { gb: 10, a: 1e6, b: 10e6 } }).r2_usd, 0.315);
+    assert.throws(() => recoveryCost({ sqlBytes: 1e6, documentBytes: 1e9, objects: 1000 }), /MEASUREMENTS/);
+    assert.ok(recoveryCost({ sqlBytes: 1e6, documentBytes: 1e9, objects: 1000, printBytes: 1e9, printObjects: 1 }).r2_usd > paid.r2_usd);
+    assert.equal(recoveryCost({ sqlBytes: 1e6, documentBytes: 1e9, objects: 1000, printBytes: 0, printObjects: 0, remainingFree: { gb: 10, a: 1e6, b: 10e6 } }).r2_usd, 0.315);
     assert.ok(paid.excluded.includes('GitHub runner minutes'));
     assert.throws(() => estimateInventoryCost({ d1: { state: 'unavailable' } }, 2), /INVENTORY/);
-    const estimate = estimateInventoryCost({ d1: { state: 'verified', value: { bytes: 1e6 } }, buckets: [{ binding: 'DOCUMENTS', metrics: { state: 'verified', value: { bytes: 1e9, metadata_bytes: 0, objects: 1000 } } }] }, 2);
+    const estimate = estimateInventoryCost({ d1: { state: 'verified', value: { bytes: 1e6 } }, buckets: [{ binding: 'DOCUMENTS', metrics: { state: 'verified', value: { bytes: 1e9, metadata_bytes: 0, objects: 1000 } } }, { binding: 'PRINT_FILES', metrics: { state: 'verified', value: { bytes: 0, metadata_bytes: 0, objects: 0 } } }] }, 2);
     assert.equal(estimate.sql_expansion_factor_assumed, 2); assert.match(estimate.warning, /not measured/);
 });
 
@@ -79,7 +81,9 @@ test('operation policy is closed before ports and rejects scope, retention, budg
     for (const mutate of [p => { p.deletion_policy_approved = false; }, p => { p.retention_days = 7; },
         p => { p.monthly_budget_usd = null; }, p => { p.scope.print_files = 'pending-live-verification'; },
         p => { p.scope.print_files = 'exclude-ephemeral'; }, p => { p.restore_target.database_id = source.database_id; },
-        p => { p.vault.bucket = source.document_bucket; }]) {
+        p => { p.vault.bucket = source.document_bucket; }, p => { p.vault.account_id = 'b'.repeat(32); },
+        p => { p.restore_target.account_id = 'c'.repeat(32); }, p => { p.scope.document_exclude_prefixes = ['']; },
+        p => { p.scope.document_exclude_prefixes = ['backups/', 'documents/']; }]) {
         const p = policy(); mutate(p); assert.throws(() => approveOperation(p, source, 'backup'));
     }
     const p = policy(); p.scope.print_files = 'exclude-ephemeral'; p.print_exclusion_evidence_sha256 = hash;
@@ -180,4 +184,27 @@ test('workflow keeps unconditional exit before prepared publication, and mainten
     const maintenance = readFileSync(new URL('../.github/workflows/recovery-preparation.yml', import.meta.url), 'utf8');
     assert.doesNotMatch(maintenance, /^  schedule:/m);
     assert.match(maintenance, /inputs.operation == 'inventory'/); assert.match(maintenance, /execution_enabled:false/);
+});
+
+test('selected preparation decisions keep execution, budget, retention approval and real resource IDs unresolved', () => {
+    const p = JSON.parse(readFileSync(new URL('../config/recovery-operations.json', import.meta.url)));
+    assert.equal(p.resource_placement, 'same-account-private-isolated');
+    assert.equal(p.scope.d1, 'full-sql'); assert.equal(p.scope.documents, 'exclude-backup-prefixes');
+    assert.deepEqual(p.scope.document_exclude_prefixes, ['backups/']); assert.equal(p.scope.print_files, 'include');
+    assert.equal(p.retention_days, 30); assert.equal(p.backup_interval_hours, 24); assert.equal(p.restore_interval_days, 30);
+    assert.equal(p.execution_enabled, false); assert.equal(p.approval_ref, null); assert.equal(p.monthly_budget_usd, null);
+    assert.equal(p.deletion_policy_approved, false); assert.equal(p.print_exclusion_evidence_sha256, null);
+    assert.equal(p.vault, null); assert.equal(p.restore_target, null);
+});
+
+test('DOCUMENTS excludes old backups but preserves ordinary documents and PRINT_FILES until live exclusion proof', async () => {
+    const f = fakeMaintenance(); const copied = [];
+    f.io.listSourceObjects = async function* (binding) {
+        for (const key of ['backups/production/latest.json', 'backups/production/old.json', 'documents/permanent.pdf', 'backups-photos/document.pdf']) yield { key };
+    };
+    f.io.copyPrivateObject = async (binding, object) => { copied.push(`${binding}:${object.key}`); return { sha256: hash }; };
+    const result = await prepareMaintenanceOperation(policy(), source, 'backup', f.io);
+    assert.equal(result.objects, 6);
+    assert.deepEqual(copied.filter(key => key.startsWith('DOCUMENTS:')), ['DOCUMENTS:documents/permanent.pdf', 'DOCUMENTS:backups-photos/document.pdf']);
+    assert.equal(copied.filter(key => key.startsWith('PRINT_FILES:')).length, 4);
 });

@@ -9,13 +9,17 @@ export function approveOperation(policy, source, operation) {
     assert.match(policy.approval_ref || '', /^[a-f0-9]{64}$/, 'Scope/cost approval required.');
     assert.ok(Number.isFinite(policy.monthly_budget_usd) && policy.monthly_budget_usd > 0);
     assert.equal(policy.retention_days, 30); assert.equal(policy.backup_interval_hours, 24); assert.equal(policy.restore_interval_days, 30);
-    assert.equal(policy.scope.d1, 'full-sql'); assert.equal(policy.scope.documents, 'full-bucket');
+    assert.equal(policy.scope.d1, 'full-sql'); assert.equal(policy.scope.documents, 'exclude-backup-prefixes');
+    assert.deepEqual(policy.scope.document_exclude_prefixes, ['backups/'], 'Only the reviewed backup prefix may be excluded.');
+    assert.equal(policy.resource_placement, 'same-account-private-isolated');
     assert.equal(policy.deletion_policy_approved, true, 'Thirty-day deletion/temporary-data policy requires approval.');
     assert.ok(['include', 'exclude-ephemeral'].includes(policy.scope.print_files), 'Live print safety review required.');
     if (policy.scope.print_files === 'exclude-ephemeral') assert.match(policy.print_exclusion_evidence_sha256 || '', /^[a-f0-9]{64}$/);
     const target = policy.restore_target, vault = policy.vault;
     assert.ok(target && vault);
     for (const account of [source.account_id, target.account_id, vault.account_id]) assert.match(account || '', /^[a-f0-9]{32}$/);
+    assert.equal(vault.account_id, source.account_id, 'Backup vault must remain in the selected account.');
+    assert.equal(target.account_id, source.account_id, 'Restore targets must remain in the selected account.');
     assert.match(target.database_id || '', /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
     assert.notEqual(target.database_id, source.database_id);
     const production = [source.document_bucket, source.print_bucket];
@@ -23,7 +27,7 @@ export function approveOperation(policy, source, operation) {
         assert.match(bucket || '', /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/); assert.ok(!production.includes(bucket));
     }
     assert.equal(new Set([target.document_bucket, target.print_bucket, vault.bucket]).size, 3);
-    return { operation, retention_days: 30, source, target, vault, print_mode: policy.scope.print_files };
+    return { operation, retention_days: 30, source, target, vault, print_mode: policy.scope.print_files, document_exclude_prefixes: [...policy.scope.document_exclude_prefixes] };
 }
 
 // I/O ports are intentionally explicit. No default production writer, secret loader or evidence signer.
@@ -42,6 +46,8 @@ export async function prepareMaintenanceOperation(policy, source, operation, io)
         let objects = 0;
         for (const binding of plan.print_mode === 'include' ? ['DOCUMENTS', 'PRINT_FILES'] : ['DOCUMENTS']) {
             for await (const object of io.listSourceObjects(binding, plan)) {
+                assert.ok(typeof object.key === 'string' && object.key.length > 0, 'Object key missing.');
+                if (binding === 'DOCUMENTS' && plan.document_exclude_prefixes.some(prefix => object.key.startsWith(prefix))) continue;
                 const copied = await io.copyPrivateObject(binding, object, plan);
                 assert.equal(await io.verifyPrivateCopy(copied, plan), true);
                 objects++;

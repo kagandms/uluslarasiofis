@@ -8,11 +8,15 @@
   "restore_interval_days": 30,
   "scope": {
     "d1": "full-sql",
-    "documents": "full-bucket",
-    "print_files": "pending-live-verification"
+    "documents": "exclude-backup-prefixes",
+    "print_files": "include",
+    "document_exclude_prefixes": [
+      "backups/"
+    ]
   },
   "deletion_policy_approved": false,
   "print_exclusion_evidence_sha256": null,
   "vault": null,
-  "restore_target": null
+  "restore_target": null,
+  "resource_placement": "same-account-private-isolated"
 }

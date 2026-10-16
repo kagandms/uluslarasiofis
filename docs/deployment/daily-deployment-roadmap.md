@@ -27,7 +27,7 @@ Mevcut CI artifact upload/download round-trip, dosya listesi, boyut/SHA-256 ve c
 
 ## İlk güvenli deployment'a en kısa sıra
 
-1. Kaynak/plan envanteri, SQL+belge/print kapsamı, retention/RPO ve private hedefi seç; ayrı bakım kimlikleri, gerçek export/kopya, izole restore ve bütçe için açık onay al.
+1. Başlangıç seçimi: aynı hesapta ayrı private kaynaklar; tam SQL + DOCUMENTS (`backups/` dışlanır) + şimdilik PRINT_FILES; 30 gün, günlük backup/aylık restore. Dashboard kapasite/plan/lifecycle/usage bilgilerini al; retention uyumu ve maliyeti doğrula. Resource ID, gerçek işlem ve bütçe onaylarını varsayma.
 2. Onay sonrası aynı bakım workflow'unda gerçek backup + ilk izole restore + tek güvenilir imzalı metadata üretimini tamamla; gerçek storage/hash/reference/no-job-replay sonuçlarını doğrula. Günlük backup ve aylık/değişiklik sonrası restore otomasyonunu kur; hata alarmını ekle. Gerçek sonuç olmadan policy enable etme.
 3. Bu PR'ın gerçek CI/dry-run sonucunu incele; exact-artifact publish + version kaydı + salt okunur health bağlantısını ayrı reviewed değişiklikte tamamla. Publication lock değişikliği, merge ve ilk deploy için ayrıca onay al.
 
