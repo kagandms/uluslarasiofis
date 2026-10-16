@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, appendFileSync } from 'node:fs';
+import { assertWorkerSettings } from './worker-settings.mjs';
+import { singleWorkerVersion } from './worker-version.mjs';
 import { assertProductionRuntimeSecretMetadata } from './runtime-secret-metadata.mjs';
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
@@ -17,7 +19,7 @@ async function cloudflare(path) {
     try {
         response = await fetch(`${api}${path}`, {
             headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
-            signal: AbortSignal.timeout(20_000)
+            redirect: 'error', signal: AbortSignal.timeout(20_000)
         });
     } catch {
         throw new Error('Cloudflare API request failed before a response was received.');
@@ -42,6 +44,7 @@ const [settings, schedules, secrets] = await Promise.all([
     cloudflare(`${workerPath}/secrets`)
 ]);
 
+assertWorkerSettings(settings, production, config.compatibility_date);
 const bindings = settings.bindings || [];
 const byName = new Map(bindings.map(binding => [binding.name, binding]));
 for (const binding of [
@@ -66,5 +69,9 @@ const actualCrons = (schedules?.schedules || []).map(item => item.cron).sort();
 assert.deepEqual(actualCrons, expectedCrons, 'Production cron schedules differ from the reviewed configuration.');
 
 const actualSecrets = assertProductionRuntimeSecretMetadata(secrets, production.secrets?.required || []);
+
+// Pin the currently active version before publication; reject gradual deployments.
+const version = singleWorkerVersion(await cloudflare(`${workerPath}/deployments`));
+if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `current_version=${version}\n`);
 
 console.log(`Cloudflare preflight passed for account scope, Worker ${production.name}, D1/R2 bindings, ${actualCrons.length} cron schedules, and ${actualSecrets.length} runtime secret names/types. Secret values were not requested or logged.`);

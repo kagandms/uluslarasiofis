@@ -177,16 +177,19 @@ test('post-deploy health check uses only fixed public GET routes and rejects any
     await assert.rejects(checkReadOnlyHealth(async () => ({ status: 503, redirected: false })));
 });
 
-test('production release workflow stays manual, serialized, environment-gated and publication-locked', () => {
+test('production release workflow stays manual, serialized, environment-gated and explicitly opted into', () => {
     const workflow = readFileSync(new URL('../.github/workflows/production-release.yml', import.meta.url), 'utf8');
     const ci = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
     assert.match(workflow, /^  workflow_dispatch:/m);
     assert.doesNotMatch(workflow, /^  (?:push|pull_request|schedule|workflow_run):/m);
     assert.match(workflow, /group: production-release\s+cancel-in-progress: false/);
     assert.match(workflow, /environment: Production[\s\S]*secrets\.CLOUDFLARE_API_TOKEN/);
-    assert.match(workflow, /scripts\/ci\/check-backup-evidence\.mjs/);
-    assert.match(workflow, /scripts\/ci\/check-rollback-evidence\.mjs/);
-    assert.match(workflow, /publication remains locked/);
+    assert.doesNotMatch(workflow, /check-(?:backup|rollback)-evidence|exit 1/);
+    assert.match(workflow, /default: preflight/);
+    assert.match(workflow, /inputs.operation == 'publish'/);
+    assert.match(workflow, /artifact-dry-run\.mjs/);
+    assert.match(workflow, /needs: \[candidate, validate\]/);
+    assert.doesNotMatch(workflow, /npm run (?:build|deploy)/);
     assert.match(workflow, /sha256sum --check "\$ARTIFACT_ROOT\/candidate-config\.sha256"/);
     assert.doesNotMatch(workflow, /wrangler deploy --env production(?! --dry-run)/);
     assert.doesNotMatch(workflow, /d1 migrations apply .*--remote/);
