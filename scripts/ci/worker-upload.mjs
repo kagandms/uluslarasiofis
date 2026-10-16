@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { createHash } from 'node:crypto';
+import { assertUploadHead } from './worker-version.mjs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -17,7 +18,7 @@ export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export function cloudflareClient(account, token, fetchImpl = fetch) {
     assert.match(account || '', /^[a-f0-9]{32}$/); assert.ok(token);
     return async (path, options = {}, credential = token) => {
-        const read = /^\/workers\/scripts\/goc\/(?:settings|deployments|versions\/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})$/.test(path);
+        const read = /^\/workers\/scripts\/goc\/(?:settings|deployments|versions|versions\/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})$/.test(path);
         const write = /^\/workers\/scripts\/goc\/(?:assets-upload-session|versions\?bindings_inherit=strict|deployments)$/.test(path)
             || path === '/workers/assets/upload?base64=true' || /^\/workers\/assets\/upload\/[a-f0-9]{32}$/.test(path);
         assert.ok((!options.method || options.method === 'GET') ? read : options.method === 'POST' && write,
@@ -32,7 +33,7 @@ export function cloudflareClient(account, token, fetchImpl = fetch) {
         } catch { throw new Error('Cloudflare request failed or outcome uncertain; no automatic retry.'); }
         if (!response.ok || body.success !== true) {
             const codes = (body.errors || []).map(e => e.code).filter(Number.isInteger).join(',');
-            throw new Error(`Cloudflare request denied/failed (HTTP ${response.status}, codes ${codes}); inspect account-scoped Workers Scripts Edit permission. No retry.`);
+            throw new Error(`Cloudflare request denied/failed (HTTP ${response.status}, codes ${codes}); check request compatibility and account-scoped permissions. No retry.`);
         }
         return body.result;
     };
@@ -116,10 +117,11 @@ export function inheritWorkerMetadata(metadata, settings, sha, assetsJwt, active
     assert.deepEqual(settings.compatibility_flags || [], metadata.compatibility_flags || []);
     const bindings = settings.bindings || [];
     assert.equal(bindings.filter(b => b.type === 'assets' && b.name === 'ASSETS').length, 1);
+    // This API accepts only latest. publishPrepared verifies latest equals the approved active version.
     // Inherit by name, including secrets; no secret value is fetched or supplied.
     const result = { main_module: metadata.main_module, compatibility_date: settings.compatibility_date,
         compatibility_flags: settings.compatibility_flags || [],
-        bindings: bindings.map(b => b.name === 'ASSETS' ? { name: 'ASSETS', type: 'assets' } : { name: b.name, type: 'inherit', version_id: activeVersion }),
+        bindings: bindings.map(b => b.name === 'ASSETS' ? { name: 'ASSETS', type: 'assets' } : { name: b.name, type: 'inherit', version_id: 'latest' }),
         annotations: { 'workers/message': `release:${sha}` },
         assets: { jwt: assetsJwt, config: { not_found_handling: '404-page' } } };
     // Versioned settings are copied unchanged. Non-versioned settings/routes/cron are never written.
@@ -128,12 +130,15 @@ export function inheritWorkerMetadata(metadata, settings, sha, assetsJwt, active
 }
 
 export async function publishPrepared({ bundle, plan, settings, sha, activeVersion, api, beforeActivation }) {
+    await assertUploadHead(api, activeVersion); // Before any staging write.
     const jwt = await uploadAssets(plan, api);
     bundle.form.set('metadata', JSON.stringify(inheritWorkerMetadata(bundle.metadata, settings, sha, jwt, activeVersion)));
+    await assertUploadHead(api, activeVersion); // Asset upload can take time: recheck immediately before inheritance.
     const version = await api('/workers/scripts/goc/versions?bindings_inherit=strict', { method: 'POST', body: bundle.form });
     assert.match(version.id || '', /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/);
     console.log(`Candidate staged for goc: version ${version.id}, source ${sha}; activation not yet confirmed.`);
     await beforeActivation(version.id); // Recheck source, artifact and live version after staging.
+    await assertUploadHead(api, activeVersion, version.id); // Our own candidate must now be latest.
     await api('/workers/scripts/goc/deployments', { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ strategy: 'percentage', versions: [{ version_id: version.id, percentage: 100 }],
             annotations: { 'workers/message': `release:${sha}` } }) });

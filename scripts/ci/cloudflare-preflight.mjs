@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, appendFileSync } from 'node:fs';
 import { assertWorkerSettings } from './worker-settings.mjs';
-import { singleWorkerVersion } from './worker-version.mjs';
+import { readOnlyVersionReport, assertPreflightVersion } from './worker-version.mjs';
 import { assertProductionRuntimeSecretMetadata } from './runtime-secret-metadata.mjs';
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
@@ -71,7 +71,19 @@ assert.deepEqual(actualCrons, expectedCrons, 'Production cron schedules differ f
 const actualSecrets = assertProductionRuntimeSecretMetadata(secrets, production.secrets?.required || []);
 
 // Pin the currently active version before publication; reject gradual deployments.
-const version = singleWorkerVersion(await cloudflare(`${workerPath}/deployments`));
+const report = readOnlyVersionReport(
+    await cloudflare(`${workerPath}/deployments`), await cloudflare(`${workerPath}/versions`)
+);
+const version = report.active_version;
+// Safe identifiers/time only. Write even on mismatch so no Dashboard or token sharing is needed.
+console.log(`Read-only Worker version report: ${JSON.stringify(report)}`);
+if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+    `Read-only Worker version report:\n\n${JSON.stringify(report)}\n\n`);
+await assertPreflightVersion(report, {
+    staged: process.env.EXPECTED_STAGED_WORKER_VERSION,
+    operation: process.env.RELEASE_OPERATION, approvedActive: process.env.CURRENT_WORKER_VERSION,
+    sha: process.env.RELEASE_SHA
+}, id => cloudflare(`${workerPath}/versions/${id}`));
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `current_version=${version}\n`);
 
 console.log(`Cloudflare preflight passed for account scope, Worker ${production.name}, D1/R2 bindings, ${actualCrons.length} cron schedules, and ${actualSecrets.length} runtime secret names/types. Secret values were not requested or logged.`);
