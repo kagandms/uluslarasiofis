@@ -32,6 +32,12 @@ jobs:
         with:
           ref: ${{ inputs.sha || github.sha }}
           persist-credentials: false
+      - name: Lint workflows with checksum-pinned actionlint
+        run: |
+          curl --fail --silent --show-error --location https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz --output "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
       - name: Node 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -104,3 +110,8 @@ jobs:
           test "$(cat "$ARTIFACT_ROOT/candidate-sha.txt")" = "$EXPECTED_SHA"
           sha256sum --check "$ARTIFACT_ROOT/candidate-config.sha256"
           node scripts/ci/candidate-artifact.mjs verify "$EXPECTED_SHA" "$ARTIFACT_ROOT"
+      - name: Rehearse exact downloaded artifact without rebuilding or credentials
+        env:
+          RELEASE_SHA: ${{ inputs.sha || github.sha }}
+          ARTIFACT_ROOT: ${{ runner.temp }}/candidate-roundtrip
+        run: node scripts/ci/artifact-dry-run.mjs
