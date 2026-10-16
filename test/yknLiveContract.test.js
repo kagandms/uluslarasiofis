@@ -1986,3 +1986,60 @@ test('ZK AU kuyruğunda ertelenmiş onChange olsa bile arama butonu 8 saniye bek
     }
 });
 
+test('YÖKSİS araması, Belge Sorgula (Pasaport) butonunu değil yalnızca Kabul Mektup Id İle Ara butonunu tetikler', async () => {
+    const harness = createContentHarness(`
+        <div id="sidebar">
+            <div id="belge-sorgula-box">
+                <span>Belge Sorgula (Pasaport ile Giriş Bilgisi Sorgulama)</span>
+                <input id="belge-no-inp" placeholder="Pasaport/Belge No" type="text">
+                <button id="btn-belge-sorgula">Belge Sorgula</button>
+            </div>
+            <div id="kabul-sorgula-box">
+                <span>Kabul Mektup ID ile Sorgula</span>
+                <input id="kabul-id-inp" class="z-textbox" type="text">
+                <button id="btn-kabul-ara">Kabul Mektup Id İle Ara</button>
+            </div>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+
+    const win = harness.dom.window;
+    for (const el of win.document.querySelectorAll('div, span, input, button')) {
+        el.getBoundingClientRect = () => ({ width: 140, height: 30, top: 10, left: 10, right: 150, bottom: 40 });
+    }
+
+    let belgeSorgulaClicks = 0;
+    let kabulAraClicks = 0;
+
+    win.document.getElementById('btn-belge-sorgula').addEventListener('click', () => {
+        belgeSorgulaClicks += 1;
+    });
+
+    win.document.getElementById('btn-kabul-ara').addEventListener('click', () => {
+        kabulAraClicks += 1;
+        setTimeout(() => {
+            win.document.body.insertAdjacentHTML('beforeend', `
+                <table id="student-form">
+                    <tr><td>Adı</td><td><input id="ad" value="ADAM"></td></tr>
+                    <tr><td>Belge No</td><td><input id="belge" value="A4069288"></td></tr>
+                </table>
+            `);
+        }, 10);
+    });
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: '6A5-CF8-84',
+            requestId: 'test-exclude-belge-sorgula',
+            expectedStudent: { studentName: 'ADAM', passportNo: 'A4069288' }
+        });
+
+        assert.equal(belgeSorgulaClicks, 0, 'Belge Sorgula butonu kesinlikle tetiklenmemelidir!');
+        assert.equal(kabulAraClicks, 1, 'Yalnızca Kabul Mektup Id İle Ara butonu tetiklenmelidir!');
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+    } finally {
+        harness.close();
+    }
+});
+

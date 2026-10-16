@@ -678,12 +678,21 @@ export function initYknManager() {
                     currentStudentData.yoksisReady = true;
                 } catch (prepErr) {
                     console.warn('[YKN] YÖKSİS kabul kodu otomatik arama uyarısı:', prepErr);
+                    addStatus(`YÖKSİS formu hazırlanamadı: ${prepErr?.message || 'Form açılamadı'}. Lütfen önce 1. Adımdaki kabul mektubu arama butonuna basın.`, 'error');
+                    showToast('YÖKSİS formu hazır değil. Önce kabul kodunu aratın.', 'error');
+                    return;
                 }
             } else {
                 addStatus('Fotoğraf kaydedildi. Her şeyi YÖKSİS’e aktarmak için önce kabul kodunu YÖKSİS’te aratın.', 'warning');
                 showToast('Önce kabul kodunu YÖKSİS’te aratın.', 'warning');
                 return;
             }
+        }
+
+        if (currentStudentData?.yoksisReady !== true) {
+            addStatus('YÖKSİS kabul kodu aranamadı veya form doğrulanamadı. Lütfen önce 1. Adımdaki butona tıklayın.', 'error');
+            showToast('YÖKSİS formu hazır değil.', 'error');
+            return;
         }
 
         if (!beginButtonAction('paste-yoksis', btnPasteYoksis, 30_000, () => {

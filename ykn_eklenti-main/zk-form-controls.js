@@ -1,5 +1,5 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.96') return;
+    if (window.YknZkForm?.version === '1.2.97') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
 
@@ -125,19 +125,18 @@
                 const root = resolveButtonRoot(candidate);
                 if (!isVisible(root)) return -1;
                 const text = normalizeCompact(root.innerText || root.textContent || root.value || root.getAttribute?.('aria-label') || root.getAttribute?.('title') || '');
-                if (!text || text.length > 60 || text.includes('pasaport') || text.includes('belgeno') || text.includes('tckimlik')
+                if (!text || text.length > 60 || text.includes('pasaport') || text.includes('belge') || text.includes('tckimlik')
                     || text.includes('temizle') || text.includes('kaydet') || text.includes('iptal') || text.includes('vazgec')) return -1;
                 const hasKabul = text.includes('kabul');
+                if (!hasKabul) return -1;
                 const hasAra = text.includes('ara');
                 const hasSorgula = text.includes('sorgula');
                 const hasGetir = text.includes('getir');
-                if (!hasAra && !hasSorgula && !hasGetir && !hasKabul) return -1;
+                if (!hasAra && !hasSorgula && !hasGetir) return -1;
                 let score = 0;
                 if (hasKabul && hasAra) score += 220;
                 else if (hasKabul && (hasSorgula || hasGetir)) score += 180;
-                else if (hasAra) score += 80;
-                else if (hasSorgula) score += 70;
-                else if (hasGetir) score += 40;
+                else if (hasKabul) score += 100;
                 if (text.includes('mektup')) score += 30;
                 if (text.includes('id')) score += 20;
                 if (root.tagName !== 'A') score += 25;
@@ -492,5 +491,5 @@
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.96', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.97', execute });
 })();

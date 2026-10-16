@@ -635,11 +635,11 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     function isKabulSearchButtonText(text) {
                         const cTxt = norm(text);
                         if (!cTxt || cTxt.length > 90) return false;
-                        if (cTxt.includes('pasaport') || cTxt.includes('belge no') || cTxt.includes('tc kimlik') || cTxt.includes('temizle') || cTxt.includes('kaydet') || cTxt.includes('iptal') || cTxt.includes('vazgec')) {
+                        if (cTxt.includes('pasaport') || cTxt.includes('belge') || cTxt.includes('tckimlik') || cTxt.includes('temizle') || cTxt.includes('kaydet') || cTxt.includes('iptal') || cTxt.includes('vazgec')) {
                             return false;
                         }
                         const hasSearchVerb = cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || /\bbul\b/.test(cTxt);
-                        return hasSearchVerb && (cTxt.includes('kabul') || cTxt.includes('mektup') || cTxt === 'ara' || cTxt === 'sorgula');
+                        return hasSearchVerb && (cTxt.includes('kabul') || cTxt.includes('mektup'));
                     }
 
                     function scoreKabulButton(candidate, refInput) {

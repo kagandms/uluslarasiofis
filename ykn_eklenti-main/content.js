@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.96';
+const CONTENT_SCRIPT_VERSION = '1.2.97';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -1004,24 +1004,22 @@ function scoreYoksisKabulButton(candidate, idInput = null) {
     if (!isYoksisControlUsable(root)) return -1;
     const text = getYoksisClickableText(root) || getYoksisClickableText(candidate);
     if (!text || text.length > 60) return -1;
-    if (text.includes('pasaport') || text.includes('belgeno') || text.includes('tckimlik')
+    if (text.includes('pasaport') || text.includes('belge') || text.includes('tckimlik')
         || text.includes('temizle') || text.includes('kaydet') || text.includes('iptal')
         || text.includes('vazgec') || text.includes('yukle')) {
         return -1;
     }
     const hasKabul = text.includes('kabul');
+    if (!hasKabul) return -1;
     const hasAra = text.includes('ara');
     const hasSorgula = text.includes('sorgula');
     const hasGetir = text.includes('getir');
-    if (!hasAra && !hasSorgula && !hasGetir && !hasKabul) return -1;
+    if (!hasAra && !hasSorgula && !hasGetir) return -1;
 
     let score = 0;
     if (hasKabul && hasAra) score += 220;
     else if (hasKabul && (hasSorgula || hasGetir)) score += 180;
-    else if (hasAra) score += 80;
-    else if (hasSorgula) score += 70;
-    else if (hasGetir) score += 40;
-    else if (hasKabul) score += 20;
+    else if (hasKabul) score += 100;
 
     if (text.includes('mektup')) score += 30;
     if (text.includes('id')) score += 20;
@@ -1513,7 +1511,31 @@ function isYoksisFormResetApproved(request) {
     return true;
 }
 
+function dismissExistingYoksisModal() {
+    const allDocs = getAllDocs(document);
+    for (const doc of allDocs) {
+        const modals = doc.querySelectorAll(
+            '.z-window-modal, .z-window-highlighted, .z-messagebox-window, .z-messagebox, [class*="z-window-modal"], [class*="z-window-highlighted"], [class*="z-messagebox"]'
+        );
+        for (const modal of modals) {
+            if (!isYoksisControlUsable(modal)) continue;
+            const buttons = modal.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
+            for (const btn of buttons) {
+                if (!isYoksisControlUsable(btn)) continue;
+                const bTxt = normalizeYoksisText(btn.innerText || btn.textContent || btn.value || '');
+                if (bTxt.includes('tamam') || bTxt === 'ok' || bTxt.includes('kapat')) {
+                    const target = getYoksisClickableRoot(btn) || btn;
+                    triggerZkClick(target);
+                    try { target.click(); } catch (_) {}
+                    break;
+                }
+            }
+        }
+    }
+}
+
 async function prepareYoksisSearchControls(request) {
+    dismissExistingYoksisModal();
     pendingYoksisSearch = null;
     confirmedYoksisSearch = null;
     if (hasPopulatedYoksisStudentForm()) {
