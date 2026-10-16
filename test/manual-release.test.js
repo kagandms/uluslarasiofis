@@ -85,7 +85,7 @@ const settings={compatibility_date:'2026-09-28',compatibility_flags:[],bindings:
     observability:{enabled:true},placement:{mode:'smart'},limits:{cpu_ms:100},logpush:true};
 test('upload inherits binding/secret values and versioned settings; never writes cron or non-versioned settings',()=>{
     const value=inheritWorkerMetadata({main_module:'index.js',compatibility_date:'2026-09-28',compatibility_flags:[]},settings,sha,'synthetic-asset-token',old);
-    assert.deepEqual(value.bindings.slice(1),settings.bindings.slice(1).map(b=>({name:b.name,type:'inherit',version_id:old})));
+    assert.deepEqual(value.bindings.slice(1),settings.bindings.slice(1).map(b=>({name:b.name,type:'inherit',version_id:'latest'})));
     assert.deepEqual(value.placement,settings.placement);assert.deepEqual(value.limits,settings.limits);
     assert.ok(!value.observability&&!value.logpush&&!value.triggers&&!value.migrations);
     assert.throws(()=>inheritWorkerMetadata({compatibility_date:'other'},settings,sha,'synthetic',old));
@@ -99,20 +99,25 @@ test('unknown/duplicate/missing non-secret bindings and compatibility drift stop
     assert.equal(settingsSnapshot({...settings,bindings:[{name:'S',type:'secret_text',text:'MUST_NOT_CAPTURE'}]}).bindings[0].text,undefined);
 });
 test('activation uses only staged candidate at 100%, once, after final source/live checks',async()=>{
-    const calls=[];const form=new FormData();form.set('metadata','{}');
+    const calls=[];const form=new FormData();form.set('metadata','{}');let uploaded=false;
     await publishPrepared({bundle:{form,metadata:{main_module:'index.js',compatibility_date:'2026-09-28'}},plan:{manifest:{},byHash:new Map()},settings,sha,activeVersion:old,
-        api:async(path,opts)=>{calls.push(path);if(path.endsWith('assets-upload-session'))return{jwt:'synthetic',buckets:[]};
-            if(path.includes('/versions?')){const metadata=JSON.parse(opts.body.get('metadata'));assert.equal(metadata.annotations['workers/message'],`release:${sha}`);return{id:next};}
+        api:async(path,opts={})=>{
+            if(!opts.method){if(path.endsWith('/deployments'))return{deployments:[{versions:[{version_id:old,percentage:100}]}]};
+                return{items:[{id:uploaded?next:old,number:uploaded?2:1}]};}
+            calls.push(path);if(path.endsWith('assets-upload-session'))return{jwt:'synthetic',buckets:[]};
+            if(path.includes('/versions?')){const metadata=JSON.parse(opts.body.get('metadata'));assert.equal(metadata.annotations['workers/message'],`release:${sha}`);uploaded=true;return{id:next};}
             assert.deepEqual(JSON.parse(opts.body).versions,[{version_id:next,percentage:100}]);return{};},
         beforeActivation:async id=>{assert.equal(id,next);calls.push('final-check');}});
     assert.deepEqual(calls,['/workers/scripts/goc/assets-upload-session','/workers/scripts/goc/versions?bindings_inherit=strict','final-check','/workers/scripts/goc/deployments']);
 });
 test('staging failure or final guard failure cannot activate; failed activation is never repeated',async()=>{
     for(const fail of ['assets','version','guard','activation']){
-        const calls=[];await assert.rejects(publishPrepared({bundle:{form:new FormData(),metadata:{main_module:'index.js',compatibility_date:'2026-09-28'}},
-            plan:{manifest:{},byHash:new Map()},settings,sha,activeVersion:old,api:async(path)=>{
+        const calls=[];let uploaded=false;await assert.rejects(publishPrepared({bundle:{form:new FormData(),metadata:{main_module:'index.js',compatibility_date:'2026-09-28'}},
+            plan:{manifest:{},byHash:new Map()},settings,sha,activeVersion:old,api:async(path,opts={})=>{
+                if(!opts.method){if(path.endsWith('/deployments'))return{deployments:[{versions:[{version_id:old,percentage:100}]}]};
+                    return{items:[{id:uploaded?next:old,number:uploaded?2:1}]};}
                 calls.push(path);if(path.endsWith('assets-upload-session')){if(fail==='assets')throw Error();return{jwt:'synthetic',buckets:[]};}
-                if(path.includes('/versions?')){if(fail==='version')throw Error();return{id:next};}throw Error('activation failed');
+                if(path.includes('/versions?')){if(fail==='version')throw Error();uploaded=true;return{id:next};}throw Error('activation failed');
             },beforeActivation:async()=>{if(fail==='guard')throw Error();}}));
         assert.equal(calls.filter(p=>p.endsWith('/deployments')).length,fail==='activation'?1:0);
     }

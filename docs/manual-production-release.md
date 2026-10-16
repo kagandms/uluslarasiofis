@@ -36,7 +36,11 @@ The publisher stages static assets and a Worker version, then issues exactly one
 All requests stop on failure without SDK retries. Staging failure leaves the active version unchanged;
 unused staged assets/versions may remain. No production D1/R2 object API is used. This assets upload
 is Cloudflare's Worker static-assets storage, not the application's DOCUMENTS/PRINT_FILES buckets.
-Bindings, including all runtime secrets, inherit by name from the approved active version ID; values are never fetched or supplied.
+Bindings, including all runtime secrets, inherit by name using the API-supported `version_id: latest`; values are never fetched or supplied.
+The latest uploaded version must equal the approved active version before staging and again immediately
+before the strict version upload. After staging, latest must be our candidate before activation. Any
+mismatch stops without retry, deletion, rollback or promotion. Existing external writers must remain
+paused; these reads cannot provide a server-side atomic lock against Dashboard uploads.
 Live compatibility settings must match the reviewed configuration. Placement/limits/cache options
 are copied unchanged; no routes/subdomain/cron/settings PATCH is issued. Metadata is compared after
 activation and read-only binding/secret/cron preflight runs again. Application crons continue normally.
@@ -61,3 +65,17 @@ backup plus isolated restore remain separate, unperformed maintenance requiring 
 cost approval. No new paid resource or controller is required by daily code releases.
 There is currently no demonstrated end-to-end production recovery or rollback drill. Publication may
 proceed only with this residual risk understood; the workflow does not label missing evidence as passed.
+
+## 10057 compatibility correction
+
+The failed release run 38860053033 reached version creation and received HTTP 400 / 10057 before
+activation. No candidate-staged message or activation was reached. Static assets may have been staged;
+this is not an active Worker deployment. The former explicit UUID inheritance was incompatible with
+the account's API; UUIDs must not be sent as binding `version_id`. An SDK type accepting UUIDs was
+insufficient evidence of server support. Regression tests now model the actual latest-only contract.
+The current active UUID still needs an authenticated read; historical logs alone do not establish
+current state. The existing workflow's `operation=preflight` now records active/latest UUIDs and last
+deployment time in Actions logs/summary using only GET requests for this report. Differences stop the
+preflight. No Dashboard sharing, new token, or new workflow is needed. Because Production environment
+credentials allow only the production branch, this new diagnostic cannot run with those credentials
+before the fix has been separately approved and merged. This PR does not change that restriction.

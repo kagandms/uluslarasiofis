@@ -53,8 +53,8 @@ async function main() {
         const config = JSON.parse(readFileSync(new URL('../../wrangler.jsonc', import.meta.url), 'utf8'));
         const args = artifactDryRunPlan(root, { ...config.env.production, compatibility_date: config.compatibility_date });
         assert.equal(readFileSync(join(root, 'candidate-sha.txt'), 'utf8').trim(), sha);
-        const node = (script, args = []) => {
-            const result = spawnSync(process.execPath, [fileURLToPath(new URL(script, import.meta.url)), ...args], { stdio: 'inherit', timeout: 120_000 });
+        const node = (script, args = [], extraEnv = {}) => {
+            const result = spawnSync(process.execPath, [fileURLToPath(new URL(script, import.meta.url)), ...args], { stdio: 'inherit', timeout: 120_000, env: { ...process.env, ...extraEnv } });
             assert.ok(!result.error && result.status === 0, 'Release guard stopped.');
         };
         const api = cloudflareClient(process.env.CLOUDFLARE_ACCOUNT_ID, process.env.CLOUDFLARE_API_TOKEN);
@@ -107,7 +107,7 @@ async function main() {
                             assert.deepEqual(settingsSnapshot(await getSettings()), settingsSnapshot(beforeSettings));
                             const version = await api(`/workers/scripts/goc/versions/${id}`);
                             assertStagedVersion(version, previous, beforeSettings, sha);
-                            node('./cloudflare-preflight.mjs'); node('./check-migration-ledger.mjs');
+                            node('./cloudflare-preflight.mjs', [], { EXPECTED_STAGED_WORKER_VERSION: id }); node('./check-migration-ledger.mjs');
                             const fetched = spawnSync('git', ['fetch', '--no-tags', 'origin', 'production'], { stdio: 'pipe', timeout: 30_000 });
                             assert.equal(fetched.status, 0); node('./check-release-sha.mjs');
                         }
