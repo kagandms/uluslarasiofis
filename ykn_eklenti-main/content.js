@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.94';
+const CONTENT_SCRIPT_VERSION = '1.2.95';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -978,33 +978,65 @@ function getYoksisClickableText(element) {
 function getYoksisClickableRoot(element) {
     if (!element) return null;
     // ZK'nin görsel parçası td.z-button-cm/td.z-button-cl olsa da gerçek
-    // click listener çoğunlukla üst table.z-button üzerindedir.
+    // click listener çoğunlukla üst table.z-button veya .z-button kökündedir.
     const nestedTableRoot = element.querySelector?.('table.z-button');
     if (nestedTableRoot) return nestedTableRoot;
     const tableRoot = element.closest('table.z-button');
     if (tableRoot) return tableRoot;
-    return element.closest(`button, a, [role="button"], .z-button, [class*="z-button"]`) || element;
+    const buttonRoot = element.closest('button, input[type="button"], input[type="submit"], .z-button, .z-toolbarbutton, .z-button-os, .form-btn, a, [role="button"]');
+    if (buttonRoot) return buttonRoot;
+    return element.closest('[class*="z-button"]:not([class*="z-button-"])') || element;
 }
 
-function findYoksisButtonIn(container) {
+function scoreYoksisKabulButton(candidate, idInput = null) {
+    if (!isYoksisControlUsable(candidate)) return -1;
+    if (candidate.closest('.z-menu, .z-menuitem, .z-menu-item, .z-menupopup, .z-caption, .z-tab, nav')) return -1;
+    const root = getYoksisClickableRoot(candidate) || candidate;
+    if (!isYoksisControlUsable(root)) return -1;
+    const text = getYoksisClickableText(root) || getYoksisClickableText(candidate);
+    if (!text || text.length > 60) return -1;
+    if (text.includes('pasaport') || text.includes('belgeno') || text.includes('tckimlik')
+        || text.includes('temizle') || text.includes('kaydet') || text.includes('iptal')
+        || text.includes('vazgec') || text.includes('yukle')) {
+        return -1;
+    }
+    const hasKabul = text.includes('kabul');
+    const hasAra = text.includes('ara');
+    const hasSorgula = text.includes('sorgula');
+    const hasGetir = text.includes('getir');
+    if (!hasAra && !hasSorgula && !hasGetir && !hasKabul) return -1;
+
+    let score = 0;
+    if (hasKabul && hasAra) score += 220;
+    else if (hasKabul && (hasSorgula || hasGetir)) score += 180;
+    else if (hasAra) score += 80;
+    else if (hasSorgula) score += 70;
+    else if (hasGetir) score += 40;
+    else if (hasKabul) score += 20;
+
+    if (text.includes('mektup')) score += 30;
+    if (text.includes('id')) score += 20;
+    if (root.tagName !== 'A') score += 25;
+    if (idInput && typeof idInput.compareDocumentPosition === 'function'
+        && (idInput.compareDocumentPosition(root) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+        score += 30;
+    }
+    return score;
+}
+
+function findYoksisButtonIn(container, idInput = null, minScore = 1) {
     if (!container) return null;
     const clickables = container.querySelectorAll(getYoksisClickableSelector());
     let best = null;
     let bestScore = -1;
     for (const candidate of clickables) {
-        if (!isYoksisControlUsable(candidate)) continue;
-        const text = getYoksisClickableText(candidate);
-        let score = 0;
-        if (text.includes('kabul')) score += 100;
-        if (text.includes('ara')) score += 80;
-        if (text.includes('sorgula')) score += 70;
-        if (text.includes('getir') || text.includes('bul')) score += 20;
-        if (score > 0 && score > bestScore) {
+        const score = scoreYoksisKabulButton(candidate, idInput);
+        if (score >= minScore && score > bestScore) {
             best = getYoksisClickableRoot(candidate);
             bestScore = score;
         }
     }
-    return bestScore > 0 ? best : null;
+    return bestScore >= minScore ? best : null;
 }
 
 function isYoksisTextInput(element) {
@@ -1029,12 +1061,14 @@ function findYoksisKabulPair() {
                 if (!isYoksisControlUsable(input)) return null;
                 // Öğrenci form tablosu / grid içindeki alanları arama kutusu sanma
                 if (input.closest('.z-grid-body, .z-listbox-body')) return null;
+                const labelText = input.labels?.[0]?.textContent || '';
                 const metadata = normalizeYoksisText([
                     input.placeholder,
                     input.getAttribute('placeholder'),
                     input.title,
                     input.name,
-                    input.id
+                    input.id,
+                    labelText
                 ].join(' '));
                 // Canlı YÖKSİS ekranındaki kabul kutusu, örneğin
                 // tGDP49-chdextr kimliğiyle üretiliyor. Başlıktaki metin
@@ -1056,7 +1090,7 @@ function findYoksisKabulPair() {
         // Bazı YÖKSİS sürümlerinde placeholder metadata'sı eksik kalıyor;
         // bu durumda etiket ve aynı satırdaki input birlikte kullanılır.
         if (!idInput) {
-            for (const row of doc.querySelectorAll('tr')) {
+            for (const row of doc.querySelectorAll('tr, .z-row, .form-row')) {
                 if (!isYoksisControlUsable(row)) continue;
                 const rowText = normalizeYoksisText(row.innerText || row.textContent || '');
                 if (!rowText.includes('kabul') || !rowText.includes('id') || rowText.includes('tarih')) continue;
@@ -1071,30 +1105,37 @@ function findYoksisKabulPair() {
 
         if (!idInput) continue;
 
-        // En güvenilir eşleştirme: input ile Kabul Mektup butonunun aynı tr
-        // içinde olması. ZK'nin td.z-button-cm gibi sınıfları da kapsanır.
-        let searchBtn = findYoksisButtonIn(idInput.closest('tr'));
+        // 1. Önce input ile aynı satır veya hemen altındaki komşu satıra bak.
+        const inputRow = idInput.closest('tr, .z-row, .form-row');
+        let searchBtn = findYoksisButtonIn(inputRow, idInput);
+        if (!searchBtn && inputRow?.nextElementSibling) {
+            searchBtn = findYoksisButtonIn(inputRow.nextElementSibling, idInput)
+                || findYoksisButtonIn(inputRow.nextElementSibling.nextElementSibling, idInput);
+        }
+
+        // 2. Ebeveyn kapsayıcılarda yukarı yürüyerek "Kabul Mektup Id İle Ara" butonunu bul.
         if (!searchBtn) {
             let parent = idInput.parentElement;
             let depth = 0;
-            while (parent && parent !== doc.body && depth < 7 && !searchBtn) {
-                searchBtn = findYoksisButtonIn(parent);
+            let fallbackLocalBtn = null;
+            while (parent && parent !== doc.body && depth < 12) {
+                const explicitBtn = findYoksisButtonIn(parent, idInput, 180);
+                if (explicitBtn) {
+                    searchBtn = explicitBtn;
+                    break;
+                }
+                if (!fallbackLocalBtn) {
+                    fallbackLocalBtn = findYoksisButtonIn(parent, idInput, 70);
+                }
                 parent = parent.parentElement;
                 depth += 1;
             }
+            if (!searchBtn) searchBtn = fallbackLocalBtn;
         }
 
-        // Son fallback: sayfadaki kabul arama butonu.
+        // 3. Son fallback: sayfadaki açık "Kabul ... Ara/Sorgula" butonu.
         if (!searchBtn) {
-            const allClickables = doc.querySelectorAll(getYoksisClickableSelector());
-            for (const candidate of allClickables) {
-                if (!isYoksisControlUsable(candidate)) continue;
-                const text = getYoksisClickableText(candidate);
-                if (text.includes('kabul') && (text.includes('ara') || text.includes('sorgula') || text.includes('getir') || text.includes('bul'))) {
-                    searchBtn = getYoksisClickableRoot(candidate);
-                    break;
-                }
-            }
+            searchBtn = findYoksisButtonIn(doc, idInput, 180);
         }
 
         return { idInput, searchBtn, doc };
@@ -1105,13 +1146,10 @@ function findYoksisKabulPair() {
 
 function findKabulIdButton(idInput) {
     if (idInput) {
-        const iRow = idInput.closest('tr, .z-row, table, .z-groupbox, div');
-        if (iRow) {
-            const rowBtns = Array.from(iRow.querySelectorAll('button, .z-button, a, input[type="button"], span.z-button, table.z-button, span.z-button-cm'))
-                .filter(isYoksisControlUsable);
-            if (rowBtns.length > 0) {
-                return rowBtns[0].closest('button, .z-button, a, input[type="button"], table.z-button, [role="button"]') || rowBtns[0];
-            }
+        let parent = idInput.closest('tr, .z-row, .form-row') || idInput.parentElement;
+        for (let depth = 0; parent && parent !== document.body && depth < 10; depth += 1, parent = parent.parentElement) {
+            const btn = findYoksisButtonIn(parent, idInput, 70);
+            if (btn) return btn;
         }
     }
     return findYoksisKabulPair().searchBtn;
@@ -1297,7 +1335,11 @@ function simulateButtonClick(element) {
 
     // dispatchEvent('click') ve element.click() birlikte kullanıldığında aynı
     // ZK komutu iki kez gönderiliyordu. Native click tek gerçek tıklama olsun.
-    try { element.click(); } catch (_) { return false; }
+    const nestedNativeBtn = (element.tagName !== 'BUTTON' && element.tagName !== 'INPUT' && element.tagName !== 'A')
+        ? element.querySelector?.('button, input[type="button"], input[type="submit"]')
+        : null;
+    const clickTarget = (nestedNativeBtn && isYoksisControlUsable(nestedNativeBtn)) ? nestedNativeBtn : element;
+    try { clickTarget.click(); } catch (_) { return false; }
 
     return true;
 }
@@ -1310,9 +1352,9 @@ function triggerZkClick(buttonElement, inputElement, kabulId) {
     try {
         if (win.zk && win.zk.Widget) {
             if (buttonElement) {
-                let wb = win.zk.Widget.$(buttonElement);
-                if (!wb && buttonElement.parentElement) {
-                    wb = win.zk.Widget.$(buttonElement.parentElement);
+                let wb = null;
+                for (let current = buttonElement, depth = 0; current && depth < 6 && !wb; current = current.parentElement, depth += 1) {
+                    wb = win.zk.Widget.$(current);
                 }
                 if (wb && typeof wb.fire === 'function') {
                     wb.fire('onClick', null, { toServer: true });
@@ -1369,6 +1411,10 @@ function waitForYoksisSearchControls(timeoutMs = 12_000) {
             }
             if (Date.now() >= deadline) {
                 clearInterval(intervalId);
+                if (pair.idInput) {
+                    resolve(pair);
+                    return;
+                }
                 reject(new Error('YÖKSİS Kabul Mektubu alanı hazır olmadı.'));
             }
         }, 200);
@@ -1412,8 +1458,8 @@ function getYoksisFormState() {
 // Kabul kodu alanının onChange olayı da ZK'de bağımsız bir AU/DOM güncellemesi
 // üretebilir. ZK meşgulse AU isteğinin bitmesini, DOM değişiyorsa sakinleşmesini
 // akıllı biçimde bekleyip baseline'ı ancak ondan sonra alıyoruz.
-async function waitForYoksisSearchControlsToSettle() {
-    const response = await runZkCommand({ action: 'waitForIdle' });
+async function waitForYoksisSearchControlsToSettle(options = {}) {
+    const response = await runZkCommand({ action: 'waitForIdle', ...options });
     if (!response.success) throw new Error('YÖKSİS sunucu güncellemesi tamamlanmadı; arama gönderilmedi.');
 }
 
@@ -1429,12 +1475,17 @@ async function prepareYoksisSearchControls() {
     pendingYoksisSearch = null;
     confirmedYoksisSearch = null;
     if (hasPopulatedYoksisStudentForm()) {
+        const rejectProtectedForm = (msg) => {
+            const err = new Error(msg);
+            err.allowMainFallback = false;
+            return err;
+        };
         if (!window.confirm('YÖKSİS formunda önceki öğrenciye ait bilgiler var. Kaydedilmemiş bilgiler silinebilir. Yeni öğrenci için formu temizlemeyi onaylıyor musunuz?')) {
-            throw new Error('Yeni öğrenci onayı verilmedi; önceki form korundu.');
+            throw rejectProtectedForm('Yeni öğrenci onayı verilmedi; önceki form korundu.');
         }
-        if (!tryResetOrNewRecord()) throw new Error('Güvenli yeni kayıt/temizle düğmesi bulunamadı; önceki form korundu.');
+        if (!tryResetOrNewRecord()) throw rejectProtectedForm('Güvenli yeni kayıt/temizle düğmesi bulunamadı; önceki form korundu.');
         await waitForYoksisSearchControlsToSettle();
-        if (hasPopulatedYoksisStudentForm()) throw new Error('Önceki öğrenci formunun temizlendiği doğrulanamadı.');
+        if (hasPopulatedYoksisStudentForm()) throw rejectProtectedForm('Önceki öğrenci formunun temizlendiği doğrulanamadı.');
     }
     return await waitForYoksisSearchControls();
 }
@@ -3562,10 +3613,13 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                     // Değerin ZK tarafındaki onChange güncellemesi bitmeden
                     // arama butonuna basılırsa ikinci öğrencide tıklama eski
                     // bileşene gidebilir. Yeniden bulma da bu yüzden şarttır.
-                    await waitForYoksisSearchControlsToSettle();
+                    await waitForYoksisSearchControlsToSettle({
+                        syncSearchInput: true,
+                        requestId: request.requestId
+                    });
                     const refreshedPair = findYoksisKabulPair();
-                    idInput = refreshedPair.idInput;
-                    searchBtn = refreshedPair.searchBtn;
+                    idInput = refreshedPair.idInput || (isYoksisControlUsable(idInput) ? idInput : null);
+                    searchBtn = refreshedPair.searchBtn || (isYoksisControlUsable(searchBtn) ? searchBtn : null);
                     if (idInput && isYoksisControlUsable(idInput)
                         && normalizeYoksisIdValue(idInput.value) === kabulId) {
                         valueConfirmed = true;
@@ -3591,6 +3645,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 pendingYoksisSearch = { code: kabulId, requestId: request.requestId };
                 let searchTriggered = false;
                 const searchClickStartedAt = performance.now();
+                const hasDirectZkWidget = Boolean((searchBtn?.ownerDocument?.defaultView || window).zk?.Widget?.$);
                 if (searchBtn) {
                     searchTriggered = triggerZkClick(searchBtn, idInput, kabulId);
                 } else {
@@ -3601,8 +3656,23 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                     console.warn('[YKN] Kabul mektup ID ara butonu doğrulanamadı; arama gönderilmedi.');
                     searchTriggered = false;
                 }
-                if (!searchTriggered) throw new Error('YÖKSİS arama komutu tetiklenemedi.');
-                await waitForYoksisSearchControlsToSettle();
+                if (!searchTriggered) {
+                    return {
+                        formReady: false,
+                        searchTriggered: false,
+                        formFingerprintBeforeSearch,
+                        domRevisionBeforeSearch: stateBeforeSearch.domRevision,
+                        message: 'YÖKSİS arama komutu tetiklenemedi.',
+                        inputReadyDurationMs,
+                        inputWriteDurationMs,
+                        searchClickDurationMs: Math.round(performance.now() - searchClickStartedAt),
+                        formWaitDurationMs: 0
+                    };
+                }
+                await waitForYoksisSearchControlsToSettle({
+                    triggerSearchClick: !hasDirectZkWidget,
+                    requestId: request.requestId
+                });
                 const searchClickDurationMs = Math.round(performance.now() - searchClickStartedAt);
 
                 let formReady = false;
@@ -3651,7 +3721,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 success: false,
                 requestId: request.requestId,
                 message: error.message,
-                allowMainFallback: false
+                ...(error?.allowMainFallback === false ? { allowMainFallback: false } : {})
             }));
         return true;
     }

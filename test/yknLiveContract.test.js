@@ -1669,3 +1669,176 @@ test('unverified missing source demographics cannot be reported as a complete tr
     assert.ok(result.missingFields.includes('Cinsiyet'));
     assert.ok(result.missingFields.includes('Medeni Hali'));
 });
+
+test('YÖKSİS araması, üstteki grup başlığını değil inputun altındaki "Kabul Mektup Id İle Ara" butonunu tetikler', async () => {
+    const harness = createContentHarness(`
+        <div class="z-groupbox">
+            <div class="z-caption"><a id="caption-link" href="#">Kabul Mektup ID ile Sorgula</a></div>
+            <div class="z-groupbox-cnt">
+                <table>
+                    <tbody>
+                        <tr class="z-row">
+                            <td class="z-row-inner"><span class="z-label">Kabul Mektup Id</span></td>
+                            <td class="z-row-inner"><input id="kabul-id" class="z-textbox" type="text"></td>
+                        </tr>
+                        <tr class="z-row">
+                            <td class="z-row-inner" colspan="2">
+                                <span id="search-btn" class="z-button">
+                                    <table cellspacing="0" cellpadding="0" border="0">
+                                        <tbody>
+                                            <tr><td class="z-button-cm">Kabul Mektup Id İle Ara</td></tr>
+                                        </tbody>
+                                    </table>
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+    for (const element of harness.dom.window.document.querySelectorAll('a, input, span, table, tr, td')) {
+        element.getBoundingClientRect = () => ({ width: 120, height: 28, top: 10, left: 10, right: 130, bottom: 38 });
+    }
+    let captionClicks = 0;
+    let searchButtonClicks = 0;
+    harness.dom.window.document.getElementById('caption-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        captionClicks += 1;
+    });
+    harness.dom.window.document.getElementById('search-btn').addEventListener('click', () => {
+        searchButtonClicks += 1;
+        setTimeout(() => {
+            harness.dom.window.document.body.insertAdjacentHTML('beforeend', `
+                <table id="student-form">
+                    <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+                    <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+                </table>
+            `);
+        }, 20);
+    });
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: '821-EC2-34',
+            requestId: 'workflow-underneath-button'
+        });
+
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+        assert.equal(response.formReady, true);
+        assert.equal(captionClicks, 0);
+        assert.equal(searchButtonClicks, 1);
+        assert.equal(harness.dom.window.document.getElementById('kabul-id').value, '821-EC2-34');
+    } finally {
+        harness.close();
+    }
+});
+
+test('YÖKSİS araması, DOM click yanıt üretmediğinde MAIN-world ZK Button widget onClick olayını tetikler', async () => {
+    const harness = createContentHarness(`
+        <div class="z-vbox">
+            <div class="z-hbox">
+                <span class="z-label">Kabul Mektup Id</span>
+                <input id="kabul-id" class="z-textbox" type="text">
+            </div>
+            <div class="z-hbox">
+                <span id="search-btn" class="z-button">
+                    <span class="z-button-cm">Kabul Mektup Id İle Ara</span>
+                </span>
+            </div>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const { window } = harness.dom;
+    for (const element of window.document.querySelectorAll('input, span, div')) {
+        element.getBoundingClientRect = () => ({ width: 120, height: 28, top: 10, left: 10, right: 130, bottom: 38 });
+    }
+    const inputEl = window.document.getElementById('kabul-id');
+    const buttonEl = window.document.getElementById('search-btn');
+    const firedInputEvents = [];
+    const firedButtonEvents = [];
+    const inputWidget = {
+        _value: '',
+        _lastValue: '',
+        setValue(val) {
+            this._value = val;
+        },
+        fire(eventName, data) {
+            firedInputEvents.push({ eventName, data });
+        }
+    };
+    const buttonWidget = {
+        fire(eventName) {
+            firedButtonEvents.push(eventName);
+            if (eventName === 'onClick') {
+                setTimeout(() => {
+                    window.document.body.insertAdjacentHTML('beforeend', `
+                        <table id="student-form">
+                            <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+                            <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+                        </table>
+                    `);
+                }, 15);
+            }
+        }
+    };
+    window.zk = {
+        processing: false,
+        Widget: {
+            $(el) {
+                if (el === inputEl) return inputWidget;
+                if (el === buttonEl) return buttonWidget;
+                return null;
+            }
+        }
+    };
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: '991-AB7-12',
+            requestId: 'workflow-zk-widget-button-below'
+        });
+
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+        assert.equal(response.formReady, true);
+        assert.equal(inputEl.value, '991-AB7-12');
+        assert.equal(inputWidget._value, '991-AB7-12');
+        assert.equal(firedInputEvents.some((ev) => ev.eventName === 'onChange' && ev.data?.value === '991-AB7-12'), true);
+        assert.deepEqual(firedButtonEvents, ['onClick']);
+    } finally {
+        harness.close();
+    }
+});
+
+test('background, ilk boş YÖKSİS arama ekranında (fingerprint === "") tıklama sonuç üretmezse MAIN-world fallback çalıştırır', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: true, buttonFound: true, searchTriggered: true },
+        {
+            success: false,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: '',
+            domRevisionBeforeSearch: 0
+        },
+        {
+            formState: { success: true, fingerprint: '', domRevision: 0, hasPopulatedStudentForm: false },
+            formReadyResponses: [{ success: true, formReady: false }, { success: true, formReady: true }]
+        }
+    );
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'workflow-empty-initial-fingerprint-retry',
+        data: { yoksisId: 'AB-123-CD' }
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.searchTriggered, true);
+    assert.equal(response.formReady, true);
+    assert.ok(harness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
+});
+

@@ -610,6 +610,103 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             .trim();
                     }
 
+                    function isVisible(el) {
+                        if (!el || !el.isConnected) return false;
+                        if (el.disabled || el.getAttribute?.('aria-disabled') === 'true') return false;
+                        if (/(?:-|_)chdextr$/i.test(el.id || '')) return false;
+                        const doc = el.ownerDocument || document;
+                        const win = doc.defaultView || window;
+                        for (let cur = el; cur && cur !== doc.documentElement; cur = cur.parentElement) {
+                            if (cur.hidden || cur.getAttribute?.('aria-hidden') === 'true') return false;
+                            const style = win.getComputedStyle ? win.getComputedStyle(cur) : null;
+                            if (style && (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')) {
+                                return false;
+                            }
+                        }
+                        const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 0, height: 0 };
+                        return rect.width > 0 && rect.height > 0;
+                    }
+
+                    function getButtonRoot(el) {
+                        if (!el) return null;
+                        return el.closest('button, .z-button, .z-toolbarbutton, input[type="button"], input[type="submit"], a, [role="button"]') || el;
+                    }
+
+                    function isKabulSearchButtonText(text) {
+                        const cTxt = norm(text);
+                        if (!cTxt || cTxt.length > 90) return false;
+                        if (cTxt.includes('pasaport') || cTxt.includes('belge no') || cTxt.includes('tc kimlik') || cTxt.includes('temizle') || cTxt.includes('kaydet') || cTxt.includes('iptal') || cTxt.includes('vazgec')) {
+                            return false;
+                        }
+                        const hasSearchVerb = cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || /\bbul\b/.test(cTxt);
+                        return hasSearchVerb && (cTxt.includes('kabul') || cTxt.includes('mektup') || cTxt === 'ara' || cTxt === 'sorgula');
+                    }
+
+                    function scoreKabulButton(candidate, refInput) {
+                        const root = getButtonRoot(candidate);
+                        if (!isVisible(root)) return 0;
+                        if (root.closest('.z-menu, .z-menuitem, .z-menu-item, .z-menupopup, .z-caption, .z-tab, nav')) return 0;
+                        const cTxt = norm(root.innerText || root.textContent || root.value || root.title || '');
+                        if (!isKabulSearchButtonText(cTxt)) return 0;
+                        let score = 0;
+                        if (cTxt.includes('kabul') && cTxt.includes('ara')) score = 240;
+                        else if (cTxt.includes('kabul') && (cTxt.includes('sorgula') || cTxt.includes('getir') || /\bbul\b/.test(cTxt))) score = 200;
+                        else if (cTxt === 'ara' || cTxt === 'sorgula' || cTxt === 'getir') score = 150;
+                        else if (cTxt.includes('ara') || cTxt.includes('sorgula')) score = 120;
+                        if (score === 0) return 0;
+                        const tag = (root.tagName || '').toLowerCase();
+                        if (tag === 'button' || root.classList?.contains('z-button') || root.classList?.contains('z-toolbarbutton')) {
+                            score += 25;
+                        }
+                        if (refInput && typeof refInput.compareDocumentPosition === 'function') {
+                            try {
+                                if (refInput.compareDocumentPosition(root) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                                    score += 30;
+                                }
+                            } catch (_) {}
+                        }
+                        return score;
+                    }
+
+                    function findBestButtonIn(scope, refInput, minScore = 100) {
+                        if (!scope || !scope.querySelectorAll) return null;
+                        const candidates = scope.querySelectorAll('button, .z-button, .z-toolbarbutton, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"], span');
+                        let best = null;
+                        let bestScore = 0;
+                        const seen = new Set();
+                        for (let i = 0; i < candidates.length; i++) {
+                            const root = getButtonRoot(candidates[i]);
+                            if (!root || seen.has(root)) continue;
+                            seen.add(root);
+                            const score = scoreKabulButton(root, refInput);
+                            if (score >= minScore && score > bestScore) {
+                                bestScore = score;
+                                best = root;
+                            }
+                        }
+                        return best;
+                    }
+
+                    function findZkWidget(el, win) {
+                        if (!el || !win?.zk?.Widget?.$) return null;
+                        for (let cur = el, depth = 0; cur && depth < 6; cur = cur.parentElement, depth++) {
+                            try {
+                                const w = win.zk.Widget.$(cur);
+                                if (w) return w;
+                            } catch (_) {}
+                        }
+                        if (el.querySelector) {
+                            const inner = el.querySelector('.z-button, button, input');
+                            if (inner) {
+                                try {
+                                    const w = win.zk.Widget.$(inner);
+                                    if (w) return w;
+                                } catch (_) {}
+                            }
+                        }
+                        return null;
+                    }
+
                     const allDocs = getAllDocs(document);
 
                     let inp = null;
@@ -622,9 +719,10 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         let dBtn = null;
 
                         // 1. ÖNCELİK: Placeholder / Title / Name / Id / Value üzerinden doğrudan Input bulma
-                        const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                        const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])');
                         for (let i = 0; i < allInputs.length; i++) {
                             const it = allInputs[i];
+                            if (!isVisible(it)) continue;
                             const ph = norm((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.id || ''));
                             if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum')) {
                                 dInp = it;
@@ -632,32 +730,20 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             }
                         }
 
-                        // 2. ÖNCELİK: Buton bulma ("Kabul Mektup Id İle Ara" veya içinde "kabul" geçen buton)
-                        const allClickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"]');
-                        for (let i = 0; i < allClickables.length; i++) {
-                            const c = allClickables[i];
-                            const cTxt = norm(c.innerText || c.textContent || c.value || '');
-                            if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
-                                dBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || c;
-                                break;
-                            }
-                        }
-
-                        // 3. ÖNCELİK: Etiket ("Kabul Mektup ID ile Sorgula" veya "Kabul Mektup Id") üzerinden bulma
-                        if (!dInp || !dBtn) {
+                        // 2. ÖNCELİK: Etiket ("Kabul Mektup ID ile Sorgula" veya "Kabul Mektup Id") üzerinden bulma
+                        if (!dInp) {
                             const textNodes = doc.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption, .z-caption, .z-groupbox-header');
                             for (let i = 0; i < textNodes.length; i++) {
                                 const node = textNodes[i];
                                 if (node.children.length > 3) continue;
                                 const txt = norm(node.innerText || node.textContent || '');
-                                if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup')) && !txt.includes('kabultarih')) {
-                                    // Komşu hücreye bak
+                                if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup') || txt.includes('kod') || txt.includes('no')) && !txt.includes('kabultarih')) {
                                     const td = node.closest('td');
                                     if (td && td.nextElementSibling && !dInp) {
-                                        dInp = td.nextElementSibling.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                        const candidate = td.nextElementSibling.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])');
+                                        if (isVisible(candidate)) dInp = candidate;
                                     }
 
-                                    // En yakın kapsayıcıyı (groupbox, panel, table, form, window) bul
                                     let box = node.closest('.z-groupbox, .z-panel, fieldset, table, form, div.z-window');
                                     if (!box) {
                                         let p = node.parentElement;
@@ -670,43 +756,47 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                         }
                                     }
 
-                                    if (box) {
-                                        if (!dInp) {
-                                            const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                                            for (let j = 0; j < bInps.length; j++) {
-                                                const bPh = norm((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
-                                                if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum')) {
-                                                    dInp = bInps[j];
-                                                    break;
-                                                }
-                                            }
-                                            if (!dInp && bInps.length > 0) dInp = bInps[0];
-                                        }
-                                        if (!dBtn) {
-                                            const bBtns = box.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
-                                            if (bBtns.length > 0) {
-                                                for (let j = 0; j < bBtns.length; j++) {
-                                                    const bTxt = norm(bBtns[j].innerText || bBtns[j].textContent || bBtns[j].value || '');
-                                                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                                                        dBtn = bBtns[j].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[j];
-                                                        break;
-                                                    }
-                                                }
-                                                if (!dBtn) dBtn = bBtns[0].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[0];
+                                    if (box && !dInp) {
+                                        const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])');
+                                        for (let j = 0; j < bInps.length; j++) {
+                                            if (!isVisible(bInps[j])) continue;
+                                            const bPh = norm((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
+                                            if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum')) {
+                                                dInp = bInps[j];
+                                                break;
                                             }
                                         }
                                     }
-                                    if (dInp && dBtn) break;
+                                    if (dInp) break;
                                 }
                             }
                         }
 
-                        // 4. Biri bulunup diğeri bulunamadıysa ebeveyn ağacında yukarı yürüyerek tamamla
+                        // 3. ÖNCELİK: Input'un altındaki satırda, kapsayıcılarında veya belgede "Kabul Mektup Id İle Ara" butonunu bul
+                        if (dInp) {
+                            const row = dInp.closest('tr, .z-row, .z-hbox, .z-vbox, .form-group');
+                            if (row) {
+                                dBtn = findBestButtonIn(row, dInp, 100);
+                                for (let sib = row.nextElementSibling, hop = 0; sib && hop < 3 && !dBtn; sib = sib.nextElementSibling, hop++) {
+                                    dBtn = findBestButtonIn(sib, dInp, 100);
+                                }
+                            }
+                            for (let parent = dInp.parentElement, depth = 0; parent && parent !== doc.body && depth < 12 && !dBtn; parent = parent.parentElement, depth++) {
+                                dBtn = findBestButtonIn(parent, dInp, 180) || (depth <= 4 ? findBestButtonIn(parent, dInp, 120) : null);
+                            }
+                        }
+
+                        if (!dBtn) {
+                            dBtn = findBestButtonIn(doc, dInp, 180);
+                        }
+
+                        // 4. Buton bulunduysa ve input henüz bulunmadıysa butonun üst/ebeveyn satırından inputu tamamla
                         if (dBtn && !dInp) {
                             let parent = dBtn.parentElement;
                             while (parent && parent !== doc.body) {
-                                const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])');
                                 for (let k = 0; k < inps.length; k++) {
+                                    if (!isVisible(inps[k])) continue;
                                     const itPh = norm(inps[k].placeholder || inps[k].getAttribute('placeholder') || inps[k].value || inps[k].id || '');
                                     if (!itPh.includes('pasaport') && !itPh.includes('tc') && !itPh.includes('dogum')) {
                                         dInp = inps[k];
@@ -714,26 +804,6 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                     }
                                 }
                                 if (dInp) break;
-                                parent = parent.parentElement;
-                            }
-                        }
-
-                        if (dInp && !dBtn) {
-                            let parent = dInp.parentElement;
-                            while (parent && parent !== doc.body) {
-                                const btns = parent.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
-                                for (let k = 0; k < btns.length; k++) {
-                                    const bTxt = norm(btns[k].innerText || btns[k].textContent || btns[k].value || '');
-                                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                                        dBtn = btns[k].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[k];
-                                        break;
-                                    }
-                                }
-                                if (dBtn) break;
-                                if (btns.length > 0) {
-                                    dBtn = btns[0].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[0];
-                                    break;
-                                }
                                 parent = parent.parentElement;
                             }
                         }
@@ -763,17 +833,15 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         inp.setAttribute('value', code);
                         inp.dispatchEvent(new Event('focus', { bubbles: true }));
                         inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                        if (targetWin.zk && targetWin.zk.Widget) {
+                        inputWidget = findZkWidget(inp, targetWin);
+                        if (inputWidget) {
                             try {
-                                inputWidget = targetWin.zk.Widget.$(inp);
-                                if (inputWidget) {
-                                    if (typeof inputWidget.setValue === 'function') inputWidget.setValue(code);
-                                    inputWidget._value = code;
-                                    inputWidget._lastValue = code;
-                                    if (typeof inputWidget.fire === 'function') {
-                                        inputWidget.fire('onChange', { value: code }, { toServer: true });
-                                        zkChangeSent = true;
-                                    }
+                                if (typeof inputWidget.setValue === 'function') inputWidget.setValue(code);
+                                inputWidget._value = code;
+                                inputWidget._lastValue = code;
+                                if (typeof inputWidget.fire === 'function') {
+                                    inputWidget.fire('onChange', { value: code }, { toServer: true });
+                                    zkChangeSent = true;
                                 }
                             } catch (_) {}
                         }
@@ -789,20 +857,16 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     // 6. Butonu tek kez çalıştır. ZK widget bulunduysa doğrudan onu
                     // çalıştırmak, DOM click + zAu + onClick üçlemesini engeller.
                     if (btn) {
-                        let buttonWidget = null;
-                        if (targetWin.zk && targetWin.zk.Widget) {
-                            try {
-                                buttonWidget = targetWin.zk.Widget.$(btn);
-                                if (!buttonWidget && btn.parentElement) {
-                                    buttonWidget = targetWin.zk.Widget.$(btn.parentElement);
-                                }
-                            } catch (_) {}
-                        }
+                        const buttonWidget = findZkWidget(btn, targetWin);
                         if (buttonWidget && typeof buttonWidget.fire === 'function') {
                             buttonWidget.fire('onClick', null, { toServer: true });
                         } else {
                             btn.focus();
                             try { btn.click(); } catch (_) {}
+                            const innerBtn = btn.querySelector ? btn.querySelector('button, input[type="button"], input[type="submit"]') : null;
+                            if (innerBtn && innerBtn !== btn) {
+                                try { innerBtn.click(); } catch (_) {}
+                            }
                         }
                     }
 
@@ -810,11 +874,9 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         // Buton yoksa yalnızca Enter/onOK fallback'i kullan.
                         inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: targetWin }));
                         inp.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: targetWin }));
-                        if (targetWin.zk && targetWin.zk.Widget) {
-                            const wi = inputWidget || targetWin.zk.Widget.$(inp);
-                            if (wi && typeof wi.fire === 'function') {
-                                try { wi.fire('onOK', null, { toServer: true }); } catch (_) {}
-                            }
+                        const wi = inputWidget || findZkWidget(inp, targetWin);
+                        if (wi && typeof wi.fire === 'function') {
+                            try { wi.fire('onOK', null, { toServer: true }); } catch (_) {}
                         }
                     }
 
@@ -1751,7 +1813,6 @@ async function waitForYoksisFormReady(tabId, requestId, options = {}) {
 function isUnchangedEmptyYoksisForm(state, fingerprint, domRevision) {
     return state?.hasPopulatedStudentForm === false
         && typeof fingerprint === 'string'
-        && fingerprint.length > 0
         && state.fingerprint === fingerprint
         && Number.isFinite(domRevision)
         && state.domRevision === domRevision;

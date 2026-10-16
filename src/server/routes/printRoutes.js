@@ -115,7 +115,7 @@ async function createPrintUploadIntent(request, environment, staffActor = null) 
     const storage = createStorage(environment);
     const repository = createPrintRepository(environment.DB);
     await enforceRateLimit({ rateLimits: createRateLimitRepository(environment.DB) }, request,
-        { endpoint: staffActor ? 'staff-print-upload' : 'print-upload', maxRequests: 5, windowSeconds: 300 });
+        { endpoint: staffActor ? 'staff-print-upload' : 'print-upload', maxRequests: 20, windowSeconds: 120 });
     const context = await readPrintUpload(request, environment, repository);
     const intent = await preparePrintIntent(request, environment, context, staffActor);
     const job = await repository.createUploadIntent(intent);
