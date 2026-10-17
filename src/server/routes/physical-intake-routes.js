@@ -19,7 +19,7 @@ async function readDetail(repository, id) {
     const files = (await repository.files(id)).results;
     const currentPdf = files.find(file => file.id === intake.current_pdf_id) || null;
     const receipts = await repository.receipts(id);
-    return { intake, files, receipts: receipts.results, current_pdf: currentPdf, allowed_transitions: listPhysicalTransitions(intake, currentPdf) };
+    return { intake, files, receipts: receipts.results, current_pdf: currentPdf, allowed_transitions: listPhysicalTransitions(intake) };
 }
 
 function readQuery(body) {
@@ -70,8 +70,7 @@ async function mutateReceipt(request, context, action) {
     requireKeys(body, action === 'status' ? ['lock_version', 'status', 'rejection_reason'] : ['lock_version']);
     const version = requirePhysicalVersion(body.lock_version);
     if (action === 'status') {
-        const currentPdf = context.intake.current_pdf_id ? await context.repository.file(context.intake.current_pdf_id) : null;
-        if (!listPhysicalTransitions(context.intake, currentPdf).includes(body.status)) throw new ApiError(409, 'PHYSICAL_STATUS_INVALID', 'Durum değişikliği için kaydı ve PDF dosyasını kontrol edin.');
+        if (!listPhysicalTransitions(context.intake).includes(body.status)) throw new ApiError(409, 'PHYSICAL_STATUS_INVALID', 'Durum değişikliği için kaydı kontrol edin.');
     }
     let changed;
     try { changed = await context.repository.update({ id: context.intake.id, version, action, now: context.now,

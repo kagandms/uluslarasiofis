@@ -918,7 +918,7 @@ async function runYoksisZkCommand(tabId, options) {
     return results?.[0]?.result || { success: false, verified: false };
 }
 
-async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
+async function syncYoksisFormInMainWorld(tabId, studentData, options = {}) {
     if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return null;
     try {
         const results = await chrome.scripting.executeScript({
@@ -926,8 +926,8 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
             // içinde ele alınıyor; allFrames ikinci/üçüncü commit üretmesin.
             target: { tabId },
             world: 'MAIN',
-            args: [studentData || null],
-            func: (data) => {
+            args: [studentData || null, options.phase || 'complete'],
+            func: (data, phase) => {
                 try {
                     function getAllDocs(rootDoc) {
                         var docs = [];
@@ -1371,7 +1371,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
                     // Content script izole dünyada DOM'a değer yazabilir ancak
                     // YÖKSİS/ZK bunu sunucu durumuna almayabilir. Bu prepass,
                     // değerleri doğrudan sayfanın gerçek JS dünyasında yazar.
-                    if (data) {
+                    if (data && phase !== 'photo') {
                         var firstName = data.firstName || data.adi || data.ad || '';
                         var lastName = data.lastName || data.soyadi || data.soyad || '';
                         var passportNo = data.pasaportNo || data.passportNo || '';
@@ -1412,7 +1412,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
                         var win = doc.defaultView || window;
 
                         // SADECE eklentinin doldurduğu hedeflenmiş alanları senkronize et.
-                        var allInputs = doc.querySelectorAll('input');
+                        var allInputs = phase === 'photo' ? [] : doc.querySelectorAll('input');
                         for (var j = 0; j < allInputs.length; j++) {
                             var inp = allInputs[j];
                             var row = inp.closest('tr');
@@ -1444,7 +1444,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
 
                         // Select alanları input döngüsünde yer almadığı için
                         // özellikle uyruk ve ülke seçimlerini ayrıca commit et.
-                        var allSelects = doc.querySelectorAll('select');
+                        var allSelects = phase === 'photo' ? [] : doc.querySelectorAll('select');
                         for (var si = 0; si < allSelects.length; si++) {
                             var selectEl = allSelects[si];
                             var selectRow = selectEl.closest('tr');
@@ -1460,7 +1460,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
 
 
                         // Fotoğraf Yükleme (MAIN World güvencesi)
-                        if (data && data.croppedPhotoBase64 && !photoUploadAttempted) {
+                        if (phase !== 'fields' && data && data.croppedPhotoBase64 && !photoUploadAttempted) {
                             photoUploadAttempted = true;
                             var photoUploadStartedAt = performance.now();
                             try {
@@ -1779,6 +1779,111 @@ function mergeYoksisFillResponses(mainResponse, contentResponse, studentData) {
     };
 }
 
+function buildVerifiedFillResponse(mainResponse, verification, studentData) {
+    const filledFields = verification?.filledFields || [];
+    return {
+        ...mainResponse,
+        success: filledFields.length > 0,
+        filledFields,
+        missingFields: getExpectedYoksisFields(studentData).filter(label => !filledFields.includes(label)),
+        failedFields: verification?.failedFields || [],
+        ...(verification?.error ? { error: verification.error } : {})
+    };
+}
+
+async function verifyTransferredYoksisFields(context) {
+    try {
+        const response = await sendTabMessage(context.tabId, {
+            action: 'verifyYoksisFields', data: context.studentData, requestId: context.requestId
+        }, { frameId: 0 });
+        if (!Array.isArray(response?.filledFields) || !Array.isArray(response?.missingFields)) {
+            throw new Error('YÖKSİS alan doğrulama yanıtı alınamadı.');
+        }
+        return response;
+    } catch (error) {
+        console.warn('YÖKSİS field verification failed.', { errorName: error.name });
+        return { success: false, filledFields: [], failedFields: getExpectedYoksisFields(context.studentData), error: error.message };
+    }
+}
+
+async function completeMissingYoksisFields(context, mainResponse) {
+    if (mainResponse.error) return { ...mergeYoksisFillResponses(mainResponse, null, context.studentData), success: false, partial: true };
+    const combined = mergeYoksisFillResponses(mainResponse, null, context.studentData);
+    if (!combined.partial) return combined;
+    const fallbackStartedAt = startYknTiming();
+    const fieldData = { ...context.studentData, ...(mainResponse.photoUploaded ? { croppedPhotoBase64: '', photoBase64: '' } : {}) };
+    try {
+        const fallback = await sendTabMessage(context.tabId, {
+            action: 'fillRemainingData', data: fieldData, requestId: context.requestId
+        }, { frameId: 0 });
+        const verification = await verifyTransferredYoksisFields(context);
+        const verified = buildVerifiedFillResponse({ ...mainResponse, photoUploaded: mainResponse.photoUploaded || fallback?.photoUploaded === true }, verification, context.studentData);
+        const result = mergeYoksisFillResponses(verified, null, context.studentData);
+        finishYknTiming('content-script-fill-fallback', fallbackStartedAt, result.partial ? 'partial' : 'ok');
+        return verification?.error ? { ...result, success: false, partial: true } : result;
+    } catch (error) {
+        finishYknTiming('content-script-fill-fallback', fallbackStartedAt, 'failed', 'content_fallback_unavailable');
+        console.warn('YÖKSİS remaining field transfer failed.', { errorName: error.name });
+        return { ...combined, error: error.message, partial: true };
+    }
+}
+
+async function transferYoksisFieldsAndPhoto(context) {
+    const startedAt = startYknTiming();
+    const mainResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, { phase: 'fields' });
+    const settled = await verifyTransferredYoksisFields(context);
+    if (settled?.error) return { ...buildVerifiedFillResponse(mainResponse, settled, context.studentData), success: false, partial: true };
+    let photoResponse = null;
+    if (context.studentData.croppedPhotoBase64) {
+        photoResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, { phase: 'photo' });
+        reportYknTiming('photo-file-preparation-and-form-assignment', photoResponse?.photoUploadDurationMs,
+            photoResponse?.photoUploaded ? 'assigned' : 'failed');
+    }
+    const verification = photoResponse ? await verifyTransferredYoksisFields(context) : settled;
+    const verified = buildVerifiedFillResponse({ ...mainResponse, photoUploaded: photoResponse?.photoUploaded === true }, verification, context.studentData);
+    const result = await completeMissingYoksisFields(context, verified);
+    finishYknTiming('main-world-fields-and-photo-transfer', startedAt, result.partial ? 'partial' : 'ok');
+    return result;
+}
+
+async function fillReadyYoksisStudent(context) {
+    const formReady = await waitForYoksisFormReady(context.tabId, context.requestId, {
+        requireBoundSearch: true, expectedKabulId: context.studentData.yoksisId || context.studentData.kabulId || '', expectedStudent: context.studentData
+    });
+    if (!formReady) throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
+    await saveTemporaryStudentData(context.studentData);
+    return await transferYoksisFieldsAndPhoto(context);
+}
+
+async function fillBoundYoksisStudent(studentData, requestId) {
+    if (studentData.yoksisReady !== true) throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
+    const tab = await resolveExpectedYoksisTab(studentData.yoksisTabId, studentData.yoksisTabUrl);
+    await updateTab(tab.id, { active: true });
+    if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true }).catch(error => {
+        console.warn('YÖKSİS window focus failed.', { errorName: error.name });
+    });
+    const startedAt = startYknTiming();
+    const response = await runYoksisOperation(tab.id, 'fill', requestId, async () => {
+        const result = await fillReadyYoksisStudent({ tabId: tab.id, studentData, requestId });
+        const isComplete = result.success === true && !result.partial && (result.missingFields || []).length === 0
+            && (!studentData.croppedPhotoBase64 || result.photoUploaded === true);
+        return { ...result, ...(isComplete ? { temporaryDataCleared: await clearTemporaryStudentData() } : {}) };
+    });
+    finishYknTiming('yoksis-fill-total', startedAt, response.partial ? 'partial' : 'ok');
+    return response;
+}
+
+async function fillStoredYoksisStudent(request) {
+    const stored = await getTemporaryStudentData();
+    if (!stored) throw new Error('Öğrenci bilgisi bulunamadı; kabul kodunu yeniden aratın.');
+    const photo = request.action === 'CROPPED_PHOTO_CONFIRMED' ? request.photoBase64 : '';
+    if (request.action === 'CROPPED_PHOTO_CONFIRMED' && (typeof photo !== 'string' || !/^data:image\/(?:jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(photo))) {
+        throw new Error('Kırpılmış fotoğraf verisi bulunamadı veya geçersiz.');
+    }
+    return await fillBoundYoksisStudent({ ...stored, croppedPhotoBase64: photo, photoBase64: photo,
+        photoFileName: photo ? request.fileName || 'ogrenci_foto.jpg' : '' }, request.requestId);
+}
+
 async function searchYoksisFromContent(tabId, kabulId, requestId, expectedStudent = null) {
     try {
         await waitForContentScript(tabId, 'yoksis', { frameId: 0 });
@@ -1907,7 +2012,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         fatherName: request.data?.babaAdi || ''
     };
 
-    return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
+    const performSearch = async () => {
         await saveTemporaryStudentData(request.data);
 
         await waitForContentScript(yoksisTab.id, 'yoksis', { frameId: 0 });
@@ -2047,8 +2152,17 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             ...(await getVerifiedYoksisTarget(yoksisTab.id)),
             message: 'Kabul mektup kodu YÖKSİS\'e aktarıldı ve öğrenci formu doğrulandı.'
         };
+    };
+    return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
+        const response = await performSearch();
+        if (response.success && response.formReady) {
+            await saveTemporaryStudentData({ ...request.data, yoksisId: kabulId,
+                yoksisReady: true, yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
+        }
+        return response;
     });
 }
+
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.status !== 'complete' || !pendingApplyNavigation) return;
@@ -2115,68 +2229,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
-    if (request.action === 'CROPPED_PHOTO_CONFIRMED') {
-        (async () => {
-            try {
-                const stored = await getTemporaryStudentData() || {};
-                stored.croppedPhotoBase64 = request.photoBase64;
-                stored.photoBase64 = request.photoBase64;
-                stored.photoFileName = request.fileName || 'ogrenci_foto.jpg';
-                await saveTemporaryStudentData(stored);
-
-                const yoksisTab = await resolveExpectedYoksisTab(
-                    stored.yoksisTabId,
-                    stored.yoksisTabUrl
-                );
-                await updateTab(yoksisTab.id, { active: true });
-                if (yoksisTab.windowId) {
-                    await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch(() => {});
-                }
-
-                const fillResult = await runYoksisOperation(yoksisTab.id, 'fill', request.requestId, async () => {
-                    const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, { requireBoundSearch: true, expectedKabulId: stored.yoksisId || stored.kabulId || '', expectedStudent: stored });
-                    if (!formReady) {
-                        throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
-                    }
-                    return await syncYoksisFormInMainWorld(yoksisTab.id, stored, request.requestId);
-                });
-                sendResponse({ success: fillResult?.success === true, photoUploaded: fillResult?.photoUploaded === true, partial: fillResult?.partial, missingFields: fillResult?.missingFields });
-            } catch (err) {
-                sendResponse({ success: false, error: err.message });
-            }
-        })();
-        return true;
-    }
-
-    if (request.action === 'FILL_YOKSIS_WITHOUT_PHOTO') {
-        (async () => {
-            try {
-                const stored = await getTemporaryStudentData() || {};
-                stored.croppedPhotoBase64 = '';
-                stored.photoBase64 = '';
-                await saveTemporaryStudentData(stored);
-
-                const yoksisTab = await resolveExpectedYoksisTab(
-                    stored.yoksisTabId,
-                    stored.yoksisTabUrl
-                );
-                await updateTab(yoksisTab.id, { active: true });
-                if (yoksisTab.windowId) {
-                    await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch(() => {});
-                }
-
-                const fillResult = await runYoksisOperation(yoksisTab.id, 'fill', request.requestId, async () => {
-                    const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, { requireBoundSearch: true, expectedKabulId: stored.yoksisId || stored.kabulId || '', expectedStudent: stored });
-                    if (!formReady) {
-                        throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
-                    }
-                    return await syncYoksisFormInMainWorld(yoksisTab.id, stored, request.requestId);
-                });
-                sendResponse({ success: fillResult?.success === true, manualPhotoRequired: true, missingFields: fillResult?.missingFields });
-            } catch (err) {
-                sendResponse({ success: false, error: err.message });
-            }
-        })();
+    if (request.action === 'CROPPED_PHOTO_CONFIRMED' || request.action === 'FILL_YOKSIS_WITHOUT_PHOTO') {
+        void fillStoredYoksisStudent(request).then(sendResponse)
+            .catch(error => sendResponse({ success: false, error: error.message }));
         return true;
     }
 
@@ -2334,162 +2389,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return true;
         }
         else if (request.action === 'FILL_YOKSIS_FORM') {
-            const rawStudentData = request.data || {};
-            const totalStartedAt = startYknTiming();
-            (async () => {
-                let studentData = { ...rawStudentData };
-                if (!studentData.croppedPhotoBase64) {
-                    const temp = await getTemporaryStudentData();
-                    if (temp?.croppedPhotoBase64) {
-                        studentData.croppedPhotoBase64 = temp.croppedPhotoBase64;
-                        if (!studentData.photoFileName && temp.photoFileName) {
-                            studentData.photoFileName = temp.photoFileName;
-                        }
-                    }
-                }
-                if (studentData?.yoksisReady !== true) {
-                    throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
-                }
-                const yoksisTab = await resolveExpectedYoksisTab(
-                    studentData?.yoksisTabId,
-                    studentData?.yoksisTabUrl
-                );
-                await updateTab(yoksisTab.id, { active: true });
-                if (yoksisTab.windowId) {
-                    await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch(() => {});
-                }
-                const response = await runYoksisOperation(yoksisTab.id, 'fill', request.requestId, async () => {
-                    await saveTemporaryStudentData(studentData);
-
-                    // Doldurma, arama postback'i tamamen bitmeden başlayamaz.
-                    // Önce formun kararlı olduğunu doğrula; aksi halde eksik
-                    // alanları ikinci/üçüncü yazımla telafi etmeye çalışma.
-                    const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, { requireBoundSearch: true, expectedKabulId: studentData.yoksisId || studentData.kabulId || '', expectedStudent: studentData });
-                    if (!formReady) {
-                        throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
-                    }
-
-                    const hasPhoto = Boolean(studentData?.croppedPhotoBase64);
-                    // Tek MAIN-world turunda önce alanları, sonra fotoğrafı işle.
-                    // Fotoğraf postback'i araya girip alan senkronizasyonunu kesmesin.
-                    const mainFillStartedAt = startYknTiming();
-                    const rawMainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData, request.requestId);
-                    let verificationResponse;
-                    try {
-                        verificationResponse = await sendTabMessage(yoksisTab.id, {
-                            action: 'verifyYoksisFields',
-                            data: studentData,
-                            requestId: request.requestId
-                        }, { frameId: 0 });
-                    } catch (verificationError) {
-                        verificationResponse = {
-                            success: false,
-                            filledFields: [],
-                            missingFields: getExpectedYoksisFields(studentData),
-                            failedFields: getExpectedYoksisFields(studentData),
-                            error: verificationError.message
-                        };
-                    }
-                    const verifiedFields = Array.isArray(verificationResponse?.filledFields)
-                        ? verificationResponse.filledFields : [];
-                    const verifiedMissingFields = Array.isArray(verificationResponse?.missingFields)
-                        ? verificationResponse.missingFields : getExpectedYoksisFields(studentData);
-                    const mainResponse = {
-                        ...rawMainResponse,
-                        filledFields: verifiedFields,
-                        missingFields: Array.from(new Set([
-                            ...(rawMainResponse?.missingFields || []),
-                            ...verifiedMissingFields
-                        ])).filter((label) => !verifiedFields.includes(label)),
-                        failedFields: verificationResponse?.failedFields || [],
-                        success: verifiedFields.length > 0,
-                        photoUploaded: rawMainResponse?.photoUploaded === true
-                    };
-                    const expectedFields = getExpectedYoksisFields(studentData);
-                    const mainFilledFields = new Set(verifiedFields);
-                    const missingExpectedFields = expectedFields.filter((label) => !mainFilledFields.has(label));
-                    finishYknTiming('main-world-fields-and-photo-transfer', mainFillStartedAt,
-                        missingExpectedFields.length === 0 ? 'ok' : 'partial',
-                        missingExpectedFields.length === 0 ? undefined : 'main_world_incomplete');
-                    if (hasPhoto) {
-                        reportYknTiming('photo-file-preparation-and-form-assignment',
-                            mainResponse?.photoUploadDurationMs,
-                            mainResponse?.photoUploaded === true ? 'assigned' : 'failed',
-                            mainResponse?.photoUploaded === true ? undefined : 'photo_assignment_not_confirmed');
-                    }
-                    if (verificationResponse?.error) {
-                        return {
-                            ...mergeYoksisFillResponses(mainResponse, {
-                                success: false,
-                                failedFields: getExpectedYoksisFields(studentData)
-                            }, studentData),
-                            success: false,
-                            partial: true,
-                            error: verificationResponse.error
-                        };
-                    }
-                    const fieldData = mainResponse.photoUploaded === true
-                        ? { ...studentData, croppedPhotoBase64: '', photoFileName: '' }
-                        : studentData;
-
-                    const needsFallback = !mainResponse.success
-                        || (studentData?.croppedPhotoBase64 && mainResponse.photoUploaded !== true)
-                        || mainResponse.missingFields.length > 0
-                        || missingExpectedFields.length > 0;
-
-                    if (!needsFallback) {
-                        return mergeYoksisFillResponses(mainResponse, null, studentData);
-                    }
-
-                    // Fallback yalnızca ilk denemenin eksik bıraktığı durumda
-                    // bir kez çalışır. Sonrasında MAIN world'e yeniden yazmak
-                    // eski kodda alanları ve fotoğraf yüklemesini çoğaltıyordu.
-                    let contentResponse;
-                    const fallbackStartedAt = startYknTiming();
-                    try {
-                        contentResponse = await sendTabMessage(yoksisTab.id, {
-                            action: 'fillRemainingData',
-                            data: fieldData,
-                            requestId: request.requestId
-                        }, { frameId: 0 });
-                    } catch (contentError) {
-                        finishYknTiming('content-script-fill-fallback', fallbackStartedAt, 'failed', 'content_fallback_unavailable');
-                        return mergeYoksisFillResponses(mainResponse, {
-                            success: false,
-                            failedFields: missingExpectedFields,
-                            error: contentError.message
-                        }, studentData);
-                    }
-
-                    const finalVerification = await sendTabMessage(yoksisTab.id, {
-                        action: 'verifyYoksisFields', data: studentData, requestId: request.requestId
-                    }, { frameId: 0 });
-                    const finalFields = finalVerification?.filledFields || [];
-                    const finalMissing = getExpectedYoksisFields(studentData).filter((label) => !finalFields.includes(label));
-                    const finalResponse = { ...contentResponse, filledFields: finalFields, missingFields: finalMissing };
-                    finishYknTiming('content-script-fill-fallback', fallbackStartedAt,
-                        finalMissing.length === 0 ? 'ok' : 'partial', 'main_world_incomplete');
-                    return mergeYoksisFillResponses({ ...mainResponse, filledFields: [], missingFields: finalMissing }, finalResponse, studentData);
-                });
-                const hasCompletedAllFields = response?.success === true
-                    && response.partial !== true
-                    && (response.missingFields || []).length === 0;
-                const hasRequiredPhoto = !request.data?.croppedPhotoBase64 || response.photoUploaded === true;
-                const temporaryDataCleared = hasCompletedAllFields && hasRequiredPhoto
-                    ? await clearTemporaryStudentData()
-                    : undefined;
-                finishYknTiming('yoksis-fill-total', totalStartedAt,
-                    response?.success && !response.partial ? 'ok' : 'partial',
-                    response?.partial ? 'fields_or_photo_need_review' : undefined);
-                sendResponse({
-                    ...response,
-                    requestId: request.requestId,
-                    ...(temporaryDataCleared === undefined ? {} : { temporaryDataCleared })
-                });
-            })().catch((error) => {
-                finishYknTiming('yoksis-fill-total', totalStartedAt, 'failed', 'fill_operation_failed');
-                sendResponse({ success: false, requestId: request.requestId, error: error.message });
-            });
+            void fillBoundYoksisStudent(request.data || {}, request.requestId)
+                .then(response => sendResponse({ ...response, requestId: request.requestId }))
+                .catch(error => sendResponse({ success: false, requestId: request.requestId, error: error.message }));
             return true;
         }
         else if (request.action === 'SAVE_CROPPED_PHOTO') {

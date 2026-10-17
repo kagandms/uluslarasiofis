@@ -1,5 +1,5 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.98') return;
+    if (window.YknZkForm?.version === '1.2.99') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
 
@@ -311,6 +311,26 @@
         });
     }
 
+    // A single MAIN-world owner prevents a fast reset response from causing a second click.
+    async function resetStudentForm(options) {
+        await waitForIdle();
+        const resetKey = `reset:${options.requestId || ''}`;
+        if (!options.requestId || attemptedSelections.has(resetKey)) return { success: false, resetPerformed: false };
+        const control = findResetControl();
+        if (!control) return { success: false, resetPerformed: false };
+        const widget = findZkWidget(control.resetBtn, control.targetWindow);
+        const observer = widget?.fire ? observeResponse(control.targetWindow) : null;
+        attemptedSelections.add(resetKey);
+        if (attemptedSelections.size > 100) attemptedSelections.delete(attemptedSelections.values().next().value);
+        try {
+            if (widget?.fire) widget.fire('onClick', null, { toServer: true });
+            if (!widget?.fire) control.resetBtn.click();
+            if (observer) await waitForResponse(observer);
+            await waitForIdle();
+            return { success: true, resetPerformed: true };
+        } finally { observer?.dispose(); }
+    }
+
     async function settleAndSyncSearch(options = {}) {
         const isSearchAction = Boolean(options.syncSearchInput || options.triggerSearchClick || options.resetStudentForm || options.kabulId || ('triggerSearchClick' in options));
         if (!isSearchAction) {
@@ -318,28 +338,7 @@
         }
         await waitForActiveProcessing();
 
-        if (options.resetStudentForm) {
-            const resetControl = findResetControl();
-            if (resetControl?.targetWindow?.zk?.Widget?.$) {
-                const { resetBtn, targetWindow } = resetControl;
-                const resetKey = options.requestId ? `reset:${options.requestId}` : '';
-                if (!resetKey || !attemptedSelections.has(resetKey)) {
-                    if (!isActivelyProcessing(targetWindow)) {
-                        const resetWidget = findZkWidget(resetBtn, targetWindow);
-                        if (resetWidget && typeof resetWidget.fire === 'function') {
-                            if (resetKey) {
-                                attemptedSelections.add(resetKey);
-                                if (attemptedSelections.size > 100) attemptedSelections.delete(attemptedSelections.values().next().value);
-                            }
-                            try { resetWidget.fire('onClick', null, { toServer: true }); } catch { /* Ignore */ }
-                            await new Promise((resolve) => setTimeout(resolve, 20));
-                        }
-                    }
-                    await waitForActiveProcessing();
-                }
-            }
-            if (!options.syncSearchInput && !options.triggerSearchClick) return { success: true };
-        }
+        if (options.resetStudentForm) return await resetStudentForm(options);
 
         const controls = findAcceptanceControls(options.kabulId);
         if (!controls?.targetWindow?.zk?.Widget?.$) return { success: true };
@@ -491,5 +490,5 @@
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.98', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.99', execute });
 })();

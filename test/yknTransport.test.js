@@ -92,7 +92,7 @@ test('YÖKSİS search and fill are single-flight operations, not all-frame retri
 
     assert.match(background, /function runYoksisOperation/);
     assert.match(background, /runYoksisOperation\(yoksisTab\.id, 'search'/);
-    assert.match(background, /runYoksisOperation\(yoksisTab\.id, 'fill'/);
+    assert.match(background, /runYoksisOperation\(tab\.id, 'fill'/);
     assert.match(background, /target: \{ tabId \}/);
     assert.doesNotMatch(background, /setTimeout\(\(\) => \{\s*executeYoksisSearchInMainWorld/s);
     assert.match(content, /formFingerprintBeforeSearch/);
@@ -106,7 +106,7 @@ test('YÖKSİS fill is blocked until a fresh acceptance-code search has opened i
     const content = await readExtensionFile('content.js');
 
     assert.match(manager, /currentStudentData\.yoksisReady !== true/);
-    assert.match(background, /studentData\?\.yoksisReady !== true/);
+    assert.match(background, /studentData\.yoksisReady !== true/);
     assert.match(content, /requireFreshResult: true/);
     assert.match(content, /domChangedAfterSearch/);
     assert.match(background, /function resolveYoksisTab/);

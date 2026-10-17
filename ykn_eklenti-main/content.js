@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.98';
+const CONTENT_SCRIPT_VERSION = '1.2.99';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -916,63 +916,6 @@ function isYoksisControlUsable(element) {
     return true;
 }
 
-function tryResetOrNewRecord() {
-    const allDocs = getAllDocs(document);
-    for (const doc of allDocs) {
-        // 1. Önce Kaydet butonunu bulup hemen yanındaki Öğrenci Bilgileri formunun "Temizle" butonunu ara
-        const clickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
-        let kaydetBtn = null;
-        for (const c of clickables) {
-            if (!isYoksisControlUsable(c)) continue;
-            const txt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
-            if (txt === 'kaydet' || txt.startsWith('kaydet')) {
-                kaydetBtn = getYoksisClickableRoot(c) || c;
-                break;
-            }
-        }
-        if (kaydetBtn) {
-            let parent = kaydetBtn.parentElement;
-            for (let depth = 0; parent && depth < 8; depth++, parent = parent.parentElement) {
-                const parentText = normalizeYoksisText(parent.innerText || parent.textContent || '');
-                if (parentText.includes('excel')) break;
-                const candidates = parent.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button');
-                for (const c of candidates) {
-                    if (c === kaydetBtn || kaydetBtn.contains(c)) continue;
-                    if (!isYoksisControlUsable(c)) continue;
-                    const cTxt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
-                    if (cTxt === 'temizle' || cTxt === 'yenikayit') {
-                        const targetBtn = getYoksisClickableRoot(c) || c;
-                        triggerZkClick(targetBtn);
-                        return true;
-                    }
-                }
-            }
-        }
-
-        // 2. Fallback: Tablo filtre çubuğunda (excel/yıl/ykn) olmayan Temizle butonunu bul
-        for (const c of clickables) {
-            if (!isYoksisControlUsable(c)) continue;
-            const txt = normalizeYoksisText(c.innerText || c.textContent || c.value || c.getAttribute('title') || '');
-            if (txt === 'temizle' || txt === 'yenikayit' || txt === 'yeni kayit') {
-                const targetBtn = getYoksisClickableRoot(c) || c;
-                let ancestor = targetBtn.parentElement;
-                let isTableFilterBtn = false;
-                for (let hop = 0; ancestor && hop < 4; hop++, ancestor = ancestor.parentElement) {
-                    const ancestorText = normalizeYoksisText(ancestor.innerText || ancestor.textContent || '');
-                    if (ancestorText.includes('excel') || ancestorText.includes('yil') || ancestorText.includes('ykn')) {
-                        isTableFilterBtn = true;
-                        break;
-                    }
-                }
-                if (isTableFilterBtn) continue;
-                triggerZkClick(targetBtn);
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 function getYoksisClickableText(element) {
     return normalizeYoksisText(
         element?.innerText
@@ -1468,6 +1411,7 @@ function getYoksisFormState() {
 async function waitForYoksisSearchControlsToSettle(options = {}) {
     const response = await runZkCommand({ action: 'waitForIdle', ...options });
     if (!response.success) throw new Error('YÖKSİS sunucu güncellemesi tamamlanmadı; arama gönderilmedi.');
+    return response;
 }
 
 function hasPopulatedYoksisStudentForm() {
@@ -1476,24 +1420,6 @@ function hasPopulatedYoksisStudentForm() {
         const input = findTargetElementByFuzzyLabels(labels, 'input');
         return isYoksisControlUsable(input) && String(input.value || '').trim() !== '';
     });
-}
-
-function clearLeftoverYoksisStudentFormInputs() {
-    const aliases = [['Adı', 'Öğrenci Adı'], ['Soyadı'], ['Anne Adı'], ['Baba Adı'], ['Belge No']];
-    for (const labels of aliases) {
-        const input = labels[0] === 'Belge No'
-            ? (findBelgeNoInMainPanel() || findTargetElementByFuzzyLabels(labels, 'input'))
-            : findTargetElementByFuzzyLabels(labels, 'input');
-        if (!input || !isYoksisControlUsable(input)) continue;
-        const win = input.ownerDocument?.defaultView || window;
-        const nativeSetter = Object.getOwnPropertyDescriptor(win.HTMLInputElement?.prototype || window.HTMLInputElement.prototype, 'value')?.set;
-        if (nativeSetter) {
-            nativeSetter.call(input, '');
-        } else {
-            input.value = '';
-        }
-        try { input.setAttribute('value', ''); } catch (_) {}
-    }
 }
 
 function isYoksisFormResetApproved(request) {
@@ -1526,7 +1452,6 @@ function dismissExistingYoksisModal() {
                 if (bTxt.includes('tamam') || bTxt === 'ok' || bTxt.includes('kapat')) {
                     const target = getYoksisClickableRoot(btn) || btn;
                     triggerZkClick(target);
-                    try { target.click(); } catch (_) {}
                     break;
                 }
             }
@@ -1547,11 +1472,12 @@ async function prepareYoksisSearchControls(request) {
         if (!isYoksisFormResetApproved(request)) {
             throw rejectProtectedForm('Yeni öğrenci onayı verilmedi; önceki form korundu.');
         }
-        const resetClicked = tryResetOrNewRecord();
-        await waitForYoksisSearchControlsToSettle({ resetStudentForm: true, requestId: request?.requestId });
-        if (!resetClicked) throw rejectProtectedForm('Güvenli yeni kayıt/temizle düğmesi bulunamadı; önceki form korundu.');
-        if (hasPopulatedYoksisStudentForm()) {
-            clearLeftoverYoksisStudentFormInputs();
+        try {
+            const reset = await waitForYoksisSearchControlsToSettle({ resetStudentForm: true, requestId: request?.requestId });
+            if (!reset.resetPerformed) throw new Error('Güvenli yeni kayıt/temizle işlemi doğrulanamadı.');
+        } catch (error) {
+            console.warn('YÖKSİS new record reset failed.', { errorName: error.name });
+            throw rejectProtectedForm(error.message);
         }
     }
     return await waitForYoksisSearchControls();

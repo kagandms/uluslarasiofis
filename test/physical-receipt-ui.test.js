@@ -77,13 +77,14 @@ test('physical tracking renders a rejection reason as plain text',async()=>{
     const dom=new JSDOM('<main></main>',{url:'https://portal.test'});const panel=createPhysicalTrackingPanel(dom.window.document);
     const originalFetch=globalThis.fetch;
     globalThis.fetch=async()=>({ok:true,json:async()=>({found:true,tracking_reference:'ITU-26-ABCDEFG',application_date:'2026-10-12',
-        office_status:'contact_office',rejection_reason:'<script>unsafe</script>',updated_at:'2026-10-12T13:00:00Z'})});
+        office_status:'rejected',rejection_reason:'<script>unsafe</script>',updated_at:'2026-10-12T13:00:00Z'})});
     try {
         panel.querySelector('input[name=tracking_reference]').value='ITU-26-ABCDEFG';
         panel.querySelector('form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
         await new Promise(resolve=>setImmediate(resolve));
 
         assert.match(panel.textContent,/Ret gerekçesi/);
+        assert.match(panel.textContent,/Dosyanız reddedildi/);
         assert.match(panel.textContent,/<script>unsafe<\/script>/);
         assert.equal(panel.querySelector('script'),null);
     } finally {
@@ -160,7 +161,7 @@ test('physical queue displays delivery date as day.month.year and Istanbul time 
     dom.window.close();
 });
 
-test('detail keeps the current status selected, hides Onaylandı action, and shows a compact A4 download', () => {
+test('detail keeps the current status selected, allows Onaylandı without a PDF, and shows a compact A4 download', () => {
     const dom = new JSDOM('<main></main>');
     const root = dom.window.document.querySelector('main');
     const intake = { id: 'synthetic', first_name: 'Synthetic', last_name: 'Student', status: 'under_review', tracking_reference: 'ITU-26-ABCDEFG', metadata_version: 1 };
@@ -170,7 +171,7 @@ test('detail keeps the current status selected, hides Onaylandı action, and sho
     root.querySelector('.physical-receipt-download').click();
 
     const buttons = [...root.querySelectorAll('button')];
-    assert.equal(buttons.some(button => button.textContent === 'Onaylandı'), false);
+    assert.equal(buttons.find(button => button.textContent === 'Onaylandı').disabled, false);
     assert.equal(buttons.find(button => button.textContent === 'Göçe Gönderildi').disabled, true);
     assert.equal(buttons.find(button => button.textContent === 'İncelemede').classList.contains('is-current'), true);
     assert.equal(buttons.find(button => button.textContent === 'İncelemede').disabled, true);
@@ -201,7 +202,7 @@ test('new intake detail identifies İncelemede as the current status', () => {
 
     assert.equal(root.querySelector('.physical-status-actions [aria-current=true]').textContent, 'İncelemede');
     assert.equal(root.querySelector('.physical-status-actions [aria-current=true]').classList.contains('is-current'), true);
-    assert.equal([...root.querySelectorAll('.physical-status-actions button')].some(button => button.textContent === 'Onaylandı'), false);
+    assert.equal([...root.querySelectorAll('.physical-status-actions button')].find(button => button.textContent === 'Onaylandı').disabled, false);
     dom.window.close();
 });
 

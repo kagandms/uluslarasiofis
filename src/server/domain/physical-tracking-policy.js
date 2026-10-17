@@ -68,11 +68,9 @@ export function readReceiptPortalOrigin(environment) {
 
 /** Returns a safe public status code with no personal information. @param {object} intake Stored record. @returns {string} Office status. */
 export function readPhysicalTrackingStatus(intake) {
-    if (['sent_to_migration','migration_approved','completed'].includes(intake.status)) return intake.status;
     if (intake.processing_closed_at || intake.legacy_status === 'completed') return 'closed';
-    if (intake.status === 'rejected') return 'contact_office';
-    if (intake.status === 'approved_for_processing') return 'approved_for_processing';
-    return intake.current_pdf_id ? 'under_review' : 'received';
+    const visibleStatuses = ['under_review', 'approved_for_processing', 'sent_to_migration', 'migration_approved', 'completed', 'rejected'];
+    return visibleStatuses.includes(intake.status) ? intake.status : 'contact_office';
 }
 
 /** Builds a versioned, staff-only document snapshot. @param {object} intake Record. @param {string|null} portalOrigin Trusted origin. @param {string} createdAt Receipt UTC time. @returns {object} Snapshot. */
