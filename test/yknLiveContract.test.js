@@ -378,7 +378,7 @@ test('extension rejects staff bridge messages from an untrusted page before runn
 test('YÖKSİS search handles ZK-labelled controls and confirms delayed form readiness', async () => {
     const harness = createContentHarness(`
         <table>
-            <tr><td>Kabul Mektup ID</td><td><input id="tGDP49-chdextr" class="z-textbox" title="Kabul Mektup Id veya YÖKSİS Id"></td><td><button id="tGDPa9" class="s-button s-button-submit z-button">Kabul Mektup ID ile Ara</button></td></tr>
+            <tr><td>Kabul Mektup ID</td><td><input id="tGDP49-chdextr" class="z-textbox" title="Kabul Mektup Id veya YÖKSİS Id" value="PREVIOUS-STUDENT-CODE"></td><td><button id="tGDPa9" class="s-button s-button-submit z-button">Kabul Mektup ID ile Ara</button></td></tr>
         </table>
     `, 'https://yoksis.yok.gov.tr/student');
     let clickCount = 0;
@@ -404,7 +404,7 @@ test('YÖKSİS search handles ZK-labelled controls and confirms delayed form rea
         assert.equal(response.success, true);
         assert.equal(response.formReady, true);
         assert.equal(harness.dom.window.document.getElementById('tGDP49-chdextr').value, 'AB-123-CD');
-        assert.ok(clickCount > 0);
+        assert.equal(clickCount, 1);
     } finally {
         harness.close();
     }
@@ -770,11 +770,12 @@ test('YÖKSİS form readiness waits for a form that appears after the search res
     }
 });
 
-test('YÖKSİS fill reports photo upload truthfully and fills passport fields', async () => {
+test('YÖKSİS retains acceptance fields while filling blank remaining fields and photo', async () => {
     const harness = createContentHarness(`
         <table>
-            <tr><td>Adı</td><td><input id="first-name"></td></tr>
-            <tr><td>Soyadı</td><td><input id="last-name"></td></tr>
+            <tr><td>Adı</td><td><input id="first-name" readonly value="TEST"></td></tr>
+            <tr><td>Soyadı</td><td><input id="last-name" readonly value="STUDENT"></td></tr>
+            <tr><td>Doğum Tarihi</td><td><input id="birth-date" readonly value="04.03.2000"></td></tr>
             <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
             <tr><td>Baba Adı</td><td><input id="father-name"></td></tr>
             <tr><td>Uyruğu</td><td><select id="nationality"><option>Türkiye</option></select></td></tr>
@@ -784,7 +785,7 @@ test('YÖKSİS fill reports photo upload truthfully and fills passport fields', 
             <tr><td>Doğum Yeri Açıklaması</td><td><input id="birth-place"></td></tr>
             <tr><td>Belgeyi Veren Makam</td><td><input id="authority"></td></tr>
             <tr><td>Telefon No</td><td><input id="phone"></td></tr>
-            <tr><td>Belge No</td><td><input id="document-number" placeholder="Belge No"></td></tr>
+            <tr><td>Belge No</td><td><input id="document-number" placeholder="Belge No" readonly value="P123456"></td></tr>
             <tr><td>Belge Düzenleme Tarihi</td><td><input id="issue-date"></td></tr>
             <tr><td>Belge Geçerlilik Tarihi</td><td><input id="expiry-date"></td></tr>
             <tr><td>Fotoğraf Adı</td><td><button id="photo-upload">Fotoğraf Yükle</button><input id="photo-file" type="file"></td></tr>
@@ -797,6 +798,7 @@ test('YÖKSİS fill reports photo upload truthfully and fills passport fields', 
             action: 'fillRemainingData',
             data: {
                 firstName: 'TEST',
+                birthDate: '2000-03-04',
                 lastName: 'STUDENT',
                 anneAdi: 'ANNE',
                 babaAdi: 'BABA',
@@ -814,6 +816,7 @@ test('YÖKSİS fill reports photo upload truthfully and fills passport fields', 
 
         assert.equal(response.success, true);
         assert.equal(response.photoUploaded, true);
+        assert.equal(harness.dom.window.document.getElementById('birth-date').value, '04.03.2000');
         assert.equal(harness.dom.window.document.getElementById('first-name').value, 'TEST');
         assert.equal(harness.dom.window.document.getElementById('last-name').value, 'STUDENT');
         assert.equal(harness.dom.window.document.getElementById('mother-name').value, 'ANNE');
