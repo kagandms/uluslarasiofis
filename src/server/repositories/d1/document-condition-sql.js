@@ -9,7 +9,7 @@ const CONDITIONS = Object.freeze({
     minor_consent: "applications.is_under_18 = 1 AND (applications.document_policy_version = 1 OR applications.minor_entry_type IS NOT 'student_visa')",
     minor_family_evidence: "applications.is_under_18 = 1 AND (applications.document_policy_version = 1 OR applications.minor_entry_type IS NOT 'student_visa') AND applications.minor_family_status IN ('divorced','deceased','single_parent','absent')",
     parent_permit_copy: 'applications.is_under_18 = 1',
-    minor_optional_parent_documents: 'applications.is_under_18 = 1',
+    minor_optional_parent_documents: "applications.is_under_18 = 1 AND (applications.document_policy_version = 1 OR applications.minor_entry_type IS NOT 'student_visa')",
     bilateral_insurance: "applications.insurance_basis = 'bilateral_agreement'",
     'address_evidence:rental_contract': `${ACCOMMODATION_SQL} = 'rental_contract'`,
     'address_evidence:residence_certificate': `${ACCOMMODATION_SQL} = 'residence_certificate'`,

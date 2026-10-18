@@ -102,7 +102,7 @@ function isPolicyApplicable(policy, applicationType, isUnder18, addressContext) 
     case 'address_utility_bill': return applicationType === 'renewal';
     case 'registered_address': return applicationType === 'renewal' || accommodation === 'residence_certificate';
     case 'under18': return isUnder18 && context.minor_entry_type !== 'student_visa' && context.minor_parents_identified === 'no';
-    case 'minor_optional_parent_documents': return isUnder18;
+    case 'minor_optional_parent_documents': return isUnder18 && context.minor_entry_type !== 'student_visa';
     case 'host_spouse_undertaking': return accommodation === 'undertaking' && context.host_is_married === 'yes';
     case 'minor_consent': return isUnder18 && context.minor_entry_type !== 'student_visa';
     case 'minor_family_evidence': return isUnder18 && context.minor_entry_type !== 'student_visa'

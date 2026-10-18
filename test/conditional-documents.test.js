@@ -63,7 +63,9 @@ test('minor entry basis exempts student-visa applicants from consent and parent 
         assert.ok(readCodes({ ...minor, minor_family_status }).includes('minor_family_evidence'));
     }
     const studentVisa = readCodes({ ...minor, minor_entry_type: 'student_visa' });
-    for (const code of ['birth_certificate_under18', 'minor_consent', 'minor_family_evidence']) assert.equal(studentVisa.includes(code), false);
+    for (const code of ['birth_certificate_under18', 'minor_consent', 'minor_family_evidence', 'parent_permit_copy']) {
+        assert.equal(studentVisa.includes(code), false);
+    }
     const adult = readCodes({ ...minor, is_under_18: 0 });
     assert.equal(adult.some((code) => code.startsWith('minor_') || code === 'birth_certificate_under18'), false);
 });

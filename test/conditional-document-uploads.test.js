@@ -58,7 +58,7 @@ test('student-visa minors cannot upload parental consent or conditional parent e
     const app = await createSyntheticDraft(context);
     await applyScenario(context, app, { date_of_birth: '2012-01-01', minor_entry_type: 'student_visa', codes: [] });
 
-    for (const code of ['minor_consent', 'minor_family_evidence', 'birth_certificate_under18']) {
+    for (const code of ['minor_consent', 'minor_family_evidence', 'birth_certificate_under18', 'parent_permit_copy']) {
         const response = await portalRequest(context, '/api/public/applications/current/documents/upload-intent', {
             cookie: app.cookie, method: 'POST', body: { code, filename: 'parent-document.pdf', media_type: 'application/pdf', byte_size: 4 }
         });
