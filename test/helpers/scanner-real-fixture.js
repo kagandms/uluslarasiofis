@@ -91,7 +91,7 @@ export async function completeSyntheticFields(context, app) {
     const updated=await portalRequest(context,'/api/public/applications/current',{cookie:app.cookie,method:'PATCH',body:{
         lock_version:(await current.json()).application.lock_version,first_name:'Synthetic',last_name:'Student',
         passport_number:'SYNTHETIC',nationality:'Turkish',date_of_birth:'2000-01-01',is_under_18:false,
-        address_evidence_type:'rental_contract',fingerprint_status:'registered',fingerprint_code:'SYNTHETIC-FP' }});
+        address_evidence_type:'rental_contract',insurance_basis:'system_verified',fingerprint_status:'registered',fingerprint_code:'SYNTHETIC-FP' }});
     assert.equal(updated.status,200,await updated.clone().text());
     for (const [path,version] of [['contact-acknowledgement',CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION],
         ['declaration','student-information-accuracy-v1']]) {

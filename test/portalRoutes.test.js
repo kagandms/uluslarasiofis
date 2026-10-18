@@ -76,23 +76,25 @@ test('landing document guidance renders policy-derived titles and highlights the
 
     const overview = listPublicDocumentOverview();
     assert.equal(root.querySelectorAll('.public-document-card').length,
-        overview.filter(({ group_key }) => !group_key).length + 1);
+        overview.filter(({ group_key, required }) => !group_key && required).length + 1);
     assert.ok([...root.querySelectorAll('.public-document-card h3')].some(({ textContent }) => textContent === 'Doğum belgesi'));
-    assert.equal(root.querySelectorAll('.public-document-badge:not(.is-renewal)').length, 1);
-    assert.match(root.textContent, /Yalnız 18 yaşından küçük başvurularda zorunludur/);
+    assert.equal(root.querySelectorAll('.public-document-badge:not(.is-renewal)').length, 3);
+    assert.match(root.textContent, /anne\/baba bilgileri pasaport veya kimlikten tespit edilemiyorsa/);
     assert.ok([...root.querySelectorAll('.public-document-badge')].some(({ textContent }) => textContent === '18 yaş altı'));
-    assert.equal(root.querySelectorAll('.address-evidence-option').length, 3);
-    assert.equal(root.querySelectorAll('.address-evidence-supporting-docs li').length, 2);
+    assert.equal(root.querySelectorAll('.address-evidence-option').length, 5);
+    assert.equal(root.querySelectorAll('.address-evidence-supporting-docs li').length, 4);
     const uetsCard = [...root.querySelectorAll('.public-document-card')]
         .find((card) => card.querySelector('h3')?.textContent === 'UETS belgesi');
     assert.ok(uetsCard);
     assert.match(uetsCard.querySelector('p').textContent, /UETS kaydınızı gösteren belgeyi hazırlayın/);
+    assert.match(uetsCard.textContent, /18 yaş ve üzerindeki/);
     assert.equal(uetsCard.querySelectorAll('.public-document-badge.is-renewal').length, 1);
     assert.match(root.textContent, /Noter onaylı kira sözleşmesi/);
     assert.match(root.textContent, /Taahhüt veren kişinin yerleşim yeri belgesi/);
     assert.match(root.textContent, /Pasaport/);
-    assert.match(root.textContent, /İkamet kartı/);
-    assert.match(root.textContent, /Su \/ elektrik \/ doğal gaz faturası/);
+    assert.doesNotMatch(root.textContent, /İkamet kartı/);
+    assert.match(root.textContent, /Biyometrik fotoğraflar \(2 adet\)/);
+    assert.match(root.textContent, /Güncel fatura veya yeni abonelik sözleşmesi/);
     assert.doesNotMatch(root.textContent, /parmak izi belgesi|Kaynak liste/i);
     assert.doesNotMatch(root.textContent, /application\/pdf|10 MB|conditional_rule/i);
 });
@@ -108,7 +110,7 @@ test('document policy copy is localized, source-free, and treats utility evidenc
         assert.ok(SESSION3_MESSAGES[locale].documentHomeUtilityBillHelp.length > 0, locale);
         assert.equal(Object.hasOwn(PUBLIC_MESSAGES[locale], 'documentFingerprint'), false, locale);
     }
-    assert.match(SESSION3_MESSAGES.tr.documentHomeUtilityBillHelp, /birini yükleyin/);
+    assert.match(PUBLIC_MESSAGES.tr.documentHomeUtilityBillHelp, /yalnızca uzatma başvurusunda/i);
 });
 
 test('public locale dictionaries have matching keys for all five supported languages', () => {

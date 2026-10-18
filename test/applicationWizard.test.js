@@ -30,7 +30,7 @@ function createFingerprintRequirements() {
 async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null, addressEvidenceType = 'rental_contract') {
     const { document, root } = createRoot();
     const application = {
-        status: 'draft', application_type: 'initial', address_evidence_type: addressEvidenceType, student_number: 'S3-FP-1',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: addressEvidenceType, student_number: 'S3-FP-1',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish',
         date_of_birth: '2000-01-01', is_under_18: 0,
@@ -77,7 +77,7 @@ async function advanceWizardToReview(root, state) {
 test('contact step keeps Continue disabled until valid contact fields and the separate acknowledgement are present', async () => {
     const { document, root } = createRoot();
     const application = {
-        status: 'draft', application_type: 'initial', student_number: 'S3-CONTACT-1',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', student_number: 'S3-CONTACT-1',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: false }
     };
@@ -308,7 +308,7 @@ test('residence step requires one address evidence branch and persists the selec
     const choices = root.querySelectorAll('[name="address_evidence_type"]');
     const continueButton = root.querySelector('#application-step-form button[type="submit"]');
 
-    assert.equal(choices.length, 3);
+    assert.equal(choices.length, 5);
     assert.equal(continueButton.disabled, true);
     const undertaking = root.querySelector('[name="address_evidence_type"][value="undertaking"]');
     undertaking.checked = true;
@@ -602,7 +602,7 @@ test('wizard saves under-18 and fingerprint state before loading the server requ
     const { document, root } = createRoot();
     const window = document.defaultView;
     const application = {
-        status: 'draft', application_type: 'initial', address_evidence_type: 'rental_contract', student_number: '2026123999',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: '2026123999',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null
@@ -656,7 +656,7 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
     const { document, root } = createRoot();
     const window = document.defaultView;
     const saved = {
-        status: 'draft', application_type: 'initial', address_evidence_type: 'rental_contract', student_number: 'S3-WIZ-1', student_email: 'student@example.edu',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-WIZ-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', first_name: '', last_name: '', passport_number: '', nationality: '', date_of_birth: '',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null,
@@ -724,7 +724,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     const { document, root } = createRoot();
     const window = document.defaultView;
     const application = {
-        status: 'draft', application_type: 'initial', address_evidence_type: 'rental_contract', student_number: 'S3-UP-1', student_email: 'student@example.edu',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-UP-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }
@@ -871,7 +871,7 @@ test('closeout translations have parity and the wizard rerenders in Arabic RTL',
     const window = document.defaultView;
     document.documentElement.lang = 'en';
     const application = {
-        status: 'draft', application_type: 'initial', student_number: 'S3-RTL-1', student_email: 'student@example.edu',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', student_number: 'S3-RTL-1', student_email: 'student@example.edu',
         student_phone: '555', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }

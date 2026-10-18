@@ -1,3 +1,5 @@
+import { readAccommodationType } from '../../shared/document-conditions.js';
+import { listDocumentPolicies as listLegacyPolicies, readDocumentPolicy as readLegacyPolicy } from './document-policy-v1.js';
 const MEDIA_TYPES = Object.freeze(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 const APPLICATION_TYPES = Object.freeze(['initial', 'renewal']);
@@ -17,6 +19,15 @@ const TYPE_SWITCH_CODE_MAP = Object.freeze({
     address_undertaking: 'address_undertaking',
     host_residence_certificate: 'host_residence_certificate',
     host_identity_copy: 'host_identity_copy',
+    address_title_deed: 'address_title_deed',
+    address_numbering: 'address_numbering',
+    address_dormitory: 'address_dormitory',
+    address_hotel: 'address_hotel',
+    address_hotel_receipt: 'address_hotel_receipt',
+    host_spouse_undertaking: 'host_spouse_undertaking',
+    minor_consent: 'minor_consent',
+    minor_family_evidence: 'minor_family_evidence',
+    parent_permit_copy: 'parent_permit_copy',
     fingerprint: 'fingerprint',
     home_utility_bill: 'home_utility_bill',
     birth_certificate_under18: 'birth_certificate_under18'
@@ -25,10 +36,9 @@ const TYPE_SWITCH_CODE_MAP = Object.freeze({
 const POLICIES = Object.freeze([
     { code: 'residence_application_form', order: 1, label: 'documentResidenceApplicationForm', help: 'documentResidenceApplicationFormHelp' },
     { code: 'passport', order: 2, label: 'documentPassport', help: 'documentPassportHelp' },
-    { code: 'residence_card', order: 3, label: 'documentResidenceCard', help: 'documentResidenceCardHelp' },
-    { code: 'photographs', order: 4, label: 'documentPhotographs', help: 'documentPhotographsHelp' },
-    { code: 'health_insurance', order: 5, label: 'documentHealthInsurance', help: 'documentHealthInsuranceHelp' },
-    { code: 'uets', order: 6, label: 'documentUets', help: 'documentUetsHelp', application_types: ['renewal'] },
+    { code: 'photographs', order: 3, label: 'documentPhotographs', help: 'documentPhotographsHelp' },
+    { code: 'health_insurance', order: 5, label: 'documentHealthInsurance', help: 'documentHealthInsuranceHelp', conditional_rule: 'bilateral_insurance' },
+    { code: 'uets', order: 6, label: 'documentUets', help: 'documentUetsHelp', application_types: ['renewal'], conditional_rule: 'uets' },
     { code: 'student_certificate', order: 7, label: 'documentStudentCertificate', help: 'documentStudentCertificateHelp' },
     { code: 'residence_permit_fee', order: 8, label: 'documentResidencePermitFee', help: 'documentResidencePermitFeeHelp' },
     {
@@ -37,7 +47,7 @@ const POLICIES = Object.freeze([
     },
     {
         code: 'address_residence_certificate', order: 10, label: 'documentAddressResidenceCertificate', help: 'documentAddressResidenceCertificateHelp',
-        address_evidence_type: 'residence_certificate'
+        conditional_rule: 'registered_address'
     },
     {
         code: 'address_undertaking', order: 11, label: 'documentAddressUndertaking', help: 'documentAddressUndertakingHelp',
@@ -47,19 +57,24 @@ const POLICIES = Object.freeze([
         code: 'host_residence_certificate', order: 12, label: 'documentHostResidenceCertificate', help: 'documentHostResidenceCertificateHelp',
         address_evidence_type: 'undertaking', parent_code: 'address_undertaking', accepted_media_types: ['application/pdf']
     },
-    {
-        code: 'host_identity_copy', order: 13, label: 'documentHostIdentityCopy', help: 'documentHostIdentityCopyHelp',
-        address_evidence_type: 'undertaking', parent_code: 'address_undertaking'
-    },
-    { code: 'home_utility_bill', order: 14, label: 'documentHomeUtilityBill', help: 'documentHomeUtilityBillHelp' },
+    { code: 'home_utility_bill', order: 14, label: 'documentHomeUtilityBill', help: 'documentHomeUtilityBillHelp', conditional_rule: 'address_utility_bill' },
     {
         code: 'birth_certificate_under18', order: 15, label: 'documentBirthCertificateUnder18', help: 'documentBirthCertificateUnder18Help',
         conditional_rule: 'under18'
-    }
+    },
+    { code: 'address_title_deed', order: 16, label: 'documentAddressTitleDeed', help: 'documentAddressTitleDeedHelp', address_evidence_type: 'own_home' },
+    { code: 'address_numbering', order: 17, label: 'documentAddressNumbering', help: 'documentAddressNumberingHelp', address_evidence_type: 'own_home', parent_code: 'address_title_deed' },
+    { code: 'address_dormitory', order: 18, label: 'documentAddressDormitory', help: 'documentAddressDormitoryHelp', address_evidence_type: 'dormitory' },
+    { code: 'address_hotel', order: 19, label: 'documentAddressHotel', help: 'documentAddressHotelHelp', address_evidence_type: 'hotel' },
+    { code: 'address_hotel_receipt', order: 20, label: 'documentAddressHotelReceipt', help: 'documentAddressHotelReceiptHelp', address_evidence_type: 'hotel', parent_code: 'address_hotel' },
+    { code: 'host_spouse_undertaking', address_evidence_type: 'undertaking', order: 21, label: 'documentHostSpouseUndertaking', help: 'documentHostSpouseUndertakingHelp', parent_code: 'address_undertaking', conditional_rule: 'host_spouse_undertaking' },
+    { code: 'minor_consent', order: 22, label: 'documentMinorConsent', help: 'documentMinorConsentHelp', conditional_rule: 'minor_consent' },
+    { code: 'minor_family_evidence', order: 23, label: 'documentMinorFamilyEvidence', help: 'documentMinorFamilyEvidenceHelp', conditional_rule: 'minor_family_evidence' },
+    { code: 'parent_permit_copy', required: false, order: 24, label: 'documentParentPermitCopy', help: 'documentParentPermitCopyHelp', conditional_rule: 'minor_optional_parent_documents' }
 ].map((policy) => Object.freeze({
     code: policy.code,
     application_types: Object.freeze([...(policy.application_types || APPLICATION_TYPES)]),
-    required: true,
+    required: policy.required !== false,
     display_order: policy.order,
     label_key: policy.label,
     description_key: policy.help,
@@ -72,10 +87,28 @@ const POLICIES = Object.freeze([
     parent_code: policy.parent_code || null
 })));
 
-function isPolicyApplicable(policy, applicationType, isUnder18, addressEvidenceType) {
+function readPolicyContext(addressContext) {
+    return addressContext && typeof addressContext === 'object' ? addressContext
+        : { address_evidence_type: addressContext };
+}
+
+function isPolicyApplicable(policy, applicationType, isUnder18, addressContext) {
+    const context = readPolicyContext(addressContext);
+    const accommodation = readAccommodationType(context);
     if (!policy.active || !policy.application_types.includes(applicationType)) return false;
-    if (policy.conditional_rule === 'under18' && !isUnder18) return false;
-    return !policy.address_evidence_type || policy.address_evidence_type === addressEvidenceType;
+    if (policy.address_evidence_type && policy.address_evidence_type !== accommodation) return false;
+    switch (policy.conditional_rule) {
+    case 'uets': return applicationType === 'renewal' && !isUnder18;
+    case 'address_utility_bill': return applicationType === 'renewal';
+    case 'registered_address': return applicationType === 'renewal' || accommodation === 'residence_certificate';
+    case 'under18': return isUnder18 && context.minor_parents_identified === 'no';
+    case 'minor_optional_parent_documents': return isUnder18;
+    case 'host_spouse_undertaking': return accommodation === 'undertaking' && context.host_is_married === 'yes';
+    case 'minor_consent': return isUnder18;
+    case 'minor_family_evidence': return isUnder18 && ['divorced', 'deceased', 'single_parent', 'absent'].includes(context.minor_family_status);
+    case 'bilateral_insurance': return context.insurance_basis === 'bilateral_agreement';
+    default: return true;
+    }
 }
 
 function createStudentPolicyDto(policy) {
@@ -96,10 +129,13 @@ function createStudentPolicyDto(policy) {
  * @param {string} code Stable public document code.
  * @param {string} applicationType Application type loaded from the owner's D1 record.
  * @param {boolean} isUnder18 Server-calculated age condition.
- * @param {string|null} addressEvidenceType Persisted address evidence choice.
+ * @param {object|string|null} addressEvidenceType Persisted application facts, or legacy address choice.
  * @returns {object|null} Safe policy metadata source, or null when inapplicable.
  */
 export function readDocumentPolicy(code, applicationType, isUnder18, addressEvidenceType = null) {
+    if (addressEvidenceType?.document_policy_version === 1) {
+        return readLegacyPolicy(code, applicationType, isUnder18, addressEvidenceType.address_evidence_type);
+    }
     const policy = POLICIES.find((entry) => entry.code === code);
     return policy && isPolicyApplicable(policy, applicationType, isUnder18, addressEvidenceType)
         ? createStudentPolicyDto(policy) : null;
@@ -109,10 +145,13 @@ export function readDocumentPolicy(code, applicationType, isUnder18, addressEvid
  * Lists safe document policies in product-defined order for the current application.
  * @param {string} applicationType Application type loaded from D1.
  * @param {boolean} isUnder18 Server-calculated age condition.
- * @param {string|null} addressEvidenceType Persisted address evidence choice.
+ * @param {object|string|null} addressEvidenceType Persisted application facts, or legacy address choice.
  * @returns {Array<object>} Safe student policy metadata.
  */
 export function listDocumentPolicies(applicationType, isUnder18, addressEvidenceType = null) {
+    if (addressEvidenceType?.document_policy_version === 1) {
+        return listLegacyPolicies(applicationType, isUnder18, addressEvidenceType.address_evidence_type);
+    }
     return POLICIES.filter((policy) => isPolicyApplicable(policy, applicationType, isUnder18, addressEvidenceType))
         .sort((left, right) => left.display_order - right.display_order)
         .map(createStudentPolicyDto);
@@ -124,8 +163,11 @@ export function listDocumentPolicies(applicationType, isUnder18, addressEvidence
  */
 export function listPublicDocumentOverview() {
     return POLICIES.map((policy) => {
-        const scopeKey = policy.conditional_rule === 'under18' ? 'homeDocumentUnder18'
-            : (policy.application_types.length === 1 ? 'homeDocumentRenewal' : 'homeDocumentAllApplications');
+        let scopeKey = 'homeDocumentAllApplications';
+        if (policy.code === 'uets') scopeKey = 'homeDocumentRenewalAdults';
+        else if (policy.code === 'address_residence_certificate' || policy.application_types.length === 1) scopeKey = 'homeDocumentRenewal';
+        else if (['under18', 'minor_consent', 'minor_family_evidence'].includes(policy.conditional_rule)) scopeKey = 'homeDocumentUnder18';
+        else if (policy.conditional_rule) scopeKey = 'homeDocumentConditional';
         return Object.freeze({
             code: policy.code,
             label_key: policy.label_key,

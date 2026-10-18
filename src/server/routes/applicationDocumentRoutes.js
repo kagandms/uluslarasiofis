@@ -18,7 +18,7 @@ async function readCurrentStudentRequirements(session, environment) {
     const policies = listDocumentPolicies(
         application.application_type,
         application.is_under_18 === 1,
-        application.address_evidence_type ?? null
+        application
     );
     const requirements = policies.filter((policy) => storedRequirements.some((entry) => entry.code === policy.code))
         .map((policy) => {
@@ -97,7 +97,7 @@ export async function readCurrentStudentDocumentRequirements(request, environmen
     return {
         application: {
             application_type: application.application_type,
-            address_evidence_type: application.address_evidence_type ?? null,
+            address_evidence_type: application.accommodation_type || application.address_evidence_type || null,
             is_under_18: application.is_under_18 === 1
         },
         requirements: requirements.map(createStudentRequirementDto)
@@ -123,7 +123,7 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
         requestedCode,
         application.application_type,
         application.is_under_18 === 1,
-        application.address_evidence_type ?? null
+        application
     );
     const metadata = readStudentUploadMetadata(body, policy);
     requireDraftApplication(application);
@@ -229,7 +229,7 @@ export async function finalizeCurrentStudentDocument(request, environment) {
         intent.code,
         application.application_type,
         application.is_under_18 === 1,
-        application.address_evidence_type ?? null
+        application
     );
     if (!policy || actualSize !== intent.byte_size || actualSize > policy.max_byte_size
         || !policy.accepted_media_types.includes(actualMediaType) || actualMediaType !== intent.media_type) {

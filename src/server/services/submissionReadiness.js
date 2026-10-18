@@ -1,9 +1,9 @@
+import { ACCOMMODATION_TYPES, readAccommodationType, listMissingDocumentAnswers } from '../../shared/document-conditions.js';
 import { isValidPhoneNumber } from '../../shared/phoneNumber.js';
 import { listDocumentPolicies } from '../domain/documentPolicy.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 
 const APPLICATION_TYPES = new Set(['initial', 'renewal']);
-const ADDRESS_EVIDENCE_TYPES = new Set(['rental_contract', 'residence_certificate', 'undertaking']);
 const ACCEPTED_REVISION_STATUSES = new Set(['submitted', 'approved']);
 const ACCEPTED_SCAN_STATUSES = new Set(['pending', 'clean']);
 const REQUIRED_FIELDS = Object.freeze([
@@ -35,7 +35,7 @@ function isValidCoreField(field, application) {
     if (field === 'student_phone') return isValidPhoneNumber(value) && value.trim().length <= 40;
     if (field === 'date_of_birth') return isValidDate(value);
     if (field === 'is_under_18') return value === 0 || value === 1 || typeof value === 'boolean';
-    if (field === 'address_evidence_type') return ADDRESS_EVIDENCE_TYPES.has(value);
+    if (field === 'address_evidence_type') return ACCOMMODATION_TYPES.includes(readAccommodationType(application));
     return isPresentText(value) && value.trim().length <= 255;
 }
 
@@ -54,6 +54,7 @@ function uniqueSorted(values) {
 
 function readMissingFields(application, declarationVersion) {
     const missingFields = REQUIRED_FIELDS.filter((field) => !isValidCoreField(field, application));
+    missingFields.push(...listMissingDocumentAnswers(application));
     if (!isPresentText(application.student_number) || application.student_number.length > 64) missingFields.push('student_number');
     if (application.fingerprint_status !== 'registered' || !isPresentText(application.fingerprint_code)
         || application.fingerprint_code.trim().length > 128 || /[\u0000-\u001f\u007f]/u.test(application.fingerprint_code)) {
@@ -130,7 +131,7 @@ export async function readSubmissionReadiness(applicationId, environment, declar
     const policies = listDocumentPolicies(
         application.application_type,
         application.is_under_18 === 1,
-        application.address_evidence_type ?? null
+        application
     );
     const documents = await repositories.documents.listSubmissionRequirementStates(applicationId);
     return evaluateSubmissionReadiness(application, policies, documents, {

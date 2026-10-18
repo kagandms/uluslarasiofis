@@ -1,18 +1,5 @@
+import { readDocumentConditionSql } from './document-condition-sql.js';
 import { createScanJobStatement } from './scanner-job-statement.js';
-
-const ADDRESS_EVIDENCE_CONDITIONS = Object.freeze({
-    'address_evidence:rental_contract': "AND applications.address_evidence_type = 'rental_contract'",
-    'address_evidence:residence_certificate': "AND applications.address_evidence_type = 'residence_certificate'",
-    'address_evidence:undertaking': "AND applications.address_evidence_type = 'undertaking'"
-});
-
-function readConditionalSql(conditionalRule) {
-    if (conditionalRule === null || conditionalRule === undefined) return '';
-    if (conditionalRule === 'under18') return 'AND applications.is_under_18 = 1';
-    const addressCondition = ADDRESS_EVIDENCE_CONDITIONS[conditionalRule];
-    if (addressCondition) return addressCondition;
-    throw new TypeError('Unsupported document policy condition.');
-}
 
 /**
  * Creates the document metadata repository for one D1 binding.
@@ -95,7 +82,7 @@ export function createDocumentRepository(database) {
             `).bind(applicationType, code).first();
         },
         async createStudentUploadIntent({ applicationId, requirementId, conditionalRule, documentRecordId, revisionId, fileId, storageKey, filename, mediaType, byteSize, intentId, idempotencyKey, expiresAt, createdAt }) {
-            const conditionalSql = readConditionalSql(conditionalRule);
+            const conditionalSql = readDocumentConditionSql(conditionalRule);
             const results = await database.batch([
                 database.prepare(`
                     INSERT INTO document_records (id, application_id, requirement_id, application_type)
@@ -223,7 +210,7 @@ export function createDocumentRepository(database) {
             return results[0]?.meta?.changes === 1;
         },
         async finalizeStudentUpload({ applicationId, intentId, fileId, revisionId, documentRecordId, conditionalRule, finalizedAt }) {
-            const conditionalSql = readConditionalSql(conditionalRule);
+            const conditionalSql = readDocumentConditionSql(conditionalRule);
             const validPendingIntent = `EXISTS (
                 SELECT 1 FROM upload_intents AS intents
                 JOIN document_revision_files AS files ON files.id = intents.revision_file_id

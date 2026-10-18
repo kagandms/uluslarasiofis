@@ -185,7 +185,7 @@ test('tracking returns current policy requirements and localized-status keys for
         WHERE students.student_number = 'TRACK-POLICY'
     `).first().id;
     await database.prepare(`
-        UPDATE applications SET is_under_18 = 1, address_evidence_type = 'undertaking' WHERE id = ?
+        UPDATE applications SET minor_parents_identified = 'no', is_under_18 = 1, address_evidence_type = 'undertaking', insurance_basis = 'bilateral_agreement' WHERE id = ?
     `).bind(applicationId).run();
     await seedDocument(database, applicationId, 'renewal', 'passport', { reviewStatus: 'pending', revisionStatus: 'submitted' });
     await seedDocument(database, applicationId, 'renewal', 'residence_card', { reviewStatus: 'under_review', revisionStatus: 'submitted' });
@@ -198,18 +198,18 @@ test('tracking returns current policy requirements and localized-status keys for
 
     assert.equal(response.status, 200);
     assert.equal(statusByCode.passport, 'waiting_review');
-    assert.equal(statusByCode.residence_card, 'under_review');
+    assert.equal(statusByCode.residence_card, undefined);
     assert.equal(statusByCode.health_insurance, 'approved');
     assert.equal(statusByCode.student_certificate, 'resubmission_required');
-    assert.equal(statusByCode.uets, 'not_uploaded');
+    assert.equal(statusByCode.uets, undefined);
     assert.equal(statusByCode.address_undertaking, 'not_uploaded');
     assert.equal(statusByCode.host_residence_certificate, 'not_uploaded');
-    assert.equal(statusByCode.host_identity_copy, 'not_uploaded');
+    assert.equal(statusByCode.parent_permit_copy, 'not_uploaded');
     assert.equal(statusByCode.birth_certificate_under18, 'not_uploaded');
     assert.equal(statusByCode.address_rental_contract, undefined);
     assert.equal(statusByCode.fingerprint, undefined);
     assert.equal(payload.application.submitted_at, null);
-    assert.ok(payload.documents.every(({ label_key, required }) => label_key.startsWith('document') && required === true));
+    assert.ok(payload.documents.every(({ label_key, required }) => label_key.startsWith('document') && typeof required === 'boolean'));
     assert.ok(payload.documents.every(({ filename }) => filename === null || filename.endsWith('.pdf')));
     assert.doesNotMatch(JSON.stringify(payload), /quarantine|storage|https?:\/\//i);
 });
@@ -242,7 +242,7 @@ test('public lookup returns submitted tracking with a strict DTO and creates no 
         UPDATE applications SET status = 'submitted', submitted_at = '2026-09-30T09:00:00.000Z',
             first_name = 'PrivateName', last_name = 'PrivateSurname', student_email = 'private@example.edu',
             student_phone = '+905550000000', passport_number = 'PASSPORT-SECRET', nationality = 'PrivateNation',
-            date_of_birth = '2001-01-01', is_under_18 = 1, address_evidence_type = 'undertaking',
+            date_of_birth = '2001-01-01', minor_parents_identified = 'no', is_under_18 = 1, address_evidence_type = 'undertaking',
             fingerprint_code = 'FINGERPRINT-SECRET', updated_at = '2026-09-30T10:00:00.000Z'
         WHERE id = ?
     `).bind(applicationId).run();
@@ -268,13 +268,13 @@ test('public lookup returns submitted tracking with a strict DTO and creates no 
     ]);
     assert.equal(payload.application.student_number, 'LOOKUP-KNOWN');
     assert.deepEqual(Object.keys(payload.documents[0]).sort(), ['code', 'label_key', 'required', 'status']);
-    assert.ok(payload.documents.some((document) => document.code === 'uets'));
+    assert.equal(payload.documents.some((document) => document.code === 'uets'), false);
     assert.ok(payload.documents.some((document) => document.code === 'address_undertaking'));
     assert.ok(payload.documents.some((document) => document.code === 'host_residence_certificate'));
-    assert.ok(payload.documents.some((document) => document.code === 'host_identity_copy'));
+    assert.ok(payload.documents.some((document) => document.code === 'parent_permit_copy'));
     assert.ok(payload.documents.some((document) => document.code === 'birth_certificate_under18'));
     assert.equal(payload.documents.some((document) => document.code === 'lookup_legacy_marker'), false);
-    assert.ok(payload.documents.every((document) => document.required === true));
+    assert.ok(payload.documents.filter((document) => document.code !== 'parent_permit_copy').every((document) => document.required === true));
     assert.doesNotMatch(serialized, /PrivateName|PrivateSurname|private@example|\+905550000000|PASSPORT-SECRET|PrivateNation|2001-01-01|FINGERPRINT-SECRET|\.pdf|application_id|student_id|revision_number|storage_key|token_hash|https?:\/\//i);
     assert.equal(database.prepare('SELECT count(*) AS count FROM application_sessions').first().count, sessionsBefore);
 

@@ -1,3 +1,4 @@
+import { listRequiredDocumentAnswers } from '../shared/document-conditions.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
@@ -286,6 +287,23 @@ function appendDetail(document, list, label, value) {
     list.append(createText(document, 'dt', '', label), createText(document, 'dd', '', displayValue(value)));
 }
 
+function readAccommodationLabel(value) {
+    const keys = { rental_contract: 'addressEvidenceRentalContract', residence_certificate: 'addressEvidenceResidenceCertificate',
+        undertaking: 'addressEvidenceUndertaking', own_home: 'addressEvidenceOwnHome', dormitory: 'addressEvidenceDormitory', hotel: 'addressEvidenceHotel' };
+    return PUBLIC_MESSAGES.tr[keys[value]] || value;
+}
+
+function readDocumentAnswerDetails(application) {
+    const questions = { host_is_married: 'hostIsMarriedQuestion',
+        minor_family_status: 'minorFamilyQuestion', minor_parents_identified: 'minorParentsIdentifiedQuestion',
+        insurance_basis: 'insuranceBasisQuestion' };
+    const answers = { yes: 'yes', no: 'no', system_verified: 'insuranceSystemVerified',
+        bilateral_agreement: 'insuranceBilateralAgreement', gss_pending: 'insuranceGssPending', both_parents: 'minorBothParents',
+        divorced: 'minorDivorced', deceased: 'minorDeceased', single_parent: 'minorSingleParent', absent: 'minorAbsent' };
+    return Object.entries(questions).filter(([field]) => application[field] && listRequiredDocumentAnswers(application).includes(field))
+        .map(([field, key]) => [PUBLIC_MESSAGES.tr[key], PUBLIC_MESSAGES.tr[answers[application[field]]]]);
+}
+
 function createApplicationSummary(document, application) {
     const section = document.createElement('section');
     const details = document.createElement('dl');
@@ -297,7 +315,8 @@ function createApplicationSummary(document, application) {
         ['Ad', application.first_name], ['Soyad', application.last_name], ['E-posta', application.email],
         ['Telefon', application.phone], ['Pasaport No', application.passport_number], ['Uyruk', application.nationality],
         ['Doğum tarihi', application.date_of_birth], ['18 yaş altı', application.is_under_18],
-        ['Adres belgesi türü', application.address_evidence_type], ['Parmak izi durumu', application.fingerprint_status],
+        ['Adres belgesi türü', readAccommodationLabel(application.address_evidence_type)],
+        ...readDocumentAnswerDetails(application), ['Parmak izi durumu', application.fingerprint_status],
         ['Parmak izi kodu', application.fingerprint_code], ['Beyan sürümü', application.declaration_version],
         ['Beyan tarihi', formatDate(application.declaration_accepted_at)],
         ['İletişim teyidi', application.contact_acknowledgement_accepted_current ? 'Onaylandı' : 'Onaylanmadı'],

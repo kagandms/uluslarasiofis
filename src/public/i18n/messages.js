@@ -1,3 +1,4 @@
+import { DOCUMENT_CONDITION_MESSAGES } from './document-condition-messages.js';
 import { PHYSICAL_RECEIPT_MESSAGES } from './physical-receipt-messages.js';
 
 export const SUPPORTED_LOCALES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
@@ -23,6 +24,7 @@ export const PUBLIC_MESSAGES = Object.freeze({
         homeAddressEvidenceIntro: 'Aşağıdaki seçeneklerden başvurunuza uygun olan birini seçin.',
         homeDocumentAllApplications: 'İlk başvuru ve yenileme başvurularında istenir.',
         homeDocumentRenewal: 'Yalnız yenileme başvurularında istenir.',
+        homeDocumentRenewalAdults: 'Yalnız 18 yaş ve üzerindeki yenileme başvurularında istenir.',
         homeDocumentUnder18: 'Yalnız 18 yaş altı başvurularda zorunludur.',
         homeDocumentUnder18Badge: '18 yaş altı',
         homeDocumentConditional: 'Uygunluk, başvurunuzdaki bilgilere göre belirlenir.',
@@ -192,7 +194,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessDeviceExplanation: 'Başvuru numaranızı ve öğrenci numaranızı girerek başvurunuza başka bir cihazdan devam edebilirsiniz.',
         accessDeviceSubmit: 'Başvuruya Giriş Yap',
         accessInvalidCredentials: 'Başvuru numarası veya öğrenci numarası hatalı.',
-        submissionCredentialsReminder: 'Başvuru numaranızı saklamayı unutmayınız. Farklı bir cihazdan başvurunuza erişmek için başvuru numaranız ve öğrenci numaranız gerekecektir.'
+        submissionCredentialsReminder: 'Başvuru numaranızı saklamayı unutmayınız. Farklı bir cihazdan başvurunuza erişmek için başvuru numaranız ve öğrenci numaranız gerekecektir.',
+        ...DOCUMENT_CONDITION_MESSAGES.tr
     }),
     en: Object.freeze({
         languageLabel: 'Language selection',
@@ -214,6 +217,7 @@ export const PUBLIC_MESSAGES = Object.freeze({
         homeAddressEvidenceIntro: 'Choose one option that applies to your address situation.',
         homeDocumentAllApplications: 'Required for initial and renewal applications.',
         homeDocumentRenewal: 'Required for renewal applications only.',
+        homeDocumentRenewalAdults: 'Required only for renewal applicants aged 18 or older.',
         homeDocumentUnder18: 'Required only for applicants under 18.',
         homeDocumentUnder18Badge: 'Under 18',
         homeDocumentConditional: 'Eligibility depends on the information in your application.',
@@ -383,7 +387,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessDeviceExplanation: 'Enter your application number and student number to continue your application from another device.',
         accessDeviceSubmit: 'Access Application',
         accessInvalidCredentials: 'Invalid application number or student number.',
-        submissionCredentialsReminder: 'Remember to keep your application number. You will need it together with your student number to access your application from another device.'
+        submissionCredentialsReminder: 'Remember to keep your application number. You will need it together with your student number to access your application from another device.',
+        ...DOCUMENT_CONDITION_MESSAGES.en
     }),
     ru: Object.freeze({
         languageLabel: 'Выбор языка',
@@ -405,6 +410,7 @@ export const PUBLIC_MESSAGES = Object.freeze({
         homeAddressEvidenceIntro: 'Выберите один вариант, подходящий к вашей ситуации.',
         homeDocumentAllApplications: 'Требуется для первичной заявки и продления.',
         homeDocumentRenewal: 'Требуется только для продления.',
+        homeDocumentRenewalAdults: 'Требуется только при продлении для заявителей от 18 лет.',
         homeDocumentUnder18: 'Обязателен только для заявителей младше 18 лет.',
         homeDocumentUnder18Badge: 'До 18 лет',
         homeDocumentConditional: 'Необходимость зависит от данных заявки.',
@@ -574,7 +580,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessDeviceExplanation: 'Введите номер заявки и номер студента, чтобы продолжить работу с заявкой с другого устройства.',
         accessDeviceSubmit: 'Войти в заявку',
         accessInvalidCredentials: 'Неверный номер заявки или номер студента.',
-        submissionCredentialsReminder: 'Не забудьте сохранить номер заявки. Он понадобится вместе с номером студента для доступа к заявке с другого устройства.'
+        submissionCredentialsReminder: 'Не забудьте сохранить номер заявки. Он понадобится вместе с номером студента для доступа к заявке с другого устройства.',
+        ...DOCUMENT_CONDITION_MESSAGES.ru
     }),
     tk: Object.freeze({
         languageLabel: 'Dil saýlaň',
@@ -596,6 +603,7 @@ export const PUBLIC_MESSAGES = Object.freeze({
         homeAddressEvidenceIntro: 'Ýagdaýyňyza laýyk gelýän bir görnüşi saýlaň.',
         homeDocumentAllApplications: 'Ilkinji arza we uzaltma üçin gerek.',
         homeDocumentRenewal: 'Diňe uzaltma arzasy üçin gerek.',
+        homeDocumentRenewalAdults: 'Diňe 18 ýaşdan uly adamlaryň uzaltma arzasy üçin gerek.',
         homeDocumentUnder18: 'Diňe 18 ýaşdan kiçi talyplar üçin hökmany.',
         homeDocumentUnder18Badge: '18 ýaşdan kiçi',
         homeDocumentConditional: 'Gerekli bolmagy arza maglumatlaryna baglydyr.',
@@ -765,7 +773,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessDeviceExplanation: 'Arza belgiňizi we talyp belgiňizi girizip, başga bir enjamdan arzaňyzy dowam etdiriň.',
         accessDeviceSubmit: 'Arza gir',
         accessInvalidCredentials: 'Arza belgisi ýa-da talyp belgisi nädogry.',
-        submissionCredentialsReminder: 'Arza belgiňizi saklamagy ýatdan çykarmaň. Başga enjamdan arzaňyza girmek üçin arza belgiňiz we talyp belgiňiz gerek bolar.'
+        submissionCredentialsReminder: 'Arza belgiňizi saklamagy ýatdan çykarmaň. Başga enjamdan arzaňyza girmek üçin arza belgiňiz we talyp belgiňiz gerek bolar.',
+        ...DOCUMENT_CONDITION_MESSAGES.tk
     }),
     ar: Object.freeze({
         languageLabel: 'اختيار اللغة',
@@ -787,6 +796,7 @@ export const PUBLIC_MESSAGES = Object.freeze({
         homeAddressEvidenceIntro: 'اختر خياراً واحداً يناسب حالة عنوانك.',
         homeDocumentAllApplications: 'مطلوب للطلب الأولي والتجديد.',
         homeDocumentRenewal: 'مطلوب لطلبات التجديد فقط.',
+        homeDocumentRenewalAdults: 'مطلوب فقط لطلبات التجديد لمن أعمارهم 18 عاماً فأكثر.',
         homeDocumentUnder18: 'مطلوب فقط للمتقدمين دون 18 عاماً.',
         homeDocumentUnder18Badge: 'دون 18 عاماً',
         homeDocumentConditional: 'تحدد الحاجة وفقاً لبيانات الطلب.',
@@ -956,7 +966,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessDeviceExplanation: 'أدخل رقم طلبك ورقم الطالب لمتابعة طلبك من جهاز آخر.',
         accessDeviceSubmit: 'الدخول إلى الطلب',
         accessInvalidCredentials: 'رقم الطلب أو رقم الطالب غير صحيح.',
-        submissionCredentialsReminder: 'تذكّر الاحتفاظ برقم طلبك. ستحتاجه مع رقم الطالب للوصول إلى طلبك من جهاز آخر.'
+        submissionCredentialsReminder: 'تذكّر الاحتفاظ برقم طلبك. ستحتاجه مع رقم الطالب للوصول إلى طلبك من جهاز آخر.',
+        ...DOCUMENT_CONDITION_MESSAGES.ar
     })
 });
 

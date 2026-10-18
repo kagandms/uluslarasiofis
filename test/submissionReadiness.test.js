@@ -11,6 +11,8 @@ function createApplication(overrides = {}) {
         status: 'draft',
         student_number: '2026123456',
         application_type: 'initial',
+        host_is_married: 'no', insurance_basis: 'system_verified',
+        minor_family_status: 'both_parents', minor_parents_identified: 'no',
         student_email: 'student@example.edu',
         student_phone: '+905551112233',
         first_name: 'Ayşe',
@@ -33,7 +35,7 @@ function createReadyDocuments(application) {
     const policies = listDocumentPolicies(
         application.application_type,
         application.is_under_18 === 1,
-        application.address_evidence_type
+        application
     );
     return policies.map((policy) => ({
         code: policy.code,
@@ -52,7 +54,7 @@ function evaluate(application = createApplication(), documents = createReadyDocu
     const policies = listDocumentPolicies(
         application.application_type,
         application.is_under_18 === 1,
-        application.address_evidence_type
+        application
     );
     return evaluateSubmissionReadiness(application, policies, documents, {
         declarationVersion: CURRENT_DECLARATION
@@ -128,7 +130,7 @@ test('only the selected address branch and its undertaking dependencies are requ
     const documents = createReadyDocuments(application).filter((document) => document.code !== 'host_identity_copy');
     const readiness = evaluate(application, documents);
 
-    assert.deepEqual(readiness.missing_documents, ['host_identity_copy']);
+    assert.deepEqual(readiness.missing_documents, []);
 });
 
 test('renewal requires current UETS while initial applications do not', () => {

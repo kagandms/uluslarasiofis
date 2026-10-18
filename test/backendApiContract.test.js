@@ -141,7 +141,7 @@ async function createReadyApplication(environment, database, studentNumber, appl
     await database.prepare(`
         UPDATE applications SET first_name = 'Ayşe', last_name = 'Yılmaz', passport_number = 'P123456',
             nationality = 'Turkish', date_of_birth = '2000-01-01', is_under_18 = 0,
-            address_evidence_type = 'rental_contract', fingerprint_status = 'registered', fingerprint_code = 'FP-A/42',
+            address_evidence_type = 'rental_contract', insurance_basis = 'system_verified', fingerprint_status = 'registered', fingerprint_code = 'FP-A/42',
             declaration_version = ?, declaration_accepted_at = ?
         WHERE id = ?
     `).bind(environment.PUBLIC_DECLARATION_VERSION || 'student-information-accuracy-v1', acceptedAt, application.id).run();
@@ -180,7 +180,7 @@ async function createStaffApplication(environment, database, studentNumber, {
         WHERE students.normalized_student_number = ?
     `).bind(studentNumber.toLocaleUpperCase('en-US')).first();
     await database.prepare(`
-        UPDATE applications SET status = ?, first_name = ?, last_name = ?, passport_number = ?,
+        UPDATE applications SET document_policy_version = 1, status = ?, first_name = ?, last_name = ?, passport_number = ?,
             updated_at = ?, submitted_at = '2026-09-29T10:00:00.000Z'
         WHERE id = ?
     `).bind(status, firstName, lastName, passportNumber, updatedAt, application.id).run();

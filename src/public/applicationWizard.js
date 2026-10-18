@@ -1,3 +1,4 @@
+import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_FIELDS, DOCUMENT_ANSWER_OPTIONS, listRequiredDocumentAnswers, listMissingDocumentAnswers } from '../shared/document-conditions.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { createDraftAutosave } from './draftAutosave.js';
 import { createNotificationPreferenceField, parseNotificationPreferences, WHATSAPP_CONSENT_VERSION } from './notificationPreferences.js';
@@ -358,11 +359,35 @@ function createResidenceStep(document, application, formValues) {
     under18Field.querySelector('select').disabled = true;
     form.append(under18Field);
     form.append(createAddressEvidenceChoices(document, fields, messages, Boolean(application && application.status !== 'draft')));
+    appendDocumentQuestions(form, fields);
     renderFingerprintSection(form, fields);
     const continueButton = createContinueButton(document, messages);
     form.append(continueButton);
     continueButton.disabled = !canContinueResidenceStep(form, fields);
     return form;
+}
+
+const DOCUMENT_QUESTION_KEYS = Object.freeze({
+    host_is_married: 'hostIsMarriedQuestion',
+    minor_parents_identified: 'minorParentsIdentifiedQuestion',
+    minor_family_status: 'minorFamilyQuestion', insurance_basis: 'insuranceBasisQuestion'
+});
+const DOCUMENT_ANSWER_KEYS = Object.freeze({
+    yes: 'yes', no: 'no', system_verified: 'insuranceSystemVerified',
+    bilateral_agreement: 'insuranceBilateralAgreement', gss_pending: 'insuranceGssPending',
+    both_parents: 'minorBothParents', divorced: 'minorDivorced', deceased: 'minorDeceased',
+    single_parent: 'minorSingleParent', absent: 'minorAbsent'
+});
+
+function appendDocumentQuestions(form, fields) {
+    const document = form.ownerDocument;
+    listRequiredDocumentAnswers(fields).forEach((name) => {
+        form.append(createSelectField(document, {
+            key: DOCUMENT_QUESTION_KEYS[name], name, value: fields[name] || '', required: true,
+            options: [{ value: '', key: 'under18SelectPlaceholder', disabled: true },
+                ...DOCUMENT_ANSWER_OPTIONS[name].map((value) => ({ value, key: DOCUMENT_ANSWER_KEYS[value] }))]
+        }));
+    });
 }
 
 function createAddressEvidenceChoices(document, fields, messages, isDisabled) {
@@ -371,7 +396,9 @@ function createAddressEvidenceChoices(document, fields, messages, isDisabled) {
     fieldset.append(createTranslatedElement(document, 'legend', 'addressEvidenceQuestion', messages.addressEvidenceQuestion));
     [
         ['rental_contract', 'addressEvidenceRentalContract'],
-        ['residence_certificate', 'addressEvidenceResidenceCertificate'],
+        ['own_home', 'addressEvidenceOwnHome'],
+        ['dormitory', 'addressEvidenceDormitory'],
+        ['hotel', 'addressEvidenceHotel'],
         ['undertaking', 'addressEvidenceUndertaking']
     ].forEach(([value, key]) => {
         const label = document.createElement('label');
@@ -426,10 +453,13 @@ function isFingerprintUploadEligible(application) {
 
 function canContinueResidenceStep(form, fields) {
     const birthDate = form?.querySelector('[name="date_of_birth"]')?.value;
-    return Boolean(form?.checkValidity() && calculateCurrentUnder18(birthDate) !== null && isFingerprintUploadEligible(fields));
+    return Boolean(form?.checkValidity() && calculateCurrentUnder18(birthDate) !== null && isFingerprintUploadEligible(fields) && listMissingDocumentAnswers(fields).length === 0);
 }
 
 function getAddressEvidenceMessageKey(value) {
+    if (value === 'own_home') return 'addressEvidenceOwnHome';
+    if (value === 'dormitory') return 'addressEvidenceDormitory';
+    if (value === 'hotel') return 'addressEvidenceHotel';
     if (value === 'rental_contract') return 'addressEvidenceRentalContract';
     if (value === 'residence_certificate') return 'addressEvidenceResidenceCertificate';
     if (value === 'undertaking') return 'addressEvidenceUndertaking';
@@ -665,6 +695,7 @@ function createApplicantReview(document, application) {
         ['studentNumber', application.student_number], ['email', application.student_email], ['phone', application.student_phone],
         ['applicationType', application.application_type === 'renewal' ? messages.renewalApplication : messages.initialApplication],
         ['addressEvidenceTypeLabel', messages[getAddressEvidenceMessageKey(application.address_evidence_type)] || ''],
+        ...listRequiredDocumentAnswers(application).map((field) => [DOCUMENT_QUESTION_KEYS[field], messages[DOCUMENT_ANSWER_KEYS[application[field]]] || '']),
         ['firstName', application.first_name], ['lastName', application.last_name], ['passportNumber', application.passport_number],
         ['nationality', application.nationality], ['dateOfBirth', application.date_of_birth],
         ['under18Question', application.is_under_18 === true || application.is_under_18 === 1 ? messages.yes
@@ -930,7 +961,7 @@ function isReviewFieldValid(field, application) {
     if (field === 'application_type') return ['initial', 'renewal'].includes(value);
     if (field === 'student_email') return typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value.trim());
     if (field === 'student_phone') return isValidPhoneNumber(value) && value.trim().length <= 40;
-    if (field === 'address_evidence_type') return ['rental_contract', 'residence_certificate', 'undertaking'].includes(value);
+    if (field === 'address_evidence_type') return ACCOMMODATION_TYPES.includes(value);
     if (field === 'date_of_birth') {
         return calculateCurrentUnder18(value) !== null;
     }
@@ -948,6 +979,9 @@ export function getReviewReadiness(application, requirements, uploads = {}, dele
     ];
     const issues = fields.filter(([field]) => !isReviewFieldValid(field, application))
         .map(([, messageKey, step]) => ({ kind: 'field', step, code: null, messageKey }));
+    listMissingDocumentAnswers(application).forEach((field) => {
+        issues.push({ kind: 'field', step: 1, code: null, messageKey: DOCUMENT_QUESTION_KEYS[field] });
+    });
     if (!isFingerprintUploadEligible(application)) {
         issues.push({ kind: 'field', step: 1, code: null, messageKey: 'fingerprintQuestion' });
     }
@@ -1246,6 +1280,7 @@ function buildAutosaveValues(fields) {
         fingerprint_status: fields.fingerprint_status ?? null,
         fingerprint_code: fields.fingerprint_status === 'registered' ? (fields.fingerprint_code ?? '') : null
     };
+    DOCUMENT_ANSWER_FIELDS.forEach((field) => { values[field] = fields[field] || null; });
     RESIDENCE_FIELDS.forEach((field) => { values[field] = fields[field] ?? ''; });
     return values;
 }
@@ -1717,8 +1752,9 @@ function handleWizardChange(root, state, api, event) {
         return;
     }
     handleWizardInput(root, state, api);
-    if (['application_type', 'address_evidence_type'].includes(input.name)) {
+    if (['application_type', 'address_evidence_type', 'date_of_birth', ...DOCUMENT_ANSWER_FIELDS].includes(input.name)) {
         state.errorKey = null;
+        renderWizard(root, state);
         void persistRequirementSelection(root, state, api);
     }
 }

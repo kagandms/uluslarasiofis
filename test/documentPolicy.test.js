@@ -3,16 +3,19 @@ import { test } from 'node:test';
 import * as documentPolicy from '../src/server/domain/documentPolicy.js';
 import { listDocumentPolicies, listPublicDocumentOverview, readDocumentPolicy } from '../src/server/domain/documentPolicy.js';
 
-test('document policies expose separate passport and residence-card uploads without fingerprint files', () => {
-    const policies = listDocumentPolicies('initial', false);
+test('document policies expose passport and biometric photos without residence-card or fingerprint uploads', () => {
+    const policies = listDocumentPolicies('initial', false, { has_residence_card: 'yes', insurance_basis: 'bilateral_agreement' });
     const codes = policies.map(({ code }) => code);
 
     assert.ok(codes.includes('passport'));
-    assert.ok(codes.includes('residence_card'));
+    assert.ok(codes.includes('photographs'));
+    assert.ok(!codes.includes('residence_card'));
     assert.ok(!codes.includes('passport_identity'));
     assert.ok(!codes.includes('fingerprint'));
+    assert.ok(codes.includes('health_insurance'));
     assert.equal(readDocumentPolicy('passport', 'initial', false).label_key, 'documentPassport');
-    assert.equal(readDocumentPolicy('residence_card', 'initial', false).label_key, 'documentResidenceCard');
+    assert.equal(readDocumentPolicy('photographs', 'initial', false).label_key, 'documentPhotographs');
+    assert.equal(readDocumentPolicy('residence_card', 'renewal', false), null);
 });
 
 test('address policy exposes exactly the selected one-of-three evidence branch', () => {
@@ -25,23 +28,27 @@ test('address policy exposes exactly the selected one-of-three evidence branch',
     assert.deepEqual(rental.filter(({ conditional_rule }) => conditional_rule?.startsWith('address_')).map(({ code }) => code), [
         'address_rental_contract'
     ]);
-    assert.deepEqual(residence.filter(({ conditional_rule }) => conditional_rule?.startsWith('address_')).map(({ code }) => code), [
+    assert.deepEqual(residence.filter(({ code }) => code === 'address_residence_certificate').map(({ code }) => code), [
         'address_residence_certificate'
     ]);
     assert.deepEqual(undertaking.filter(({ conditional_rule }) => conditional_rule?.startsWith('address_')).map(({ code }) => code), [
-        'address_undertaking', 'host_residence_certificate', 'host_identity_copy'
+        'address_undertaking', 'host_residence_certificate'
     ]);
+    assert.equal(undertaking.some(({ code }) => code === 'home_utility_bill'), false);
+    assert.equal(rental.some(({ code }) => code === 'home_utility_bill'), false);
     assert.equal(readDocumentPolicy('host_residence_certificate', 'initial', false, 'rental_contract'), null);
     assert.deepEqual(readDocumentPolicy('host_residence_certificate', 'initial', false, 'undertaking').accepted_media_types, [
         'application/pdf'
     ]);
 });
 
-test('renewal-only UETS and under-18 certificate applicability stay canonical', () => {
+test('renewal UETS excludes minors while under-18 evidence follows official conditional cases', () => {
     assert.equal(listDocumentPolicies('renewal', false).some(({ code }) => code === 'uets'), true);
+    assert.equal(listDocumentPolicies('renewal', true).some(({ code }) => code === 'uets'), false);
     assert.equal(listDocumentPolicies('initial', false).some(({ code }) => code === 'uets'), false);
     assert.equal(listDocumentPolicies('initial', false).some(({ code }) => code === 'birth_certificate_under18'), false);
-    assert.equal(listDocumentPolicies('initial', true).some(({ code, required }) => code === 'birth_certificate_under18' && required), true);
+    assert.equal(listDocumentPolicies('initial', true, { minor_parents_identified: 'no' }).some(({ code, required }) => code === 'birth_certificate_under18' && required), true);
+    assert.equal(listDocumentPolicies('initial', true, { minor_parents_identified: 'yes' }).some(({ code }) => code === 'minor_consent'), true);
 });
 
 test('public overview derives the new concise policy and address alternatives without legacy uploads', () => {
@@ -50,13 +57,15 @@ test('public overview derives the new concise policy and address alternatives wi
 
     assert.equal(new Set(overview.map(({ code }) => code)).size, overview.length);
     assert.ok(byCode.has('passport'));
-    assert.ok(byCode.has('residence_card'));
+    assert.ok(byCode.has('photographs'));
+    assert.ok(!byCode.has('residence_card'));
     assert.ok(!byCode.has('passport_identity'));
     assert.ok(!byCode.has('fingerprint'));
-    assert.equal(byCode.get('uets').scope_key, 'homeDocumentRenewal');
+    assert.equal(byCode.get('uets').scope_key, 'homeDocumentRenewalAdults');
     assert.equal(byCode.get('birth_certificate_under18').scope_key, 'homeDocumentUnder18');
     assert.equal(byCode.get('address_rental_contract').group_key, 'address_evidence');
-    assert.equal(byCode.get('address_residence_certificate').group_key, 'address_evidence');
+    assert.equal(byCode.get('address_residence_certificate').group_key, null);
+    assert.equal(byCode.get('address_residence_certificate').scope_key, 'homeDocumentRenewal');
     assert.equal(byCode.get('address_undertaking').group_key, 'address_evidence');
 });
 
@@ -65,7 +74,7 @@ test('application type remapping explicitly recognizes every legacy and current 
         'residence_application_form', 'passport_identity', 'passport', 'residence_card', 'photographs',
         'health_insurance', 'uets', 'student_certificate', 'residence_permit_fee', 'address_document',
         'address_rental_contract', 'address_residence_certificate', 'address_undertaking',
-        'host_residence_certificate', 'host_identity_copy', 'fingerprint', 'home_utility_bill',
+        'host_residence_certificate', 'host_identity_copy', 'fingerprint', 'home_utility_bill', 'parent_permit_copy',
         'birth_certificate_under18'
     ];
 
