@@ -50,8 +50,8 @@ test('married hosts require spouse undertaking and host identity copy is not req
     assert.equal(readDocumentPolicy('host_identity_copy', 'initial', false, application), null);
 });
 
-test('minor consent applies to every minor while family evidence follows the stated family situation', () => {
-    const minor = { ...ADULT, is_under_18: 1, minor_parents_identified: 'no', minor_family_status: 'divorced' };
+test('minor entry basis exempts student-visa applicants from consent and parent evidence', () => {
+    const minor = { ...ADULT, is_under_18: 1, minor_entry_type: 'other', minor_parents_identified: 'no', minor_family_status: 'divorced' };
     const codes = readCodes(minor);
     for (const code of ['birth_certificate_under18', 'minor_consent', 'minor_family_evidence']) assert.ok(codes.includes(code));
     const bothParents = readCodes({ ...minor, minor_parents_identified: 'yes', minor_family_status: 'both_parents' });
@@ -62,6 +62,8 @@ test('minor consent applies to every minor while family evidence follows the sta
     for (const minor_family_status of ['divorced', 'deceased', 'single_parent', 'absent']) {
         assert.ok(readCodes({ ...minor, minor_family_status }).includes('minor_family_evidence'));
     }
+    const studentVisa = readCodes({ ...minor, minor_entry_type: 'student_visa' });
+    for (const code of ['birth_certificate_under18', 'minor_consent', 'minor_family_evidence']) assert.equal(studentVisa.includes(code), false);
     const adult = readCodes({ ...minor, is_under_18: 0 });
     assert.equal(adult.some((code) => code.startsWith('minor_') || code === 'birth_certificate_under18'), false);
 });
@@ -75,7 +77,9 @@ test('renewal omits UETS for applicants under 18', () => {
 test('unanswered and invalid conditional questions block server readiness even with no missing document uploads', () => {
     const application = { ...ADULT, accommodation_type: 'undertaking', is_under_18: 1 };
     const missing = listMissingDocumentAnswers(application);
-    assert.deepEqual(missing, ['host_is_married', 'minor_family_status', 'minor_parents_identified', 'insurance_basis']);
+    assert.deepEqual(missing, ['host_is_married', 'minor_entry_type', 'insurance_basis']);
+    assert.deepEqual(listMissingDocumentAnswers({ ...application, minor_entry_type: 'other' }),
+        ['host_is_married', 'minor_family_status', 'minor_parents_identified', 'insurance_basis']);
     const result = evaluateSubmissionReadiness(application, [], [], { declarationVersion: 'test' });
     missing.forEach((field) => assert.ok(result.missing_fields.includes(field)));
     assert.equal(result.status, 'not_ready');

@@ -369,11 +369,13 @@ function createResidenceStep(document, application, formValues) {
 
 const DOCUMENT_QUESTION_KEYS = Object.freeze({
     host_is_married: 'hostIsMarriedQuestion',
+    minor_entry_type: 'minorEntryQuestion',
     minor_parents_identified: 'minorParentsIdentifiedQuestion',
     minor_family_status: 'minorFamilyQuestion', insurance_basis: 'insuranceBasisQuestion'
 });
 const DOCUMENT_ANSWER_KEYS = Object.freeze({
     yes: 'yes', no: 'no', system_verified: 'insuranceSystemVerified',
+    student_visa: 'minorStudentVisa', other: 'minorOtherEntry',
     bilateral_agreement: 'insuranceBilateralAgreement', gss_pending: 'insuranceGssPending',
     both_parents: 'minorBothParents', divorced: 'minorDivorced', deceased: 'minorDeceased',
     single_parent: 'minorSingleParent', absent: 'minorAbsent'

@@ -602,7 +602,7 @@ test('wizard saves under-18 and fingerprint state before loading the server requ
     const { document, root } = createRoot();
     const window = document.defaultView;
     const application = {
-        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: '2026123999',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_entry_type: 'other', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: '2026123999',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null

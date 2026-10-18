@@ -67,17 +67,21 @@ test('host question appears only for host accommodation and other answers surviv
     assert.equal(root.querySelector('button[type="submit"]').disabled, false);
 });
 
-test('birth date transition reveals all minor questions and saves calculated age', async (context) => {
+test('minor entry choice reveals only the applicable questions and saves calculated age', async (context) => {
     const { root, document, application } = await createWizard();
     context.after(() => document.defaultView.close());
     assert.equal(root.querySelector('[name="minor_entry_type"]'), null);
 
     await changeValue(root, 'date_of_birth', '2012-01-01');
-    for (const name of ['minor_family_status', 'minor_parents_identified']) {
-        assert.ok(root.querySelector(`[name="${name}"]`), name);
-    }
+    assert.ok(root.querySelector('[name="minor_entry_type"]'));
+    assert.equal(root.querySelector('[name="minor_family_status"]'), null);
     assert.ok(root.querySelector('[name="insurance_basis"]'));
     assert.equal(application.is_under_18, true);
+    await changeValue(root, 'minor_entry_type', 'student_visa');
+    assert.equal(root.querySelector('[name="minor_family_status"]'), null);
+    assert.equal(root.querySelector('[name="minor_parents_identified"]'), null);
+    await changeValue(root, 'minor_entry_type', 'other');
+    for (const name of ['minor_family_status', 'minor_parents_identified']) assert.ok(root.querySelector(`[name="${name}"]`), name);
     await changeValue(root, 'minor_family_status', 'both_parents');
     await changeValue(root, 'minor_parents_identified', 'yes');
     await changeValue(root, 'insurance_basis', 'system_verified');
