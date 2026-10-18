@@ -1,3 +1,4 @@
+import { DOCUMENT_ANSWER_FIELDS } from '../../shared/document-conditions.js';
 import { ApiError } from '../domain/errors.js';
 import { listDocumentPolicies } from '../domain/documentPolicy.js';
 import { evaluateApplicationTransition, listApplicationStatusTransitions } from '../domain/applicationStateMachine.js';
@@ -100,7 +101,8 @@ function createApplicationDetailDto(application) {
         nationality: application.nationality,
         date_of_birth: application.date_of_birth,
         is_under_18: application.is_under_18 === null ? null : application.is_under_18 === 1,
-        address_evidence_type: application.address_evidence_type ?? null,
+        address_evidence_type: application.accommodation_type || application.address_evidence_type || null,
+        ...Object.fromEntries(DOCUMENT_ANSWER_FIELDS.map((field) => [field, application[field] ?? null])),
         fingerprint_status: application.fingerprint_status ?? null,
         fingerprint_code: application.fingerprint_code ?? null,
         declaration_version: application.declaration_version ?? null,
@@ -121,7 +123,7 @@ function createDocumentDetailDtos(application, storedRequirements) {
     return listDocumentPolicies(
         application.application_type,
         application.is_under_18 === 1,
-        application.address_evidence_type ?? null
+        application
     ).map((policy) => {
         const requirement = requirementsByCode.get(policy.code) || {};
         const hasFinalizedCurrentDocument = READABLE_REVISION_STATUSES.has(requirement.revision_status)
@@ -164,7 +166,7 @@ function readAllowedStatusTransitions(application, requirements) {
     const applicableRequirements = listDocumentPolicies(
         application.application_type,
         application.is_under_18 === 1,
-        application.address_evidence_type ?? null
+        application
     ).map((policy) => ({ ...requirementsByCode.get(policy.code), is_required: policy.required ? 1 : 0 }));
     const hasResubmissionRequiredDocuments = applicableRequirements.some((requirement) =>
         requirement.review_status === 'resubmission_required' || requirement.revision_status === 'resubmission_required');

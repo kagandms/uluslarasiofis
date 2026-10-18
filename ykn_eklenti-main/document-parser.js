@@ -1375,7 +1375,14 @@
             'cansu', 'didem', 'dilara', 'ezgi', 'gizem', 'ipek', 'melis', 'melisa', 'nilay', 'nur', 'ozlem',
             'seda', 'sezen', 'simge', 'yasmin', 'yagmur', 'oguljan', 'ogulkeyik', 'jemal',
             'gozel', 'guzal', 'shirin', 'bahar', 'gulya', 'gulnora', 'dinara', 'samira', 'amina', 'khadija',
-            'hajar', 'nour', 'sarah', 'sara', 'salma', 'laylo', 'aziza', 'munira', 'marhabo', 'sabina', 'kamila'
+            'hajar', 'nour', 'sarah', 'sara', 'salma', 'laylo', 'aziza', 'munira', 'marhabo', 'sabina', 'kamila',
+            'fatoumata', 'aminata', 'aissata', 'djeneba', 'kadiatou', 'oumu', 'oumy', 'rokia', 'salimata', 'fanta',
+            'adjaratou', 'hafsa', 'asmaa', 'zainab', 'safiatou', 'binta', 'mame', 'awa', 'coumba', 'ramatoulaye',
+            'sokhna', 'astou', 'antat', 'nogaye', 'daba', 'ndeye', 'khady', 'penda', 'kine', 'mariama', 'saran',
+            'assitan', 'tenin', 'korotoumou', 'minata', 'alima', 'nana', 'grace', 'esther', 'joy', 'mercy',
+            'faith', 'peace', 'blessing', 'victoria', 'rebecca', 'rachel', 'elizabeth', 'ruth', 'claire',
+            'marie', 'julie', 'sophie', 'catherine', 'florence', 'christine', 'alice', 'patricia', 'charlotte',
+            'helene', 'beatrice'
         ]);
 
         const maleNames = new Set([
@@ -1390,7 +1397,18 @@
             'otabek', 'sherzod', 'dmitry', 'alexander', 'sergey', 'andrey', 'mikhail', 'ivan', 'vladimir',
             'igor', 'artem', 'nikita', 'pavel', 'mohamed', 'mohammad', 'muhammad', 'mahmoud', 'abdullah',
             'abdul', 'khalid', 'tariq', 'omar', 'amr', 'ziad', 'karim', 'youssef', 'nazar', 'batyr', 'berdi',
-            'atajan', 'eziz', 'resul', 'allamyrat', 'annamyrat', 'bayram'
+            'atajan', 'eziz', 'resul', 'allamyrat', 'annamyrat', 'bayram',
+            'adam', 'ramadan', 'abdoul', 'amadou', 'mamadou', 'ibrahima', 'sekou', 'oumar', 'souleymane',
+            'boubacar', 'bakary', 'ousmane', 'idrissa', 'moussa', 'cheick', 'daouda', 'amad', 'said',
+            'saeed', 'bilal', 'hamza', 'anas', 'ayoub', 'zakaria', 'yassine', 'drissa', 'lassina', 'seydou',
+            'tidiane', 'issa', 'aliou', 'modibo', 'baba', 'adama', 'abdoulaye', 'yaya', 'samba', 'koffi',
+            'yao', 'kouame', 'moustapha', 'cheikh', 'alassane', 'lassana', 'harouna', 'tiemoko', 'fousseni',
+            'bassirou', 'lamine', 'moriba', 'sidiki', 'driss', 'salif', 'salifou', 'ismael', 'ismaila',
+            'tahirou', 'nouhou', 'issouf', 'issoufou', 'aziz', 'kader', 'abdel', 'nasser', 'tarek', 'walid',
+            'khaled', 'yacine', 'amine', 'mehdi', 'sofiane', 'redouane', 'samir', 'nabil', 'fouad', 'rachid',
+            'mourad', 'farid', 'kamal', 'jamal', 'habib', 'mahamadou', 'soumaila', 'jean', 'paul', 'pierre',
+            'david', 'daniel', 'michael', 'george', 'john', 'joseph', 'mark', 'samuel', 'christian', 'victor',
+            'emmanuel', 'francis', 'charles', 'patrick', 'eric', 'richard', 'robert'
         ]);
 
         for (const p of parts) {

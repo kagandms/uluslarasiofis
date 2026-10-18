@@ -60,6 +60,24 @@ function safeRouteResponse(result, requestId) {
     return jsonResponse(result ?? {}, 200, requestId);
 }
 
+function recoveryModeResponse(request, requestId) {
+    const { pathname } = new URL(request.url);
+    if (pathname.startsWith('/api/')) {
+        return errorResponse(requestId, 503, 'SERVICE_MAINTENANCE',
+            'Portal kısa süreli bakımda. Lütfen daha sonra tekrar deneyin.', true);
+    }
+    return new Response('<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bakım çalışması</title><main><h1>Bakım çalışması</h1><p>Başvuru portalı kısa süreli bakımda. Lütfen birkaç dakika sonra tekrar deneyin.</p></main></html>', {
+        status: 503,
+        headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'Retry-After': '120',
+            'X-Content-Type-Options': 'nosniff',
+            'X-Request-Id': requestId
+        }
+    });
+}
+
 function withMetaWhatsAppProvider(environment) {
     if (environment.NOTIFICATION_PROVIDERS?.whatsapp) return environment;
     return { ...environment, NOTIFICATION_PROVIDERS: {
@@ -275,6 +293,7 @@ async function routeApi(request, environment, requestId, cache) {
 const worker = {
     async fetch(request, environment) {
         const requestId = createRequestId();
+        if (environment.RECOVERY_MODE === 'maintenance') return recoveryModeResponse(request, requestId);
         const { pathname } = new URL(request.url);
         if (!pathname.startsWith('/api/')) {
             if (environment.ASSETS) return environment.ASSETS.fetch(request);

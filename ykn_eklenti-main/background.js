@@ -93,6 +93,14 @@ function saveTemporaryStudentData(studentData) {
     });
 }
 
+function getTemporaryStudentData() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['studentData'], (res) => {
+            resolve(res?.studentData || null);
+        });
+    });
+}
+
 function clearTemporaryStudentData() {
     return new Promise((resolve) => {
         chrome.storage.local.remove([...TEMPORARY_STUDENT_DATA_KEYS, TEMPORARY_STORAGE_TIMESTAMP_KEY], () => {
@@ -610,6 +618,103 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             .trim();
                     }
 
+                    function isVisible(el) {
+                        if (!el || !el.isConnected) return false;
+                        if (el.disabled || el.getAttribute?.('aria-disabled') === 'true') return false;
+                        if (/(?:-|_)chdextr$/i.test(el.id || '')) return false;
+                        const doc = el.ownerDocument || document;
+                        const win = doc.defaultView || window;
+                        for (let cur = el; cur && cur !== doc.documentElement; cur = cur.parentElement) {
+                            if (cur.hidden || cur.getAttribute?.('aria-hidden') === 'true') return false;
+                            const style = win.getComputedStyle ? win.getComputedStyle(cur) : null;
+                            if (style && (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')) {
+                                return false;
+                            }
+                        }
+                        const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 0, height: 0 };
+                        return rect.width > 0 && rect.height > 0;
+                    }
+
+                    function getButtonRoot(el) {
+                        if (!el) return null;
+                        return el.closest('button, .z-button, .z-toolbarbutton, input[type="button"], input[type="submit"], a, [role="button"]') || el;
+                    }
+
+                    function isKabulSearchButtonText(text) {
+                        const cTxt = norm(text);
+                        if (!cTxt || cTxt.length > 90) return false;
+                        if (cTxt.includes('pasaport') || cTxt.includes('belge') || cTxt.includes('tckimlik') || cTxt.includes('temizle') || cTxt.includes('kaydet') || cTxt.includes('iptal') || cTxt.includes('vazgec')) {
+                            return false;
+                        }
+                        const hasSearchVerb = cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || /\bbul\b/.test(cTxt);
+                        return hasSearchVerb && (cTxt.includes('kabul') || cTxt.includes('mektup'));
+                    }
+
+                    function scoreKabulButton(candidate, refInput) {
+                        const root = getButtonRoot(candidate);
+                        if (!isVisible(root)) return 0;
+                        if (root.closest('.z-menu, .z-menuitem, .z-menu-item, .z-menupopup, .z-caption, .z-tab, nav')) return 0;
+                        const cTxt = norm(root.innerText || root.textContent || root.value || root.title || '');
+                        if (!isKabulSearchButtonText(cTxt)) return 0;
+                        let score = 0;
+                        if (cTxt.includes('kabul') && cTxt.includes('ara')) score = 240;
+                        else if (cTxt.includes('kabul') && (cTxt.includes('sorgula') || cTxt.includes('getir') || /\bbul\b/.test(cTxt))) score = 200;
+                        else if (cTxt === 'ara' || cTxt === 'sorgula' || cTxt === 'getir') score = 150;
+                        else if (cTxt.includes('ara') || cTxt.includes('sorgula')) score = 120;
+                        if (score === 0) return 0;
+                        const tag = (root.tagName || '').toLowerCase();
+                        if (tag === 'button' || root.classList?.contains('z-button') || root.classList?.contains('z-toolbarbutton')) {
+                            score += 25;
+                        }
+                        if (refInput && typeof refInput.compareDocumentPosition === 'function') {
+                            try {
+                                if (refInput.compareDocumentPosition(root) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                                    score += 30;
+                                }
+                            } catch (_) {}
+                        }
+                        return score;
+                    }
+
+                    function findBestButtonIn(scope, refInput, minScore = 100) {
+                        if (!scope || !scope.querySelectorAll) return null;
+                        const candidates = scope.querySelectorAll('button, .z-button, .z-toolbarbutton, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"], span');
+                        let best = null;
+                        let bestScore = 0;
+                        const seen = new Set();
+                        for (let i = 0; i < candidates.length; i++) {
+                            const root = getButtonRoot(candidates[i]);
+                            if (!root || seen.has(root)) continue;
+                            seen.add(root);
+                            const score = scoreKabulButton(root, refInput);
+                            if (score >= minScore && score > bestScore) {
+                                bestScore = score;
+                                best = root;
+                            }
+                        }
+                        return best;
+                    }
+
+                    function findZkWidget(el, win) {
+                        if (!el || !win?.zk?.Widget?.$) return null;
+                        for (let cur = el, depth = 0; cur && depth < 6; cur = cur.parentElement, depth++) {
+                            try {
+                                const w = win.zk.Widget.$(cur);
+                                if (w) return w;
+                            } catch (_) {}
+                        }
+                        if (el.querySelector) {
+                            const inner = el.querySelector('.z-button, button, input');
+                            if (inner) {
+                                try {
+                                    const w = win.zk.Widget.$(inner);
+                                    if (w) return w;
+                                } catch (_) {}
+                            }
+                        }
+                        return null;
+                    }
+
                     const allDocs = getAllDocs(document);
 
                     let inp = null;
@@ -622,9 +727,10 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         let dBtn = null;
 
                         // 1. ÖNCELİK: Placeholder / Title / Name / Id / Value üzerinden doğrudan Input bulma
-                        const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                        const allInputs = doc.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])');
                         for (let i = 0; i < allInputs.length; i++) {
                             const it = allInputs[i];
+                            if (!isVisible(it)) continue;
                             const ph = norm((it.placeholder || '') + ' ' + (it.getAttribute('placeholder') || '') + ' ' + (it.title || '') + ' ' + (it.name || '') + ' ' + (it.id || ''));
                             if (ph.includes('kabul') && !ph.includes('pasaport') && !ph.includes('tc') && !ph.includes('dogum')) {
                                 dInp = it;
@@ -632,32 +738,20 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                             }
                         }
 
-                        // 2. ÖNCELİK: Buton bulma ("Kabul Mektup Id İle Ara" veya içinde "kabul" geçen buton)
-                        const allClickables = doc.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], input[type="submit"], [role="button"]');
-                        for (let i = 0; i < allClickables.length; i++) {
-                            const c = allClickables[i];
-                            const cTxt = norm(c.innerText || c.textContent || c.value || '');
-                            if (cTxt.includes('kabul') && (cTxt.includes('ara') || cTxt.includes('sorgula') || cTxt.includes('getir') || cTxt.includes('bul'))) {
-                                dBtn = c.closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || c;
-                                break;
-                            }
-                        }
-
-                        // 3. ÖNCELİK: Etiket ("Kabul Mektup ID ile Sorgula" veya "Kabul Mektup Id") üzerinden bulma
-                        if (!dInp || !dBtn) {
+                        // 2. ÖNCELİK: Etiket ("Kabul Mektup ID ile Sorgula" veya "Kabul Mektup Id") üzerinden bulma
+                        if (!dInp) {
                             const textNodes = doc.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption, .z-caption, .z-groupbox-header');
                             for (let i = 0; i < textNodes.length; i++) {
                                 const node = textNodes[i];
                                 if (node.children.length > 3) continue;
                                 const txt = norm(node.innerText || node.textContent || '');
-                                if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup')) && !txt.includes('kabultarih')) {
-                                    // Komşu hücreye bak
+                                if (txt.includes('kabul') && (txt.includes('id') || txt.includes('sorgula') || txt.includes('mektup') || txt.includes('kod') || txt.includes('no')) && !txt.includes('kabultarih')) {
                                     const td = node.closest('td');
                                     if (td && td.nextElementSibling && !dInp) {
-                                        dInp = td.nextElementSibling.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                        const candidate = td.nextElementSibling.querySelector('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])');
+                                        if (isVisible(candidate)) dInp = candidate;
                                     }
 
-                                    // En yakın kapsayıcıyı (groupbox, panel, table, form, window) bul
                                     let box = node.closest('.z-groupbox, .z-panel, fieldset, table, form, div.z-window');
                                     if (!box) {
                                         let p = node.parentElement;
@@ -670,43 +764,47 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                         }
                                     }
 
-                                    if (box) {
-                                        if (!dInp) {
-                                            const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
-                                            for (let j = 0; j < bInps.length; j++) {
-                                                const bPh = norm((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
-                                                if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum')) {
-                                                    dInp = bInps[j];
-                                                    break;
-                                                }
-                                            }
-                                            if (!dInp && bInps.length > 0) dInp = bInps[0];
-                                        }
-                                        if (!dBtn) {
-                                            const bBtns = box.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
-                                            if (bBtns.length > 0) {
-                                                for (let j = 0; j < bBtns.length; j++) {
-                                                    const bTxt = norm(bBtns[j].innerText || bBtns[j].textContent || bBtns[j].value || '');
-                                                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                                                        dBtn = bBtns[j].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[j];
-                                                        break;
-                                                    }
-                                                }
-                                                if (!dBtn) dBtn = bBtns[0].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || bBtns[0];
+                                    if (box && !dInp) {
+                                        const bInps = box.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])');
+                                        for (let j = 0; j < bInps.length; j++) {
+                                            if (!isVisible(bInps[j])) continue;
+                                            const bPh = norm((bInps[j].placeholder || '') + ' ' + (bInps[j].getAttribute('placeholder') || '') + ' ' + (bInps[j].id || '') + ' ' + (bInps[j].name || ''));
+                                            if (!bPh.includes('pasaport') && !bPh.includes('tc') && !bPh.includes('dogum')) {
+                                                dInp = bInps[j];
+                                                break;
                                             }
                                         }
                                     }
-                                    if (dInp && dBtn) break;
+                                    if (dInp) break;
                                 }
                             }
                         }
 
-                        // 4. Biri bulunup diğeri bulunamadıysa ebeveyn ağacında yukarı yürüyerek tamamla
+                        // 3. ÖNCELİK: Input'un altındaki satırda, kapsayıcılarında veya belgede "Kabul Mektup Id İle Ara" butonunu bul
+                        if (dInp) {
+                            const row = dInp.closest('tr, .z-row, .z-hbox, .z-vbox, .form-group');
+                            if (row) {
+                                dBtn = findBestButtonIn(row, dInp, 100);
+                                for (let sib = row.nextElementSibling, hop = 0; sib && hop < 3 && !dBtn; sib = sib.nextElementSibling, hop++) {
+                                    dBtn = findBestButtonIn(sib, dInp, 100);
+                                }
+                            }
+                            for (let parent = dInp.parentElement, depth = 0; parent && parent !== doc.body && depth < 12 && !dBtn; parent = parent.parentElement, depth++) {
+                                dBtn = findBestButtonIn(parent, dInp, 180) || (depth <= 4 ? findBestButtonIn(parent, dInp, 120) : null);
+                            }
+                        }
+
+                        if (!dBtn) {
+                            dBtn = findBestButtonIn(doc, dInp, 180);
+                        }
+
+                        // 4. Buton bulunduysa ve input henüz bulunmadıysa butonun üst/ebeveyn satırından inputu tamamla
                         if (dBtn && !dInp) {
                             let parent = dBtn.parentElement;
                             while (parent && parent !== doc.body) {
-                                const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+                                const inps = parent.querySelectorAll('input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])');
                                 for (let k = 0; k < inps.length; k++) {
+                                    if (!isVisible(inps[k])) continue;
                                     const itPh = norm(inps[k].placeholder || inps[k].getAttribute('placeholder') || inps[k].value || inps[k].id || '');
                                     if (!itPh.includes('pasaport') && !itPh.includes('tc') && !itPh.includes('dogum')) {
                                         dInp = inps[k];
@@ -714,26 +812,6 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                                     }
                                 }
                                 if (dInp) break;
-                                parent = parent.parentElement;
-                            }
-                        }
-
-                        if (dInp && !dBtn) {
-                            let parent = dInp.parentElement;
-                            while (parent && parent !== doc.body) {
-                                const btns = parent.querySelectorAll('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]');
-                                for (let k = 0; k < btns.length; k++) {
-                                    const bTxt = norm(btns[k].innerText || btns[k].textContent || btns[k].value || '');
-                                    if (bTxt.includes('ara') || bTxt.includes('kabul') || bTxt.includes('sorgula')) {
-                                        dBtn = btns[k].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[k];
-                                        break;
-                                    }
-                                }
-                                if (dBtn) break;
-                                if (btns.length > 0) {
-                                    dBtn = btns[0].closest('button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"]') || btns[0];
-                                    break;
-                                }
                                 parent = parent.parentElement;
                             }
                         }
@@ -763,17 +841,15 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         inp.setAttribute('value', code);
                         inp.dispatchEvent(new Event('focus', { bubbles: true }));
                         inp.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                        if (targetWin.zk && targetWin.zk.Widget) {
+                        inputWidget = findZkWidget(inp, targetWin);
+                        if (inputWidget) {
                             try {
-                                inputWidget = targetWin.zk.Widget.$(inp);
-                                if (inputWidget) {
-                                    if (typeof inputWidget.setValue === 'function') inputWidget.setValue(code);
-                                    inputWidget._value = code;
-                                    inputWidget._lastValue = code;
-                                    if (typeof inputWidget.fire === 'function') {
-                                        inputWidget.fire('onChange', { value: code }, { toServer: true });
-                                        zkChangeSent = true;
-                                    }
+                                if (typeof inputWidget.setValue === 'function') inputWidget.setValue(code);
+                                inputWidget._value = code;
+                                inputWidget._lastValue = code;
+                                if (typeof inputWidget.fire === 'function') {
+                                    inputWidget.fire('onChange', { value: code }, { toServer: true });
+                                    zkChangeSent = true;
                                 }
                             } catch (_) {}
                         }
@@ -789,20 +865,16 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                     // 6. Butonu tek kez çalıştır. ZK widget bulunduysa doğrudan onu
                     // çalıştırmak, DOM click + zAu + onClick üçlemesini engeller.
                     if (btn) {
-                        let buttonWidget = null;
-                        if (targetWin.zk && targetWin.zk.Widget) {
-                            try {
-                                buttonWidget = targetWin.zk.Widget.$(btn);
-                                if (!buttonWidget && btn.parentElement) {
-                                    buttonWidget = targetWin.zk.Widget.$(btn.parentElement);
-                                }
-                            } catch (_) {}
-                        }
+                        const buttonWidget = findZkWidget(btn, targetWin);
                         if (buttonWidget && typeof buttonWidget.fire === 'function') {
                             buttonWidget.fire('onClick', null, { toServer: true });
                         } else {
                             btn.focus();
                             try { btn.click(); } catch (_) {}
+                            const innerBtn = btn.querySelector ? btn.querySelector('button, input[type="button"], input[type="submit"]') : null;
+                            if (innerBtn && innerBtn !== btn) {
+                                try { innerBtn.click(); } catch (_) {}
+                            }
                         }
                     }
 
@@ -810,11 +882,9 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
                         // Buton yoksa yalnızca Enter/onOK fallback'i kullan.
                         inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: targetWin }));
                         inp.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, view: targetWin }));
-                        if (targetWin.zk && targetWin.zk.Widget) {
-                            const wi = inputWidget || targetWin.zk.Widget.$(inp);
-                            if (wi && typeof wi.fire === 'function') {
-                                try { wi.fire('onOK', null, { toServer: true }); } catch (_) {}
-                            }
+                        const wi = inputWidget || findZkWidget(inp, targetWin);
+                        if (wi && typeof wi.fire === 'function') {
+                            try { wi.fire('onOK', null, { toServer: true }); } catch (_) {}
                         }
                     }
 
@@ -848,7 +918,7 @@ async function runYoksisZkCommand(tabId, options) {
     return results?.[0]?.result || { success: false, verified: false };
 }
 
-async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
+async function syncYoksisFormInMainWorld(tabId, studentData, options = {}) {
     if (!chrome.scripting || !chrome.scripting.executeScript || !tabId) return null;
     try {
         const results = await chrome.scripting.executeScript({
@@ -856,8 +926,8 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
             // içinde ele alınıyor; allFrames ikinci/üçüncü commit üretmesin.
             target: { tabId },
             world: 'MAIN',
-            args: [studentData || null],
-            func: (data) => {
+            args: [studentData || null, options.phase || 'complete'],
+            func: (data, phase) => {
                 try {
                     function getAllDocs(rootDoc) {
                         var docs = [];
@@ -1301,7 +1371,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
                     // Content script izole dünyada DOM'a değer yazabilir ancak
                     // YÖKSİS/ZK bunu sunucu durumuna almayabilir. Bu prepass,
                     // değerleri doğrudan sayfanın gerçek JS dünyasında yazar.
-                    if (data) {
+                    if (data && phase !== 'photo') {
                         var firstName = data.firstName || data.adi || data.ad || '';
                         var lastName = data.lastName || data.soyadi || data.soyad || '';
                         var passportNo = data.pasaportNo || data.passportNo || '';
@@ -1342,7 +1412,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
                         var win = doc.defaultView || window;
 
                         // SADECE eklentinin doldurduğu hedeflenmiş alanları senkronize et.
-                        var allInputs = doc.querySelectorAll('input');
+                        var allInputs = phase === 'photo' ? [] : doc.querySelectorAll('input');
                         for (var j = 0; j < allInputs.length; j++) {
                             var inp = allInputs[j];
                             var row = inp.closest('tr');
@@ -1374,7 +1444,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
 
                         // Select alanları input döngüsünde yer almadığı için
                         // özellikle uyruk ve ülke seçimlerini ayrıca commit et.
-                        var allSelects = doc.querySelectorAll('select');
+                        var allSelects = phase === 'photo' ? [] : doc.querySelectorAll('select');
                         for (var si = 0; si < allSelects.length; si++) {
                             var selectEl = allSelects[si];
                             var selectRow = selectEl.closest('tr');
@@ -1390,7 +1460,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
 
 
                         // Fotoğraf Yükleme (MAIN World güvencesi)
-                        if (data && data.croppedPhotoBase64 && !photoUploadAttempted) {
+                        if (phase !== 'fields' && data && data.croppedPhotoBase64 && !photoUploadAttempted) {
                             photoUploadAttempted = true;
                             var photoUploadStartedAt = performance.now();
                             try {
@@ -1417,6 +1487,15 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
                                                 if (isVisibleElement(btnInRow)) { photoBtn = btnInRow; break; }
                                             }
                                         }
+                                    }
+                                }
+
+                                if (!photoBtn) {
+                                    var uploadEl = doc.querySelector('[upload], .z-upload, .z-fileupload');
+                                    if (uploadEl && isVisibleElement(uploadEl)) {
+                                        photoBtn = uploadEl.matches('button, a, input[type="button"], .z-button')
+                                            ? uploadEl
+                                            : (uploadEl.querySelector('button, a, input[type="button"], .z-button') || uploadEl);
                                     }
                                 }
 
@@ -1553,6 +1632,20 @@ async function syncYoksisFormInMainWorld(tabId, studentData, requestId) {
                                         fileInput.setAttribute('data-ykn-photo-status', 'submitted');
                                         fillResult.photoUploaded = Boolean(fileInput.files && fileInput.files.length > 0);
                                         console.info('[YKN MAIN World] Fotoğraf dosyası forma eklendi.');
+                                        try {
+                                            var photoNameInputs = doc.querySelectorAll('input');
+                                            for (var pni = 0; pni < photoNameInputs.length; pni++) {
+                                                var pInp = photoNameInputs[pni];
+                                                var pRow = pInp.closest('tr');
+                                                var pText = pRow ? norm(pRow.innerText || pRow.textContent) : '';
+                                                if (pText.indexOf('fotografadi') !== -1 || pText === 'fotograf' || (pInp.placeholder && norm(pInp.placeholder).indexOf('fotograf') !== -1)) {
+                                                    if (!pInp.value) {
+                                                        pInp.value = photoName;
+                                                        commitTextbox(pInp, win);
+                                                    }
+                                                }
+                                            }
+                                        } catch (_) {}
                                     }
                                 } else {
                                     addResultField(fillResult, 'Fotoğraf', false);
@@ -1686,6 +1779,111 @@ function mergeYoksisFillResponses(mainResponse, contentResponse, studentData) {
     };
 }
 
+function buildVerifiedFillResponse(mainResponse, verification, studentData) {
+    const filledFields = verification?.filledFields || [];
+    return {
+        ...mainResponse,
+        success: filledFields.length > 0,
+        filledFields,
+        missingFields: getExpectedYoksisFields(studentData).filter(label => !filledFields.includes(label)),
+        failedFields: verification?.failedFields || [],
+        ...(verification?.error ? { error: verification.error } : {})
+    };
+}
+
+async function verifyTransferredYoksisFields(context) {
+    try {
+        const response = await sendTabMessage(context.tabId, {
+            action: 'verifyYoksisFields', data: context.studentData, requestId: context.requestId
+        }, { frameId: 0 });
+        if (!Array.isArray(response?.filledFields) || !Array.isArray(response?.missingFields)) {
+            throw new Error('YÖKSİS alan doğrulama yanıtı alınamadı.');
+        }
+        return response;
+    } catch (error) {
+        console.warn('YÖKSİS field verification failed.', { errorName: error.name });
+        return { success: false, filledFields: [], failedFields: getExpectedYoksisFields(context.studentData), error: error.message };
+    }
+}
+
+async function completeMissingYoksisFields(context, mainResponse) {
+    if (mainResponse.error) return { ...mergeYoksisFillResponses(mainResponse, null, context.studentData), success: false, partial: true };
+    const combined = mergeYoksisFillResponses(mainResponse, null, context.studentData);
+    if (!combined.partial) return combined;
+    const fallbackStartedAt = startYknTiming();
+    const fieldData = { ...context.studentData, ...(mainResponse.photoUploaded ? { croppedPhotoBase64: '', photoBase64: '' } : {}) };
+    try {
+        const fallback = await sendTabMessage(context.tabId, {
+            action: 'fillRemainingData', data: fieldData, requestId: context.requestId
+        }, { frameId: 0 });
+        const verification = await verifyTransferredYoksisFields(context);
+        const verified = buildVerifiedFillResponse({ ...mainResponse, photoUploaded: mainResponse.photoUploaded || fallback?.photoUploaded === true }, verification, context.studentData);
+        const result = mergeYoksisFillResponses(verified, null, context.studentData);
+        finishYknTiming('content-script-fill-fallback', fallbackStartedAt, result.partial ? 'partial' : 'ok');
+        return verification?.error ? { ...result, success: false, partial: true } : result;
+    } catch (error) {
+        finishYknTiming('content-script-fill-fallback', fallbackStartedAt, 'failed', 'content_fallback_unavailable');
+        console.warn('YÖKSİS remaining field transfer failed.', { errorName: error.name });
+        return { ...combined, error: error.message, partial: true };
+    }
+}
+
+async function transferYoksisFieldsAndPhoto(context) {
+    const startedAt = startYknTiming();
+    const mainResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, { phase: 'fields' });
+    const settled = await verifyTransferredYoksisFields(context);
+    if (settled?.error) return { ...buildVerifiedFillResponse(mainResponse, settled, context.studentData), success: false, partial: true };
+    let photoResponse = null;
+    if (context.studentData.croppedPhotoBase64) {
+        photoResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, { phase: 'photo' });
+        reportYknTiming('photo-file-preparation-and-form-assignment', photoResponse?.photoUploadDurationMs,
+            photoResponse?.photoUploaded ? 'assigned' : 'failed');
+    }
+    const verification = photoResponse ? await verifyTransferredYoksisFields(context) : settled;
+    const verified = buildVerifiedFillResponse({ ...mainResponse, photoUploaded: photoResponse?.photoUploaded === true }, verification, context.studentData);
+    const result = await completeMissingYoksisFields(context, verified);
+    finishYknTiming('main-world-fields-and-photo-transfer', startedAt, result.partial ? 'partial' : 'ok');
+    return result;
+}
+
+async function fillReadyYoksisStudent(context) {
+    const formReady = await waitForYoksisFormReady(context.tabId, context.requestId, {
+        requireBoundSearch: true, expectedKabulId: context.studentData.yoksisId || context.studentData.kabulId || '', expectedStudent: context.studentData
+    });
+    if (!formReady) throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
+    await saveTemporaryStudentData(context.studentData);
+    return await transferYoksisFieldsAndPhoto(context);
+}
+
+async function fillBoundYoksisStudent(studentData, requestId) {
+    if (studentData.yoksisReady !== true) throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
+    const tab = await resolveExpectedYoksisTab(studentData.yoksisTabId, studentData.yoksisTabUrl);
+    await updateTab(tab.id, { active: true });
+    if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true }).catch(error => {
+        console.warn('YÖKSİS window focus failed.', { errorName: error.name });
+    });
+    const startedAt = startYknTiming();
+    const response = await runYoksisOperation(tab.id, 'fill', requestId, async () => {
+        const result = await fillReadyYoksisStudent({ tabId: tab.id, studentData, requestId });
+        const isComplete = result.success === true && !result.partial && (result.missingFields || []).length === 0
+            && (!studentData.croppedPhotoBase64 || result.photoUploaded === true);
+        return { ...result, ...(isComplete ? { temporaryDataCleared: await clearTemporaryStudentData() } : {}) };
+    });
+    finishYknTiming('yoksis-fill-total', startedAt, response.partial ? 'partial' : 'ok');
+    return response;
+}
+
+async function fillStoredYoksisStudent(request) {
+    const stored = await getTemporaryStudentData();
+    if (!stored) throw new Error('Öğrenci bilgisi bulunamadı; kabul kodunu yeniden aratın.');
+    const photo = request.action === 'CROPPED_PHOTO_CONFIRMED' ? request.photoBase64 : '';
+    if (request.action === 'CROPPED_PHOTO_CONFIRMED' && (typeof photo !== 'string' || !/^data:image\/(?:jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(photo))) {
+        throw new Error('Kırpılmış fotoğraf verisi bulunamadı veya geçersiz.');
+    }
+    return await fillBoundYoksisStudent({ ...stored, croppedPhotoBase64: photo, photoBase64: photo,
+        photoFileName: photo ? request.fileName || 'ogrenci_foto.jpg' : '' }, request.requestId);
+}
+
 async function searchYoksisFromContent(tabId, kabulId, requestId, expectedStudent = null) {
     try {
         await waitForContentScript(tabId, 'yoksis', { frameId: 0 });
@@ -1751,7 +1949,6 @@ async function waitForYoksisFormReady(tabId, requestId, options = {}) {
 function isUnchangedEmptyYoksisForm(state, fingerprint, domRevision) {
     return state?.hasPopulatedStudentForm === false
         && typeof fingerprint === 'string'
-        && fingerprint.length > 0
         && state.fingerprint === fingerprint
         && Number.isFinite(domRevision)
         && state.domRevision === domRevision;
@@ -1815,7 +2012,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         fatherName: request.data?.babaAdi || ''
     };
 
-    return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
+    const performSearch = async () => {
         await saveTemporaryStudentData(request.data);
 
         await waitForContentScript(yoksisTab.id, 'yoksis', { frameId: 0 });
@@ -1955,8 +2152,17 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             ...(await getVerifiedYoksisTarget(yoksisTab.id)),
             message: 'Kabul mektup kodu YÖKSİS\'e aktarıldı ve öğrenci formu doğrulandı.'
         };
+    };
+    return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
+        const response = await performSearch();
+        if (response.success && response.formReady) {
+            await saveTemporaryStudentData({ ...request.data, yoksisId: kabulId,
+                yoksisReady: true, yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
+        }
+        return response;
     });
 }
+
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.status !== 'complete' || !pendingApplyNavigation) return;
@@ -2020,6 +2226,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         transferToYoksis(request)
             .then((response) => sendResponse({ ...response, requestId: request.requestId }))
             .catch((error) => sendResponse({ success: false, requestId: request.requestId, error: error.message }));
+        return true;
+    }
+
+    if (request.action === 'CROPPED_PHOTO_CONFIRMED' || request.action === 'FILL_YOKSIS_WITHOUT_PHOTO') {
+        void fillStoredYoksisStudent(request).then(sendResponse)
+            .catch(error => sendResponse({ success: false, error: error.message }));
         return true;
     }
 
@@ -2177,152 +2389,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return true;
         }
         else if (request.action === 'FILL_YOKSIS_FORM') {
-            const studentData = request.data;
-            const totalStartedAt = startYknTiming();
-            (async () => {
-                if (studentData?.yoksisReady !== true) {
-                    throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
-                }
-                const yoksisTab = await resolveExpectedYoksisTab(
-                    studentData?.yoksisTabId,
-                    studentData?.yoksisTabUrl
-                );
-                await updateTab(yoksisTab.id, { active: true });
-                if (yoksisTab.windowId) {
-                    await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch(() => {});
-                }
-                const response = await runYoksisOperation(yoksisTab.id, 'fill', request.requestId, async () => {
-                    await saveTemporaryStudentData(studentData);
-
-                    // Doldurma, arama postback'i tamamen bitmeden başlayamaz.
-                    // Önce formun kararlı olduğunu doğrula; aksi halde eksik
-                    // alanları ikinci/üçüncü yazımla telafi etmeye çalışma.
-                    const formReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, { requireBoundSearch: true, expectedKabulId: studentData.yoksisId || studentData.kabulId || '', expectedStudent: studentData });
-                    if (!formReady) {
-                        throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
-                    }
-
-                    const hasPhoto = Boolean(studentData?.croppedPhotoBase64);
-                    // Tek MAIN-world turunda önce alanları, sonra fotoğrafı işle.
-                    // Fotoğraf postback'i araya girip alan senkronizasyonunu kesmesin.
-                    const mainFillStartedAt = startYknTiming();
-                    const rawMainResponse = await syncYoksisFormInMainWorld(yoksisTab.id, studentData, request.requestId);
-                    let verificationResponse;
-                    try {
-                        verificationResponse = await sendTabMessage(yoksisTab.id, {
-                            action: 'verifyYoksisFields',
-                            data: studentData,
-                            requestId: request.requestId
-                        }, { frameId: 0 });
-                    } catch (verificationError) {
-                        verificationResponse = {
-                            success: false,
-                            filledFields: [],
-                            missingFields: getExpectedYoksisFields(studentData),
-                            failedFields: getExpectedYoksisFields(studentData),
-                            error: verificationError.message
-                        };
-                    }
-                    const verifiedFields = Array.isArray(verificationResponse?.filledFields)
-                        ? verificationResponse.filledFields : [];
-                    const verifiedMissingFields = Array.isArray(verificationResponse?.missingFields)
-                        ? verificationResponse.missingFields : getExpectedYoksisFields(studentData);
-                    const mainResponse = {
-                        ...rawMainResponse,
-                        filledFields: verifiedFields,
-                        missingFields: Array.from(new Set([
-                            ...(rawMainResponse?.missingFields || []),
-                            ...verifiedMissingFields
-                        ])).filter((label) => !verifiedFields.includes(label)),
-                        failedFields: verificationResponse?.failedFields || [],
-                        success: verifiedFields.length > 0,
-                        photoUploaded: rawMainResponse?.photoUploaded === true
-                    };
-                    const expectedFields = getExpectedYoksisFields(studentData);
-                    const mainFilledFields = new Set(verifiedFields);
-                    const missingExpectedFields = expectedFields.filter((label) => !mainFilledFields.has(label));
-                    finishYknTiming('main-world-fields-and-photo-transfer', mainFillStartedAt,
-                        missingExpectedFields.length === 0 ? 'ok' : 'partial',
-                        missingExpectedFields.length === 0 ? undefined : 'main_world_incomplete');
-                    if (hasPhoto) {
-                        reportYknTiming('photo-file-preparation-and-form-assignment',
-                            mainResponse?.photoUploadDurationMs,
-                            mainResponse?.photoUploaded === true ? 'assigned' : 'failed',
-                            mainResponse?.photoUploaded === true ? undefined : 'photo_assignment_not_confirmed');
-                    }
-                    if (verificationResponse?.error) {
-                        return {
-                            ...mergeYoksisFillResponses(mainResponse, {
-                                success: false,
-                                failedFields: getExpectedYoksisFields(studentData)
-                            }, studentData),
-                            success: false,
-                            partial: true,
-                            error: verificationResponse.error
-                        };
-                    }
-                    const fieldData = hasPhoto
-                        ? { ...studentData, croppedPhotoBase64: '', photoFileName: '' }
-                        : studentData;
-
-                    const needsFallback = !mainResponse.success
-                        || (studentData?.croppedPhotoBase64 && mainResponse.photoUploaded !== true)
-                        || mainResponse.missingFields.length > 0
-                        || missingExpectedFields.length > 0;
-
-                    if (!needsFallback) {
-                        return mergeYoksisFillResponses(mainResponse, null, studentData);
-                    }
-
-                    // Fallback yalnızca ilk denemenin eksik bıraktığı durumda
-                    // bir kez çalışır. Sonrasında MAIN world'e yeniden yazmak
-                    // eski kodda alanları ve fotoğraf yüklemesini çoğaltıyordu.
-                    let contentResponse;
-                    const fallbackStartedAt = startYknTiming();
-                    try {
-                        contentResponse = await sendTabMessage(yoksisTab.id, {
-                            action: 'fillRemainingData',
-                            data: fieldData,
-                            requestId: request.requestId
-                        }, { frameId: 0 });
-                    } catch (contentError) {
-                        finishYknTiming('content-script-fill-fallback', fallbackStartedAt, 'failed', 'content_fallback_unavailable');
-                        return mergeYoksisFillResponses(mainResponse, {
-                            success: false,
-                            failedFields: missingExpectedFields,
-                            error: contentError.message
-                        }, studentData);
-                    }
-
-                    const finalVerification = await sendTabMessage(yoksisTab.id, {
-                        action: 'verifyYoksisFields', data: studentData, requestId: request.requestId
-                    }, { frameId: 0 });
-                    const finalFields = finalVerification?.filledFields || [];
-                    const finalMissing = getExpectedYoksisFields(studentData).filter((label) => !finalFields.includes(label));
-                    const finalResponse = { ...contentResponse, filledFields: finalFields, missingFields: finalMissing };
-                    finishYknTiming('content-script-fill-fallback', fallbackStartedAt,
-                        finalMissing.length === 0 ? 'ok' : 'partial', 'main_world_incomplete');
-                    return mergeYoksisFillResponses({ ...mainResponse, filledFields: [], missingFields: finalMissing }, finalResponse, studentData);
-                });
-                const hasCompletedAllFields = response?.success === true
-                    && response.partial !== true
-                    && (response.missingFields || []).length === 0;
-                const hasRequiredPhoto = !request.data?.croppedPhotoBase64 || response.photoUploaded === true;
-                const temporaryDataCleared = hasCompletedAllFields && hasRequiredPhoto
-                    ? await clearTemporaryStudentData()
-                    : undefined;
-                finishYknTiming('yoksis-fill-total', totalStartedAt,
-                    response?.success && !response.partial ? 'ok' : 'partial',
-                    response?.partial ? 'fields_or_photo_need_review' : undefined);
-                sendResponse({
-                    ...response,
-                    requestId: request.requestId,
-                    ...(temporaryDataCleared === undefined ? {} : { temporaryDataCleared })
-                });
-            })().catch((error) => {
-                finishYknTiming('yoksis-fill-total', totalStartedAt, 'failed', 'fill_operation_failed');
-                sendResponse({ success: false, requestId: request.requestId, error: error.message });
-            });
+            void fillBoundYoksisStudent(request.data || {}, request.requestId)
+                .then(response => sendResponse({ ...response, requestId: request.requestId }))
+                .catch(error => sendResponse({ success: false, requestId: request.requestId, error: error.message }));
             return true;
         }
         else if (request.action === 'SAVE_CROPPED_PHOTO') {

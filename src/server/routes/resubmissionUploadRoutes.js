@@ -36,11 +36,11 @@ function createEligibilityInput(row, policy) {
     };
 }
 
-function readEligibleRow(rows, code) {
+function readEligibleRow(rows, code, application) {
     const row = rows.find((entry) => entry.code === code);
     if (!row) return null;
     const policy = readDocumentPolicy(code, row.application_type, row.is_under_18 === 1,
-        row.address_evidence_type ?? null);
+        application);
     const eligibility = evaluateResubmissionEligibility(createEligibilityInput(row, policy));
     if (!eligibility.allowed) return null;
     return { row, policy, mode: eligibility.mode };
@@ -114,7 +114,7 @@ export async function readCurrentResubmissionEligibility(request, environment) {
     await expireAbandonedIntents(repositories, application.id);
     await retryExpiredCleanup(repositories, application.id, createCleanupStorage(environment));
     const policies = listDocumentPolicies(application.application_type,
-        application.is_under_18 === 1, application.address_evidence_type ?? null);
+        application.is_under_18 === 1, application);
     const documents = rows.flatMap((row) => {
         const policy = policies.find((entry) => entry.code === row.code);
         const eligibility = evaluateResubmissionEligibility(createEligibilityInput(row, policy));
@@ -143,7 +143,7 @@ export async function createCurrentResubmissionUploadIntent(request, environment
     requireExactKeys(body, ['code', 'filename', 'media_type', 'byte_size']);
     await expireAbandonedIntents(repositories, application.id);
     const requestedCode = typeof body.code === 'string' ? body.code.trim() : '';
-    const eligible = readEligibleRow(rows, requestedCode);
+    const eligible = readEligibleRow(rows, requestedCode, application);
     if (!eligible) throw new ApiError(409, 'RESUBMISSION_NOT_AVAILABLE', 'Bu belge için güvenli yeniden yükleme açılamıyor.');
     const metadata = readStudentUploadMetadata(body, eligible.policy);
     await retryExpiredCleanup(repositories, application.id, createCleanupStorage(environment));
@@ -224,7 +224,7 @@ export async function finalizeCurrentResubmissionUpload(request, environment, re
         await retryExpiredCleanup(repositories, application.id, createCleanupStorage(environment), intent.code);
         throw new ApiError(409, 'UPLOAD_INTENT_EXPIRED', 'Belge yükleme süresi doldu. Yeni bir yükleme başlatın.');
     }
-    const eligible = readEligibleRow(rows, intent.code);
+    const eligible = readEligibleRow(rows, intent.code, application);
     if (!eligible || eligible.row.document_record_id !== intent.document_record_id
         || eligible.row.current_revision_id !== intent.expected_current_revision_id
         || eligible.mode !== intent.mode) {

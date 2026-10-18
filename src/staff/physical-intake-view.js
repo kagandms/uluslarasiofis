@@ -259,19 +259,18 @@ function renderDetail(document, panel, options) {
     const actions = document.createElement('div');
     actions.className = 'physical-status-actions';
     for (const [status, label] of Object.entries(STATUS_LABELS)) {
-        if (status === 'approved_for_processing') continue;
         const action = button(document, label, () => status === 'rejected' ? handlers.reject(intake) : handlers.mutate(intake, 'status', status));
         action.disabled = !detail.allowed_transitions.includes(status);
         if (status === intake.status) {
             action.setAttribute('aria-current', 'true');
             action.classList.add('is-current');
         }
-        if (action.disabled && status !== intake.status) action.title = 'Bu aşama için önce dosya PDF’ini ekleyin.';
+        if (action.disabled && status !== intake.status) action.title = 'Bu kayıt için durum değişikliği kullanılamıyor.';
         actions.append(action);
     }
     actions.append(button(document, intake.deleted_at ? 'Geri Yükle' : 'Silinenlere Taşı', () => handlers.mutate(intake, intake.deleted_at ? 'restore' : 'delete')));
     panel.append(actions);
-    if (!intake.current_pdf_id && !intake.deleted_at) panel.append(text(document, 'p', 'Fiziksel dosyayı onaylayabilirsiniz. Göçe gönderildi ve sonraki aşamalar için dosya PDF’ini ekleyin.'));
+    if (!intake.current_pdf_id && !intake.deleted_at) panel.append(text(document, 'p', 'Dijital dosya PDF’i henüz eklenmedi. Fiziksel evrakın işlem durumunu güncelleyebilirsiniz.'));
     if (intake.rejection_reason) panel.append(text(document, 'p', `Ret gerekçesi: ${intake.rejection_reason}`));
     if (state.isRejecting) panel.append(createRejectionForm(document, { state, handlers }));
     renderPhysicalReceiptControls(panel, state, handlers);

@@ -70,8 +70,8 @@ async function seedApplication(database, { id = crypto.randomUUID(), studentNumb
         VALUES (?, ?, ?)
     `).bind(`student-${id}`, studentNumber, studentNumber.toUpperCase()).run();
     await database.prepare(`
-        INSERT INTO applications (id, student_id, application_type, status, is_under_18, address_evidence_type)
-        VALUES (?, ?, 'initial', ?, 0, 'rental_contract')
+        INSERT INTO applications (id, student_id, application_type, status, is_under_18, address_evidence_type, document_policy_version)
+        VALUES (?, ?, 'initial', ?, 0, 'rental_contract', 1)
     `).bind(id, `student-${id}`, status).run();
     return id;
 }

@@ -48,7 +48,7 @@ test('a populated prior YÖKSİS form cannot be replaced without explicit consen
     harness.dom.window.document.getElementById('search').onclick = () => { searches += 1; };
 
     try {
-        const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-123-ID', waitForForm: false });
+        const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-123-ID', requestId: 'new-record-reset', waitForForm: false });
 
         assert.equal(searches, 0);
         assert.equal(response.success, false);
@@ -68,9 +68,9 @@ test('approved new-record reset sends exactly one click before reacquiring the a
     };
 
     try {
-        const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-123-ID', waitForForm: false });
+        const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-123-ID', requestId: 'new-record-reset', waitForForm: false });
 
-        assert.equal(resets, 1);
+        assert.equal(resets, 1, JSON.stringify(response));
         assert.equal(harness.dom.window.document.getElementById('fresh-code').value, 'NEW-123-ID');
         assert.equal(response.searchTriggered, true);
     } finally { harness.close(); }
@@ -338,6 +338,7 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
     return {
         calls,
         timingLogs,
+        storageValues,
         async send(request) {
             assert.ok(messageHandler, 'background message listener was not registered');
             return new Promise((resolveResponse) => {
@@ -377,7 +378,7 @@ test('extension rejects staff bridge messages from an untrusted page before runn
 test('YÖKSİS search handles ZK-labelled controls and confirms delayed form readiness', async () => {
     const harness = createContentHarness(`
         <table>
-            <tr><td>Kabul Mektup ID</td><td><input id="tGDP49-chdextr" class="z-textbox" title="Kabul Mektup Id veya YÖKSİS Id"></td><td><button id="tGDPa9" class="s-button s-button-submit z-button">Kabul Mektup ID ile Ara</button></td></tr>
+            <tr><td>Kabul Mektup ID</td><td><input id="tGDP49-chdextr" class="z-textbox" title="Kabul Mektup Id veya YÖKSİS Id" value="PREVIOUS-STUDENT-CODE"></td><td><button id="tGDPa9" class="s-button s-button-submit z-button">Kabul Mektup ID ile Ara</button></td></tr>
         </table>
     `, 'https://yoksis.yok.gov.tr/student');
     let clickCount = 0;
@@ -403,7 +404,7 @@ test('YÖKSİS search handles ZK-labelled controls and confirms delayed form rea
         assert.equal(response.success, true);
         assert.equal(response.formReady, true);
         assert.equal(harness.dom.window.document.getElementById('tGDP49-chdextr').value, 'AB-123-CD');
-        assert.ok(clickCount > 0);
+        assert.equal(clickCount, 1);
     } finally {
         harness.close();
     }
@@ -769,11 +770,12 @@ test('YÖKSİS form readiness waits for a form that appears after the search res
     }
 });
 
-test('YÖKSİS fill reports photo upload truthfully and fills passport fields', async () => {
+test('YÖKSİS retains acceptance fields while filling blank remaining fields and photo', async () => {
     const harness = createContentHarness(`
         <table>
-            <tr><td>Adı</td><td><input id="first-name"></td></tr>
-            <tr><td>Soyadı</td><td><input id="last-name"></td></tr>
+            <tr><td>Adı</td><td><input id="first-name" readonly value="TEST"></td></tr>
+            <tr><td>Soyadı</td><td><input id="last-name" readonly value="STUDENT"></td></tr>
+            <tr><td>Doğum Tarihi</td><td><input id="birth-date" readonly value="04.03.2000"></td></tr>
             <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
             <tr><td>Baba Adı</td><td><input id="father-name"></td></tr>
             <tr><td>Uyruğu</td><td><select id="nationality"><option>Türkiye</option></select></td></tr>
@@ -783,7 +785,7 @@ test('YÖKSİS fill reports photo upload truthfully and fills passport fields', 
             <tr><td>Doğum Yeri Açıklaması</td><td><input id="birth-place"></td></tr>
             <tr><td>Belgeyi Veren Makam</td><td><input id="authority"></td></tr>
             <tr><td>Telefon No</td><td><input id="phone"></td></tr>
-            <tr><td>Belge No</td><td><input id="document-number" placeholder="Belge No"></td></tr>
+            <tr><td>Belge No</td><td><input id="document-number" placeholder="Belge No" readonly value="P123456"></td></tr>
             <tr><td>Belge Düzenleme Tarihi</td><td><input id="issue-date"></td></tr>
             <tr><td>Belge Geçerlilik Tarihi</td><td><input id="expiry-date"></td></tr>
             <tr><td>Fotoğraf Adı</td><td><button id="photo-upload">Fotoğraf Yükle</button><input id="photo-file" type="file"></td></tr>
@@ -796,6 +798,7 @@ test('YÖKSİS fill reports photo upload truthfully and fills passport fields', 
             action: 'fillRemainingData',
             data: {
                 firstName: 'TEST',
+                birthDate: '2000-03-04',
                 lastName: 'STUDENT',
                 anneAdi: 'ANNE',
                 babaAdi: 'BABA',
@@ -813,6 +816,7 @@ test('YÖKSİS fill reports photo upload truthfully and fills passport fields', 
 
         assert.equal(response.success, true);
         assert.equal(response.photoUploaded, true);
+        assert.equal(harness.dom.window.document.getElementById('birth-date').value, '04.03.2000');
         assert.equal(harness.dom.window.document.getElementById('first-name').value, 'TEST');
         assert.equal(harness.dom.window.document.getElementById('last-name').value, 'STUDENT');
         assert.equal(harness.dom.window.document.getElementById('mother-name').value, 'ANNE');
@@ -1551,10 +1555,10 @@ test('eklenti popup araması da Tek Tık ile aynı YÖKSİS aktarım yolunu kull
         && call.message.action === 'searchWithId'));
 });
 
-test('three students search and receive fields/photo in the same page without F5 or old controls', async () => {
+test('ten students search and receive fields/photo in the same page without F5 or old controls', async () => {
     const harness = createContentHarness('<div id="searches"></div><div id="forms"></div><button id="reset">Temizle</button>', 'https://yoksis.yok.gov.tr/student');
     const { window } = harness.dom;
-    const codes = ['ONE-123-ID', 'TWO-123-ID', 'THR-123-ID'];
+    const codes = Array.from({ length: 10 }, (_, studentIndex) => `TEST-${studentIndex}-CODE`);
     const searches = [];
     const uploads = [];
     const usedInputs = [];
@@ -1605,9 +1609,9 @@ test('three students search and receive fields/photo in the same page without F5
             assert.equal(window.document.getElementById(`form-${studentIndex}`).querySelector('input').value, student.firstName);
         }
         assert.deepEqual(searches, codes);
-        assert.deepEqual(uploads, [0, 1, 2]);
-        assert.equal(resets, 2);
-        assert.equal(approvals, 2);
+        assert.deepEqual(uploads, codes.map((_, studentIndex) => studentIndex));
+        assert.equal(resets, codes.length - 1);
+        assert.equal(approvals, codes.length - 1);
         assert.deepEqual(usedInputs.map((input) => input.value), codes);
     } finally { harness.close(); }
 });
@@ -1668,4 +1672,543 @@ test('unverified missing source demographics cannot be reported as a complete tr
     assert.equal(result.partial, true);
     assert.ok(result.missingFields.includes('Cinsiyet'));
     assert.ok(result.missingFields.includes('Medeni Hali'));
+});
+
+test('YÖKSİS araması, üstteki grup başlığını değil inputun altındaki "Kabul Mektup Id İle Ara" butonunu tetikler', async () => {
+    const harness = createContentHarness(`
+        <div class="z-groupbox">
+            <div class="z-caption"><a id="caption-link" href="#">Kabul Mektup ID ile Sorgula</a></div>
+            <div class="z-groupbox-cnt">
+                <table>
+                    <tbody>
+                        <tr class="z-row">
+                            <td class="z-row-inner"><span class="z-label">Kabul Mektup Id</span></td>
+                            <td class="z-row-inner"><input id="kabul-id" class="z-textbox" type="text"></td>
+                        </tr>
+                        <tr class="z-row">
+                            <td class="z-row-inner" colspan="2">
+                                <span id="search-btn" class="z-button">
+                                    <table cellspacing="0" cellpadding="0" border="0">
+                                        <tbody>
+                                            <tr><td class="z-button-cm">Kabul Mektup Id İle Ara</td></tr>
+                                        </tbody>
+                                    </table>
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+    for (const element of harness.dom.window.document.querySelectorAll('a, input, span, table, tr, td')) {
+        element.getBoundingClientRect = () => ({ width: 120, height: 28, top: 10, left: 10, right: 130, bottom: 38 });
+    }
+    let captionClicks = 0;
+    let searchButtonClicks = 0;
+    harness.dom.window.document.getElementById('caption-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        captionClicks += 1;
+    });
+    harness.dom.window.document.getElementById('search-btn').addEventListener('click', () => {
+        searchButtonClicks += 1;
+        setTimeout(() => {
+            harness.dom.window.document.body.insertAdjacentHTML('beforeend', `
+                <table id="student-form">
+                    <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+                    <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+                </table>
+            `);
+        }, 20);
+    });
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: '821-EC2-34',
+            requestId: 'workflow-underneath-button'
+        });
+
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+        assert.equal(response.formReady, true);
+        assert.equal(captionClicks, 0);
+        assert.equal(searchButtonClicks, 1);
+        assert.equal(harness.dom.window.document.getElementById('kabul-id').value, '821-EC2-34');
+    } finally {
+        harness.close();
+    }
+});
+
+test('YÖKSİS araması, DOM click yanıt üretmediğinde MAIN-world ZK Button widget onClick olayını tetikler', async () => {
+    const harness = createContentHarness(`
+        <div class="z-vbox">
+            <div class="z-hbox">
+                <span class="z-label">Kabul Mektup Id</span>
+                <input id="kabul-id" class="z-textbox" type="text">
+            </div>
+            <div class="z-hbox">
+                <span id="search-btn" class="z-button">
+                    <span class="z-button-cm">Kabul Mektup Id İle Ara</span>
+                </span>
+            </div>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const { window } = harness.dom;
+    for (const element of window.document.querySelectorAll('input, span, div')) {
+        element.getBoundingClientRect = () => ({ width: 120, height: 28, top: 10, left: 10, right: 130, bottom: 38 });
+    }
+    const inputEl = window.document.getElementById('kabul-id');
+    const buttonEl = window.document.getElementById('search-btn');
+    const firedInputEvents = [];
+    const firedButtonEvents = [];
+    const inputWidget = {
+        _value: '',
+        _lastValue: '',
+        setValue(val) {
+            this._value = val;
+        },
+        fire(eventName, data) {
+            firedInputEvents.push({ eventName, data });
+        }
+    };
+    const buttonWidget = {
+        fire(eventName) {
+            firedButtonEvents.push(eventName);
+            if (eventName === 'onClick') {
+                setTimeout(() => {
+                    window.document.body.insertAdjacentHTML('beforeend', `
+                        <table id="student-form">
+                            <tr><td>Anne Adı</td><td><input id="mother-name"></td></tr>
+                            <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+                        </table>
+                    `);
+                }, 15);
+            }
+        }
+    };
+    window.zk = {
+        processing: false,
+        Widget: {
+            $(el) {
+                if (el === inputEl) return inputWidget;
+                if (el === buttonEl) return buttonWidget;
+                return null;
+            }
+        }
+    };
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: '991-AB7-12',
+            requestId: 'workflow-zk-widget-button-below'
+        });
+
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+        assert.equal(response.formReady, true);
+        assert.equal(inputEl.value, '991-AB7-12');
+        assert.equal(inputWidget._value, '991-AB7-12');
+        assert.equal(firedInputEvents.some((ev) => ev.eventName === 'onChange' && ev.data?.value === '991-AB7-12'), true);
+        assert.deepEqual(firedButtonEvents, ['onClick']);
+    } finally {
+        harness.close();
+    }
+});
+
+test('background, ilk boş YÖKSİS arama ekranında (fingerprint === "") tıklama sonuç üretmezse MAIN-world fallback çalıştırır', async () => {
+    const harness = createBackgroundHarness(
+        { inputFound: true, buttonFound: true, searchTriggered: true },
+        {
+            success: false,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: '',
+            domRevisionBeforeSearch: 0
+        },
+        {
+            formState: { success: true, fingerprint: '', domRevision: 0, hasPopulatedStudentForm: false },
+            formReadyResponses: [{ success: true, formReady: false }, { success: true, formReady: true }]
+        }
+    );
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: 'workflow-empty-initial-fingerprint-retry',
+        data: { yoksisId: 'AB-123-CD' }
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.searchTriggered, true);
+    assert.equal(response.formReady, true);
+    assert.ok(harness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
+});
+
+test('önceki öğrencinin salt okunur alanları Temizle sonrası kalsa bile yeni öğrenci araması bloklanmadan devam eder', async () => {
+    const harness = createContentHarness(`
+        <div id="search-box">
+            <table><tr>
+                <td>Kabul Mektup Id</td>
+                <td><input id="kabul-id" class="z-textbox" value=""></td>
+                <td><button id="search-btn">Kabul Mektup Id İle Ara</button></td>
+            </tr></table>
+        </div>
+        <div id="student-container">
+            <table>
+                <tr><td>Adı</td><td><input id="ad" value="GULJEMAL"></td></tr>
+                <tr><td>Soyadı</td><td><input id="soyad" value="SOYEKOVA"></td></tr>
+                <tr><td>Belge No</td><td><input id="belge-no" value="A2697635"></td></tr>
+                <tr>
+                    <td><button id="kaydet-btn" class="z-button">Kaydet</button></td>
+                    <td><button id="temizle-btn" class="z-button">Temizle</button></td>
+                </tr>
+            </table>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const { window } = harness.dom;
+    let resetClicked = 0;
+    let searchClicked = 0;
+
+    // YÖKSİS'te Temizle'ye basıldığında editable alanlar temizlenirken
+    // soyad ve belge-no gibi kabul mektubundan gelen salt-okunur alanlar DOM'da kalabilir
+    window.document.getElementById('temizle-btn').addEventListener('click', () => {
+        resetClicked += 1;
+        window.document.getElementById('ad').value = '';
+        // soyad ve belge-no bilerek bırakılıyor (kullanıcının karşılaştığı YÖKSİS durumu)
+    });
+
+    window.document.getElementById('search-btn').addEventListener('click', () => {
+        searchClicked += 1;
+        setTimeout(() => {
+            window.document.getElementById('student-container').innerHTML = `
+                <table>
+                    <tr><td>Adı</td><td><input id="ad" value="NEWSTUDENT"></td></tr>
+                    <tr><td>Soyadı</td><td><input id="soyad" value="NEWSURNAME"></td></tr>
+                    <tr><td>Belge No</td><td><input id="belge-no" value="B9999999"></td></tr>
+                    <tr>
+                        <td><button id="kaydet-btn" class="z-button">Kaydet</button></td>
+                        <td><button id="temizle-btn" class="z-button">Temizle</button></td>
+                    </tr>
+                </table>
+            `;
+        }, 20);
+    });
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: 'NEW-999-ID',
+            requestId: 'second-student-transition',
+            expectedStudent: { studentName: 'NEWSTUDENT', studentSurname: 'NEWSURNAME', passportNo: 'B9999999' }
+        });
+
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+        assert.equal(response.formReady, true);
+        assert.equal(resetClicked, 1);
+        assert.equal(searchClicked, 1);
+        assert.equal(window.document.getElementById('kabul-id').value, 'NEW-999-ID');
+        assert.equal(window.document.getElementById('ad').value, 'NEWSTUDENT');
+    } finally {
+        harness.close();
+    }
+});
+
+test('ZK AU kuyruğunda ertelenmiş onChange olsa bile arama butonu 8 saniye beklemeden hemen tetiklenir', async () => {
+    const harness = createContentHarness(`
+        <div class="z-groupbox">
+            <table>
+                <tr>
+                    <td>Kabul Mektup Id</td>
+                    <td><input id="kabul-id" class="z-textbox" value=""></td>
+                </tr>
+                <tr>
+                    <td colspan="2"><span id="search-btn" class="z-button">Kabul Mektup Id İle Ara</span></td>
+                </tr>
+            </table>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const { window } = harness.dom;
+    const desktop = {};
+    window.zAu = {
+        processing: () => false,
+        getAuRequests: () => [{ cmd: 'onChange', data: { value: 'CODE-123' } }] // deferrable queued request
+    };
+    window.zk = {
+        processing: false,
+        mounting: false,
+        loading: 0,
+        Desktop: { all: { d1: desktop } },
+        Widget: {
+            $: (el) => {
+                if (el.id === 'kabul-id') {
+                    return {
+                        _value: '',
+                        setValue(v) { this._value = v; },
+                        fire(evt, data) {}
+                    };
+                }
+                if (el.id === 'search-btn' || el.closest('#search-btn')) {
+                    return {
+                        fire(evt) {
+                            if (evt === 'onClick') {
+                                searchTriggered += 1;
+                                window.document.body.insertAdjacentHTML('beforeend', `
+                                    <table id="student-form">
+                                        <tr><td>Adı</td><td><input id="ad" value="FAST"></td></tr>
+                                        <tr><td>Belge No</td><td><input id="belge" value="P123"></td></tr>
+                                    </table>
+                                `);
+                            }
+                        }
+                    };
+                }
+                return null;
+            }
+        }
+    };
+    let searchTriggered = 0;
+    const start = Date.now();
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: 'CODE-123',
+            requestId: 'fast-search-test',
+            expectedStudent: { studentName: 'FAST', passportNo: 'P123' }
+        });
+
+        const elapsed = Date.now() - start;
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+        assert.ok(searchTriggered >= 1);
+        assert.ok(elapsed < 2000, `Expected search to trigger rapidly under 2000ms, took ${elapsed}ms`);
+    } finally {
+        harness.close();
+    }
+});
+
+test('YÖKSİS araması, Belge Sorgula (Pasaport) butonunu değil yalnızca Kabul Mektup Id İle Ara butonunu tetikler', async () => {
+    const harness = createContentHarness(`
+        <div id="sidebar">
+            <div id="belge-sorgula-box">
+                <span>Belge Sorgula (Pasaport ile Giriş Bilgisi Sorgulama)</span>
+                <input id="belge-no-inp" placeholder="Pasaport/Belge No" type="text">
+                <button id="btn-belge-sorgula">Belge Sorgula</button>
+            </div>
+            <div id="kabul-sorgula-box">
+                <span>Kabul Mektup ID ile Sorgula</span>
+                <input id="kabul-id-inp" class="z-textbox" type="text">
+                <button id="btn-kabul-ara">Kabul Mektup Id İle Ara</button>
+            </div>
+        </div>
+    `, 'https://yoksis.yok.gov.tr/student');
+
+    const win = harness.dom.window;
+    for (const el of win.document.querySelectorAll('div, span, input, button')) {
+        el.getBoundingClientRect = () => ({ width: 140, height: 30, top: 10, left: 10, right: 150, bottom: 40 });
+    }
+
+    let belgeSorgulaClicks = 0;
+    let kabulAraClicks = 0;
+
+    win.document.getElementById('btn-belge-sorgula').addEventListener('click', () => {
+        belgeSorgulaClicks += 1;
+    });
+
+    win.document.getElementById('btn-kabul-ara').addEventListener('click', () => {
+        kabulAraClicks += 1;
+        setTimeout(() => {
+            win.document.body.insertAdjacentHTML('beforeend', `
+                <table id="student-form">
+                    <tr><td>Adı</td><td><input id="ad" value="ADAM"></td></tr>
+                    <tr><td>Belge No</td><td><input id="belge" value="A4069288"></td></tr>
+                </table>
+            `);
+        }, 10);
+    });
+
+    try {
+        const response = await harness.send({
+            action: 'searchWithId',
+            kabulId: '6A5-CF8-84',
+            requestId: 'test-exclude-belge-sorgula',
+            expectedStudent: { studentName: 'ADAM', passportNo: 'A4069288' }
+        });
+
+        assert.equal(belgeSorgulaClicks, 0, 'Belge Sorgula butonu kesinlikle tetiklenmemelidir!');
+        assert.equal(kabulAraClicks, 1, 'Yalnızca Kabul Mektup Id İle Ara butonu tetiklenmelidir!');
+        assert.equal(response.success, true);
+        assert.equal(response.searchTriggered, true);
+    } finally {
+        harness.close();
+    }
+});
+
+
+
+test('serial student reset sends one MAIN-world command even after a fast ZK response', async () => {
+    const harness = createContentHarness(`<div><table><tr><td>Anne Adı</td><td><input value="PREVIOUS"></td></tr></table>
+        <button id="save">Kaydet</button><button id="reset">Temizle</button></div>`, 'https://yoksis.yok.gov.tr/student');
+    const { window } = harness.dom;
+    let resetEvents = 0;
+    const widget = { fire() { resetEvents += 1;
+        window.document.querySelector('input').value = '';
+        window.document.body.insertAdjacentHTML('beforeend', '<label>Kabul Mektup ID<input title="Kabul Mektup ID"></label><button>Kabul Mektup ID ile Ara</button>');
+        window.queueMicrotask(() => { for (const listener of listeners) listener.onResponse(); });
+    } };
+    const listeners = new Set();
+    window.zk = { Widget: { $: element => element?.id === 'reset' ? widget : null }, Desktop: { all: {} } };
+    window.zAu = { processing: () => false };
+    window.zWatch = { listen: ({ onResponse }) => listeners.add(onResponse), unlisten: ({ onResponse }) => listeners.delete(onResponse) };
+
+    try {
+        await harness.send({ action: 'searchWithId', kabulId: 'FAST-RESET', requestId: 'fast-reset', waitForForm: false });
+
+        assert.equal(resetEvents, 1);
+    } finally { harness.close(); }
+});
+
+test('extension cropper verifies all fields and reports a partial transfer after photo postback', async () => {
+    const harness = createBackgroundHarness({ success: true, filledFields: ['Adı'], missingFields: [], photoUploaded: true }, {}, {
+        verificationResult: { success: true, filledFields: ['Adı'], missingFields: ['Soyadı'] },
+        finalVerificationResult: { success: true, filledFields: ['Adı'], missingFields: ['Soyadı'] },
+        contentResult: { success: true, filledFields: ['Adı'], missingFields: ['Soyadı'] }
+    });
+    // The harness exposes storage only to prepare a synthetic, already verified search.
+    Object.assign(harness.storageValues, { studentData: { yoksisReady: true, yoksisTabId: 42,
+        yoksisTabUrl: 'https://yoksis.yok.gov.tr/student', firstName: 'TEST', lastName: 'STUDENT' } });
+
+    const response = await harness.send({ action: 'CROPPED_PHOTO_CONFIRMED', requestId: 'crop-transfer',
+        photoBase64: 'data:image/jpeg;base64,AA==', fileName: 'synthetic.jpg' });
+
+    assert.equal(response.partial, true);
+    assert.equal(response.photoUploaded, true);
+    assert.ok(Array.from(response.missingFields).includes('Soyadı'));
+    assert.ok(harness.calls.some(call => call.message?.action === 'fillRemainingData'));
+});
+
+
+test('photo starts only after field verification and is followed by postback verification', async () => {
+    const harness = createBackgroundHarness({ success: true, filledFields: ['Adı'], missingFields: [], photoUploaded: true }, {});
+    const student = { yoksisReady: true, yoksisTabId: 42, yoksisTabUrl: 'https://yoksis.yok.gov.tr/student',
+        firstName: 'SYNTHETIC', croppedPhotoBase64: 'data:image/jpeg;base64,AA==' };
+
+    const response = await harness.send({ source: 'IKAMET_PORTAL', action: 'FILL_YOKSIS_FORM', requestId: 'ordered-fill', data: student });
+
+    const operations = harness.calls.flatMap(call => call.type === 'script' && call.options.args?.[1]
+        ? [call.options.args[1]] : call.message?.action === 'verifyYoksisFields' ? ['verify'] : []);
+    assert.deepEqual(operations, ['fields', 'verify', 'photo', 'verify']);
+    assert.equal(response.partial, false);
+    assert.equal(response.photoUploaded, true);
+});
+
+test('extension cropper without a bound search refuses to upload a photo', async () => {
+    const harness = createBackgroundHarness({ success: true, filledFields: ['Adı'], photoUploaded: true }, {});
+    harness.storageValues.studentData = { firstName: 'SYNTHETIC' };
+
+    const response = await harness.send({ action: 'CROPPED_PHOTO_CONFIRMED', requestId: 'unbound-crop',
+        photoBase64: 'data:image/jpeg;base64,AA==' });
+
+    assert.equal(response.success, false);
+    assert.match(response.error, /doğrulanmış/);
+    assert.equal(harness.calls.some(call => call.type === 'script'), false);
+});
+
+test('successful acceptance search stores the verified target for the extension cropper', async () => {
+    const harness = createBackgroundHarness({}, { success: true, searchTriggered: true, formReady: true });
+
+    const response = await harness.send({ source: 'IKAMET_PORTAL', action: 'TRANSFER_TO_YOKSIS', requestId: 'bound-search',
+        data: { yoksisId: 'SYNTHETIC-CODE', firstName: 'SYNTHETIC' } });
+
+    assert.equal(response.success, true);
+    assert.equal(harness.storageValues.studentData.yoksisReady, true);
+    assert.equal(harness.storageValues.studentData.yoksisTabId, 42);
+    assert.equal(harness.storageValues.studentData.firstName, 'SYNTHETIC');
+});
+
+
+test('MAIN field phase leaves photo untouched and photo phase preserves the settled field values', async () => {
+    const background = createBackgroundHarness({ success: true, filledFields: ['Adı'], photoUploaded: true }, {});
+    const student = { yoksisReady: true, yoksisTabId: 42, yoksisTabUrl: 'https://yoksis.yok.gov.tr/student',
+        firstName: 'SYNTHETIC', croppedPhotoBase64: 'data:image/jpeg;base64,AA==' };
+    const content = createContentHarness(`<table><tr><td>Adı</td><td><input id="name"></td></tr>
+        <tr><td>Fotoğraf Adı</td><td><button>Fotoğraf Yükle</button><input id="photo" type="file"></td></tr></table>`,
+        'https://yoksis.yok.gov.tr/student');
+    const { window } = content.dom;
+    const input = window.document.getElementById('name');
+    const photo = window.document.getElementById('photo');
+    makeFileInputWritable(photo);
+    try {
+        await background.send({ source: 'IKAMET_PORTAL', action: 'FILL_YOKSIS_FORM', requestId: 'phased-dom', data: student });
+        const scripts = background.calls.filter(call => call.type === 'script' && ['fields', 'photo'].includes(call.options.args?.[1]));
+        const fieldResult = window.eval(`(${scripts[0].options.func.toString()})`)(student, 'fields');
+
+        assert.equal(input.value, 'SYNTHETIC');
+        assert.equal(photo.files.length, 0);
+        assert.equal(fieldResult.photoUploaded, false);
+        input.value = 'SETTLED';
+        const photoResult = window.eval(`(${scripts[1].options.func.toString()})`)(student, 'photo');
+        assert.equal(input.value, 'SETTLED');
+        assert.equal(photo.files.length, 1);
+        assert.equal(photoResult.photoUploaded, true);
+    } finally { content.close(); }
+});
+
+
+test('missing field verification response stops before photo upload or fallback', async () => {
+    const harness = createBackgroundHarness({ success: true, filledFields: ['Adı'], photoUploaded: true }, {}, { verificationResult: {} });
+
+    const response = await harness.send({ source: 'IKAMET_PORTAL', action: 'FILL_YOKSIS_FORM', requestId: 'missing-verification',
+        data: { yoksisReady: true, yoksisTabId: 42, yoksisTabUrl: 'https://yoksis.yok.gov.tr/student',
+            firstName: 'SYNTHETIC', croppedPhotoBase64: 'data:image/jpeg;base64,AA==' } });
+
+    assert.equal(response.success, false);
+    assert.equal(response.partial, true);
+    assert.equal(harness.calls.some(call => call.type === 'script' && call.options.args?.[1] === 'photo'), false);
+    assert.equal(harness.calls.some(call => call.message?.action === 'fillRemainingData'), false);
+});
+
+
+test('serial search dismisses a prior YÖKSİS result modal with one click', async () => {
+    const harness = createContentHarness(`<div class="z-messagebox"><button id="dismiss">Tamam</button></div>
+        <table><tr><td>Kabul Mektup ID</td><td><input title="Kabul Mektup ID"></td><td><button>Kabul Mektup ID ile Ara</button></td></tr></table>`,
+        'https://yoksis.yok.gov.tr/student');
+    let dismissals = 0;
+    harness.dom.window.document.getElementById('dismiss').onclick = () => { dismissals += 1; };
+    try {
+        await harness.send({ action: 'searchWithId', kabulId: 'NEXT-STUDENT', requestId: 'modal-dismiss', waitForForm: false });
+
+        assert.equal(dismissals, 1);
+    } finally { harness.close(); }
+});
+
+
+test('replaying an old acceptance request never replaces the next student temporary data', async () => {
+    const harness = createBackgroundHarness({}, { success: true, searchTriggered: true, formReady: true });
+    const first = { source: 'IKAMET_PORTAL', action: 'TRANSFER_TO_YOKSIS', requestId: 'first-search',
+        data: { yoksisId: 'FIRST-STUDENT', firstName: 'FIRST' } };
+    const second = { ...first, requestId: 'second-search', data: { yoksisId: 'SECOND-STUDENT', firstName: 'SECOND' } };
+
+    await harness.send(first);
+    await harness.send(second);
+    await harness.send(first);
+
+    assert.equal(harness.storageValues.studentData.yoksisId, 'SECOND-STUDENT');
+    assert.equal(harness.calls.filter(call => call.message?.action === 'searchWithId').length, 2);
+});
+
+
+test('a late fill from the previous student cannot replace current temporary data', async () => {
+    const harness = createBackgroundHarness({}, {}, { formReadyResponses: [{ success: false, formReady: false }] });
+    harness.storageValues.studentData = { yoksisId: 'CURRENT-STUDENT', firstName: 'CURRENT' };
+
+    const response = await harness.send({ source: 'IKAMET_PORTAL', action: 'FILL_YOKSIS_FORM', requestId: 'late-old-fill',
+        data: { yoksisReady: true, yoksisTabId: 42, yoksisTabUrl: 'https://yoksis.yok.gov.tr/student', yoksisId: 'OLD-STUDENT', firstName: 'OLD' } });
+
+    assert.equal(response.success, false);
+    assert.equal(harness.storageValues.studentData.yoksisId, 'CURRENT-STUDENT');
+    assert.equal(harness.calls.some(call => call.type === 'script' && call.options.args?.[1] === 'fields'), false);
 });

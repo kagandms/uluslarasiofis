@@ -92,7 +92,7 @@ test('YÖKSİS search and fill are single-flight operations, not all-frame retri
 
     assert.match(background, /function runYoksisOperation/);
     assert.match(background, /runYoksisOperation\(yoksisTab\.id, 'search'/);
-    assert.match(background, /runYoksisOperation\(yoksisTab\.id, 'fill'/);
+    assert.match(background, /runYoksisOperation\(tab\.id, 'fill'/);
     assert.match(background, /target: \{ tabId \}/);
     assert.doesNotMatch(background, /setTimeout\(\(\) => \{\s*executeYoksisSearchInMainWorld/s);
     assert.match(content, /formFingerprintBeforeSearch/);
@@ -106,7 +106,7 @@ test('YÖKSİS fill is blocked until a fresh acceptance-code search has opened i
     const content = await readExtensionFile('content.js');
 
     assert.match(manager, /currentStudentData\.yoksisReady !== true/);
-    assert.match(background, /studentData\?\.yoksisReady !== true/);
+    assert.match(background, /studentData\.yoksisReady !== true/);
     assert.match(content, /requireFreshResult: true/);
     assert.match(content, /domChangedAfterSearch/);
     assert.match(background, /function resolveYoksisTab/);
@@ -152,4 +152,26 @@ test('starting a new YKN student search clears the prior student document-byte c
 
     assert.ok(resetStart >= 0, 'student context reset should exist');
     assert.match(resetBody, /documentBytesCache\.clear\(\)/);
+});
+
+test('ykn:photo-cropped assigns cropped photo data to currentStudentData', async () => {
+    const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+    const cropStart = manager.indexOf("window.addEventListener('ykn:photo-cropped'");
+    const cropEnd = manager.indexOf("window.addEventListener('ykn:cropper-closed'", cropStart);
+    const cropBody = manager.slice(cropStart, cropEnd);
+
+    assert.ok(cropStart >= 0, 'photo-cropped listener should exist');
+    assert.match(cropBody, /currentStudentData\.croppedPhotoBase64\s*=\s*dataUrl/);
+    assert.match(cropBody, /currentStudentData\.photoFileName\s*=\s*fileName/);
+});
+
+test('STUDENT_DOCUMENTS_FOUND preserves incoming gender and does not clobber it', async () => {
+    const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+    const docFoundStart = manager.indexOf("event.data.action === 'STUDENT_DOCUMENTS_FOUND'");
+    const docFoundEnd = manager.indexOf("updateStudentActions(currentStudentData)", docFoundStart);
+    const docFoundBody = manager.slice(docFoundStart, docFoundEnd);
+
+    assert.ok(docFoundStart >= 0, 'STUDENT_DOCUMENTS_FOUND listener should exist');
+    assert.match(docFoundBody, /resolvedGender/);
+    assert.match(docFoundBody, /incoming\.cinsiyet/);
 });

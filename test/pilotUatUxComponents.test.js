@@ -136,7 +136,7 @@ test('document readiness blocks unsafe, cleanup-pending, and in-flight required 
 test('review readiness requires declaration but does not require a clean scan verdict', () => {
     const application = {
         student_number: 'SYN-1', student_email: 'synthetic@example.test', student_phone: '+905551112233',
-        application_type: 'initial', address_evidence_type: 'rental_contract', first_name: 'Test', last_name: 'Student',
+        application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', first_name: 'Test', last_name: 'Student',
         passport_number: 'P-1', nationality: 'Türkiye', date_of_birth: '2000-01-01', is_under_18: 0,
         fingerprint_status: 'registered', fingerprint_code: 'FP-1', contact_acknowledgement: { accepted_current: true },
         declaration: { accepted_current: false }

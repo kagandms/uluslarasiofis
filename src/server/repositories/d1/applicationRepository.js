@@ -9,6 +9,14 @@ import { generateApplicationReference } from '../../auth/applicationAccessCode.j
 const PUBLIC_APPLICATION_FIELDS = Object.freeze({
     applicationType: 'application_type',
     addressEvidenceType: 'address_evidence_type',
+    accommodationType: 'accommodation_type',
+    hasResidenceCard: 'has_residence_card',
+    hostIsMarried: 'host_is_married',
+    minorEntryType: 'minor_entry_type',
+    minorFamilyStatus: 'minor_family_status',
+    minorParentsIdentified: 'minor_parents_identified',
+    insuranceBasis: 'insurance_basis',
+
     studentEmail: 'student_email',
     studentPhone: 'student_phone',
     firstName: 'first_name',

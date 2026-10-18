@@ -304,7 +304,7 @@ test('server-calculated document requirements change with the saved under-18 sta
     const { environment, database } = createEnvironment();
     const adult = await createDraft(environment, '2026123908');
     const updateAge = async (cookie, isUnder18) => worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), date_of_birth: isUnder18 ? '2010-01-01' : '2000-01-01', is_under_18: !isUnder18 }
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), date_of_birth: isUnder18 ? '2010-01-01' : '2000-01-01', minor_parents_identified: 'no', is_under_18: !isUnder18 }
     }), environment, {});
     const listRequirements = async (cookie) => worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {});
 
@@ -362,7 +362,7 @@ test('address evidence choices select one server-enforced branch and branch chan
     assert.equal(wrongBranchIntent.status, 404);
     assert.equal((await wrongBranchIntent.json()).error.code, 'DOCUMENT_REQUIREMENT_NOT_FOUND');
     assert.deepEqual(codes.filter((code) => code.startsWith('address_') || code.startsWith('host_')), [
-        'address_undertaking', 'host_residence_certificate', 'host_identity_copy'
+        'address_undertaking', 'host_residence_certificate'
     ]);
     assert.equal(intentResponse.status, 201);
     assert.equal(rentalRequirements.response.status, 200);
@@ -448,7 +448,7 @@ test('student document requirements and upload intents are scoped to the current
     const studentA = await createDraft(environment, '2026123910');
     const studentB = await createDraft(environment, '2026123911');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: studentB.cookie, body: { lock_version: await readApplicationVersion(environment, studentB.cookie), date_of_birth: '2010-01-01', is_under_18: true }
+        method: 'PATCH', cookie: studentB.cookie, body: { lock_version: await readApplicationVersion(environment, studentB.cookie), date_of_birth: '2010-01-01', minor_parents_identified: 'no', is_under_18: true }
     }), environment, {});
 
     const studentARequirements = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie: studentA.cookie }), environment, {});
@@ -646,7 +646,7 @@ test('birth certificate uploaded by an under-18 student cannot be finalized afte
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123915');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), date_of_birth: '2010-01-01', is_under_18: true }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), date_of_birth: '2010-01-01', minor_parents_identified: 'no', is_under_18: true }
     }), environment, {});
     const intentResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,

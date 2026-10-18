@@ -1,5 +1,5 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.94') return;
+    if (window.YknZkForm?.version === '1.2.99') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
 
@@ -8,12 +8,18 @@
             .replace(/[\u0300-\u036f]/g, '').replace(/ı/g, 'i').trim();
     }
 
+    function normalizeCompact(value) {
+        return normalizeLabel(value)
+            .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c')
+            .replace(/[^a-z0-9]/g, '');
+    }
+
     function isVisible(control) {
         if (!control?.isConnected || control.disabled) return false;
         for (let ancestor = control; ancestor; ancestor = ancestor.parentElement) {
-            const style = ancestor.ownerDocument.defaultView.getComputedStyle(ancestor);
+            const style = ancestor.ownerDocument?.defaultView?.getComputedStyle?.(ancestor);
             if (ancestor.hidden || ancestor.getAttribute('aria-hidden') === 'true'
-                || style.display === 'none' || style.visibility === 'hidden') return false;
+                || style?.display === 'none' || style?.visibility === 'hidden') return false;
         }
         return true;
     }
@@ -26,6 +32,202 @@
             } catch { /* Cross-origin frames are outside the permitted target form. */ }
         }
         return documents;
+    }
+
+    function findZkWidget(element, targetWindow) {
+        if (!element || !targetWindow?.zk?.Widget?.$) return null;
+        for (let current = element, depth = 0; current && depth < 6; current = current.parentElement, depth += 1) {
+            try {
+                const widget = targetWindow.zk.Widget.$(current);
+                if (widget) return widget;
+            } catch { /* Continue walking ancestors */ }
+        }
+        const nested = element.querySelector?.('table.z-button, .z-button, button, input');
+        if (nested) {
+            try {
+                return targetWindow.zk.Widget.$(nested);
+            } catch { /* Ignore */ }
+        }
+        return null;
+    }
+
+    function resolveButtonRoot(candidate) {
+        return candidate?.querySelector?.('table.z-button')
+            || candidate?.closest('table.z-button')
+            || candidate?.closest('button, input[type="button"], input[type="submit"], .z-button, .z-toolbarbutton, .z-button-os, .form-btn, a, [role="button"]')
+            || candidate?.closest('[class*="z-button"]:not([class*="z-button-"])')
+            || candidate;
+    }
+
+    function findAcceptanceControls(expectedCode = '') {
+        const inputSelector = 'input:not([type="button"]):not([type="submit"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"])';
+        const clickableSelector = 'button, a, input[type="button"], input[type="submit"], [role="button"], .z-button, .z-toolbarbutton, [class*="z-button"]';
+        const expectedNorm = normalizeCompact(expectedCode);
+        for (const targetDocument of collectDocuments()) {
+            const targetWindow = targetDocument.defaultView;
+            if (!targetWindow) continue;
+            const inputs = Array.from(targetDocument.querySelectorAll(inputSelector)).filter((input) => !input.readOnly && isVisible(input));
+            let idInput = expectedNorm
+                ? inputs.find((input) => !input.closest('.z-grid-body, .z-listbox-body') && normalizeCompact(input.value) === expectedNorm)
+                : null;
+            if (!idInput) {
+                idInput = inputs.find((input) => {
+                    if (input.closest('.z-grid-body, .z-listbox-body')) return false;
+                    const meta = normalizeCompact([input.placeholder, input.getAttribute('placeholder'), input.title, input.name, input.id, input.labels?.[0]?.textContent].join(' '));
+                    const isChdextr = /(?:-|_)chdextr$/i.test(input.id || '');
+                    return (isChdextr || meta.includes('kabul')) && !meta.includes('pasaport') && !meta.includes('tc') && !meta.includes('dogum') && !meta.includes('tarih');
+                });
+            }
+            if (!idInput) {
+                const textNodes = targetDocument.querySelectorAll('span, td, div, label, b, strong, th, p, a, legend, caption, .z-caption, .z-groupbox-header');
+                for (const node of textNodes) {
+                    if (node.children.length > 3 || !isVisible(node)) continue;
+                    const txt = normalizeCompact(node.innerText || node.textContent || '');
+                    if (!txt.includes('kabul') || txt.includes('kabultarih')
+                        || (!txt.includes('id') && !txt.includes('sorgula') && !txt.includes('mektup') && !txt.includes('kod') && !txt.includes('no'))) {
+                        continue;
+                    }
+                    const td = node.closest('td');
+                    if (td?.nextElementSibling) {
+                        const siblingInput = Array.from(td.nextElementSibling.querySelectorAll(inputSelector)).find((input) => !input.readOnly && isVisible(input));
+                        if (siblingInput) {
+                            idInput = siblingInput;
+                            break;
+                        }
+                    }
+                    const box = node.closest('.z-groupbox, .z-panel, fieldset, table, form, div.z-window') || node.parentElement;
+                    if (box) {
+                        const boxInput = Array.from(box.querySelectorAll(inputSelector)).find((input) => {
+                            if (input.readOnly || !isVisible(input)) return false;
+                            const meta = normalizeCompact([input.placeholder, input.getAttribute('placeholder'), input.title, input.name, input.id].join(' '));
+                            return !meta.includes('pasaport') && !meta.includes('tc') && !meta.includes('dogum') && !meta.includes('tarih');
+                        });
+                        if (boxInput) {
+                            idInput = boxInput;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!idInput) {
+                for (const row of targetDocument.querySelectorAll('tr, .z-row, .form-row, .z-hbox, .z-vbox')) {
+                    if (!isVisible(row)) continue;
+                    const text = normalizeCompact(row.textContent || '');
+                    if (!text.includes('kabul') || !text.includes('id') || text.includes('tarih')) continue;
+                    idInput = Array.from(row.querySelectorAll(inputSelector)).find((input) => !input.readOnly && isVisible(input)) || null;
+                    if (idInput) break;
+                }
+            }
+            if (!idInput) continue;
+
+            const scoreButton = (candidate) => {
+                if (!isVisible(candidate) || candidate.closest('.z-menu, .z-menuitem, .z-menu-item, .z-menupopup, .z-caption, .z-tab, nav')) return -1;
+                const root = resolveButtonRoot(candidate);
+                if (!isVisible(root)) return -1;
+                const text = normalizeCompact(root.innerText || root.textContent || root.value || root.getAttribute?.('aria-label') || root.getAttribute?.('title') || '');
+                if (!text || text.length > 60 || text.includes('pasaport') || text.includes('belge') || text.includes('tckimlik')
+                    || text.includes('temizle') || text.includes('kaydet') || text.includes('iptal') || text.includes('vazgec')) return -1;
+                const hasKabul = text.includes('kabul');
+                if (!hasKabul) return -1;
+                const hasAra = text.includes('ara');
+                const hasSorgula = text.includes('sorgula');
+                const hasGetir = text.includes('getir');
+                if (!hasAra && !hasSorgula && !hasGetir) return -1;
+                let score = 0;
+                if (hasKabul && hasAra) score += 220;
+                else if (hasKabul && (hasSorgula || hasGetir)) score += 180;
+                else if (hasKabul) score += 100;
+                if (text.includes('mektup')) score += 30;
+                if (text.includes('id')) score += 20;
+                if (root.tagName !== 'A') score += 25;
+                if (idInput.compareDocumentPosition(root) & Node.DOCUMENT_POSITION_FOLLOWING) score += 30;
+                return score;
+            };
+
+            let searchBtn = null;
+            let bestScore = 0;
+            const rowScope = idInput.closest('tr, .z-row, .form-row, .z-hbox, .z-vbox');
+            if (rowScope) {
+                for (let sib = rowScope, hop = 0; sib && hop < 4; sib = sib.nextElementSibling, hop += 1) {
+                    for (const candidate of sib.querySelectorAll(clickableSelector)) {
+                        const score = scoreButton(candidate);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            searchBtn = resolveButtonRoot(candidate);
+                        }
+                    }
+                    if (bestScore >= 200) break;
+                }
+            }
+            for (let scope = rowScope || idInput.parentElement, depth = 0;
+                scope && scope !== targetDocument.body && depth < 12 && bestScore < 200; scope = scope.parentElement, depth += 1) {
+                for (const candidate of scope.querySelectorAll(clickableSelector)) {
+                    const score = scoreButton(candidate);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        searchBtn = resolveButtonRoot(candidate);
+                    }
+                }
+            }
+            if (!searchBtn) {
+                for (const candidate of targetDocument.querySelectorAll(clickableSelector)) {
+                    const score = scoreButton(candidate);
+                    if (score >= 180 && score > bestScore) {
+                        bestScore = score;
+                        searchBtn = resolveButtonRoot(candidate);
+                    }
+                }
+            }
+            return { idInput, searchBtn, targetWindow };
+        }
+        return null;
+    }
+
+    function findResetControl() {
+        const clickableSelector = 'button, .z-button, [class*="z-button"], a, input[type="button"], [role="button"], table.z-button';
+        for (const targetDocument of collectDocuments()) {
+            const targetWindow = targetDocument.defaultView;
+            if (!targetWindow) continue;
+            const clickables = Array.from(targetDocument.querySelectorAll(clickableSelector)).filter(isVisible);
+            let kaydetBtn = null;
+            for (const c of clickables) {
+                const txt = normalizeCompact(c.innerText || c.textContent || c.value || c.getAttribute?.('title') || '');
+                if (txt === 'kaydet' || txt.startsWith('kaydet')) {
+                    kaydetBtn = resolveButtonRoot(c);
+                    break;
+                }
+            }
+            if (kaydetBtn) {
+                for (let parent = kaydetBtn.parentElement, depth = 0; parent && parent !== targetDocument.body && depth < 8; depth += 1, parent = parent.parentElement) {
+                    const parentTxt = normalizeCompact(parent.innerText || parent.textContent || '');
+                    if (parentTxt.includes('excel')) break;
+                    for (const c of parent.querySelectorAll(clickableSelector)) {
+                        if (c === kaydetBtn || kaydetBtn.contains(c) || !isVisible(c)) continue;
+                        const cTxt = normalizeCompact(c.innerText || c.textContent || c.value || c.getAttribute?.('title') || '');
+                        if (cTxt === 'temizle') {
+                            return { resetBtn: resolveButtonRoot(c), targetWindow };
+                        }
+                    }
+                }
+            }
+            for (const c of clickables) {
+                const txt = normalizeCompact(c.innerText || c.textContent || c.value || c.getAttribute?.('title') || '');
+                if (txt !== 'temizle' && txt !== 'yenikayit') continue;
+                const root = resolveButtonRoot(c);
+                let isFilterBar = false;
+                for (let anc = root.parentElement, hop = 0; anc && anc !== targetDocument.body && hop < 4; anc = anc.parentElement, hop += 1) {
+                    const ancTxt = normalizeCompact(anc.innerText || anc.textContent || '');
+                    if (ancTxt.includes('excel') || ancTxt.includes('yil') || ancTxt.includes('ykn')) {
+                        isFilterBar = true;
+                        break;
+                    }
+                }
+                if (!isFilterBar) {
+                    return { resetBtn: root, targetWindow };
+                }
+            }
+        }
+        return null;
     }
 
     function getRadioLabel(radio) {
@@ -53,8 +255,8 @@
                 const labels = Array.from(scope.querySelectorAll('input[type="radio"]')).map(getRadioLabel);
                 if (!choices.every((aliases) => labels.some((label) => aliases.includes(label)))) continue;
                 const targetWindow = targetDocument.defaultView;
-                const widget = targetWindow.zk?.Widget?.$(radio)
-                    || targetWindow.zk?.Widget?.$(radio.closest('.z-radio'));
+                const widget = targetWindow?.zk?.Widget?.$(radio)
+                    || targetWindow?.zk?.Widget?.$(radio.closest('.z-radio'));
                 candidates.push({ radio, widget, targetWindow });
             }
         }
@@ -62,13 +264,23 @@
     }
 
     function isBusy(targetWindow) {
+        if (!targetWindow) return false;
         const zk = targetWindow.zk;
         if (zk?.processing || zk?.mounting || zk?.loading > 0 || targetWindow.zAu?.processing?.()) return true;
         const desktops = Object.values(zk?.Desktop?.all || {});
         return desktops.some((desktop) => targetWindow.zAu?.getAuRequests?.(desktop)?.length > 0);
     }
 
+    function isActivelyProcessing(targetWindow) {
+        if (!targetWindow) return false;
+        const zk = targetWindow.zk;
+        return Boolean(zk?.processing || zk?.mounting || zk?.loading > 0 || targetWindow.zAu?.processing?.());
+    }
+
     function waitForIdle() {
+        if (collectDocuments().every((targetDocument) => !isBusy(targetDocument.defaultView))) {
+            return Promise.resolve({ success: true });
+        }
         const deadline = Date.now() + 8_000;
         return new Promise((resolve, reject) => {
             const timer = setInterval(() => {
@@ -81,6 +293,111 @@
                 }
             }, 25);
         });
+    }
+
+    function waitForActiveProcessing(timeoutMs = 2_500) {
+        if (collectDocuments().every((targetDocument) => !isActivelyProcessing(targetDocument.defaultView))) {
+            return Promise.resolve({ success: true });
+        }
+        const deadline = Date.now() + timeoutMs;
+        return new Promise((resolve) => {
+            const timer = setInterval(() => {
+                if (collectDocuments().every((targetDocument) => !isActivelyProcessing(targetDocument.defaultView))
+                    || Date.now() >= deadline) {
+                    clearInterval(timer);
+                    resolve({ success: true });
+                }
+            }, 20);
+        });
+    }
+
+    // A single MAIN-world owner prevents a fast reset response from causing a second click.
+    async function resetStudentForm(options) {
+        await waitForIdle();
+        const resetKey = `reset:${options.requestId || ''}`;
+        if (!options.requestId || attemptedSelections.has(resetKey)) return { success: false, resetPerformed: false };
+        const control = findResetControl();
+        if (!control) return { success: false, resetPerformed: false };
+        const widget = findZkWidget(control.resetBtn, control.targetWindow);
+        const observer = widget?.fire ? observeResponse(control.targetWindow) : null;
+        attemptedSelections.add(resetKey);
+        if (attemptedSelections.size > 100) attemptedSelections.delete(attemptedSelections.values().next().value);
+        try {
+            if (widget?.fire) widget.fire('onClick', null, { toServer: true });
+            if (!widget?.fire) control.resetBtn.click();
+            if (observer) await waitForResponse(observer);
+            await waitForIdle();
+            return { success: true, resetPerformed: true };
+        } finally { observer?.dispose(); }
+    }
+
+    async function settleAndSyncSearch(options = {}) {
+        const isSearchAction = Boolean(options.syncSearchInput || options.triggerSearchClick || options.resetStudentForm || options.kabulId || ('triggerSearchClick' in options));
+        if (!isSearchAction) {
+            return await waitForIdle();
+        }
+        await waitForActiveProcessing();
+
+        if (options.resetStudentForm) return await resetStudentForm(options);
+
+        const controls = findAcceptanceControls(options.kabulId);
+        if (!controls?.targetWindow?.zk?.Widget?.$) return { success: true };
+        const { idInput, searchBtn, targetWindow } = controls;
+        const code = String(idInput?.value || options.kabulId || '').trim();
+        const inputWidget = findZkWidget(idInput, targetWindow);
+
+        if (options.syncSearchInput && code && inputWidget && inputWidget._value !== code) {
+            try {
+                if (typeof inputWidget.setValue === 'function') inputWidget.setValue(code);
+                inputWidget._value = code;
+                inputWidget._lastValue = code;
+                if (typeof inputWidget.fire === 'function') {
+                    inputWidget.fire('onChange', { value: code }, { toServer: true });
+                }
+            } catch { /* Ignore widget sync error and continue */ }
+            await new Promise((resolve) => setTimeout(resolve, 15));
+            await waitForActiveProcessing();
+        }
+
+        if (options.triggerSearchClick && searchBtn) {
+            const attemptKey = options.requestId ? `search:${options.requestId}` : '';
+            if (!attemptKey || !attemptedSelections.has(attemptKey)) {
+                let sawResponse = false;
+                const listener = { onResponse() { sawResponse = true; } };
+                try { targetWindow.zWatch?.listen?.({ onResponse: listener }); } catch { /* Optional */ }
+                try {
+                    if (!isActivelyProcessing(targetWindow)) {
+                        await new Promise((resolve) => setTimeout(resolve, 15));
+                    }
+                    if (!isActivelyProcessing(targetWindow) && !sawResponse) {
+                        if (attemptKey) {
+                            attemptedSelections.add(attemptKey);
+                            if (attemptedSelections.size > 100) attemptedSelections.delete(attemptedSelections.values().next().value);
+                        }
+                        if (code && inputWidget) {
+                            try {
+                                const needsChange = inputWidget._value !== code;
+                                if (typeof inputWidget.setValue === 'function') inputWidget.setValue(code);
+                                inputWidget._value = code;
+                                inputWidget._lastValue = code;
+                                if (needsChange && typeof inputWidget.fire === 'function') {
+                                    inputWidget.fire('onChange', { value: code }, { toServer: true });
+                                }
+                            } catch { /* Ignore */ }
+                        }
+                        const buttonWidget = findZkWidget(searchBtn, targetWindow);
+                        if (buttonWidget && typeof buttonWidget.fire === 'function') {
+                            buttonWidget.fire('onClick', null, { toServer: true });
+                            await new Promise((resolve) => setTimeout(resolve, 20));
+                        }
+                    }
+                } finally {
+                    try { targetWindow.zWatch?.unlisten?.({ onResponse: listener }); } catch { /* Optional */ }
+                }
+                await waitForActiveProcessing();
+            }
+        }
+        return { success: true };
     }
 
     function observeResponse(targetWindow) {
@@ -159,7 +476,7 @@
     /** Executes a bounded MAIN-world ZK operation without returning student values. */
     async function execute(options) {
         try {
-            if (options.action === 'waitForIdle') return await waitForIdle();
+            if (options.action === 'waitForIdle') return await settleAndSyncSearch(options);
             if (options.action === 'verifyRadio') {
                 await waitForIdle();
                 const target = findRadio(options);
@@ -173,5 +490,5 @@
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.94', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.99', execute });
 })();

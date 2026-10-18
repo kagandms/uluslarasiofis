@@ -47,7 +47,7 @@ async function resolveCurrentDocument(environment, applicationId, code) {
         code,
         application.application_type,
         application.is_under_18 === 1,
-        application.address_evidence_type ?? null
+        application
     );
     if (!policy) throw unavailableDocument();
     const file = await repositories.documents.findCurrentPrivateFileByApplicationAndCode(applicationId, code);
@@ -126,7 +126,7 @@ export async function createStaffApplicationArchiveManifest({ request, environme
     let totalSourceBytes = 0;
     for (const requirement of requirements) {
         const policy = readDocumentPolicy(requirement.code, application.application_type,
-            application.is_under_18 === 1, application.address_evidence_type ?? null);
+            application.is_under_18 === 1, application);
         if (!policy || requirement.revision_number === null || requirement.revision_number === undefined) continue;
         const resolved = await resolveArchiveFile(environment, applicationId, requirement.code);
         if (resolved.file.revision_number !== requirement.revision_number) {

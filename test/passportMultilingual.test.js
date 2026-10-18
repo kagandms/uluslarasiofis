@@ -599,11 +599,16 @@ test('Gender normalization and name-based gender inference', () => {
     assert.equal(inferGenderFromName('Ivanova Maria Petrovna'), 'Kadın');
     assert.equal(inferGenderFromName('Leyla Aliyeva'), 'Kadın');
     assert.equal(inferGenderFromName('Ali Mammadov'), 'Erkek');
+    assert.equal(inferGenderFromName('ADAM-RAMADAN SAVADOGO'), 'Erkek');
+    assert.equal(inferGenderFromName('FATOUMATA DIALLO'), 'Kadın');
+    assert.equal(inferGenderFromName('Mamadou Traore'), 'Erkek');
 
     assert.equal(extParser.inferGenderFromName('MERJEN BEGENJOVA'), 'Kadın');
     assert.equal(extParser.inferGenderFromName('AYNUR BEGENJOVA'), 'Kadın');
     assert.equal(extParser.inferGenderFromName('LUIZA ROZYÝEWA'), 'Kadın');
     assert.equal(extParser.inferGenderFromName('BEGENJOV AHMET'), 'Erkek');
+    assert.equal(extParser.inferGenderFromName('ADAM-RAMADAN SAVADOGO'), 'Erkek');
+    assert.equal(extParser.inferGenderFromName('FATOUMATA DIALLO'), 'Kadın');
 
     // 3. Metadata extraction with name hint when text has no explicit sex field
     const passNoSex = `PASSPORT

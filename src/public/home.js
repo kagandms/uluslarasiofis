@@ -18,7 +18,7 @@ export function renderPublicDocumentOverview(root, locale) {
     list.className = 'public-document-list';
     const policies = listPublicDocumentOverview();
 
-    policies.filter((policy) => !policy.group_key).forEach((policy) => {
+    policies.filter((policy) => !policy.group_key && policy.required).forEach((policy) => {
         const item = document.createElement('li');
         const title = document.createElement('h3');
         const description = document.createElement('p');
@@ -38,10 +38,16 @@ export function renderPublicDocumentOverview(root, locale) {
             badge.textContent = messages.homeDocumentRenewal;
             item.append(badge);
         }
+        if (policy.scope_key === 'homeDocumentRenewalAdults') {
+            const badge = document.createElement('span');
+            badge.className = 'public-document-badge is-renewal';
+            badge.textContent = messages.homeDocumentRenewalAdults;
+            item.append(badge);
+        }
         list.append(item);
     });
 
-    const addressPolicies = policies.filter((policy) => policy.group_key === 'address_evidence');
+    const addressPolicies = policies.filter((policy) => policy.group_key === 'address_evidence' && policy.required);
     if (addressPolicies.length) list.append(createAddressEvidenceCard(document, messages, addressPolicies));
 
     root.replaceChildren(list);

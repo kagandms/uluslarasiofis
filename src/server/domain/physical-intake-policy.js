@@ -15,7 +15,6 @@ export const PHYSICAL_STATUS_FILTERS = Object.freeze({
     sent_to_migration: ['sent_to_migration'], migration_approved: ['migration_approved'], completed: ['completed'], rejected: ['rejected'], deleted: null
 });
 const REVIEW_STATUSES = Object.keys(PHYSICAL_STATUS_LABELS);
-const PDF_REQUIRED_STATUSES = ['sent_to_migration', 'migration_approved', 'completed'];
 
 /** @param {unknown} value Record version. @returns {number} Valid version. @throws {ApiError} Invalid version. */
 export function requirePhysicalVersion(value) {
@@ -46,11 +45,10 @@ export function validatePhysicalIntake(body) {
     };
 }
 
-/** @param {object} intake Current receipt. @param {object} pdf Current file. @returns {string[]} Available transitions. */
-export function listPhysicalTransitions(intake, pdf) {
+/** @param {object} intake Current receipt. @returns {string[]} Available transitions independent of digital copies. */
+export function listPhysicalTransitions(intake) {
     if (intake.deleted_at || intake.processing_closed_at || intake.legacy_status === 'completed') return [];
-    return REVIEW_STATUSES.filter(status => status !== intake.status
-        && (!PDF_REQUIRED_STATUSES.includes(status) || pdf?.upload_status === 'finalized'));
+    return REVIEW_STATUSES.filter(status => status !== intake.status);
 }
 
 /** Validates a rejection reason. @param {unknown} value Reason. @returns {string} Bounded reason. @throws {ApiError} Missing or short reason. */

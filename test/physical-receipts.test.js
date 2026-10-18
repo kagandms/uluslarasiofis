@@ -410,7 +410,7 @@ test('public lookup exposes no PII or internal IDs and expired reservations do n
     const response=await portRequest(context,'/api/public/physical-intakes/tracking-lookup',{method:'POST',json:{tracking_reference:registration.intake.tracking_reference.toLowerCase().replaceAll('-','')}});
 
     assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'no-store');
-    const payload=await response.json();assert.equal(payload.office_status,'received');
+    const payload=await response.json();assert.equal(payload.office_status,'under_review');
     assert.deepEqual(Object.keys(payload).sort(),['application_date','found','office_status','requestId','tracking_reference','updated_at'].sort());
     assert.equal(JSON.stringify(payload).includes('Synthetic'),false);
     context.database.prepare('UPDATE physical_intakes SET deleted_at=? WHERE id=?').bind(new Date().toISOString(),registration.intake.id).run();
@@ -428,7 +428,7 @@ test('public physical tracking returns the staff rejection reason only for rejec
     });
     const payload=await response.json();
 
-    assert.equal(response.status,200);assert.equal(payload.office_status,'contact_office');
+    assert.equal(response.status,200);assert.equal(payload.office_status,'rejected');
     assert.equal(payload.rejection_reason,reason);
     assert.equal(Object.hasOwn(payload,'rejection_reason'),true);
     assert.equal(Object.hasOwn(payload,'student_number'),false);
@@ -637,32 +637,24 @@ test('a deleted intake cannot recycle its consumed reference or retain receipt s
     assert.equal((await context.database.prepare('SELECT consumed_intake_id FROM physical_reference_reservations').first()).consumed_intake_id,registration.intake.id);
 });
 
-test('office approval needs no PDF and later stages appear in public tracking after PDF upload', async () => {
+test('all staff stages appear in code tracking without an uploaded PDF', async () => {
     const context = await fixture();
     const registration = await register(context);
     const id = registration.intake.id;
-    const change = async status => {
+
+    for (const status of ['under_review', 'approved_for_processing', 'sent_to_migration', 'migration_approved', 'completed', 'rejected']) {
         const current = await context.database.prepare('SELECT lock_version FROM physical_intakes WHERE id=?').bind(id).first();
-        return json(context, `/${id}/status`, { lock_version: current.lock_version, status }, { method: 'PATCH' });
-    };
+        if (status !== 'under_review') {
+            const changed = await json(context, `/${id}/status`, { lock_version: current.lock_version, status,
+                ...(status === 'rejected' ? { rejection_reason: 'Synthetic missing document' } : {}) }, { method: 'PATCH' });
+            assert.equal(changed.status, 200, await changed.clone().text());
+        }
+        const tracked = await portRequest(context, '/api/public/physical-intakes/tracking-lookup', {
+            method: 'POST', json: { tracking_reference: registration.intake.tracking_reference } });
 
-    const approved = await change('approved_for_processing');
-    const premature = await change('sent_to_migration');
-    const pdfResponse = await portRequest(context, `${BASE}/${id}/pdf`, { method: 'POST', cookie: context.staffCookie,
-        headers: { 'Content-Type': 'application/pdf', 'If-Match': String((await context.database.prepare('SELECT lock_version FROM physical_intakes WHERE id=?').bind(id).first()).lock_version), 'X-Pdf-Id': crypto.randomUUID() }, body: await pdfBytes() });
-
-    assert.equal(approved.status, 200);
-    assert.equal(premature.status, 409);
-    assert.equal(pdfResponse.status, 200);
-    for (const status of ['sent_to_migration', 'migration_approved', 'completed']) {
-        const changed = await change(status);
-        assert.equal(changed.status, 200, await changed.clone().text());
-        const tracked = await portRequest(context, '/api/public/physical-intakes/tracking-lookup', { method: 'POST', json: { tracking_reference: registration.intake.tracking_reference } });
         assert.equal((await tracked.json()).office_status, status);
+        assert.equal((await context.database.prepare('SELECT current_pdf_id FROM physical_intakes WHERE id=?').bind(id).first()).current_pdf_id, null);
     }
-    const filter = await json(context, '/query', { status: 'completed', page: 1, page_size: 25 });
-    assert.equal((await filter.json()).items[0].id, id);
-    assert.equal((await context.database.prepare('SELECT current_pdf_id FROM physical_intakes WHERE id=?').bind(id).first()).current_pdf_id !== null, true);
 });
 
 test('physical intake query filters inclusively by delivery date and validates range', async () => {

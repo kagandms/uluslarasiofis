@@ -42,7 +42,7 @@ async function resolveReviewTarget(repositories, applicationId, code, expectedRe
     const application = await repositories.applications.findById(applicationId);
     requireApplication(application);
     if (!readDocumentPolicy(code, application.application_type, application.is_under_18 === 1,
-        application.address_evidence_type ?? null)) {
+        application)) {
         throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya incelemeye uygun değil.');
     }
     const document = await repositories.documents.findCurrentPrivateFileByApplicationAndCode(applicationId, code);
@@ -57,7 +57,7 @@ async function resolveReviewTarget(repositories, applicationId, code, expectedRe
         throw new ApiError(409, 'DOCUMENT_NOT_REVIEWABLE', 'Belge güncel ve güvenli incelemeye uygun değil.');
     }
     const policy = readDocumentPolicy(code, application.application_type, application.is_under_18 === 1,
-        application.address_evidence_type ?? null);
+        application);
     if (!policy.accepted_media_types.includes(document.media_type)) {
         throw new ApiError(409, 'DOCUMENT_NOT_REVIEWABLE', 'Belge güncel ve güvenli incelemeye uygun değil.');
     }
@@ -72,7 +72,7 @@ async function resolveResubmissionTarget({ repositories, applicationId, code, re
     const application = await repositories.applications.findById(applicationId);
     requireApplication(application);
     const policy = readDocumentPolicy(code, application.application_type, application.is_under_18 === 1,
-        application.address_evidence_type ?? null);
+        application);
     if (!policy) throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya yenilemeye uygun değil.');
     const document = await repositories.applicationReviews.findCurrentDocumentForResubmission(applicationId, code);
     if (!document) throw new ApiError(409, 'DOCUMENT_NOT_REVIEWABLE', 'Belge güncel ve yenilemeye uygun değil.');
@@ -121,7 +121,7 @@ export async function unapproveStaffApplicationDocument({ request, environment, 
     const application = await repositories.applications.findById(applicationId);
     requireApplication(application);
     if (!readDocumentPolicy(code, application.application_type, application.is_under_18 === 1,
-        application.address_evidence_type ?? null)) {
+        application)) {
         throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya incelemeye uygun değil.');
     }
     const document = await repositories.documents.findCurrentPrivateFileByApplicationAndCode(applicationId, code);
@@ -186,7 +186,7 @@ export async function transitionStaffApplicationStatus({ request, environment, a
     const storedRequirements = await repositories.documents.listStudentRequirements(applicationId);
     const requirementsByCode = new Map(storedRequirements.map((requirement) => [requirement.code, requirement]));
     const requirements = listDocumentPolicies(application.application_type, application.is_under_18 === 1,
-        application.address_evidence_type ?? null).map((policy) => ({
+        application).map((policy) => ({
         ...requirementsByCode.get(policy.code), is_required: policy.required ? 1 : 0
     }));
     const transition = evaluateApplicationTransition(application.status, body.target_status, {

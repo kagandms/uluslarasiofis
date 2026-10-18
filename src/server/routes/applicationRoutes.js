@@ -1,3 +1,4 @@
+import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_FIELDS, DOCUMENT_ANSWER_OPTIONS } from '../../shared/document-conditions.js';
 import { ApiError, ApplicationConflictError } from '../domain/errors.js';
 import { APPLICATION_OWNER_SESSION_DAYS, CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../config/constants.js';
 import { createOpaqueSessionToken, createSessionCookie, createExpiredSessionCookie, getSessionCookieName, hashSessionToken, readCookie } from '../auth/sessionToken.js';
@@ -50,7 +51,9 @@ function createApplicationDto(application, environment) {
         status: application.status,
         submitted_at: application.submitted_at ?? null,
         application_type: application.application_type,
-        address_evidence_type: application.address_evidence_type ?? null,
+        address_evidence_type: application.accommodation_type || application.address_evidence_type || null,
+        document_policy_version: application.document_policy_version,
+        ...Object.fromEntries(DOCUMENT_ANSWER_FIELDS.map((field) => [field, application[field] ?? null])),
         student_number: application.student_number,
         student_email: application.student_email,
         student_phone: application.student_phone,
@@ -130,8 +133,21 @@ function readFingerprintCode(value) {
     return code || null;
 }
 
-function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
+function readDocumentAnswerChanges(body) {
     const changes = {};
+    for (const field of DOCUMENT_ANSWER_FIELDS) {
+        if (!Object.hasOwn(body, field)) continue;
+        if (body[field] !== null && !DOCUMENT_ANSWER_OPTIONS[field].includes(body[field])) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Belge koşullarına ait yanıtları kontrol edin.');
+        }
+        const repositoryField = field.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+        changes[repositoryField] = body[field];
+    }
+    return changes;
+}
+
+function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
+    const changes = readDocumentAnswerChanges(body);
     for (const [field, repositoryField] of Object.entries(DRAFT_FIELDS)) {
         if (Object.hasOwn(body, field)) changes[repositoryField] = requireString(body, field, {
             min: allowIncomplete ? 0 : 1,
@@ -145,10 +161,11 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
         changes.applicationType = body.application_type;
     }
     if (Object.hasOwn(body, 'address_evidence_type')) {
-        if (body.address_evidence_type !== null && !ADDRESS_EVIDENCE_VALUES.has(body.address_evidence_type)) {
+        if (body.address_evidence_type !== null && ![...ADDRESS_EVIDENCE_VALUES, ...ACCOMMODATION_TYPES].includes(body.address_evidence_type)) {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Adres belgesi seçimini kontrol edip tekrar deneyin.');
         }
-        changes.addressEvidenceType = body.address_evidence_type;
+        changes.addressEvidenceType = ADDRESS_EVIDENCE_VALUES.has(body.address_evidence_type) ? body.address_evidence_type : null;
+        changes.accommodationType = ACCOMMODATION_TYPES.includes(body.address_evidence_type) ? body.address_evidence_type : null;
     }
     if (Object.hasOwn(body, 'is_under_18')) {
         if (body.is_under_18 !== null && typeof body.is_under_18 !== 'boolean') {

@@ -54,7 +54,7 @@ async function createResubmissionApplicant(environment, database, studentNumber 
     const requirementId = database.prepare(`
         SELECT id FROM document_requirements WHERE application_type = 'initial' AND code = 'passport'
     `).first().id;
-    await database.prepare(`UPDATE applications SET status = 'resubmission_required' WHERE id = ?`).bind(applicationId).run();
+    await database.prepare(`UPDATE applications SET document_policy_version = 1, status = 'resubmission_required' WHERE id = ?`).bind(applicationId).run();
     await database.prepare(`
         INSERT INTO document_records (id, application_id, requirement_id, application_type, review_status)
         VALUES (?, ?, ?, 'initial', 'resubmission_required')
@@ -163,7 +163,7 @@ test('application, document, record, message, and active-policy state independen
             await database.prepare(`UPDATE applications SET status = 'under_review'`).run();
         }],
         ['approved record', async () => {
-            await database.prepare(`UPDATE applications SET status = 'resubmission_required'`).run();
+            await database.prepare(`UPDATE applications SET document_policy_version = 1, status = 'resubmission_required'`).run();
             await database.prepare(`UPDATE document_records SET review_status = 'approved' WHERE id = 'record-api-resubmit'`).run();
         }],
         ['approved revision', async () => {

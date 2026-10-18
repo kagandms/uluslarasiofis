@@ -58,7 +58,7 @@ function createDocumentTrackingView(application, storedRequirements, createDto) 
     const policies = listDocumentPolicies(
         application.application_type,
         application.is_under_18 === 1,
-        application.address_evidence_type ?? null
+        application
     );
     const requirementsByCode = new Map(storedRequirements.map((requirement) => [requirement.code, requirement]));
     return policies.map((policy) => createDto(policy, requirementsByCode.get(policy.code)));
