@@ -4,6 +4,19 @@ const LOGIN_ERROR_MESSAGES = Object.freeze({
     429: 'Çok fazla başarısız giriş denemesi yapıldı. Bir süre sonra tekrar deneyin.',
     503: 'Giriş şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.'
 });
+const LOGIN_DEVICE_STORAGE_KEY = 'staff-login-device-id';
+
+function getLoginDeviceId() {
+    try {
+        const storedDeviceId = window.localStorage.getItem(LOGIN_DEVICE_STORAGE_KEY);
+        if (storedDeviceId && /^[a-zA-Z0-9_-]{20,128}$/.test(storedDeviceId)) return storedDeviceId;
+        const deviceId = crypto.randomUUID();
+        window.localStorage.setItem(LOGIN_DEVICE_STORAGE_KEY, deviceId);
+        return deviceId;
+    } catch {
+        return crypto.randomUUID();
+    }
+}
 
 async function requestSession() {
     const response = await fetch('/api/staff/auth/session', {
@@ -51,6 +64,7 @@ export async function initStaffAuth() {
     const loginError = document.getElementById('login-error');
     const logoutButton = document.getElementById('btn-staff-logout');
     const globalError = document.getElementById('staff-global-error');
+    const loginDeviceId = getLoginDeviceId();
     let resolveAuthorization;
     const authorization = new Promise((resolve) => {
         resolveAuthorization = resolve;
@@ -99,7 +113,10 @@ export async function initStaffAuth() {
             const response = await fetch('/api/staff/auth/login', {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Staff-Login-Device': loginDeviceId
+                },
                 body: JSON.stringify({
                     username: usernameInput.value,
                     password: passwordInput.value,
