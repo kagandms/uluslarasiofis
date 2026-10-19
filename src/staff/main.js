@@ -20,6 +20,7 @@ import { initDocumentsManager } from '../ui/documents-manager.js';
 import { initLiveClock } from '../ui/liveClock.js';
 import { openStaffGuideModal } from '../ui/staffGuideModal.js';
 import { initializeStaffPrintStatus } from './print-status.js';
+import { initializeConnectivityStatus } from './connectivity-status.js';
 import { initD1UsageCounter } from '../ui/d1-usage-counter.js';
 
 const staffAuthReady = document.readyState === 'loading'
@@ -862,28 +863,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     
-    // --- Online/Offline Listener ---
-    const updateOnlineStatus = () => {
-        const btnUpload = document.getElementById('btn-upload');
-        if (navigator.onLine) {
-            if(btnUpload) {
-                btnUpload.disabled = false;
-                btnUpload.style.opacity = '1';
-                btnUpload.title = '';
-            }
-        } else {
-            if(btnUpload) {
-                btnUpload.disabled = true;
-                btnUpload.style.opacity = '0.5';
-                btnUpload.title = 'İnternet bağlantısı yok';
-            }
-            showToast('İnternet bağlantısı kesildi. Çevrimdışı moda geçildi.', 'warning');
-        }
-    };
-
-    window.addEventListener('online', updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-    updateOnlineStatus(); // initial check
+    void initializeConnectivityStatus({
+        root: document,
+        fetcher: window.fetch.bind(window),
+        notify: showToast
+    });
 
     // --- Shortcut Listener ---
     document.addEventListener('keydown', (e) => {
