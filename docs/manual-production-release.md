@@ -1,7 +1,8 @@
 # Manual code/assets release from a tablet
 
-Only `.github/workflows/production-release.yml` publishes. This focused change is based on
-production `5db4d049807ab58614702145c0dc30fe1c48f780`; PR #6 recovery maintenance remains separate.
+Only `.github/workflows/production-release.yml` publishes. The code-only release baseline is
+production `dec9891adb78f8d0c0cae0de1077431687c2d455`, which already contains migrations `0024` and
+`0025`; PR #6 recovery maintenance remains separate.
 Merging this PR does not deploy. No backup/restore result is asserted by this release workflow.
 
 ## First use, after separate merge approval
