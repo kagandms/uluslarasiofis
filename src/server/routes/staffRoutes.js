@@ -14,12 +14,30 @@ const STAFF_SESSION_SECONDS = 12 * 60 * 60;
 const REMEMBERED_SESSION_SECONDS = 30 * 24 * 60 * 60;
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 const MAX_LOGIN_ATTEMPTS = 5;
+const MAX_LOGIN_ATTEMPTS_PER_ADDRESS = 30;
+const LOGIN_DEVICE_HEADER = 'X-Staff-Login-Device';
 
-async function hashLoginIdentity(request, normalizedUsername) {
-    const address = request.headers.get('CF-Connecting-IP') || 'unknown-client';
-    const value = new TextEncoder().encode(`${address}\u0000${normalizedUsername}`);
-    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', value));
+async function hashLoginKey(value) {
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
     return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function readClientAddress(request) {
+    const address = request.headers.get('CF-Connecting-IP') || 'unknown-client';
+    return address;
+}
+
+function readLoginDeviceId(request) {
+    const deviceId = request.headers.get(LOGIN_DEVICE_HEADER) || '';
+    return /^[a-zA-Z0-9_-]{20,128}$/.test(deviceId) ? deviceId : 'unknown-device';
+}
+
+async function hashLoginIdentities(request, normalizedUsername) {
+    const address = readClientAddress(request);
+    const deviceId = readLoginDeviceId(request);
+    const browserKey = await hashLoginKey(`staff-browser\u0000${address}\u0000${normalizedUsername}\u0000${deviceId}`);
+    const addressKey = await hashLoginKey(`staff-address\u0000${address}`);
+    return { browserKey, addressKey };
 }
 
 function publicStaff(staff) {
@@ -58,19 +76,28 @@ function readLoginInput(body) {
 async function authenticateStaff(repositories, request, { username, password }, sharedUsername) {
     const isSharedAccount = isConfiguredUsername(username, sharedUsername);
     const staff = isSharedAccount ? await findLoginStaff(repositories, username) : null;
-    const loginKey = await hashLoginIdentity(request, staff?.normalized_username || username.toLocaleLowerCase('en-US'));
+    const normalizedUsername = staff?.normalized_username || username.toLocaleLowerCase('en-US');
+    const { browserKey, addressKey } = await hashLoginIdentities(request, normalizedUsername);
     const nowSeconds = Math.floor(Date.now() / 1000);
-    if (await repositories.sessions.isLoginBlocked(loginKey, nowSeconds)) {
+    const isBrowserBlocked = await repositories.sessions.isLoginBlocked(browserKey, nowSeconds);
+    const isAddressBlocked = isSharedAccount
+        && await repositories.sessions.isLoginBlocked(addressKey, nowSeconds);
+    if (isBrowserBlocked || isAddressBlocked) {
         throw new ApiError(429, 'RATE_LIMITED', 'Çok fazla başarısız giriş denemesi yapıldı. Bir süre sonra tekrar deneyin.', true);
     }
     const passwordMatches = await verifyStaffPassword(password, staff?.password_hash);
     if (!isSharedAccount || !staff || !staff.is_active || !passwordMatches) {
-        await repositories.sessions.recordFailedLogin(loginKey, nowSeconds, {
+        await repositories.sessions.recordFailedLogin(browserKey, nowSeconds, {
             maxAttempts: MAX_LOGIN_ATTEMPTS, windowSeconds: LOGIN_WINDOW_SECONDS
         });
+        if (isSharedAccount) {
+            await repositories.sessions.recordFailedLogin(addressKey, nowSeconds, {
+                maxAttempts: MAX_LOGIN_ATTEMPTS_PER_ADDRESS, windowSeconds: LOGIN_WINDOW_SECONDS
+            });
+        }
         throw new ApiError(401, 'INVALID_CREDENTIALS', 'Kullanıcı adı veya şifre hatalı. Bilgilerinizi kontrol edip tekrar deneyin.');
     }
-    return { staff, loginKey };
+    return { staff, browserKey };
 }
 
 function isConfiguredUsername(username, sharedUsername) {
@@ -110,8 +137,8 @@ export async function loginStaff(request, environment, requestId) {
     const credentials = readLoginInput(await readJsonBody(request));
     const sharedUsername = readSharedStaffUsername(environment);
     const repositories = createRepositories(environment);
-    const { staff, loginKey } = await authenticateStaff(repositories, request, credentials, sharedUsername);
-    await repositories.sessions.clearLoginAttempts(loginKey);
+    const { staff, browserKey } = await authenticateStaff(repositories, request, credentials, sharedUsername);
+    await repositories.sessions.clearLoginAttempts(browserKey);
     const maxAge = credentials.rememberMe ? REMEMBERED_SESSION_SECONDS : STAFF_SESSION_SECONDS;
     const token = await createStaffLoginSession(repositories, staff, requestId, maxAge);
     return routeResult({ success: true, authenticated: true, staff: publicStaff(staff) }, {

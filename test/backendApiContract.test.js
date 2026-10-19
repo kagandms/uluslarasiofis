@@ -381,8 +381,10 @@ test('staff account management endpoints are unavailable in the shared-account m
 
 test('staff login applies a temporary D1-backed failed-attempt limit', async () => {
     const { environment } = createEnvironment();
-    const loginRequest = () => createRequest('/api/staff/auth/login', {
-        method: 'POST', body: { username: 'unknown-user', password: TEST_PASSWORD }
+    const loginRequest = (deviceId = 'browser-device-000000000001') => createRequest('/api/staff/auth/login', {
+        method: 'POST',
+        headers: { 'X-Staff-Login-Device': deviceId },
+        body: { username: 'unknown-user', password: TEST_PASSWORD }
     });
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -393,6 +395,36 @@ test('staff login applies a temporary D1-backed failed-attempt limit', async () 
 
     assert.equal(blockedResponse.status, 429);
     assert.equal((await readJson(blockedResponse)).error.code, 'RATE_LIMITED');
+});
+
+test('staff login isolates browser failures while preserving a broad address limit', async () => {
+    const { environment, database } = createEnvironment();
+    await seedStaff(environment, database, { id: 'staff-admin', username: 'admin', role: 'admin' });
+    const loginRequest = (deviceId, password = 'wrong password') => createRequest('/api/staff/auth/login', {
+        method: 'POST',
+        headers: { 'CF-Connecting-IP': '192.0.2.25', 'X-Staff-Login-Device': deviceId },
+        body: { username: 'admin', password }
+    });
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        assert.equal((await worker.fetch(loginRequest('browser-device-office-pc-a'), environment, {})).status, 401);
+    }
+    assert.equal((await worker.fetch(loginRequest('browser-device-office-pc-a'), environment, {})).status, 429);
+    const separateBrowserLogin = await worker.fetch(loginRequest('browser-device-office-pc-b', TEST_PASSWORD), environment, {});
+
+    assert.equal(separateBrowserLogin.status, 200);
+
+    const broadLimitEnvironment = createEnvironment();
+    await seedStaff(broadLimitEnvironment.environment, broadLimitEnvironment.database, {
+        id: 'staff-admin', username: 'admin', role: 'admin'
+    });
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+        const response = await worker.fetch(loginRequest(`browser-device-${String(attempt).padStart(16, '0')}`), broadLimitEnvironment.environment, {});
+        assert.equal(response.status, 401);
+    }
+    const addressBlocked = await worker.fetch(loginRequest('browser-device-office-pc-c', TEST_PASSWORD), broadLimitEnvironment.environment, {});
+
+    assert.equal(addressBlocked.status, 429);
 });
 
 test('staff APIs reject requests without a D1-backed session', async () => {
