@@ -7,7 +7,6 @@ import {
     extractPassportPlaceOfBirth,
     extractPassportIssuingAuthority,
     extractPassportGender,
-    inferGenderFromName,
     getCountryIso3Code
 } from '../utils/ykn-document-parser.js';
 import { mergeApplyProfile, applyManualProfileChoices, normalizeProfileGender, normalizeProfileMaritalStatus } from '../utils/ykn-profile-state.js';
@@ -1716,9 +1715,8 @@ export function initYknManager() {
 
                                     if (!currentStudentData.cinsiyet) {
                                         const detectedSex = extractPassportGender(pageOcrText, {
-                                            birthDate: currentStudentData?.birthDate,
-                                            studentName: currentStudentData?.fullName
-                                        }) || (currentStudentData?.fullName ? inferGenderFromName(currentStudentData.fullName) : '');
+                                            birthDate: currentStudentData?.birthDate
+                                        });
                                         if (detectedSex) {
                                             currentStudentData.cinsiyet = detectedSex;
                                             currentStudentData.genderSource = 'passport';
@@ -2985,13 +2983,6 @@ export function initYknManager() {
                 yoksisId: safeYoksisId
             };
             currentStudentData = mergeApplyProfile(null, currentStudentData);
-            if (!currentStudentData.cinsiyet && currentStudentData.fullName) {
-                const inferred = inferGenderFromName(currentStudentData.fullName);
-                if (inferred) {
-                    currentStudentData.cinsiyet = inferred;
-                    currentStudentData.genderSource = 'inferred';
-                }
-            }
             studentName.textContent = currentStudentData.fullName || "İsim Bulunamadı";
             updateStudentActions(currentStudentData);
             applyCountryDefaultsToStudent(currentStudentData);
@@ -3015,8 +3006,8 @@ export function initYknManager() {
                 : (incoming.passportDocumentUrl || incoming.passportImageUrl ? [incoming.passportDocumentUrl || incoming.passportImageUrl] : (currentStudentData?.passportCandidates || []));
             const currentSearchPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
             const resolvedPassportNo = readProfileText(currentStudentData?.passportNo || currentStudentData?.pasaportNo || incoming.passportNo || incoming.pasaportNo || currentSearchPassport || '').trim().toUpperCase();
-            const resolvedGender = incoming.cinsiyet || currentStudentData?.cinsiyet || (incoming.fullName || currentStudentData?.fullName ? inferGenderFromName(incoming.fullName || currentStudentData?.fullName) : '');
-            const resolvedGenderSource = incoming.cinsiyet ? (incoming.genderSource || 'apply') : (currentStudentData?.cinsiyet ? currentStudentData.genderSource : (resolvedGender ? 'inferred' : 'unverified'));
+            const resolvedGender = incoming.cinsiyet || currentStudentData?.cinsiyet || '';
+            const resolvedGenderSource = incoming.cinsiyet ? (incoming.genderSource || 'apply') : (currentStudentData?.cinsiyet ? currentStudentData.genderSource : 'unverified');
             const resolvedMarital = incoming.medeniHali || incoming.medeniHal || currentStudentData?.medeniHali || '';
             const resolvedMaritalSource = (incoming.medeniHali || incoming.medeniHal) ? (incoming.maritalSource || 'apply') : (currentStudentData?.maritalSource || 'unverified');
             currentStudentData = {

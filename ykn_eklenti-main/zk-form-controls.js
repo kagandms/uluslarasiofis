@@ -1,5 +1,5 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.102') return;
+    if (window.YknZkForm?.version === '1.2.103') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
     const COUNTRY_ALIAS_GROUPS = [
@@ -326,7 +326,20 @@
         return Boolean(zk?.processing || zk?.mounting || zk?.loading > 0 || targetWindow.zAu?.processing?.());
     }
 
+    function flushDeferredSelections(targetWindow) {
+        const au = targetWindow?.zAu;
+        if (!au?.sendNow || !au.getAuRequests) return;
+        for (const desktop of Object.values(targetWindow.zk?.Desktop?.all || {})) {
+            const hasPendingSelection = au.getAuRequests(desktop).some(request =>
+                ['onSelect', 'onCheck'].includes(request.name) && request.opts?.defer === true);
+            // These important ZK events deliberately wait for another AU request. Our
+            // serial response verification must send that existing queue without replaying it.
+            if (hasPendingSelection) au.sendNow(desktop);
+        }
+    }
+
     function waitForIdle() {
+        for (const targetDocument of collectDocuments()) flushDeferredSelections(targetDocument.defaultView);
         if (collectDocuments().every((targetDocument) => !isBusy(targetDocument.defaultView))) {
             return Promise.resolve({ success: true });
         }
@@ -513,6 +526,7 @@
         if (attemptedSelections.size > 100) attemptedSelections.delete(attemptedSelections.values().next().value);
         try {
             commitSelection(target);
+            flushDeferredSelections(target.targetWindow);
             await waitForResponse(observer);
             await waitForIdle();
             const refreshed = findRadio(options);
@@ -604,6 +618,7 @@
         if (attemptedSelections.size > 100) attemptedSelections.delete(attemptedSelections.values().next().value);
         try {
             commitCountry(target);
+            flushDeferredSelections(target.targetWindow);
             if (observer) await waitForResponse(observer);
             await waitForIdle();
             const refreshed = findCountry(options);
@@ -644,5 +659,5 @@
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.102', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.103', execute });
 })();

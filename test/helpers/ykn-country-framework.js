@@ -37,10 +37,11 @@ function createCountryWidget(framework, select) {
             const reference = select.options[select.selectedIndex].id;
             this.fire('onSelect', { items: [reference], reference });
         },
-        fire(name, payload) {
+        fire(name, payload, options = {}) {
             framework.events.push({ id: select.id, name, payload });
-            framework.isProcessing = true;
-            framework.window.queueMicrotask(() => completeCountryRequest(framework, { select, widget: this, name, payload }));
+            const request = { target: this, name, payload, select, widget: this, opts: { defer: !options.toServer } };
+            framework.queue.push(request);
+            if (options.toServer) framework.window.zAu.sendNow();
         }
     };
 }
@@ -57,10 +58,20 @@ function mountCountrySelect(framework, select) {
  */
 export function installCountryFramework(window, options = {}) {
     const framework = { window, options, widgets: new WeakMap(), listeners: new Set(),
-        events: [], serverValues: new Map(), isProcessing: false };
+        events: [], queue: [], serverValues: new Map(), isProcessing: false };
     for (const select of window.document.querySelectorAll('select')) mountCountrySelect(framework, select);
     window.zk = { Widget: { $: element => framework.widgets.get(element) }, Desktop: { all: { current: {} } } };
-    window.zAu = { processing: () => framework.isProcessing, getAuRequests: () => options.queue || [] };
+    window.zAu = {
+        processing: () => framework.isProcessing,
+        getAuRequests: () => [...(options.queue || []), ...framework.queue],
+        sendNow() {
+            const requests = framework.queue.splice(0);
+            if (!requests.length) return false;
+            framework.isProcessing = true;
+            window.queueMicrotask(() => requests.forEach(request => completeCountryRequest(framework, request)));
+            return true;
+        }
+    };
     window.zWatch = {
         listen: ({ onResponse }) => framework.listeners.add(onResponse),
         unlisten: ({ onResponse }) => framework.listeners.delete(onResponse)

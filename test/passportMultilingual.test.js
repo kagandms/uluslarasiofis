@@ -610,7 +610,7 @@ test('Gender normalization and name-based gender inference', () => {
     assert.equal(extParser.inferGenderFromName('ADAM-RAMADAN SAVADOGO'), 'Erkek');
     assert.equal(extParser.inferGenderFromName('FATOUMATA DIALLO'), 'Kadın');
 
-    // 3. Metadata extraction with name hint when text has no explicit sex field
+    // A name hint is not evidence for a passport gender field.
     const passNoSex = `PASSPORT
 SURNAME: BEGENJOVA
 GIVEN NAMES: MERJEN
@@ -619,10 +619,11 @@ DATE OF ISSUE: 01.01.2021
 DATE OF EXPIRY: 01.01.2031`;
 
     const meta = extractPassportMetadata(passNoSex, { fullName: 'MERJEN BEGENJOVA' });
-    assert.equal(meta.cinsiyet, 'Kadın');
+    assert.equal(meta.cinsiyet, '');
+    assert.equal(extractPassportGender(passNoSex, { studentName: 'MERJEN BEGENJOVA' }), '');
 
     const extMeta = extParser.extractPassportMetadata(passNoSex, { fullName: 'MERJEN BEGENJOVA' });
-    assert.equal(extMeta.cinsiyet, 'Kadın');
+    assert.equal(extMeta.cinsiyet, '');
 });
 
 

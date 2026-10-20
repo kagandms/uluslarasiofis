@@ -14,6 +14,7 @@ function createFramework(options = {}) {
     const events = [];
     let widgets = new Map();
     let isBusy = false;
+    const pendingChecks = [];
     function mount(value) {
         window.document.getElementById('form').innerHTML = `<fieldset class="z-radiogroup"><label><input id="single" type="radio" ${value === 'Bekar' ? 'checked' : ''}>Bekar</label><label><input id="married" type="radio" ${value === 'Evli' ? 'checked' : ''}>Evli</label></fieldset>
             <fieldset class="z-radiogroup"><label><input id="male" type="radio" ${value === 'Erkek' ? 'checked' : ''}>Erkek</label><label><input id="female" type="radio" ${value === 'Kadın' ? 'checked' : ''}>Kadın</label></fieldset>`;
@@ -33,8 +34,7 @@ function createFramework(options = {}) {
                 setChecked(checked) { radio.checked = checked; },
                 fireOnCheck_(checked) {
                     events.push({ id: radio.id, checked });
-                    isBusy = true;
-                    window.queueMicrotask(() => {
+                    pendingChecks.push({ name: 'onCheck', opts: { defer: true }, complete: () => {
                         if (options.rerender) mount(radio.id === 'single' ? 'Bekar' : radio.id === 'female' ? 'Kadın' : radio.id === 'male' ? 'Erkek' : 'Evli');
                         if (options.reject) {
                             group.selected = null;
@@ -42,7 +42,7 @@ function createFramework(options = {}) {
                         }
                         isBusy = false;
                         if (!options.noResponse) for (const listener of listeners) listener.onResponse();
-                    });
+                    } });
                 }
             };
             widgets.set(radio, widget);
@@ -51,7 +51,16 @@ function createFramework(options = {}) {
     }
     mount(options.initial || 'Bekar');
     window.zk = { Widget: { $: (radio) => widgets.get(radio) }, Desktop: { all: { current: {} } } };
-    window.zAu = { processing: () => isBusy, getAuRequests: () => options.queue || [] };
+    window.zAu = {
+        processing: () => isBusy, getAuRequests: () => [...(options.queue || []), ...pendingChecks],
+        sendNow() {
+            const requests = pendingChecks.splice(0);
+            if (!requests.length) return false;
+            isBusy = true;
+            window.queueMicrotask(() => requests.forEach(request => request.complete()));
+            return true;
+        }
+    };
     window.zWatch = {
         listen: ({ onResponse }) => listeners.add(onResponse),
         unlisten: ({ onResponse }) => listeners.delete(onResponse)
