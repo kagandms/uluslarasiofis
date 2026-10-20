@@ -2114,7 +2114,7 @@ export function initYknManager() {
             // Eğer kabul kodu zaten mevcutsa doğrudan panoya kopyala ve YÖKSİS'te ara
             if (currentStudentData.yoksisId && isValidYoksisId(currentStudentData.yoksisId)) {
                 copyTextToClipboard(currentStudentData.yoksisId);
-                showToast(`Kabul Kodu kopyalandı ve YÖKSİS'te aranıyor: ${currentStudentData.yoksisId}`, 'success');
+                showToast('Kabul kodu kopyalandı; YÖKSİS araması başlatılıyor.', 'info');
                 addStatus(`Kabul kodu panoya kopyalandı ve YÖKSİS sekmesinde aranıyor: ${currentStudentData.yoksisId}`, 'info');
 
                 btnReadAcceptance.disabled = true;

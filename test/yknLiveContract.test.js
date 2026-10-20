@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { JSDOM } from 'jsdom';
 import test from 'node:test';
+import { installCountryFramework } from './helpers/ykn-country-framework.js';
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const fieldTargetsSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/yoksis-field-targets.js'), 'utf8');
@@ -363,10 +364,10 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                 assert.equal(isAsync, true);
             });
         },
-        async sendFrom(request, senderUrl) {
+        async sendFrom(request, senderUrl, frameId) {
             assert.ok(messageHandler, 'background message listener was not registered');
             return new Promise((resolveResponse) => {
-                messageHandler(request, { tab: { id: 2, url: senderUrl } }, resolveResponse);
+                messageHandler(request, { tab: { id: 2, url: senderUrl }, frameId }, resolveResponse);
             });
         }
     };
@@ -388,6 +389,29 @@ test('extension rejects staff bridge messages from an untrusted page before runn
     assert.equal(response.success, false);
     assert.equal(response.error, 'İstek doğrulanamadı. Yetkili portalı yenileyip tekrar deneyin.');
     assert.equal(harness.calls.some((call) => call.type === 'message' && call.message.action === 'searchWithId'), false);
+});
+
+test('country commands require the YÖKSİS main frame, a known field and a bounded request', async () => {
+    for (const [url, frameId, override] of [
+        ['https://evil.example/', 0, {}], ['https://yoksis.yok.gov.tr/student', 1, {}],
+        ['https://yoksis.yok.gov.tr/student', 0, { field: 'arbitrary-input' }],
+        ['https://yoksis.yok.gov.tr/student', 0, { requestId: '' }],
+        ['https://yoksis.yok.gov.tr/student', 0, { value: 'x'.repeat(101) }]
+    ]) {
+        const harness = createBackgroundHarness({}, {});
+
+        const response = await harness.sendFrom({ action: 'YOKSIS_ZK_COMMAND', command: {
+            action: 'selectCountry', field: 'birthCountry', value: 'Türkiye', requestId: 'validated-country', ...override
+        } }, url, frameId);
+
+        assert.equal(response.success, false);
+        assert.equal(harness.calls.some(call => call.type === 'script'), false);
+    }
+    const harness = createBackgroundHarness({}, {});
+    const response = await harness.sendFrom({ action: 'YOKSIS_ZK_COMMAND', command: {
+        action: 'selectCountry', field: 'birthCountry', value: 'Türkiye', requestId: 'validated-country'
+    } }, 'https://yoksis.yok.gov.tr/student', 0);
+    assert.equal(response.success, true);
 });
 
 test('YÖKSİS search handles ZK-labelled controls and confirms delayed form readiness', async () => {
@@ -1296,7 +1320,7 @@ test('background transfer waits for a delayed fresh form after the search click'
     assert.ok(!harness.calls.some((call) => call.type === 'script' && call.options.world === 'MAIN'));
 });
 
-test('Tek Tık aktarımı açık YÖKSİS sekmesi yoksa güvenli biçimde yeni sekme açar', async () => {
+test('acceptance search activates its target before navigation and search timers run', async () => {
     const harness = createBackgroundHarness(
         { inputFound: false, buttonFound: false },
         { success: true, searchTriggered: true, formReady: true },
@@ -1315,9 +1339,13 @@ test('Tek Tık aktarımı açık YÖKSİS sekmesi yoksa güvenli biçimde yeni s
         && call.createProperties.url === 'https://yoksis.yok.gov.tr/'));
     assert.ok(harness.calls.some((call) => call.type === 'create-tab'
         && call.createProperties.active === false));
-    assert.ok(!harness.calls.some((call) => call.type === 'update-tab'
+    assert.ok(harness.calls.some((call) => call.type === 'update-tab'
         && call.updateProperties.active === true));
-    assert.ok(!harness.calls.some((call) => call.type === 'focus-window'));
+    const activation = harness.calls.findIndex(call => call.type === 'update-tab' && call.updateProperties.active === true);
+    const navigation = harness.calls.findIndex(call => call.message?.action === 'OPEN_YOKSIS_YKN_REQUEST');
+    assert.ok(activation < navigation);
+    assert.ok(activation < harness.calls.findIndex(call => call.message?.action === 'PING'));
+    assert.ok(harness.calls.some((call) => call.type === 'focus-window'));
 });
 
 test('son YÖKSİS doldurma adımı sekmeyi öne alır', async () => {
@@ -1534,7 +1562,7 @@ test('ardışık YÖKSİS aramaları requestId ile birbirine karışmaz', async 
     })));
 });
 
-test('YÖKSİS popup araması da arka planda çalışır', async () => {
+test('popup search also activates the shared YÖKSİS target', async () => {
     const harness = createBackgroundHarness(
         { inputFound: false, buttonFound: false },
         { success: true, searchTriggered: true, formReady: true }
@@ -1547,7 +1575,7 @@ test('YÖKSİS popup araması da arka planda çalışır', async () => {
     });
 
     assert.equal(response.success, true);
-    assert.ok(!harness.calls.some((call) => call.type === 'update-tab'
+    assert.ok(harness.calls.some((call) => call.type === 'update-tab'
         && call.updateProperties.active === true));
 });
 
@@ -2291,6 +2319,7 @@ test('real MAIN and content transfer keep nested student fields distinct across 
         </table></fieldset></td></tr></table></td></tr></table>`;
     const target = createContentHarness(markup, 'https://yoksis.yok.gov.tr/student');
     const document = target.dom.window.document;
+    const countryFramework = installCountryFramework(target.dom.window);
     makeFileInputWritable(document.getElementById('photo'));
     let photoUploads = 0;
     let searchChanges = 0;
@@ -2300,6 +2329,10 @@ test('real MAIN and content transfer keep nested student fields distinct across 
         photoUploads += 1;
         countriesBeforePhoto = Array.from(document.querySelectorAll('select')).map(select => select.value);
         document.getElementById('last').value = '';
+        for (const select of document.querySelectorAll('select')) {
+            target.dom.window.zk.Widget.$(select).setSelectedIndex(0);
+            countryFramework.serverValues.set(select.id, '');
+        }
     });
     const background = createBackgroundHarness({}, {}, { targetHarness: target });
     const student = { yoksisReady: true, yoksisTabId: 42, yoksisTabUrl: 'https://yoksis.yok.gov.tr/student',
@@ -2317,6 +2350,8 @@ test('real MAIN and content transfer keep nested student fields distinct across 
         assert.equal(response.photoUploaded, true);
         assert.equal(photoUploads, 1);
         assert.deepEqual(countriesBeforePhoto, ['tr', 'tr', 'tr', 'tr']);
+        assert.deepEqual([...countryFramework.serverValues.values()], ['tr', 'tr', 'tr', 'tr']);
+        assert.equal(countryFramework.events.length, 8);
         assert.equal(searchChanges, 0);
         assert.equal(document.getElementById('search').value, 'KEEP-SEARCH');
         for (const [id, expected] of Object.entries({ first: 'SYNTHETIC', last: 'STUDENT', mother: 'MOTHER', father: 'FATHER',
