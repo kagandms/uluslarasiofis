@@ -120,7 +120,7 @@ export function initializeScannerManager(root, api = createScannerApi()) {
 
         const summary = document.createElement('p');
         summary.className = 'staff-scanner-summary-text';
-        summary.textContent = `Bekleyen tarama: ${backlog}. ${hostSummary} Son başarılı tarama: ${formatScanTime(status.last_successful_scan)}`;
+        summary.textContent = `Kuyrukta veya işlemde: ${backlog}. Doğrulanamayan dosya: ${failedJobs.length}. ${hostSummary} Son başarılı tarama: ${formatScanTime(status.last_successful_scan)}`;
         summary.setAttribute('aria-live', 'polite');
         detailsRoot.append(summary);
 
