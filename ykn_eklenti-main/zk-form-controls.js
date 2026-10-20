@@ -1,5 +1,5 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.100') return;
+    if (window.YknZkForm?.version === '1.2.101') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
 
@@ -490,5 +490,5 @@
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.100', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.101', execute });
 })();

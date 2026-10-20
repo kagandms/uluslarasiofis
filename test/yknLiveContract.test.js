@@ -7,6 +7,7 @@ import { JSDOM } from 'jsdom';
 import test from 'node:test';
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
+const fieldTargetsSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/yoksis-field-targets.js'), 'utf8');
 const contentSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/content.js'), 'utf8');
 const zkControlsSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/zk-form-controls.js'), 'utf8');
 const backgroundSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/background.js'), 'utf8');
@@ -135,6 +136,7 @@ function createContentHarness(markup, url, storedData = {}) {
     window.DataTransfer = createDataTransfer(window);
     window.PointerEvent = window.MouseEvent;
     installInnerText(window);
+    window.eval(fieldTargetsSource);
     window.eval(zkControlsSource);
     window.eval(contentSource);
 
@@ -163,6 +165,7 @@ function makeFileInputWritable(input) {
 }
 
 function createBackgroundHarness(mainResult, searchResult, options = {}) {
+    const optionsForTarget = options.targetHarness;
     const calls = [];
     const timingLogs = [];
     let messageHandler = null;
@@ -228,6 +231,10 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         scripting: {
             async executeScript(options) {
                 calls.push({ type: 'script', options });
+                if (options.world === 'MAIN' && options.func && optionsForTarget?.dom) {
+                    const execute = optionsForTarget.dom.window.eval(`(${options.func.toString()})`);
+                    return [{ result: await execute(...(options.args || [])) }];
+                }
                 if (options.files?.includes('zk-form-controls.js')) return [];
                 if (options.func?.name === 'executeYoksisZkCommand') return [{ result: { success: true, verified: true } }];
                 if (options.world === 'MAIN') return [{ result: mainResult }];
@@ -284,6 +291,10 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                     return;
                 }
                 if (message.action === 'verifyYoksisFields') {
+                    if (options.targetHarness) {
+                        void options.targetHarness.send(message).then(callback);
+                        return;
+                    }
                     verificationCount += 1;
                     callback((verificationCount > 1 ? options.finalVerificationResult : null) || options.verificationResult || {
                         success: Array.isArray(mainResult?.filledFields) && mainResult.filledFields.length > 0,
@@ -293,6 +304,10 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                     return;
                 }
                 if (message.action === 'fillRemainingData') {
+                    if (options.targetHarness) {
+                        void options.targetHarness.send(message).then(callback);
+                        return;
+                    }
                     callback(typeof options.contentResult === 'function'
                         ? options.contentResult(message)
                         : options.contentResult || { success: true, filledFields: [], missingFields: [] });
@@ -2256,4 +2271,59 @@ test('a late fill from the previous student cannot replace current temporary dat
     assert.equal(response.success, false);
     assert.equal(harness.storageValues.studentData.yoksisId, 'CURRENT-STUDENT');
     assert.equal(harness.calls.some(call => call.type === 'script' && call.options.args?.[1] === 'fields'), false);
+});
+
+test('real MAIN and content transfer keep nested student fields distinct across photo postback', async () => {
+    const row = (label, id, kind = 'input') => `<td><span id="label-${id}">${label}</span></td><td>${kind === 'select'
+        ? `<select id="${id}"><option value=""></option><option value="tr">Türkiye</option></select>`
+        : `<input id="${id}">`}</td>`;
+    const markup = `<table><tr><td id="outer-layout"><table><tr><td><fieldset><legend>Belge Sorgula</legend>
+        <table><tr><td>Belge No</td><td><input id="search" placeholder="Pasaport/Belge No" value="KEEP-SEARCH"></td></tr></table></fieldset></td>
+        <td><fieldset><legend>Öğrenci Bilgileri</legend><table>
+        <tr>${row('Adı', 'first')}${row('Soyadı', 'last')}</tr>
+        <tr>${row('Anne Adı', 'mother')}${row('Baba Adı', 'father')}</tr>
+        <tr>${row('Doğum Tarihi', 'birth')}${row('Belge No', 'passport')}</tr>
+        <tr>${row('Belge Düzenleme Tarihi', 'issue')}${row('Belge Geçerlilik Tarihi', 'expiry')}</tr>
+        <tr>${row('Uyruğu', 'nationality', 'select')}${row('Doğum Uyruğu', 'birth-nationality', 'select')}</tr>
+        <tr>${row('Doğum Yeri Ülkesi', 'birth-country', 'select')}${row('Belgeyi Veren Ülke', 'issuer-country', 'select')}</tr>
+        <tr>${row('Doğum Yeri Açıklaması', 'birth-place')}${row('Belgeyi Veren Makam', 'authority')}</tr>
+        <tr><td>Fotoğraf Adı</td><td><button>Fotoğraf Yükle</button><input id="photo" type="file"></td></tr>
+        </table></fieldset></td></tr></table></td></tr></table>`;
+    const target = createContentHarness(markup, 'https://yoksis.yok.gov.tr/student');
+    const document = target.dom.window.document;
+    makeFileInputWritable(document.getElementById('photo'));
+    let photoUploads = 0;
+    let searchChanges = 0;
+    let countriesBeforePhoto = [];
+    document.getElementById('search').addEventListener('change', () => { searchChanges += 1; });
+    document.getElementById('photo').addEventListener('change', () => {
+        photoUploads += 1;
+        countriesBeforePhoto = Array.from(document.querySelectorAll('select')).map(select => select.value);
+        document.getElementById('last').value = '';
+    });
+    const background = createBackgroundHarness({}, {}, { targetHarness: target });
+    const student = { yoksisReady: true, yoksisTabId: 42, yoksisTabUrl: 'https://yoksis.yok.gov.tr/student',
+        firstName: 'SYNTHETIC', lastName: 'STUDENT', anneAdi: 'MOTHER', babaAdi: 'FATHER',
+        birthDate: '01.01.2000', issueDate: '02.02.2024', expiryDate: '03.03.2034', pasaportNo: 'SYNTHETIC-PASSPORT',
+        uyruk: 'Türkiye', dogumUlkesi: 'Türkiye', dogumYeriAciklamasi: 'CITY', verenMakam: 'AUTHORITY',
+        croppedPhotoBase64: 'data:image/jpeg;base64,AA==' };
+
+    try {
+        const response = await background.send({ source: 'IKAMET_PORTAL', action: 'FILL_YOKSIS_FORM',
+            requestId: 'real-nested-transfer', data: student });
+
+        assert.equal(response.success, true, JSON.stringify(response));
+        assert.equal(response.partial, false, JSON.stringify(response));
+        assert.equal(response.photoUploaded, true);
+        assert.equal(photoUploads, 1);
+        assert.deepEqual(countriesBeforePhoto, ['tr', 'tr', 'tr', 'tr']);
+        assert.equal(searchChanges, 0);
+        assert.equal(document.getElementById('search').value, 'KEEP-SEARCH');
+        for (const [id, expected] of Object.entries({ first: 'SYNTHETIC', last: 'STUDENT', mother: 'MOTHER', father: 'FATHER',
+            birth: '01.01.2000', issue: '02.02.2024', expiry: '03.03.2034', passport: 'SYNTHETIC-PASSPORT',
+            'birth-place': 'CITY', authority: 'AUTHORITY' })) {
+            assert.equal(document.getElementById(id).value, expected, id);
+        }
+        assert.equal(background.calls.filter(call => call.message?.action === 'fillRemainingData').length, 1);
+    } finally { target.close(); }
 });
