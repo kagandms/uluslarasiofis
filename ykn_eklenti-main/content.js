@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.103';
+const CONTENT_SCRIPT_VERSION = '1.2.104';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -1328,10 +1328,12 @@ async function waitForYoksisSearchControlsToSettle(options = {}) {
 
 function hasPopulatedYoksisStudentForm() {
     const aliases = [['Adı', 'Öğrenci Adı'], ['Soyadı'], ['Anne Adı'], ['Baba Adı'], ['Belge No']];
-    return aliases.some((labels) => {
-        const input = findTargetElementByFuzzyLabels(labels, 'input');
-        return isYoksisControlUsable(input) && String(input.value || '').trim() !== '';
-    });
+    return aliases.some((labels) => getAllDocs(document).some(root => {
+        const input = globalThis.YknFieldTargets.find({ root, labels, kind: 'existing-text' });
+        // A completed YKN record can retain disabled fields even after visible values clear.
+        // Its locked form still requires the normal new-record reset before the next search.
+        return Boolean(input && (String(input.value || '').trim() || input.disabled));
+    }));
 }
 
 function isYoksisFormResetApproved(request) {
