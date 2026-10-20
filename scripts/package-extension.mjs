@@ -13,6 +13,7 @@ const extensionFiles = [
     'bridge.js',
     'content.js',
     'zk-form-controls.js',
+    'yoksis-field-targets.js',
     'portal-security.js',
     'storage-lifecycle.js',
     'document-parser.js',

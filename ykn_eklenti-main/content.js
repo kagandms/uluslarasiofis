@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.100';
+const CONTENT_SCRIPT_VERSION = '1.2.101';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -1645,187 +1645,19 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
 
 // YÖKSİS: "Belge No" alanını bul (Hata Düzeltildi - Kesin TD Araması)
 function findBelgeNoInMainPanel() {
-    const normalize = str => str.toLocaleLowerCase('tr-TR').replace(/\s+/g, '');
-    const searchWord = normalize('Belge No');
-    const allDocs = getAllDocs(document);
-
-    for (const doc of allDocs) {
-        const allInputs = doc.querySelectorAll('input');
-        for (const target of allInputs) {
-            if (!isYoksisControlUsable(target)) continue;
-            // Sol menüdeki arama kutucuğunu atlamak için placeholder kontrolü
-            const ph = target.getAttribute('placeholder') || '';
-            if (ph.toLocaleLowerCase('tr-TR').includes('pasaport')) {
-                continue;
-            }
-
-            // Bu input'un solundaki hücrelerde 'Belge No' var mı bakıyoruz
-            const targetTd = target.closest('td');
-            let prevTd = targetTd ? targetTd.previousElementSibling : null;
-            let foundLabel = false;
-
-            while (prevTd) {
-                const text = normalize(prevTd.innerText);
-                if (text.includes(searchWord)) {
-                    foundLabel = true;
-                    break;
-                }
-                if (text.includes(normalize('Uyruk Kimlik No'))) {
-                    // Eğer sola doğru giderken Belge No'dan önce Uyruk Kimlik No'ya çarparsak,
-                    // bu kutu Uyruk Kimlik No'nun kutusudur, Belge No'nun değil! Aramayı kes.
-                    break;
-                }
-                prevTd = prevTd.previousElementSibling;
-            }
-
-            if (!foundLabel) {
-                const row = target.closest('tr');
-                const rowText = normalize(row && (row.innerText || row.textContent) || '');
-                if (rowText.includes(searchWord) && !rowText.includes('pasaport') && !rowText.includes(normalize('Uyruk Kimlik No'))) {
-                    foundLabel = true;
-                }
-            }
-
-            if (foundLabel) {
-                return target;
-            }
-        }
-    }
-    return null;
+    return findTargetElementByFuzzyLabels(['Belge No'], 'input');
 }
 
-// YÖKSİS: Diğer alanlar için çok güçlü, boşluk duyarsız arayıcı
 function findTargetElementByFuzzyLabel(labelText, tagName) {
-    const normalize = (str) => (str || '')
-        .toLocaleLowerCase('tr-TR')
-        .replace(/ı/g, 'i')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/duzenlenme/g, 'duzenleme')
-        .replace(/[*:\s]/g, '');
-    const searchWord = normalize(labelText);
-    const isAdiSearch = searchWord === 'adi' || searchWord === 'ad' || searchWord === 'ogrenciadi';
-    const isSoyadSearch = searchWord === 'soyadi' || searchWord === 'soyad' || searchWord === 'ogrencisoyadi';
-    const allDocs = getAllDocs(document);
-
-    for (const doc of allDocs) {
-        const allTargets = Array.from(doc.querySelectorAll(tagName)).filter(isYoksisControlUsable);
-        for (const target of allTargets) {
-            if (tagName === 'input' && (target.getAttribute('type') || '').toLowerCase() === 'file') {
-                continue;
-            }
-            const row = target.closest('tr');
-            if (row) {
-                const targetTd = target.closest('td');
-                let prevTd = targetTd ? targetTd.previousElementSibling : null;
-                while (prevTd) {
-                    const prevText = normalize(prevTd.innerText);
-                    if (isAdiSearch && (prevText.includes('soyad') || prevText.includes('anne') || prevText.includes('baba') || prevText.includes('foto'))) {
-                        prevTd = prevTd.previousElementSibling;
-                        continue;
-                    }
-                    if (isSoyadSearch && (prevText.includes('anne') || prevText.includes('baba'))) {
-                        prevTd = prevTd.previousElementSibling;
-                        continue;
-                    }
-                    const matches = isAdiSearch
-                        ? (prevText === 'adi' || prevText === 'ad' || prevText === 'ogrenciadi')
-                        : (prevText === searchWord || prevText.includes(searchWord));
-                    if (matches) {
-                        return target;
-                    }
-                    prevTd = prevTd.previousElementSibling;
-                }
-            }
-        }
-
-        // Yeni YÖKSİS kartlarında etiket ve kontrol aynı form grubunda,
-        // tablo satırı olmadan yan yana bulunabilir. Kapsayıcıdaki ilk inputu
-        // almak yerine etikete komşu veya tekil kontrolü kullan.
-        const labelNodes = doc.querySelectorAll('label, span, div, dt, strong, b');
-        for (const labelNode of labelNodes) {
-            if (!isYoksisControlUsable(labelNode)) continue;
-            const labelValue = normalize(labelNode.innerText || labelNode.textContent || '');
-            if (isAdiSearch && (labelValue.includes('soyad') || labelValue.includes('anne') || labelValue.includes('baba') || labelValue.includes('foto'))) {
-                continue;
-            }
-            if (isSoyadSearch && (labelValue.includes('anne') || labelValue.includes('baba'))) {
-                continue;
-            }
-            const isExplicitLabel = ['LABEL', 'DT', 'STRONG', 'B'].includes(labelNode.tagName);
-            const exactMatch = isAdiSearch
-                ? (labelValue === 'adi' || labelValue === 'ad' || labelValue === 'ogrenciadi')
-                : (labelValue === searchWord);
-            const partialMatch = !isAdiSearch && isExplicitLabel && labelValue.includes(searchWord);
-            if (!exactMatch && !partialMatch) continue;
-
-            const ownTargets = Array.from(labelNode.querySelectorAll(tagName)).filter(isYoksisControlUsable);
-            if (ownTargets.length === 1) return ownTargets[0];
-            if (ownTargets.length > 0) continue;
-
-            const nextNode = labelNode.nextElementSibling;
-            const nextTarget = nextNode && (nextNode.matches?.(tagName)
-                ? nextNode
-                : nextNode.querySelector?.(tagName));
-            if (isYoksisControlUsable(nextTarget)) return nextTarget;
-
-            const parent = labelNode.parentElement;
-            const parentTargets = parent ? Array.from(parent.querySelectorAll(tagName)).filter(isYoksisControlUsable) : [];
-            if (parentTargets.length === 1) return parentTargets[0];
-        }
-
-        const elements = Array.from(doc.querySelectorAll('span, div, label')).filter(el => {
-            const value = normalize(el.innerText || el.textContent || '');
-            if (isAdiSearch && (value.includes('soyad') || value.includes('anne') || value.includes('baba') || value.includes('foto'))) {
-                return false;
-            }
-            if (isSoyadSearch && (value.includes('anne') || value.includes('baba'))) {
-                return false;
-            }
-            const isLeafLike = !el.querySelector(tagName);
-            const isMatched = isAdiSearch
-                ? (value === 'adi' || value === 'ad' || value === 'ogrenciadi')
-                : (value === searchWord);
-            return isMatched && isLeafLike && el.children.length <= 2;
-        });
-
-        for (const el of elements) {
-            const parentTd = el.closest('td');
-            if (parentTd && parentTd.nextElementSibling) {
-                const target = parentTd.nextElementSibling.querySelector(tagName);
-                if (isYoksisControlUsable(target)) return target;
-            }
-        }
-
-        for (const target of allTargets) {
-            const row = target.closest('tr');
-            if (row) {
-                const rowText = normalize(row.innerText);
-                if (isAdiSearch && (rowText.includes('soyad') || rowText.includes('anne') || rowText.includes('baba') || rowText.includes('foto'))) {
-                    continue;
-                }
-                if (isSoyadSearch && (rowText.includes('anne') || rowText.includes('baba'))) {
-                    continue;
-                }
-                const matches = isAdiSearch
-                    ? (rowText === 'adi' || rowText === 'ad' || rowText === 'ogrenciadi')
-                    : rowText.includes(searchWord);
-                if (matches) {
-                    const rowTargets = Array.from(row.querySelectorAll(tagName));
-                    if (rowTargets.length === 1) return target;
-                }
-            }
-        }
-    }
-    return null;
+    return findTargetElementByFuzzyLabels([labelText], tagName);
 }
 
 function findTargetElementByFuzzyLabels(labelTexts, tagName) {
-    for (const labelText of labelTexts) {
-        const target = findTargetElementByFuzzyLabel(labelText, tagName);
-        if (target) return target;
-    }
-    return null;
+    const candidates = getAllDocs(document).map(root => globalThis.YknFieldTargets.find({
+        root, labels: labelTexts, kind: tagName === 'select' ? 'select' : 'text'
+    })).filter(Boolean);
+    const unique = [...new Set(candidates)];
+    return unique.length === 1 ? unique[0] : null;
 }
 
 function findPhotoUploadButton() {

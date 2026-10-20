@@ -21,7 +21,10 @@ test('distributed YKN package supports only staging, production, Apply, and YÖK
     assert.ok(manifest.host_permissions.includes('https://apply.topkapi.edu.tr/*'));
     assert.ok(manifest.host_permissions.includes('https://yoksis.yok.gov.tr/*'));
     assert.doesNotMatch(JSON.stringify(manifest), /\*\.vercel\.app|\*\.topkapi\.edu\.tr|\*\.yok\.gov\.tr/);
-    for (const file of ['pdf.min.js', 'pdf.worker.min.js', 'document-parser.js', 'cropper.js', 'cropper.html', 'cropper-selection.js']) {
+    const targetScript = manifest.content_scripts.find(({ matches }) => matches.includes('https://yoksis.yok.gov.tr/*'));
+    assert.ok(targetScript.js.indexOf('yoksis-field-targets.js') < targetScript.js.indexOf('content.js'));
+    assert.ok(targetScript.js.includes('yoksis-field-targets.js'));
+    for (const file of ['pdf.min.js', 'pdf.worker.min.js', 'document-parser.js', 'cropper.js', 'cropper.html', 'cropper-selection.js', 'yoksis-field-targets.js']) {
         await readFile(resolve(extensionRoot, file));
     }
 });
