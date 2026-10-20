@@ -1511,13 +1511,7 @@
         const dates = extractPassportDates(text, options);
         const mrz = extractDatesFromMrz(text);
         const mrzNames = extractMrzNames(text);
-        let cinsiyet = extractPassportGender(text, options) || mrz.cinsiyet || '';
-        if (!cinsiyet) {
-            const studentName = options?.fullName || options?.studentName || `${mrzNames.givenNames || ''} ${mrzNames.surname || ''}`.trim();
-            if (studentName) {
-                cinsiyet = inferGenderFromName(studentName);
-            }
-        }
+        const cinsiyet = extractPassportGender(text, options) || mrz.cinsiyet || '';
         return {
             issueDate: dates.issueDate || '',
             expiryDate: dates.expiryDate || mrz.expiryDate || '',

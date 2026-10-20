@@ -1642,11 +1642,6 @@ export function extractPassportGender(text, options = {}) {
         }
     }
 
-    if (options.fullName || options.studentName) {
-        const inferred = inferGenderFromName(options.fullName || options.studentName);
-        if (inferred) return inferred;
-    }
-
     return '';
 }
 
@@ -1658,12 +1653,6 @@ export function extractPassportMetadata(text, options = {}) {
     const mrz = extractDatesFromMrz(text, options);
     if (!cinsiyet && mrz.cinsiyet) {
         cinsiyet = mrz.cinsiyet;
-    }
-    if (!cinsiyet) {
-        const studentName = options.fullName || options.studentName || '';
-        if (studentName) {
-            cinsiyet = inferGenderFromName(studentName);
-        }
     }
 
     return {
