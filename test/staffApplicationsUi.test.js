@@ -825,3 +825,72 @@ test('queue preserves row DOM while archiving and releases controls after an API
     assert.equal(root.querySelector('[data-action="archive-application"]').disabled, false);
     assert.match(root.textContent, /arşive taşınamadı/);
 });
+
+test('queue ZIP download reports pending scans and allows another attempt', async context => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let detailRequests = 0;
+    const api = {
+        queryApplications: async () => createQueuePayload([QUEUE_ITEM]),
+        async readApplicationDetail() {
+            detailRequests += 1;
+            return { application: QUEUE_ITEM, documents: [{ revision_number: 1, scan_status: 'pending' }] };
+        },
+        async createArchiveManifest() { assert.fail('Pending documents must block the archive.'); },
+        async readArchiveFile() { assert.fail('Pending documents must not be downloaded.'); }
+    };
+    initializeStaffApplicationsManager(root, api);
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    root.querySelector('[data-action="download-application-archive"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(detailRequests, 1);
+    assert.equal(root.querySelector('[data-action="download-application-archive"]').textContent, 'İndir');
+    assert.match(root.textContent, /güvenlik|tarama/i);
+
+    root.querySelector('[data-action="download-application-archive"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(detailRequests, 2);
+});
+
+test('detail ZIP action starts, cancels and restarts an archive without waiting for the provider', async context => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const archiveSignals = [];
+    const api = {
+        queryApplications: async () => createQueuePayload([QUEUE_ITEM]),
+        readApplicationDetail: async () => ({ application: QUEUE_ITEM, documents: [], allowed_status_transitions: [] }),
+        createArchiveManifest(applicationId, signal) {
+            archiveSignals.push(signal);
+            return new Promise(() => {});
+        },
+        async readArchiveFile() { assert.fail('An unfinished manifest must not download files.'); }
+    };
+    initializeStaffApplicationsManager(root, api);
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise(resolve => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+
+    root.querySelector('[data-action="download-application-archive"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(archiveSignals.length, 1);
+    assert.equal(root.querySelector('[data-action="download-application-archive"]').textContent, 'ZIP’i iptal et');
+
+    root.querySelector('[data-action="download-application-archive"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(archiveSignals[0].aborted, true);
+    assert.equal(root.querySelector('[data-action="download-application-archive"]').textContent, 'Belgeleri ZIP indir');
+    assert.match(root.textContent, /iptal edildi/);
+
+    root.querySelector('[data-action="download-application-archive"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(archiveSignals.length, 2);
+    assert.equal(archiveSignals[1].aborted, false);
+});

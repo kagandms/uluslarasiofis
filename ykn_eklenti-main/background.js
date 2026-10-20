@@ -1695,8 +1695,10 @@ async function syncYoksisFormInMainWorld(tabId, studentData, options = {}) {
             if (missingIndex !== -1) aggregate.missingFields.splice(missingIndex, 1);
         }
         for (const [field, value, label] of [['gender', studentData?.cinsiyet, 'Cinsiyet'], ['marital', studentData?.medeniHali || studentData?.medeniHal, 'Medeni Hali']]) {
-            if (!value) continue;
-            const response = await runYoksisZkCommand(tabId, { action: 'selectRadio', field, value, requestId });
+            if (!value || options.phase === 'photo') continue;
+            const response = await runYoksisZkCommand(tabId, {
+                action: 'selectRadio', field, value, requestId: options.requestId
+            });
             (response?.verified ? aggregate.filledFields : aggregate.missingFields).push(label);
         }
         aggregate.success = aggregate.filledFields.length > 0;
@@ -1830,12 +1832,16 @@ async function completeMissingYoksisFields(context, mainResponse) {
 
 async function transferYoksisFieldsAndPhoto(context) {
     const startedAt = startYknTiming();
-    const mainResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, { phase: 'fields' });
+    const mainResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, {
+        phase: 'fields', requestId: context.requestId
+    });
     const settled = await verifyTransferredYoksisFields(context);
     if (settled?.error) return { ...buildVerifiedFillResponse(mainResponse, settled, context.studentData), success: false, partial: true };
     let photoResponse = null;
     if (context.studentData.croppedPhotoBase64) {
-        photoResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, { phase: 'photo' });
+        photoResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, {
+            phase: 'photo', requestId: context.requestId
+        });
         reportYknTiming('photo-file-preparation-and-form-assignment', photoResponse?.photoUploadDurationMs,
             photoResponse?.photoUploaded ? 'assigned' : 'failed');
     }

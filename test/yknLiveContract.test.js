@@ -2105,6 +2105,51 @@ test('photo starts only after field verification and is followed by postback ver
     assert.equal(response.photoUploaded, true);
 });
 
+for (const [profile, label, field, value] of [
+    [{ cinsiyet: 'Kadın' }, 'Cinsiyet', 'gender', 'Kadın'],
+    [{ medeniHali: 'Bekar' }, 'Medeni Hali', 'marital', 'Bekar']
+]) {
+    test(`cropped-photo transfer preserves ${label} and correlates its single selection`, async () => {
+        const harness = createBackgroundHarness({ success: true, filledFields: ['Adı', label],
+            missingFields: [], photoUploaded: true }, {});
+        const student = { yoksisReady: true, yoksisTabId: 42, yoksisTabUrl: 'https://yoksis.yok.gov.tr/student',
+            firstName: 'SYNTHETIC', croppedPhotoBase64: 'data:image/jpeg;base64,AA==', ...profile };
+
+        const response = await harness.send({ source: 'IKAMET_PORTAL', action: 'FILL_YOKSIS_FORM',
+            requestId: 'profile-photo-transfer', data: student });
+
+        assert.equal(response.success, true);
+        assert.equal(response.partial, false);
+        assert.equal(response.photoUploaded, true);
+        const selections = harness.calls.filter(call => call.type === 'script'
+            && call.options.func?.name === 'executeYoksisZkCommand'
+            && call.options.args?.[0]?.action === 'selectRadio');
+        assert.equal(selections.length, 1);
+        assert.deepEqual(JSON.parse(JSON.stringify(selections[0].options.args[0])), {
+            action: 'selectRadio', field, value, requestId: 'profile-photo-transfer'
+        });
+    });
+}
+
+test('cropped-photo transfer still completes missing fields when gender is present', async () => {
+    const harness = createBackgroundHarness({ success: true, filledFields: ['Adı'],
+        missingFields: ['Soyadı'], photoUploaded: true }, {}, {
+        verificationResult: { success: true, filledFields: ['Adı', 'Cinsiyet'], missingFields: ['Soyadı'] },
+        finalVerificationResult: { success: true, filledFields: ['Adı', 'Cinsiyet'], missingFields: ['Soyadı'] },
+        contentResult: { success: true, filledFields: ['Adı', 'Cinsiyet'], missingFields: ['Soyadı'] }
+    });
+    Object.assign(harness.storageValues, { studentData: { yoksisReady: true, yoksisTabId: 42,
+        yoksisTabUrl: 'https://yoksis.yok.gov.tr/student', firstName: 'SYNTHETIC', lastName: 'STUDENT', cinsiyet: 'Kadın' } });
+
+    const response = await harness.send({ action: 'CROPPED_PHOTO_CONFIRMED', requestId: 'crop-profile-fallback',
+        photoBase64: 'data:image/jpeg;base64,AA==', fileName: 'synthetic.jpg' });
+
+    assert.equal(response.partial, true);
+    assert.equal(response.photoUploaded, true);
+    assert.ok(harness.calls.some(call => call.message?.action === 'fillRemainingData'));
+    assert.equal(response.error, undefined);
+});
+
 test('extension cropper without a bound search refuses to upload a photo', async () => {
     const harness = createBackgroundHarness({ success: true, filledFields: ['Adı'], photoUploaded: true }, {});
     harness.storageValues.studentData = { firstName: 'SYNTHETIC' };
