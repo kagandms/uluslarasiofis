@@ -1,11 +1,15 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.101';
+const CONTENT_SCRIPT_VERSION = '1.2.102';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
 const FIXED_YOKSIS_PHONE = '5322431261';
+const YOKSIS_COUNTRY_FIELDS = Object.freeze({
+    'Uyruğu': 'nationality', 'Doğum Uyruğu': 'birthNationality',
+    'Doğum Yeri Ülkesi': 'birthCountry', 'Belgeyi Veren Ülke': 'issuerCountry'
+});
 
 function copyTextToClipboardDirect(text) {
     if (!text) return;
@@ -189,9 +193,14 @@ async function verifyYoksisFields(data, requestId) {
         const control = label === 'Belge No'
             ? findBelgeNoInMainPanel()
             : findTargetElementByFuzzyLabels(expected.aliases, expected.tagName);
-        const currentValue = expected.tagName === 'select'
-            ? getSelectedOptionText(control)
-            : control?.value;
+        if (expected.tagName === 'select') {
+            const selection = await runZkCommand({
+                action: 'verifyCountry', field: YOKSIS_COUNTRY_FIELDS[label], value: expected.value, requestId
+            });
+            (selection.verified ? filledFields : missingFields).push(label);
+            continue;
+        }
+        const currentValue = control?.value;
         const isDate = label.includes('Tarihi');
         const matches = Boolean(control) && (isDate
             ? normalize(currentValue) === normalize(formatDateForYoksisInput(control, expected.value))
@@ -462,103 +471,6 @@ async function simulateDateboxInput(element, formattedDate) {
 }
 
 // ZK Framework için Event Dispatcher (Select/Dropdown'lar için)
-function normalizeCountryText(value) {
-    return String(value || '')
-        .toLocaleLowerCase('tr-TR')
-        .replace(/ı/g, 'i')
-        .replace(/ğ/g, 'g')
-        .replace(/ü/g, 'u')
-        .replace(/ş/g, 's')
-        .replace(/ö/g, 'o')
-        .replace(/ç/g, 'c')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]/g, '');
-}
-
-// Apply profili ülke adlarını İngilizce, YÖKSİS ise Türkçe döndürebilir.
-// Aynı ülkenin iki yazımı tek bir aday kümesinde eşleştirilir.
-const COUNTRY_ALIAS_GROUPS = [
-    ['afghanistan', 'afganistan'],
-    ['albania', 'arnavutluk'],
-    ['azerbaijan', 'azerbaycan'],
-    ['bosniaandherzegovina', 'bosnahersek'],
-    ['bulgaria', 'bulgaristan'],
-    ['china', 'cin'],
-    ['croatia', 'hirvatistan'],
-    ['egypt', 'misir'],
-    ['georgia', 'gurcistan'],
-    ['greece', 'yunanistan'],
-    ['india', 'hindistan'],
-    ['iran', 'iran'],
-    ['iraq', 'irak'],
-    ['kazakhstan', 'kazakistan'],
-    ['kyrgyzstan', 'kirgizistan'],
-    ['lebanon', 'lubnan'],
-    ['libya', 'libya'],
-    ['morocco', 'fas'],
-    ['nigeria', 'nijerya'],
-    ['northmacedonia', 'kuzeymakedonya'],
-    ['pakistan', 'pakistan'],
-    ['palestine', 'filistin'],
-    ['romania', 'romanya'],
-    ['russia', 'rusya'],
-    ['saudiarabia', 'suudiarabistan'],
-    ['somalia', 'somali'],
-    ['sudan', 'sudan'],
-    ['syria', 'suriye'],
-    ['tajikistan', 'tacikistan'],
-    ['turkmenistan', 'turkmenistan'],
-    ['ukraine', 'ukrayna'],
-    ['unitedarabemirates', 'birlesikarapemirlikleri'],
-    ['unitedkingdom', 'birlesikkrallik'],
-    ['unitedstates', 'amerika'],
-    ['uzbekistan', 'ozbekistan'],
-    ['yemen', 'yemen'],
-    ['zimbabwe', 'zimbabwe']
-];
-
-function countryNameVariants(value) {
-    const normalized = normalizeCountryText(value);
-    if (!normalized) return [];
-    const group = COUNTRY_ALIAS_GROUPS.find((aliases) => aliases.includes(normalized));
-    return group ? Array.from(new Set(group)) : [normalized];
-}
-
-function simulateSelect(element, textToMatch) {
-    if (!element || !textToMatch) return false;
-    let found = false;
-    const targetVariants = countryNameVariants(textToMatch);
-    const currentOption = element.options?.[element.selectedIndex];
-    const currentVariants = countryNameVariants(currentOption?.text || currentOption?.value);
-    if (targetVariants.some((target) => currentVariants.some((current) => current === target))) return true;
-
-    const options = element.options || [];
-    for (let i = 0; i < options.length; i++) {
-        const option = options[i];
-        const optionVariants = countryNameVariants(option.text || option.value);
-        if (targetVariants.some((target) => optionVariants.some((candidate) =>
-            candidate === target || candidate.includes(target) || target.includes(candidate)
-        ))) {
-            element.selectedIndex = i;
-            try { option.selected = true; } catch (_) {}
-            element.value = option.value;
-            found = true;
-            break;
-        }
-    }
-    if (found) {
-        try {
-            element.focus();
-            element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-            element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-            element.dispatchEvent(new Event('blur', { bubbles: true, cancelable: true }));
-        } catch (_) {}
-        return true;
-    }
-    return false;
-}
-
 function getSelectedOptionText(element) {
     if (!element || !element.options) return '';
     const option = element.options[element.selectedIndex];
@@ -3682,19 +3594,18 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
             if (recordField('Baba Adı', data.babaAdi, await simulateInput(babaAdiInput, data.babaAdi))) successCount++;
 
             const uyrukSelect = findTargetElementByFuzzyLabel('Uyruğu', 'select');
-            const visibleNationality = getSelectedOptionText(uyrukSelect);
-            const countryValue = data.uyruk || visibleNationality;
-            if (recordField('Uyruğu', data.uyruk, simulateSelect(uyrukSelect, data.uyruk))) successCount++;
-
-            const dogumUyruguSelect = findTargetElementByFuzzyLabel('Doğum Uyruğu', 'select');
-            if (recordField('Doğum Uyruğu', countryValue, simulateSelect(dogumUyruguSelect, countryValue))) successCount++;
-
-            const dogumYeriUlkesiSelect = findTargetElementByFuzzyLabel('Doğum Yeri Ülkesi', 'select');
-            const dogumYeriDegeri = data.dogumUlkesi ? data.dogumUlkesi : countryValue;
-            if (recordField('Doğum Yeri Ülkesi', dogumYeriDegeri, simulateSelect(dogumYeriUlkesiSelect, dogumYeriDegeri))) successCount++;
-
-            const belgeyiVerenUlkeSelect = findTargetElementByFuzzyLabel('Belgeyi Veren Ülke', 'select');
-            if (recordField('Belgeyi Veren Ülke', countryValue, simulateSelect(belgeyiVerenUlkeSelect, countryValue))) successCount++;
+            const countryValue = data.uyruk || getSelectedOptionText(uyrukSelect);
+            const countrySelections = [
+                ['Uyruğu', data.uyruk], ['Doğum Uyruğu', countryValue],
+                ['Doğum Yeri Ülkesi', data.dogumUlkesi || countryValue], ['Belgeyi Veren Ülke', countryValue]
+            ];
+            for (const [label, value] of countrySelections) {
+                if (!value) continue;
+                const selection = await runZkCommand({
+                    action: 'selectCountry', field: YOKSIS_COUNTRY_FIELDS[label], value, requestId: request.requestId
+                });
+                if (recordField(label, value, selection.verified)) successCount++;
+            }
 
             // Özel Ülke Kuralları (Türkmenistan, Afganistan, Pakistan)
             const normalizeCountry = (val) => val ? val.toLocaleLowerCase('tr-TR').replace(/\s+/g, '') : '';

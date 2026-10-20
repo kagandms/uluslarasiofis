@@ -1,7 +1,53 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.101') return;
+    if (window.YknZkForm?.version === '1.2.102') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
+    const COUNTRY_ALIAS_GROUPS = [
+        ['afghanistan', 'afganistan'],
+        ['albania', 'arnavutluk'],
+        ['azerbaijan', 'azerbaycan'],
+        ['bosniaandherzegovina', 'bosnahersek'],
+        ['bulgaria', 'bulgaristan'],
+        ['china', 'cin'],
+        ['croatia', 'hirvatistan'],
+        ['egypt', 'misir'],
+        ['georgia', 'gurcistan'],
+        ['greece', 'yunanistan'],
+        ['india', 'hindistan'],
+        ['iran', 'iran'],
+        ['iraq', 'irak'],
+        ['kazakhstan', 'kazakistan'],
+        ['kyrgyzstan', 'kirgizistan'],
+        ['lebanon', 'lubnan'],
+        ['libya', 'libya'],
+        ['morocco', 'fas'],
+        ['nigeria', 'nijerya'],
+        ['northmacedonia', 'kuzeymakedonya'],
+        ['pakistan', 'pakistan'],
+        ['palestine', 'filistin'],
+        ['romania', 'romanya'],
+        ['russia', 'rusya'],
+        ['saudiarabia', 'suudiarabistan'],
+        ['somalia', 'somali'],
+        ['sudan', 'sudan'],
+        ['syria', 'suriye'],
+        ['tajikistan', 'tacikistan'],
+        ['turkmenistan', 'turkmenistan'],
+        ['ukraine', 'ukrayna'],
+        ['unitedarabemirates', 'birlesikarapemirlikleri'],
+        ['unitedkingdom', 'birlesikkrallik'],
+        ['unitedstates', 'amerika'],
+        ['uzbekistan', 'ozbekistan'],
+        ['yemen', 'yemen'],
+        ['zimbabwe', 'zimbabwe']
+    ];
+
+    const COUNTRY_FIELDS = Object.freeze({
+        nationality: ['Uyruğu', 'Nationality'],
+        birthNationality: ['Doğum Uyruğu', 'Birth Nationality'],
+        birthCountry: ['Doğum Yeri Ülkesi', 'Birth Country', 'Born Country'],
+        issuerCountry: ['Belgeyi Veren Ülke', 'Document Issuing Country']
+    });
 
     function normalizeLabel(value) {
         return String(value || '').toLocaleLowerCase('tr-TR').normalize('NFD')
@@ -268,7 +314,10 @@
         const zk = targetWindow.zk;
         if (zk?.processing || zk?.mounting || zk?.loading > 0 || targetWindow.zAu?.processing?.()) return true;
         const desktops = Object.values(zk?.Desktop?.all || {});
-        return desktops.some((desktop) => targetWindow.zAu?.getAuRequests?.(desktop)?.length > 0);
+        // ZK retains deferred, ignorable window events until the next real AU action.
+        // Waiting for those events before allowing that action deadlocks serial transfers.
+        return desktops.some((desktop) => (targetWindow.zAu?.getAuRequests?.(desktop) || [])
+            .some(request => !(request.opts?.defer === true && request.opts?.ignorable === true)));
     }
 
     function isActivelyProcessing(targetWindow) {
@@ -422,7 +471,7 @@
                     resolve();
                 } else if (Date.now() >= deadline) {
                     clearInterval(timer);
-                    reject(new Error('YÖKSİS radio seçimi sunucu yanıtıyla doğrulanamadı.'));
+                    reject(new Error('YÖKSİS seçimi sunucu yanıtıyla doğrulanamadı.'));
                 }
             }, 25);
         });
@@ -473,6 +522,108 @@
         } finally { observer.dispose(); }
     }
 
+    function readCountryVariants(value) {
+        const normalized = normalizeCompact(value);
+        return COUNTRY_ALIAS_GROUPS.find(aliases => aliases.includes(normalized)) || [normalized];
+    }
+
+    function findCountryOption(select, value) {
+        const variants = readCountryVariants(value).filter(Boolean);
+        if (!variants.length) return null;
+        const options = Array.from(select.options).filter(option => !option.disabled && option.value && normalizeCompact(option.text));
+        const matches = options.filter(option => variants.some(candidate =>
+            readCountryVariants(option.text).includes(candidate) || normalizeCompact(option.value) === candidate));
+        return matches.length === 1 ? matches[0] : null;
+    }
+
+    function findCountry(options) {
+        const labels = COUNTRY_FIELDS[options.field];
+        if (!labels || !window.YknFieldTargets?.find) return null;
+        const candidates = collectDocuments().map(root => window.YknFieldTargets.find({ root, labels, kind: 'select' })).filter(Boolean);
+        if (candidates.length !== 1) return null;
+        const select = candidates[0];
+        const targetWindow = select.ownerDocument.defaultView;
+        const widget = targetWindow?.zk?.Widget?.$(select);
+        const option = findCountryOption(select, options.value);
+        if (!option || (targetWindow?.zk && widget?.className !== 'zul.sel.Select')) return null;
+        return { select, option, widget, targetWindow };
+    }
+
+    function hasCountryWidgetSelection(target) {
+        if (!target.widget) return true;
+        const selectedIndex = target.widget.getSelectedIndex?.();
+        let optionIndex = 0;
+        for (let child = target.widget.firstChild; child; child = child.nextSibling) {
+            const isOption = child.className === 'zul.sel.Option' || (target.targetWindow.zul?.sel?.Option
+                && child.$instanceof?.(target.targetWindow.zul.sel.Option));
+            if (!isOption) continue;
+            if (optionIndex === selectedIndex) return child.uuid === target.option.id;
+            optionIndex += 1;
+        }
+        return false;
+    }
+
+    function isCountrySelectionRetained(target) {
+        if (!target || target.select.options[target.select.selectedIndex] !== target.option) return false;
+        const scope = target.select.closest('td, .z-cell, label') || target.select.parentElement;
+        return hasCountryWidgetSelection(target) && !scope?.querySelector('.z-errorbox, [aria-invalid="true"]');
+    }
+
+    function commitCountry(target) {
+        const { select, option, widget, targetWindow } = target;
+        if (widget && (!option.id || !widget._doChange || !widget.getSelectedIndex || !widget.fire)) {
+            throw new Error('YÖKSİS ülke seçimi güvenilir biçimde gönderilemiyor.');
+        }
+        select.value = option.value;
+        option.selected = true;
+        if (!widget) {
+            for (const name of ['input', 'change', 'blur']) select.dispatchEvent(new targetWindow.Event(name, { bubbles: true }));
+            return;
+        }
+        const previousIndex = widget.getSelectedIndex();
+        // Use the live Select handler to keep option/widget indices in sync, including hidden options.
+        widget._doChange();
+        if (widget.getSelectedIndex() === previousIndex) {
+            // A DOM selection left by an earlier attempt still needs its first confirmed server event.
+            widget.fire('onSelect', { items: [option.id], reference: option.id }, { toServer: true });
+        }
+    }
+
+    async function selectCountry(options) {
+        await waitForIdle();
+        const target = findCountry(options);
+        if (!target || !options.requestId) return { success: false, verified: false };
+        const identity = target.widget || target.select;
+        if (confirmedSelections.get(identity) === options.requestId && isCountrySelectionRetained(target)) {
+            return { success: true, verified: true, eventSent: false };
+        }
+        const attemptKey = `${options.requestId}:country:${options.field}`;
+        if (attemptedSelections.has(attemptKey)) return { success: false, verified: false, eventSent: false };
+        const observer = target.widget ? observeResponse(target.targetWindow) : null;
+        attemptedSelections.add(attemptKey);
+        if (attemptedSelections.size > 100) attemptedSelections.delete(attemptedSelections.values().next().value);
+        try {
+            commitCountry(target);
+            if (observer) await waitForResponse(observer);
+            await waitForIdle();
+            const refreshed = findCountry(options);
+            const verified = isCountrySelectionRetained(refreshed);
+            if (verified) {
+                confirmedSelections.set(refreshed.widget || refreshed.select, options.requestId);
+                attemptedSelections.delete(attemptKey);
+            }
+            return { success: verified, verified, eventSent: true };
+        } finally { observer?.dispose(); }
+    }
+
+    async function verifyCountry(options) {
+        await waitForIdle();
+        const target = findCountry(options);
+        const verified = Boolean(target && options.requestId
+            && confirmedSelections.get(target.widget || target.select) === options.requestId && isCountrySelectionRetained(target));
+        return { success: verified, verified };
+    }
+
     /** Executes a bounded MAIN-world ZK operation without returning student values. */
     async function execute(options) {
         try {
@@ -484,11 +635,14 @@
                 return { success: verified, verified };
             }
             if (options.action === 'selectRadio') return await selectRadio(options);
+            if (options.action === 'selectCountry') return await selectCountry(options);
+            if (options.action === 'verifyCountry') return await verifyCountry(options);
             return { success: false, verified: false };
-        } catch {
+        } catch (error) {
+            console.warn('[YKN] ZK operation could not be verified.', { action: options.action, errorName: error?.name || 'Error' });
             return { success: false, verified: false, error: 'YÖKSİS seçimi veya sunucu güncellemesi doğrulanamadı.' };
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.101', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.102', execute });
 })();

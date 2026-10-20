@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import test from 'node:test';
+import { installCountryFramework } from './helpers/ykn-country-framework.js';
 
 const source = await readFile(new URL('../ykn_eklenti-main/zk-form-controls.js', import.meta.url), 'utf8');
+const fieldTargets = await readFile(new URL('../ykn_eklenti-main/yoksis-field-targets.js', import.meta.url), 'utf8');
 
 function createFramework(options = {}) {
     const dom = new JSDOM('<div id="form"></div>', { runScripts: 'outside-only', url: 'https://yoksis.yok.gov.tr/' });
@@ -48,8 +50,8 @@ function createFramework(options = {}) {
         }
     }
     mount(options.initial || 'Bekar');
-    window.zk = { Widget: { $: (radio) => widgets.get(radio) }, Desktop: { all: {} } };
-    window.zAu = { processing: () => isBusy };
+    window.zk = { Widget: { $: (radio) => widgets.get(radio) }, Desktop: { all: { current: {} } } };
+    window.zAu = { processing: () => isBusy, getAuRequests: () => options.queue || [] };
     window.zWatch = {
         listen: ({ onResponse }) => listeners.add(onResponse),
         unlisten: ({ onResponse }) => listeners.delete(onResponse)
@@ -88,6 +90,119 @@ test('checked Bekar with empty ZK group still commits exactly one genuine framew
         assert.equal(fixture.listeners.size, 0);
     } finally { fixture.close(); }
 });
+
+test('deferred ignorable window events do not block idle or the next selection', async () => {
+    const queue = ['onMove', 'onZIndex'].map(name => ({ name, opts: { defer: true, ignorable: true } }));
+    const fixture = createFramework({ queue });
+    try {
+        const idle = await fixture.execute({ action: 'waitForIdle' });
+        const selection = await fixture.execute({ action: 'selectRadio', field: 'gender', value: 'Erkek', requestId: 'deferred-window' });
+
+        assert.equal(idle.success, true);
+        assert.equal(selection.verified, true);
+        assert.equal(queue.length, 2);
+    } finally { fixture.close(); }
+});
+
+for (const opts of [{}, { defer: true }, { ignorable: true }]) {
+    test(`a queued application event remains blocking (${JSON.stringify(opts)})`, async () => {
+        const queue = [{ name: 'onSelect', opts }];
+        const fixture = createFramework({ queue });
+        let didFinish = false;
+        const drain = setTimeout(() => { assert.equal(didFinish, false); queue.length = 0; }, 70);
+        try {
+            const result = await fixture.execute({ action: 'waitForIdle' });
+            didFinish = true;
+
+            assert.equal(result.success, true);
+        } finally { clearTimeout(drain); fixture.close(); }
+    });
+}
+
+function createCountryFixture(options = {}) {
+    const dom = new JSDOM('<table><tr><td>Doğum Uyruğu</td><td><select id="country"><option value=""></option><option value="tm">Türkmenistan</option><option value="uz">Özbekistan</option></select></td></tr></table>',
+        { runScripts: 'outside-only', url: 'https://yoksis.yok.gov.tr/' });
+    if (options.alreadyVisible) dom.window.document.querySelector('select').value = 'tm';
+    const framework = installCountryFramework(dom.window, options);
+    dom.window.eval(fieldTargets);
+    dom.window.eval(source);
+    return { ...framework, dom, execute: command => dom.window.YknZkForm.execute(command), close: () => dom.window.close() };
+}
+
+test('a visible country without a confirmed server event cannot pass verification', async () => {
+    const fixture = createCountryFixture({ alreadyVisible: true });
+    try {
+        const response = await fixture.execute({ action: 'verifyCountry', field: 'birthNationality', value: 'Türkmenistan', requestId: 'unproven' });
+
+        assert.equal(response.verified, false);
+        assert.equal(fixture.events.length, 0);
+    } finally { fixture.close(); }
+});
+
+test('consecutive country transfers use fresh request proofs and preserve English aliases', async () => {
+    const fixture = createCountryFixture();
+    try {
+        const first = await fixture.execute({ action: 'selectCountry', field: 'birthNationality', value: 'Türkmenistan', requestId: 'first-country' });
+        const second = await fixture.execute({ action: 'selectCountry', field: 'birthNationality', value: 'Uzbekistan', requestId: 'second-country' });
+        const oldProof = await fixture.execute({ action: 'verifyCountry', field: 'birthNationality', value: 'Türkmenistan', requestId: 'first-country' });
+
+        assert.equal(first.verified, true);
+        assert.equal(second.verified, true);
+        assert.equal(oldProof.verified, false);
+        assert.equal(fixture.serverValues.get('country'), 'uz');
+        assert.equal(fixture.events.length, 2);
+    } finally { fixture.close(); }
+});
+
+test('ambiguous country options are refused before any server event', async () => {
+    const fixture = createCountryFixture();
+    fixture.dom.window.document.querySelector('select').insertAdjacentHTML('beforeend', '<option value="duplicate">Türkmenistan</option>');
+    try {
+        const response = await fixture.execute({ action: 'selectCountry', field: 'birthNationality', value: 'Türkmenistan', requestId: 'ambiguous-country' });
+
+        assert.equal(response.verified, false);
+        assert.equal(fixture.events.length, 0);
+    } finally { fixture.close(); }
+});
+
+for (const options of [{}, { alreadyVisible: true, staleWidget: true }, { alreadyVisible: true }, { rerender: true }]) {
+    test(`country transfer commits option IDs to the server and survives verification (${JSON.stringify(options)})`, async () => {
+        const fixture = createCountryFixture(options);
+        const command = { action: 'selectCountry', field: 'birthNationality', value: 'Türkmenistan', requestId: 'country-transfer' };
+        try {
+            const first = await fixture.execute(command);
+            const verified = await fixture.execute({ ...command, action: 'verifyCountry' });
+            const repeated = await fixture.execute(command);
+
+            assert.equal(first.verified, true);
+            assert.equal(verified.verified, true);
+            assert.equal(repeated.eventSent, false);
+            assert.equal(fixture.serverValues.get('country'), 'tm');
+            assert.equal(fixture.events.length, 1);
+            assert.equal(fixture.events[0].name, 'onSelect');
+            assert.equal(fixture.events[0].payload.reference, 'country-option-1');
+            assert.equal(fixture.listeners.size, 0);
+        } finally { fixture.close(); }
+    });
+}
+
+for (const options of [{ reject: true }, { noResponse: true }]) {
+    test(`country DOM cannot prove a rejected or unanswered transfer (${JSON.stringify(options)})`, async () => {
+        const fixture = createCountryFixture(options);
+        const command = { action: 'selectCountry', field: 'birthNationality', value: 'Türkmenistan', requestId: 'unconfirmed-country' };
+        try {
+            const first = await fixture.execute(command);
+            const repeated = await fixture.execute(command);
+            const verified = await fixture.execute({ ...command, action: 'verifyCountry' });
+
+            assert.equal(first.verified, false);
+            assert.equal(repeated.verified, false);
+            assert.equal(verified.verified, false);
+            assert.equal(fixture.events.length, 1);
+            assert.equal(fixture.listeners.size, 0);
+        } finally { fixture.close(); }
+    });
+}
 
 test('Bekar remains verified after an AU response replaces the radio DOM/widget', async () => {
     const fixture = createFramework({ rerender: true, emptyGroup: true });

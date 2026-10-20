@@ -535,8 +535,7 @@ async function getBackgroundYoksisTab() {
 
     yoksisTabId = yoksisTab.id;
     await writeSessionYoksisTabId(yoksisTab.id);
-    await waitForContentScript(yoksisTabId, 'yoksis', { frameId: 0 });
-    finishYknTiming('yoksis-tab-resolution-and-content-readiness', startedAt);
+    finishYknTiming('yoksis-tab-resolution', startedAt);
     return yoksisTab;
 }
 
@@ -910,12 +909,21 @@ async function executeYoksisSearchInMainWorld(tabId, kabulId) {
 
 /** Runs only the packaged ZK controller in the validated main frame. */
 async function runYoksisZkCommand(tabId, options) {
-    await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, world: 'MAIN', files: ['zk-form-controls.js'] });
+    await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, world: 'MAIN', files: ['yoksis-field-targets.js', 'zk-form-controls.js'] });
     const results = await chrome.scripting.executeScript({
         target: { tabId, frameIds: [0] }, world: 'MAIN', args: [options],
         func: async function executeYoksisZkCommand(command) { return await window.YknZkForm.execute(command); }
     });
     return results?.[0]?.result || { success: false, verified: false };
+}
+
+function buildYoksisCountrySelections(studentData) {
+    return [
+        { field: 'nationality', label: 'Uyruğu', value: studentData?.uyruk },
+        { field: 'birthNationality', label: 'Doğum Uyruğu', value: studentData?.uyruk },
+        { field: 'birthCountry', label: 'Doğum Yeri Ülkesi', value: studentData?.dogumUlkesi || studentData?.uyruk },
+        { field: 'issuerCountry', label: 'Belgeyi Veren Ülke', value: studentData?.uyruk }
+    ].filter(selection => String(selection.value || '').trim());
 }
 
 async function syncYoksisFormInMainWorld(tabId, studentData, options = {}) {
@@ -1109,50 +1117,6 @@ async function syncYoksisFormInMainWorld(tabId, studentData, options = {}) {
                         }
                     }
 
-                    function commitSelect(el, win) {
-                        if (!el || !el.value) return;
-                        var wWin = win || window;
-                        var widgetCommitted = false;
-
-                        // Native change olayı bazı YÖKSİS selectlerinde yeterli
-                        // olmuyor; ZK widget değerini de sunucuya gönder.
-                        try {
-                            if (wWin.zk && wWin.zk.Widget) {
-                                var w = wWin.zk.Widget.$(el);
-                                if (w) {
-                                    w._value = el.value;
-                                    if (typeof w.setValue === 'function') {
-                                        try { w.setValue(el.value); } catch (_) {}
-                                    }
-                                    if (typeof w.updateChange_ === 'function') {
-                                        try { w.updateChange_(); } catch (_) {}
-                                    }
-                                    var changeSent = false;
-                                    if (typeof w.fire === 'function') {
-                                        try {
-                                            w.fire('onChange', { value: el.value }, { toServer: true });
-                                            changeSent = true;
-                                            widgetCommitted = true;
-                                        } catch (_) {}
-                                    }
-                                    if (!changeSent && wWin.zAu && typeof wWin.zAu.send === 'function') {
-                                        try {
-                                            wWin.zAu.send(new wWin.zk.Event(w, 'onChange', { value: el.value }, { toServer: true }));
-                                            widgetCommitted = true;
-                                        } catch (_) {}
-                                    }
-                                }
-                            }
-                        } catch (_) {}
-                        if (!widgetCommitted) {
-                            try {
-                                el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-                                el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-                                el.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
-                            } catch (_) {}
-                        }
-                    }
-
                     function isVisibleElement(el) {
                         if (!el || !el.isConnected || el.disabled) return false;
                         for (var ancestor = el; ancestor; ancestor = ancestor.parentElement) {
@@ -1204,21 +1168,6 @@ async function syncYoksisFormInMainWorld(tabId, studentData, options = {}) {
                         return ('0' + d).slice(-2) + '.' + ('0' + m).slice(-2) + '.' + y;
                     }
 
-                    function selectMatchingOption(select, value) {
-                        if (!select || value === undefined || value === null || String(value).trim() === '') return false;
-                        var wanted = norm(value);
-                        var options = Array.from(select.options || []).filter(option => option.value && norm(option.text));
-                        var exact = options.filter(option => norm(option.text) === wanted || norm(option.value) === wanted);
-                        var matches = exact.length ? exact : options.filter(option => {
-                            var label = norm(option.text);
-                            return label.includes(wanted) || wanted.includes(label);
-                        });
-                        if (matches.length !== 1) return false;
-                        select.value = matches[0].value;
-                        matches[0].selected = true;
-                        return select.value === matches[0].value;
-                    }
-
                     function addResultField(result, label, filled) {
                         var filledIndex = result.filledFields.indexOf(label);
                         var missingIndex = result.missingFields.indexOf(label);
@@ -1251,14 +1200,6 @@ async function syncYoksisFormInMainWorld(tabId, studentData, options = {}) {
                         addResultField(result, resultLabel, set && String(control.value || '').trim() === targetValue);
                     }
 
-                    function fillSelectByLabels(docs, labels, value, result, resultLabel) {
-                        if (value === undefined || value === null || String(value).trim() === '') return;
-                        var control = findControl(labels, 'select', docs);
-                        var set = Boolean(control && selectMatchingOption(control, value));
-                        if (set) commitSelect(control, control.ownerDocument && control.ownerDocument.defaultView || window);
-                        addResultField(result, resultLabel, set);
-                    }
-
                     var allDocs = getAllDocs(document);
                     var fillResult = {
                         success: false,
@@ -1277,16 +1218,11 @@ async function syncYoksisFormInMainWorld(tabId, studentData, options = {}) {
                         var passportNo = data.pasaportNo || data.passportNo || '';
                         var birthPlace = data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace || '';
                         var issuingAuthority = data.verenMakam || data.issuingAuthority || '';
-                        var birthCountry = data.dogumUlkesi || data.uyruk || '';
 
                         fillTextByLabels(allDocs, ['Adı', 'Öğrenci Adı', 'Ad', 'First Name', 'Given Name'], firstName, fillResult, 'Adı', false);
                         fillTextByLabels(allDocs, ['Soyadı', 'Öğrenci Soyadı', 'Soyad', 'Last Name', 'Surname'], lastName, fillResult, 'Soyadı', false);
                         fillTextByLabels(allDocs, ['Anne Adı', 'Ana Adı', 'Anne İsmi', 'Ana İsmi', 'Mother Name', "Mother's Name"], data.anneAdi, fillResult, 'Anne Adı', false);
                         fillTextByLabels(allDocs, ['Baba Adı', 'Baba İsmi', 'Father Name', "Father's Name"], data.babaAdi, fillResult, 'Baba Adı', false);
-                        fillSelectByLabels(allDocs, ['Uyruğu', 'Nationality'], data.uyruk, fillResult, 'Uyruğu');
-                        fillSelectByLabels(allDocs, ['Doğum Uyruğu', 'Birth Nationality'], data.uyruk, fillResult, 'Doğum Uyruğu');
-                        fillSelectByLabels(allDocs, ['Doğum Yeri Ülkesi', 'Birth Country', 'Born Country'], birthCountry, fillResult, 'Doğum Yeri Ülkesi');
-                        fillSelectByLabels(allDocs, ['Belgeyi Veren Ülke', 'Document Issuing Country'], data.uyruk, fillResult, 'Belgeyi Veren Ülke');
 
                         fillTextByLabels(allDocs, ['Doğum Yeri Açıklaması', 'Place of Birth Description'], birthPlace, fillResult, 'Doğum Yeri Açıklaması', false);
                         fillTextByLabels(allDocs, ['Belgeyi Veren Makam', 'Veren Makam', 'Issuing Authority'], issuingAuthority, fillResult, 'Belgeyi Veren Makam', false);
@@ -1545,6 +1481,14 @@ async function syncYoksisFormInMainWorld(tabId, studentData, options = {}) {
         for (const label of aggregate.filledFields) {
             const missingIndex = aggregate.missingFields.indexOf(label);
             if (missingIndex !== -1) aggregate.missingFields.splice(missingIndex, 1);
+        }
+        if (options.phase !== 'photo') {
+            for (const selection of buildYoksisCountrySelections(studentData)) {
+                const response = await runYoksisZkCommand(tabId, {
+                    action: 'selectCountry', field: selection.field, value: selection.value, requestId: options.requestId
+                });
+                (response?.verified ? aggregate.filledFields : aggregate.missingFields).push(selection.label);
+            }
         }
         for (const [field, value, label] of [['gender', studentData?.cinsiyet, 'Cinsiyet'], ['marital', studentData?.medeniHali || studentData?.medeniHal, 'Medeni Hali']]) {
             if (!value || options.phase === 'photo') continue;
@@ -2012,6 +1956,8 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         };
     };
     return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
+        await updateTab(yoksisTab.id, { active: true });
+        if (yoksisTab.windowId) await chrome.windows.update(yoksisTab.windowId, { focused: true });
         const response = await performSearch();
         if (response.success && response.formReady) {
             await saveTemporaryStudentData({ ...request.data, yoksisId: kabulId,
@@ -2043,7 +1989,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'YOKSIS_ZK_COMMAND') {
         const command = request.command || {};
         const allowedValues = command.field === 'gender' ? ['Erkek', 'Kadın'] : command.field === 'marital' ? ['Bekar', 'Evli'] : [];
-        const validCommand = command.action === 'waitForIdle' || (['selectRadio', 'verifyRadio'].includes(command.action)
+        const isCountryCommand = ['selectCountry', 'verifyCountry'].includes(command.action)
+            && ['nationality', 'birthNationality', 'birthCountry', 'issuerCountry'].includes(command.field)
+            && typeof command.value === 'string' && command.value.trim().length > 0 && command.value.length <= 100
+            && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 160;
+        const validCommand = isCountryCommand || command.action === 'waitForIdle' || (['selectRadio', 'verifyRadio'].includes(command.action)
             && allowedValues.includes(command.value) && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 160);
         if (!isYoksisUrl(sender?.tab?.url || '') || sender.frameId !== 0 || !validCommand) {
             sendResponse({ success: false, verified: false, error: 'YÖKSİS komutu doğrulanamadı.' });
