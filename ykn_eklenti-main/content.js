@@ -751,8 +751,8 @@ function isApplyProfileVisible(element) {
     return true;
 }
 
-function findApplyProfileScopes(aliases, selector) {
-    const scopes = Array.from(document.querySelectorAll(selector)).filter(isApplyProfileVisible)
+function findApplyProfileScopes(aliases, selector, isEligibleControl = isApplyProfileVisible) {
+    const scopes = Array.from(document.querySelectorAll(selector)).filter(isEligibleControl)
         .map((control) => control.matches('input[type="radio"]') ? control.closest('fieldset, .form-group, .form-item, .field') || control.parentElement : control);
     for (const label of document.querySelectorAll('label, dt, th, td, span, strong, b')) {
         const text = normalizeYoksisText(label.textContent);
@@ -768,7 +768,7 @@ function findApplyProfileScopes(aliases, selector) {
 }
 
 function readApplyProfileChoice(options) {
-    const values = findApplyProfileScopes(options.aliases, options.selector)
+    const values = findApplyProfileScopes(options.aliases, options.selector, options.isEligibleControl)
         .map(readApplySelectedLabel).map(options.normalize).filter(Boolean);
     const unique = new Set(values);
     return unique.size === 1 ? Array.from(unique)[0] : '';
@@ -777,6 +777,8 @@ function readApplyProfileChoice(options) {
 function extractGenderFromApply() {
     return readApplyProfileChoice({ aliases: ['cinsiyet', 'cinsiyeti', 'gender', 'sex'],
         selector: 'select[name*="gender" i], select[id*="gender" i], select[name*="cinsiyet" i], select[id*="cinsiyet" i], select[name="sex" i], input[type="radio"][name="gender" i], input[type="radio"][name="cinsiyet" i], input[type="radio"][name="sex" i]',
+        isEligibleControl: (control) => isApplyProfileVisible(control)
+            || (control.matches('select[name="gender" i]') && control.closest('#personal-info.tab-pane')),
         normalize: normalizeGenderValue });
 }
 

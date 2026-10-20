@@ -1724,6 +1724,20 @@ test('Apply selected radio label and disabled marital dropdown remain authoritat
     } finally { harness.close(); }
 });
 
+test('Apply gender is read from the selected profile tab while its tab pane is inactive', async () => {
+    const harness = createContentHarness('<div id="personal-info" class="tab-pane fade" style="display:none">' +
+        '<div class="col-md-6"><label>Cinsiyet</label><select name="gender" aria-hidden="true">' +
+        '<option value="Female" selected>Kadın</option><option value="Male">Erkek</option></select></div></div>',
+    'https://apply.topkapi.edu.tr/panel/student');
+
+    try {
+        const result = await harness.send({ action: 'copyData' });
+
+        assert.equal(result.data.cinsiyet, 'Kadın');
+        assert.equal(result.data.genderSource, 'apply');
+    } finally { harness.close(); }
+});
+
 test('fallback field claims are discarded when the final AU verification finds an empty form', async () => {
     const harness = createBackgroundHarness({ filledFields: [], photoUploaded: true }, {}, {
         verificationResult: { filledFields: [], missingFields: ['Adı'] },

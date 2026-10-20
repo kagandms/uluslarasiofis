@@ -19,6 +19,8 @@ test('staff scanner panel exposes backlog, stale host and controlled failed-job 
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.match(root.textContent, /4/);
+    assert.match(root.textContent, /Kuyrukta veya işlemde: 4/);
+    assert.match(root.textContent, /Doğrulanamayan dosya: 1/);
     assert.match(root.textContent, /çevrimdışı|bayat/);
     const retry = root.querySelector('[data-action="retry-scan"]');
     retry.click();
@@ -44,6 +46,7 @@ test('staff scanner panel does not offer replay for deterministic unsupported co
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.match(root.textContent, /replacement akışından yüklemeli/i);
+    assert.match(root.textContent, /Kuyrukta veya işlemde: 0\. Doğrulanamayan dosya: 1/);
     assert.equal(root.querySelector('[data-action="retry-scan"]'), null);
     assert.deepEqual(retries, []);
     document.defaultView.close();
