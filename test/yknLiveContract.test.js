@@ -78,6 +78,42 @@ test('approved new-record reset sends exactly one click before reacquiring the a
     } finally { harness.close(); }
 });
 
+for (const previousValue of ['', 'SYNTHETIC-PREVIOUS']) {
+    test(`completed YKN locked form resets once before replacing the old acceptance code (${previousValue ? 'retained' : 'cleared'} values)`, async () => {
+        const harness = createContentHarness(`<fieldset><legend>Öğrenci Bilgileri</legend><table>
+            <tr><td>Adı</td><td><input id="prior-first" disabled readonly value="${previousValue}"></td></tr>
+            <tr><td>Soyadı</td><td><input id="prior-last" disabled readonly value="${previousValue}"></td></tr>
+            <tr><td><button>Kaydet</button></td><td><button id="new-record">Temizle</button></td></tr>
+            </table></fieldset><table><tr><td>Kabul Mektup Id</td><td><input id="acceptance" title="Kabul Mektup Id" value="OLD-123-ID"></td>
+            <td><button id="search-new">Kabul Mektup Id İle Ara</button></td></tr></table>`, 'https://yoksis.yok.gov.tr/student');
+        const { document } = harness.dom.window;
+        assert.equal(harness.dom.window.YknFieldTargets.find({ root: document, labels: ['Adı'], kind: 'text' }), null);
+        assert.equal(harness.dom.window.YknFieldTargets.find({ root: document, labels: ['Adı'], kind: 'existing-text' }).disabled, true);
+        const operations = [];
+        document.getElementById('new-record').onclick = () => {
+            operations.push('reset');
+            assert.equal(document.getElementById('acceptance').value, 'OLD-123-ID');
+            for (const input of document.querySelectorAll('input:disabled')) {
+                input.disabled = false;
+                input.readOnly = false;
+                input.value = '';
+            }
+        };
+        document.getElementById('search-new').onclick = () => {
+            operations.push('search');
+            assert.equal(document.getElementById('acceptance').value, 'NEW-456-ID');
+        };
+
+        try {
+            const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-456-ID', requestId: 'completed-record', waitForForm: false });
+
+            assert.equal(response.searchTriggered, true, JSON.stringify(response));
+            assert.deepEqual(operations, ['reset', 'search']);
+            assert.equal(harness.dom.window.YknFieldTargets.find({ root: document, labels: ['Adı'], kind: 'text' }).disabled, false);
+        } finally { harness.close(); }
+    });
+}
+
 function installInnerText(window) {
     Object.defineProperty(window.Element.prototype, 'innerText', {
         configurable: true,
