@@ -33,9 +33,9 @@ function focusView(viewName) {
     const targetId = viewName === 'print'
         ? 'print-status-title'
         : (viewName === 'teblig'
-        ? 'tebligat-search-input'
+        ? 'workspace-title'
         : (viewName === 'ykn'
-            ? 'ykn-passport-input'
+            ? 'ykn-title'
             : (viewName === 'archive'
                 ? (document.getElementById('staff-archive-search') ? 'staff-archive-search' : 'archive-title')
                 : `${viewName}-title`)));

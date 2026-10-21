@@ -38,6 +38,39 @@ test('number shortcuts switch workspaces and Escape returns home without clearin
     assert.equal(document.querySelectorAll('#home-screen [aria-keyshortcuts]').length, 7);
 });
 
+test('YKN and Teblig workspaces focus their headings instead of search inputs', (context) => {
+    const dom = installWorkspace(context);
+    const document = dom.window.document;
+    const press = (target, key) => target.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true }));
+
+    document.querySelector('[data-workspace-view="ykn"]').click();
+    assert.equal(document.activeElement.id, 'ykn-title');
+    press(document.activeElement, '1');
+    assert.equal(document.getElementById('workspace-title').textContent.trim(), 'İkamet Başvuruları');
+
+    document.querySelector('[data-workspace-view="teblig"]').click();
+    assert.equal(document.activeElement.id, 'workspace-title');
+    press(document.activeElement, '2');
+    assert.equal(document.getElementById('workspace-title').textContent.trim(), 'Arşiv');
+
+    document.querySelector('[data-workspace-view="teblig"]').click();
+    assert.equal(document.activeElement.id, 'workspace-title');
+    const visited = [];
+    document.addEventListener('workspace:view-changed', event => visited.push(event.detail.viewName));
+    const searchInput = document.getElementById('tebligat-search-input');
+    searchInput.focus();
+    press(searchInput, '2');
+
+    assert.deepEqual(visited, []);
+    assert.equal(document.activeElement.id, 'tebligat-search-input');
+});
+
+test('YKN family and birth date fields are open when the result form renders', (context) => {
+    const dom = installWorkspace(context);
+
+    assert.equal(dom.window.document.querySelector('.ykn-family-details')?.open, true);
+});
+
 test('workspace shortcuts respect editing, dialogs, modifier keys and the login screen', (context) => {
     const dom = installWorkspace(context);
     const document = dom.window.document;
