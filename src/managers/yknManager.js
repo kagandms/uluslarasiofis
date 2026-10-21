@@ -18,6 +18,11 @@ import {
     appendPassportPages
 } from '../ui/passportCropperModal.js';
 import { PDFJS_VERSION } from '../config/pdfjs-version.js';
+import {
+    hasYknStudentContextChanged,
+    isCurrentYknWorkflowResponse,
+    isCurrentYknTransferResponse
+} from '../utils/ykn-student-transition.js';
 
 const PDFJS_SUPPORT_URL = `/pdfjs-support/${PDFJS_VERSION}`;
 const PASSPORT_MAX_PAGES = 5;
@@ -881,6 +886,7 @@ export function initYknManager() {
 
     let currentStudentData = null;
     let activeSearchRequestId = null;
+    let currentStudentRequestId = null;
     let searchTimeoutTimer = null;
     let extensionBridgeActive = false;
     let extensionCheckRequestId = null;
@@ -1130,6 +1136,7 @@ export function initYknManager() {
         documentRequestKeys.clear();
         workflowStepStatuses.clear();
         completedWorkflowSteps.clear();
+        oneClickTimingStarts.clear();
         currentWorkflowStep = 1;
         updateWorkflowUI(1);
         if (proActions) proActions.style.display = 'none';
@@ -1156,6 +1163,20 @@ export function initYknManager() {
         if (alertMissing) alertMissing.style.display = 'none';
         setOneClickButtonMode('ready');
         if (btnOneClick) btnOneClick.style.display = 'none';
+    }
+
+    function prepareStudentContextForUpdate(incomingStudent, incomingRequestId) {
+        const contextChanged = hasYknStudentContextChanged({
+            currentStudent: currentStudentData,
+            incomingStudent,
+            currentRequestId: currentStudentRequestId,
+            incomingRequestId
+        });
+        if (contextChanged) {
+            resetStudentActions();
+            currentStudentData = null;
+        }
+        if (incomingRequestId) currentStudentRequestId = incomingRequestId;
     }
 
     function updateStudentActions(studentData) {
@@ -1202,6 +1223,7 @@ export function initYknManager() {
         return Boolean(
             oneClickWorkflow
             && oneClickWorkflow.status === 'running'
+            && oneClickWorkflow.studentRequestId === currentStudentRequestId
             && (!stage || oneClickWorkflow.stage === stage)
         );
     }
@@ -1378,6 +1400,7 @@ export function initYknManager() {
         clearOneClickTimeout();
         oneClickWorkflow = {
             workflowId: createRequestId(),
+            studentRequestId: currentStudentRequestId,
             stage: ONE_CLICK_STAGE.ACCEPTANCE_READING,
             status: 'running',
             passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || ''
@@ -1995,6 +2018,7 @@ export function initYknManager() {
             setSearchButtonLoading(true);
             currentStudentData = null;
             activeSearchRequestId = createRequestId();
+            currentStudentRequestId = activeSearchRequestId;
             resetStudentActions();
             studentResult.style.display = 'block';
             studentName.textContent = "Aranıyor... (" + passportNo + ")";
@@ -2620,10 +2644,26 @@ export function initYknManager() {
         }
 
         const requestId = event.data.requestId;
-        const isCurrentWorkflowResponse = requestId
-            && oneClickWorkflow
-            && requestId === oneClickWorkflow.workflowId;
-        if (requestId && activeSearchRequestId && requestId !== activeSearchRequestId && !isCurrentWorkflowResponse) return;
+        const isCurrentWorkflowResponse = isCurrentYknWorkflowResponse({
+            responseRequestId: requestId,
+            workflow: oneClickWorkflow,
+            currentStudentRequestId
+        });
+        const isCurrentYoksisTransferResponse = isCurrentYknTransferResponse({
+            responseRequestId: requestId,
+            activeRequestId: activeSearchRequestId,
+            workflow: oneClickWorkflow,
+            currentStudentRequestId
+        });
+        const isCurrentStudentRequest = Boolean(requestId && requestId === currentStudentRequestId);
+        const isStudentLookupEvent = event.data.type === 'EVENT' && [
+            'STUDENT_FOUND', 'STUDENT_DOCUMENTS_FOUND', 'DOCUMENTS_NOT_FOUND', 'STUDENT_NOT_FOUND', 'REQUEST_FAILED'
+        ].includes(event.data.action);
+        if (isStudentLookupEvent && !isCurrentStudentRequest) return;
+        if (requestId && activeSearchRequestId && requestId !== activeSearchRequestId
+            && !isCurrentWorkflowResponse && !isCurrentStudentRequest) return;
+        if (event.data.type === 'RESPONSE' && event.data.action === 'TRANSFER_TO_YOKSIS'
+            && !isCurrentYoksisTransferResponse) return;
 
         if (event.data.type === 'RESPONSE') {
             const response = event.data.response;
@@ -2967,6 +3007,7 @@ export function initYknManager() {
         if (event.data.type === 'EVENT' && event.data.action === 'STUDENT_FOUND') {
             clearSearchTimeout();
             const incoming = event.data.data || {};
+            prepareStudentContextForUpdate(incoming, requestId);
             const rawId = incoming.yoksisId || incoming.kabulId || '';
             const safeYoksisId = isValidYoksisId(rawId) ? rawId : '';
             const passCandidates = incoming.passportCandidates && incoming.passportCandidates.length > 0
@@ -2996,6 +3037,7 @@ export function initYknManager() {
         else if (event.data.type === 'EVENT' && event.data.action === 'STUDENT_DOCUMENTS_FOUND') {
             clearSearchTimeout();
             const incoming = event.data.data || {};
+            prepareStudentContextForUpdate(incoming, requestId);
             const rawId = incoming.yoksisId || incoming.kabulId || '';
             const safeYoksisId = isValidYoksisId(rawId) ? rawId : (isValidYoksisId(currentStudentData?.yoksisId) ? currentStudentData.yoksisId : '');
             const candidates = incoming.acceptanceCandidates && incoming.acceptanceCandidates.length > 0
