@@ -351,7 +351,8 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
             },
             sendMessage(tabId, message, optionsOrCallback, maybeCallback) {
                 const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-                calls.push({ type: 'message', tabId, message });
+                const messageOptions = typeof optionsOrCallback === 'function' ? undefined : optionsOrCallback;
+                calls.push({ type: 'message', tabId, message, options: messageOptions });
                 chrome.runtime.lastError = null;
                 if (message.action === 'PING') {
                     const targetTab = yoksisTabs.find((tab) => tab.id === tabId) || yoksisTab;
@@ -406,6 +407,10 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         }
     };
 
+    if (options.sendMessageArityZero) {
+        Object.defineProperty(chrome.tabs.sendMessage, 'length', { value: 0 });
+    }
+
     const backgroundContext = vm.createContext({
         chrome,
         URL,
@@ -437,6 +442,9 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         calls,
         timingLogs,
         storageValues,
+        sendTabMessage(tabId, message, messageOptions) {
+            return backgroundContext.sendTabMessage(tabId, message, messageOptions);
+        },
         async send(request) {
             assert.ok(messageHandler, 'background message listener was not registered');
             return new Promise((resolveResponse) => {
@@ -454,6 +462,15 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         }
     };
 }
+
+test('YÖKSİS frame targeting survives browser APIs that report sendMessage arity zero', async () => {
+    const harness = createBackgroundHarness({}, {}, { sendMessageArityZero: true });
+
+    const response = await harness.sendTabMessage(42, { action: 'PING', pageKind: 'yoksis' }, { frameId: 0 });
+
+    assert.equal(response.ready, true);
+    assert.deepEqual(harness.calls.at(-1).options, { frameId: 0 });
+});
 
 test('extension rejects staff bridge messages from an untrusted page before running workflows', async () => {
     const harness = createBackgroundHarness(
