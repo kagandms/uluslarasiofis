@@ -43,7 +43,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .page-range-input:disabled { background: #f1f3f5; }
 .page-selection-hint { margin: 7px 0 0; color: #667080; font-size: .84rem; }
 .print-settings-summary { margin: 12px 0 0; color: #4b5563; font-size: .87rem; line-height: 1.45; }
-.secondary-button { width: 100%; margin-top: 14px; border: 1px dashed #9aa3af; background: #fff; color: #7e1533; }
+.primary-button { width: 100%; margin-top: 12px; }
 .print-basket { position: sticky; bottom: 8px; z-index: 1; margin-top: 18px; padding: 12px; border: 1px solid #e0d5d9; border-radius: 12px; background: #fff; box-shadow: 0 6px 22px #17203318; }
 .print-basket p { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 10px; color: #4b5563; font-size: .9rem; }
 #print-submit { width: 100%; }

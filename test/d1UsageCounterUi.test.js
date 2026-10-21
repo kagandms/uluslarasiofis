@@ -22,16 +22,30 @@ test('usage counter is limited to the authenticated staff home and renders daily
     await new Promise((resolveRequest) => setImmediate(resolveRequest));
 
     assert.equal(document.querySelector('#d1-usage-value').textContent, '12.345 / 5.000.000');
+    assert.equal(document.querySelector('#d1-usage-percent').textContent, '0,25%');
     assert.equal(document.querySelector('#d1-usage-status').textContent, '2026-10-14 UTC');
     assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '12345');
 
 });
 
 test('staff counter shows unavailable instead of inventing zero usage', async () => {
-    const document = new JSDOM('<!doctype html><html lang="tr"><body><aside id="d1-usage-counter"><span id="d1-usage-value"></span><span id="d1-usage-status"></span><span role="progressbar"></span></aside></body></html>').window.document;
+    const document = new JSDOM('<!doctype html><html lang="tr"><body><aside id="d1-usage-counter"><span id="d1-usage-value"></span><span id="d1-usage-percent"></span><span id="d1-usage-status"></span><span role="progressbar"></span></aside></body></html>').window.document;
     initD1UsageCounter({ root: document, fetcher: async () => new Response(null, { status: 503 }) });
     await new Promise((resolveRequest) => setImmediate(resolveRequest));
 
     assert.match(document.querySelector('#d1-usage-value').textContent, /^— \/ 5\.000\.000$/);
     assert.equal(document.querySelector('#d1-usage-status').textContent, 'Kullanım verisi alınamıyor');
+    assert.equal(document.querySelector('#d1-usage-percent').textContent, '—');
+});
+
+test('staff counter rejects a zero limit instead of rendering an invalid percentage', async () => {
+    const staffHtml = await readFile(resolve(repositoryRoot, 'yetkili/index.html'), 'utf8');
+    const dom = new JSDOM(staffHtml);
+
+    initD1UsageCounter({ root: dom.window.document, fetcher: async () => Response.json({ rowsRead: 12, limit: 0 }) });
+    await new Promise((resolveRequest) => setImmediate(resolveRequest));
+
+    assert.equal(dom.window.document.querySelector('#d1-usage-percent').textContent, '—');
+    assert.equal(dom.window.document.querySelector('#d1-usage-status').textContent, 'Kullanım verisi alınamıyor');
+    dom.window.close();
 });

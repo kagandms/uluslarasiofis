@@ -67,7 +67,7 @@ test('admin UI offers pause and only enables cancellation for safe pending jobs'
     }
 });
 
-test('staff status uses plain Turkish and keeps operational details collapsed', async () => {
+test('staff status uses plain Turkish without showing printer implementation details', async () => {
     const { dom } = await openPrintView('admin', []);
     try {
         const document = dom.window.document;
@@ -77,10 +77,9 @@ test('staff status uses plain Turkish and keeps operational details collapsed', 
         assert.match(document.getElementById('print-staff-details').textContent, /Son bağlantı/);
         assert.match(document.getElementById('print-staff-details').textContent, /Hazır/);
         assert.doesNotMatch(document.getElementById('print-staff-details').textContent, /heartbeat|ready|agent-1/);
-        assert.equal(document.querySelector('.print-technical-disclosure').open, false);
-        assert.match(document.getElementById('print-staff-technical-details').textContent, /agent-1/);
+        assert.equal(document.querySelector('.print-technical-disclosure'), null);
+        assert.equal(document.getElementById('print-staff-technical-details'), null);
         assert.match(document.getElementById('print-staff-jobs').textContent, /dosya yok/);
-        assert.match(document.querySelector('.print-technical-disclosure').textContent, /otomatik tekrarlanmaz/);
     } finally {
         closePrintView(dom);
     }
