@@ -15,7 +15,9 @@ import {
     initPassportCropperModal,
     openPassportCropper,
     isPassportCropperOpen,
-    appendPassportPages
+    appendPassportPages,
+    replacePassportPages,
+    setCropperSourceLoading
 } from '../ui/passportCropperModal.js';
 import { PDFJS_VERSION } from '../config/pdfjs-version.js';
 import {
@@ -895,12 +897,15 @@ export function initYknManager() {
     let pasteTimeoutTimer = null;
     let oneClickTimeoutTimer = null;
     let oneClickWorkflow = null;
+    let activeCropSourceUrl = '';
+    let activeCropSourcePages = [];
     const oneClickTimingStarts = new Map();
     let shouldOpenCropperWhenReady = false;
     let shouldAutoTransferYoksisAfterAcceptance = false;
     let shouldAutoRunAcceptanceAfterSearch = false;
     let shouldAutoRunCopyAfterSearch = false;
     const pendingDocumentReads = new Set();
+    const cropSourceObjectUrls = new Set();
     const buttonActionTimers = new Map();
 
     const ONE_CLICK_STAGE = Object.freeze({
@@ -1119,6 +1124,10 @@ export function initYknManager() {
         });
         clearOneClickTimeout();
         documentBytesCache.clear();
+        cropSourceObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+        cropSourceObjectUrls.clear();
+        activeCropSourceUrl = '';
+        activeCropSourcePages = [];
         cancelButtonActions();
         oneClickWorkflow = null;
         if (pasteTimeoutTimer) {
@@ -1266,6 +1275,7 @@ export function initYknManager() {
     function getYoksisTransportData(studentData) {
         if (!studentData) return studentData;
         const { passportPages, ...transportData } = studentData;
+        delete transportData.cropSources;
         return transportData;
     }
 
@@ -1305,7 +1315,10 @@ export function initYknManager() {
 
     function openOneClickCropper() {
         if (!isOneClickActive()) return;
-        if (!currentStudentData?.passportImageSrc) {
+        const pages = activeCropSourcePages.length
+            ? activeCropSourcePages
+            : (currentStudentData?.passportPages || []);
+        if (pages.length === 0) {
             failOneClick('PASSPORT_IMAGE_UNAVAILABLE', 'Pasaport fotoğrafı cropper için hazırlanamadı.');
             return;
         }
@@ -1319,31 +1332,87 @@ export function initYknManager() {
         shouldOpenCropperWhenReady = false;
         if (isPassportCropperOpen()) return;
         openPassportCropper({
-            imageSrc: currentStudentData.passportImageSrc,
-            pages: currentStudentData.passportPages || [],
-            initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
+            imageSrc: pages[0]?.dataUrl || currentStudentData?.passportImageSrc,
+            pages,
+            initialPageIndex: 0,
             studentName: currentStudentData.fullName || '',
             passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
-            studentData: currentStudentData
+            studentData: currentStudentData,
+            sources: currentStudentData.cropSources || [],
+            selectedSourceUrl: activeCropSourceUrl
         });
+    }
+
+    function getPreferredCropSource() {
+        const sources = currentStudentData?.cropSources || [];
+        return sources.find((source) => source.type === 'photo')
+            || sources.find((source) => source.type === 'passport')
+            || sources[0]
+            || null;
+    }
+
+    function openPreferredCropSource(requestId = activeSearchRequestId) {
+        const source = getPreferredCropSource();
+        if (!source) return false;
+        activeCropSourceUrl = source.url;
+        if (source.type === 'passport' && currentStudentData?.passportPages?.length) {
+            activeCropSourcePages = currentStudentData.passportPages;
+            openPassportCropper({
+                imageSrc: activeCropSourcePages[0]?.dataUrl || currentStudentData.passportImageSrc,
+                pages: activeCropSourcePages,
+                studentName: currentStudentData.fullName || '',
+                passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
+                studentData: currentStudentData,
+                sources: currentStudentData.cropSources || [],
+                selectedSourceUrl: source.url
+            });
+            shouldOpenCropperWhenReady = false;
+            if (btnCopy) {
+                btnCopy.disabled = false;
+                btnCopy.classList.remove('is-loading');
+            }
+            return true;
+        }
+        shouldOpenCropperWhenReady = true;
+        if (!requestId) {
+            activeSearchRequestId = createRequestId();
+            requestId = activeSearchRequestId;
+        }
+        setCropperSourceLoading(true);
+        requestApplyDocument('cropSource', source.url, requestId);
+        return true;
     }
 
     function startOneClickPassportRead() {
         oneClickTimingStarts.set(`${oneClickWorkflow?.workflowId}:passport-document`, startYknUiTiming());
         setOneClickStage(ONE_CLICK_STAGE.PASSPORT_READING, 'Öğrenci bilgileri alındı. Pasaport okunuyor...');
         armOneClickTimeout(ONE_CLICK_STAGE.PASSPORT_READING, 30_000);
+        const preferredSource = getPreferredCropSource();
+        if (preferredSource?.type === 'photo') {
+            openPreferredCropSource(oneClickWorkflow.workflowId);
+            return;
+        }
         if (currentStudentData?.passportImageSrc) {
+            activeCropSourceUrl = currentStudentData?.passportDocumentUrl
+                || currentStudentData?.passportImageUrl
+                || (preferredSource?.type === 'passport' ? preferredSource.url : '');
+            activeCropSourcePages = currentStudentData.passportPages || [];
             openOneClickCropper();
             return;
         }
         const passportUrl = currentStudentData?.passportDocumentUrl
             || currentStudentData?.passportImageUrl
             || currentStudentData?.passportCandidates?.[0];
+        if (!passportUrl && preferredSource) {
+            openPreferredCropSource(oneClickWorkflow.workflowId);
+            return;
+        }
         if (!passportUrl) {
             failOneClick('PASSPORT_DOCUMENT_NOT_FOUND', 'Apply profilinde pasaport belgesi bulunamadı.');
             return;
         }
         shouldOpenCropperWhenReady = true;
+        activeCropSourceUrl = passportUrl;
         requestApplyDocument('passport', passportUrl, oneClickWorkflow.workflowId);
     }
 
@@ -1412,7 +1481,7 @@ export function initYknManager() {
 
     function completeOneClickPassport() {
         if (!isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)) return;
-        if (!currentStudentData?.passportImageSrc) {
+        if (!activeCropSourcePages.length && !currentStudentData?.passportImageSrc) {
             failOneClick('PASSPORT_IMAGE_UNAVAILABLE', 'Pasaport görseli cropper için hazırlanamadı.');
             return;
         }
@@ -1471,6 +1540,66 @@ export function initYknManager() {
         return false;
     }
 
+    async function renderPdfCropSourcePages(bytes, label) {
+        const pdfOffset = isPdfData(bytes);
+        const validPdfBytes = pdfOffset > 0 ? bytes.subarray(pdfOffset) : bytes;
+        ensurePdfWorkerReady();
+        const pdf = await window.pdfjsLib.getDocument({
+            data: validPdfBytes,
+            cMapUrl: `${PDFJS_SUPPORT_URL}/cmaps/`,
+            standardFontDataUrl: `${PDFJS_SUPPORT_URL}/standard_fonts/`,
+            cMapPacked: true,
+            isEvalSupported: false
+        }).promise;
+        const totalPages = Math.min(pdf.numPages, PASSPORT_MAX_PAGES);
+        const pages = [];
+        for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
+            const page = await pdf.getPage(pageNumber);
+            const viewport = page.getViewport({ scale: 1.4 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+            pages.push({
+                dataUrl: canvas.toDataURL('image/jpeg', 0.85),
+                pageNumber,
+                label: totalPages > 1 ? `${label} - Sayfa ${pageNumber}` : label
+            });
+            canvas.width = 0;
+            canvas.height = 0;
+        }
+        return pages;
+    }
+
+    async function renderCropSourcePages(bytes, contentType, label) {
+        if (isPdfData(bytes) >= 0) return renderPdfCropSourcePages(bytes, label);
+        if (!isImageData(bytes, contentType)) return [];
+
+        const objectUrl = URL.createObjectURL(new Blob([bytes], { type: contentType || 'image/jpeg' }));
+        cropSourceObjectUrls.add(objectUrl);
+        return [{ dataUrl: objectUrl, pageNumber: 1, label }];
+    }
+
+    function handleCropSourceSelection(source) {
+        if (!source?.url || !currentStudentData) return;
+        activeCropSourceUrl = source.url;
+        const passportUrls = [
+            currentStudentData.passportDocumentUrl,
+            currentStudentData.passportImageUrl,
+            ...(currentStudentData.passportCandidates || [])
+        ];
+        if (source.type === 'passport'
+            && passportUrls.includes(source.url)
+            && currentStudentData.passportPages?.length) {
+            activeCropSourcePages = currentStudentData.passportPages;
+            replacePassportPages(activeCropSourcePages);
+            return;
+        }
+        setCropperSourceLoading(true);
+        requestApplyDocument('cropSource', source.url,
+            isOneClickActive() ? oneClickWorkflow.workflowId : activeSearchRequestId);
+    }
+
     async function handleDocumentBytesReady(documentData) {
         const documentKind = documentData?.documentKind;
         const documentBytes = documentData?.documentBase64
@@ -1498,6 +1627,39 @@ export function initYknManager() {
         try {
             const pdfOffset = isPdfData(documentBytes);
             const isImage = isImageData(documentBytes, contentType);
+
+            if (documentKind === 'cropSource') {
+                const sourceUrl = documentUrl;
+                const source = currentStudentData?.cropSources?.find((item) => item.url === sourceUrl);
+                const pages = await renderCropSourcePages(documentBytes, contentType, source?.label || 'Diğer belge');
+                if (sourceUrl === activeCropSourceUrl) {
+                    activeCropSourcePages = pages;
+                    setCropperSourceLoading(false);
+                    if (pages.length === 0) {
+                        addStatus(`${source?.label || 'Seçilen dosya'} görüntülenemiyor. Başka bir belge seçin.`, 'warning');
+                        return;
+                    }
+                    if (isPassportCropperOpen()) {
+                        replacePassportPages(pages);
+                    } else if (shouldOpenCropperWhenReady) {
+                        if (isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)) {
+                            openOneClickCropper();
+                        } else {
+                            openPassportCropper({
+                                imageSrc: pages[0].dataUrl,
+                                pages,
+                                studentName: currentStudentData?.fullName || '',
+                                passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || '',
+                                studentData: currentStudentData,
+                                sources: currentStudentData?.cropSources || [],
+                                selectedSourceUrl: sourceUrl
+                            });
+                            shouldOpenCropperWhenReady = false;
+                        }
+                    }
+                }
+                return;
+            }
 
             if (documentKind === 'passport') {
                 let renderedPages = [];
@@ -1611,6 +1773,8 @@ export function initYknManager() {
                     const allPages = [...existingPages, ...adjustedPages];
                     const selectedPage = renderedPages[bestPageIndex] || renderedPages[0];
 
+                    activeCropSourcePages = allPages;
+                    activeCropSourceUrl = documentUrl;
                     currentStudentData = {
                         ...currentStudentData,
                         passportPages: allPages,
@@ -1635,7 +1799,9 @@ export function initYknManager() {
                                 initialPageIndex: initialTotal + bestPageIndex,
                                 studentName: currentStudentData?.fullName || '',
                                 passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || '',
-                                studentData: currentStudentData
+                                studentData: currentStudentData,
+                                sources: currentStudentData?.cropSources || [],
+                                selectedSourceUrl: documentUrl
                             });
                         }
                         addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
@@ -1973,6 +2139,14 @@ export function initYknManager() {
                 return;
             }
         } catch (error) {
+            if (documentKind === 'cropSource') {
+                setCropperSourceLoading(false);
+                addStatus(`Seçilen belge açılamadı: ${error.message}`, 'error');
+                if (isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)) {
+                    failOneClick('DOCUMENT_READ_FAILED', error.message);
+                }
+                return;
+            }
             addStatus(`${documentKind === 'passport' ? 'Pasaport' : 'Kabul mektubu'} okunamadı: ${error.message}`, 'error');
             const stage = documentKind === 'passport'
                 ? ONE_CLICK_STAGE.PASSPORT_READING
@@ -2225,6 +2399,10 @@ export function initYknManager() {
 
             if (!activeSearchRequestId) activeSearchRequestId = createRequestId();
 
+            if (openPreferredCropSource()) {
+                return;
+            }
+
             if (currentStudentData.passportImageSrc) {
                 openPassportCropper({
                     imageSrc: currentStudentData.passportImageSrc,
@@ -2232,7 +2410,9 @@ export function initYknManager() {
                     initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
                     studentName: currentStudentData?.fullName || '',
                     passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || '',
-                    studentData: currentStudentData
+                    studentData: currentStudentData,
+                    sources: currentStudentData.cropSources || [],
+                    selectedSourceUrl: currentStudentData.passportDocumentUrl || ''
                 });
                 shouldOpenCropperWhenReady = false;
                 btnCopy.disabled = false;
@@ -2263,6 +2443,7 @@ export function initYknManager() {
                 return;
             }
             shouldOpenCropperWhenReady = true;
+            if (openPreferredCropSource()) return;
             if (currentStudentData.passportImageSrc) {
                 openPassportCropper({
                     imageSrc: currentStudentData.passportImageSrc,
@@ -2270,7 +2451,9 @@ export function initYknManager() {
                     initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
                     studentName: currentStudentData?.fullName || '',
                     passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || '',
-                    studentData: currentStudentData
+                    studentData: currentStudentData,
+                    sources: currentStudentData.cropSources || [],
+                    selectedSourceUrl: currentStudentData.passportDocumentUrl || ''
                 });
                 shouldOpenCropperWhenReady = false;
             } else {
@@ -2452,6 +2635,10 @@ export function initYknManager() {
             syncUserEnteredPassportDates();
         });
     }
+
+    window.addEventListener('ykn:crop-source-selected', (event) => {
+        handleCropSourceSelection(event.detail);
+    });
 
     window.addEventListener('ykn:photo-cropped', async (e) => {
         const { dataUrl, fileName, autoTransfer, userFields } = e.detail || {};
@@ -2701,6 +2888,7 @@ export function initYknManager() {
                 clearOneClickTimeout();
                 if (response?.success && response.data) {
                     currentStudentData = mergeApplyProfile(currentStudentData, response.data);
+                    currentStudentData.cropSources = response.data.cropSources || currentStudentData.cropSources || [];
                     applyCountryDefaultsToStudent(currentStudentData);
                     copyStudentInfoToClipboard(currentStudentData);
                     completedWorkflowSteps.add(3);
@@ -2855,11 +3043,15 @@ export function initYknManager() {
                 if (response?.success && response.data) {
                     const data = response.data;
                     currentStudentData = mergeApplyProfile(currentStudentData, data);
+                    currentStudentData.cropSources = data.cropSources || currentStudentData.cropSources || [];
                     applyCountryDefaultsToStudent(currentStudentData);
                     copyStudentInfoToClipboard(currentStudentData);
                     setWorkflowStepStatus(3, 'success');
                     if (currentWorkflowStep <= 3) updateWorkflowUI(4);
 
+                    if (openPreferredCropSource()) {
+                        addStatus('Öğrenci bilgileri alındı. Seçilen fotoğraf kaynağı açılıyor.', 'success');
+                    } else {
                     const passUrl = currentStudentData.passportImageUrl
                         || currentStudentData.passportDocumentUrl
                         || (currentStudentData.passportCandidates && currentStudentData.passportCandidates[0]);
@@ -2880,6 +3072,7 @@ export function initYknManager() {
                         addStatus('Öğrenci bilgileri kopyalandı. Fotoğraf kırpma ekranı açıldı.', 'success');
                     } else {
                         addStatus('Öğrenci bilgileri kopyalandı. Sonraki adımlar bağımsız olarak kullanılabilir.', 'success');
+                    }
                     }
                     showToast('Öğrenci bilgileri kopyalandı.', 'success');
                 } else {
@@ -2983,6 +3176,14 @@ export function initYknManager() {
         if (event.data.type === 'EVENT' && event.data.action === 'DOCUMENT_READ_FAILED') {
             const documentKind = event.data.data?.documentKind;
             if (documentKind) pendingDocumentReads.delete(documentKind);
+            if (documentKind === 'cropSource') {
+                setCropperSourceLoading(false);
+                addStatus(event.data.error || 'Seçilen belge açılamadı.', 'error');
+                if (isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)) {
+                    failOneClick('DOCUMENT_READ_FAILED', event.data.error || 'Seçilen belge açılamadı.');
+                }
+                return;
+            }
             if (documentKind === 'acceptanceLetter') {
                 finishButtonAction('copy-letter');
                 setWorkflowStepStatus(1, 'error');
@@ -3014,6 +3215,7 @@ export function initYknManager() {
                 passportNo: resolvedPassportNo,
                 pasaportNo: resolvedPassportNo,
                 passportCandidates: passCandidates,
+                cropSources: incoming.cropSources || [],
                 currentPassportCandidateIndex: 0,
                 yoksisId: safeYoksisId
             };
@@ -3061,6 +3263,7 @@ export function initYknManager() {
                 currentCandidateIndex: 0,
                 passportDocumentUrl: passCandidates[0] || incoming.passportDocumentUrl || incoming.passportImageUrl || '',
                 passportCandidates: passCandidates,
+                cropSources: incoming.cropSources || currentStudentData?.cropSources || [],
                 currentPassportCandidateIndex: 0,
                 yoksisId: safeYoksisId,
                 documentsReady: true

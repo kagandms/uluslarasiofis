@@ -14,5 +14,5 @@ test('PDF.js stays pinned to the patched package and same-origin support assets'
     assert.match(pdfBootstrap, /pdfjs-dist\/legacy\/build\/pdf\.worker\.min\.mjs\?url/);
     assert.doesNotMatch(staffHtml, /cdnjs\.cloudflare\.com\/ajax\/libs\/pdf\.js/);
     assert.doesNotMatch(yknManager, /cdnjs\.cloudflare\.com\/ajax\/libs\/pdf\.js/);
-    assert.equal((yknManager.match(/isEvalSupported: false/g) || []).length, 3);
+    assert.equal((yknManager.match(/isEvalSupported: false/g) || []).length, 4);
 });
