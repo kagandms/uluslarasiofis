@@ -125,7 +125,7 @@ test('a reset that clears values but leaves the previous student form read-only 
 });
 
 for (const previousValue of ['', 'SYNTHETIC-PREVIOUS']) {
-    test(`completed YKN locked form resets once before replacing the old acceptance code (${previousValue ? 'retained' : 'cleared'} values)`, async () => {
+    test(`blank locked controls are skipped and populated locked records reset before search (${previousValue ? 'populated' : 'blank'} values)`, async () => {
         const harness = createContentHarness(`<fieldset><legend>Öğrenci Bilgileri</legend><table>
             <tr><td>Adı</td><td><input id="prior-first" disabled readonly value="${previousValue}"></td></tr>
             <tr><td>Soyadı</td><td><input id="prior-last" disabled readonly value="${previousValue}"></td></tr>
@@ -154,8 +154,8 @@ for (const previousValue of ['', 'SYNTHETIC-PREVIOUS']) {
             const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-456-ID', requestId: 'completed-record', waitForForm: false });
 
             assert.equal(response.searchTriggered, true, JSON.stringify(response));
-            assert.deepEqual(operations, ['reset', 'search']);
-            assert.equal(harness.dom.window.YknFieldTargets.find({ root: document, labels: ['Adı'], kind: 'text' }).disabled, false);
+            assert.deepEqual(operations, previousValue ? ['reset', 'search'] : ['search']);
+            assert.equal(Boolean(harness.dom.window.YknFieldTargets.find({ root: document, labels: ['Adı'], kind: 'text' })), Boolean(previousValue));
         } finally { harness.close(); }
     });
 }
