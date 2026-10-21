@@ -1,7 +1,7 @@
 {
   "name": "ikamet-main",
   "version": "2.2.1",
-  "description": "\u0130stanbul Topkap\u0131 \u00dcniversitesi Uluslararas\u0131 \u00d6\u011frenci \u0130\u015flemleri Portal\u0131",
+  "description": "İstanbul Topkapı Üniversitesi Uluslararası Öğrenci İşlemleri Portalı",
   "main": "app.js",
   "scripts": {
     "test": "node --disable-warning=ExperimentalWarning --test test/**/*.test.js",
@@ -46,7 +46,7 @@
     "@cloudflare/vite-plugin": "1.64.0",
     "jsdom": "^29.1.1",
     "pdfjs-dist": "6.3.289",
-    "vite": "^8.2.2",
+    "vite": "^8.2.4",
     "wrangler": "4.151.0"
   },
   "overrides": {
