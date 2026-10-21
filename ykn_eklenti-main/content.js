@@ -1346,9 +1346,7 @@ function getYoksisStudentResetFingerprint(controls) {
 }
 
 function hasPopulatedYoksisStudentForm() {
-    return getYoksisStudentFormControls().some(control =>
-        String(control.value || '').trim() || control.disabled || control.readOnly
-    );
+    return getYoksisStudentFormControls().some(control => String(control.value || '').trim());
 }
 
 function hasYoksisStudentResetCompleted(previousFingerprint) {
