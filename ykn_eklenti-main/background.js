@@ -169,7 +169,7 @@ function sendTabMessage(tabId, message, options = {}) {
             }
             resolve(response);
         };
-        if (options && Object.keys(options).length > 0 && typeof chrome.tabs.sendMessage === "function" && chrome.tabs.sendMessage.length >= 4) {
+        if (options && Object.keys(options).length > 0) {
             chrome.tabs.sendMessage(tabId, message, options, callback);
         } else {
             chrome.tabs.sendMessage(tabId, message, callback);
