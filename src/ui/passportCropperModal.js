@@ -7,6 +7,7 @@ let currentStudentInfo = { name: '', passport: '' };
 let currentAspectRatio = 3 / 4; // Standard biometric portrait ratio
 let cropperPages = []; // [{ dataUrl, pageNumber, label }]
 let currentCropperPageIndex = 0;
+let cropSources = [];
 
 function getElements() {
     return {
@@ -24,6 +25,8 @@ function getElements() {
         btnCancel: document.getElementById('btn-passport-crop-cancel'),
         btnClose: document.getElementById('btn-passport-crop-close'),
         pageSelector: document.getElementById('passport-page-selector'),
+        sourceSelectorWrapper: document.getElementById('passport-source-selector'),
+        sourceSelector: document.getElementById('passport-source-select'),
         pageInfo: document.getElementById('passport-page-info'),
         btnPrevPage: document.getElementById('btn-passport-prev-page'),
         btnNextPage: document.getElementById('btn-passport-next-page'),
@@ -34,6 +37,23 @@ function getElements() {
         cropperSelectGender: document.getElementById('cropper-select-gender'),
         cropperSelectMedeni: document.getElementById('cropper-select-medeni')
     };
+}
+
+function updateSourceSelector(sources, selectedUrl) {
+    const { sourceSelectorWrapper, sourceSelector } = getElements();
+    cropSources = Array.isArray(sources) ? sources : [];
+    if (!sourceSelectorWrapper || !sourceSelector) return;
+
+    sourceSelector.replaceChildren();
+    cropSources.forEach((source) => {
+        const option = document.createElement('option');
+        option.value = source.url;
+        option.textContent = source.label || 'Diğer belge';
+        sourceSelector.append(option);
+    });
+    sourceSelector.value = selectedUrl || cropSources[0]?.url || '';
+    sourceSelectorWrapper.style.display = cropSources.length > 1 ? 'block' : 'none';
+    sourceSelector.disabled = false;
 }
 
 function updatePageSelectorUI() {
@@ -140,14 +160,17 @@ export function closePassportCropper() {
         passportCropperInstance.destroy();
         passportCropperInstance = null;
     }
-    const { modal, image, slider, angleLabel, pageSelector } = getElements();
+    const { modal, image, slider, angleLabel, pageSelector, sourceSelectorWrapper, sourceSelector } = getElements();
     if (modal) modal.classList.remove('show');
     if (image) image.src = '';
     if (slider) slider.value = 0;
     if (angleLabel) angleLabel.textContent = '0°';
     if (pageSelector) pageSelector.style.display = 'none';
+    if (sourceSelectorWrapper) sourceSelectorWrapper.style.display = 'none';
+    if (sourceSelector) sourceSelector.replaceChildren();
     baseRotation = 0;
     cropperPages = [];
+    cropSources = [];
     currentCropperPageIndex = 0;
     window.dispatchEvent(new CustomEvent('ykn:cropper-closed'));
 }
@@ -167,6 +190,20 @@ export function appendPassportPages(newPages) {
     updatePageSelectorUI();
 }
 
+export function replacePassportPages(newPages) {
+    if (!Array.isArray(newPages) || newPages.length === 0) return;
+    cropperPages = newPages;
+    currentCropperPageIndex = 0;
+    switchToPage(0);
+}
+
+export function setCropperSourceLoading(isLoading) {
+    const { sourceSelector, btnTransfer, btnDownload } = getElements();
+    if (sourceSelector) sourceSelector.disabled = isLoading;
+    if (btnTransfer) btnTransfer.disabled = isLoading;
+    if (btnDownload) btnDownload.disabled = isLoading;
+}
+
 function formatDateDisplay(isoDate) {
     if (!isoDate || typeof isoDate !== 'string') return '';
     const clean = isoDate.trim();
@@ -177,7 +214,7 @@ function formatDateDisplay(isoDate) {
     return clean;
 }
 
-export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0, studentName = '', passportNo = '', studentData = null }) {
+export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0, studentName = '', passportNo = '', studentData = null, sources = [], selectedSourceUrl = '' }) {
     if (pages && pages.length > 0) {
         cropperPages = pages.map((p, idx) => {
             if (typeof p === 'string') return { dataUrl: p, pageNumber: idx + 1 };
@@ -207,6 +244,7 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
         cropperSelectMedeni
     } = getElements();
     if (!modal || !image) return;
+    setCropperSourceLoading(false);
 
     if (passportCropperInstance) {
         passportCropperInstance.destroy();
@@ -214,6 +252,7 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
     }
 
     currentStudentInfo = { name: studentName, passport: passportNo };
+    updateSourceSelector(sources, selectedSourceUrl);
     baseRotation = 0;
     if (slider) slider.value = 0;
     if (angleLabel) angleLabel.textContent = '0°';
@@ -359,6 +398,7 @@ export function initPassportCropperModal() {
         btnClose,
         btnPrevPage,
         btnNextPage,
+        sourceSelector,
         cropperInputIssueDate,
         cropperInputExpiryDate,
         cropperInputAuthority,
@@ -551,6 +591,14 @@ export function initPassportCropperModal() {
             if (currentCropperPageIndex < cropperPages.length - 1) {
                 switchToPage(currentCropperPageIndex + 1);
             }
+        });
+    }
+
+    if (sourceSelector) {
+        sourceSelector.addEventListener('change', () => {
+            const source = cropSources.find((item) => item.url === sourceSelector.value);
+            if (!source) return;
+            window.dispatchEvent(new CustomEvent('ykn:crop-source-selected', { detail: source }));
         });
     }
 
