@@ -86,9 +86,6 @@ function renderPrinterStatus(root, payload) {
         ['Yazdırma', isPaused ? 'Yeni dosyalar kabul edilmiyor' : isPrinterReady ? 'Yeni dosyalar kabul ediliyor' : 'Yazıcı hazır olana kadar bekleyin'],
         ['Hazırlık durumu', !printer.online ? 'Bağlantı bekleniyor' : printer.health === 'ready' ? 'Hazır' : printer.health === 'unavailable' ? 'Hazır değil' : 'Bilinmiyor']
     ]);
-    appendDefinitionList(document, root.getElementById('print-staff-technical-details'), [
-        ['Agent bağlantısı', printer.runner_id || 'Bağlı değil'], ['Agent durum kodu', printer.health || 'Bilinmiyor']
-    ]);
     root.getElementById('print-queue-pause').hidden = !payload.canManage || isPaused;
     root.getElementById('print-queue-resume').hidden = !payload.canManage || !isPaused;
 }

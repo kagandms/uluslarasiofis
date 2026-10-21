@@ -1,4 +1,6 @@
 import { IS_PHYSICAL_INTAKE_ENABLED } from '../config/physical-intake-policy.js';
+import { animateWorkspaceView } from './workspace-motion.js';
+import { initStaffHomePresentation } from './staff-home-presentation.js';
 const VIEW_TITLES = {
     ...(IS_PHYSICAL_INTAKE_ENABLED ? { intake: 'İkamet Başvuruları', physical: 'Fiziksel Teslimler' } : {}),
     applications: IS_PHYSICAL_INTAKE_ENABLED ? 'Online Başvurular' : 'İkamet Başvuruları',
@@ -81,9 +83,30 @@ function showHomeScreen() {
     animateWorkspaceView(homeScreen);
 }
 
-function animateWorkspaceView(element) {
-    element.classList.add('is-view-entering');
-    element.addEventListener('animationend', () => element.classList.remove('is-view-entering'), { once: true });
+function hasOpenDialog() {
+    return [...document.querySelectorAll('dialog[open], [aria-modal="true"]')].some((dialog) =>
+        !dialog.hidden && document.defaultView.getComputedStyle(dialog).display !== 'none');
+}
+
+function handleNavigationShortcut(event) {
+    if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (!/^[1-7]$/.test(event.key) && event.key !== 'Escape') return;
+    if (document.getElementById('app-content')?.hidden || hasOpenDialog()) return;
+    const { homeScreen, workspaceContent } = getWorkspaceElements();
+    if (homeScreen.hidden && workspaceContent.hidden) return;
+    if (event.key === 'Escape') {
+        if (workspaceContent.hidden) return;
+        event.preventDefault();
+        focusHomeScreen();
+        return;
+    }
+    const source = event.target;
+    if (source instanceof document.defaultView.Element && source.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
+    const cards = document.querySelectorAll('#home-screen .home-action');
+    const card = cards[Number(event.key) - 1];
+    if (!card) return;
+    event.preventDefault();
+    card.click();
 }
 
 function focusHomeScreen() {
@@ -95,6 +118,8 @@ function focusHomeScreen() {
 export function initWorkspaceNavigation() {
     const { homeScreen, workspaceContent, homeButton } = getWorkspaceElements();
     if (!homeScreen || !workspaceContent || !homeButton) return;
+    initStaffHomePresentation();
+    document.addEventListener('keydown', handleNavigationShortcut);
 
     if (IS_PHYSICAL_INTAKE_ENABLED) {
         document.querySelectorAll('[data-intake-entry]').forEach(button => {

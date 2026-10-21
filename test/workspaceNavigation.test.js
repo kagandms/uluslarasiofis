@@ -1,7 +1,64 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
+import { readFileSync } from 'node:fs';
 import { initWorkspaceNavigation } from '../src/ui/workspaceNavigation.js';
+
+function installWorkspace(context) {
+    const html = readFileSync(new URL('../yetkili/index.html', import.meta.url), 'utf8');
+    const dom = new JSDOM(html, { url: 'https://portal.test/yetkili/' });
+    const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    Object.defineProperty(globalThis, 'document', { configurable: true, value: dom.window.document });
+    dom.window.document.getElementById('app-content').hidden = false;
+    dom.window.document.getElementById('login-overlay').hidden = true;
+    context.after(() => {
+        if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument);
+        else delete globalThis.document;
+        dom.window.close();
+    });
+    initWorkspaceNavigation();
+    return dom;
+}
+
+test('number shortcuts switch workspaces and Escape returns home without clearing form content', (context) => {
+    const dom = installWorkspace(context);
+    const document = dom.window.document;
+    const draft = document.getElementById('ykn-passport-input');
+    draft.value = 'Unsaved passport';
+    const visited = [];
+    document.addEventListener('workspace:view-changed', event => visited.push(event.detail.viewName));
+
+    for (const key of ['3', '7']) document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true }));
+    document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    assert.deepEqual(visited, ['ykn', 'print']);
+    assert.equal(document.getElementById('home-screen').hidden, false);
+    assert.equal(document.getElementById('workspace-content').hidden, true);
+    assert.equal(draft.value, 'Unsaved passport');
+    assert.equal(document.querySelectorAll('#home-screen [aria-keyshortcuts]').length, 7);
+});
+
+test('workspace shortcuts respect editing, dialogs, modifier keys and the login screen', (context) => {
+    const dom = installWorkspace(context);
+    const document = dom.window.document;
+    const visited = [];
+    document.addEventListener('workspace:view-changed', event => visited.push(event.detail.viewName));
+    const press = (target, key, options = {}) => target.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true, ...options }));
+
+    press(document.getElementById('ykn-passport-input'), '1');
+    press(document, '2', { metaKey: true });
+    const dialog = document.createElement('div');
+    dialog.setAttribute('aria-modal', 'true');
+    document.body.append(dialog);
+    press(document, '3');
+    press(document, 'Escape');
+    dialog.remove();
+    document.getElementById('app-content').hidden = true;
+    press(document, '4');
+
+    assert.deepEqual(visited, []);
+    assert.equal(document.getElementById('home-screen').hidden, false);
+});
 
 test('staff logo returns to the protected workspace home without resetting tool state', () => {
     const dom = new JSDOM(`<!doctype html><html><body>

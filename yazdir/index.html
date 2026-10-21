@@ -28,6 +28,8 @@
             <p class="print-eyebrow" data-i18n="eyebrow">International Student Office</p>
             <h1 id="print-title" data-i18n="title">Print a document</h1>
             <p class="print-intro" data-i18n="intro">Add the files you want to print. Each file can be up to 10 MB.</p>
+            <input id="print-file-input" class="visually-hidden" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" multiple>
+            <button id="print-add-file" class="primary-button" type="button" data-i18n="addFile">+ Add files</button>
             <section class="print-quick-guide" aria-labelledby="print-guide-title">
                 <h2 id="print-guide-title" data-i18n="quickGuideTitle">How to print</h2>
                 <ol>
@@ -41,8 +43,6 @@
             <div id="print-availability" class="print-availability" role="status" aria-live="polite" data-i18n="availabilityChecking">Checking printer status…</div>
             <p class="print-guidance" data-i18n="guidance">Choose print settings for each file. You can print only the pages you need.</p>
             <div id="print-files" class="print-files" aria-live="polite"></div>
-            <input id="print-file-input" class="visually-hidden" type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" multiple>
-            <button id="print-add-file" class="secondary-button" type="button" data-i18n="addFile">+ Add files</button>
             <section id="print-basket" class="print-basket" data-i18n-aria-label="basketLabel" aria-label="Print summary">
                 <p><span id="print-file-count">0 files</span><span id="print-page-total">0 print pages</span></p>
                 <button id="print-submit" type="button" data-i18n="submit" disabled>Print all</button>
