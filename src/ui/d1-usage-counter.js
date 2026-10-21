@@ -12,6 +12,7 @@ export function initD1UsageCounter({ root = document, fetcher = fetch } = {}) {
     if (!widget) return;
 
     const value = widget.querySelector('#d1-usage-value');
+    const percentage = widget.querySelector('#d1-usage-percent');
     const status = widget.querySelector('#d1-usage-status');
     const progress = widget.querySelector('[role="progressbar"]');
     let usage = null;
@@ -20,6 +21,9 @@ export function initD1UsageCounter({ root = document, fetcher = fetch } = {}) {
         const numberFormat = new Intl.NumberFormat('tr-TR');
         const limit = usage?.limit || FALLBACK_LIMIT;
         value.textContent = `${usage ? numberFormat.format(usage.rowsRead) : '—'} / ${numberFormat.format(limit)}`;
+        if (percentage) percentage.textContent = usage
+            ? `${new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(usage.rowsRead / limit * 100)}%`
+            : '—';
         if (!usage) {
             status.textContent = hasLoaded ? UNAVAILABLE_STATUS : DEFAULT_STATUS;
             return;
@@ -38,7 +42,7 @@ export function initD1UsageCounter({ root = document, fetcher = fetch } = {}) {
         })
         .then((payload) => {
             hasLoaded = true;
-            if (!Number.isSafeInteger(payload.rowsRead) || !Number.isSafeInteger(payload.limit)) {
+            if (!Number.isSafeInteger(payload.rowsRead) || payload.rowsRead < 0 || !Number.isSafeInteger(payload.limit) || payload.limit <= 0) {
                 throw new Error('D1 usage response is invalid.');
             }
             usage = payload;
