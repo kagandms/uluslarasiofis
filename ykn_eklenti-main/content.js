@@ -1328,14 +1328,36 @@ async function waitForYoksisSearchControlsToSettle(options = {}) {
     return response;
 }
 
-function hasPopulatedYoksisStudentForm() {
+function getYoksisStudentFormControls() {
     const aliases = [['Adı', 'Öğrenci Adı'], ['Soyadı'], ['Anne Adı'], ['Baba Adı'], ['Belge No']];
-    return aliases.some((labels) => getAllDocs(document).some(root => {
-        const input = globalThis.YknFieldTargets.find({ root, labels, kind: 'existing-text' });
-        // A completed YKN record can retain disabled fields even after visible values clear.
-        // Its locked form still requires the normal new-record reset before the next search.
-        return Boolean(input && (String(input.value || '').trim() || input.disabled));
-    }));
+    const controls = aliases.flatMap(labels => getAllDocs(document).map(root =>
+        globalThis.YknFieldTargets.find({ root, labels, kind: 'existing-text' })
+    ));
+    return [...new Set(controls.filter(Boolean))];
+}
+
+function getYoksisStudentResetFingerprint(controls) {
+    return controls.map(control => [
+        control.id || control.name || control.type || control.tagName,
+        String(control.value || '').trim(),
+        String(control.disabled),
+        String(control.readOnly)
+    ].join('|')).sort().join('||');
+}
+
+function hasPopulatedYoksisStudentForm() {
+    return getYoksisStudentFormControls().some(control =>
+        String(control.value || '').trim() || control.disabled || control.readOnly
+    );
+}
+
+function hasYoksisStudentResetCompleted(previousFingerprint) {
+    const controls = getYoksisStudentFormControls();
+    const hasUnclearedEditableValue = controls.some(control =>
+        String(control.value || '').trim() && !control.disabled && !control.readOnly
+    );
+    return !hasUnclearedEditableValue
+        && getYoksisStudentResetFingerprint(controls) !== previousFingerprint;
 }
 
 function isYoksisFormResetApproved(request) {
@@ -1380,6 +1402,7 @@ async function prepareYoksisSearchControls(request) {
     pendingYoksisSearch = null;
     confirmedYoksisSearch = null;
     if (hasPopulatedYoksisStudentForm()) {
+        const previousFingerprint = getYoksisStudentResetFingerprint(getYoksisStudentFormControls());
         const rejectProtectedForm = (msg) => {
             const err = new Error(msg);
             err.allowMainFallback = false;
@@ -1391,6 +1414,9 @@ async function prepareYoksisSearchControls(request) {
         try {
             const reset = await waitForYoksisSearchControlsToSettle({ resetStudentForm: true, requestId: request?.requestId });
             if (!reset.resetPerformed) throw new Error('Güvenli yeni kayıt/temizle işlemi doğrulanamadı.');
+            if (!hasYoksisStudentResetCompleted(previousFingerprint)) {
+                throw new Error('YÖKSİS temizle işlemi tamamlanmadı; önceki öğrenci alanları dolu veya kilitli kaldı.');
+            }
         } catch (error) {
             console.warn('YÖKSİS new record reset failed.', { errorName: error.name });
             throw rejectProtectedForm(error.message);

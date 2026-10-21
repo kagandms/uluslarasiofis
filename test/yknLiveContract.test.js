@@ -78,6 +78,52 @@ test('approved new-record reset sends exactly one click before reacquiring the a
     } finally { harness.close(); }
 });
 
+test('an approved reset that leaves the previous student form populated stops before searching', async () => {
+    const harness = createContentHarness(`<table><tr><td>Anne Adı</td><td><input value="PREVIOUS"></td></tr>
+        <tr><td>Belge No</td><td><input value="PREVIOUS"></td></tr><tr><td>Kabul Mektup ID</td>
+        <td><input title="Kabul Mektup ID"></td><td><button id="search">Kabul Mektup ID ile Ara</button></td></tr>
+        <tr><td><button id="save">Kaydet</button><button id="reset">Temizle</button></td></tr></table>`,
+    'https://yoksis.yok.gov.tr/student');
+    harness.dom.window.confirm = () => true;
+    let resetAttempts = 0;
+    let searches = 0;
+    harness.dom.window.document.getElementById('reset').addEventListener('click', () => { resetAttempts += 1; });
+    harness.dom.window.document.getElementById('search').addEventListener('click', () => { searches += 1; });
+
+    try {
+        const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-123-ID', requestId: 'reset-not-applied', waitForForm: false });
+
+        assert.equal(resetAttempts, 1);
+        assert.equal(searches, 0);
+        assert.equal(response.success, false);
+        assert.match(response.message, /temiz|sıfır|kilit|önceki/i);
+    } finally { harness.close(); }
+});
+
+test('a reset that clears values but leaves the previous student form read-only stops before searching', async () => {
+    const harness = createContentHarness(`<table><tr><td>Anne Adı</td><td><input id="mother" value="PREVIOUS"></td></tr>
+        <tr><td>Belge No</td><td><input value="PREVIOUS"></td></tr><tr><td>Kabul Mektup ID</td>
+        <td><input title="Kabul Mektup ID"></td><td><button id="search">Kabul Mektup ID ile Ara</button></td></tr>
+        <tr><td><button id="save">Kaydet</button><button id="reset">Temizle</button></td></tr></table>`,
+    'https://yoksis.yok.gov.tr/student');
+    harness.dom.window.confirm = () => true;
+    let searches = 0;
+    harness.dom.window.document.getElementById('reset').addEventListener('click', () => {
+        const mother = harness.dom.window.document.getElementById('mother');
+        mother.value = '';
+        mother.readOnly = true;
+    });
+    harness.dom.window.document.getElementById('search').addEventListener('click', () => { searches += 1; });
+
+    try {
+        const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-456-ID', requestId: 'reset-still-locked', waitForForm: false });
+
+        assert.equal(searches, 0);
+        assert.equal(response.success, false);
+        assert.match(response.message, /kilit|önceki/i);
+    } finally { harness.close(); }
+});
+
 for (const previousValue of ['', 'SYNTHETIC-PREVIOUS']) {
     test(`completed YKN locked form resets once before replacing the old acceptance code (${previousValue ? 'retained' : 'cleared'} values)`, async () => {
         const harness = createContentHarness(`<fieldset><legend>Öğrenci Bilgileri</legend><table>
@@ -1951,8 +1997,8 @@ test('önceki öğrencinin salt okunur alanları Temizle sonrası kalsa bile yen
         <div id="student-container">
             <table>
                 <tr><td>Adı</td><td><input id="ad" value="GULJEMAL"></td></tr>
-                <tr><td>Soyadı</td><td><input id="soyad" value="SOYEKOVA"></td></tr>
-                <tr><td>Belge No</td><td><input id="belge-no" value="A2697635"></td></tr>
+                <tr><td>Soyadı</td><td><input id="soyad" value="SOYEKOVA" readonly></td></tr>
+                <tr><td>Belge No</td><td><input id="belge-no" value="A2697635" readonly></td></tr>
                 <tr>
                     <td><button id="kaydet-btn" class="z-button">Kaydet</button></td>
                     <td><button id="temizle-btn" class="z-button">Temizle</button></td>
@@ -1964,8 +2010,8 @@ test('önceki öğrencinin salt okunur alanları Temizle sonrası kalsa bile yen
     let resetClicked = 0;
     let searchClicked = 0;
 
-    // YÖKSİS'te Temizle'ye basıldığında editable alanlar temizlenirken
-    // soyad ve belge-no gibi kabul mektubundan gelen salt-okunur alanlar DOM'da kalabilir
+    // Kabul mektubundan gelen salt-okunur alanlar kalabilir, ancak form değişmeli
+    // ve yeni öğrenci aramasından önce eski düzenlenebilir değer kalmamalıdır.
     window.document.getElementById('temizle-btn').addEventListener('click', () => {
         resetClicked += 1;
         window.document.getElementById('ad').value = '';
