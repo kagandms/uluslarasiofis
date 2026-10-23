@@ -35,7 +35,7 @@ test('number shortcuts switch workspaces and Escape returns home without clearin
     assert.equal(document.getElementById('home-screen').hidden, false);
     assert.equal(document.getElementById('workspace-content').hidden, true);
     assert.equal(draft.value, 'Unsaved passport');
-    assert.equal(document.querySelectorAll('#home-screen [aria-keyshortcuts]').length, 7);
+    assert.equal(document.querySelectorAll('#home-screen [aria-keyshortcuts]').length, 8);
 });
 
 test('YKN and Teblig workspaces focus their headings instead of search inputs', (context) => {
