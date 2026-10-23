@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.104';
+const CONTENT_SCRIPT_VERSION = '1.2.106';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -1470,21 +1470,29 @@ function checkSemanticStudentMatch(expectedStudent) {
     const expPassport = (expectedStudent.passportNo || expectedStudent.pasaportNo || '').trim().toUpperCase();
     const expName = (expectedStudent.studentName || expectedStudent.ad || expectedStudent.adi || expectedStudent.firstName || '').trim().toUpperCase();
     const expSurname = (expectedStudent.studentSurname || expectedStudent.soyad || expectedStudent.soyadi || expectedStudent.lastName || '').trim().toUpperCase();
+    const expBirthDate = expectedStudent.birthDate || expectedStudent.dogumTarihi || '';
 
-    if (!expPassport && !expName && !expSurname) return null;
+    if (!expPassport && !expName && !expSurname && !expBirthDate) return null;
 
     const currentDocNo = (findBelgeNoInMainPanel()?.value || '').trim().toUpperCase();
     const currentNameInput = findTargetElementByFuzzyLabels(['Adı', 'Öğrenci Adı', 'Ad'], 'input');
     const currentSurnameInput = findTargetElementByFuzzyLabels(['Soyadı', 'Öğrenci Soyadı', 'Soyad'], 'input');
+    const currentBirthDateInput = findTargetElementByFuzzyLabels(['Doğum Tarihi', 'Date of Birth', 'Birth Date'], 'input');
     const currentName = (currentNameInput?.value || '').trim().toUpperCase();
     const currentSurname = (currentSurnameInput?.value || '').trim().toUpperCase();
+    const currentBirthDate = currentBirthDateInput?.value || '';
 
-    if (expPassport && currentDocNo) return currentDocNo === expPassport;
-    if (expName && expSurname && currentName && currentSurname) {
-        return currentName === expName && currentSurname === expSurname;
-    }
+    return window.YknStudentIdentity.matches({
+        expectedPassport: expPassport,
+        currentDocument: currentDocNo,
+        expectedName: expName,
+        currentName,
+        expectedSurname: expSurname,
+        currentSurname,
+        expectedBirthDate: expBirthDate,
+        currentBirthDate
+    });
 
-    return null;
 }
 
 function waitForYoksisForm(timeoutMs = 6000, options = {}) {
