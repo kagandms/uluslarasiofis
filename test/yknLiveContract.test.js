@@ -11,6 +11,7 @@ const testDirectory = dirname(fileURLToPath(import.meta.url));
 const fieldTargetsSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/yoksis-field-targets.js'), 'utf8');
 const contentSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/content.js'), 'utf8');
 const zkControlsSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/zk-form-controls.js'), 'utf8');
+const studentIdentitySource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/yoksis-student-identity.js'), 'utf8');
 const backgroundSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/background.js'), 'utf8');
 const portalSecuritySource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/portal-security.js'), 'utf8');
 const storageLifecycleSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/storage-lifecycle.js'), 'utf8');
@@ -125,7 +126,7 @@ test('a reset that clears values but leaves the previous student form read-only 
 });
 
 for (const previousValue of ['', 'SYNTHETIC-PREVIOUS']) {
-    test(`completed YKN locked form resets once before replacing the old acceptance code (${previousValue ? 'retained' : 'cleared'} values)`, async () => {
+    test(`blank locked controls are skipped and populated locked records reset before search (${previousValue ? 'populated' : 'blank'} values)`, async () => {
         const harness = createContentHarness(`<fieldset><legend>Öğrenci Bilgileri</legend><table>
             <tr><td>Adı</td><td><input id="prior-first" disabled readonly value="${previousValue}"></td></tr>
             <tr><td>Soyadı</td><td><input id="prior-last" disabled readonly value="${previousValue}"></td></tr>
@@ -154,8 +155,8 @@ for (const previousValue of ['', 'SYNTHETIC-PREVIOUS']) {
             const response = await harness.send({ action: 'searchWithId', kabulId: 'NEW-456-ID', requestId: 'completed-record', waitForForm: false });
 
             assert.equal(response.searchTriggered, true, JSON.stringify(response));
-            assert.deepEqual(operations, ['reset', 'search']);
-            assert.equal(harness.dom.window.YknFieldTargets.find({ root: document, labels: ['Adı'], kind: 'text' }).disabled, false);
+            assert.deepEqual(operations, previousValue ? ['reset', 'search'] : ['search']);
+            assert.equal(Boolean(harness.dom.window.YknFieldTargets.find({ root: document, labels: ['Adı'], kind: 'text' })), Boolean(previousValue));
         } finally { harness.close(); }
     });
 }
@@ -221,6 +222,7 @@ function createContentHarness(markup, url, storedData = {}) {
     installInnerText(window);
     window.eval(fieldTargetsSource);
     window.eval(zkControlsSource);
+    window.eval(studentIdentitySource);
     window.eval(contentSource);
 
     return {
@@ -351,7 +353,8 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
             },
             sendMessage(tabId, message, optionsOrCallback, maybeCallback) {
                 const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-                calls.push({ type: 'message', tabId, message });
+                const messageOptions = typeof optionsOrCallback === 'function' ? undefined : optionsOrCallback;
+                calls.push({ type: 'message', tabId, message, options: messageOptions });
                 chrome.runtime.lastError = null;
                 if (message.action === 'PING') {
                     const targetTab = yoksisTabs.find((tab) => tab.id === tabId) || yoksisTab;
@@ -406,6 +409,10 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         }
     };
 
+    if (options.sendMessageArityZero) {
+        Object.defineProperty(chrome.tabs.sendMessage, 'length', { value: 0 });
+    }
+
     const backgroundContext = vm.createContext({
         chrome,
         URL,
@@ -437,6 +444,9 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         calls,
         timingLogs,
         storageValues,
+        sendTabMessage(tabId, message, messageOptions) {
+            return backgroundContext.sendTabMessage(tabId, message, messageOptions);
+        },
         async send(request) {
             assert.ok(messageHandler, 'background message listener was not registered');
             return new Promise((resolveResponse) => {
@@ -454,6 +464,15 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         }
     };
 }
+
+test('YÖKSİS frame targeting survives browser APIs that report sendMessage arity zero', async () => {
+    const harness = createBackgroundHarness({}, {}, { sendMessageArityZero: true });
+
+    const response = await harness.sendTabMessage(42, { action: 'PING', pageKind: 'yoksis' }, { frameId: 0 });
+
+    assert.equal(response.ready, true);
+    assert.deepEqual(harness.calls.at(-1).options, { frameId: 0 });
+});
 
 test('extension rejects staff bridge messages from an untrusted page before running workflows', async () => {
     const harness = createBackgroundHarness(
@@ -1998,6 +2017,7 @@ test('önceki öğrencinin salt okunur alanları Temizle sonrası kalsa bile yen
             <table>
                 <tr><td>Adı</td><td><input id="ad" value="GULJEMAL"></td></tr>
                 <tr><td>Soyadı</td><td><input id="soyad" value="SOYEKOVA" readonly></td></tr>
+                <tr><td>Doğum Tarihi</td><td><input id="birth-date" value="19.06.2003"></td></tr>
                 <tr><td>Belge No</td><td><input id="belge-no" value="A2697635" readonly></td></tr>
                 <tr>
                     <td><button id="kaydet-btn" class="z-button">Kaydet</button></td>
@@ -2025,6 +2045,7 @@ test('önceki öğrencinin salt okunur alanları Temizle sonrası kalsa bile yen
                 <table>
                     <tr><td>Adı</td><td><input id="ad" value="NEWSTUDENT"></td></tr>
                     <tr><td>Soyadı</td><td><input id="soyad" value="NEWSURNAME"></td></tr>
+                    <tr><td>Doğum Tarihi</td><td><input id="birth-date" value="19.06.2003"></td></tr>
                     <tr><td>Belge No</td><td><input id="belge-no" value="B9999999"></td></tr>
                     <tr>
                         <td><button id="kaydet-btn" class="z-button">Kaydet</button></td>
@@ -2040,7 +2061,7 @@ test('önceki öğrencinin salt okunur alanları Temizle sonrası kalsa bile yen
             action: 'searchWithId',
             kabulId: 'NEW-999-ID',
             requestId: 'second-student-transition',
-            expectedStudent: { studentName: 'NEWSTUDENT', studentSurname: 'NEWSURNAME', passportNo: 'B9999999' }
+            expectedStudent: { studentName: 'NEWSTUDENT', studentSurname: 'NEWSURNAME', birthDate: '19.06.2003', passportNo: 'B9999999' }
         });
 
         assert.equal(response.success, true);

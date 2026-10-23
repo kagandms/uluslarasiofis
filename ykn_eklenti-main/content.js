@@ -1346,9 +1346,7 @@ function getYoksisStudentResetFingerprint(controls) {
 }
 
 function hasPopulatedYoksisStudentForm() {
-    return getYoksisStudentFormControls().some(control =>
-        String(control.value || '').trim() || control.disabled || control.readOnly
-    );
+    return getYoksisStudentFormControls().some(control => String(control.value || '').trim());
 }
 
 function hasYoksisStudentResetCompleted(previousFingerprint) {
@@ -2023,6 +2021,22 @@ function getDocumentType(text) {
     return '';
 }
 
+function getCropSourceType(text) {
+    const norm = normalizeApplyText(text);
+    if (norm.includes('fotoğraf') || norm.includes('fotograf') || norm.includes('photo')) return 'photo';
+    if (norm.includes('pasaport') || norm.includes('passport')) return 'passport';
+    return 'other';
+}
+
+function getCropSourceLabel(type, titleText, itemText) {
+    if (type === 'photo') return 'Fotoğraf';
+    if (type === 'passport') return 'Pasaport';
+    const label = String(titleText || itemText || '').split(/\n|\r/)
+        .map((part) => part.trim())
+        .find((part) => part && !/görüntüle|indir|download|view|\d{2}[./-]\d{2}[./-]\d{4}/i.test(part));
+    return label || 'Diğer belge';
+}
+
 function isNavigationOrInvalidUrl(url) {
     if (!url || url === '#' || url.startsWith('javascript:')) return true;
     try {
@@ -2132,6 +2146,7 @@ function findDocumentLinks() {
         acceptanceCandidates: [],
         passportDocumentUrl: '',
         passportCandidates: [],
+        cropSources: [],
         kabulId: ''
     };
 
@@ -2158,6 +2173,7 @@ function findDocumentLinks() {
     const allClickables = Array.from(document.querySelectorAll('a[href], [data-url], [data-href], [data-link], button, [onclick], img[src], iframe[src], embed[src]'));
     const acceptanceCandidates = [];
     const passportCandidates = [];
+    const cropSourceCandidates = [];
 
     for (const el of allClickables) {
         const url = extractElementUrl(el);
@@ -2174,6 +2190,18 @@ function findDocumentLinks() {
         const timestamp = parseDateTimestamp(fullItemText) || parseDateTimestamp(selfText);
         const inGenerated = generatedSection && generatedSection.contains(el);
         const inUploaded = uploadedSection && uploadedSection.contains(el);
+
+        if (inUploaded && !isTrueAcceptanceText(fullItemText) && !isOffer) {
+            const sourceType = getCropSourceType(fullItemText);
+            const sourceLabel = getCropSourceLabel(sourceType, titleText, parentText);
+            cropSourceCandidates.push({
+                url,
+                label: sourceLabel,
+                type: sourceType,
+                priority: sourceType === 'photo' ? 0 : sourceType === 'passport' ? 1 : 2,
+                timestamp
+            });
+        }
 
         // ACCEPTANCE LETTER EVALUATION:
         // STRICT RULE: Teklif Mektubu (Offer Letter) is NEVER an Acceptance Letter!
@@ -2223,6 +2251,20 @@ function findDocumentLinks() {
         links.passportDocumentUrl = uniquePassportUrls[0];
         links.passportCandidates = uniquePassportUrls;
     }
+
+    const uniqueCropSources = new Map();
+    cropSourceCandidates
+        .sort((a, b) => a.priority - b.priority || b.timestamp - a.timestamp)
+        .forEach((source) => {
+            if (!uniqueCropSources.has(source.url)) {
+                uniqueCropSources.set(source.url, {
+                    url: source.url,
+                    label: source.label,
+                    type: source.type
+                });
+            }
+        });
+    links.cropSources = Array.from(uniqueCropSources.values());
 
     // Fallback ONLY if absolutely no true acceptance letter with "kabul" text was found
     if (!links.acceptanceLetterUrl) {
@@ -2626,7 +2668,7 @@ function watchForDocumentLinks(requestId) {
         }
         const links = findDocumentLinks();
         const safeKabulId = isValidYoksisId(links.kabulId) ? links.kabulId : '';
-        if (links.passportDocumentUrl || links.acceptanceLetterUrl || safeKabulId) {
+        if (links.cropSources.length || links.passportDocumentUrl || links.acceptanceLetterUrl || safeKabulId) {
             clearInterval(intervalId);
             const profileData = extractApplyProfileData();
             if (!profileData.passportNo) delete profileData.passportNo;
@@ -3266,6 +3308,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 ...profileData,
                 passportDocumentUrl: links.passportDocumentUrl || '',
                 passportCandidates: links.passportCandidates || [],
+                cropSources: links.cropSources || [],
                 acceptanceLetterUrl: links.acceptanceLetterUrl || '',
                 acceptanceCandidates: links.acceptanceCandidates || [],
                 kabulId: links.kabulId || ''
@@ -3292,6 +3335,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 acceptanceCandidates: links.acceptanceCandidates || [],
                 passportDocumentUrl: links.passportDocumentUrl || '',
                 passportCandidates: links.passportCandidates || [],
+                cropSources: links.cropSources || [],
                 data: studentData
             });
         } catch (error) {

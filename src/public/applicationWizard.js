@@ -133,6 +133,59 @@ function createTextField(document, { key, name, value, type = 'text', required =
     return label;
 }
 
+function parseDateOfBirthInput(value) {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim();
+    const dayFirst = /^(\d{2})[./](\d{2})[./](\d{4})$/.exec(normalized)
+        || /^(\d{2})(\d{2})(\d{4})$/.exec(normalized);
+    const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+    if (!dayFirst && !iso) return null;
+    const year = Number(iso ? iso[1] : dayFirst[3]);
+    const month = Number(iso ? iso[2] : dayFirst[2]);
+    const day = Number(iso ? iso[3] : dayFirst[1]);
+    const date = new Date(0);
+    date.setUTCHours(0, 0, 0, 0);
+    date.setUTCFullYear(year, month - 1, day);
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function formatDateOfBirthInput(value) {
+    const iso = parseDateOfBirthInput(value);
+    if (!iso) return value || '';
+    return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+}
+
+function createDateOfBirthField(document, value, rawValue, messages) {
+    const label = createTextField(document, { key: 'dateOfBirth', name: 'date_of_birth', value: '', required: true, maxLength: 10 });
+    const input = document.createElement('input');
+    const help = createTranslatedElement(document, 'small', 'dateOfBirthFormatHelp', messages.dateOfBirthFormatHelp);
+    input.type = 'text';
+    input.name = 'date_of_birth';
+    input.id = 'field-date_of_birth';
+    input.required = true;
+    input.maxLength = 10;
+    input.inputMode = 'numeric';
+    input.autocomplete = 'bday';
+    input.placeholder = messages.dateOfBirthFormat;
+    input.setAttribute('aria-describedby', 'date-of-birth-format-help');
+    input.value = typeof rawValue === 'string' ? rawValue : formatDateOfBirthInput(value);
+    help.id = 'date-of-birth-format-help';
+    const existingInput = label.querySelector('input');
+    existingInput.replaceWith(input);
+    label.append(help);
+    updateDateOfBirthValidity(input, messages);
+    return label;
+}
+
+function updateDateOfBirthValidity(input, messages) {
+    const birthDate = parseDateOfBirthInput(input.value);
+    const isFutureOrInvalid = input.value.trim() !== ''
+        && (!birthDate || calculateCurrentUnder18(birthDate) === null);
+    input.setCustomValidity(isFutureOrInvalid ? messages.dateOfBirthInvalid : '');
+    return birthDate;
+}
+
 function createSelectField(document, { key, name, value, options, required = false }) {
     const messages = readMessages(document);
     const label = document.createElement('label');
@@ -338,6 +391,10 @@ function createResidenceStep(document, application, formValues) {
     const fields = { ...application, ...formValues };
     const form = createWizardForm(document);
     RESIDENCE_FIELDS.forEach((field) => {
+        if (field === 'date_of_birth') {
+            form.append(createDateOfBirthField(document, fields[field], fields.date_of_birth_input, messages));
+            return;
+        }
         if (field === 'nationality') {
             form.append(createNationalityField(document, {
                 value: fields[field], locale: document.documentElement.lang, messages
@@ -454,7 +511,7 @@ function isFingerprintUploadEligible(application) {
 }
 
 function canContinueResidenceStep(form, fields) {
-    const birthDate = form?.querySelector('[name="date_of_birth"]')?.value;
+    const birthDate = parseDateOfBirthInput(form?.querySelector('[name="date_of_birth"]')?.value);
     return Boolean(form?.checkValidity() && calculateCurrentUnder18(birthDate) !== null && isFingerprintUploadEligible(fields) && listMissingDocumentAnswers(fields).length === 0);
 }
 
@@ -1262,7 +1319,18 @@ function readVisibleFields(root, application = {}) {
             return;
         }
         if (input.name === 'is_under_18') {
+            const dateInput = root.querySelector('[name="date_of_birth"]');
+            if (dateInput?.value.trim() && !parseDateOfBirthInput(dateInput.value)) {
+                fields.is_under_18 = application.is_under_18 ?? null;
+                return;
+            }
             fields.is_under_18 = input.value === '' ? null : input.value === 'true';
+            return;
+        }
+        if (input.name === 'date_of_birth') {
+            const normalizedDate = parseDateOfBirthInput(input.value);
+            fields.date_of_birth_input = input.value;
+            fields.date_of_birth = normalizedDate || (input.value.trim() ? application.date_of_birth || '' : '');
             return;
         }
         fields[input.name] = input.type === 'checkbox' ? input.checked : input.value;
@@ -1723,7 +1791,9 @@ function handleWizardInput(root, state, api) {
         return;
     }
     if (state.step === 1) {
-        const birthDate = root.querySelector('[name="date_of_birth"]')?.value || '';
+        const dateInput = root.querySelector('[name="date_of_birth"]');
+        const messages = readMessages(root.ownerDocument);
+        const birthDate = updateDateOfBirthValidity(dateInput, messages);
         const ageAnswer = calculateCurrentUnder18(birthDate);
         const ageField = root.querySelector('[name="is_under_18"]');
         if (ageField) ageField.value = ageAnswer === null ? '' : String(ageAnswer);
@@ -1752,6 +1822,10 @@ function handleWizardChange(root, state, api, event) {
         state.errorKey = null;
         renderWizard(root, state);
         return;
+    }
+    if (input.name === 'date_of_birth') {
+        const birthDate = parseDateOfBirthInput(input.value);
+        if (birthDate) input.value = formatDateOfBirthInput(birthDate);
     }
     handleWizardInput(root, state, api);
     if (['application_type', 'address_evidence_type', 'date_of_birth', ...DOCUMENT_ANSWER_FIELDS].includes(input.name)) {

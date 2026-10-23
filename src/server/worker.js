@@ -37,6 +37,7 @@ import { handleStaffPrintRequest } from './routes/staffPrintRoutes.js';
 import { handlePrinterRequest, readStaffPrintStatus } from './routes/printerRoutes.js';
 import { runPrintCleanup } from './services/printCleanupService.js';
 import { readD1UsageMetrics } from './services/d1-usage-metrics.js';
+import { handleStaffWorkHours } from './routes/staffWorkHoursRoutes.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -93,6 +94,7 @@ async function routeApi(request, environment, requestId, cache) {
         await requireStaff(request, environment);
         return readD1UsageMetrics({ environment, cache });
     }
+    if (pathname === '/api/staff/work-hours') return handleStaffWorkHours(request, environment, requestId);
     if (['/api/staff/physical-access', '/api/staff/physical-access/session'].includes(pathname)) return readPhysicalAccess(request, environment);
     if (pathname === '/api/public/physical-intakes/tracking-lookup') return lookupPhysicalTracking(request, environment);
     if (pathname.startsWith('/api/staff/physical-intakes')) return handlePhysicalIntakes(request, environment, requestId);
