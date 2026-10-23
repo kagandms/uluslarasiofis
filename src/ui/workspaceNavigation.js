@@ -9,7 +9,8 @@ const VIEW_TITLES = {
     cover: 'Kapak Hazırla',
     teblig: 'Tebliğ Bul',
     documents: 'Belgeler',
-    print: 'Yazdırma'
+    print: 'Yazdırma',
+    'work-hours': 'Çalışma Saatleri'
 };
 
 function getWorkspaceElements() {
@@ -90,7 +91,7 @@ function hasOpenDialog() {
 
 function handleNavigationShortcut(event) {
     if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    if (!/^[1-7]$/.test(event.key) && event.key !== 'Escape') return;
+    if (!/^[1-8]$/.test(event.key) && event.key !== 'Escape') return;
     if (document.getElementById('app-content')?.hidden || hasOpenDialog()) return;
     const { homeScreen, workspaceContent } = getWorkspaceElements();
     if (homeScreen.hidden && workspaceContent.hidden) return;

@@ -117,7 +117,7 @@
                 <div class="home-intro">
                     <p class="home-eyebrow">Uluslararası Öğrenci Ofisi</p>
                     <h2 id="home-screen-title" tabindex="-1">İşlem seçin</h2>
-                    <p>Devam etmek için bir çalışma alanı seçin veya kart numarasına (1–7) basın.</p>
+                    <p>Devam etmek için bir çalışma alanı seçin veya kart numarasına (1–8) basın.</p>
                 </div>
                 <div class="home-actions">
                     <button type="button" class="home-action" data-intake-entry data-workspace-view="applications" aria-controls="view-applications">
@@ -148,6 +148,10 @@
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><path d="M6 14h12v8H6z"></path></svg></span>
                         <span class="home-action-content"><strong>Yazdırma</strong><small>Yazıcı ve kuyruk durumu</small></span>
                     </button>
+                    <button type="button" class="home-action" data-workspace-view="work-hours" aria-controls="view-work-hours">
+                        <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+                        <span class="home-action-content"><strong>Çalışma Saatleri</strong><small>Günlük süre kayıtları ve aylık toplamlar</small></span>
+                    </button>
                 </div>
                 <aside id="d1-usage-counter" class="d1-usage-counter" role="group" aria-label="D1 günlük okuma">
                     <span class="d1-usage-counter-title"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"></path></svg>D1 günlük okuma</span>
@@ -164,7 +168,7 @@
                     <button type="button" id="btn-workspace-home" class="btn btn-outline" aria-label="Ana menüye dön">Geri</button>
                     <h2 id="workspace-title" class="workspace-title-badge" tabindex="-1"><span class="workspace-title-dot" aria-hidden="true"></span><span>Çalışma alanı</span></h2>
                 </div>
-                <p class="workspace-shortcut-hint"><kbd>1–7</kbd> çalışma alanına geç <kbd>Esc</kbd> ana sayfaya dön</p>
+                <p class="workspace-shortcut-hint"><kbd>1–8</kbd> çalışma alanına geç <kbd>Esc</kbd> ana sayfaya dön</p>
                 <nav class="workspace-nav" aria-label="Çalışma alanları">
                     <button type="button" data-intake-entry data-workspace-view="applications" aria-controls="view-applications">İkamet Başvuruları</button>
                     <button type="button" data-workspace-view="archive" aria-controls="view-archive">Arşiv</button>
@@ -173,6 +177,7 @@
                     <button type="button" data-workspace-view="teblig" aria-controls="view-teblig">Tebliğ Bul</button>
                     <button type="button" data-workspace-view="documents" aria-controls="view-documents">Belgeler</button>
                     <button type="button" data-workspace-view="print" aria-controls="view-print">Yazdırma</button>
+                    <button type="button" data-workspace-view="work-hours" aria-controls="view-work-hours">Çalışma Saatleri</button>
                 </nav>
 
                 <section id="view-intake" class="view-panel" hidden aria-labelledby="intake-title">
@@ -465,6 +470,14 @@
                     </div>
                 </section>
 
+                <section id="view-work-hours" class="view-panel" hidden aria-labelledby="work-hours-title">
+                    <div id="staff-work-hours" class="work-hours-workspace">
+                        <div class="work-hours-page-heading"><div><p class="home-eyebrow">Personel takibi</p><h3 id="work-hours-title" tabindex="-1">Çalışma Saatleri</h3><p>Bir tarih seçerek günlük kayıtları ve ay içindeki toplamları görüntüleyin.</p></div><div class="work-hours-date-tools"><span class="work-hours-date-chip" data-work-hours-display></span><label class="work-hours-date-picker">Tarih seçin<input type="date" data-work-hours-date></label></div></div>
+                        <p data-work-hours-holiday hidden role="status">Bugün tatil. Kayıt ekleme ve düzenleme kapalıdır.</p>
+                        <section class="work-hours-section" aria-labelledby="work-hours-today-title"><div class="work-hours-section-heading"><div><h4 id="work-hours-today-title">Seçilen günün kayıtları</h4><p>Her kişi için çalışma süresi ve kayıt durumu.</p></div><span class="work-hours-date-chip" data-work-hours-status role="status" aria-live="polite"></span></div><div data-work-hours-table></div></section>
+                        <section class="work-hours-section" aria-labelledby="work-hours-history-title"><div class="work-hours-section-heading"><div><h4 id="work-hours-history-title">Aylık kayıtlar</h4><p>Seçilen tarihin bulunduğu aydaki kayıtlar.</p></div></div><div class="work-hours-history-list" data-work-hours-history></div></section>
+                    </div>
+                </section>
                 <section id="view-print" class="view-panel print-management" hidden aria-labelledby="print-status-title">
                     <section class="card glass-card print-management-section" aria-labelledby="print-status-title">
                         <div class="print-section-heading">
