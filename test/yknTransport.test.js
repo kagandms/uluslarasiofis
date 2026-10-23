@@ -86,6 +86,28 @@ test('YKN one-click waits for crop confirmation before final YÖKSİS fill', { s
     assert.match(manager, /shouldOpenCropperWhenReady = true/);
 });
 
+test('Apply data retrieval and passport crop do not require YÖKSİS readiness, while final fill stays gated', { skip: !hasLocalExtensionCheckout }, async () => {
+    const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+    const copyInfoStart = manager.indexOf('if (btnCopyInfo) {');
+    const copyInfoEnd = manager.indexOf('\n    if (btnReadAcceptance)', copyInfoStart);
+    const copyInfoHandler = manager.slice(copyInfoStart, copyInfoEnd);
+    const visibleCopyStart = manager.indexOf('if (btnCopy) {');
+    const visibleCopyEnd = manager.indexOf('\n    if (btnCropPhoto)', visibleCopyStart);
+    const visibleCopyHandler = manager.slice(visibleCopyStart, visibleCopyEnd);
+    const pasteStart = manager.indexOf('if (btnPasteYoksis) {');
+    const pasteEnd = manager.indexOf('\n    if (btnExtensionRecheck)', pasteStart);
+    const pasteHandler = manager.slice(pasteStart, pasteEnd);
+
+    assert.ok(copyInfoStart >= 0, 'Apply information action should exist');
+    assert.doesNotMatch(copyInfoHandler, /yoksisReady/, 'preparing Apply data must not depend on YÖKSİS readiness');
+    assert.match(copyInfoHandler, /action: 'COPY_APPLY_DATA'/);
+    assert.ok(visibleCopyStart >= 0, 'visible second step should exist');
+    assert.doesNotMatch(visibleCopyHandler, /yoksisReady/, 'visible Apply/photo step must remain available');
+    assert.ok(pasteStart >= 0, 'final YÖKSİS action should exist');
+    assert.match(pasteHandler, /currentStudentData\.yoksisReady !== true/);
+    assert.match(pasteHandler, /currentStudentData\.croppedPhotoBase64/);
+});
+
 test('YÖKSİS search and fill are single-flight operations, not all-frame retries', { skip: !hasLocalExtensionCheckout }, async () => {
     const background = await readExtensionFile('background.js');
     const content = await readExtensionFile('content.js');

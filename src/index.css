@@ -585,6 +585,130 @@ body.dark-mode .ykn-status-item {
     }
 }
 
+#view-ykn .ykn-layout-grid {
+    grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.85fr);
+    gap: 0.85rem;
+}
+
+#view-ykn .ykn-card {
+    padding: 1rem;
+}
+
+#view-ykn .ykn-card .home-eyebrow {
+    margin-bottom: 0.25rem;
+}
+
+#view-ykn .ykn-card h3 {
+    font-size: 1.1rem;
+    margin-bottom: 0.25rem;
+}
+
+#view-ykn .ykn-description {
+    font-size: 0.84rem;
+    margin: 0 0 0.65rem !important;
+}
+
+#view-ykn .ykn-search-row {
+    gap: 0.5rem !important;
+    margin: 0 0 0.55rem !important;
+}
+
+#view-ykn .ykn-search-row input {
+    padding: 0.55rem !important;
+}
+
+#view-ykn .ykn-student-result {
+    padding-top: 0.55rem !important;
+}
+
+#view-ykn .ykn-result-heading {
+    margin-bottom: 0.5rem !important;
+}
+
+#view-ykn #ykn-fields-panel {
+    margin: 0.5rem 0 !important;
+    padding: 0.65rem !important;
+}
+
+#view-ykn .ykn-passport-fields {
+    gap: 0.45rem 0.65rem !important;
+    margin-bottom: 0.45rem !important;
+}
+
+#view-ykn .ykn-passport-fields input,
+#view-ykn .ykn-family-grid input {
+    padding: 0.35rem 0.5rem !important;
+}
+
+#view-ykn .ykn-family-details {
+    margin-top: 0.25rem !important;
+}
+
+#view-ykn .ykn-family-grid {
+    gap: 0.45rem !important;
+    margin-top: 0.4rem !important;
+    padding-top: 0.35rem !important;
+}
+
+#view-ykn .ykn-demographic-fields {
+    gap: 0.55rem !important;
+    margin-top: 0.45rem !important;
+    padding-top: 0.4rem !important;
+}
+
+#view-ykn .ykn-field-actions {
+    gap: 0.6rem;
+    margin-top: 0.5rem !important;
+    padding-top: 0.4rem !important;
+}
+
+#view-ykn .ykn-field-actions > span {
+    font-size: 0.7rem !important;
+}
+
+#view-ykn .ykn-pro-actions {
+    flex-direction: row;
+    gap: 0.5rem !important;
+    margin-top: 0.55rem !important;
+}
+
+#view-ykn .ykn-pro-actions > button {
+    flex: 1 1 0;
+    min-height: 3.5rem;
+    padding: 0.55rem 0.65rem !important;
+    font-size: 0.82rem !important;
+}
+
+#view-ykn .ykn-status-card {
+    min-height: 0;
+    padding: 1rem;
+    top: 0.75rem;
+}
+
+#view-ykn .ykn-status-empty {
+    padding: 1.5rem 0.75rem;
+}
+
+@media (max-width: 900px) {
+    #view-ykn .ykn-layout-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #view-ykn .ykn-pro-actions {
+        flex-direction: column;
+    }
+
+    #view-ykn .ykn-status-card {
+        position: static;
+    }
+}
+
+@media (max-width: 560px) {
+    #view-ykn .ykn-family-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
 .ykn-extension-status {
     margin: 1rem 0 1.25rem;
     padding: 1rem;

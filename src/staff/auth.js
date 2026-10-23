@@ -5,6 +5,25 @@ const LOGIN_ERROR_MESSAGES = Object.freeze({
     503: 'Giriş şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.'
 });
 const LOGIN_DEVICE_STORAGE_KEY = 'staff-login-device-id';
+const REMEMBER_ME_STORAGE_KEY = 'staff-login-remember-me';
+
+function restoreRememberMePreference(checkbox) {
+    if (!checkbox) return;
+    try {
+        checkbox.checked = window.localStorage.getItem(REMEMBER_ME_STORAGE_KEY) === 'true';
+    } catch (error) {
+        console.warn('Remember-me preference could not be read.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
+}
+
+function saveRememberMePreference(checkbox) {
+    if (!checkbox) return;
+    try {
+        window.localStorage.setItem(REMEMBER_ME_STORAGE_KEY, String(checkbox.checked));
+    } catch (error) {
+        console.warn('Remember-me preference could not be saved.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
+}
 
 function getLoginDeviceId() {
     try {
@@ -60,6 +79,8 @@ export async function initStaffAuth() {
     const usernameInput = document.getElementById('login-username');
     const passwordInput = document.getElementById('login-password');
     const rememberCheckbox = document.getElementById('login-remember');
+    restoreRememberMePreference(rememberCheckbox);
+    rememberCheckbox?.addEventListener('change', () => saveRememberMePreference(rememberCheckbox));
     const loginButton = document.getElementById('btn-login-submit');
     const loginError = document.getElementById('login-error');
     const logoutButton = document.getElementById('btn-staff-logout');
