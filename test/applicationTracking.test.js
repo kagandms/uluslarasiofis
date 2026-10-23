@@ -36,7 +36,7 @@ async function readTracking(environment, cookie, search = '') {
     return worker.fetch(createRequest(`/api/public/applications/current/tracking${search}`, { cookie }), environment, {});
 }
 
-function createLookupRequest(studentNumber, options = {}) {
+function createLookupRequest(referenceNumber, options = {}) {
     const headers = new Headers({
         Origin: options.origin || 'https://portal.test',
         'Content-Type': 'application/json',
@@ -46,12 +46,16 @@ function createLookupRequest(studentNumber, options = {}) {
     return new Request('https://portal.test/api/public/applications/tracking-lookup', {
         method: options.method || 'POST',
         headers,
-        body: options.method === 'GET' ? undefined : JSON.stringify(options.body || { student_number: studentNumber })
+        body: options.method === 'GET' ? undefined : JSON.stringify(options.body || { reference_number: referenceNumber })
     });
 }
 
 async function lookupTracking(environment, studentNumber, options = {}) {
-    return worker.fetch(createLookupRequest(studentNumber, options), environment, {});
+    const reference = options.referenceNumber || environment.DB.prepare(`SELECT applications.reference_number FROM applications
+        JOIN students ON students.id=applications.student_id WHERE students.normalized_student_number=?
+        AND applications.status <> 'draft' ORDER BY applications.updated_at DESC LIMIT 1`).bind(studentNumber.trim().toUpperCase()).first()?.reference_number
+        || 'ITU-7K9M-4X2P';
+    return worker.fetch(createLookupRequest(reference, options), environment, {});
 }
 
 function findApplicationId(database, studentNumber, applicationType = null, status = null) {
@@ -96,7 +100,7 @@ test('tracking UI and persisted application statuses have translations in all su
         'trackingDraftText', 'trackingLoading', 'trackingLoadError', 'trackingDocumentsHeading',
         'trackingApplicationDetails', 'trackingStatusLabel', 'trackingStatusUnknown', 'trackingCreatedAt', 'trackingUpdatedAt', 'trackingSubmittedAt',
         'trackingViewAction', 'trackingReturnToApplication', 'trackingStartNewApplication',
-        'trackingLookupHeading', 'trackingLookupStudentNumberLabel', 'trackingLookupSubmit', 'trackingLookupExplanation',
+        'trackingLookupHeading', 'trackingLookupReferenceLabel', 'trackingLookupSubmit', 'trackingLookupExplanation',
         'trackingLookupNotFound', 'trackingLookupRateLimited', 'trackingLookupError', 'submissionTracking',
         'applicationStatus_draft', 'applicationStatus_submitted', 'applicationStatus_under_review',
         'applicationStatus_resubmission_required', 'applicationStatus_approved_for_processing',
@@ -136,6 +140,7 @@ test('tracking is owner-session scoped and returns only the student-safe applica
     assert.equal(response.headers.get('Cache-Control'), 'no-store');
     assert.deepEqual(payload.application, {
         student_number: 'TRACK-A',
+        reference_number: database.prepare('SELECT reference_number FROM applications WHERE id=?').bind(studentAId).first().reference_number,
         status: 'submitted',
         application_type: 'initial',
         created_at: payload.application.created_at,
@@ -264,9 +269,9 @@ test('public lookup returns submitted tracking with a strict DTO and creates no 
     assert.deepEqual(Object.keys(payload).sort(), ['application', 'documents', 'found', 'requestId']);
     assert.equal(payload.found, true);
     assert.deepEqual(Object.keys(payload.application).sort(), [
-        'application_type', 'created_at', 'status', 'student_number', 'submitted_at', 'updated_at'
+        'application_type', 'created_at', 'status', 'submitted_at', 'updated_at'
     ]);
-    assert.equal(payload.application.student_number, 'LOOKUP-KNOWN');
+    assert.equal(payload.application.student_number, undefined);
     assert.deepEqual(Object.keys(payload.documents[0]).sort(), ['code', 'label_key', 'required', 'status']);
     assert.equal(payload.documents.some((document) => document.code === 'uets'), false);
     assert.ok(payload.documents.some((document) => document.code === 'address_undertaking'));
@@ -314,16 +319,18 @@ test('public lookup selects an active non-draft application, or the newest termi
     await database.prepare(`UPDATE applications SET status = 'rejected', updated_at = '2026-09-29T10:00:00.000Z' WHERE id = ?`)
         .bind(secondId).run();
 
-    const terminalResponse = await lookupTracking(environment, 'LOOKUP-HISTORY', { address: '198.51.100.44' });
+    const terminalReference = database.prepare('SELECT reference_number FROM applications WHERE id=?').bind(secondId).first().reference_number;
+    const terminalResponse = await lookupTracking(environment, 'LOOKUP-HISTORY', { address: '198.51.100.44', referenceNumber: terminalReference });
     assert.equal((await terminalResponse.json()).application.application_type, 'renewal');
 
     const thirdCookie = await createApplicant(environment, 'LOOKUP-HISTORY');
     const thirdId = findApplicationId(database, 'LOOKUP-HISTORY', 'initial', 'draft');
-    const draftLookup = await lookupTracking(environment, 'LOOKUP-HISTORY', { address: '198.51.100.48' });
+    const draftLookup = await lookupTracking(environment, 'LOOKUP-HISTORY', { address: '198.51.100.48', referenceNumber: terminalReference });
     assert.equal((await draftLookup.json()).application.application_type, 'renewal');
     await database.prepare(`UPDATE applications SET status = 'submitted', updated_at = '2026-09-27T10:00:00.000Z' WHERE id = ?`)
         .bind(thirdId).run();
-    const activeResponse = await lookupTracking(environment, 'LOOKUP-HISTORY', { address: '198.51.100.45' });
+    const activeReference = database.prepare('SELECT reference_number FROM applications WHERE id=?').bind(thirdId).first().reference_number;
+    const activeResponse = await lookupTracking(environment, 'LOOKUP-HISTORY', { address: '198.51.100.45', referenceNumber: activeReference });
     const activePayload = await activeResponse.json();
     assert.equal(activePayload.application.application_type, 'initial');
     assert.equal(activePayload.application.status, 'submitted');
@@ -333,12 +340,12 @@ test('public lookup selects an active non-draft application, or the newest termi
     assert.equal(await readTracking(environment, thirdCookie).then((response) => response.status), 200);
 });
 
-test('public lookup enforces method, same-origin, and canonical student-number validation', async () => {
+test('public lookup enforces method, same-origin, and canonical ITU-reference validation', async () => {
     const { environment } = createEnvironment();
     const wrongMethod = await lookupTracking(environment, 'LOOKUP-VALID', { method: 'GET' });
     const crossOrigin = await lookupTracking(environment, 'LOOKUP-VALID', { origin: 'https://attacker.test' });
     const missing = await lookupTracking(environment, 'LOOKUP-VALID', { body: {} });
-    const tooLong = await lookupTracking(environment, 'LOOKUP-VALID', { body: { student_number: 'x'.repeat(65) } });
+    const tooLong = await lookupTracking(environment, 'LOOKUP-VALID', { body: { reference_number: 'x'.repeat(65) } });
 
     assert.equal(wrongMethod.status, 405);
     assert.equal(crossOrigin.status, 403);

@@ -1,5 +1,5 @@
-import { createPhysicalTrackingPanel } from './physical-application-tracking.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
+import { PHYSICAL_RECEIPT_MESSAGES } from './i18n/physical-receipt-messages.js';
 import { initializeResubmissionUpload } from './resubmissionUpload.js';
 import { mountTrackingNotificationPreferences } from './notificationPreferences.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
@@ -46,17 +46,19 @@ function createLookupForm(document, state, messages, submitLookup) {
         submitLookup(input.value);
     });
     input.type = 'text';
-    input.name = 'student_number';
+    input.name = 'reference_number';
     input.maxLength = 64;
     input.required = true;
     input.autocomplete = 'off';
-    input.value = state.studentNumber;
-    input.id = 'tracking-student-number';
-    input.setAttribute('aria-label', messages.trackingLookupStudentNumberLabel);
+    input.value = state.referenceNumber;
+    input.id = 'tracking-application-reference';
+    input.placeholder = 'ITU-XXXX-XXXX / ITU-YY-XXXXXXX';
+    input.dir = 'ltr';
+    input.setAttribute('aria-label', messages.trackingLookupReferenceLabel);
     input.addEventListener('input', () => {
-        state.studentNumber = input.value;
+        state.referenceNumber = input.value;
     });
-    const label = createTextElement(document, 'label', '', messages.trackingLookupStudentNumberLabel);
+    const label = createTextElement(document, 'label', '', messages.trackingLookupReferenceLabel);
     label.htmlFor = input.id;
     const button = document.createElement('button');
     button.type = 'submit';
@@ -199,6 +201,10 @@ function renderTracking(root, state, locale, submitLookup, api) {
         renderLookup(root, state, messages, submitLookup);
         return;
     }
+    if (state.kind === 'physicalReady') {
+        renderPhysicalResult(root, state.payload, locale);
+        return;
+    }
     if (state.kind === 'error') {
         root.replaceChildren(createTextElement(document, 'p', 'tracking-message', messages.trackingLoadError));
         return;
@@ -242,21 +248,24 @@ function renderTracking(root, state, locale, submitLookup, api) {
  */
 export async function initializeApplicationTracking(root, api) {
     const document = root.ownerDocument;
-    const state = { kind: 'lookup', payload: null, studentNumber: '', replacementDocuments: [], notificationPreference: null, replacementSuccess: false, replacementCompleted: {} };
-    const physicalPanel = createPhysicalTrackingPanel(document);
-    const render = () => {
-        renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup, api);
-        root.prepend(physicalPanel);
-    };
-    async function submitLookup(studentNumber) {
-        state.studentNumber = studentNumber.trim();
+    const state = { kind: 'lookup', payload: null, referenceNumber: '', replacementDocuments: [], notificationPreference: null, replacementSuccess: false, replacementCompleted: {} };
+    const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup, api);
+    async function submitLookup(referenceNumber) {
+        state.referenceNumber = referenceNumber.trim().toUpperCase();
         state.kind = 'lookupLoading';
         render();
         try {
-            state.payload = await api.lookupApplicationTracking(state.studentNumber);
+            if (isPhysicalReference(state.referenceNumber)) {
+                const result = await api.lookupPhysicalApplicationTracking(state.referenceNumber);
+                state.payload = result.found ? result : null;
+                state.kind = result.found ? 'physicalReady' : 'notFound';
+                render();
+                return;
+            }
+            state.payload = await api.lookupApplicationTracking(state.referenceNumber);
             state.kind = state.payload.found ? 'publicReady' : 'notFound';
             if (state.payload.found && typeof api.readCurrentApplicationTracking === 'function') {
-                await attachMatchingOwnerSession(state, api, state.studentNumber, render);
+                await attachMatchingOwnerSession(state, api, state.referenceNumber, render);
             }
         } catch (error) {
             state.kind = error?.code === 'RATE_LIMITED' ? 'rateLimited' : 'lookupError';
@@ -268,10 +277,32 @@ export async function initializeApplicationTracking(root, api) {
     return { get kind() { return state.kind; } };
 }
 
-async function attachMatchingOwnerSession(state, api, studentNumber, render) {
+function isPhysicalReference(referenceNumber) {
+    return /^ITU-?\d{2}-?[2-9A-HJKMNP-Z]{7}$/i.test(referenceNumber);
+}
+
+function renderPhysicalResult(root, payload, locale) {
+    const document = root.ownerDocument;
+    const messages = PHYSICAL_RECEIPT_MESSAGES[locale] || PHYSICAL_RECEIPT_MESSAGES.tr;
+    const panel = document.createElement('section');
+    panel.className = 'tracking-state physical-tracking-panel';
+    panel.append(
+        createTextElement(document, 'h2', '', messages.heading),
+        createTextElement(document, 'p', '', payload.tracking_reference),
+        createTextElement(document, 'p', '', messages[payload.office_status] || messages.error),
+        createTextElement(document, 'p', '', payload.application_date)
+    );
+    if (typeof payload.rejection_reason === 'string' && payload.rejection_reason.trim()) {
+        panel.append(createTextElement(document, 'strong', '', messages.rejectionReasonLabel),
+            createTextElement(document, 'p', '', payload.rejection_reason));
+    }
+    root.replaceChildren(panel);
+}
+
+async function attachMatchingOwnerSession(state, api, referenceNumber, render) {
     try {
         const ownerPayload = await api.readCurrentApplicationTracking();
-        if (normalizeStudentNumber(ownerPayload.application?.student_number) !== normalizeStudentNumber(studentNumber)) return;
+        if (normalizeReferenceNumber(ownerPayload.application?.reference_number) !== normalizeReferenceNumber(referenceNumber)) return;
         state.payload = ownerPayload;
         state.kind = ownerPayload.application.status === 'draft' ? 'draft' : 'ready';
         if (ownerPayload.application.status !== 'resubmission_required'
@@ -305,6 +336,6 @@ async function attachMatchingOwnerSession(state, api, studentNumber, render) {
     }
 }
 
-function normalizeStudentNumber(value) {
+function normalizeReferenceNumber(value) {
     return typeof value === 'string' ? value.trim().toLocaleUpperCase('en-US') : '';
 }

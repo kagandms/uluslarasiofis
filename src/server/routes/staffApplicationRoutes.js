@@ -100,6 +100,8 @@ function createApplicationDetailDto(application) {
         passport_number: application.passport_number,
         nationality: application.nationality,
         date_of_birth: application.date_of_birth,
+        residence_application_date: application.residence_application_date ?? null,
+        university_registration_date: application.university_registration_date ?? null,
         is_under_18: application.is_under_18 === null ? null : application.is_under_18 === 1,
         address_evidence_type: application.accommodation_type || application.address_evidence_type || null,
         ...Object.fromEntries(DOCUMENT_ANSWER_FIELDS.map((field) => [field, application[field] ?? null])),

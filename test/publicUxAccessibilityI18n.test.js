@@ -84,17 +84,17 @@ test('application tracking lookup preserves student number input across language
     assert.equal(ownerAccess?.getAttribute('href'), '/basvuru/#resume-application-form');
     assert.match(root.querySelector('.tracking-owner-access-note')?.textContent || '', /yalnızca takip sağlar/u);
 
-    const input = root.querySelector('#tracking-student-number');
-    assert.ok(input, 'Tracking student number input must exist');
-    input.value = 'STU-998877';
+    const input = root.querySelector('#tracking-application-reference');
+    assert.ok(input, 'Tracking ITU reference input must exist');
+    input.value = 'ITU-7K9M-4X2P';
     input.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
 
     // Switch language
     document.documentElement.lang = 'en';
     document.dispatchEvent(new document.defaultView.CustomEvent('public:locale-changed'));
 
-    const refreshedInput = root.querySelector('#tracking-student-number');
-    assert.equal(refreshedInput.value, 'STU-998877', 'Student number must be preserved after locale change');
+    const refreshedInput = root.querySelector('#tracking-application-reference');
+    assert.equal(refreshedInput.value, 'ITU-7K9M-4X2P', 'Tracking code must be preserved after locale change');
 });
 
 test('application tracking lookup sets aria-busy during lookup and role="alert" on errors', async () => {
@@ -113,10 +113,10 @@ test('application tracking lookup sets aria-busy during lookup and role="alert" 
 
     await initializeApplicationTracking(root, api);
 
-    const input = root.querySelector('#tracking-student-number');
+    const input = root.querySelector('#tracking-application-reference');
     const form = root.querySelector('.tracking-lookup-form');
 
-    input.value = 'STU-12345';
+    input.value = 'ITU-7K9M-4X2P';
     input.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
 
     form.dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));

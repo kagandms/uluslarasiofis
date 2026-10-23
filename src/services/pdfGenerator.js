@@ -230,8 +230,8 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
                 <li style="margin-bottom:${s.listMb};">☐ İkamet izni kayıt/başvuru formu (öğrenci tarafından ıslak imzalı şekilde)</li>
                 <li style="margin-bottom:${s.listMb};">☐ Pasaport ya da pasaport yerine geçen belge (aslı görüldü şeklinde)</li>
                 <li style="margin-bottom:${s.listMb};">☐ Öğrencilik durumunu gösterir belge</li>
-                <li style="margin-bottom:${s.listMb};">☐ 4 adet biometrik fotoğraf</li>
-                <li style="margin-bottom:${s.listMb};">☐ Geçerli sağlık sigortası (GSS ya da ikamet izni talep süresini kapsayan özel sağlık sigortası)</li>
+                <li style="margin-bottom:${s.listMb};">☐ 2 adet biyometrik fotoğraf</li>
+                <li style="margin-bottom:${s.listMb};">☐ Sağlık güvencesi: Öğrenci belge listesi özel sigorta ve GSS için ek dosya istemiyor; GöçNet kayıt formu özel poliçenin ilk sayfasının ibrazını belirtiyor. İkili sosyal güvenlik anlaşmasında SGK belgesi sunulur. Özel poliçe için fiziksel dosya uygulaması ofisten teyit edilmelidir.</li>
                 <li style="margin-bottom:${s.listMb};">☐ Kalacağı adres bilgilerini gösterir belge
                     <ul style="list-style-type:disc;padding-left:20px;margin:2px 0;">
                         <li style="margin-bottom:${s.innerListMb};">Kendi evinde kalıyorsa, tapu fotokopisi (uzatma başvurularında "yerleşim yeri belgesi ve fatura" yeterlidir)</li>
@@ -242,7 +242,7 @@ export function getDocumentHtml(vBasvuruNo, vTeslim, vYabanciKimlik, vPasaportNo
                     </ul>
                 </li>
                 <li style="margin-bottom:${s.listMb};">☐ İkamet izni belge bedelinin ödendiğine dair makbuz</li>
-                <li style="margin-bottom:${s.listMb};">☐ 18 yaşından küçük yabancılar için; vize muafiyetiyle ya da farklı amaca yönelik vizeyle gelenler için; veli/vasi bilgisini içeren belge (doğum belgesi, aile belgesi vb.) ve veli/vasi/yasal temsilcisi tarafından verilen muvafakatname (amacına uygun vizeyle ((öğrenim vizesi)) gelenler için; muvafakatname ve veli/vasi bilgisini içeren belge eklenmeyecektir.)</li>
+                <li style="margin-bottom:${s.listMb};">☐ 18 yaşından küçük yabancılar için; veli/yasal temsilci muvafakati ve Türkiye’deki sorumlu kişinin noter onaylı taahhütnamesi. Pasaport veya kimlikte anne-baba belirlenemiyorsa doğum belgesi; boşanma, ölüm, gaiplik veya tek ebeveyn durumunda ilgili onaylı belge eklenmelidir.</li>
             </ul>
             <p style="font-weight:bold;font-size:${s.boxFont};margin:${s.boxMargin};text-align:center;border:1px solid #000;padding:${s.boxPad}; flex-shrink: 0;">Tebliğ belgenizi teslim almak üzere müracaat edebileceğiniz en erken tarih: ${safeTebligatTarihi}</p>
             

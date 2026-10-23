@@ -13,6 +13,7 @@ function createTrackingDto(overrides = {}) {
     return {
         application: {
             student_number: 'TRACK-STUDENT-1',
+            reference_number: 'ITU-7K9M-4X2P',
             status: 'submitted',
             application_type: 'initial',
             created_at: '2026-09-28T10:00:00.000Z',
@@ -46,8 +47,8 @@ async function initializeAndLookup(document, root, api) {
         }
     };
     const result = await initializeApplicationTracking(root, wrappedApi);
-    const input = root.querySelector('input[name="student_number"]');
-    input.value = 'TRACK-STUDENT-1';
+    const input = root.querySelector('input[name="reference_number"]');
+    input.value = 'ITU-7K9M-4X2P';
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
     return result;
@@ -112,7 +113,7 @@ test('draft owner session links back to the existing application wizard', async 
     document.defaultView.close();
 });
 
-test('missing owner session preserves both code and online student-number lookup forms', async () => {
+test('missing owner session shows one shared ITU reference lookup form', async () => {
     const { document, root } = createTrackingRoot();
     const api = {
         async readCurrentApplicationTracking() {
@@ -124,10 +125,10 @@ test('missing owner session preserves both code and online student-number lookup
 
     assert.equal(result.kind, 'lookup');
     assert.match(root.textContent, /Başvurumu sorgula/i);
-    assert.match(root.textContent, /Fiziksel teslim yapanlar/);
-    assert.match(root.textContent, /Online başvuru yapanlar/);
-    assert.equal(root.querySelectorAll('input:not([name=tracking_reference])').length, 1);
-    assert.equal(root.querySelector('input[name="student_number"]')?.type, 'text');
+    assert.match(root.textContent, /ITU ile başlayan/);
+    assert.match(root.textContent, /Başvurumu sorgula/);
+    assert.equal(root.querySelectorAll('input[name="reference_number"]').length, 1);
+    assert.equal(root.querySelector('input[name="reference_number"]')?.type, 'text');
     assert.equal(root.querySelector('input[name="passport_number"]'), null);
     assert.equal(root.querySelector('input[type="password"]'), null);
     assert.equal(root.querySelector('input[type="file"]'), null);
@@ -155,7 +156,7 @@ test('public lookup renders statuses without filenames or document controls', as
         async finalizeResubmissionUpload() { privateEndpointCalls += 1; }
     };
     await initializeApplicationTracking(root, api);
-    root.querySelector('input[name="student_number"]').value = 'TRACK-STUDENT-1';
+    root.querySelector('input[name="reference_number"]').value = 'ITU-7K9M-4X2P';
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -168,6 +169,30 @@ test('public lookup renders statuses without filenames or document controls', as
     assert.equal(root.querySelector('input[type="file"]'), null);
     assert.equal(privateEndpointCalls, 0);
     assert.doesNotMatch(root.innerHTML, /download|preview|upload|ocr/i);
+    document.defaultView.close();
+});
+
+test('shared lookup routes physical ITU codes to physical tracking and displays the rejection reason safely', async () => {
+    const { document, root } = createTrackingRoot();
+    let physicalLookups = 0;
+    const api = {
+        async lookupPhysicalApplicationTracking(reference) {
+            physicalLookups += 1;
+            assert.equal(reference, 'ITU-26-ABCDEFG');
+            return { found: true, tracking_reference: reference, office_status: 'rejected',
+                rejection_reason: '<script>blocked</script>', application_date: '2026-10-23', updated_at: '2026-10-23T10:00:00Z' };
+        },
+        async lookupApplicationTracking() { throw new Error('Online lookup must not run for physical codes.'); }
+    };
+    await initializeApplicationTracking(root, api);
+    root.querySelector('[name="reference_number"]').value = 'ITU-26-ABCDEFG';
+    root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(physicalLookups, 1);
+    assert.match(root.textContent, /Dosyanız reddedildi/);
+    assert.match(root.textContent, /<script>blocked<\/script>/);
+    assert.equal(root.querySelector('script'), null);
     document.defaultView.close();
 });
 
@@ -259,16 +284,16 @@ test('not-found lookup is neutral and allows a retry', async () => {
     };
     await initializeApplicationTracking(root, api);
     const submit = async (studentNumber) => {
-        root.querySelector('input[name="student_number"]').value = studentNumber;
+        root.querySelector('input[name="reference_number"]').value = studentNumber;
         root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
         await new Promise((resolve) => setImmediate(resolve));
     };
 
-    await submit('UNKNOWN-STUDENT');
+    await submit('ITU-7K9M-4X2P');
     assert.match(root.textContent, /görüntülenebilir bir başvuru bulunamadı/i);
     assert.equal(root.querySelectorAll('input:not([name=tracking_reference])').length, 1);
     assert.doesNotMatch(root.textContent, /draft exists|student exists/i);
-    await submit('TRACK-STUDENT-1');
+    await submit('ITU-7K9M-4X2P');
     assert.equal(lookupCount, 2);
     assert.match(root.textContent, /Gönderildi/);
     document.defaultView.close();
@@ -277,7 +302,7 @@ test('not-found lookup is neutral and allows a retry', async () => {
 test('tracking supports all locales and the public main entry keeps Arabic right-to-left', async (context) => {
     const requiredKeys = [
         'trackingPageTitle', 'trackingPageText', 'trackingSessionUnavailableHeading', 'trackingSessionUnavailableText',
-        'trackingLookupHeading', 'trackingLookupStudentNumberLabel', 'trackingLookupSubmit', 'trackingLookupExplanation',
+        'trackingLookupHeading', 'trackingLookupReferenceLabel', 'trackingLookupSubmit', 'trackingLookupExplanation',
         'trackingLookupNotFound', 'trackingLookupRateLimited', 'trackingLookupError',
         'trackingDraftHeading', 'trackingDraftText', 'trackingStatusLabel', 'trackingStatusUnknown',
         ...['draft', 'submitted', 'under_review', 'resubmission_required', 'approved_for_processing', 'sent_to_migration',
@@ -316,23 +341,19 @@ test('tracking supports all locales and the public main entry keeps Arabic right
     }
 });
 
-test('language changes preserve unsent physical codes and cached online tracking without new lookups', async () => {
+test('language changes preserve the shared ITU code without new lookups', async () => {
     const { document, root } = createTrackingRoot();
     let lookups = 0;
     const api = { lookupApplicationTracking: async () => { lookups += 1; return { found: true, ...createTrackingDto() }; } };
     await initializeApplicationTracking(root, api);
-    const physical = root.querySelector('#physical-tracking-reference');
-    physical.value = 'ITU-26-ABCDEFG';
-    physical.dispatchEvent(new document.defaultView.Event('input'));
-    const online = root.querySelector('#tracking-student-number');
-    online.value = 'TRACK-STUDENT-1';
-    online.dispatchEvent(new document.defaultView.Event('input'));
+    const reference = root.querySelector('#tracking-application-reference');
+    reference.value = 'ITU-7K9M-4X2P';
+    reference.dispatchEvent(new document.defaultView.Event('input'));
 
     for (const locale of ['en', 'ar']) {
         document.documentElement.lang = locale;
         document.dispatchEvent(new document.defaultView.Event('public:locale-changed'));
-        assert.equal(root.querySelector('#physical-tracking-reference').value, 'ITU-26-ABCDEFG');
-        assert.equal(root.querySelector('#tracking-student-number').value, 'TRACK-STUDENT-1');
+        assert.equal(root.querySelector('#tracking-application-reference').value, 'ITU-7K9M-4X2P');
     }
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { cancelable: true }));
     await new Promise(resolve => setImmediate(resolve));
@@ -340,7 +361,6 @@ test('language changes preserve unsent physical codes and cached online tracking
         document.documentElement.lang = locale;
         document.dispatchEvent(new document.defaultView.Event('public:locale-changed'));
         assert.match(root.querySelector('.tracking-summary').textContent, /TRACK-STUDENT-1/);
-        assert.equal(root.querySelector('#physical-tracking-reference').value, 'ITU-26-ABCDEFG');
     }
 
     assert.equal(lookups, 1);

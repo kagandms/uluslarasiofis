@@ -2,7 +2,7 @@ import { ApiError } from '../domain/errors.js';
 import { listDocumentPolicies } from '../domain/documentPolicy.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
-import { normalizeStudentNumber } from '../repositories/d1/studentRepository.js';
+import { isValidApplicationReference, normalizeApplicationReference } from '../auth/applicationAccessCode.js';
 import { enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { APPLICATION_TRACKING_RATE_LIMIT } from '../security/application-rate-limits.js';
@@ -17,6 +17,8 @@ export function readStudentDocumentStatus(requirement) {
         || requirement?.revision_status === 'resubmission_required') return 'resubmission_required';
     if (requirement?.review_status === 'approved' || requirement?.revision_status === 'approved') return 'approved';
     if (requirement?.review_status === 'under_review') return 'under_review';
+    if (requirement?.upload_status === 'finalized'
+        && ['unsafe', 'failed'].includes(requirement.scan_status)) return 'contact_office';
     if (isStudentVisibleFile(requirement)) return 'waiting_review';
     return 'not_uploaded';
 }
@@ -45,7 +47,6 @@ function createPublicTrackingDocumentDto(policy, requirement) {
 
 function createTrackingApplicationDto(application) {
     return {
-        student_number: application.student_number,
         status: application.status,
         application_type: application.application_type,
         created_at: application.created_at ?? null,
@@ -87,13 +88,15 @@ export async function readCurrentApplicationTracking(request, environment) {
     }));
 
     return {
-        application: createTrackingApplicationDto(application),
+        application: { ...createTrackingApplicationDto(application),
+            student_number: application.student_number,
+            reference_number: application.reference_number ?? null },
         documents: createDocumentTrackingView(application, requirementsWithMessages, createTrackingDocumentDto)
     };
 }
 
 /**
- * Reads a privacy-minimized public tracking view by normalized student number.
+ * Reads a privacy-minimized public tracking view by unguessable application reference.
  * @param {Request} request Same-origin JSON POST request.
  * @param {object} environment Worker bindings containing D1.
  * @returns {Promise<object>} Public-safe tracking result, or an indistinguishable not-found result.
@@ -103,20 +106,18 @@ export async function lookupApplicationTracking(request, environment) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
     const body = await readJsonBody(request);
-    if (Object.keys(body).length !== 1 || !Object.hasOwn(body, 'student_number')) {
-        throw new ApiError(400, 'VALIDATION_ERROR', 'Öğrenci numarasını kontrol edip tekrar deneyin.');
+    if (Object.keys(body).length !== 1 || !Object.hasOwn(body, 'reference_number')) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru kodunu kontrol edip tekrar deneyin.');
     }
 
-    let studentNumber;
-    try {
-        studentNumber = normalizeStudentNumber(body.student_number);
-    } catch {
-        throw new ApiError(400, 'VALIDATION_ERROR', 'Öğrenci numarasını kontrol edip tekrar deneyin.');
+    const referenceNumber = normalizeApplicationReference(body.reference_number);
+    if (!isValidApplicationReference(referenceNumber)) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru kodunu kontrol edip tekrar deneyin.');
     }
 
     const repositories = createD1Repositories(environment.DB);
     await enforceRateLimit(repositories, request, APPLICATION_TRACKING_RATE_LIMIT);
-    const application = await repositories.applications.findTrackableByStudentNumber(studentNumber);
+    const application = await repositories.applications.findTrackableByReferenceNumber(referenceNumber);
     if (!application) return { found: false, application: null, documents: [] };
 
     const [storedRequirements, studentMessages] = await Promise.all([

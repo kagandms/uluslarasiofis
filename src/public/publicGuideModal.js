@@ -6,16 +6,16 @@ const GUIDE_TRANSLATIONS = {
         section1Title: '📝 İkamet Başvurusu Nasıl Yapılır?',
         section1Steps: [
             '<strong>1. İletişim Bilgileri:</strong> Size ulaşabileceğimiz güncel e-posta adresinizi ve telefon numaranızı girin.',
-            '<strong>2. Başvuru ve Kimlik Bilgileri:</strong> İkamet türünüzü (İlk Başvuru / Uzatma / Geçiş) seçip kişisel bilgilerinizi pasaportunuzdaki gibi doldurun.',
+            '<strong>2. Başvuru ve Kimlik Bilgileri:</strong> İlk başvuru veya uzatma seçeneğini seçip kişisel bilgilerinizi pasaportunuzdaki gibi doldurun. Geçiş başvurusu şu anda portalda desteklenmiyor; bu durumda Uluslararası Öğrenci Ofisine danışın.',
             '<strong>3. Bilgilerinizi Kontrol Edin:</strong> İlerlemeden önce girdiğiniz bilgilerin doğruluğunu teyit edin.',
-            '<strong>4. Gerekli Belgeleri Yükleyin:</strong> İkamet başvuru formu, pasaport, öğrenci belgesi, sağlık sigortası ve harç dekontunuzu PDF veya net görsel olarak yükleyin.',
-            '<strong>5. Takip Kodunuzu Alın:</strong> Başvurunuz tamamlandığında size verilen başvuru takip numarasını güvenli bir yere kaydedin.'
+            '<strong>4. Gerekli Belgeleri Yükleyin:</strong> Başvurunuza ve verdiğiniz yanıtlara göre ekranda gösterilen belgeleri yükleyin. Sigorta ve diğer koşullu belgeler yalnızca durumunuza göre istenebilir; emin olmadığınız bir durumda ofise danışın.',
+            '<strong>5. Başvuru Numaranızı Kaydedin:</strong> Online başvuruda verilen ITU ile başlayan başvuru kodunuzu güvenli bir yere kaydedin. Sorgulama ekranında fiziksel ve online başvurular için bu kodu kullanabilirsiniz; ayrıntılı online girişte öğrenci numaranız da gerekir.'
         ],
         section2Title: '🔍 Başvuru Sorgulama Özelliği Nasıl Kullanılır?',
         section2Steps: [
             '<strong>Sorgulama Ekranı:</strong> Ana sayfadaki "Başvurumu Sorgula" butonuna tıklayın.',
-            '<strong>Giriş Yapma:</strong> Size verilen başvuru takip kodu veya başvuru yaparken kullandığınız e-posta adresiyle sorgulama yapabilirsiniz.',
-            '<strong>Aşamaları Takip Edin:</strong> Başvurunuzun durumu (Taslak, İncelemede, Göç İdaresine İletildi, Tamamlandı) anlık olarak gösterilir.',
+            '<strong>Durum sorgulama:</strong> Fiziksel veya online başvuruda size verilen ITU ile başlayan kodu girin. Ayrıntılı online giriş ve belge işlemleri için başvuru kodunuz ve öğrenci numaranızla oturum açın.',
+            '<strong>Aşamaları Takip Edin:</strong> Portal başvurunuzun ofis incelemesi ve işlem aşamasını gösterir. Portalda tamamlanması, tek başına Göç İdaresinin ikamet izni kararı anlamına gelmez.',
             '<strong>Eksik Belge Güncellemesi:</strong> Eğer Uluslararası Öğrenci Ofisi evraklarınızda bir eksiklik veya yenileme talep ederse, sorgulama sayfasından doğrudan yeni belge yükleyebilirsiniz.'
         ]
     },
@@ -26,16 +26,16 @@ const GUIDE_TRANSLATIONS = {
         section1Title: '📝 How to Submit a Residence Permit Application?',
         section1Steps: [
             '<strong>1. Contact Information:</strong> Enter your active email address and phone number so the office can reach you.',
-            '<strong>2. Identity & Application Details:</strong> Select your application type (First Application / Extension / Transfer) and enter your information exactly as shown in your passport.',
+            '<strong>2. Identity & Application Details:</strong> Select First Application or Extension and enter your information exactly as shown in your passport. Transfer applications are not supported in this portal; contact the International Student Office.',
             '<strong>3. Review Information:</strong> Carefully verify all entered information before proceeding.',
-            '<strong>4. Upload Required Documents:</strong> Upload your residence application form, passport, student certificate, health insurance, and fee receipt as PDF or clear images.',
-            '<strong>5. Save Your Tracking Code:</strong> When submitted, record your unique application tracking code.'
+            '<strong>4. Upload Required Documents:</strong> Upload the documents shown for your application and answers. Insurance and other conditional documents may only be required for some cases; contact the office if you are unsure.',
+            '<strong>5. Save Your Application Reference:</strong> Keep the ITU application code issued after online submission. Use it to track either in-person or online applications; detailed online access also requires your student number.'
         ],
         section2Title: '🔍 How to Use the Application Tracking Feature?',
         section2Steps: [
             '<strong>Tracking Screen:</strong> Click "Track My Application" on the homepage.',
-            '<strong>Lookup:</strong> Enter your application tracking code or registered email address to view status.',
-            '<strong>Track Status:</strong> View your current stage in real time (Draft, Under Review, Transferred to Migration, Completed).',
+            '<strong>Status lookup:</strong> Enter the ITU code issued for an in-person or online application. Detailed online access and document actions require signing in with the application code and student number.',
+            '<strong>Track Status:</strong> The portal shows the office review and processing stage. Completion in this portal does not by itself mean that the Migration Authority has granted a residence permit.',
             '<strong>Resubmission / Missing Documents:</strong> If the International Office requests missing or updated documents, upload them directly from the tracking page.'
         ]
     },
@@ -46,16 +46,16 @@ const GUIDE_TRANSLATIONS = {
         section1Title: '📝 Как подать заявку на ВНЖ?',
         section1Steps: [
             '<strong>1. Контактные данные:</strong> Введите актуальный адрес электронной почты и номер телефона для связи.',
-            '<strong>2. Личные данные и вид заявки:</strong> Выберите тип заявления (Первичная / Продление / Переход) и заполните данные строго как в паспорте.',
+            '<strong>2. Личные данные и вид заявки:</strong> Выберите первичную подачу или продление и заполните данные строго как в паспорте. Переход на студенческий ВНЖ через этот портал пока не поддерживается; обратитесь в Международный студенческий офис.',
             '<strong>3. Проверка данных:</strong> Внимательно проверьте правильность введенной информации перед отправкой.',
-            '<strong>4. Загрузка документов:</strong> Загрузите анкету, паспорт, студенческую справку, медицинскую страховку и квитанцию об оплате в формате PDF или четкого фото.',
-            '<strong>5. Сохранение кода отслеживания:</strong> Сохраните полученный номер для дальнейшего отслеживания заявки.'
+            '<strong>4. Загрузка документов:</strong> Загрузите документы, показанные для вашего заявления и ответов. Страховка и другие условные документы требуются только в некоторых случаях; при сомнениях обратитесь в офис.',
+            '<strong>5. Сохранение номера заявки:</strong> Сохраните номер заявки; он понадобится вместе с номером студента для входа и просмотра подробностей.'
         ],
         section2Title: '🔍 Как отслеживать статус заявки?',
         section2Steps: [
             '<strong>Экран отслеживания:</strong> Нажмите «Проверить статус» на главной странице.',
-            '<strong>Поиск:</strong> Введите номер отслеживания или адрес электронной почты, указанный при подаче.',
-            '<strong>Статусы заявки:</strong> Отслеживайте этапы (Черновик, На рассмотрении, Передано в миграционную службу, Завершено).',
+            '<strong>Проверка статуса:</strong> Введите код ITU, выданный для личной или онлайн-подачи. Для подробного онлайн-доступа и работы с документами войдите по коду заявки и номеру студента.',
+            '<strong>Этапы:</strong> Портал показывает этап проверки и обработки в офисе. Завершение в портале само по себе не означает выдачу ВНЖ Миграционной службой.',
             '<strong>Обновление недостающих документов:</strong> Если офис запросит исправление или дополнительный документ, загрузите его прямо на странице отслеживания.'
         ]
     },
@@ -66,16 +66,16 @@ const GUIDE_TRANSLATIONS = {
         section1Title: '📝 Ýaşamak rugsady üçin arza nähili tabşyrylýar?',
         section1Steps: [
             '<strong>1. Habarlaşmak Maglumatlary:</strong> Size elýeterli boljak häzirki elektron poçtaňyzy we telefon belgiňizi giriziň.',
-            '<strong>2. Arza we Şahsy Maglumatlar:</strong> Arzaňyzyň görnüşini saýlaň we pasportdaky maglumatlaryňyzy doly we dogry giriziň.',
+            '<strong>2. Arza we Şahsy Maglumatlar:</strong> Ilkinji ýüz tutma ýa-da möhlet uzaltma görnüşini saýlaň we pasportdaky maglumatlaryňyzy giriziň. Talyp rugsadyna geçiş bu portalyň üsti bilen häzir goldanylmaýar; Halkara Talyp Ofisine ýüz tutuň.',
             '<strong>3. Maglumatlary Barlamak:</strong> Indiki ädime geçmezden ozal ähli maglumatlaryň dogrulygyny barlaň.',
-            '<strong>4. Gerekli Resminamalary Ýüklemek:</strong> E-ikamet formasy, pasport, talyp şahadatnamasy, saglyk ätiýaçlandyryşy we töleg kensiýasyny ýükläň.',
-            '<strong>5. Yzarlamak Koduny Saklaň:</strong> Arza tabşyrylandan soň berilýän arza yzarlamak belgisini belläp goýuň.'
+            '<strong>4. Gerekli Resminamalary Ýüklemek:</strong> Arzaňyza we jogaplaryňyza görä ekranda görkezilen resminamalary ýükläň. Ätiýaçlandyryş we beýleki şertli resminamalar diňe käbir ýagdaýlarda talap edilýär; şübhe bolsa Ofise ýüz tutuň.',
+            '<strong>5. Arza Belgiňizi Saklaň:</strong> Arza salgylanma belgiňizi saklaň; jikme-jiklikleri görmek üçin talyp belgiňiz bilen bilelikde gerek bolar.'
         ],
         section2Title: '🔍 Arza Ýagdaýy Nähili Barlanýar?',
         section2Steps: [
             '<strong>Barlamak Bölümi:</strong> Baş sahypadaky "Arzamy Barla" düwmesine basyň.',
-            '<strong>Giriş:</strong> Size berlen yzarlamak kody ýa-da arza beren elektron poçtaňyz arkaly arzaňyzy barlaň.',
-            '<strong>Ýagdaýy Yzarlamak:</strong> Arzaňyzyň derejesini (Gözden geçirilýär, Göç edarasyna iberildi, Tamamlandy) anyk görüň.',
+            '<strong>Ýagdaýy barlamak:</strong> Şahsy ýa-da onlaýn arzaňyz üçin berlen ITU kody giriziň. Onlaýn jikme-jiklikler we resminamalar üçin arza kody hem-de talyp belgisi bilen giriň.',
+            '<strong>Ýagdaýy yzarlamak:</strong> Portal Ofisiň barlag we iş alyp barýan tapgyryny görkezýär. Portalyň tamamlanmagy özbaşdak Göç edarasynyň ýaşamak rugsadyny berendigini aňlatmaýar.',
             '<strong>Kemçilik Resminamalary Täzelemek:</strong> Eger Ofis goşmaça ýa-da täze resminama talap etse, göni şu sahypadan ýükläp bilersiňiz.'
         ]
     },
@@ -86,16 +86,16 @@ const GUIDE_TRANSLATIONS = {
         section1Title: '📝 كيفية تقديم طلب تصريح الإقامة؟',
         section1Steps: [
             '<strong>1. معلومات الاتصال:</strong> أدخل بريدك الإلكتروني الفعال ورقم هاتفك حتى يتمكن المكتب من التواصل معك.',
-            '<strong>2. بيانات الهوية والطلب:</strong> اختر نوع الطلب (طلب أول / تمديد / انتقال) واملأ البيانات بدقة مطابقة لجواز سفرك.',
+            '<strong>2. بيانات الهوية والطلب:</strong> اختر طلباً أولياً أو تمديداً واملأ البيانات كما في جواز سفرك. طلب الانتقال إلى إقامة الطالب غير مدعوم حالياً في هذه البوابة؛ تواصل مع مكتب الطلاب الدوليين.',
             '<strong>3. مراجعة البيانات:</strong> راجع جميع المعلومات التي أدخلتها بعناية قبل المتابعة.',
-            '<strong>4. رفع المستندات المطلوبة:</strong> ارفع استمارة الطلب، جواز السفر، وثيقة الطالب، التأمين الصحي، وإيصال الرسوم بصيغة PDF أو صورة واضحة.',
-            '<strong>5. الاحتفاظ برمز المتابعة:</strong> احتفظ برمز تتبع الطلب المخصص لك لمتابعة الخطوات القادمة.'
+            '<strong>4. رفع المستندات المطلوبة:</strong> ارفع المستندات المعروضة وفقاً لطلبك وإجاباتك. قد يُطلب التأمين الصحي ومستندات أخرى مشروطة في بعض الحالات فقط؛ تواصل مع المكتب إذا لم تكن متأكداً.',
+            '<strong>5. الاحتفاظ برقم الطلب:</strong> احتفظ برقم مرجع الطلب؛ ستحتاج إليه مع رقم الطالب لتسجيل الدخول وعرض التفاصيل.'
         ],
         section2Title: '🔍 كيفية استخدام ميزة الاستعلام عن الطلب؟',
         section2Steps: [
             '<strong>شاشة الاستعلام:</strong> انقر على زر "الاستعلام عن طلبي" في الصفحة الرئيسية.',
-            '<strong>تسجيل الدخول:</strong> يمكنك الاستعلام برمز المتابعة أو البريد الإلكتروني الذي استخدمته أثناء التقديم.',
-            '<strong>متابعة المراحل:</strong> تابع مرحلة معالجة طلبك (مسودة، قيد المراجعة، تم الإرسال لإدارة الهجرة، مكتمل).',
+            '<strong>الاستعلام عن الحالة:</strong> أدخل رمز ITU الصادر للطلب الشخصي أو الإلكتروني. يتطلب الوصول التفصيلي للطلب الإلكتروني وتعديل المستندات تسجيل الدخول برمز الطلب ورقم الطالب.',
+            '<strong>متابعة المراحل:</strong> تعرض البوابة مراحل المراجعة والمعالجة لدى المكتب. اكتمال الطلب في البوابة لا يعني بحد ذاته أن إدارة الهجرة منحت تصريح الإقامة.',
             '<strong>تحديث المستندات الناقصة:</strong> في حال طلب مكتب الطلاب الدوليين أي مستند إضافي أو بديل، يمكنك رفعه مباشرة من صفحة المتابعة.'
         ]
     }

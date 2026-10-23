@@ -57,19 +57,20 @@ test('closed intake keeps compact A4 download and hides removed management contr
     dom.window.close();
 });
 
-test('physical code form remains first through an online owner session and locale changes',async()=>{
+test('the shared lookup accepts a physical ITU code and renders its status',async()=>{
     const dom=new JSDOM('<main></main>',{url:'https://portal.test'});const document=dom.window.document;const root=document.querySelector('main');
-    const payload={found:true,application:{id:'online',student_number:'TEST',application_type:'initial',status:'submitted'},documents:[]};
-    const api={lookupApplicationTracking:async()=>payload,readCurrentApplicationTracking:async()=>payload};
+    const payload={found:true,tracking_reference:'ITU-26-ABCDEFG',application_date:'2026-10-12',office_status:'under_review',updated_at:'2026-10-12T13:00:00Z'};
+    const api={lookupPhysicalApplicationTracking:async()=>payload};
     await initializeApplicationTracking(root,api);
-    root.querySelector('input[name=student_number]').value='TEST';
+    assert.equal(root.querySelectorAll('input[name=reference_number]').length,1);
+    root.querySelector('input[name=reference_number]').value='ITU-26-ABCDEFG';
     root.querySelector('.tracking-lookup-form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
     await new Promise(resolve=>setImmediate(resolve));
 
-    assert.equal(root.firstElementChild.classList.contains('physical-tracking-panel'),true);assert.ok(root.querySelector('input[name=tracking_reference]'));
-    assert.match(root.textContent,/Başvuru Takip No/);
+    assert.equal(root.firstElementChild.classList.contains('physical-tracking-panel'),true);
+    assert.match(root.textContent,/Dosyanız inceleniyor/);
     document.documentElement.lang='ar';document.dispatchEvent(new dom.window.Event('public:locale-changed'));
-    assert.ok(root.querySelector('input[name=tracking_reference]'));assert.match(root.firstElementChild.textContent,/رقم متابعة الطلب/);
+    assert.match(root.firstElementChild.textContent,/ITU-26-ABCDEFG/);
     dom.window.close();
 });
 

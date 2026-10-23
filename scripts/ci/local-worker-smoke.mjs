@@ -75,7 +75,7 @@ try {
     }
     const headers = { Origin: base, 'Content-Type': 'application/json' };
     const post = (path, body) => fetch(base + path, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(10_000) });
-    let response = await post('/api/public/applications/tracking-lookup', { student_number: 'CI-NO-RECORD' });
+    let response = await post('/api/public/applications/tracking-lookup', { reference_number: 'ITU-7K9M-4X2P' });
     assert.equal(response.status, 200);
     assert.equal((await response.json()).found, false);
     assert.equal((await fetch(`${base}/api/public/applications/current`)).status, 401);

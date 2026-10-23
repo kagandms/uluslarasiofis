@@ -15,7 +15,7 @@ function createRoot() {
 }
 
 function fillRequiredResidenceFields(root) {
-    const fields = { first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish', date_of_birth: '2000-01-01' };
+    const fields = { first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish', date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01' };
     Object.entries(fields).forEach(([name, value]) => { root.querySelector(`[name="${name}"]`).value = value; });
 }
 
@@ -33,7 +33,7 @@ async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: addressEvidenceType, student_number: 'S3-FP-1',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish',
-        date_of_birth: '2000-01-01', is_under_18: 0,
+        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01', is_under_18: 0,
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true, accepted_at: '2026-09-29T00:00:00.000Z' },
         fingerprint_status: fingerprintStatus, fingerprint_code: fingerprintCode,
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAccuracy', accepted_current: false }
@@ -633,10 +633,11 @@ test('wizard saves under-18 and fingerprint state before loading the server requ
     const { document, root } = createRoot();
     const window = document.defaultView;
     const application = {
-        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_entry_type: 'other', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: '2026123999',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: '2026123999',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
-        is_under_18: null, fingerprint_status: null, fingerprint_code: null
+        is_under_18: null, fingerprint_status: null, fingerprint_code: null,
+        residence_application_date: '2026-10-23', university_registration_date: '2026-09-01'
     };
     const api = {
         async readCurrentApplication() { return { ...application }; },
@@ -689,6 +690,7 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
     const saved = {
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-WIZ-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', first_name: '', last_name: '', passport_number: '', nationality: '', date_of_birth: '',
+        residence_application_date: '', university_registration_date: '',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null,
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false, accepted_at: null }
@@ -757,6 +759,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     const application = {
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-UP-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
+        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }
     };
@@ -904,6 +907,7 @@ test('closeout translations have parity and the wizard rerenders in Arabic RTL',
     const application = {
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', student_number: 'S3-RTL-1', student_email: 'student@example.edu',
         student_phone: '555', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
+        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }
     };
@@ -967,7 +971,7 @@ test('Review submits once, keeps five steps, and shows student-safe confirmation
     assert.doesNotMatch(root.textContent, /2026-09-30T10:00:00\.000Z/);
     assert.match(root.querySelector('[data-i18n="submissionNewStudentApplicationAction"]')?.textContent || '', /Farklı öğrenci için/);
     assert.equal(root.querySelector('a[data-i18n="trackingViewAction"]')?.getAttribute('href'), '/basvurum/');
-    assert.match(root.textContent, /öğrenci numaranızla \/basvurum\//i);
+    assert.match(root.textContent, /ITU kodunuzla \/basvurum\//i);
     assert.equal(root.querySelector('[data-action="submit-application"]'), null);
     assert.equal(root.querySelector('.application-progress li').parentElement.children.length, 5);
     document.defaultView.close();

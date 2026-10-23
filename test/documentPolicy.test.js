@@ -13,6 +13,8 @@ test('document policies expose passport and biometric photos without residence-c
     assert.ok(!codes.includes('passport_identity'));
     assert.ok(!codes.includes('fingerprint'));
     assert.ok(codes.includes('health_insurance'));
+    assert.deepEqual(listDocumentPolicies('initial', false, { insurance_basis: 'system_verified' })
+        .some(({ code }) => code === 'health_insurance'), false);
     assert.equal(readDocumentPolicy('passport', 'initial', false).label_key, 'documentPassport');
     assert.equal(readDocumentPolicy('photographs', 'initial', false).label_key, 'documentPhotographs');
     assert.equal(readDocumentPolicy('residence_card', 'renewal', false), null);
@@ -49,6 +51,7 @@ test('renewal UETS excludes minors while under-18 evidence follows official cond
     assert.equal(listDocumentPolicies('initial', false).some(({ code }) => code === 'birth_certificate_under18'), false);
     assert.equal(listDocumentPolicies('initial', true, { minor_parents_identified: 'no' }).some(({ code, required }) => code === 'birth_certificate_under18' && required), true);
     assert.equal(listDocumentPolicies('initial', true, { minor_parents_identified: 'yes' }).some(({ code }) => code === 'minor_consent'), true);
+    assert.equal(listDocumentPolicies('initial', true, {}).some(({ code, required }) => code === 'minor_consent' && required), true);
 });
 
 test('public overview derives the new concise policy and address alternatives without legacy uploads', () => {

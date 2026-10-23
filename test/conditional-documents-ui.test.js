@@ -10,6 +10,7 @@ async function createWizard(overrides = {}) {
         student_number: 'CONDITIONAL-UI', student_email: 'test@example.edu', student_phone: '+905551112233',
         first_name: 'Test', last_name: 'Student', passport_number: 'P1234', nationality: 'Turkish',
         date_of_birth: '2000-01-01', is_under_18: 0, fingerprint_status: 'registered', fingerprint_code: 'FP-1',
+        residence_application_date: '2026-10-23', university_registration_date: '2026-09-01',
         insurance_basis: 'system_verified',
         contact_acknowledgement: { accepted_current: true }, declaration: { accepted_current: false }, ...overrides };
     const api = {
@@ -67,21 +68,14 @@ test('host question appears only for host accommodation and other answers surviv
     assert.equal(root.querySelector('button[type="submit"]').disabled, false);
 });
 
-test('minor entry choice reveals only the applicable questions and saves calculated age', async (context) => {
+test('minor details are required for every under-18 applicant and age uses residence application date', async (context) => {
     const { root, document, application } = await createWizard();
     context.after(() => document.defaultView.close());
-    assert.equal(root.querySelector('[name="minor_entry_type"]'), null);
-
     await changeValue(root, 'date_of_birth', '2012-01-01');
-    assert.ok(root.querySelector('[name="minor_entry_type"]'));
-    assert.equal(root.querySelector('[name="minor_family_status"]'), null);
+    assert.ok(root.querySelector('[name="minor_family_status"]'));
+    assert.ok(root.querySelector('[name="minor_parents_identified"]'));
     assert.ok(root.querySelector('[name="insurance_basis"]'));
     assert.equal(application.is_under_18, true);
-    await changeValue(root, 'minor_entry_type', 'student_visa');
-    assert.equal(root.querySelector('[name="minor_family_status"]'), null);
-    assert.equal(root.querySelector('[name="minor_parents_identified"]'), null);
-    await changeValue(root, 'minor_entry_type', 'other');
-    for (const name of ['minor_family_status', 'minor_parents_identified']) assert.ok(root.querySelector(`[name="${name}"]`), name);
     await changeValue(root, 'minor_family_status', 'both_parents');
     await changeValue(root, 'minor_parents_identified', 'yes');
     await changeValue(root, 'insurance_basis', 'system_verified');

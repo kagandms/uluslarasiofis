@@ -80,10 +80,10 @@ test('public lookup remains a separate read-only API call', async (context) => {
         { status: 200, headers: { 'Content-Type': 'application/json' } }
     ));
 
-    await lookupApplicationTracking('LOOKUP-ONLY');
+    await lookupApplicationTracking('ITU-7K9M-4X2P');
 
     const [path, options] = fetchMock.mock.calls[0].arguments;
     assert.equal(path, '/api/public/applications/tracking-lookup');
-    assert.deepEqual(JSON.parse(options.body), { student_number: 'LOOKUP-ONLY' });
+    assert.deepEqual(JSON.parse(options.body), { reference_number: 'ITU-7K9M-4X2P' });
     assert.equal(fetchMock.mock.calls.length, 1);
 });

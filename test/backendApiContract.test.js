@@ -140,7 +140,8 @@ async function createReadyApplication(environment, database, studentNumber, appl
     const acceptedAt = '2026-09-30T10:00:00.000Z';
     await database.prepare(`
         UPDATE applications SET first_name = 'Ayşe', last_name = 'Yılmaz', passport_number = 'P123456',
-            nationality = 'Turkish', date_of_birth = '2000-01-01', is_under_18 = 0,
+            nationality = 'Turkish', date_of_birth = '2000-01-01', residence_application_date = '2026-09-30',
+            university_registration_date = '2026-09-01', is_under_18 = 0,
             address_evidence_type = 'rental_contract', insurance_basis = 'system_verified', fingerprint_status = 'registered', fingerprint_code = 'FP-A/42',
             declaration_version = ?, declaration_accepted_at = ?
         WHERE id = ?

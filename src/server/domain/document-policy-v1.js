@@ -7,7 +7,7 @@ const POLICIES = Object.freeze([
     { code: 'passport', order: 2, label: 'documentPassport', help: 'documentPassportHelp' },
     { code: 'residence_card', order: 3, label: 'documentResidenceCard', help: 'documentResidenceCardHelp' },
     { code: 'photographs', order: 4, label: 'documentPhotographs', help: 'documentPhotographsHelp' },
-    { code: 'health_insurance', order: 5, label: 'documentHealthInsurance', help: 'documentHealthInsuranceHelp' },
+    { code: 'health_insurance', order: 5, label: 'documentHealthInsurance', help: 'documentHealthInsuranceHelp', conditional_rule: 'health_insurance_document' },
     { code: 'uets', order: 6, label: 'documentUets', help: 'documentUetsHelp', application_types: ['renewal'] },
     { code: 'student_certificate', order: 7, label: 'documentStudentCertificate', help: 'documentStudentCertificateHelp' },
     { code: 'residence_permit_fee', order: 8, label: 'documentResidencePermitFee', help: 'documentResidencePermitFeeHelp' },
@@ -53,9 +53,12 @@ const POLICIES = Object.freeze([
 })));
 
 function isPolicyApplicable(policy, applicationType, isUnder18, addressEvidenceType) {
+    const context = addressEvidenceType && typeof addressEvidenceType === 'object'
+        ? addressEvidenceType : { address_evidence_type: addressEvidenceType };
     if (!policy.active || !policy.application_types.includes(applicationType)) return false;
     if (policy.conditional_rule === 'under18' && !isUnder18) return false;
-    return !policy.address_evidence_type || policy.address_evidence_type === addressEvidenceType;
+    if (policy.conditional_rule === 'health_insurance_document') return context.insurance_basis === 'bilateral_agreement';
+    return !policy.address_evidence_type || policy.address_evidence_type === context.address_evidence_type;
 }
 
 function createStudentPolicyDto(policy) {

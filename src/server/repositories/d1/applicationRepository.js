@@ -12,7 +12,6 @@ const PUBLIC_APPLICATION_FIELDS = Object.freeze({
     accommodationType: 'accommodation_type',
     hasResidenceCard: 'has_residence_card',
     hostIsMarried: 'host_is_married',
-    minorEntryType: 'minor_entry_type',
     minorFamilyStatus: 'minor_family_status',
     minorParentsIdentified: 'minor_parents_identified',
     insuranceBasis: 'insurance_basis',
@@ -24,6 +23,8 @@ const PUBLIC_APPLICATION_FIELDS = Object.freeze({
     passportNumber: 'passport_number',
     nationality: 'nationality',
     dateOfBirth: 'date_of_birth',
+    residenceApplicationDate: 'residence_application_date',
+    universityRegistrationDate: 'university_registration_date',
     isUnder18: 'is_under_18',
     fingerprintStatus: 'fingerprint_status',
     fingerprintCode: 'fingerprint_code',
@@ -196,6 +197,23 @@ export function createApplicationRepository(database) {
             if (!selected) return null;
             return this.findById(selected.id);
         },
+        async findTrackableByReferenceNumber(referenceNumber) {
+            if (typeof referenceNumber !== 'string') return null;
+            const normalizedReference = referenceNumber.trim().toUpperCase();
+            const selected = await database.prepare(`
+                SELECT applications.id
+                FROM applications
+                WHERE UPPER(applications.reference_number) = ?
+                  AND applications.status <> 'draft'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM application_deletions
+                      WHERE application_deletions.application_id = applications.id
+                  )
+                LIMIT 1
+            `).bind(normalizedReference).first();
+            if (!selected) return null;
+            return this.findById(selected.id);
+        },
         async queryStaffApplications({ statuses, isDeleted = false, includeDeleted = false, searchPattern, pageSize, offset }) {
             const conditions = ["applications.status <> 'draft'"];
             const queryValues = [];
@@ -270,19 +288,45 @@ export function createApplicationRepository(database) {
         },
         async findCurrentStatusById(applicationId) {
             return database.prepare(`
-                SELECT status, application_type, updated_at
+                SELECT status, application_type, updated_at, lock_version
                 FROM applications
                 WHERE id = ?
             `).bind(applicationId).first();
         },
-        async submitDraft({ applicationId, submittedAt, auditEventId, requestId }) {
+        async submitDraft({ applicationId, expectedLockVersion = null, ownerSessionId = null, requiredDocumentCodes = [], submittedAt, auditEventId, requestId }) {
             const results = await database.batch([
                 database.prepare(`
                     UPDATE applications
                     SET status = 'submitted', submitted_at = ?, updated_at = ?, last_activity_at = ?,
                         terminal_at = NULL, retention_due_at = NULL
                     WHERE id = ? AND status = 'draft'
-                `).bind(submittedAt, submittedAt, submittedAt, applicationId),
+                      AND (? IS NULL OR lock_version = ?)
+                      AND (? IS NULL OR EXISTS (
+                        SELECT 1 FROM application_sessions AS sessions
+                        WHERE sessions.id = ? AND sessions.application_id = applications.id
+                          AND sessions.revoked_at IS NULL AND sessions.expires_at > ?
+                      ))
+                      AND NOT EXISTS (
+                        SELECT 1 FROM document_requirements AS required
+                        WHERE required.application_type = applications.application_type
+                          AND required.is_active = 1 AND required.is_required = 1
+                          AND EXISTS (SELECT 1 FROM json_each(?) selected WHERE selected.value = required.code)
+                          AND NOT EXISTS (
+                            SELECT 1 FROM document_records AS records
+                            JOIN document_revisions AS revisions ON revisions.document_record_id = records.id
+                            JOIN document_revision_files AS files ON files.revision_id = revisions.id
+                            JOIN upload_intents AS intents ON intents.revision_file_id = files.id
+                            WHERE records.application_id = applications.id
+                              AND records.requirement_id = required.id
+                              AND revisions.is_current = 1 AND revisions.status IN ('submitted','approved')
+                              AND files.upload_status = 'finalized' AND files.scan_status IN ('pending','clean')
+                              AND (files.cleanup_status IS NULL OR files.cleanup_status = 'none')
+                              AND intents.status = 'completed'
+                          )
+                      )
+                `).bind(submittedAt, submittedAt, submittedAt, applicationId, expectedLockVersion,
+                    expectedLockVersion, ownerSessionId, ownerSessionId, submittedAt,
+                    JSON.stringify(requiredDocumentCodes)),
                 database.prepare(`
                     INSERT INTO audit_events (
                         id, event_type, actor_type, application_id, request_id, safe_metadata_json, created_at

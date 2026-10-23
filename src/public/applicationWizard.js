@@ -6,7 +6,7 @@ import { createPhoneField } from './phoneField.js';
 import { createNationalityField } from './nationalityField.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 import { isValidPhoneNumber } from '../shared/phoneNumber.js';
-import { calculateCurrentUnder18 } from '../shared/age.js';
+import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate } from '../shared/age.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
@@ -181,9 +181,37 @@ function createDateOfBirthField(document, value, rawValue, messages) {
 function updateDateOfBirthValidity(input, messages) {
     const birthDate = parseDateOfBirthInput(input.value);
     const isFutureOrInvalid = input.value.trim() !== ''
-        && (!birthDate || calculateCurrentUnder18(birthDate) === null);
+        && (!birthDate || calculateUnder18(birthDate, readIstanbulDate()) === null);
     input.setCustomValidity(isFutureOrInvalid ? messages.dateOfBirthInvalid : '');
     return birthDate;
+}
+
+function createPolicyDateField(document, { name, key, helpKey, value, messages }) {
+    const label = document.createElement('label');
+    const title = createTranslatedElement(document, 'span', key, messages[key]);
+    const input = document.createElement('input');
+    const help = createTranslatedElement(document, 'small', helpKey, messages[helpKey]);
+    input.type = 'text';
+    input.name = name;
+    input.id = `field-${name}`;
+    input.required = true;
+    input.maxLength = 10;
+    input.inputMode = 'numeric';
+    input.placeholder = messages.dateOfBirthFormat;
+    input.value = formatDateOfBirthInput(value);
+    updatePolicyDateValidity(input, messages);
+    help.id = `${name}-help`;
+    input.setAttribute('aria-describedby', help.id);
+    label.htmlFor = input.id;
+    label.append(title, input, help);
+    return label;
+}
+
+function updatePolicyDateValidity(input, messages) {
+    const parsedDate = parseDateOfBirthInput(input.value);
+    const isInvalid = input.value.trim() !== '' && (!parsedDate || parsedDate > readIstanbulDate());
+    input.setCustomValidity(isInvalid ? messages.applicationDateInvalid : '');
+    return parsedDate;
 }
 
 function createSelectField(document, { key, name, value, options, required = false }) {
@@ -404,7 +432,15 @@ function createResidenceStep(document, application, formValues) {
         const key = ({ first_name: 'firstName', last_name: 'lastName', passport_number: 'passportNumber', nationality: 'nationality', date_of_birth: 'dateOfBirth' })[field];
         form.append(createTextField(document, { key, name: field, value: fields[field], type: field === 'date_of_birth' ? 'date' : 'text', required: true }));
     });
-    const under18 = calculateCurrentUnder18(fields.date_of_birth);
+    form.append(createPolicyDateField(document, {
+        name: 'residence_application_date', key: 'residenceApplicationDate',
+        helpKey: 'residenceApplicationDateHelp', value: fields.residence_application_date, messages
+    }));
+    form.append(createPolicyDateField(document, {
+        name: 'university_registration_date', key: 'universityRegistrationDate',
+        helpKey: 'universityRegistrationDateHelp', value: fields.university_registration_date, messages
+    }));
+    const under18 = calculateUnder18(fields.date_of_birth, fields.residence_application_date);
     const under18Field = createSelectField(document, {
         key: 'under18Question', name: 'is_under_18', value: under18 === null ? '' : String(under18), required: false,
         options: [
@@ -426,13 +462,12 @@ function createResidenceStep(document, application, formValues) {
 
 const DOCUMENT_QUESTION_KEYS = Object.freeze({
     host_is_married: 'hostIsMarriedQuestion',
-    minor_entry_type: 'minorEntryQuestion',
     minor_parents_identified: 'minorParentsIdentifiedQuestion',
-    minor_family_status: 'minorFamilyQuestion', insurance_basis: 'insuranceBasisQuestion'
+    minor_family_status: 'minorFamilyQuestion',
+    insurance_basis: 'insuranceBasisQuestion'
 });
 const DOCUMENT_ANSWER_KEYS = Object.freeze({
     yes: 'yes', no: 'no', system_verified: 'insuranceSystemVerified',
-    student_visa: 'minorStudentVisa', other: 'minorOtherEntry',
     bilateral_agreement: 'insuranceBilateralAgreement', gss_pending: 'insuranceGssPending',
     both_parents: 'minorBothParents', divorced: 'minorDivorced', deceased: 'minorDeceased',
     single_parent: 'minorSingleParent', absent: 'minorAbsent'
@@ -440,12 +475,22 @@ const DOCUMENT_ANSWER_KEYS = Object.freeze({
 
 function appendDocumentQuestions(form, fields) {
     const document = form.ownerDocument;
+    const messages = readMessages(document);
     listRequiredDocumentAnswers(fields).forEach((name) => {
         form.append(createSelectField(document, {
             key: DOCUMENT_QUESTION_KEYS[name], name, value: fields[name] || '', required: true,
             options: [{ value: '', key: 'under18SelectPlaceholder', disabled: true },
                 ...DOCUMENT_ANSWER_OPTIONS[name].map((value) => ({ value, key: DOCUMENT_ANSWER_KEYS[value] }))]
         }));
+        if (name === 'insurance_basis' && fields.insurance_basis === 'gss_pending') {
+            const deadline = calculateGssRegistrationDeadline(fields.university_registration_date);
+            if (deadline) {
+                const notice = createTranslatedElement(document, 'p', 'gssDeadlineNotice',
+                    messages.gssDeadlineNotice.replace('{date}', formatDateOfBirthInput(deadline)));
+                notice.className = 'application-policy-notice';
+                form.append(notice);
+            }
+        }
     });
 }
 
@@ -512,7 +557,11 @@ function isFingerprintUploadEligible(application) {
 
 function canContinueResidenceStep(form, fields) {
     const birthDate = parseDateOfBirthInput(form?.querySelector('[name="date_of_birth"]')?.value);
-    return Boolean(form?.checkValidity() && calculateCurrentUnder18(birthDate) !== null && isFingerprintUploadEligible(fields) && listMissingDocumentAnswers(fields).length === 0);
+    const residenceDate = parseDateOfBirthInput(form?.querySelector('[name="residence_application_date"]')?.value);
+    const registrationDate = parseDateOfBirthInput(form?.querySelector('[name="university_registration_date"]')?.value);
+    return Boolean(form?.checkValidity() && registrationDate && registrationDate <= readIstanbulDate()
+        && calculateUnder18(birthDate, residenceDate) !== null
+        && isFingerprintUploadEligible(fields) && listMissingDocumentAnswers(fields).length === 0);
 }
 
 function getAddressEvidenceMessageKey(value) {
@@ -757,6 +806,8 @@ function createApplicantReview(document, application) {
         ...listRequiredDocumentAnswers(application).map((field) => [DOCUMENT_QUESTION_KEYS[field], messages[DOCUMENT_ANSWER_KEYS[application[field]]] || '']),
         ['firstName', application.first_name], ['lastName', application.last_name], ['passportNumber', application.passport_number],
         ['nationality', application.nationality], ['dateOfBirth', application.date_of_birth],
+        ['residenceApplicationDate', application.residence_application_date],
+        ['universityRegistrationDate', application.university_registration_date],
         ['under18Question', application.is_under_18 === true || application.is_under_18 === 1 ? messages.yes
             : (application.is_under_18 === false || application.is_under_18 === 0 ? messages.no : '')]
     ];
@@ -802,6 +853,7 @@ export function createSubmissionConfirmation(document, application, messages) {
     reminder.className = 'submission-credentials-reminder';
     confirmation.append(reminder);
     confirmation.append(createTranslatedElement(document, 'p', 'submissionTracking', messages.submissionTracking));
+    confirmation.append(createTranslatedElement(document, 'p', 'submissionNextSteps', messages.submissionNextSteps));
     const newApplicationLink = document.createElement('a');
     newApplicationLink.href = '/basvuru/?new=1';
     newApplicationLink.className = 'application-button application-button-secondary';
@@ -1022,7 +1074,10 @@ function isReviewFieldValid(field, application) {
     if (field === 'student_phone') return isValidPhoneNumber(value) && value.trim().length <= 40;
     if (field === 'address_evidence_type') return ACCOMMODATION_TYPES.includes(value);
     if (field === 'date_of_birth') {
-        return calculateCurrentUnder18(value) !== null;
+        return calculateUnder18(value, application.residence_application_date) !== null;
+    }
+    if (['residence_application_date', 'university_registration_date'].includes(field)) {
+        return typeof value === 'string' && parseDateOfBirthInput(value) !== null && value <= readIstanbulDate();
     }
     if (field === 'student_number') return typeof value === 'string' && value.trim().length > 0 && value.length <= 64;
     return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 255;
@@ -1034,13 +1089,19 @@ export function getReviewReadiness(application, requirements, uploads = {}, dele
         ['student_number', 'studentNumber', 0], ['student_email', 'email', 0], ['student_phone', 'phone', 0],
         ['application_type', 'applicationType', 0], ['address_evidence_type', 'addressEvidenceQuestion', 1],
         ['first_name', 'firstName', 1], ['last_name', 'lastName', 1], ['passport_number', 'passportNumber', 1],
-        ['nationality', 'nationality', 1], ['date_of_birth', 'dateOfBirth', 1]
+        ['nationality', 'nationality', 1], ['date_of_birth', 'dateOfBirth', 1],
+        ['residence_application_date', 'residenceApplicationDate', 1],
+        ['university_registration_date', 'universityRegistrationDate', 1]
     ];
     const issues = fields.filter(([field]) => !isReviewFieldValid(field, application))
         .map(([, messageKey, step]) => ({ kind: 'field', step, code: null, messageKey }));
     listMissingDocumentAnswers(application).forEach((field) => {
         issues.push({ kind: 'field', step: 1, code: null, messageKey: DOCUMENT_QUESTION_KEYS[field] });
     });
+    const gssDeadline = calculateGssRegistrationDeadline(application.university_registration_date);
+    if (application.insurance_basis === 'gss_pending' && (!gssDeadline || readIstanbulDate() > gssDeadline)) {
+        issues.push({ kind: 'field', step: 1, code: null, messageKey: 'gssDeadlineExpired' });
+    }
     if (!isFingerprintUploadEligible(application)) {
         issues.push({ kind: 'field', step: 1, code: null, messageKey: 'fingerprintQuestion' });
     }
@@ -1333,6 +1394,11 @@ function readVisibleFields(root, application = {}) {
             fields.date_of_birth = normalizedDate || (input.value.trim() ? application.date_of_birth || '' : '');
             return;
         }
+        if (['residence_application_date', 'university_registration_date'].includes(input.name)) {
+            const normalizedDate = parseDateOfBirthInput(input.value);
+            fields[input.name] = normalizedDate || (input.value.trim() ? application[input.name] || '' : '');
+            return;
+        }
         fields[input.name] = input.type === 'checkbox' ? input.checked : input.value;
     });
     return fields;
@@ -1350,6 +1416,8 @@ function buildAutosaveValues(fields) {
         fingerprint_status: fields.fingerprint_status ?? null,
         fingerprint_code: fields.fingerprint_status === 'registered' ? (fields.fingerprint_code ?? '') : null
     };
+    values.residence_application_date = fields.residence_application_date ?? '';
+    values.university_registration_date = fields.university_registration_date ?? '';
     DOCUMENT_ANSWER_FIELDS.forEach((field) => { values[field] = fields[field] || null; });
     RESIDENCE_FIELDS.forEach((field) => { values[field] = fields[field] ?? ''; });
     return values;
@@ -1794,9 +1862,15 @@ function handleWizardInput(root, state, api) {
         const dateInput = root.querySelector('[name="date_of_birth"]');
         const messages = readMessages(root.ownerDocument);
         const birthDate = updateDateOfBirthValidity(dateInput, messages);
-        const ageAnswer = calculateCurrentUnder18(birthDate);
+        const residenceDateInput = root.querySelector('[name="residence_application_date"]');
+        const registrationDateInput = root.querySelector('[name="university_registration_date"]');
+        const residenceDate = parseDateOfBirthInput(residenceDateInput?.value || '');
+        const ageAnswer = calculateUnder18(birthDate, residenceDate);
         const ageField = root.querySelector('[name="is_under_18"]');
         if (ageField) ageField.value = ageAnswer === null ? '' : String(ageAnswer);
+        [residenceDateInput, registrationDateInput].filter(Boolean).forEach((dateInput) => {
+            updatePolicyDateValidity(dateInput, messages);
+        });
     }
     if (state.application && state.step <= 1 && state.autosave) scheduleCurrentFields(root, state);
     if (state.step === 1) updateResidenceContinueButton(root, readVisibleFields(root, state.application || {}));
@@ -1827,8 +1901,13 @@ function handleWizardChange(root, state, api, event) {
         const birthDate = parseDateOfBirthInput(input.value);
         if (birthDate) input.value = formatDateOfBirthInput(birthDate);
     }
+    if (['residence_application_date', 'university_registration_date'].includes(input.name)) {
+        const dateValue = parseDateOfBirthInput(input.value);
+        if (dateValue) input.value = formatDateOfBirthInput(dateValue);
+    }
     handleWizardInput(root, state, api);
-    if (['application_type', 'address_evidence_type', 'date_of_birth', ...DOCUMENT_ANSWER_FIELDS].includes(input.name)) {
+    if (['application_type', 'address_evidence_type', 'date_of_birth', 'residence_application_date',
+        'university_registration_date', ...DOCUMENT_ANSWER_FIELDS].includes(input.name)) {
         state.errorKey = null;
         renderWizard(root, state);
         void persistRequirementSelection(root, state, api);
