@@ -468,7 +468,7 @@ test('optimistic concurrency control: lock_version mismatch returns 409 APPLICAT
     assert.equal(updatedB.application.lock_version, 3);
 });
 
-test('public tracking lookup by student number does not leak reference number, access code, or sessions', async () => {
+test('public tracking lookup by ITU reference does not leak reference number, access code, or sessions', async () => {
     const { environment, database } = createEnvironment();
     const studentNumber = 'STUDENT-PRIVACY-1';
     const { data } = await createDraftApplication(environment, studentNumber);
@@ -485,7 +485,7 @@ test('public tracking lookup by student number does not leak reference number, a
 
     const lookupResp = await worker.fetch(createRequest('/api/public/applications/tracking-lookup', {
         method: 'POST',
-        body: { student_number: studentNumber }
+        body: { reference_number: data.reference_number }
     }), environment, {});
 
     assert.equal(lookupResp.status, 200);
@@ -493,7 +493,7 @@ test('public tracking lookup by student number does not leak reference number, a
     const lookupData = await lookupResp.json();
 
     assert.equal(lookupData.found, true);
-    assert.equal(lookupData.application.student_number, studentNumber);
+    assert.equal(lookupData.application.student_number, undefined);
     assert.equal(lookupData.application.status, 'submitted');
 
     // Ensure NO private credentials leaked

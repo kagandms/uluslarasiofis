@@ -305,9 +305,12 @@ test('owner-session revocation after capability issuance blocks finalize without
 test('lookup remains read-only and cannot access owner eligibility or create an upload capability', async () => {
     const { environment, database } = createEnvironment();
     await createResubmissionApplicant(environment, database, 'RESUB-LOOKUP');
+    const referenceNumber = database.prepare('SELECT reference_number FROM applications WHERE id = ?')
+        .bind(database.prepare(`SELECT applications.id FROM applications JOIN students ON students.id = applications.student_id
+            WHERE students.normalized_student_number = 'RESUB-LOOKUP'`).first().id).first().reference_number;
     const before = database.prepare(`SELECT COUNT(*) AS count FROM upload_intents`).first().count;
     const lookup = await worker.fetch(createRequest('/api/public/applications/tracking-lookup', {
-        method: 'POST', body: { student_number: 'RESUB-LOOKUP' }
+        method: 'POST', body: { reference_number: referenceNumber }
     }), environment);
     const privateHint = await worker.fetch(createRequest(`${RESUBMISSION_PATH}/resubmission-eligibility`), environment);
     const payload = await readJson(lookup);

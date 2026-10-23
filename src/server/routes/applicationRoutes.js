@@ -14,6 +14,7 @@ import { calculateUnder18, readIstanbulDate } from '../../shared/age.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { readSubmissionReadiness } from '../services/submissionReadiness.js';
+import { listDocumentPolicies } from '../domain/documentPolicy.js';
 import { createAuditEvent, createRepositories, enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
 
 const APPLICATION_SESSION_SECONDS = APPLICATION_OWNER_SESSION_DAYS * 24 * 60 * 60;
@@ -24,7 +25,6 @@ const DRAFT_FIELDS = Object.freeze({
     last_name: 'lastName',
     passport_number: 'passportNumber',
     nationality: 'nationality',
-    date_of_birth: 'dateOfBirth',
     student_email: 'studentEmail',
     student_phone: 'studentPhone'
 });
@@ -62,6 +62,8 @@ function createApplicationDto(application, environment) {
         passport_number: application.passport_number,
         nationality: application.nationality,
         date_of_birth: application.date_of_birth,
+        residence_application_date: application.residence_application_date ?? null,
+        university_registration_date: application.university_registration_date ?? null,
         is_under_18: application.is_under_18,
         fingerprint_status: application.fingerprint_status ?? null,
         fingerprint_code: application.fingerprint_code ?? null,
@@ -133,6 +135,19 @@ function readFingerprintCode(value) {
     return code || null;
 }
 
+function readOptionalApplicationDate(value, allowIncomplete) {
+    if (allowIncomplete && (value === '' || value === null)) return null;
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru tarihlerini kontrol edip tekrar deneyin.');
+    }
+    const parsedDate = new Date(`${value}T00:00:00.000Z`);
+    if (!Number.isFinite(parsedDate.valueOf()) || parsedDate.toISOString().slice(0, 10) !== value
+        || value > readIstanbulDate()) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru tarihlerini kontrol edip tekrar deneyin.');
+    }
+    return value;
+}
+
 function readDocumentAnswerChanges(body) {
     const changes = {};
     for (const field of DOCUMENT_ANSWER_FIELDS) {
@@ -154,6 +169,12 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
             max: field === 'student_email' ? 254 : 255
         });
     }
+    if (Object.hasOwn(body, 'residence_application_date')) {
+        changes.residenceApplicationDate = readOptionalApplicationDate(body.residence_application_date, allowIncomplete);
+    }
+    if (Object.hasOwn(body, 'university_registration_date')) {
+        changes.universityRegistrationDate = readOptionalApplicationDate(body.university_registration_date, allowIncomplete);
+    }
     if (Object.hasOwn(body, 'application_type')) {
         if (!APPLICATION_TYPE_VALUES.has(body.application_type)) {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru türünü kontrol edip tekrar deneyin.');
@@ -173,11 +194,16 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
         }
         changes.isUnder18 = body.is_under_18 === null ? null : (body.is_under_18 ? 1 : 0);
     }
-    if (Object.hasOwn(body, 'date_of_birth') || Object.hasOwn(body, 'is_under_18')) {
-        const birthDate = changes.dateOfBirth ?? application.date_of_birth;
-        const under18 = calculateUnder18(birthDate, readIstanbulDate());
+    if (Object.hasOwn(body, 'date_of_birth')) {
+        changes.dateOfBirth = requireString(body, 'date_of_birth', { min: allowIncomplete ? 0 : 1, max: 255 });
+    }
+    if (Object.hasOwn(body, 'date_of_birth') || Object.hasOwn(body, 'residence_application_date') || Object.hasOwn(body, 'is_under_18')) {
+        const birthDate = Object.hasOwn(changes, 'dateOfBirth') ? changes.dateOfBirth : application.date_of_birth;
+        const residenceApplicationDate = Object.hasOwn(changes, 'residenceApplicationDate')
+            ? changes.residenceApplicationDate : application.residence_application_date;
+        const under18 = calculateUnder18(birthDate, residenceApplicationDate);
         if (under18 === null && !allowIncomplete) {
-            throw new ApiError(400, 'VALIDATION_ERROR', 'Doğum tarihini kontrol edip tekrar deneyin.');
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Doğum tarihi ve e-İkamet başvuru tarihini kontrol edip tekrar deneyin.');
         }
         changes.isUnder18 = under18 === null ? null : (under18 ? 1 : 0);
     }
@@ -491,6 +517,10 @@ export async function submitCurrentApplication(request, environment, requestId) 
 
     const submitted = await repositories.applications.submitDraft({
         applicationId: session.application_id,
+        expectedLockVersion: application.lock_version,
+        ownerSessionId: session.session_id,
+        requiredDocumentCodes: listDocumentPolicies(application.application_type, application.is_under_18 === 1, application)
+            .filter((policy) => policy.required).map((policy) => policy.code),
         submittedAt: new Date().toISOString(),
         auditEventId: crypto.randomUUID(),
         requestId
@@ -552,7 +582,7 @@ export async function accessApplicationWithReference(request, environment, reque
         }
 
         application = await repositories.applications.findByReferenceNumber(referenceNumber);
-        if (!application || ['completed', 'cancelled', 'rejected'].includes(application.status)
+        if (!application
             || !constantTimeCompare(submittedStudentNumber, normalizeStudentNumber(application.student_number))) {
             return rejectAccessCredentials({ repositories, request, referenceNumber });
         }
@@ -561,7 +591,7 @@ export async function accessApplicationWithReference(request, environment, reque
             return rejectAccessCredentials({ repositories, request, referenceNumber });
         }
         application = await repositories.applications.findByReferenceNumber(referenceNumber);
-        if (!application || !application.access_code_hash || ['completed', 'cancelled', 'rejected'].includes(application.status)) {
+        if (!application || !application.access_code_hash) {
             await verifyAccessCode(rawCode, '0000000000000000000000000000000000000000000000000000000000000000');
             return rejectAccessCredentials({ repositories, request, referenceNumber });
         }

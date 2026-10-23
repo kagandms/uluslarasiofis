@@ -37,7 +37,7 @@ const POLICIES = Object.freeze([
     { code: 'residence_application_form', order: 1, label: 'documentResidenceApplicationForm', help: 'documentResidenceApplicationFormHelp' },
     { code: 'passport', order: 2, label: 'documentPassport', help: 'documentPassportHelp' },
     { code: 'photographs', order: 3, label: 'documentPhotographs', help: 'documentPhotographsHelp' },
-    { code: 'health_insurance', order: 5, label: 'documentHealthInsurance', help: 'documentHealthInsuranceHelp', conditional_rule: 'bilateral_insurance' },
+    { code: 'health_insurance', order: 5, label: 'documentHealthInsurance', help: 'documentHealthInsuranceHelp', conditional_rule: 'health_insurance_document' },
     { code: 'uets', order: 6, label: 'documentUets', help: 'documentUetsHelp', application_types: ['renewal'], conditional_rule: 'uets' },
     { code: 'student_certificate', order: 7, label: 'documentStudentCertificate', help: 'documentStudentCertificateHelp' },
     { code: 'residence_permit_fee', order: 8, label: 'documentResidencePermitFee', help: 'documentResidencePermitFeeHelp' },
@@ -101,13 +101,13 @@ function isPolicyApplicable(policy, applicationType, isUnder18, addressContext) 
     case 'uets': return applicationType === 'renewal' && !isUnder18;
     case 'address_utility_bill': return applicationType === 'renewal';
     case 'registered_address': return applicationType === 'renewal' || accommodation === 'residence_certificate';
-    case 'under18': return isUnder18 && context.minor_entry_type !== 'student_visa' && context.minor_parents_identified === 'no';
-    case 'minor_optional_parent_documents': return isUnder18 && context.minor_entry_type !== 'student_visa';
+    case 'under18': return isUnder18 && context.minor_parents_identified === 'no';
+    case 'minor_optional_parent_documents': return isUnder18;
     case 'host_spouse_undertaking': return accommodation === 'undertaking' && context.host_is_married === 'yes';
-    case 'minor_consent': return isUnder18 && context.minor_entry_type !== 'student_visa';
-    case 'minor_family_evidence': return isUnder18 && context.minor_entry_type !== 'student_visa'
+    case 'minor_consent': return isUnder18;
+    case 'minor_family_evidence': return isUnder18
         && ['divorced', 'deceased', 'single_parent', 'absent'].includes(context.minor_family_status);
-    case 'bilateral_insurance': return context.insurance_basis === 'bilateral_agreement';
+    case 'health_insurance_document': return context.insurance_basis === 'bilateral_agreement';
     default: return true;
     }
 }
@@ -135,7 +135,7 @@ function createStudentPolicyDto(policy) {
  */
 export function readDocumentPolicy(code, applicationType, isUnder18, addressEvidenceType = null) {
     if (addressEvidenceType?.document_policy_version === 1) {
-        return readLegacyPolicy(code, applicationType, isUnder18, addressEvidenceType.address_evidence_type);
+        return readLegacyPolicy(code, applicationType, isUnder18, addressEvidenceType);
     }
     const policy = POLICIES.find((entry) => entry.code === code);
     return policy && isPolicyApplicable(policy, applicationType, isUnder18, addressEvidenceType)
@@ -151,7 +151,7 @@ export function readDocumentPolicy(code, applicationType, isUnder18, addressEvid
  */
 export function listDocumentPolicies(applicationType, isUnder18, addressEvidenceType = null) {
     if (addressEvidenceType?.document_policy_version === 1) {
-        return listLegacyPolicies(applicationType, isUnder18, addressEvidenceType.address_evidence_type);
+        return listLegacyPolicies(applicationType, isUnder18, addressEvidenceType);
     }
     return POLICIES.filter((policy) => isPolicyApplicable(policy, applicationType, isUnder18, addressEvidenceType))
         .sort((left, right) => left.display_order - right.display_order)

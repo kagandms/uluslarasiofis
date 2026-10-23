@@ -2,6 +2,7 @@ import { ACCOMMODATION_TYPES, readAccommodationType, listMissingDocumentAnswers 
 import { isValidPhoneNumber } from '../../shared/phoneNumber.js';
 import { listDocumentPolicies } from '../domain/documentPolicy.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
+import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate } from '../../shared/age.js';
 
 const APPLICATION_TYPES = new Set(['initial', 'renewal']);
 const ACCEPTED_REVISION_STATUSES = new Set(['submitted', 'approved']);
@@ -9,6 +10,7 @@ const ACCEPTED_SCAN_STATUSES = new Set(['pending', 'clean']);
 const REQUIRED_FIELDS = Object.freeze([
     'student_number', 'application_type', 'student_email', 'student_phone', 'first_name',
     'last_name', 'passport_number', 'nationality', 'date_of_birth', 'is_under_18',
+    'residence_application_date', 'university_registration_date',
     'address_evidence_type'
 ]);
 
@@ -20,7 +22,7 @@ function isValidDate(value) {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
     const parsed = new Date(`${value}T00:00:00.000Z`);
     return Number.isFinite(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value
-        && parsed.valueOf() <= Date.now();
+        && value <= readIstanbulDate();
 }
 
 function isTrue(value) {
@@ -33,7 +35,7 @@ function isValidCoreField(field, application) {
     if (field === 'student_email') return isPresentText(value) && value.trim().length <= 254
         && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
     if (field === 'student_phone') return isValidPhoneNumber(value) && value.trim().length <= 40;
-    if (field === 'date_of_birth') return isValidDate(value);
+    if (['date_of_birth', 'residence_application_date', 'university_registration_date'].includes(field)) return isValidDate(value);
     if (field === 'is_under_18') return value === 0 || value === 1 || typeof value === 'boolean';
     if (field === 'address_evidence_type') return ACCOMMODATION_TYPES.includes(readAccommodationType(application));
     return isPresentText(value) && value.trim().length <= 255;
@@ -54,6 +56,14 @@ function uniqueSorted(values) {
 
 function readMissingFields(application, declarationVersion) {
     const missingFields = REQUIRED_FIELDS.filter((field) => !isValidCoreField(field, application));
+    const calculatedUnder18 = calculateUnder18(application.date_of_birth, application.residence_application_date);
+    if (calculatedUnder18 === null || Number(application.is_under_18) !== Number(calculatedUnder18)) {
+        missingFields.push('is_under_18');
+    }
+    if (application.insurance_basis === 'gss_pending') {
+        const deadline = calculateGssRegistrationDeadline(application.university_registration_date);
+        if (!deadline || readIstanbulDate() > deadline) missingFields.push('insurance_basis');
+    }
     missingFields.push(...listMissingDocumentAnswers(application));
     if (!isPresentText(application.student_number) || application.student_number.length > 64) missingFields.push('student_number');
     if (application.fingerprint_status !== 'registered' || !isPresentText(application.fingerprint_code)

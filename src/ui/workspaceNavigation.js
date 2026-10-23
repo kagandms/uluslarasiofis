@@ -101,8 +101,7 @@ function handleNavigationShortcut(event) {
         focusHomeScreen();
         return;
     }
-    const source = event.target;
-    if (source instanceof document.defaultView.Element && source.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
+    if (event.target instanceof document.defaultView.Element && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]')) return;
     const cards = document.querySelectorAll('#home-screen .home-action');
     const card = cards[Number(event.key) - 1];
     if (!card) return;

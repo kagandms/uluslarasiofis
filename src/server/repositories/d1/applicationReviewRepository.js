@@ -39,12 +39,6 @@ export function createApplicationReviewRepository(database, notes) {
                     ? 'staff.application_review_started' : 'staff.application_status_changed',
                 staffId, applicationId, requestId, JSON.stringify({ applicationStatus: targetStatus, result: 'success' }))
             ];
-            if (isCompleted) {
-                statements.push(database.prepare(`
-                    UPDATE application_sessions SET revoked_at = ?
-                    WHERE application_id = ? AND revoked_at IS NULL AND changes() = 1
-                `).bind(now, applicationId));
-            }
             if (currentStatus === 'completed') {
                 statements.push(database.prepare(`
                     UPDATE application_sessions SET revoked_at = NULL

@@ -13,14 +13,16 @@ const SCENARIOS = [
     { address_evidence_type: 'undertaking', host_is_married: 'yes', codes: ['host_spouse_undertaking'] },
     { application_type: 'renewal', address_evidence_type: 'rental_contract', codes: ['address_residence_certificate', 'home_utility_bill'] },
     { address_evidence_type: 'undertaking', host_is_married: 'no', codes: [] },
+    { insurance_basis: 'system_verified', codes: [] },
     { insurance_basis: 'bilateral_agreement', codes: ['health_insurance'] },
-    { date_of_birth: '2012-01-01', minor_entry_type: 'other', minor_parents_identified: 'no', minor_family_status: 'divorced',
+    { date_of_birth: '2012-01-01', minor_parents_identified: 'no', minor_family_status: 'divorced',
         codes: ['birth_certificate_under18', 'minor_consent', 'minor_family_evidence'] }
 ];
 
 async function applyScenario(context, app, scenario) {
     const current = await portalRequest(context, '/api/public/applications/current', { cookie: app.cookie });
     const { codes, ...answers } = scenario;
+    if (Object.hasOwn(answers, 'date_of_birth')) answers.residence_application_date = '2026-10-23';
     const response = await portalRequest(context, '/api/public/applications/current', { cookie: app.cookie, method: 'PATCH',
         body: { lock_version: (await current.json()).application.lock_version, ...answers } });
     assert.equal(response.status, 200, await response.clone().text());
@@ -53,16 +55,23 @@ test('upload intent rejects a residence-card document and keeps photos available
     assert.equal(photograph.status, 201);
 });
 
-test('student-visa minors cannot upload parental consent or conditional parent evidence', async () => {
+test('student-visa minors follow the same official consent and conditional evidence rules', async () => {
     const context = await createRealScannerFixture();
     const app = await createSyntheticDraft(context);
-    await applyScenario(context, app, { date_of_birth: '2012-01-01', minor_entry_type: 'student_visa', codes: [] });
+    await applyScenario(context, app, { date_of_birth: '2012-01-01',
+        minor_family_status: 'both_parents', minor_parents_identified: 'yes', codes: [] });
 
-    for (const code of ['minor_consent', 'minor_family_evidence', 'birth_certificate_under18', 'parent_permit_copy']) {
+    for (const code of ['minor_family_evidence', 'birth_certificate_under18']) {
         const response = await portalRequest(context, '/api/public/applications/current/documents/upload-intent', {
             cookie: app.cookie, method: 'POST', body: { code, filename: 'parent-document.pdf', media_type: 'application/pdf', byte_size: 4 }
         });
         assert.equal(response.status, 404, code);
+    }
+    for (const code of ['minor_consent', 'parent_permit_copy']) {
+        const response = await portalRequest(context, '/api/public/applications/current/documents/upload-intent', {
+            cookie: app.cookie, method: 'POST', body: { code, filename: 'parent-document.pdf', media_type: 'application/pdf', byte_size: 4 }
+        });
+        assert.equal(response.status, 201, code);
     }
 });
 

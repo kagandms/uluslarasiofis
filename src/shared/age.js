@@ -55,3 +55,19 @@ export function readIstanbulDate(now = readSynchronizedNow()) {
 export function calculateCurrentUnder18(dateOfBirth) {
     return calculateUnder18(dateOfBirth, readIstanbulDate());
 }
+
+/**
+ * Returns the final eligible day in the three-calendar-month GSS registration window.
+ * @param {string|null} universityRegistrationDate ISO date-only university registration date.
+ * @returns {string|null} Inclusive GSS deadline, or null for an invalid date.
+ */
+export function calculateGssRegistrationDeadline(universityRegistrationDate) {
+    const registrationDate = readCalendarDate(universityRegistrationDate);
+    if (!registrationDate) return null;
+    const targetMonthIndex = registrationDate.year * 12 + registrationDate.month - 1 + 3;
+    const targetYear = Math.floor(targetMonthIndex / 12);
+    const targetMonth = targetMonthIndex % 12 + 1;
+    const lastTargetDay = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
+    const deadlineDay = Math.min(registrationDate.day, lastTargetDay);
+    return `${String(targetYear).padStart(4, '0')}-${String(targetMonth).padStart(2, '0')}-${String(deadlineDay).padStart(2, '0')}`;
+}

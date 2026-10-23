@@ -42,25 +42,29 @@ async function initializeTrackingAndLookup(document, root, api) {
                 const payload = cachedPayload;
                 cachedPayload = null;
                 payload.application.student_number ||= studentNumber;
+                payload.application.reference_number ||= 'ITU-7K9M-4X2P';
                 return payload;
             }
             const payload = await api.readCurrentApplicationTracking();
             const ownerNumber = lookupResult?.application?.student_number;
             if (ownerNumber && !payload.application.student_number) payload.application.student_number = ownerNumber;
+            payload.application.reference_number ||= lookupResult?.application?.reference_number || 'ITU-7K9M-4X2P';
             return payload;
         },
         async lookupApplicationTracking(number) {
             if (api.lookupApplicationTracking) {
                 lookupResult = await api.lookupApplicationTracking(number);
+                lookupResult.application.reference_number ||= number;
                 return lookupResult;
             }
             cachedPayload = await api.readCurrentApplicationTracking();
             cachedPayload.application.student_number ||= studentNumber;
+            cachedPayload.application.reference_number ||= 'ITU-7K9M-4X2P';
             return { found: true, ...cachedPayload };
         }
     };
     const result = await initializeApplicationTracking(root, lookupApi);
-    root.querySelector('[name="student_number"]').value = studentNumber;
+    root.querySelector('[name="reference_number"]').value = 'ITU-7K9M-4X2P';
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await flushAsync();
     return result;
@@ -852,7 +856,7 @@ test('tracking view: public lookup does not mount preference controls or leak pr
     const initial = await initializeApplicationTracking(root, api);
     assert.equal(initial.kind, 'lookup');
 
-    const lookupInput = root.querySelector('#tracking-student-number');
+    const lookupInput = root.querySelector('#tracking-application-reference');
     lookupInput.value = 'PUBLIC-STU-1';
     lookupInput.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));

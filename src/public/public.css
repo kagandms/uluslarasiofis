@@ -419,7 +419,7 @@ html[dir="rtl"] .resubmission-upload-control { direction: rtl; }
 html[dir="rtl"] input[type="tel"],
 html[dir="rtl"] input[type="email"],
 html[dir="rtl"] input[name="passport_number"],
-html[dir="rtl"] input[name="student_number"],
+html[dir="rtl"] input[name="reference_number"],
 html[dir="rtl"] input[name="fingerprint_code"] {
     direction: ltr;
     text-align: end;

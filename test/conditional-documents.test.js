@@ -25,6 +25,7 @@ test('current applications request the official form documents without a residen
         assert.equal(codes.includes('uets'), application_type === 'renewal');
     }
     assert.ok(readCodes({ ...ADULT, insurance_basis: 'bilateral_agreement' }).includes('health_insurance'));
+    assert.equal(readCodes({ ...ADULT, insurance_basis: 'system_verified' }).includes('health_insurance'), false);
 });
 
 test('renewal adds residence registration and bill independently to every accommodation branch', () => {
@@ -50,8 +51,8 @@ test('married hosts require spouse undertaking and host identity copy is not req
     assert.equal(readDocumentPolicy('host_identity_copy', 'initial', false, application), null);
 });
 
-test('minor entry basis exempts student-visa applicants from consent and parent evidence', () => {
-    const minor = { ...ADULT, is_under_18: 1, minor_entry_type: 'other', minor_parents_identified: 'no', minor_family_status: 'divorced' };
+test('all minors require consent while family evidence follows the official conditional cases', () => {
+    const minor = { ...ADULT, is_under_18: 1, minor_parents_identified: 'no', minor_family_status: 'divorced' };
     const codes = readCodes(minor);
     for (const code of ['birth_certificate_under18', 'minor_consent', 'minor_family_evidence']) assert.ok(codes.includes(code));
     const bothParents = readCodes({ ...minor, minor_parents_identified: 'yes', minor_family_status: 'both_parents' });
@@ -62,10 +63,8 @@ test('minor entry basis exempts student-visa applicants from consent and parent 
     for (const minor_family_status of ['divorced', 'deceased', 'single_parent', 'absent']) {
         assert.ok(readCodes({ ...minor, minor_family_status }).includes('minor_family_evidence'));
     }
-    const studentVisa = readCodes({ ...minor, minor_entry_type: 'student_visa' });
-    for (const code of ['birth_certificate_under18', 'minor_consent', 'minor_family_evidence', 'parent_permit_copy']) {
-        assert.equal(studentVisa.includes(code), false);
-    }
+    assert.equal(listDocumentPolicies('initial', true, minor)
+        .find(({ code }) => code === 'parent_permit_copy')?.required, false);
     const adult = readCodes({ ...minor, is_under_18: 0 });
     assert.equal(adult.some((code) => code.startsWith('minor_') || code === 'birth_certificate_under18'), false);
 });
@@ -79,9 +78,7 @@ test('renewal omits UETS for applicants under 18', () => {
 test('unanswered and invalid conditional questions block server readiness even with no missing document uploads', () => {
     const application = { ...ADULT, accommodation_type: 'undertaking', is_under_18: 1 };
     const missing = listMissingDocumentAnswers(application);
-    assert.deepEqual(missing, ['host_is_married', 'minor_entry_type', 'insurance_basis']);
-    assert.deepEqual(listMissingDocumentAnswers({ ...application, minor_entry_type: 'other' }),
-        ['host_is_married', 'minor_family_status', 'minor_parents_identified', 'insurance_basis']);
+    assert.deepEqual(missing, ['host_is_married', 'minor_family_status', 'minor_parents_identified', 'insurance_basis']);
     const result = evaluateSubmissionReadiness(application, [], [], { declarationVersion: 'test' });
     missing.forEach((field) => assert.ok(result.missing_fields.includes(field)));
     assert.equal(result.status, 'not_ready');
@@ -134,7 +131,7 @@ test('owner PATCH persists new accommodation and answers, survives reload and dr
     assert.equal(environment.DB.prepare('SELECT host_is_married FROM applications').first().host_is_married, null);
 });
 
-test('insurance proof is requested only for bilateral coverage, while other coverage paths require no upload', () => {
+test('insurance proof is requested only for bilateral coverage', () => {
     assert.equal(readDocumentPolicy('health_insurance', 'initial', false, { insurance_basis: 'system_verified' }), null);
     assert.equal(readDocumentPolicy('health_insurance', 'renewal', false, { insurance_basis: 'gss_pending' }), null);
     assert.equal(readDocumentPolicy('health_insurance', 'initial', false, { insurance_basis: 'bilateral_agreement' }).required, true);

@@ -27,7 +27,10 @@ function createDraft(environment, studentNumber, address = CAMPUS_ADDRESS) {
 }
 
 function lookup(environment, studentNumber, address = CAMPUS_ADDRESS) {
-    return request(environment, '/api/public/applications/tracking-lookup', { address, body: { student_number: studentNumber } });
+    const referenceNumber = environment.DB.prepare(`SELECT applications.reference_number FROM applications
+        JOIN students ON students.id=applications.student_id WHERE students.normalized_student_number=?`).bind(studentNumber).first()?.reference_number
+        || 'ITU-7K9M-4X2P';
+    return request(environment, '/api/public/applications/tracking-lookup', { address, body: { reference_number: referenceNumber } });
 }
 
 function expireWindow(database, endpoint) {
@@ -36,10 +39,13 @@ function expireWindow(database, endpoint) {
 }
 
 function seedTrackableStudent(database, index) {
+    const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+    const suffix = `${alphabet[Math.floor(index / alphabet.length)]}${alphabet[index % alphabet.length]}${alphabet[(index + 3) % alphabet.length]}${alphabet[(index + 7) % alphabet.length]}`;
+    const referenceNumber = `ITU-7K9M-${suffix}`;
     database.prepare('INSERT INTO students(id,student_number,normalized_student_number) VALUES(?,?,?)')
         .bind(`student-${index}`, `CAMPUS-${index}`, `CAMPUS-${index}`).run();
-    database.prepare("INSERT INTO applications(id,student_id,application_type,status) VALUES(?,?,'initial','submitted')")
-        .bind(`application-${index}`, `student-${index}`).run();
+    database.prepare("INSERT INTO applications(id,student_id,application_type,status,reference_number) VALUES(?,?,'initial','submitted',?)")
+        .bind(`application-${index}`, `student-${index}`, referenceNumber).run();
 }
 
 test('twenty distinct students can create drafts through one campus address while the single-active-application rule remains', async (context) => {
@@ -81,7 +87,7 @@ test('twenty students can read their public status through one campus address wi
         assert.equal(response.status, 200, `campus status ${index + 1}`);
         const payload = await response.json();
         assert.equal(payload.found, true);
-        assert.equal(payload.application.student_number, `CAMPUS-${index}`);
+        assert.equal(payload.application.student_number, undefined);
         assert.equal(response.headers.get('Set-Cookie'), null);
         assert.doesNotMatch(JSON.stringify(payload), /reference_number|access_code|token_hash|session/i);
     }

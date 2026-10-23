@@ -20,6 +20,8 @@ function createApplication(overrides = {}) {
         passport_number: 'P123456',
         nationality: 'Turkish',
         date_of_birth: '2000-01-01',
+        residence_application_date: '2026-10-23',
+        university_registration_date: '2026-09-01',
         is_under_18: 0,
         address_evidence_type: 'rental_contract',
         fingerprint_status: 'registered',
@@ -143,7 +145,7 @@ test('renewal requires current UETS while initial applications do not', () => {
 });
 
 test('under-18 applications require the birth certificate and adults do not', () => {
-    const minor = createApplication({ is_under_18: 1 });
+    const minor = createApplication({ date_of_birth: '2010-01-01', is_under_18: 1 });
     const readiness = evaluate(minor, createReadyDocuments(minor).filter(({ code }) => code !== 'birth_certificate_under18'));
     assert.deepEqual(readiness.missing_documents, ['birth_certificate_under18']);
 

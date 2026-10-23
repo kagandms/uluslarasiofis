@@ -181,6 +181,8 @@ test('staff starts review explicitly and application status updates use optimist
 test('approved workflow transitions require all applicable current required documents to be approved', async () => {
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database, { studentNumber: 'STUDENT-DONE' });
+    await database.prepare("UPDATE applications SET reference_number = 'ITU-2345-6789' WHERE id = ?")
+        .bind(applicationId).run();
     const firstOwnerCookie = await seedOwnerSession(database, applicationId, 'owner-session-complete-a-00000000000000000');
     const secondOwnerCookie = await seedOwnerSession(database, applicationId, 'owner-session-complete-b-00000000000000000');
     const otherApplicationId = await seedApplication(database, { studentNumber: 'STUDENT-OTHER-DONE' });
@@ -255,18 +257,17 @@ test('approved workflow transitions require all applicable current required docu
         SELECT revoked_at FROM application_sessions WHERE application_id = ? ORDER BY created_at, id
     `).bind(applicationId).all().results;
     assert.equal(completedSessions.length, 2);
-    assert.ok(completedSessions.every(({ revoked_at }) => revoked_at === database.prepare(
-        'SELECT terminal_at FROM applications WHERE id = ?'
-    ).bind(applicationId).first().terminal_at));
+    assert.ok(completedSessions.every(({ revoked_at }) => revoked_at === null));
     assert.equal(database.prepare('SELECT revoked_at FROM application_sessions WHERE application_id = ?')
         .bind(otherApplicationId).first().revoked_at, null);
 
-    const revokedOwnerTracking = await worker.fetch(request('/api/public/applications/current/tracking', {
+    const completedOwnerTracking = await worker.fetch(request('/api/public/applications/current/tracking', {
         cookie: secondOwnerCookie
     }), environment);
-    assert.equal(revokedOwnerTracking.status, 401);
+    assert.equal(completedOwnerTracking.status, 200);
+    assert.equal((await readJson(completedOwnerTracking)).application.status, 'completed');
     const completedLookup = await worker.fetch(request('/api/public/applications/tracking-lookup', {
-        method: 'POST', body: { student_number: 'STUDENT-DONE' }
+        method: 'POST', body: { reference_number: 'ITU-2345-6789' }
     }), environment);
     const completedLookupPayload = await readJson(completedLookup);
     assert.equal(completedLookup.status, 200);
@@ -460,6 +461,8 @@ test('staff may flag another submitted document during resubmission, but cannot 
 test('resubmission reason, document note, application state, and audit are one atomic operation', async () => {
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database, { studentNumber: 'STUDENT-RESUB' });
+    await database.prepare("UPDATE applications SET reference_number = 'ITU-3456-7892' WHERE id = ?")
+        .bind(applicationId).run();
     const { documentRecordId, revisionId } = await seedReviewableDocument(database, applicationId);
     const cookie = await seedStaff(environment, database);
     const path = `/api/staff/applications/${applicationId}/documents/passport/request-resubmission`;
@@ -527,7 +530,7 @@ test('resubmission reason, document note, application state, and audit are one a
         cookie: `application_session=${ownerToken}`
     }), environment);
     const publicLookup = await worker.fetch(request('/api/public/applications/tracking-lookup', {
-        method: 'POST', body: { student_number: 'STUDENT-RESUB' }
+        method: 'POST', body: { reference_number: 'ITU-3456-7892' }
     }), environment);
     const ownerPayload = await readJson(ownerTracking);
     const lookupPayload = await readJson(publicLookup);

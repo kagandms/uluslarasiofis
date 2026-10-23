@@ -138,14 +138,21 @@ export async function readCurrentResubmissionEligibility() {
 }
 
 /**
- * Looks up a privacy-minimized tracking view using only a student number.
- * @param {string} studentNumber Student number entered on the public tracking page.
+ * Looks up a privacy-minimized online tracking view by its application reference.
+ * @param {string} referenceNumber ITU application reference printed after submission.
  * @returns {Promise<object>} Public-safe tracking result without session authority.
  * @throws {Error} When validation, rate limit, or the lookup request fails.
  */
-export async function lookupApplicationTracking(studentNumber) {
+export async function lookupApplicationTracking(referenceNumber) {
     return requestJson('/api/public/applications/tracking-lookup', {
-        method: 'POST', body: { student_number: studentNumber }
+        method: 'POST', body: { reference_number: referenceNumber }
+    });
+}
+
+/** Looks up the public status of a physical application receipt reference. */
+export async function lookupPhysicalApplicationTracking(referenceNumber) {
+    return requestJson('/api/public/physical-intakes/tracking-lookup', {
+        method: 'POST', body: { tracking_reference: referenceNumber }
     });
 }
 
