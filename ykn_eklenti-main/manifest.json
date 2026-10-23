@@ -33,6 +33,7 @@
       ],
       "js": [
         "yoksis-field-targets.js",
+        "yoksis-student-identity.js",
         "content.js"
       ],
       "run_at": "document_end",

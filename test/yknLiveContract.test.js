@@ -11,6 +11,7 @@ const testDirectory = dirname(fileURLToPath(import.meta.url));
 const fieldTargetsSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/yoksis-field-targets.js'), 'utf8');
 const contentSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/content.js'), 'utf8');
 const zkControlsSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/zk-form-controls.js'), 'utf8');
+const studentIdentitySource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/yoksis-student-identity.js'), 'utf8');
 const backgroundSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/background.js'), 'utf8');
 const portalSecuritySource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/portal-security.js'), 'utf8');
 const storageLifecycleSource = await readFile(resolve(testDirectory, '../ykn_eklenti-main/storage-lifecycle.js'), 'utf8');
@@ -221,6 +222,7 @@ function createContentHarness(markup, url, storedData = {}) {
     installInnerText(window);
     window.eval(fieldTargetsSource);
     window.eval(zkControlsSource);
+    window.eval(studentIdentitySource);
     window.eval(contentSource);
 
     return {
@@ -2015,6 +2017,7 @@ test('önceki öğrencinin salt okunur alanları Temizle sonrası kalsa bile yen
             <table>
                 <tr><td>Adı</td><td><input id="ad" value="GULJEMAL"></td></tr>
                 <tr><td>Soyadı</td><td><input id="soyad" value="SOYEKOVA" readonly></td></tr>
+                <tr><td>Doğum Tarihi</td><td><input id="birth-date" value="19.06.2003"></td></tr>
                 <tr><td>Belge No</td><td><input id="belge-no" value="A2697635" readonly></td></tr>
                 <tr>
                     <td><button id="kaydet-btn" class="z-button">Kaydet</button></td>
@@ -2042,6 +2045,7 @@ test('önceki öğrencinin salt okunur alanları Temizle sonrası kalsa bile yen
                 <table>
                     <tr><td>Adı</td><td><input id="ad" value="NEWSTUDENT"></td></tr>
                     <tr><td>Soyadı</td><td><input id="soyad" value="NEWSURNAME"></td></tr>
+                    <tr><td>Doğum Tarihi</td><td><input id="birth-date" value="19.06.2003"></td></tr>
                     <tr><td>Belge No</td><td><input id="belge-no" value="B9999999"></td></tr>
                     <tr>
                         <td><button id="kaydet-btn" class="z-button">Kaydet</button></td>
@@ -2057,7 +2061,7 @@ test('önceki öğrencinin salt okunur alanları Temizle sonrası kalsa bile yen
             action: 'searchWithId',
             kabulId: 'NEW-999-ID',
             requestId: 'second-student-transition',
-            expectedStudent: { studentName: 'NEWSTUDENT', studentSurname: 'NEWSURNAME', passportNo: 'B9999999' }
+            expectedStudent: { studentName: 'NEWSTUDENT', studentSurname: 'NEWSURNAME', birthDate: '19.06.2003', passportNo: 'B9999999' }
         });
 
         assert.equal(response.success, true);

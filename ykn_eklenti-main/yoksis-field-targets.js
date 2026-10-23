@@ -1,5 +1,5 @@
 (() => {
-    const VERSION = '1.2.104';
+    const VERSION = '1.2.106';
     if (globalThis.YknFieldTargets?.version === VERSION) return;
     const LABEL_SELECTOR = 'label, td, th, span, div, dt, b, strong, legend';
     const TEXT_TYPES = new Set(['hidden', 'button', 'submit', 'reset', 'file', 'checkbox', 'radio']);
