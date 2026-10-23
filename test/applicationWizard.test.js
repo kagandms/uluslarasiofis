@@ -396,6 +396,37 @@ test('resumed valid fingerprint and residence fields initialize Continue enabled
     document.defaultView.close();
 });
 
+test('birth date uses a keyboard-friendly day-month-year text field and saves a canonical ISO date', async () => {
+    const { document, root, state } = await createFingerprintWizard('registered', 'FP-A/42');
+    const birthDate = root.querySelector('[name="date_of_birth"]');
+
+    assert.equal(birthDate.type, 'text');
+    assert.equal(birthDate.inputMode, 'numeric');
+    assert.equal(birthDate.value, '01.01.2000');
+    birthDate.value = '31.10.2005';
+    birthDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    birthDate.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(state.application.date_of_birth, '2005-10-31');
+    assert.equal(root.querySelector('[name="date_of_birth"]').value, '31.10.2005');
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, false);
+    document.defaultView.close();
+});
+
+test('invalid or incomplete birth dates stay visible and block Continue with a clear message', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+    const birthDate = root.querySelector('[name="date_of_birth"]');
+    birthDate.value = '31.02.2005';
+    birthDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.equal(birthDate.validity.customError, true);
+    assert.match(birthDate.validationMessage, /Geçerli bir doğum tarihi/);
+    assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, true);
+    document.defaultView.close();
+});
+
 test('registered fingerprint with missing or whitespace-only code cannot Continue', async () => {
     for (const code of [null, '   ']) {
         const { document, root, state } = await createFingerprintWizard('registered', code);
