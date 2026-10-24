@@ -1,8 +1,8 @@
+import { PDFJS_VERSION } from '../config/pdfjs-version.js';
 import { listRequiredDocumentAnswers } from '../shared/document-conditions.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
-import { createNotificationApi, createNotificationManager } from './notificationManager.js';
 
 const STATUS_LABELS = Object.freeze({
     submitted: 'Gönderildi', under_review: 'İncelemede', resubmission_required: 'Yeniden yükleme gerekli',
@@ -26,7 +26,8 @@ const STATUS_ACTION_LABELS = Object.freeze({
     approved_for_processing: 'İşlem İçin Onayla',
     sent_to_migration: 'Göç İdaresine Aktarıldı Olarak İşaretle',
     migration_approved: 'Göç İdaresi Onayladı',
-    completed: 'Başvuruyu Tamamla'
+    completed: 'Başvuruyu Tamamla',
+    rejected: 'Başvuruyu Reddet'
 });
 const STATUS_ORDER = Object.freeze({
     submitted: 1,
@@ -45,6 +46,7 @@ const STATUS_REVERT_LABELS = Object.freeze({
 });
 
 function isStatusRevert(currentStatus, targetStatus) {
+    if (targetStatus === 'rejected') return false;
     return (STATUS_ORDER[targetStatus] || 0) < (STATUS_ORDER[currentStatus] || 0);
 }
 const APPLICATION_DOCUMENT_ROUTE = (applicationId, code, action) =>
@@ -316,7 +318,7 @@ function createApplicationSummary(document, application) {
         ['Telefon', application.phone], ['Pasaport No', application.passport_number], ['Uyruk', application.nationality],
         ['Doğum tarihi', application.date_of_birth],
         ['e-İkamet başvuru tarihi', application.residence_application_date],
-        ['Üniversite kayıt tarihi', application.university_registration_date],
+        ['Akademik yıl başlangıç tarihi', application.academic_year_start_date],
         ...(application.application_type === 'transition' ? [
             ['Yabancı kimlik no', application.transition_foreign_id],
             ['Mevcut kart seri no', application.transition_card_serial],
@@ -484,7 +486,7 @@ function createDocumentSection(document, applicationId, documents, state, handle
             notice.setAttribute('role', 'status');
             card.append(notice);
         }
-        details.className = 'staff-application-details-grid';
+        details.className = 'staff-application-details-grid staff-application-document-details-grid';
         fields.forEach(([fieldLabel, value]) => appendDetail(document, details, fieldLabel, value));
         card.append(details, item.access_available === true
             ? createDocumentAccessActions(document, item, { applicationId, handlers, isPending: Boolean(state.actionPending) })
@@ -519,44 +521,35 @@ function createDocumentSection(document, applicationId, documents, state, handle
 function createApplicationWorkflow(document, application, detail, state, handlers) {
     const section = document.createElement('section');
     section.className = 'staff-application-workflow';
+    section.append(createText(document, 'h4', '', 'Başvuru durumu'));
+    section.append(createText(document, 'p', 'staff-application-current-status', `Mevcut durum: ${readStatusLabel(application.status)}`));
     if (application.status === 'resubmission_required') {
         section.append(createText(document, 'p', 'staff-applications-state', 'Öğrenciden belge bekleniyor.'));
     }
-    for (const targetStatus of detail.allowed_status_transitions || []) {
-        const rejectionReason = targetStatus === 'rejected' ? document.createElement('textarea') : null;
-        if (rejectionReason) {
-            const label = document.createElement('label');
-            label.className = 'staff-application-rejection-label';
-            label.textContent = 'Resmî ret gerekçesi';
-            rejectionReason.id = 'staff-application-rejection-reason';
-            rejectionReason.name = 'rejection_reason';
-            rejectionReason.dataset.action = 'application-rejection-reason';
-            rejectionReason.required = true;
-            rejectionReason.minLength = 5;
-            rejectionReason.maxLength = 1000;
-            rejectionReason.rows = 4;
-            rejectionReason.setAttribute('aria-label', label.textContent);
-            label.htmlFor = rejectionReason.id;
-            section.append(label, rejectionReason);
-        }
-        const isRevert = isStatusRevert(application.status, targetStatus);
-        const label = isRevert
-            ? (STATUS_REVERT_LABELS[targetStatus] || `◀ Durumu Geri Al: ${STATUS_LABELS[targetStatus] || targetStatus}`)
-            : STATUS_ACTION_LABELS[targetStatus];
-        if (!label) continue;
-        const action = document.createElement('button');
-        action.type = 'button';
-        action.className = isRevert ? 'btn btn-outline staff-status-revert-btn' : 'btn btn-primary';
-        action.dataset.action = 'application-status-transition';
-        action.dataset.targetStatus = targetStatus;
-        if (isRevert) action.dataset.isRevert = 'true';
-        action.disabled = Boolean(state.actionPending);
-        action.textContent = state.actionPending === `status:${targetStatus}` ? 'İşleniyor…' : label;
-        action.addEventListener('click', () => {
-            if (rejectionReason && !rejectionReason.reportValidity()) return;
-            handlers.onTransition(targetStatus, rejectionReason?.value.trim() || null);
-        });
-        section.append(action);
+    const transitions = detail.allowed_status_transitions || [];
+    const actions = document.createElement('div');
+    actions.className = 'staff-application-status-actions';
+    actions.setAttribute('role', 'group');
+    actions.setAttribute('aria-label', 'Bu başvuruda kullanılabilen durumlar');
+    transitions.filter((status) => status !== 'rejected' && !isStatusRevert(application.status, status))
+        .forEach((status) => actions.append(createStatusTransitionButton(document, application.status, status, state, handlers)));
+    if (transitions.includes('rejected')) {
+        actions.append(createStatusTransitionButton(document, application.status, 'rejected', state, handlers));
+    }
+    section.append(actions);
+    const reverts = transitions.filter((status) => isStatusRevert(application.status, status));
+    if (reverts.length) {
+        const revertActions = document.createElement('div');
+        revertActions.className = 'staff-application-status-actions staff-application-status-reverts';
+        revertActions.setAttribute('role', 'group');
+        revertActions.setAttribute('aria-label', 'Geri alınabilecek durumlar');
+        reverts.forEach((status) => revertActions.append(
+            createStatusTransitionButton(document, application.status, status, state, handlers)
+        ));
+        section.append(revertActions);
+    }
+    if (state.rejectionTarget === 'rejected' && transitions.includes('rejected')) {
+        section.append(createApplicationRejectionForm(document, state, handlers));
     }
     if (state.actionError && !state.resubmissionDocument) {
         const error = createText(document, 'p', 'staff-application-state', state.actionError);
@@ -566,12 +559,72 @@ function createApplicationWorkflow(document, application, detail, state, handler
     return section;
 }
 
-function validatePreviewCapability(capability) {
+function createStatusTransitionButton(document, currentStatus, targetStatus, state, handlers) {
+    const isRevert = isStatusRevert(currentStatus, targetStatus);
+    const label = isRevert
+        ? (STATUS_REVERT_LABELS[targetStatus] || `◀ Durumu Geri Al: ${STATUS_LABELS[targetStatus] || targetStatus}`)
+        : STATUS_ACTION_LABELS[targetStatus];
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = targetStatus === 'rejected'
+        ? 'btn btn-danger'
+        : (isRevert ? 'btn btn-outline staff-status-revert-btn' : 'btn btn-primary');
+    action.dataset.action = targetStatus === 'rejected' ? 'begin-application-rejection' : 'application-status-transition';
+    action.dataset.targetStatus = targetStatus;
+    if (isRevert) action.dataset.isRevert = 'true';
+    action.disabled = Boolean(state.actionPending);
+    action.textContent = state.actionPending === `status:${targetStatus}` ? 'İşleniyor…' : label;
+    action.addEventListener('click', () => targetStatus === 'rejected'
+        ? handlers.onBeginRejection()
+        : handlers.onTransition(targetStatus, null));
+    return action;
+}
+
+function createApplicationRejectionForm(document, state, handlers) {
+    const form = document.createElement('form');
+    const label = document.createElement('label');
+    const reason = document.createElement('textarea');
+    const submit = document.createElement('button');
+    const cancel = document.createElement('button');
+    form.className = 'staff-application-rejection-form';
+    label.className = 'staff-application-rejection-label';
+    label.textContent = 'Resmî ret gerekçesi';
+    label.htmlFor = 'staff-application-rejection-reason';
+    reason.id = 'staff-application-rejection-reason';
+    reason.name = 'rejection_reason';
+    reason.dataset.action = 'application-rejection-reason';
+    reason.value = state.rejectionReason || '';
+    reason.required = true;
+    reason.minLength = 5;
+    reason.maxLength = 1000;
+    reason.rows = 4;
+    reason.setAttribute('aria-label', label.textContent);
+    reason.addEventListener('input', () => { state.rejectionReason = reason.value; });
+    submit.type = 'submit';
+    submit.className = 'btn btn-danger';
+    submit.dataset.action = 'confirm-application-rejection';
+    submit.disabled = Boolean(state.actionPending);
+    submit.textContent = state.actionPending === 'status:rejected' ? 'İşleniyor…' : 'Ret işlemini onayla';
+    cancel.type = 'button';
+    cancel.className = 'btn btn-outline';
+    cancel.dataset.action = 'cancel-application-rejection';
+    cancel.disabled = Boolean(state.actionPending);
+    cancel.textContent = 'Vazgeç';
+    cancel.addEventListener('click', handlers.onCancelRejection);
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        if (!reason.reportValidity()) return;
+        handlers.onTransition('rejected', reason.value.trim());
+    });
+    form.append(label, reason, createText(document, 'p', 'staff-application-state', 'Ret gerekçesi yalnız ret işlemi onaylandığında öğrenciye iletilir.'), cancel, submit);
+    return form;
+}
+
+function validatePreviewCapability(capability, expectedOrigin) {
     const url = new URL(capability?.url);
     const isValidExpiry = typeof capability?.expires_at === 'string' && Number.isFinite(Date.parse(capability.expires_at));
-    const isPrivateR2Host = /^[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/i.test(url.hostname);
-    if (url.protocol !== 'https:' || url.username || url.password || !isPrivateR2Host
-        || !SAFE_PREVIEW_MEDIA_TYPES.has(capability?.media_type) || !isValidExpiry) {
+    const sameOriginBlob = url.protocol === 'blob:' && url.origin === expectedOrigin;
+    if (!sameOriginBlob || !capability?.blob || !SAFE_PREVIEW_MEDIA_TYPES.has(capability?.media_type) || !isValidExpiry) {
         throw new Error('Preview capability is invalid.');
     }
     return { ...capability, url: url.href };
@@ -621,12 +674,28 @@ function createPreviewPanel(document, preview, handlers) {
         retry.addEventListener('click', (event) => handlers.onRetry(event.currentTarget));
         panel.append(createText(document, 'p', 'staff-applications-state', message), retry);
     } else if (preview.status === 'ready' && preview.capability.media_type === 'application/pdf') {
-        const frame = document.createElement('iframe');
-        frame.title = `Belge önizlemesi: ${preview.document.filename || 'PDF'}`;
-        frame.setAttribute('sandbox', '');
-        frame.referrerPolicy = 'no-referrer';
-        frame.src = preview.capability.url;
-        panel.append(frame);
+        const navigation = document.createElement('div');
+        const previous = document.createElement('button');
+        const next = document.createElement('button');
+        const pageLabel = createText(document, 'span', 'staff-preview-page', `Sayfa ${preview.pageNumber} / ${preview.pageCount}`);
+        const canvas = document.createElement('canvas');
+        navigation.className = 'staff-preview-navigation';
+        previous.type = 'button';
+        previous.className = 'btn btn-outline';
+        previous.dataset.action = 'previous-preview-page';
+        previous.disabled = preview.pageNumber <= 1;
+        previous.textContent = 'Önceki sayfa';
+        previous.addEventListener('click', handlers.onPreviousPage);
+        next.type = 'button';
+        next.className = 'btn btn-outline';
+        next.dataset.action = 'next-preview-page';
+        next.disabled = preview.pageNumber >= preview.pageCount;
+        next.textContent = 'Sonraki sayfa';
+        next.addEventListener('click', handlers.onNextPage);
+        canvas.className = 'staff-preview-pdf-page';
+        canvas.setAttribute('aria-label', `PDF sayfa ${preview.pageNumber}`);
+        navigation.append(previous, pageLabel, next);
+        panel.append(navigation, canvas);
     } else if (preview.status === 'ready') {
         const image = document.createElement('img');
         image.alt = `Belge önizlemesi: ${preview.document.filename || 'Görsel'}`;
@@ -660,8 +729,7 @@ function renderDetail(root, state, handlers) {
             createApplicationArchiveAction(document, state.detail.application.id, state, handlers.onDownloadArchive),
             createApplicationSummary(document, state.detail.application),
             createApplicationWorkflow(document, state.detail.application, state.detail, state, handlers),
-            createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers),
-            handlers.createNotificationPanel()
+            createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers)
         );
     }
     if (state.archiveMessage) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveMessage));
@@ -703,7 +771,23 @@ function createStaffApplicationsApi() {
             return request(`/api/staff/applications/${encodeURIComponent(applicationId)}`, { signal });
         },
         createPreviewCapability(applicationId, code) {
-            return request(APPLICATION_DOCUMENT_ROUTE(applicationId, code, 'preview'), { method: 'POST' });
+            return fetch(APPLICATION_DOCUMENT_ROUTE(applicationId, code, 'preview'), {
+                method: 'POST', credentials: 'same-origin'
+            }).then(async (response) => {
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    throw Object.assign(new Error(payload?.error?.message || 'Staff request failed.'), {
+                        status: response.status, code: payload?.error?.code
+                    });
+                }
+                const mediaType = response.headers.get('Content-Type')?.split(';')[0];
+                if (!SAFE_PREVIEW_MEDIA_TYPES.has(mediaType)) throw new Error('Preview media type is invalid.');
+                const blob = await response.blob();
+                return {
+                    blob, url: URL.createObjectURL(blob), expires_at: new Date(Date.now() + 120_000).toISOString(),
+                    media_type: mediaType
+                };
+            });
         },
         createArchiveManifest(applicationId, signal) {
             return request(`/api/staff/applications/${encodeURIComponent(applicationId)}/documents/archive-manifest`, { method: 'POST', signal });
@@ -745,8 +829,7 @@ function createStaffApplicationsApi() {
                 target_status: targetStatus, expected_updated_at: updatedAt,
                 ...(targetStatus === 'rejected' ? { rejection_reason: rejectionReason } : {})
             });
-        },
-        notifications: createNotificationApi()
+        }
     };
 }
 
@@ -758,10 +841,10 @@ function createStaffApplicationsApi() {
  */
 export function initializeStaffApplicationsManager(root, api = createStaffApplicationsApi()) {
     const document = root.ownerDocument;
-    const notificationManager = createNotificationManager(api.notifications);
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
         actionPending: null, actionError: null, actionNotice: null, scanQueuedCode: null, resubmissionDocument: null,
+        rejectionTarget: null, rejectionReason: '',
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
         archiveError: null, archiveMessage: null,
         query: { q: '', status: 'all', page: 1, page_size: 25 }
@@ -773,6 +856,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     let scanPollStartedAt = 0;
     let previewRequestId = 0;
     let previewTriggerCode = null;
+    let previewRenderTask = null;
     const clearPreviewTimer = () => {
         if (previewTimer !== null) document.defaultView.clearTimeout(previewTimer);
         previewTimer = null;
@@ -796,6 +880,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onPreview: openPreview,
             onClose: closePreview,
             onRetry: () => openPreview(state.preview?.document),
+            onPreviousPage: () => changePreviewPage(-1),
+            onNextPage: () => changePreviewPage(1),
             onApprove: approveDocument,
             onUnapprove: unapproveDocument,
             onScanDocument: prioritizeDocumentScan,
@@ -803,10 +889,10 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onCancelResubmission: cancelResubmission,
             onRequestResubmission: requestResubmission,
             onTransition: transitionApplication,
+            onBeginRejection: beginApplicationRejection,
+            onCancelRejection: cancelApplicationRejection,
             onDownloadArchive: downloadArchive,
-            onDismissToast: dismissToast,
-            createNotificationPanel: () => notificationManager.createPanel(document,
-                state.detail.application, render)
+            onDismissToast: dismissToast
         });
         else renderQueue(root, state, {
             onSearch: submitSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,
@@ -828,6 +914,11 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     function discardPreview() {
         previewRequestId += 1;
         clearPreviewTimer();
+        previewRenderTask?.cancel();
+        previewRenderTask = null;
+        state.preview?.pdfLoadingTask?.destroy?.().catch(() => {});
+        const previewUrl = state.preview?.capability?.url;
+        if (previewUrl?.startsWith('blob:')) document.defaultView.URL.revokeObjectURL?.(previewUrl);
         state.preview = null;
         previewTriggerCode = null;
     }
@@ -902,24 +993,53 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     }
     async function openPreview(documentItem) {
         if (!documentItem || documentItem.access_available !== true) return;
-        clearPreviewTimer();
+        discardPreview();
         const requestId = ++previewRequestId;
         previewTriggerCode = documentItem.code;
         state.preview = { status: 'loading', document: documentItem, capability: null, requestId };
         render();
         root.querySelector('[data-action="close-document-preview"]')?.focus();
+        let capability = null;
+        let pdfDocument = null;
+        let pdfLoadingTask = null;
         try {
-            const capability = validatePreviewCapability(await api.createPreviewCapability(
+            capability = validatePreviewCapability(await api.createPreviewCapability(
                 state.detail.application.id, documentItem.code
-            ));
-            if (state.preview?.requestId !== requestId) return;
+            ), document.defaultView.location.origin);
+            if (state.preview?.requestId !== requestId) {
+                document.defaultView.URL.revokeObjectURL?.(capability.url);
+                return;
+            }
+            if (capability.media_type === 'application/pdf') {
+                if (!document.defaultView.pdfjsLib?.getDocument) await import('./pdfjs-bootstrap.js');
+                pdfLoadingTask = document.defaultView.pdfjsLib.getDocument({
+                    data: new Uint8Array(await capability.blob.arrayBuffer()),
+                    isEvalSupported: false,
+                    cMapUrl: `/pdfjs-support/${PDFJS_VERSION}/cmaps/`,
+                    standardFontDataUrl: `/pdfjs-support/${PDFJS_VERSION}/standard_fonts/`,
+                    cMapPacked: true
+                });
+                pdfDocument = await pdfLoadingTask.promise;
+            }
+            if (state.preview?.requestId !== requestId) {
+                await pdfLoadingTask?.destroy?.();
+                document.defaultView.URL.revokeObjectURL?.(capability.url);
+                return;
+            }
             const expiresIn = Date.parse(capability.expires_at) - Date.now();
             if (expiresIn <= 0) {
                 state.preview = { status: 'expired', document: documentItem, capability: null, requestId };
+                await pdfLoadingTask?.destroy?.();
+                document.defaultView.URL.revokeObjectURL?.(capability.url);
             } else {
-                state.preview = { status: 'ready', document: documentItem, capability, requestId };
+                state.preview = { status: 'ready', document: documentItem, capability, pdfDocument, pdfLoadingTask,
+                    pageNumber: 1, pageCount: pdfDocument?.numPages ?? 0, requestId };
                 previewTimer = document.defaultView.setTimeout(() => {
                     if (state.preview?.requestId !== requestId) return;
+                    previewRenderTask?.cancel();
+                    previewRenderTask = null;
+                    state.preview.pdfLoadingTask?.destroy?.().catch(() => {});
+                    document.defaultView.URL.revokeObjectURL?.(capability.url);
                     state.preview = { status: 'expired', document: documentItem, capability: null, requestId };
                     previewTimer = null;
                     render();
@@ -927,6 +1047,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 }, expiresIn);
             }
             render();
+            if (state.preview?.status === 'ready' && pdfDocument) await renderPreviewPage(1, requestId);
             const focusTarget = state.preview.status === 'expired'
                 ? '[data-action="retry-document-preview"]'
                 : '[data-action="close-document-preview"]';
@@ -934,10 +1055,51 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             return;
         } catch {
             if (state.preview?.requestId !== requestId) return;
+            await pdfLoadingTask?.destroy?.();
+            if (capability?.url) document.defaultView.URL.revokeObjectURL?.(capability.url);
             state.preview = { status: 'error', document: documentItem, capability: null, requestId };
         }
         render();
         root.querySelector('[data-action="retry-document-preview"]')?.focus();
+    }
+    async function renderPreviewPage(pageNumber, requestId) {
+        const preview = state.preview;
+        const canvas = root.querySelector('.staff-preview-pdf-page');
+        if (!preview?.pdfDocument || !canvas || preview.requestId !== requestId) return;
+        previewRenderTask?.cancel();
+        const page = await preview.pdfDocument.getPage(pageNumber);
+        if (state.preview?.requestId !== requestId) return;
+        const baseViewport = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: Math.min(1.5, 960 / baseViewport.width) });
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('PDF preview canvas is unavailable.');
+        const task = page.render({ canvasContext: context, viewport });
+        previewRenderTask = task;
+        try {
+            await task.promise;
+        } catch (error) {
+            if (previewRenderTask !== task) return;
+            throw error;
+        }
+        if (state.preview?.requestId !== requestId) return;
+        canvas.style.width = `${Math.ceil(viewport.width)}px`;
+        preview.pageNumber = pageNumber;
+        previewRenderTask = null;
+    }
+    function changePreviewPage(offset) {
+        const preview = state.preview;
+        if (!preview?.pdfDocument) return;
+        const pageNumber = Math.min(preview.pageCount, Math.max(1, preview.pageNumber + offset));
+        if (pageNumber === preview.pageNumber) return;
+        preview.pageNumber = pageNumber;
+        render();
+        renderPreviewPage(pageNumber, preview.requestId).catch(() => {
+            if (state.preview?.requestId !== preview.requestId) return;
+            state.preview = { status: 'error', document: preview.document, capability: null, requestId: preview.requestId };
+            render();
+        });
     }
     async function loadQueue() {
         if (state.actionPending) return;
@@ -989,6 +1151,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     async function openDetail(applicationId) {
         if (state.actionPending) return;
         discardPreview();
+        state.rejectionTarget = null;
+        state.rejectionReason = '';
         state.view = 'detail';
         state.loading = true;
         state.error = false;
@@ -1050,6 +1214,10 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                     : actionKey.startsWith('status:') && state.detail?.application?.status && isStatusRevert(state.detail.application.status, actionKey.slice(7))
                         ? 'Başvuru durumu geri alındı.'
                         : 'İşlem tamamlandı.';
+            if (actionKey.startsWith('status:')) {
+                state.rejectionTarget = null;
+                state.rejectionReason = '';
+            }
             state.resubmissionDocument = null;
             discardPreview();
             await refreshDetail();
@@ -1057,6 +1225,10 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         } catch (error) {
             state.actionError = readActionError(error);
             if (error?.status === 409) {
+                if (actionKey.startsWith('status:')) {
+                    state.rejectionTarget = null;
+                    state.rejectionReason = '';
+                }
                 state.resubmissionDocument = null;
                 discardPreview();
                 await refreshDetail();
@@ -1145,14 +1317,34 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         ));
     }
     function transitionApplication(targetStatus, rejectionReason = null) {
+        if (targetStatus !== 'rejected') {
+            state.rejectionTarget = null;
+            state.rejectionReason = '';
+        }
         return completeAction(`status:${targetStatus}`, () => api.transitionApplication(
             state.detail.application.id, targetStatus, state.detail.application.updated_at, rejectionReason
         ));
+    }
+    function beginApplicationRejection() {
+        if (state.actionPending) return;
+        state.rejectionTarget = 'rejected';
+        state.rejectionReason = '';
+        state.actionError = null;
+        render();
+        root.querySelector('[data-action="application-rejection-reason"]')?.focus();
+    }
+    function cancelApplicationRejection() {
+        if (state.actionPending) return;
+        state.rejectionTarget = null;
+        state.rejectionReason = '';
+        render();
     }
     function returnToQueue() {
         if (state.actionPending) return;
         clearScanPoll();
         discardPreview();
+        state.rejectionTarget = null;
+        state.rejectionReason = '';
         state.view = 'queue';
         state.error = false;
         state.loading = false;

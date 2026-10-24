@@ -293,7 +293,7 @@ function createApplicationSummary(document, application) {
         ['Telefon', application.phone], ['Pasaport No', application.passport_number], ['Uyruk', application.nationality],
         ['Doğum tarihi', application.date_of_birth],
         ['e-İkamet başvuru tarihi', application.residence_application_date],
-        ['Üniversite kayıt tarihi', application.university_registration_date],
+        ['Akademik yıl başlangıç tarihi', application.academic_year_start_date],
         ...(application.application_type === 'transition' ? [
             ['Yabancı kimlik no', application.transition_foreign_id],
             ['Mevcut kart seri no', application.transition_card_serial],

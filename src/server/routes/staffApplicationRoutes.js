@@ -102,7 +102,7 @@ function createApplicationDetailDto(application) {
         nationality: application.nationality,
         date_of_birth: application.date_of_birth,
         residence_application_date: application.residence_application_date ?? null,
-        university_registration_date: application.university_registration_date ?? null,
+        academic_year_start_date: application.academic_year_start_date ?? null,
         transition_foreign_id: isTransitionApplication ? application.transition_foreign_id ?? null : null,
         transition_card_serial: isTransitionApplication ? application.transition_card_serial ?? null : null,
         transition_card_number: isTransitionApplication ? application.transition_card_number ?? null : null,

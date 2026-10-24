@@ -21,10 +21,13 @@ function attachPrivateStorage(environment) {
     environment.DOCUMENTS = {
         async head(key) { return objects.get(key) ?? null; },
         async put(key, body, options = {}) {
-            objects.set(key, { size: body.byteLength, httpMetadata: options.httpMetadata ?? {} });
+            objects.set(key, { size: body.byteLength, etag: `etag-${key}`, httpMetadata: options.httpMetadata ?? {} });
         },
-        async get(key) {
+        async get(key, options = {}) {
+            const storedObject = objects.get(key);
+            if (options.onlyIf?.etagMatches && options.onlyIf.etagMatches !== storedObject?.etag) return null;
             return objects.has(key) ? { body: new Response('replacement-document').body,
+                size: storedObject.size, etag: storedObject.etag,
                 httpMetadata: { contentType: 'application/pdf' } } : null;
         },
         async delete(key) { objects.delete(key); }
@@ -549,15 +552,32 @@ test('resubmission reason, document note, application state, and audit are one a
     assert.equal(ownerPayload.application.status, 'resubmission_required');
     assert.equal(ownerPassport.status, 'resubmission_required');
     assert.equal(ownerPassport.student_message, 'Belgenin alt kısmı kesilmiş.');
-    assert.equal(ownerPayload.documents.find((document) => document.code === 'address_rental_contract').student_message, 'OTHER-DOCUMENT-SECRET');
+    assert.equal(ownerPayload.documents.find((document) => document.code === 'address_rental_contract').student_message, undefined);
     assert.doesNotMatch(JSON.stringify(ownerPayload), /STAFF-ONLY-SECRET|OTHER-APPLICATION-SECRET/);
     assert.equal(lookupPayload.application.status, 'resubmission_required');
     assert.equal(lookupPassport.student_message, ownerPassport.student_message);
-    assert.equal(lookupPayload.documents.find((document) => document.code === 'address_rental_contract').student_message, 'OTHER-DOCUMENT-SECRET');
+    assert.equal(lookupPayload.documents.find((document) => document.code === 'address_rental_contract').student_message, undefined);
     assert.doesNotMatch(JSON.stringify(lookupPayload), /STAFF-ONLY-SECRET|OTHER-APPLICATION-SECRET/);
     assert.equal(publicLookup.headers.get('Set-Cookie'), null);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_sessions').first().count, sessionsBeforeLookup);
     assert.doesNotMatch(JSON.stringify(lookupPayload), /document_record_id|author_staff_id|application_notes|noteId|staff-only/i);
+
+    await database.prepare("UPDATE document_revisions SET status = 'approved' WHERE id = ?").bind(revisionId).run();
+    await database.prepare("UPDATE document_records SET review_status = 'approved' WHERE id = ?").bind(documentRecordId).run();
+    await database.prepare("UPDATE applications SET status = 'under_review' WHERE id = ?").bind(applicationId).run();
+
+    const ownerAfterApproval = await worker.fetch(request('/api/public/applications/current/tracking', {
+        cookie: `application_session=${ownerToken}`
+    }), environment);
+    const lookupAfterApproval = await worker.fetch(request('/api/public/applications/tracking-lookup', {
+        method: 'POST', body: { reference_number: 'ITU-3456-7892' }
+    }), environment);
+    const approvedOwnerPassport = (await readJson(ownerAfterApproval)).documents.find((document) => document.code === 'passport');
+    const approvedLookupPassport = (await readJson(lookupAfterApproval)).documents.find((document) => document.code === 'passport');
+    assert.equal(approvedOwnerPassport.status, 'approved');
+    assert.equal(approvedOwnerPassport.student_message, undefined);
+    assert.equal(approvedLookupPassport.status, 'approved');
+    assert.equal(approvedLookupPassport.student_message, undefined);
 });
 
 test('resubmission audit failure rolls back document, application, and student note changes', async () => {
