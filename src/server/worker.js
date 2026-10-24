@@ -319,10 +319,14 @@ const worker = {
         }
     },
     async scheduled(controller, environment, executionContext) {
-        const includeOrphanSweep = controller.cron === '0 0 1 * *';
-        if (executionContext?.waitUntil) executionContext.waitUntil(runReceiptCleanupSafely(environment, { includeOrphanSweep }));
-        else await runReceiptCleanupSafely(environment, { includeOrphanSweep });
-        if (controller.cron === '* * * * *') {
+        const isDailyMaintenance = controller.cron === '0 0 * * *';
+        const isMonthlyReceiptSweep = controller.cron === '0 1 1 * *';
+        if (isDailyMaintenance || isMonthlyReceiptSweep) {
+            const cleanup = runReceiptCleanupSafely(environment, { includeOrphanSweep: isMonthlyReceiptSweep });
+            if (executionContext?.waitUntil) executionContext.waitUntil(cleanup);
+            else await cleanup;
+        }
+        if (controller.cron === '*/15 * * * *') {
             if (environment.DB && environment.PRINT_FILES) {
                 try {
                     await runPrintCleanup(environment);
@@ -331,6 +335,9 @@ const worker = {
                     throw cleanupError;
                 }
             }
+            return;
+        }
+        if (controller.cron === '*/5 * * * *') {
             if (environment.APP_ENV === 'production' && environment.DB) {
                 try {
                     await createScannerRepository(environment.DB).reconcile(new Date().toISOString());
@@ -343,8 +350,7 @@ const worker = {
             catch (error) { console.error('Temporary photo cleanup failed.', { errorName: error.name }); }
             return;
         }
-        try { await cleanupMobileTransfers(environment); }
-        catch (error) { console.error('Temporary photo cleanup failed.', { errorName: error.name }); }
+        if (!isDailyMaintenance) return;
         if (environment.DB && environment.DOCUMENTS && typeof environment.DOCUMENTS.put === 'function') {
             try {
                 await backupD1ToR2({

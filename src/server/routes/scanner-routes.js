@@ -35,7 +35,7 @@ async function claim(request, repository, now, environment) {
     }
     const runnerId = requireScannerIdentifier(body.runner_id);
     const applicationIds = readApplicationScope(body.application_ids);
-    if (environment.APP_ENV !== 'production') await repository.reconcile(now);
+    if (environment.APP_ENV === 'local') await repository.reconcile(now);
     const token = [...crypto.getRandomValues(new Uint8Array(32))].map((byte)=>byte.toString(16).padStart(2,'0')).join('');
     const job = await repository.claim({ now,runnerId,tokenHash:await hashScannerValue(token),applicationIds });
     if (!job) return { job:null };

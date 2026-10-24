@@ -5,6 +5,7 @@ import { createPortFixture,portRequest,registerPortPdf } from './physical-port-f
 import { readIstanbulDay,requireApplicationDate,createTrackingReference,normalizeTrackingReference,readReceiptPortalOrigin,TRACKING_ALPHABET } from '../src/server/domain/physical-tracking-policy.js';
 import { validateReceiptPdf } from '../src/server/services/physical-receipt-content.js';
 import { cleanupPhysicalReceipts } from '../src/server/services/physical-receipt-cleanup.js';
+import worker from '../src/server/worker.js';
 
 const BASE='/api/staff/physical-intakes';
 const METADATA={first_name:'Synthetic',last_name:'Student',passport_number:'receipt-test',application_type:'initial',application_date:'2026-10-12',student_number:''};
@@ -401,6 +402,16 @@ test('receipt cleanup can defer orphan bucket sweeps', async () => {
     await cleanupPhysicalReceipts(context.environment, new Date().toISOString(), { includeOrphanSweep: false });
 
     assert.equal(listCalls, 0);
+});
+
+test('scheduled orphan receipt sweep runs on the monthly maintenance trigger', async () => {
+    const context = await fixture();
+    let listCalls = 0;
+    context.storage.list = async () => { listCalls += 1; return { objects: [], truncated: false }; };
+
+    await worker.scheduled({ cron: '0 1 1 * *' }, context.environment);
+
+    assert.equal(listCalls, 1);
 });
 
 test('failed R2 deletion never labels an artifact purged',async()=>{

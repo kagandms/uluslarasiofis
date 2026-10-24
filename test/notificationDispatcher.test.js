@@ -24,8 +24,8 @@ test('background consumer is disabled by default and caps each enabled batch at 
     const disabled = await runNotificationDispatchBatch({ database: fixture.database,
         provider: { async dispatch() { assert.fail('disabled consumer must not dispatch'); } } });
     assert.deepEqual(disabled, { status: 'disabled', processed: 0 });
-    assert.deepEqual(await worker.scheduled({}, fixture.environment), { status: 'disabled', processed: 0 });
-    assert.deepEqual(await worker.scheduled({}, { ...fixture.environment, NOTIFICATION_DISPATCH_ENABLED: 'true' }),
+    assert.deepEqual(await worker.scheduled({ cron: '0 0 * * *' }, fixture.environment), { status: 'disabled', processed: 0 });
+    assert.deepEqual(await worker.scheduled({ cron: '0 0 * * *' }, { ...fixture.environment, NOTIFICATION_DISPATCH_ENABLED: 'true' }),
         { status: 'provider_not_configured', processed: 0 });
     assert.equal(fixture.database.prepare('SELECT status FROM notification_outbox').first().status, 'pending');
 

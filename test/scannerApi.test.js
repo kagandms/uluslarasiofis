@@ -214,7 +214,7 @@ test('scanner heartbeat records health without reconciling the queue', async () 
     assert.equal(reconciliationQueries.length, 0);
 });
 
-test('production scanner claims leave queue repair to the minute schedule', async () => {
+test('production scanner claims leave queue repair to the five-minute schedule', async () => {
     const { environment, database } = fixture();
     environment.APP_ENV = 'production';
     const originalPrepare = database.prepare.bind(database);
@@ -225,6 +225,22 @@ test('production scanner claims leave queue repair to the minute schedule', asyn
     };
 
     const response = await request(environment, 'claim', { body: { runner_id: 'production-runner' } });
+
+    assert.equal(response.status, 200);
+    assert.equal(reconciliationQueries.length, 0);
+});
+
+test('staging scanner claims do not run recurring queue reconciliation', async () => {
+    const { environment, database } = fixture();
+    environment.APP_ENV = 'staging';
+    const originalPrepare = database.prepare.bind(database);
+    const reconciliationQueries = [];
+    database.prepare = (sql) => {
+        if (sql.includes('INSERT OR IGNORE INTO document_scan_jobs')) reconciliationQueries.push(sql);
+        return originalPrepare(sql);
+    };
+
+    const response = await request(environment, 'claim', { body: { runner_id: 'staging-runner' } });
 
     assert.equal(response.status, 200);
     assert.equal(reconciliationQueries.length, 0);
@@ -245,7 +261,7 @@ test('scanner status reads do not reconcile or write the queue', async () => {
     assert.equal(reconciliationQueries.length, 0);
 });
 
-test('production minute schedule repairs the scanner queue', async () => {
+test('production five-minute schedule repairs the scanner queue', async () => {
     const { environment, database } = fixture();
     environment.APP_ENV = 'production';
     const originalPrepare = database.prepare.bind(database);
@@ -255,7 +271,7 @@ test('production minute schedule repairs the scanner queue', async () => {
         return originalPrepare(sql);
     };
 
-    await worker.scheduled({ cron: '* * * * *' }, environment);
+    await worker.scheduled({ cron: '*/5 * * * *' }, environment);
 
     assert.equal(reconciliationQueries.length, 1);
 });
