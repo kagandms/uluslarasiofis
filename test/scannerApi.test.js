@@ -196,3 +196,66 @@ test('ready heartbeat requires real, fresh signature time and complete engine me
     assert.equal(database.prepare('SELECT count(*) AS count FROM scanner_heartbeats').first().count, 0);
     assert.equal((await request(environment, 'heartbeat', { body: ready })).status, 200);
 });
+
+test('scanner heartbeat records health without reconciling the queue', async () => {
+    const { environment, database } = fixture();
+    const originalPrepare = database.prepare.bind(database);
+    const reconciliationQueries = [];
+    database.prepare = (sql) => {
+        if (sql.includes('INSERT OR IGNORE INTO document_scan_jobs')) reconciliationQueries.push(sql);
+        return originalPrepare(sql);
+    };
+    const body = { runner_id: 'mac', health: 'ready', engine_version: '1.5.4', signature_version: '28141',
+        signature_updated_at: new Date().toISOString() };
+
+    const response = await request(environment, 'heartbeat', { body });
+
+    assert.equal(response.status, 200);
+    assert.equal(reconciliationQueries.length, 0);
+});
+
+test('production scanner claims leave queue repair to the minute schedule', async () => {
+    const { environment, database } = fixture();
+    environment.APP_ENV = 'production';
+    const originalPrepare = database.prepare.bind(database);
+    const reconciliationQueries = [];
+    database.prepare = (sql) => {
+        if (sql.includes('INSERT OR IGNORE INTO document_scan_jobs')) reconciliationQueries.push(sql);
+        return originalPrepare(sql);
+    };
+
+    const response = await request(environment, 'claim', { body: { runner_id: 'production-runner' } });
+
+    assert.equal(response.status, 200);
+    assert.equal(reconciliationQueries.length, 0);
+});
+
+test('scanner status reads do not reconcile or write the queue', async () => {
+    const { environment, database } = fixture();
+    const originalPrepare = database.prepare.bind(database);
+    const reconciliationQueries = [];
+    database.prepare = (sql) => {
+        if (sql.includes('INSERT OR IGNORE INTO document_scan_jobs')) reconciliationQueries.push(sql);
+        return originalPrepare(sql);
+    };
+
+    const response = await request(environment, 'status', { method: 'GET' });
+
+    assert.equal(response.status, 200);
+    assert.equal(reconciliationQueries.length, 0);
+});
+
+test('production minute schedule repairs the scanner queue', async () => {
+    const { environment, database } = fixture();
+    environment.APP_ENV = 'production';
+    const originalPrepare = database.prepare.bind(database);
+    const reconciliationQueries = [];
+    database.prepare = (sql) => {
+        if (sql.includes('INSERT OR IGNORE INTO document_scan_jobs')) reconciliationQueries.push(sql);
+        return originalPrepare(sql);
+    };
+
+    await worker.scheduled({ cron: '* * * * *' }, environment);
+
+    assert.equal(reconciliationQueries.length, 1);
+});

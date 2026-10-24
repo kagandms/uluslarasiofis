@@ -6,6 +6,7 @@ import { handleMobileTransfer, cleanupMobileTransfers } from './routes/mobile-tr
 import { requirePrintRequestAccess } from './services/print-access.js';
 import { readStaffPrintUatStatus, uploadPrintUatDocument } from './routes/print-uat-routes.js';
 import { handleScannerRequest, handleStaffScannerRequest, prioritizeStaffDocumentScan } from './routes/scanner-routes.js';
+import { createScannerRepository } from './repositories/d1/scanner-repository.js';
 import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
 import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
 import { isRouteResult } from './http/routeResult.js';
@@ -318,8 +319,9 @@ const worker = {
         }
     },
     async scheduled(controller, environment, executionContext) {
-        if (executionContext?.waitUntil) executionContext.waitUntil(runReceiptCleanupSafely(environment));
-        else await runReceiptCleanupSafely(environment);
+        const includeOrphanSweep = controller.cron === '0 0 1 * *';
+        if (executionContext?.waitUntil) executionContext.waitUntil(runReceiptCleanupSafely(environment, { includeOrphanSweep }));
+        else await runReceiptCleanupSafely(environment, { includeOrphanSweep });
         if (controller.cron === '* * * * *') {
             if (environment.DB && environment.PRINT_FILES) {
                 try {
@@ -327,6 +329,14 @@ const worker = {
                 } catch (cleanupError) {
                     console.error('[Scheduled] Print cleanup failed.', { errorName: cleanupError?.name || 'UnknownError' });
                     throw cleanupError;
+                }
+            }
+            if (environment.APP_ENV === 'production' && environment.DB) {
+                try {
+                    await createScannerRepository(environment.DB).reconcile(new Date().toISOString());
+                } catch (scannerError) {
+                    console.error('[Scheduled] Scanner queue maintenance failed.', { errorName: scannerError?.name || 'UnknownError' });
+                    throw scannerError;
                 }
             }
             try { await cleanupMobileTransfers(environment); }
@@ -352,8 +362,8 @@ const worker = {
     }
 };
 
-async function runReceiptCleanupSafely(environment) {
-    try { await cleanupPhysicalReceipts(environment); }
+async function runReceiptCleanupSafely(environment, options) {
+    try { await cleanupPhysicalReceipts(environment, new Date().toISOString(), options); }
     catch (error) { console.error('Receipt cleanup failed.', { errorName: error.name }); }
 }
 

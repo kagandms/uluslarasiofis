@@ -393,6 +393,16 @@ test('artifact retention protects live/uncertain print attempts and download lea
     assert.equal([...context.objects.keys()].filter(key=>key.startsWith('receipts/')).length,0);
 });
 
+test('receipt cleanup can defer orphan bucket sweeps', async () => {
+    const context = await fixture();
+    let listCalls = 0;
+    context.storage.list = async () => { listCalls += 1; return { objects: [], truncated: false }; };
+
+    await cleanupPhysicalReceipts(context.environment, new Date().toISOString(), { includeOrphanSweep: false });
+
+    assert.equal(listCalls, 0);
+});
+
 test('failed R2 deletion never labels an artifact purged',async()=>{
     const context=await fixture();const registration=await register(context);await ready(context,registration);
     context.database.exec("UPDATE physical_intake_receipts SET expires_at='2000-01-01T00:00:00Z'");
