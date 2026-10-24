@@ -72,8 +72,9 @@ const report = readOnlyVersionReport(
     await cloudflare(`${workerPath}/deployments`), await cloudflare(`${workerPath}/versions`)
 );
 const version = report.active_version;
+const actualCrons = (schedules?.schedules || []).map(item => item.cron);
 const cronState = assertProductionCronSchedules(
-    (schedules?.schedules || []).map(item => item.cron), production.triggers?.crons || [],
+    actualCrons, production.triggers?.crons || [],
     JSON.parse(readFileSync(new URL('../../docs/production-only-evidence/rollback-compatibility.json', import.meta.url), 'utf8')),
     version
 );
