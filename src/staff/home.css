@@ -361,6 +361,7 @@ body.dark-mode::after { opacity: 1; }
 #home-screen.is-entering .home-action:nth-child(5) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 330ms both; }
 #home-screen.is-entering .home-action:nth-child(6) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 395ms both; }
 #home-screen.is-entering .home-action:nth-child(7) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 460ms both; }
+#home-screen.is-entering .home-action:nth-child(8) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 525ms both; }
 
 .workspace-content.is-entering {
     animation: staff-home-content-enter 320ms cubic-bezier(0.18, 0.8, 0.25, 1) both;
