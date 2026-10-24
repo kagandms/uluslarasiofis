@@ -6,6 +6,7 @@ import { hashSessionToken } from '../../src/server/auth/sessionToken.js';
 import worker from '../../src/server/worker.js';
 import { listDocumentPolicies } from '../../src/server/domain/documentPolicy.js';
 import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../src/config/constants.js';
+import { TEST_APPLICATION_PRIVACY_NOTICE, withTestApplicationPrivacyNoticeVersion } from './application-privacy-notice.js';
 
 function createBucket(objects) {
     function objectFor(key) {
@@ -31,6 +32,7 @@ export async function createRealScannerFixture() {
     applyAllMigrations(database);
     const objects = new Map();
     const environment = { DB: database, DOCUMENTS: createBucket(objects), APP_ENV: 'local',
+        PUBLIC_APPLICATION_PRIVACY_NOTICE: TEST_APPLICATION_PRIVACY_NOTICE,
         SCANNER_SECRET: randomBytes(32).toString('base64url'), STAFF_SHARED_USERNAME: 'synthetic-reviewer',
         R2_ACCOUNT_ID: 'a'.repeat(32), R2_BUCKET_NAME: 'synthetic-bucket',
         R2_ACCESS_KEY_ID: 'synthetic-key', R2_SECRET_ACCESS_KEY: 'synthetic-secret' };
@@ -46,8 +48,10 @@ export function portalRequest(context,path,options={}) {
     context.requestCount = (context.requestCount || 0) + 1;
     const headers = { Origin:'https://portal.test', 'CF-Connecting-IP':`198.51.100.${context.requestCount}`,  ...(options.cookie?{Cookie:options.cookie}:{}),
         ...(options.body?{'Content-Type':'application/json'}:{}), ...options.headers };
+    const body = path === '/api/public/applications' && options.method === 'POST'
+        ? withTestApplicationPrivacyNoticeVersion(options.body || {}) : options.body;
     return worker.fetch(new Request(`https://portal.test${path}`,{ method:options.method||'GET',headers,
-        ...(options.body?{body:JSON.stringify(options.body)}:{}) }),context.environment);
+        ...(body?{body:JSON.stringify(body)}:{}) }),context.environment);
 }
 
 export async function createSyntheticDraft(context) {

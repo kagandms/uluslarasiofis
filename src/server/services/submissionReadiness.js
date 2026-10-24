@@ -5,6 +5,7 @@ import { createD1Repositories } from '../repositories/d1/index.js';
 import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate } from '../../shared/age.js';
 
 const APPLICATION_TYPES = new Set(['initial', 'renewal']);
+const APPLICATION_ROUTES = new Set(['standard', 'transition']);
 const ACCEPTED_REVISION_STATUSES = new Set(['submitted', 'approved']);
 const ACCEPTED_SCAN_STATUSES = new Set(['pending', 'clean']);
 const REQUIRED_FIELDS = Object.freeze([
@@ -56,6 +57,15 @@ function uniqueSorted(values) {
 
 function readMissingFields(application, declarationVersion) {
     const missingFields = REQUIRED_FIELDS.filter((field) => !isValidCoreField(field, application));
+    const applicationRoute = application.application_route ?? 'standard';
+    if (!APPLICATION_ROUTES.has(applicationRoute)) missingFields.push('application_route');
+    if (applicationRoute === 'transition') {
+        if (!/^\d{11}$/.test(application.transition_foreign_id || '')) missingFields.push('transition_foreign_id');
+        if (!isPresentText(application.transition_card_serial) || application.transition_card_serial.trim().length > 20) missingFields.push('transition_card_serial');
+        if (!isPresentText(application.transition_card_number) || application.transition_card_number.trim().length > 20) missingFields.push('transition_card_number');
+        if (!['email', 'phone'].includes(application.transition_contact_preference)) missingFields.push('transition_contact_preference');
+        if (!['yes', 'no'].includes(application.transition_change_province)) missingFields.push('transition_change_province');
+    }
     const calculatedUnder18 = calculateUnder18(application.date_of_birth, application.residence_application_date);
     if (calculatedUnder18 === null || Number(application.is_under_18) !== Number(calculatedUnder18)) {
         missingFields.push('is_under_18');

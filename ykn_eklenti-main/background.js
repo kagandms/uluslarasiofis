@@ -40,23 +40,25 @@ function startYknTiming() {
     return globalThis.performance?.now?.() ?? Date.now();
 }
 
-function finishYknTiming(stage, startedAt, outcome = 'ok', reasonCode = undefined) {
+function finishYknTiming(stage, startedAt, outcome = 'ok', reasonCode = undefined, requestId = undefined) {
     if (globalThis.__YKN_DIAGNOSTICS_ENABLED__ !== true) return;
     const now = globalThis.performance?.now?.() ?? Date.now();
     console.info('[YKN_TIMING]', {
         stage,
         durationMs: Math.round(now - startedAt),
         outcome,
+        ...(requestId ? { requestId } : {}),
         ...(reasonCode ? { reasonCode } : {})
     });
 }
 
-function reportYknTiming(stage, durationMs, outcome = 'ok', reasonCode = undefined) {
+function reportYknTiming(stage, durationMs, outcome = 'ok', reasonCode = undefined, requestId = undefined) {
     if (globalThis.__YKN_DIAGNOSTICS_ENABLED__ !== true || !Number.isFinite(durationMs)) return;
     console.info('[YKN_TIMING]', {
         stage,
         durationMs: Math.max(0, Math.round(durationMs)),
         outcome,
+        ...(requestId ? { requestId } : {}),
         ...(reasonCode ? { reasonCode } : {})
     });
 }
@@ -1648,17 +1650,40 @@ async function transferYoksisFieldsAndPhoto(context) {
     return result;
 }
 
-async function fillReadyYoksisStudent(context) {
+async function fillReadyYoksisStudent(context, options = {}) {
     const formReady = await waitForYoksisFormReady(context.tabId, context.requestId, {
         requireBoundSearch: true, expectedKabulId: context.studentData.yoksisId || context.studentData.kabulId || '', expectedStudent: context.studentData
     });
-    if (!formReady) throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
+    if (!formReady && options.manualOverrideConfirmed !== true) {
+        throw new Error('YÖKSİS öğrenci formu hazır değil; aktarım başlatılmadı.');
+    }
+    if (!formReady) {
+        const manualCheck = await checkManualYoksisFill(context);
+        if (manualCheck !== true) {
+            throw new Error('YÖKSİS ekranı manuel aktarım için uygun değil. Kabul kodunu yeniden aratıp doğru öğrenci formunu kontrol edin.');
+        }
+    }
     await saveTemporaryStudentData(context.studentData);
     return await transferYoksisFieldsAndPhoto(context);
 }
 
-async function fillBoundYoksisStudent(studentData, requestId) {
-    if (studentData.yoksisReady !== true) throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
+async function checkManualYoksisFill(context) {
+    const response = await sendTabMessage(context.tabId, {
+        action: 'CHECK_MANUAL_YOKSIS_FILL',
+        requestId: context.requestId,
+        searchRequestId: context.studentData.yoksisSearchRequestId,
+        expectedKabulId: context.studentData.yoksisId || context.studentData.kabulId || '',
+        expectedStudent: context.studentData
+    }, { frameId: 0 });
+    return response?.manualOverrideAllowed === true;
+}
+
+async function fillBoundYoksisStudent(studentData, requestId, options = {}) {
+    const isManualOverride = options.manualOverrideConfirmed === true
+        && studentData.yoksisManualOverrideAvailable === true;
+    if (studentData.yoksisReady !== true && !isManualOverride) {
+        throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
+    }
     const tab = await resolveExpectedYoksisTab(studentData.yoksisTabId, studentData.yoksisTabUrl);
     await updateTab(tab.id, { active: true });
     if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true }).catch(error => {
@@ -1666,7 +1691,7 @@ async function fillBoundYoksisStudent(studentData, requestId) {
     });
     const startedAt = startYknTiming();
     const response = await runYoksisOperation(tab.id, 'fill', requestId, async () => {
-        const result = await fillReadyYoksisStudent({ tabId: tab.id, studentData, requestId });
+        const result = await fillReadyYoksisStudent({ tabId: tab.id, studentData, requestId }, options);
         const isComplete = result.success === true && !result.partial && (result.missingFields || []).length === 0
             && (!studentData.croppedPhotoBase64 || result.photoUploaded === true);
         return { ...result, ...(isComplete ? { temporaryDataCleared: await clearTemporaryStudentData() } : {}) };
@@ -1683,7 +1708,9 @@ async function fillStoredYoksisStudent(request) {
         throw new Error('Kırpılmış fotoğraf verisi bulunamadı veya geçersiz.');
     }
     return await fillBoundYoksisStudent({ ...stored, croppedPhotoBase64: photo, photoBase64: photo,
-        photoFileName: photo ? request.fileName || 'ogrenci_foto.jpg' : '' }, request.requestId);
+        photoFileName: photo ? request.fileName || 'ogrenci_foto.jpg' : '' }, request.requestId, {
+        manualOverrideConfirmed: request.manualOverrideConfirmed === true
+    });
 }
 
 async function searchYoksisFromContent(tabId, kabulId, requestId, expectedStudent = null) {
@@ -1741,6 +1768,7 @@ async function waitForYoksisFormReady(tabId, requestId, options = {}) {
         if (readiness && readiness.formReady === false && readiness.message) {
             options.lastErrorMessage = readiness.message;
         }
+        options.manualOverrideAvailable = readiness?.manualOverrideAvailable === true;
         return Boolean(readiness?.formReady);
     } catch (error) {
         console.warn('[YKN] YÖKSİS form hazır olma kontrolü başarısız:', { errorName: error?.name || 'Error' });
@@ -1761,14 +1789,16 @@ async function runVerifiedMainWorldSearch(tabId, kabulId, requestId, expectedStu
     const searchDispatched = Boolean(results?.some((result) => result.result?.searchTriggered === true));
     if (!searchDispatched) return null;
 
-    const formReady = await waitForYoksisFormReady(tabId, requestId, {
+    const readinessOptions = {
         afterFingerprint: baseline.fingerprint,
         afterDomRevision: baseline.domRevision,
         requireFreshResult: true,
         expectedStudent,
         expectedKabulId: kabulId
-    });
-    if (!formReady) {
+    };
+    const formReady = await waitForYoksisFormReady(tabId, requestId, readinessOptions);
+    const manualOverrideAvailable = readinessOptions.manualOverrideAvailable === true;
+    if (!formReady && !manualOverrideAvailable) {
         throw new Error('YÖKSİS arama komutu gönderildi ancak yeni öğrenci formu doğrulanmadı. Önceki form korunarak işlem durduruldu.');
     }
 
@@ -1776,9 +1806,13 @@ async function runVerifiedMainWorldSearch(tabId, kabulId, requestId, expectedStu
         success: true,
         transferred: true,
         searchTriggered: true,
-        formReady: true,
+        formReady,
+        manualOverrideAvailable,
+        yoksisSearchRequestId: requestId,
         ...(await getVerifiedYoksisTarget(tabId)),
-        message: 'Kabul mektup kodu YÖKSİS’e aktarıldı ve yeni öğrenci formu doğrulandı.'
+        message: formReady
+            ? 'Kabul mektup kodu YÖKSİS’e aktarıldı ve yeni öğrenci formu doğrulandı.'
+            : 'Kabul kodu aratıldı; form otomatik doğrulanamadı. Ekranı kontrol edip manuel aktarımı onaylayabilirsiniz.'
     };
 }
 
@@ -1788,7 +1822,7 @@ async function transferToYoksis(request) {
     try {
         return await transferToYoksisOperation(request, totalStartedAt);
     } catch (error) {
-        finishYknTiming('yoksis-transfer-total', totalStartedAt, 'failed', 'transfer_failed');
+        finishYknTiming('yoksis-transfer-total', totalStartedAt, 'failed', 'transfer_failed', request.requestId);
         throw error;
     }
 }
@@ -1824,11 +1858,11 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             requestId: request.requestId
         }, { frameId: 0 });
         if (navigation?.success !== true) {
-            finishYknTiming('ykn-request-screen-navigation', navigationStartedAt, 'failed', 'navigation_not_confirmed');
+            finishYknTiming('ykn-request-screen-navigation', navigationStartedAt, 'failed', 'navigation_not_confirmed', request.requestId);
             throw new Error(navigation?.error || 'YÖKSİS YKN Talebi V2 ekranı açılamadı.');
         }
-        finishYknTiming('ykn-request-screen-navigation', navigationStartedAt);
-        reportYknTiming('ykn-request-screen-navigation-content', navigation.durationMs);
+        finishYknTiming('ykn-request-screen-navigation', navigationStartedAt, 'ok', undefined, request.requestId);
+        reportYknTiming('ykn-request-screen-navigation-content', navigation.durationMs, 'ok', undefined, request.requestId);
 
         // Öncelik content-script yolunda: arama öncesi/sonrası form imzasını
         // karşılaştırabildiği için eski öğrenci formunu yeni sonuç sanmaz.
@@ -1836,20 +1870,20 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         const searchStartedAt = startYknTiming();
         let response = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId, expectedStudent);
         reportYknTiming('acceptance-input-readiness', response?.timing?.inputReadyDurationMs,
-            response?.timing ? 'ok' : 'unavailable', response?.timing ? undefined : 'timing_unavailable');
+            response?.timing ? 'ok' : 'unavailable', response?.timing ? undefined : 'timing_unavailable', request.requestId);
         reportYknTiming('acceptance-id-write-and-verification', response?.timing?.inputWriteDurationMs,
-            response?.timing ? 'ok' : 'unavailable', response?.timing ? undefined : 'timing_unavailable');
+            response?.timing ? 'ok' : 'unavailable', response?.timing ? undefined : 'timing_unavailable', request.requestId);
         reportYknTiming('search-trigger', response?.timing?.searchClickDurationMs,
-            response?.searchTriggered === true ? 'ok' : 'failed', response?.searchTriggered === true ? undefined : 'search_not_confirmed');
+            response?.searchTriggered === true ? 'ok' : 'failed', response?.searchTriggered === true ? undefined : 'search_not_confirmed', request.requestId);
         reportYknTiming('fresh-form-wait-content', response?.timing?.formWaitDurationMs,
-            response?.formReady === true ? 'ok' : 'pending', response?.formReady === true ? undefined : 'form_not_ready');
+            response?.formReady === true ? 'ok' : 'pending', response?.formReady === true ? undefined : 'form_not_ready', request.requestId);
         let mainTriggered = false;
         // Content-script eski sürümde yalnızca inputu bulup Enter'a basabiliyor
         // veya butonun ZK görsel parçasını kaçırabiliyor. Buton doğrulanmadıysa
         // MAIN-world taramasını kontrollü tek bir fallback olarak kullan.
         if (response?.allowMainFallback === false) throw new Error(response.message || 'Önceki YÖKSİS formu korundu.');
         if (response?.searchTriggered !== true) {
-            finishYknTiming('acceptance-id-input-and-search', searchStartedAt, 'fallback', 'content_search_not_confirmed');
+            finishYknTiming('acceptance-id-input-and-search', searchStartedAt, 'fallback', 'content_search_not_confirmed', request.requestId);
             // Content script arama butonunu bulamadıysa MAIN-world fallback'inden
             // hemen önce güncel form durumunu al. Bu baseline, eski öğrenci
             // formunun fallback sonunda "hazır" sayılmasını engeller.
@@ -1867,18 +1901,18 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             );
             mainTriggered = mainSearch !== null;
             if (mainSearch) {
-                finishYknTiming('fresh-student-form-validation', formValidationStartedAt);
-                finishYknTiming('yoksis-transfer-total', totalStartedAt);
+                finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'ok', undefined, request.requestId);
+                finishYknTiming('yoksis-transfer-total', totalStartedAt, 'ok', undefined, request.requestId);
                 return mainSearch;
             }
         }
 
         const searchTriggered = response?.searchTriggered === true || mainTriggered;
         if (!searchTriggered) {
-            finishYknTiming('acceptance-id-input-and-search', searchStartedAt, 'failed', 'search_not_confirmed');
+            finishYknTiming('acceptance-id-input-and-search', searchStartedAt, 'failed', 'search_not_confirmed', request.requestId);
             throw new Error('YÖKSİS kabul mektubu araması başlatılamadı. Öğrenci başvuru/kayıt ekranını açık tutup tekrar deneyin.');
         }
-        finishYknTiming('acceptance-id-input-and-search', searchStartedAt);
+        finishYknTiming('acceptance-id-input-and-search', searchStartedAt, 'ok', undefined, request.requestId);
 
         if (response?.searchTriggered === true && response.formReady !== true) {
             if (response.message && response.message.startsWith('YÖKSİS:')) {
@@ -1897,8 +1931,8 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 const formValidationStartedAt = startYknTiming();
                 const delayedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, waitOptions);
                 if (delayedFormReady) {
-                    finishYknTiming('fresh-student-form-validation', formValidationStartedAt);
-                    finishYknTiming('yoksis-transfer-total', totalStartedAt);
+                    finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'ok', undefined, request.requestId);
+                    finishYknTiming('yoksis-transfer-total', totalStartedAt, 'ok', undefined, request.requestId);
                     return {
                         success: true,
                         transferred: true,
@@ -1908,7 +1942,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                         message: 'Kabul mektup kodu YÖKSİS’e aktarıldı ve gecikmeli öğrenci formu doğrulandı.'
                     };
                 }
-                finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'failed', 'fresh_form_not_confirmed');
+                finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'failed', 'fresh_form_not_confirmed', request.requestId);
                 const currentFormState = await getYoksisFormState(yoksisTab.id, request.requestId);
                 if (isUnchangedEmptyYoksisForm(
                     currentFormState,
@@ -1924,11 +1958,11 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                         currentFormState
                     );
                     if (fallbackSearch) {
-                        finishYknTiming('acceptance-id-input-and-search', fallbackStartedAt, 'fallback', 'content_click_not_applied');
-                        finishYknTiming('yoksis-transfer-total', totalStartedAt);
+                        finishYknTiming('acceptance-id-input-and-search', fallbackStartedAt, 'fallback', 'content_click_not_applied', request.requestId);
+                        finishYknTiming('yoksis-transfer-total', totalStartedAt, 'ok', undefined, request.requestId);
                         return fallbackSearch;
                     }
-                    finishYknTiming('acceptance-id-input-and-search', fallbackStartedAt, 'failed', 'main_search_not_dispatched');
+                    finishYknTiming('acceptance-id-input-and-search', fallbackStartedAt, 'failed', 'main_search_not_dispatched', request.requestId);
                 }
                 if (waitOptions.lastErrorMessage) {
                     throw new Error(waitOptions.lastErrorMessage);
@@ -1941,10 +1975,25 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         // yeni kayıt sanan asıl hataydı.
         const formReady = response?.formReady === true;
         if (!formReady) {
-            throw new Error('Kabul kodu gönderildi ancak yeni YÖKSİS öğrenci formu doğrulanmadı. Aynı arama otomatik tekrar gönderilmedi.');
+            if (!response?.manualOverrideAvailable) {
+                throw new Error('Kabul kodu gönderildi ancak yeni YÖKSİS öğrenci formu doğrulanmadı. Aynı arama otomatik tekrar gönderilmedi.');
+            }
+            const target = await getVerifiedYoksisTarget(yoksisTab.id);
+            const manualResponse = {
+                success: true,
+                transferred: true,
+                searchTriggered: true,
+                formReady: false,
+                manualOverrideAvailable: true,
+                yoksisSearchRequestId: request.requestId,
+                ...target,
+                message: 'Kabul kodu aratıldı; form otomatik doğrulanamadı. YÖKSİS kaydını kontrol edip manuel aktarımı seçebilirsiniz.'
+            };
+            finishYknTiming('yoksis-transfer-total', totalStartedAt, 'partial', 'manual_confirmation_required', request.requestId);
+            return manualResponse;
         }
 
-        finishYknTiming('yoksis-transfer-total', totalStartedAt);
+        finishYknTiming('yoksis-transfer-total', totalStartedAt, 'ok', undefined, request.requestId);
 
         return {
             success: true,
@@ -1959,9 +2008,12 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         await updateTab(yoksisTab.id, { active: true });
         if (yoksisTab.windowId) await chrome.windows.update(yoksisTab.windowId, { focused: true });
         const response = await performSearch();
-        if (response.success && response.formReady) {
+        if (response.success && (response.formReady || response.manualOverrideAvailable)) {
             await saveTemporaryStudentData({ ...request.data, yoksisId: kabulId,
-                yoksisReady: true, yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
+                yoksisReady: response.formReady === true,
+                yoksisManualOverrideAvailable: response.manualOverrideAvailable === true,
+                yoksisSearchRequestId: response.yoksisSearchRequestId || request.requestId,
+                yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
         }
         return response;
     });
@@ -2197,7 +2249,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return true;
         }
         else if (request.action === 'FILL_YOKSIS_FORM') {
-            void fillBoundYoksisStudent(request.data || {}, request.requestId)
+            void fillBoundYoksisStudent(request.data || {}, request.requestId, {
+                manualOverrideConfirmed: request.manualOverrideConfirmed === true
+            })
                 .then(response => sendResponse({ ...response, requestId: request.requestId }))
                 .catch(error => sendResponse({ success: false, requestId: request.requestId, error: error.message }));
             return true;

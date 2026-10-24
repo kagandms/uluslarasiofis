@@ -123,6 +123,9 @@ test('staff identity-check detail includes the stable reference without exposing
     const applicationId = await seedApplication(database);
     database.prepare("UPDATE applications SET reference_number='ITU-2345-6789',access_code_hash=? WHERE id=?")
         .bind('a'.repeat(64), applicationId).run();
+    database.prepare(`UPDATE applications SET transition_foreign_id='12345678901', transition_card_serial='AB123',
+        transition_card_number='456789', transition_contact_preference='email', transition_change_province='no' WHERE id=?`)
+        .bind(applicationId).run();
     const cookie = await seedStaff(environment, database);
 
     const response = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment);
@@ -132,6 +135,13 @@ test('staff identity-check detail includes the stable reference without exposing
     assert.equal(application.reference_number, 'ITU-2345-6789');
     assert.equal(application.access_code_hash, undefined);
     assert.equal(application.access_code, undefined);
+    assert.deepEqual({
+        foreignId: application.transition_foreign_id,
+        cardSerial: application.transition_card_serial,
+        cardNumber: application.transition_card_number,
+        contactPreference: application.transition_contact_preference,
+        changeProvince: application.transition_change_province
+    }, { foreignId: null, cardSerial: null, cardNumber: null, contactPreference: null, changeProvince: null });
 });
 
 test('staff starts review explicitly and application status updates use optimistic concurrency', async () => {
@@ -881,7 +891,7 @@ test('staff can roll back an accidental status progression and student tracking 
     assert.equal((await readJson(tracking)).application.status, 'sent_to_migration');
 
     let detail = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment);
-    assert.deepEqual((await readJson(detail)).allowed_status_transitions, ['migration_approved', 'approved_for_processing']);
+    assert.deepEqual((await readJson(detail)).allowed_status_transitions, ['migration_approved', 'approved_for_processing', 'rejected']);
 
     // Staff accidentally advances to migration_approved
     res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
@@ -945,4 +955,65 @@ test('staff can roll back an accidental status progression and student tracking 
     assert.equal(restoredApp.status, 'migration_approved');
     assert.equal(restoredApp.terminal_at, null);
     assert.equal(restoredApp.retention_due_at, null);
+});
+
+test('Migration Authority rejection stores an audited reason for the ITU tracking code', async () => {
+    const { environment, database } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'sent_to_migration', studentNumber: 'STUDENT-REJECTED' });
+    await database.prepare("UPDATE applications SET reference_number = 'ITU-2345-6789' WHERE id = ?")
+        .bind(applicationId).run();
+    const staffCookie = await seedStaff(environment, database);
+    const application = database.prepare('SELECT updated_at, reference_number FROM applications WHERE id=?')
+        .bind(applicationId).first();
+    const reason = 'Göç İdaresinin resmî ret kararı: eksik belge.';
+    const missingReason = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie: staffCookie,
+        body: { target_status: 'rejected', expected_updated_at: application.updated_at }
+    }), environment);
+    assert.equal(missingReason.status, 400);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status,
+        'sent_to_migration');
+
+    const response = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie: staffCookie,
+        body: { target_status: 'rejected', expected_updated_at: application.updated_at, rejection_reason: reason }
+    }), environment);
+
+    assert.equal(response.status, 200);
+    const publicTracking = await worker.fetch(request('/api/public/applications/tracking-lookup', {
+        method: 'POST', body: { reference_number: application.reference_number }
+    }), environment);
+    assert.equal(publicTracking.status, 200);
+    assert.equal((await readJson(publicTracking)).application.rejection_reason, reason);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM application_notes WHERE application_id = ? AND document_record_id IS NULL AND visibility = 'student'")
+        .bind(applicationId).first().count, 1);
+    const audit = database.prepare("SELECT event_type, safe_metadata_json FROM audit_events WHERE application_id=? ORDER BY created_at DESC LIMIT 1")
+        .bind(applicationId).first();
+    assert.equal(audit.event_type, 'staff.application_rejected_at_migration');
+    assert.doesNotMatch(audit.safe_metadata_json, /eksik belge/u);
+});
+
+test('failed rejection audit rolls back the terminal status and student-visible reason', async () => {
+    const { environment, database } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'sent_to_migration' });
+    const staffCookie = await seedStaff(environment, database);
+    database.exec(`CREATE TRIGGER reject_migration_rejection_audit BEFORE INSERT ON audit_events
+        WHEN NEW.event_type = 'staff.application_rejected_at_migration'
+        BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;`);
+    const expectedUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?')
+        .bind(applicationId).first().updated_at;
+
+    const response = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie: staffCookie,
+        body: { target_status: 'rejected', expected_updated_at: expectedUpdatedAt,
+            rejection_reason: 'Göç İdaresinin resmî ret kararı.' }
+    }), environment);
+
+    assert.equal(response.status, 500);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status,
+        'sent_to_migration');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_notes WHERE application_id = ?')
+        .bind(applicationId).first().count, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_events WHERE application_id = ?')
+        .bind(applicationId).first().count, 0);
 });

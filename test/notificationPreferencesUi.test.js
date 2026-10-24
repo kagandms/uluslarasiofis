@@ -1,14 +1,26 @@
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { test } from 'node:test';
-import { initializeApplicationWizard } from '../src/public/applicationWizard.js';
+import { initializeApplicationWizard as initializeApplicationWizardRaw } from '../src/public/applicationWizard.js';
 import { initializeApplicationTracking } from '../src/public/applicationTracking.js';
+import { SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
 import {
     parseNotificationPreferences,
     createNotificationPreferenceField,
     mountTrackingNotificationPreferences,
     WHATSAPP_CONSENT_VERSION
 } from '../src/public/notificationPreferences.js';
+
+const TEST_PRIVACY_NOTICE = {
+    available: true,
+    version: 'test-approved-v1',
+    content_by_locale: Object.fromEntries(SUPPORTED_LOCALES.map((locale) => [locale, `Test notice (${locale})`]))
+};
+
+async function initializeApplicationWizard(root, api) {
+    if (!api.readApplicationPrivacyNotice) api.readApplicationPrivacyNotice = async () => TEST_PRIVACY_NOTICE;
+    return initializeApplicationWizardRaw(root, api);
+}
 
 function createDom(html = '<!doctype html><html lang="tr" dir="ltr"><body><div id="mount"></div></body></html>') {
     const dom = new JSDOM(html);

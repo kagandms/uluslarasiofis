@@ -144,6 +144,22 @@ test('renewal requires current UETS while initial applications do not', () => {
     assert.deepEqual(readiness.missing_documents, ['uets']);
 });
 
+test('transition applications require current permit identifiers and retain renewal document policy', () => {
+    const application = createApplication({ application_type: 'renewal', application_route: 'transition' });
+    const missing = evaluate(application, createReadyDocuments(application));
+
+    assert.deepEqual(missing.missing_fields, [
+        'transition_card_number', 'transition_card_serial', 'transition_change_province', 'transition_contact_preference', 'transition_foreign_id'
+    ]);
+    const complete = createApplication({ application_type: 'renewal', application_route: 'transition',
+        transition_foreign_id: '12345678901', transition_card_serial: 'AB123', transition_card_number: '456789',
+        transition_change_province: 'no', transition_contact_preference: 'email' });
+    const readiness = evaluate(complete, createReadyDocuments(complete));
+
+    assert.equal(readiness.status, 'ready');
+    assert.ok(listDocumentPolicies('renewal', false, complete).some(({ code, required }) => code === 'uets' && required));
+});
+
 test('under-18 applications require the birth certificate and adults do not', () => {
     const minor = createApplication({ date_of_birth: '2010-01-01', is_under_18: 1 });
     const readiness = evaluate(minor, createReadyDocuments(minor).filter(({ code }) => code !== 'birth_certificate_under18'));

@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.106';
+const CONTENT_SCRIPT_VERSION = '1.2.109';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -1349,6 +1349,14 @@ function hasPopulatedYoksisStudentForm() {
     return getYoksisStudentFormControls().some(control => String(control.value || '').trim());
 }
 
+function hasEditableYoksisStudentFields() {
+    return getYoksisStudentFormControls().some(control => !control.disabled && !control.readOnly);
+}
+
+function canOfferManualYoksisTransfer(formSignals, semanticMatch) {
+    return formSignals >= 2 && hasEditableYoksisStudentFields() && semanticMatch !== false;
+}
+
 function hasYoksisStudentResetCompleted(previousFingerprint) {
     const controls = getYoksisStudentFormControls();
     const hasUnclearedEditableValue = controls.some(control =>
@@ -1503,6 +1511,7 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
     const expectedStudent = options.expectedStudent || null;
     let stableChecks = 0;
     let previousFingerprint = '';
+    let lastReadinessSignals = null;
 
     return new Promise((resolve, reject) => {
         let intervalId = null;
@@ -1559,6 +1568,16 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
             previousFingerprint = fingerprint;
 
             const hasBasicControls = formSignals >= 2 || (formSignals >= 1 && hasPhotoControl);
+            lastReadinessSignals = {
+                formSignals,
+                hasEditableStudentFields: hasEditableYoksisStudentFields(),
+                hasPhotoControl,
+                formChangedAfterSearch,
+                domChangedAfterSearch,
+                semanticMatch,
+                stableChecks,
+                manualOverrideAvailable: canOfferManualYoksisTransfer(formSignals, semanticMatch)
+            };
 
             // Form temel alanlara ve yeni sonuç kanıtına sahipse:
             // - En az iki öğrenci alanı veya bir alan + fotoğraf kontrolü görünür olmalı
@@ -1572,7 +1591,14 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
 
             if (Date.now() >= deadline) {
                 cleanup();
-                reject(new Error('YÖKSİS öğrenci bilgi formu açılmadı.'));
+                const error = new Error('YÖKSİS öğrenci bilgi formu açılmadı.');
+                error.manualOverrideAvailable = lastReadinessSignals?.manualOverrideAvailable === true;
+                console.warn('[YKN_FORM_READINESS] Öğrenci formu doğrulanamadı.', {
+                    ...lastReadinessSignals,
+                    accessibleDocumentCount: getAllDocs(document).length,
+                    isZkBusy: isZkProcessing()
+                });
+                reject(error);
             }
         };
 
@@ -3498,6 +3524,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
 
                 let formReady = false;
                 let formErrorMessage = '';
+                let manualOverrideAvailable = false;
                 const formWaitStartedAt = performance.now();
                 if (request.waitForForm !== false) try {
                     await waitForYoksisForm(YOKSIS_SEARCH_INITIAL_FORM_WAIT_MS, {
@@ -3511,10 +3538,12 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 } catch (formWaitErr) {
                     formReady = false;
                     formErrorMessage = formWaitErr?.message || '';
+                    manualOverrideAvailable = formWaitErr?.manualOverrideAvailable === true;
                 }
                 return {
                     formReady,
                     searchTriggered,
+                    manualOverrideAvailable,
                     formFingerprintBeforeSearch,
                     domRevisionBeforeSearch: stateBeforeSearch.domRevision,
                     message: formErrorMessage,
@@ -3524,13 +3553,14 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                     formWaitDurationMs: Math.round(performance.now() - formWaitStartedAt)
                 };
             })
-            .then(({ formReady, searchTriggered, formFingerprintBeforeSearch, domRevisionBeforeSearch, message,
+            .then(({ formReady, searchTriggered, manualOverrideAvailable, formFingerprintBeforeSearch, domRevisionBeforeSearch, message,
                 inputReadyDurationMs, inputWriteDurationMs, searchClickDurationMs, formWaitDurationMs }) => sendResponse({
-                // Tıklamayı göndermiş olmak başarı değildir: yeni öğrenci formu
-                // doğrulanmadıkça portal sonraki "bilgileri aktar" adımını açmamalı.
-                success: formReady,
+                // Belirsiz form, yalnızca staff açıkça onaylayıp güncel formu tekrar
+                // doğrularsa manuel aktarım için devam edebilir.
+                success: formReady || manualOverrideAvailable,
                 formReady,
                 searchTriggered,
+                manualOverrideAvailable,
                 formFingerprintBeforeSearch,
                 domRevisionBeforeSearch,
                 timing: { inputReadyDurationMs, inputWriteDurationMs, searchClickDurationMs, formWaitDurationMs },
@@ -3542,6 +3572,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 success: false,
                 requestId: request.requestId,
                 message: error.message,
+                manualOverrideAvailable: error?.manualOverrideAvailable === true,
                 ...(error?.allowMainFallback === false ? { allowMainFallback: false } : {})
             }));
         return true;
@@ -3575,8 +3606,31 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 success: false,
                 formReady: false,
                 requestId: request.requestId,
-                message: error.message
+                message: error.message,
+                manualOverrideAvailable: error?.manualOverrideAvailable === true
+                    && pendingYoksisSearch?.requestId === request.requestId
+                    && (!request.expectedKabulId
+                        || pendingYoksisSearch.code === normalizeYoksisIdValue(request.expectedKabulId))
             }));
+        return true;
+    }
+
+    else if (request.action === 'CHECK_MANUAL_YOKSIS_FILL') {
+        const isBoundSearch = pendingYoksisSearch?.requestId === request.searchRequestId
+            && pendingYoksisSearch.code === normalizeYoksisIdValue(request.expectedKabulId);
+        const rejectionMessage = checkYoksisErrorModal();
+        const hasEditableStudentFields = hasEditableYoksisStudentFields();
+        const semanticMatch = checkSemanticStudentMatch(request.expectedStudent || null);
+        const manualOverrideAllowed = isBoundSearch && !rejectionMessage
+            && hasEditableStudentFields && semanticMatch !== false;
+
+        sendResponse({
+            success: manualOverrideAllowed,
+            manualOverrideAllowed,
+            semanticMatch,
+            hasEditableStudentFields,
+            requestId: request.requestId
+        });
         return true;
     }
 

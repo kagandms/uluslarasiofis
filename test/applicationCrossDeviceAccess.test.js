@@ -5,6 +5,7 @@ import { hashSessionToken } from '../src/server/auth/sessionToken.js';
 import { generateAccessCode, hashAccessCode, isValidAccessCodeFormat, isValidApplicationReference } from '../src/server/auth/applicationAccessCode.js';
 import worker from '../src/server/worker.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
+import { withTestApplicationPrivacyNotice, withTestApplicationPrivacyNoticeVersion } from './helpers/application-privacy-notice.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 
 const TEST_PASSWORD = 'Test-staff-passphrase-2026';
@@ -13,7 +14,7 @@ const PASSWORD_HASH = await deriveStaffPasswordHash(TEST_PASSWORD);
 function createEnvironment(options = {}) {
     const database = new TestD1Database();
     applyAllMigrations(database);
-    const environment = {
+    const environment = withTestApplicationPrivacyNotice({
         DB: database,
         DOCUMENTS: {
             async put() { return {}; },
@@ -27,7 +28,7 @@ function createEnvironment(options = {}) {
         STAFF_SHARED_USERNAME: 'admin',
         APP_ENV: 'test',
         ...options
-    };
+    });
     return { environment, database };
 }
 
@@ -41,7 +42,10 @@ function createRequest(path, { method = 'GET', body, cookie, origin = 'https://p
     return new Request(`https://portal.test${path}`, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body: body === undefined ? undefined : JSON.stringify(
+            path === '/api/public/applications' && method === 'POST'
+                ? withTestApplicationPrivacyNoticeVersion(body) : body
+        )
     });
 }
 

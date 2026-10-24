@@ -12,6 +12,10 @@ import { TestD1Database } from './helpers/d1-test-binding.js';
 
 const TEST_PASSWORD = 'Test-only passphrase 2026';
 const PASSWORD_HASH = await deriveStaffPasswordHash(TEST_PASSWORD);
+const TEST_APPLICATION_PRIVACY_NOTICE = JSON.stringify({
+    version: 'test-approved-v1',
+    content_by_locale: { tr: 'test', en: 'test', ru: 'test', tk: 'test', ar: 'test' }
+});
 
 function createEnvironment(options = {}) {
     const database = new TestD1Database();
@@ -57,6 +61,7 @@ function createEnvironment(options = {}) {
         STAFF_BOOTSTRAP_TOKEN: 'test-bootstrap-token-with-sufficient-entropy',
         STAFF_SHARED_USERNAME: 'admin',
         APP_ENV: 'test',
+        PUBLIC_APPLICATION_PRIVACY_NOTICE: TEST_APPLICATION_PRIVACY_NOTICE,
         ...options
     };
     return { environment, database, storedObjects };
@@ -90,10 +95,13 @@ function createRequest(path, { method = 'GET', body, cookie, origin = 'https://p
     headers.set('Origin', origin);
     if (body !== undefined) headers.set('Content-Type', 'application/json');
     if (cookie) headers.set('Cookie', cookie);
+    const requestBody = path === '/api/public/applications' && method === 'POST' && body !== undefined
+        ? { ...body, privacy_notice_version: body.privacy_notice_version ?? 'test-approved-v1' }
+        : body;
     return new Request(`https://portal.test${path}`, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body: requestBody === undefined ? undefined : JSON.stringify(requestBody)
     });
 }
 
@@ -446,6 +454,61 @@ test('public routes remain available without a staff password or session', async
         assert.equal(response.status, 200, path);
         assert.equal(await response.text(), path);
     }
+});
+
+test('default five-language notice is available and allows draft creation when no override is configured', async () => {
+    const { environment, database } = createEnvironment();
+    delete environment.PUBLIC_APPLICATION_PRIVACY_NOTICE;
+
+    const noticeResponse = await worker.fetch(createRequest('/api/public/applications/privacy-notice'), environment, {});
+    const noticePayload = await readJson(noticeResponse);
+    const createResponse = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST',
+        body: {
+            student_number: '2026123400', application_type: 'initial',
+            email: 'student@example.edu', phone: '+905551112233', privacy_notice_version: noticePayload.version
+        }
+    }), environment, {});
+
+    assert.equal(noticeResponse.status, 200);
+    assert.equal(noticePayload.available, true);
+    assert.deepEqual(Object.keys(noticePayload.content_by_locale).sort(), ['ar', 'en', 'ru', 'tk', 'tr']);
+    assert.equal(createResponse.status, 201);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 1);
+});
+
+test('new draft creation fails closed when an explicit privacy notice override is malformed', async () => {
+    const { environment, database } = createEnvironment();
+    environment.PUBLIC_APPLICATION_PRIVACY_NOTICE = '{malformed';
+
+    const noticeResponse = await worker.fetch(createRequest('/api/public/applications/privacy-notice'), environment, {});
+    const createResponse = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST',
+        body: {
+            student_number: '2026123402', application_type: 'initial',
+            email: 'student@example.edu', phone: '+905551112233', privacy_notice_version: 'student-application-privacy-2026-10-24-v1'
+        }
+    }), environment, {});
+
+    assert.equal((await readJson(noticeResponse)).available, false);
+    assert.equal(createResponse.status, 503);
+    assert.equal((await readJson(createResponse)).error.code, 'APPLICATION_PRIVACY_NOTICE_UNAVAILABLE');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 0);
+});
+
+test('new draft creation rejects a stale privacy notice version before writing to D1', async () => {
+    const { environment, database } = createEnvironment();
+    const response = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST',
+        body: {
+            student_number: '2026123401', application_type: 'initial',
+            email: 'student@example.edu', phone: '+905551112233', privacy_notice_version: 'older-approved-v0'
+        }
+    }), environment, {});
+
+    assert.equal(response.status, 409);
+    assert.equal((await readJson(response)).error.code, 'APPLICATION_PRIVACY_NOTICE_VERSION_CONFLICT');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 0);
 });
 
 test('application API creates an opaque owner session and enforces the active application constraint', async () => {
@@ -1365,6 +1428,78 @@ test('owner session can change draft application type and reload preserves it', 
     assert.equal(rejected.status, 409);
     assert.equal((await readJson(rejected)).error.code, 'APPLICATION_NOT_EDITABLE');
     assert.equal(database.prepare('SELECT application_type FROM applications').first().application_type, 'initial');
+});
+
+test('online transition applications persist transition data and use renewal document requirements', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123468', application_type: 'transition', email: 'transition@example.edu', phone: '555' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+    const version = await readApplicationVersion(environment, cookie);
+    const updated = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { lock_version: version, transition_foreign_id: '12345678901',
+            transition_card_serial: 'AB123', transition_card_number: '456789', transition_change_province: 'no',
+            transition_contact_preference: 'email' }
+    }), environment, {});
+    const refreshed = await readJson(await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {}));
+    const requirements = await readJson(await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {}));
+    const stored = database.prepare('SELECT application_type,application_route,transition_foreign_id,transition_card_serial,transition_card_number,transition_change_province,transition_contact_preference FROM applications').first();
+
+    assert.equal(created.status, 201);
+    assert.equal((await readJson(updated)).application.application_type, 'transition');
+    assert.equal(refreshed.application.application_type, 'transition');
+    assert.equal(requirements.requirements.some(({ code }) => code === 'uets'), true);
+    assert.deepEqual({ ...stored }, { application_type: 'renewal', application_route: 'transition', transition_foreign_id: '12345678901',
+        transition_card_serial: 'AB123', transition_card_number: '456789', transition_change_province: 'no', transition_contact_preference: 'email' });
+});
+
+test('changing a transition draft to a standard application clears transition-only personal data', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123470', application_type: 'transition', email: 'transition@example.edu', phone: '555' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+    const transitionFields = {
+        transition_foreign_id: '12345678901', transition_card_serial: 'AB123', transition_card_number: '456789',
+        transition_change_province: 'no', transition_contact_preference: 'email'
+    };
+    await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), ...transitionFields }
+    }), environment, {});
+
+    const changed = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), application_type: 'initial' }
+    }), environment, {});
+    const resubmittedTransitionData = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), ...transitionFields }
+    }), environment, {});
+    const resubmittedPayload = await readJson(resubmittedTransitionData);
+    const stored = database.prepare(`
+        SELECT application_route, transition_foreign_id, transition_card_serial, transition_card_number,
+            transition_change_province, transition_contact_preference FROM applications
+    `).first();
+
+    assert.equal(changed.status, 200);
+    assert.equal(resubmittedTransitionData.status, 200);
+    assert.deepEqual({ ...stored }, {
+        application_route: 'standard', transition_foreign_id: null, transition_card_serial: null,
+        transition_card_number: null, transition_change_province: null, transition_contact_preference: null
+    });
+    assert.deepEqual({
+        foreignId: resubmittedPayload.application.transition_foreign_id,
+        cardSerial: resubmittedPayload.application.transition_card_serial,
+        cardNumber: resubmittedPayload.application.transition_card_number
+    }, { foreignId: '', cardSerial: '', cardNumber: '' });
+
+    database.prepare(`UPDATE applications SET transition_foreign_id = '12345678901', transition_card_serial = 'AB123',
+        transition_card_number = '456789'`).run();
+    const legacyPayload = await readJson(await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {}));
+    assert.deepEqual({
+        foreignId: legacyPayload.application.transition_foreign_id,
+        cardSerial: legacyPayload.application.transition_card_serial,
+        cardNumber: legacyPayload.application.transition_card_number
+    }, { foreignId: '', cardSerial: '', cardNumber: '' });
 });
 
 test('draft address evidence is server-validated and restored after reload', async () => {

@@ -4,12 +4,13 @@ import { hashSessionToken } from '../src/server/auth/sessionToken.js';
 import { PUBLIC_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
 import worker from '../src/server/worker.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
+import { withTestApplicationPrivacyNotice, withTestApplicationPrivacyNoticeVersion } from './helpers/application-privacy-notice.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 
 function createEnvironment() {
     const database = new TestD1Database();
     applyAllMigrations(database);
-    return { database, environment: { DB: database } };
+    return { database, environment: withTestApplicationPrivacyNotice({ DB: database }) };
 }
 
 function createRequest(path, { method = 'GET', cookie } = {}) {
@@ -22,12 +23,12 @@ async function createApplicant(environment, studentNumber, applicationType = 'in
     const response = await worker.fetch(new Request('https://portal.test/api/public/applications', {
         method: 'POST',
         headers: { Origin: 'https://portal.test', 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify(withTestApplicationPrivacyNoticeVersion({
             student_number: studentNumber,
             application_type: applicationType,
             email: `${studentNumber}@example.edu`,
             phone: '+905551112233'
-        })
+        }))
     }), environment, {});
     return response.headers.get('Set-Cookie').split(';')[0];
 }

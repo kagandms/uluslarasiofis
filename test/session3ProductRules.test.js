@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { hashSessionToken } from '../src/server/auth/sessionToken.js';
 import worker from '../src/server/worker.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
+import { withTestApplicationPrivacyNotice, withTestApplicationPrivacyNoticeVersion } from './helpers/application-privacy-notice.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 
 function createEnvironment() {
@@ -31,14 +32,14 @@ function createEnvironment() {
     return {
         database,
         storedObjects,
-        environment: {
+        environment: withTestApplicationPrivacyNotice({
             DB: database,
             DOCUMENTS: bucket,
             R2_ACCOUNT_ID: 'a'.repeat(32),
             R2_BUCKET_NAME: 'portal-documents',
             R2_ACCESS_KEY_ID: 'test-access-key',
             R2_SECRET_ACCESS_KEY: 'test-secret-key'
-        }
+        })
     };
 }
 
@@ -49,7 +50,10 @@ function createRequest(path, { method = 'GET', body, cookie, origin = 'https://p
     return new Request(`https://portal.test${path}`, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body: body === undefined ? undefined : JSON.stringify(
+            path === '/api/public/applications' && method === 'POST'
+                ? withTestApplicationPrivacyNoticeVersion(body) : body
+        )
     });
 }
 

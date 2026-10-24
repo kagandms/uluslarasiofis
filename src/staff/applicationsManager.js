@@ -134,7 +134,7 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
         const values = [
             item.student_number,
             [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
-            item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru',
+            item.application_type === 'transition' ? 'Geçiş başvurusu' : item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru',
             readStatusLabel(item.status),
             formatDate(item.submitted_at),
             formatDate(item.updated_at)
@@ -311,12 +311,19 @@ function createApplicationSummary(document, application) {
         ['Başvuru Referansı', application.reference_number || '-'],
         ['Başvuru No', application.id], ['Öğrenci No', application.student_number],
         ['Durum', readStatusLabel(application.status)],
-        ['Başvuru türü', application.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'],
+        ['Başvuru türü', application.application_type === 'transition' ? 'Geçiş başvurusu' : application.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'],
         ['Ad', application.first_name], ['Soyad', application.last_name], ['E-posta', application.email],
         ['Telefon', application.phone], ['Pasaport No', application.passport_number], ['Uyruk', application.nationality],
         ['Doğum tarihi', application.date_of_birth],
         ['e-İkamet başvuru tarihi', application.residence_application_date],
         ['Üniversite kayıt tarihi', application.university_registration_date],
+        ...(application.application_type === 'transition' ? [
+            ['Yabancı kimlik no', application.transition_foreign_id],
+            ['Mevcut kart seri no', application.transition_card_serial],
+            ['Mevcut kart no', application.transition_card_number],
+            ['İkamet ili değişikliği', application.transition_change_province],
+            ['Tercih edilen iletişim', application.transition_contact_preference]
+        ] : []),
         ['18 yaş altı (başvuru tarihine göre)', application.is_under_18],
         ['Adres belgesi türü', readAccommodationLabel(application.address_evidence_type)],
         ...readDocumentAnswerDetails(application), ['Parmak izi durumu', application.fingerprint_status],
@@ -516,6 +523,22 @@ function createApplicationWorkflow(document, application, detail, state, handler
         section.append(createText(document, 'p', 'staff-applications-state', 'Öğrenciden belge bekleniyor.'));
     }
     for (const targetStatus of detail.allowed_status_transitions || []) {
+        const rejectionReason = targetStatus === 'rejected' ? document.createElement('textarea') : null;
+        if (rejectionReason) {
+            const label = document.createElement('label');
+            label.className = 'staff-application-rejection-label';
+            label.textContent = 'Resmî ret gerekçesi';
+            rejectionReason.id = 'staff-application-rejection-reason';
+            rejectionReason.name = 'rejection_reason';
+            rejectionReason.dataset.action = 'application-rejection-reason';
+            rejectionReason.required = true;
+            rejectionReason.minLength = 5;
+            rejectionReason.maxLength = 1000;
+            rejectionReason.rows = 4;
+            rejectionReason.setAttribute('aria-label', label.textContent);
+            label.htmlFor = rejectionReason.id;
+            section.append(label, rejectionReason);
+        }
         const isRevert = isStatusRevert(application.status, targetStatus);
         const label = isRevert
             ? (STATUS_REVERT_LABELS[targetStatus] || `◀ Durumu Geri Al: ${STATUS_LABELS[targetStatus] || targetStatus}`)
@@ -529,7 +552,10 @@ function createApplicationWorkflow(document, application, detail, state, handler
         if (isRevert) action.dataset.isRevert = 'true';
         action.disabled = Boolean(state.actionPending);
         action.textContent = state.actionPending === `status:${targetStatus}` ? 'İşleniyor…' : label;
-        action.addEventListener('click', () => handlers.onTransition(targetStatus));
+        action.addEventListener('click', () => {
+            if (rejectionReason && !rejectionReason.reportValidity()) return;
+            handlers.onTransition(targetStatus, rejectionReason?.value.trim() || null);
+        });
         section.append(action);
     }
     if (state.actionError && !state.resubmissionDocument) {
@@ -714,9 +740,10 @@ function createStaffApplicationsApi() {
                 expected_revision_number: revisionNumber, reason
             });
         },
-        transitionApplication(applicationId, targetStatus, updatedAt) {
+        transitionApplication(applicationId, targetStatus, updatedAt, rejectionReason = null) {
             return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/status`, {
-                target_status: targetStatus, expected_updated_at: updatedAt
+                target_status: targetStatus, expected_updated_at: updatedAt,
+                ...(targetStatus === 'rejected' ? { rejection_reason: rejectionReason } : {})
             });
         },
         notifications: createNotificationApi()
@@ -1117,9 +1144,9 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             state.detail.application.id, item.code, item.revision_number, reason
         ));
     }
-    function transitionApplication(targetStatus) {
+    function transitionApplication(targetStatus, rejectionReason = null) {
         return completeAction(`status:${targetStatus}`, () => api.transitionApplication(
-            state.detail.application.id, targetStatus, state.detail.application.updated_at
+            state.detail.application.id, targetStatus, state.detail.application.updated_at, rejectionReason
         ));
     }
     function returnToQueue() {

@@ -6,7 +6,7 @@ const GUIDE_TRANSLATIONS = {
         section1Title: '📝 İkamet Başvurusu Nasıl Yapılır?',
         section1Steps: [
             '<strong>1. İletişim Bilgileri:</strong> Size ulaşabileceğimiz güncel e-posta adresinizi ve telefon numaranızı girin.',
-            '<strong>2. Başvuru ve Kimlik Bilgileri:</strong> İlk başvuru veya uzatma seçeneğini seçip kişisel bilgilerinizi pasaportunuzdaki gibi doldurun. Geçiş başvurusu şu anda portalda desteklenmiyor; bu durumda Uluslararası Öğrenci Ofisine danışın.',
+            '<strong>2. Başvuru ve Kimlik Bilgileri:</strong> İlk başvuru, uzatma veya geçiş başvurusunu seçip kişisel bilgilerinizi doldurun. Geçişte mevcut ikamet kartı bilgileri istenir. Bu portal ofis sürecini ve belgeleri takip eder; e-İkamet başvurusunu ayrıca Göç İdaresinin sisteminde tamamlayın.',
             '<strong>3. Bilgilerinizi Kontrol Edin:</strong> İlerlemeden önce girdiğiniz bilgilerin doğruluğunu teyit edin.',
             '<strong>4. Gerekli Belgeleri Yükleyin:</strong> Başvurunuza ve verdiğiniz yanıtlara göre ekranda gösterilen belgeleri yükleyin. Sigorta ve diğer koşullu belgeler yalnızca durumunuza göre istenebilir; emin olmadığınız bir durumda ofise danışın.',
             '<strong>5. Başvuru Numaranızı Kaydedin:</strong> Online başvuruda verilen ITU ile başlayan başvuru kodunuzu güvenli bir yere kaydedin. Sorgulama ekranında fiziksel ve online başvurular için bu kodu kullanabilirsiniz; ayrıntılı online girişte öğrenci numaranız da gerekir.'
@@ -26,7 +26,7 @@ const GUIDE_TRANSLATIONS = {
         section1Title: '📝 How to Submit a Residence Permit Application?',
         section1Steps: [
             '<strong>1. Contact Information:</strong> Enter your active email address and phone number so the office can reach you.',
-            '<strong>2. Identity & Application Details:</strong> Select First Application or Extension and enter your information exactly as shown in your passport. Transfer applications are not supported in this portal; contact the International Student Office.',
+            '<strong>2. Identity & Application Details:</strong> Select First Application, Extension, or Transition and enter your details. Transition applications require current residence card details. This portal tracks the university office process and documents; complete the official e-İkamet application separately in the Migration Authority system.',
             '<strong>3. Review Information:</strong> Carefully verify all entered information before proceeding.',
             '<strong>4. Upload Required Documents:</strong> Upload the documents shown for your application and answers. Insurance and other conditional documents may only be required for some cases; contact the office if you are unsure.',
             '<strong>5. Save Your Application Reference:</strong> Keep the ITU application code issued after online submission. Use it to track either in-person or online applications; detailed online access also requires your student number.'
@@ -46,7 +46,7 @@ const GUIDE_TRANSLATIONS = {
         section1Title: '📝 Как подать заявку на ВНЖ?',
         section1Steps: [
             '<strong>1. Контактные данные:</strong> Введите актуальный адрес электронной почты и номер телефона для связи.',
-            '<strong>2. Личные данные и вид заявки:</strong> Выберите первичную подачу или продление и заполните данные строго как в паспорте. Переход на студенческий ВНЖ через этот портал пока не поддерживается; обратитесь в Международный студенческий офис.',
+            '<strong>2. Личные данные и вид заявки:</strong> Выберите первичную подачу, продление или переход. Для перехода нужны данные текущей карты ВНЖ. Портал отслеживает университетский процесс и документы; официальную заявку e-İkamet подайте отдельно в системе миграционной службы.',
             '<strong>3. Проверка данных:</strong> Внимательно проверьте правильность введенной информации перед отправкой.',
             '<strong>4. Загрузка документов:</strong> Загрузите документы, показанные для вашего заявления и ответов. Страховка и другие условные документы требуются только в некоторых случаях; при сомнениях обратитесь в офис.',
             '<strong>5. Сохранение номера заявки:</strong> Сохраните номер заявки; он понадобится вместе с номером студента для входа и просмотра подробностей.'
@@ -66,7 +66,7 @@ const GUIDE_TRANSLATIONS = {
         section1Title: '📝 Ýaşamak rugsady üçin arza nähili tabşyrylýar?',
         section1Steps: [
             '<strong>1. Habarlaşmak Maglumatlary:</strong> Size elýeterli boljak häzirki elektron poçtaňyzy we telefon belgiňizi giriziň.',
-            '<strong>2. Arza we Şahsy Maglumatlar:</strong> Ilkinji ýüz tutma ýa-da möhlet uzaltma görnüşini saýlaň we pasportdaky maglumatlaryňyzy giriziň. Talyp rugsadyna geçiş bu portalyň üsti bilen häzir goldanylmaýar; Halkara Talyp Ofisine ýüz tutuň.',
+            '<strong>2. Arza we Şahsy Maglumatlar:</strong> Ilkinji ýüz tutma, möhlet uzaltma ýa-da geçiş görnüşini saýlaň. Geçiş üçin häzirki ýaşaýyş rugsat kartynyň maglumatlary gerek. Bu portal uniwersitetiň işini we resminamalary yzarlaýar; resmi e-İkamet arzasyny Göç edarasynyň ulgamynda aýratyn tabşyryň.',
             '<strong>3. Maglumatlary Barlamak:</strong> Indiki ädime geçmezden ozal ähli maglumatlaryň dogrulygyny barlaň.',
             '<strong>4. Gerekli Resminamalary Ýüklemek:</strong> Arzaňyza we jogaplaryňyza görä ekranda görkezilen resminamalary ýükläň. Ätiýaçlandyryş we beýleki şertli resminamalar diňe käbir ýagdaýlarda talap edilýär; şübhe bolsa Ofise ýüz tutuň.',
             '<strong>5. Arza Belgiňizi Saklaň:</strong> Arza salgylanma belgiňizi saklaň; jikme-jiklikleri görmek üçin talyp belgiňiz bilen bilelikde gerek bolar.'
@@ -86,7 +86,7 @@ const GUIDE_TRANSLATIONS = {
         section1Title: '📝 كيفية تقديم طلب تصريح الإقامة؟',
         section1Steps: [
             '<strong>1. معلومات الاتصال:</strong> أدخل بريدك الإلكتروني الفعال ورقم هاتفك حتى يتمكن المكتب من التواصل معك.',
-            '<strong>2. بيانات الهوية والطلب:</strong> اختر طلباً أولياً أو تمديداً واملأ البيانات كما في جواز سفرك. طلب الانتقال إلى إقامة الطالب غير مدعوم حالياً في هذه البوابة؛ تواصل مع مكتب الطلاب الدوليين.',
+            '<strong>2. بيانات الهوية والطلب:</strong> اختر طلباً أولياً أو تمديداً أو انتقالاً، وأدخل بيانات بطاقة الإقامة الحالية للانتقال. تتابع هذه البوابة إجراءات الجامعة والوثائق؛ قدّم طلب e-İkamet الرسمي بشكل منفصل في نظام إدارة الهجرة.',
             '<strong>3. مراجعة البيانات:</strong> راجع جميع المعلومات التي أدخلتها بعناية قبل المتابعة.',
             '<strong>4. رفع المستندات المطلوبة:</strong> ارفع المستندات المعروضة وفقاً لطلبك وإجاباتك. قد يُطلب التأمين الصحي ومستندات أخرى مشروطة في بعض الحالات فقط؛ تواصل مع المكتب إذا لم تكن متأكداً.',
             '<strong>5. الاحتفاظ برقم الطلب:</strong> احتفظ برقم مرجع الطلب؛ ستحتاج إليه مع رقم الطالب لتسجيل الدخول وعرض التفاصيل.'

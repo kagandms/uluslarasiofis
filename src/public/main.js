@@ -6,6 +6,7 @@ import { renderPublicDocumentOverview } from './home.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 import { initLiveClock } from '../ui/liveClock.js';
 import { openPublicGuideModal } from './publicGuideModal.js';
+import { initializePrivacyNoticeModal } from './privacyNoticeModal.js';
 
 const LOCALE_STORAGE_KEY = 'portal_ui_locale';
 const FALLBACK_LOCALE = 'tr';
@@ -95,6 +96,7 @@ function initPublicPortal() {
     }
     if (document.body.dataset.page === 'home') {
         initScrollReveal();
+        initializePrivacyNoticeModal();
     }
 
     const btnHeroGuide = document.getElementById('btn-hero-guide');

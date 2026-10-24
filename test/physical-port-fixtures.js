@@ -86,7 +86,7 @@ export async function registerPortPdf(context, id = crypto.randomUUID(), options
     const pdf = await PDFDocument.create(); pdf.addPage();
     const bytes = options.bytes || await pdf.save();
     const form = new FormData();
-    form.set('metadata', JSON.stringify({student_number:'',first_name:'Synthetic',last_name:'Student',passport_number:'TEST',application_type:'initial'}));
+    form.set('metadata', JSON.stringify({student_number:'',first_name:'Synthetic',last_name:'Student',passport_number:'TEST',application_type:'initial', ...options.receipt}));
     form.set('pdf', new Blob([bytes], {type:'application/pdf'}), 'synthetic.pdf');
     const response = await portRequest(context, '/api/staff/physical-intakes/register', {method:'POST',cookie:context.staffCookie,body:form,headers:{'X-Registration-Id':id}});
     assert.equal(response.status, 200, await response.clone().text());

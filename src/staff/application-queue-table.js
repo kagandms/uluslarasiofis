@@ -16,7 +16,7 @@ function createRow(document, item, options, index) {
         row.append(number);
     }
     const values = options.values ? options.values(item) : [item.student_number || '—', [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
-        item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru', options.statusLabel(item.status),
+        item.application_type === 'transition' ? 'Geçiş başvurusu' : item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru', options.statusLabel(item.status),
         formatQueueDate(item.submitted_at), formatQueueDate(item.updated_at)];
     values.forEach((value, index) => {
         const cell = document.createElement('td');

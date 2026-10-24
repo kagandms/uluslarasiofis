@@ -34,13 +34,15 @@ export function validatePhysicalIntake(body) {
     const keys = ['student_number', 'first_name', 'last_name', 'passport_number', 'application_type', 'linked_application_id'];
     if (Object.keys(body).some(key => !keys.includes(key))) throw new ApiError(400, 'VALIDATION_ERROR', 'Kayıt alanlarını kontrol edin.');
     if (body.student_number != null && typeof body.student_number !== 'string') throw new ApiError(400, 'VALIDATION_ERROR', 'Öğrenci numarasını kontrol edin.');
-    if (!['initial', 'renewal'].includes(body.application_type)) throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru türünü seçin.');
+    if (!['initial', 'renewal', 'transition'].includes(body.application_type)) throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru türünü seçin.');
+    const applicationRoute = body.application_type === 'transition' ? 'transition' : 'standard';
     return {
         student_number: typeof body.student_number === 'string' && body.student_number.trim() ? normalizePhysicalStudentNumber(body.student_number) : '',
         first_name: requireText(body.first_name, { field: 'Ad', maxLength: 120 }),
         last_name: requireText(body.last_name, { field: 'Soyad', maxLength: 120 }),
         passport_number: requireText(body.passport_number, { field: 'Pasaport no', maxLength: 64 }).replace(/[a-z]/g, character => character.toUpperCase()),
-        application_type: body.application_type,
+        application_type: applicationRoute === 'transition' ? 'renewal' : body.application_type,
+        application_route: applicationRoute,
         linked_application_id: body.linked_application_id == null ? null : requireText(body.linked_application_id, { field: 'Bağlı başvuru', maxLength: 64 })
     };
 }

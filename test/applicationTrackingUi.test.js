@@ -172,6 +172,31 @@ test('public lookup renders statuses without filenames or document controls', as
     document.defaultView.close();
 });
 
+test('public ITU tracking renders a rejected application reason as plain text', async () => {
+    const { document, root } = createTrackingRoot();
+    const rejectionReason = '</dd><script>do not execute</script>';
+    const api = {
+        async readCurrentApplicationTracking() {
+            throw Object.assign(new Error('session required'), { code: 'APPLICATION_SESSION_REQUIRED', status: 401 });
+        },
+        async lookupApplicationTracking() {
+            return { found: true, ...createTrackingDto({
+                application: { status: 'rejected', rejection_reason: rejectionReason }, documents: []
+            }) };
+        }
+    };
+    await initializeApplicationTracking(root, api);
+    root.querySelector('input[name="reference_number"]').value = 'ITU-7K9M-4X2P';
+    root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.match(root.textContent, /Resmî ret gerekçesi/);
+    assert.ok(root.textContent.includes(rejectionReason));
+    assert.equal(root.querySelector('script'), null);
+    assert.ok(SUPPORTED_LOCALES.every((locale) => PUBLIC_MESSAGES[locale].trackingRejectionReasonLabel));
+    document.defaultView.close();
+});
+
 test('shared lookup routes physical ITU codes to physical tracking and displays the rejection reason safely', async () => {
     const { document, root } = createTrackingRoot();
     let physicalLookups = 0;
@@ -305,6 +330,7 @@ test('tracking supports all locales and the public main entry keeps Arabic right
         'trackingLookupHeading', 'trackingLookupReferenceLabel', 'trackingLookupSubmit', 'trackingLookupExplanation',
         'trackingLookupNotFound', 'trackingLookupRateLimited', 'trackingLookupError',
         'trackingDraftHeading', 'trackingDraftText', 'trackingStatusLabel', 'trackingStatusUnknown',
+        'trackingRejectionReasonLabel',
         ...['draft', 'submitted', 'under_review', 'resubmission_required', 'approved_for_processing', 'sent_to_migration',
             'migration_approved', 'completed', 'cancelled', 'rejected'].map((status) => `applicationStatus_${status}`),
         ...['not_uploaded', 'waiting_review', 'under_review', 'approved', 'resubmission_required']

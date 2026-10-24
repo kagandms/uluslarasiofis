@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-10-23T16:28:41Z",
+  "environment": "production",
+  "worker": "goc",
+  "activeDeployment": {
+    "deploymentId": "ecd16882-fded-4dd2-86c1-cf3d218fd167",
+    "versionId": "c0a250d6-4ef8-4eff-bd27-b40246b5a5f9",
+    "createdAt": "2026-10-23T12:09:51.682038Z",
+    "source": "wrangler",
+    "releaseShaAnnotation": null,
+    "scriptEtag": "7903c5d1de8802b62191a3ec77ad13c05acfd3f8e64d63ff1ba5dd6d4c3e54bc"
+  },
+  "cronSchedules": {
+    "apiReadSucceeded": true,
+    "expected": [
+      "* * * * *",
+      "0 0 * * *"
+    ],
+    "actual": [
+      "* * * * *",
+      "0 0 * * *"
+    ],
+    "matchesReviewedProductionConfig": true
+  },
+  "workerSource": {
+    "contentReadSucceeded": true,
+    "contentEtagMatchesActiveVersion": true,
+    "githubWorkflowRunId": 39950029281,
+    "githubArtifactId": 12500500373,
+    "githubArtifactName": "candidate-39950029281-1",
+    "githubArtifactSha256": "d5743ac4dde710031bd264adc9914c334aa40e1fb5d21fdfab433d4c390114a8",
+    "sourceCommitSha": "8be47f394ca06080e7bc2426e0e0d8fd205b9b34",
+    "candidateManifestVerified": true,
+    "candidateFilesVerified": 427,
+    "exactArtifactDryRunPassed": true,
+    "runtimeModule": {
+      "name": "index.js",
+      "bytes": 1827317,
+      "sha256": "b8cebf9ccae0411b6f0b3fd2a6d5be84020ddea7ad09e1888e6a0a155f7efc4e",
+      "matchesExactCiArtifact": true
+    },
+    "sourceMap": {
+      "name": "index.js.map",
+      "liveSha256": "e54248c7642f9ec3b4930fd22cddb67d268fad2d9dfd57bee863216deeff7507",
+      "candidateSha256": "222ac1b2da0bb63d6498a4082914f706c8ab1d194dd59878a0d56a5a10ee19d5",
+      "matchesExactCiArtifact": false,
+      "runtimeCode": false
+    }
+  },
+  "limitations": [
+    "The active Worker has no release SHA annotation; runtime module bytes are directly matched to the verified CI artifact.",
+    "Rollback compatibility with the prior protected version still requires the production schema compatibility check.",
+    "No production migration or deployment was performed."
+  ]
+}

@@ -19,6 +19,7 @@ async function requestJson(path, { method = 'GET', body } = {}) {
         const error = new Error('Application request failed.');
         error.code = payload.error?.code || 'REQUEST_FAILED';
         error.status = response.status;
+        error.requestId = payload.requestId || response.headers?.get('X-Request-Id') || null;
         throw error;
     }
     return payload;
@@ -32,6 +33,14 @@ async function requestJson(path, { method = 'GET', body } = {}) {
 export async function readCurrentApplication() {
     const payload = await requestJson('/api/public/applications/current');
     return payload.application;
+}
+
+/**
+ * Reads the institution-approved privacy notice required before starting a new application.
+ * @returns {Promise<object>} Current five-language notice or an unavailable marker.
+ */
+export async function readApplicationPrivacyNotice() {
+    return requestJson('/api/public/applications/privacy-notice');
 }
 
 /**

@@ -2,6 +2,7 @@ import { createOpaqueSessionToken, hashSessionToken } from '../../src/server/aut
 import worker from '../../src/server/worker.js';
 import { applyAllMigrations } from './apply-migrations.js';
 import { TestD1Database } from './d1-test-binding.js';
+import { TEST_APPLICATION_PRIVACY_NOTICE, withTestApplicationPrivacyNoticeVersion } from './application-privacy-notice.js';
 
 export const TEST_STAFF_ID = 'staff-notification-test';
 export const TEST_STAFF_TOKEN = createOpaqueSessionToken();
@@ -9,11 +10,12 @@ export const TEST_STAFF_TOKEN = createOpaqueSessionToken();
 export async function createNotificationFixture(options = {}) {
     const database = new TestD1Database();
     applyAllMigrations(database);
-    const environment = { DB: database, STAFF_SHARED_USERNAME: 'reviewer', ...options };
+    const environment = { DB: database, STAFF_SHARED_USERNAME: 'reviewer',
+        PUBLIC_APPLICATION_PRIVACY_NOTICE: TEST_APPLICATION_PRIVACY_NOTICE, ...options };
     const applicantResponse = await worker.fetch(new Request('https://portal.test/api/public/applications', {
         method: 'POST', headers: { Origin: 'https://portal.test', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_number: 'NOTIF-001', application_type: 'initial',
-            email: 'student@example.invalid', phone: '+19995550123' })
+        body: JSON.stringify(withTestApplicationPrivacyNoticeVersion({ student_number: 'NOTIF-001', application_type: 'initial',
+            email: 'student@example.invalid', phone: '+19995550123' }))
     }), environment, {});
     const ownerCookie = applicantResponse.headers.get('Set-Cookie').split(';')[0];
     const application = database.prepare(`SELECT a.id FROM applications a

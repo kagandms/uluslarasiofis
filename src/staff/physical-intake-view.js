@@ -173,7 +173,7 @@ function renderCreate(document, panel, options) {
     const form = document.createElement('form');
     form.className = 'physical-intake-form';
     [['first_name', 'Ad'], ['last_name', 'Soyad'], ['passport_number', 'Pasaport No']].forEach(([name, label]) => createField(document, form, { name, label, draft: state.draft }));
-    const type = select(document, [['initial', 'İlk başvuru'], ['renewal', 'Uzatma']]);
+    const type = select(document, [['initial', 'İlk başvuru'], ['renewal', 'Uzatma'], ['transition', 'Geçiş başvurusu']]);
     type.id = 'physical-application-type';
     type.value = state.draft.application_type;
     const label = text(document, 'label', 'Başvuru Türü');
@@ -254,7 +254,7 @@ function renderDetail(document, panel, options) {
     const intake = detail.intake;
     panel.append(button(document, 'Listeye Dön', handlers.back),
         text(document, 'h3', `${intake.first_name} ${intake.last_name}`),
-        text(document, 'p', `${intake.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'} · ${STATUS_LABELS[intake.status]}${intake.deleted_at ? ' · Silinen kayıt' : ''}`),
+        text(document, 'p', `${intake.application_type === 'transition' ? 'Geçiş başvurusu' : intake.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'} · ${STATUS_LABELS[intake.status]}${intake.deleted_at ? ' · Silinen kayıt' : ''}`),
         text(document, 'p', `Pasaport: ${intake.passport_number || '—'} · ${intake.linked_application_id ? 'Online başvuruya bağlı' : 'Bağımsız fiziksel teslim'}`));
     const actions = document.createElement('div');
     actions.className = 'physical-status-actions';

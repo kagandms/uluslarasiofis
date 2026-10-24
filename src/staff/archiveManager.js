@@ -119,7 +119,7 @@ function createQueueTable(document, items, state, handlers) {
         const values = [
             item.student_number,
             [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
-            item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru',
+            item.application_type === 'transition' ? 'Geçiş başvurusu' : item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru',
             item.deletion_state && state.query.status === 'archive_all' ? STATUS_LABELS.deleted : readStatusLabel(item.status),
             formatDate(item.submitted_at),
             formatDate(item.updated_at)
@@ -288,12 +288,19 @@ function createApplicationSummary(document, application) {
     const fields = [
         ['Başvuru No', application.id], ['Öğrenci No', application.student_number],
         ['Durum', readStatusLabel(application.status)],
-        ['Başvuru türü', application.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'],
+        ['Başvuru türü', application.application_type === 'transition' ? 'Geçiş başvurusu' : application.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'],
         ['Ad', application.first_name], ['Soyad', application.last_name], ['E-posta', application.email],
         ['Telefon', application.phone], ['Pasaport No', application.passport_number], ['Uyruk', application.nationality],
         ['Doğum tarihi', application.date_of_birth],
         ['e-İkamet başvuru tarihi', application.residence_application_date],
         ['Üniversite kayıt tarihi', application.university_registration_date],
+        ...(application.application_type === 'transition' ? [
+            ['Yabancı kimlik no', application.transition_foreign_id],
+            ['Mevcut kart seri no', application.transition_card_serial],
+            ['Mevcut kart no', application.transition_card_number],
+            ['İkamet ili değişikliği', application.transition_change_province],
+            ['Tercih edilen iletişim', application.transition_contact_preference]
+        ] : []),
         ['18 yaş altı (başvuru tarihine göre)', application.is_under_18],
         ['Adres belgesi türü', application.address_evidence_type], ['Parmak izi durumu', application.fingerprint_status],
         ['Parmak izi kodu', application.fingerprint_code], ['Beyan sürümü', application.declaration_version],

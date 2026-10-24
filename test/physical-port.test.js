@@ -352,8 +352,27 @@ test('physical policy validates identity, versions and readable PDFs', async () 
     const receipt = { first_name:' Synthetic ',last_name:'Student',passport_number:'test',application_type:'initial' };
 
     assert.equal(validatePhysicalIntake(receipt).passport_number,'TEST');
+    const transition = validatePhysicalIntake({ ...receipt, application_type: 'transition' });
+    assert.equal(transition.application_type, 'renewal');
+    assert.equal(transition.application_route, 'transition');
     assert.throws(() => validatePhysicalIntake({...receipt,application_type:'unknown'}));
     await assert.rejects(validatePhysicalPdf(new Uint8Array([1,2,3])));
+});
+
+test('physical transition registration preserves its route and returns the transition label', async () => {
+    const context = await createPortFixture();
+    await context.database.exec(`INSERT INTO students(id,student_number,normalized_student_number) VALUES('transition-student','ONLINE-TRANSITION','ONLINE-TRANSITION');
+        INSERT INTO applications(id,student_id,application_type,application_route,status) VALUES('transition-application','transition-student','renewal','transition','under_review');`);
+    const lookup = await portRequest(context, '/api/staff/physical-intakes/lookup', { method: 'POST', cookie: context.staffCookie,
+        json: { student_number: 'ONLINE-TRANSITION', application_type: 'transition' } });
+    assert.equal((await lookup.json()).application.application_type, 'transition');
+    const registration = await registerPortPdf(context, crypto.randomUUID(), { receipt: {
+        student_number: 'ONLINE-TRANSITION', application_type: 'transition', linked_application_id: 'transition-application'
+    } });
+
+    assert.equal(registration.detail.intake.application_type, 'transition');
+    assert.equal(registration.detail.intake.application_route, 'transition');
+    assert.equal((await context.database.prepare('SELECT application_type FROM physical_intakes WHERE id=?').bind(registration.detail.intake.id).first()).application_type, 'renewal');
 });
 
 test('physical uploads never enter the online scanner and leave its pending verdict untouched', async () => {

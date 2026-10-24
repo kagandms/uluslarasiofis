@@ -45,13 +45,15 @@ function createPublicTrackingDocumentDto(policy, requirement) {
     };
 }
 
-function createTrackingApplicationDto(application) {
+function createTrackingApplicationDto(application, rejectionReason = null) {
     return {
         status: application.status,
-        application_type: application.application_type,
+        application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
         created_at: application.created_at ?? null,
         updated_at: application.updated_at ?? null,
-        submitted_at: application.submitted_at ?? null
+        submitted_at: application.submitted_at ?? null,
+        ...(application.status === 'rejected' && typeof rejectionReason === 'string'
+            ? { rejection_reason: rejectionReason } : {})
     };
 }
 
@@ -120,16 +122,19 @@ export async function lookupApplicationTracking(request, environment) {
     const application = await repositories.applications.findTrackableByReferenceNumber(referenceNumber);
     if (!application) return { found: false, application: null, documents: [] };
 
-    const [storedRequirements, studentMessages] = await Promise.all([
+    const [storedRequirements, studentMessages, rejectionReason] = await Promise.all([
         repositories.documents.listStudentRequirements(application.id),
-        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id)
+        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id),
+        application.status === 'rejected'
+            ? repositories.applicationNotes.readLatestStudentApplicationRejection(application.id)
+            : null
     ]);
     const requirementsWithMessages = storedRequirements.map((requirement) => ({
         ...requirement, student_message: studentMessages.get(requirement.document_record_id)
     }));
     return {
         found: true,
-        application: createTrackingApplicationDto(application),
+        application: createTrackingApplicationDto(application, rejectionReason),
         documents: createDocumentTrackingView(application, requirementsWithMessages, createPublicTrackingDocumentDto)
     };
 }

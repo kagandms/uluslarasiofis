@@ -118,6 +118,9 @@ function createApplicationSummary(document, application, messages, locale) {
     appendDetail(document, details, messages.studentNumber, application.student_number || '');
     appendDetail(document, details, messages.applicationType, messages[`${application.application_type}Application`] || messages.trackingStatusUnknown);
     appendDetail(document, details, messages.trackingStatusLabel, readApplicationStatusLabel(messages, application.status));
+    if (application.rejection_reason) {
+        appendDetail(document, details, messages.trackingRejectionReasonLabel, application.rejection_reason);
+    }
 
     const dates = [
         ['created_at', 'trackingCreatedAt'],

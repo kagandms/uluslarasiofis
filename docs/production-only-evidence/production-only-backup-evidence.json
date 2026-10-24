@@ -1,45 +1,50 @@
 {
   "environment": "production",
-  "backup_id": "d9050b0d902562e7976133750e06d965",
-  "backup_verified_at": "2026-10-18T16:00:50Z",
-  "method": "D1 SQL export and Time Travel bookmark plus an R2 object-level recovery copy in the existing print bucket; same Cloudflare account, not an independent account backup.",
+  "backup_id": "75fd20b3808619750eff21d34d6cbfa4",
+  "backup_verified_at": "2026-10-23T16:13:51.371Z",
+  "method": "D1 Time Travel bookmark and SQL export plus an R2 object-level recovery copy in the existing print bucket; same Cloudflare account, not an independent account backup.",
   "coverage": {
     "d1_snapshot": true,
     "d1_sql_export": true,
     "r2_objects": true
   },
   "d1": {
-    "sql_export_bytes": 711632,
-    "sql_export_sha256": "e2146f97a11723ff60334739452555f2c15c7b1739971ac87833bae962f70457",
+    "sql_export_bytes": 2215136,
+    "sql_export_sha256": "37c80d5ba5c7d592888a23fe43f32dea7408327299c972c1359c382b03d91774",
     "restored_database_integrity": "ok",
-    "restored_table_count": 41,
-    "restored_row_count": 1361,
     "foreign_key_errors": 0,
-    "time_travel_bookmark": "000000a8-0000035c-00005108-51e76be4d60ba4bf88e6d9dfc3c3f291"
+    "time_travel_bookmark": "000000dd-00000562-0000510d-afecad884d178a76a7af185188517c38"
   },
   "r2": {
     "source_bucket": "uluslarasiofis-documents-production",
     "recovery_bucket": "uluslarasiofis-print-production",
-    "recovery_prefix": "recovery/student-documents-2026-10-18T155336352Z/",
-    "copied_object_count": 206,
-    "copied_bytes": 235188807,
-    "source_inventory_count": 206,
-    "source_inventory_bytes": 235188807,
-    "recovery_inventory_count_including_manifest": 207,
-    "manifest_key": "recovery/student-documents-2026-10-18T155336352Z/manifest.json",
-    "manifest_sha256": "e36b63d67cf6b21009eff078e2b63701051cdcc604d6b5ee4f8be8e0bd735bf4",
-    "manifest_etag": "d9050b0d902562e7976133750e06d965"
+    "recovery_prefix": "recovery/student-documents-2026-10-23T155858Z/",
+    "copied_object_count": 667,
+    "copied_bytes": 325909899,
+    "source_inventory_count": 667,
+    "source_inventory_bytes": 325909899,
+    "recovery_inventory_count_including_manifest": 668,
+    "recovery_inventory_count_including_restore_probe": 669,
+    "recovery_bytes_including_manifest": 326115051,
+    "recovery_bytes_including_manifest_and_restore_probe": 326115071,
+    "manifest_key": "recovery/student-documents-2026-10-23T155858Z/manifest.json",
+    "manifest_sha256": "286cd160c41f5f97363af06dca8b9d80608db98ec2ec382b33cf1cf3d2cf9dd1",
+    "manifest_etag": "75fd20b3808619750eff21d34d6cbfa4",
+    "restored_probe_bytes": 20,
+    "restored_probe_sha256": "6ed645ef0e1abea1bf1e4e935ff04f9e18d39812387f63cda3415b46240f0405",
+    "restore_probe_retained": true
   },
   "restore_drill": {
-    "verified_at": "2026-10-18T16:00:50Z",
+    "verified_at": "2026-10-23T16:13:51.371Z",
     "result": "passed",
     "coverage": {
       "d1": true,
       "r2": true
     },
-    "r2_restored_bytes": 4217819,
-    "r2_restored_object_sha256": "8f79b1bba22f12402e80e8a6c6e4c90fac30f45ea2f8d92709b0cc8270b8984c",
-    "temporary_restore_object_removed": true,
-    "evidence_ref": "8f79b1bba22f12402e80e8a6c6e4c90fac30f45ea2f8d92709b0cc8270b8984c"
+    "r2_restored_bytes": 20,
+    "r2_restored_object_sha256": "6ed645ef0e1abea1bf1e4e935ff04f9e18d39812387f63cda3415b46240f0405",
+    "temporary_restore_object_removed": false,
+    "evidence_file": "docs/production-only-evidence/production-only-restore-drill-2026-10-23.json",
+    "evidence_ref": "8d1341a114f5d3605df31988d57e1fd341724217ff6ec12bbc580db56c1afcb9"
   }
 }

@@ -1,0 +1,74 @@
+{
+  "recorded_on": "2026-10-23",
+  "scope": "in-memory only",
+  "checks": {
+    "gss_future_promise": {
+      "result": "ready",
+      "eligibility_dates_stored": false,
+      "note": "No active insurance or GSS application evidence was seeded."
+    },
+    "submit_race": {
+      "injected_between_readiness_and_write": true,
+      "http_status": 200,
+      "persisted_status": "submitted",
+      "missing_documents": [
+        "address_hotel",
+        "address_hotel_receipt"
+      ]
+    },
+    "unauthenticated_note": {
+      "http_status": 200,
+      "cookie_supplied": false,
+      "student_message_exposed": true,
+      "document_codes_exposed": [
+        "residence_application_form",
+        "passport",
+        "photographs",
+        "student_certificate",
+        "residence_permit_fee",
+        "address_rental_contract"
+      ]
+    },
+    "completed_owner_access": {
+      "existing_session_http_status": 401,
+      "valid_credentials_http_status": 401
+    },
+    "rejection": {
+      "submitted": {
+        "allowed": false,
+        "code": "INVALID_APPLICATION_TRANSITION"
+      },
+      "under_review": {
+        "allowed": false,
+        "code": "INVALID_APPLICATION_TRANSITION"
+      },
+      "approved_for_processing": {
+        "allowed": false,
+        "code": "INVALID_APPLICATION_TRANSITION"
+      },
+      "sent_to_migration": {
+        "allowed": false,
+        "code": "INVALID_APPLICATION_TRANSITION"
+      },
+      "migration_approved": {
+        "allowed": false,
+        "code": "INVALID_APPLICATION_TRANSITION"
+      }
+    },
+    "transfer": {
+      "http_status": 400,
+      "code": "VALIDATION_ERROR"
+    },
+    "policy_combinations": {
+      "evaluated": 2400,
+      "note": "Includes irrelevant-answer combinations; policy invariants, not legal approval or browser UAT."
+    },
+    "age_reference_date": {
+      "date_of_birth": "2008-10-20",
+      "e_ikamet_date": "2026-10-19",
+      "portal_date": "2026-10-23",
+      "under18_at_e_ikamet": true,
+      "under18_at_portal": false
+    }
+  }
+}

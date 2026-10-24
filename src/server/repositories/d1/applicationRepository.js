@@ -8,6 +8,7 @@ import { generateApplicationReference } from '../../auth/applicationAccessCode.j
 
 const PUBLIC_APPLICATION_FIELDS = Object.freeze({
     applicationType: 'application_type',
+    applicationRoute: 'application_route',
     addressEvidenceType: 'address_evidence_type',
     accommodationType: 'accommodation_type',
     hasResidenceCard: 'has_residence_card',
@@ -15,6 +16,11 @@ const PUBLIC_APPLICATION_FIELDS = Object.freeze({
     minorFamilyStatus: 'minor_family_status',
     minorParentsIdentified: 'minor_parents_identified',
     insuranceBasis: 'insurance_basis',
+    transitionForeignId: 'transition_foreign_id',
+    transitionCardSerial: 'transition_card_serial',
+    transitionCardNumber: 'transition_card_number',
+    transitionContactPreference: 'transition_contact_preference',
+    transitionChangeProvince: 'transition_change_province',
 
     studentEmail: 'student_email',
     studentPhone: 'student_phone',
@@ -47,7 +53,7 @@ function isReferenceConflict(error) {
  */
 export function createApplicationRepository(database) {
     return Object.freeze({
-        async createDraft({ applicationId, studentId, studentNumber, applicationType, studentEmail, studentPhone }) {
+        async createDraft({ applicationId, studentId, studentNumber, applicationType, applicationRoute = 'standard', studentEmail, studentPhone }) {
             const normalizedStudentNumber = normalizeStudentNumber(studentNumber);
             const statements = [
                 database.prepare(`
@@ -57,11 +63,11 @@ export function createApplicationRepository(database) {
                 `).bind(studentId, studentNumber.trim(), normalizedStudentNumber),
                 database.prepare(`
                     INSERT INTO applications (
-                        id, student_id, application_type, student_email, student_phone, retention_due_at
+                        id, student_id, application_type, application_route, student_email, student_phone, retention_due_at
                     )
-                    SELECT ?, id, ?, ?, ?, datetime('now', '+30 days')
+                    SELECT ?, id, ?, ?, ?, ?, datetime('now', '+30 days')
                     FROM students WHERE normalized_student_number = ?
-                `).bind(applicationId, applicationType, studentEmail, studentPhone, normalizedStudentNumber)
+                `).bind(applicationId, applicationType, applicationRoute, studentEmail, studentPhone, normalizedStudentNumber)
             ];
 
             try {
@@ -75,7 +81,7 @@ export function createApplicationRepository(database) {
             return this.findById(applicationId);
         },
         async createDraftWithSession({
-            applicationId, studentId, studentNumber, applicationType, studentEmail, studentPhone,
+            applicationId, studentId, studentNumber, applicationType, applicationRoute = 'standard', studentEmail, studentPhone,
             sessionId, tokenHash, expiresAt, createdAt, auditEventId, requestId,
             referenceNumber = null, accessCodeHash = null
         }) {
@@ -93,11 +99,11 @@ export function createApplicationRepository(database) {
                     database.prepare(`
                         INSERT INTO applications (
                             id, student_id, reference_number, access_code_hash, access_code_created_at,
-                            access_code_version, lock_version, application_type, student_email, student_phone, retention_due_at
+                            access_code_version, lock_version, application_type, application_route, student_email, student_phone, retention_due_at
                         )
-                        SELECT ?, id, ?, ?, ?, 1, 1, ?, ?, ?, datetime(?, '+30 days')
+                        SELECT ?, id, ?, ?, ?, 1, 1, ?, ?, ?, ?, datetime(?, '+30 days')
                         FROM students WHERE normalized_student_number = ?
-                    `).bind(applicationId, finalReference, accessCodeHash, createdAt, applicationType, studentEmail, studentPhone, createdAt, normalizedStudentNumber),
+                    `).bind(applicationId, finalReference, accessCodeHash, createdAt, applicationType, applicationRoute, studentEmail, studentPhone, createdAt, normalizedStudentNumber),
                     database.prepare(`
                         INSERT INTO application_sessions (id, application_id, token_hash, expires_at, created_at)
                         VALUES (?, ?, ?, ?, ?)
@@ -252,7 +258,7 @@ export function createApplicationRepository(database) {
                 `).bind(...queryValues).first(),
                 database.prepare(`
                     SELECT applications.id, students.student_number, applications.first_name,
-                           applications.last_name, applications.application_type, applications.status,
+                           applications.last_name, applications.application_type, applications.application_route, applications.status,
                            applications.submitted_at, applications.updated_at,
                            application_deletions.state AS deletion_state
                     FROM applications
@@ -288,7 +294,7 @@ export function createApplicationRepository(database) {
         },
         async findCurrentStatusById(applicationId) {
             return database.prepare(`
-                SELECT status, application_type, updated_at, lock_version
+                SELECT status, application_type, application_route, updated_at, lock_version
                 FROM applications
                 WHERE id = ?
             `).bind(applicationId).first();
@@ -360,7 +366,7 @@ export function createApplicationRepository(database) {
         async findActiveByStudentNumber(studentNumber) {
             const normalizedStudentNumber = normalizeStudentNumber(studentNumber);
             return database.prepare(`
-                SELECT applications.id, applications.status, applications.application_type
+                SELECT applications.id, applications.status, applications.application_type, applications.application_route
                 FROM applications
                 JOIN students ON students.id = applications.student_id
                 WHERE students.normalized_student_number = ?
@@ -374,21 +380,30 @@ export function createApplicationRepository(database) {
             if (fields.length === 0) return this.findById(applicationId);
 
             const requestedType = changes.applicationType;
+            const requestedRoute = changes.applicationRoute;
             const ownerSessionId = auditContext?.ownerSessionId || null;
             const writeAuthority = { expectedLockVersion, ownerSessionId };
-            if (requestedType === undefined) return this.updateDraftFields(applicationId, fields, writeAuthority);
+            if (requestedType === undefined && requestedRoute === undefined) return this.updateDraftFields(applicationId, fields, writeAuthority);
 
             const currentApplication = await this.findById(applicationId);
             if (!currentApplication || currentApplication.status !== 'draft') return null;
             if (expectedLockVersion !== null && expectedLockVersion !== undefined && currentApplication.lock_version !== expectedLockVersion) {
                 throw new ApplicationConflictError('APPLICATION_UPDATE_CONFLICT');
             }
-            if (requestedType === currentApplication.application_type) {
-                return this.updateDraftFields(applicationId, fields.filter(([key]) => key !== 'applicationType'), writeAuthority);
+            const targetType = requestedType ?? currentApplication.application_type;
+            const targetRoute = requestedRoute ?? currentApplication.application_route ?? 'standard';
+            const isTypeChanged = targetType !== currentApplication.application_type;
+            const isRouteChanged = targetRoute !== (currentApplication.application_route ?? 'standard');
+            if (!isTypeChanged && !isRouteChanged) {
+                return this.updateDraftFields(applicationId, fields.filter(([key]) => !['applicationType', 'applicationRoute'].includes(key)), writeAuthority);
             }
             if (!auditContext?.auditEventId || !auditContext?.requestId) throw new TypeError('Application type changes require audit context.');
 
-            const remaps = await this.readDocumentRequirementRemaps(applicationId, requestedType);
+            const remaps = isTypeChanged ? await this.readDocumentRequirementRemaps(applicationId, targetType) : [];
+            const expectedDocumentRecordCount = isTypeChanged
+                ? remaps.length
+                : (await database.prepare('SELECT COUNT(*) AS total FROM document_records WHERE application_id=?')
+                    .bind(applicationId).first()).total;
             const assignments = fields.map(([key]) => `${PUBLIC_APPLICATION_FIELDS[key]} = ?`);
             assignments.push('lock_version = lock_version + 1');
             const values = fields.map(([, value]) => value);
@@ -402,7 +417,7 @@ export function createApplicationRepository(database) {
                   AND EXISTS (SELECT 1 FROM applications WHERE id=? AND status='draft'
                     AND (? IS NULL OR lock_version=?) AND ${APPLICATION_OWNER_GUARD})
             `).bind(
-                remap.targetRequirementId, requestedType, remap.recordId, applicationId,
+                remap.targetRequirementId, targetType, remap.recordId, applicationId,
                 remap.currentRequirementId, currentApplication.application_type, applicationId, expectedLockVersion, expectedLockVersion,
                 ownerSessionId, ownerSessionId
             )));
@@ -424,7 +439,7 @@ export function createApplicationRepository(database) {
             `).bind(
                 ...values, applicationId, currentApplication.application_type, expectedLockVersion, expectedLockVersion,
                 ownerSessionId, ownerSessionId,
-                applicationId, remaps.length, applicationId, requestedType, requestedType
+                applicationId, expectedDocumentRecordCount, applicationId, targetType, targetType
             ));
             statements.push(database.prepare(`
                 INSERT INTO audit_events (
@@ -437,7 +452,11 @@ export function createApplicationRepository(database) {
                 auditContext.requestId,
                 JSON.stringify({
                     previous_application_type: currentApplication.application_type,
-                    new_application_type: requestedType
+                    new_application_type: targetType,
+                    ...(isRouteChanged ? {
+                        previous_application_route: currentApplication.application_route ?? 'standard',
+                        new_application_route: targetRoute
+                    } : {})
                 })
             ));
             const results = await database.batch(statements);

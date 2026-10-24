@@ -11,7 +11,7 @@ export async function reservePhysicalReference(request, context) {
     requireMethod(request,'POST');
     const body = await readJsonBody(request,2048);
     if (Object.keys(body).some(key => !['draft_id','application_date','application_type'].includes(key))) throw new ApiError(400,'VALIDATION_ERROR','Tahsis alanları geçersiz.');
-    if (!['initial','renewal'].includes(body.application_type)) throw new ApiError(400,'VALIDATION_ERROR','Önce başvuru türünü seçin.');
+    if (!['initial','renewal','transition'].includes(body.application_type)) throw new ApiError(400,'VALIDATION_ERROR','Önce başvuru türünü seçin.');
     const draftId = requireReceiptUuid(body.draft_id);
     const day = requireApplicationDate(body.application_date);
     const existing = await context.receipts.draftReservation({ draftId, sessionHash: context.sessionHash });

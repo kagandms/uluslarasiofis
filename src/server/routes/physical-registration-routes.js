@@ -43,7 +43,7 @@ async function checkReplay(context, payload) {
     const intake = await context.repository.find(payload.id);
     if (!intake) return false;
     const file = await context.repository.file(payload.id);
-    const keys = ['student_number', 'first_name', 'last_name', 'passport_number', 'application_type', 'linked_application_id'];
+    const keys = ['student_number', 'first_name', 'last_name', 'passport_number', 'application_type', 'application_route', 'linked_application_id'];
     if (intake.deleted_at || !file || file.sha256 !== payload.sha256 || file.upload_status !== 'finalized'
         || keys.some(key => intake[key] !== payload.receipt[key])) {
         throw new ApiError(409, 'REGISTRATION_CONFLICT', 'Önceki kaydetme denemesiyle bilgiler eşleşmiyor. Listeyi kontrol edin.');
@@ -85,7 +85,8 @@ export async function savePhysicalRegistration(request, context) {
     if (payload.receipt.linked_application_id) {
         const linked = await context.repository.findLinked(payload.receipt.linked_application_id);
         if (!linked || linked.student_number.trim().toUpperCase() !== payload.receipt.student_number
-            || linked.application_type !== payload.receipt.application_type) throw new ApiError(409, 'APPLICATION_LINK_INVALID', 'Online başvuru bu öğrenciyle eşleşmiyor.');
+            || linked.application_type !== payload.receipt.application_type
+            || linked.application_route !== payload.receipt.application_route) throw new ApiError(409, 'APPLICATION_LINK_INVALID', 'Online başvuru bu öğrenciyle eşleşmiyor.');
     }
     return writeRegistration(context, payload);
 }

@@ -3,11 +3,79 @@ import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import {
     createSubmissionConfirmation,
-    initializeApplicationWizard,
+    initializeApplicationWizard as initializeApplicationWizardRaw,
     renderFingerprintSection,
     renderStudentDocumentRequirements
 } from '../src/public/applicationWizard.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
+
+const TEST_PRIVACY_NOTICE = Object.freeze({
+    available: true,
+    version: 'test-approved-v1',
+    content_by_locale: Object.freeze(Object.fromEntries(SUPPORTED_LOCALES.map((locale) => [locale, `Test notice (${locale})`])))
+});
+
+async function initializeApplicationWizard(root, api, options = {}) {
+    if (!api.readApplicationPrivacyNotice) api.readApplicationPrivacyNotice = async () => TEST_PRIVACY_NOTICE;
+    return initializeApplicationWizardRaw(root, api, options);
+}
+
+test('new application stays blocked before contact fields when approved notice is unavailable', async () => {
+    const { document, root } = createRoot();
+    let createCalls = 0;
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async readApplicationPrivacyNotice() { return { available: false }; },
+        async createApplicationDraft() { createCalls += 1; throw new Error('Must remain blocked.'); }
+    };
+
+    const state = await initializeApplicationWizardRaw(root, api, { startNewApplication: true });
+
+    assert.equal(state.privacyNoticeAvailable, false);
+    assert.equal(root.querySelector('#application-step-form'), null);
+    assert.equal(root.querySelector('[name="student_email"]'), null);
+    assert.match(root.textContent, /başvuru.*kullanılamıyor/i);
+    assert.equal(createCalls, 0);
+    document.defaultView.close();
+});
+
+test('new application shows the privacy notice before contact fields without requesting acknowledgement', async () => {
+    const { document, root } = createRoot();
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async readApplicationPrivacyNotice() { return TEST_PRIVACY_NOTICE; }
+    };
+
+    const state = await initializeApplicationWizardRaw(root, api, { startNewApplication: true });
+
+    assert.ok(root.querySelector('#application-step-form'));
+    assert.ok(root.querySelector('[name="student_email"]'));
+    assert.equal(root.querySelector('[data-action="privacy-notice-continue"]'), null);
+    assert.equal(root.querySelector('[data-privacy-notice]')?.textContent, 'Test notice (tr)');
+    assert.equal(root.querySelector('[data-action="privacy-notice-read"]'), null);
+    assert.equal(state.privacyNotice.version, 'test-approved-v1');
+    document.documentElement.lang = 'en';
+    document.dispatchEvent(new document.defaultView.Event('public:locale-changed'));
+    assert.ok(root.querySelector('#application-step-form'));
+    assert.equal(root.querySelector('[data-privacy-notice]')?.textContent, 'Test notice (en)');
+    document.defaultView.close();
+});
+
+test('an existing draft opens without reading or accepting the new-application privacy notice', async () => {
+    const { document, root } = createRoot();
+    const application = { status: 'draft', student_number: 'EXISTING-1', student_email: 'student@example.edu' };
+    const api = {
+        async readCurrentApplication() { return application; },
+        async readApplicationPrivacyNotice() { throw new Error('Existing drafts must not depend on the new-intake notice.'); }
+    };
+
+    const state = await initializeApplicationWizardRaw(root, api);
+
+    assert.equal(state.application, application);
+    assert.ok(root.querySelector('#application-step-form'));
+    assert.equal(root.querySelector('[data-privacy-notice]'), null);
+    document.defaultView.close();
+});
 
 function createRoot() {
     const document = new JSDOM('<!doctype html><html lang="tr"><body><section></section></body></html>').window.document;
@@ -100,7 +168,7 @@ test('contact step keeps Continue disabled until valid contact fields and the se
     const phone = root.querySelector('[data-phone-visible]');
     const acknowledgement = root.querySelector('[name="contact_acknowledgement_accepted"]');
 
-    assert.equal(root.querySelector('h2')?.textContent, 'İletişim Bilgileri');
+    assert.equal(root.querySelector('h2[data-i18n="stepContact"]')?.textContent, 'İletişim Bilgileri');
     assert.equal(continueButton.disabled, true);
     assert.ok(acknowledgement);
     assert.equal(root.querySelector('[name="declaration_accepted"]'), null);
@@ -177,15 +245,86 @@ test('new application is never marked saved before a server draft exists and war
     document.defaultView.close();
 });
 
+test('save failure alert includes the safe server support request ID', async () => {
+    const { document, root } = createRoot();
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async createApplicationDraft() {
+            throw Object.assign(new Error('Service unavailable.'), {
+                code: 'INTERNAL_ERROR',
+                requestId: 'req_11111111-1111-4111-8111-111111111111'
+            });
+        }
+    };
+    const state = await initializeApplicationWizard(root, api);
+    root.querySelector('[name="student_number"]').value = 'SYN-SUPPORT-1';
+    root.querySelector('[name="application_type"]').value = 'initial';
+    root.querySelector('[name="student_email"]').value = 'synthetic@example.edu';
+    root.querySelector('[data-phone-visible]').value = '+905551112233';
+    root.querySelector('[name="contact_acknowledgement_accepted"]').checked = true;
+    root.querySelector('[data-phone-visible]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    root.querySelector('[name="student_email"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    await submitWizard(root);
+
+    assert.equal(state.errorRequestId, 'req_11111111-1111-4111-8111-111111111111');
+    assert.match(root.querySelector('[role="alert"]').textContent, /Destek kodu/u);
+    assert.match(root.querySelector('[role="alert"]').textContent, /req_11111111-1111-4111-8111-111111111111/u);
+    document.defaultView.close();
+});
+
+test('Continue preserves the request ID and specific error from a failed autosave', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    api.updateCurrentApplication = async () => {
+        throw Object.assign(new Error('Service unavailable.'), {
+            code: 'INTERNAL_ERROR', requestId: 'req_22222222-2222-4222-8222-222222222222'
+        });
+    };
+    const firstName = root.querySelector('[name="first_name"]');
+    firstName.value = 'ChangedName';
+    firstName.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    await submitWizard(root);
+
+    assert.equal(state.errorRequestId, 'req_22222222-2222-4222-8222-222222222222');
+    assert.match(root.querySelector('[role="alert"]').textContent, /req_22222222-2222-4222-8222-222222222222/u);
+    assert.equal(state.errorKey, 'applicationSaveFailed');
+    assert.equal(root.querySelector('[name="first_name"]').value, 'ChangedName');
+    document.defaultView.close();
+});
+
+test('requirements refresh failure reports a load error after preserving the saved application', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    fillRequiredResidenceFields(root);
+    root.querySelector('[name="is_under_18"]').value = 'false';
+    root.querySelector('[name="fingerprint_status"][value="registered"]').checked = true;
+    root.querySelector('[name="fingerprint_code"]').value = 'FP-A/42';
+    api.readCurrentStudentDocumentRequirements = async () => {
+        throw Object.assign(new Error('Requirements unavailable.'), {
+            code: 'INTERNAL_ERROR', requestId: 'req_33333333-3333-4333-8333-333333333333'
+        });
+    };
+
+    await submitWizard(root);
+
+    assert.equal(state.errorKey, 'applicationLoadFailed');
+    assert.equal(state.errorRequestId, 'req_33333333-3333-4333-8333-333333333333');
+    assert.ok(state.application);
+    assert.equal(state.step, 1);
+    assert.match(root.querySelector('[role="alert"]').textContent, /req_33333333-3333-4333-8333-333333333333/u);
+    document.defaultView.close();
+});
+
 test('valid contact details create a server draft and survive a wizard refresh without Continue', async () => {
     const { document, root } = createRoot();
     let createCalls = 0;
     let savedPhone = '';
+    let savedPrivacyNoticeVersion = '';
     let application = null;
     const api = {
         async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
         async createApplicationDraft(fields) {
             createCalls += 1;
+            savedPrivacyNoticeVersion = fields.privacy_notice_version;
             application = {
                 id: 'draft-autosave-1', status: 'draft', student_number: fields.student_number,
                 application_type: fields.application_type, email: fields.email, phone: fields.phone,
@@ -210,6 +349,7 @@ test('valid contact details create a server draft and survive a wizard refresh w
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(createCalls, 1);
+    assert.equal(savedPrivacyNoticeVersion, 'test-approved-v1');
     assert.equal(state.application.id, 'draft-autosave-1');
     assert.equal(savedPhone, '+905551112233');
     assert.equal(root.querySelector('[name="student_number"]').value, 'SYN-CONTACT-KEEP');
@@ -415,6 +555,20 @@ test('birth date uses a keyboard-friendly day-month-year text field and saves a 
     document.defaultView.close();
 });
 
+test('date fields insert day-month-year separators while the user types or pastes', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+    const birthDate = root.querySelector('[name="date_of_birth"]');
+    birthDate.value = '31102005';
+    birthDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.equal(birthDate.value, '31.10.2005');
+    const residenceDate = root.querySelector('[name="residence_application_date"]');
+    residenceDate.value = '2026-10-20';
+    residenceDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(residenceDate.value, '20.10.2026');
+    document.defaultView.close();
+});
+
 test('invalid or incomplete birth dates stay visible and block Continue with a clear message', async () => {
     const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
     const birthDate = root.querySelector('[name="date_of_birth"]');
@@ -604,6 +758,18 @@ test('under-18 answer is derived from the birth date and cannot be manually chan
     await state.autosave.flush();
     assert.equal(select.value, 'true');
     assert.equal(state.application.is_under_18, true);
+    document.defaultView.close();
+});
+
+test('under-18 answer shows the current-age result until the residence application date is entered', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+    const residenceDate = root.querySelector('[name="residence_application_date"]');
+    residenceDate.value = '';
+    residenceDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    root.querySelector('[name="date_of_birth"]').value = '04.10.2010';
+    root.querySelector('[name="date_of_birth"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.equal(root.querySelector('[name="is_under_18"]').value, 'true');
     document.defaultView.close();
 });
 

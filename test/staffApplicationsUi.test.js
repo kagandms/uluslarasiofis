@@ -729,6 +729,43 @@ test('staff application review does not expose an access-code reset action', asy
     assert.equal(resetCalledWith, null);
 });
 
+test('staff must enter an official reason before rejecting an application at Migration Authority', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const actions = [];
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM, status: 'sent_to_migration' },
+                assignment: null, allowed_status_transitions: ['rejected'], documents: []
+            };
+        },
+        async transitionApplication(...arguments_) { actions.push(arguments_); }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const reason = root.querySelector('[data-action="application-rejection-reason"]');
+    assert.ok(reason);
+    assert.equal(reason.required, true);
+    assert.equal(reason.maxLength, 1000);
+    const rejectButton = root.querySelector('[data-target-status="rejected"]');
+    rejectButton.click();
+    assert.equal(actions.length, 0);
+
+    reason.value = 'Göç İdaresinin resmî ret kararı: eksik belge.';
+    rejectButton.click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(actions, [[
+        'app-001', 'rejected', QUEUE_ITEM.updated_at, 'Göç İdaresinin resmî ret kararı: eksik belge.'
+    ]]);
+});
+
 test('staff application workflow renders rollback action with outline style and revert label', async (context) => {
     const { document, root } = createStaffDom();
     installDocument(context, document);

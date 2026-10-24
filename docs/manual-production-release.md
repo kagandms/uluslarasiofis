@@ -1,21 +1,26 @@
 # Manual code/assets release from a tablet
 
-Only `.github/workflows/production-release.yml` publishes. The code-only release baseline is
-production `dec9891adb78f8d0c0cae0de1077431687c2d455`, which already contains migrations `0024` and
-`0025`; PR #6 recovery maintenance remains separate.
-Merging this PR does not deploy. No backup/restore result is asserted by this release workflow.
+Only `.github/workflows/production-release.yml` publishes. The reviewed code-only baseline in
+`config/production-publication.json` is `8be47f394ca06080e7bc2426e0e0d8fd205b9b34`; PR #31 advanced
+`production` to `864556d652d087a17280d35ef8e352682c333150`. At the latest verified ledger check,
+migrations through `0027` were applied and `0028_student_transition_applications.sql` remained pending.
+Exact-SHA run #34 passed `operation=preflight`; its publish step was skipped. No Worker deployment or
+production migration resulted from that run. Fresh backup/restore and current-schema rollback evidence
+are recorded under `docs/production-only-evidence/`; the R2 copy is in the same Cloudflare account.
 
-## First use, after separate merge approval
+## Release procedure
 
-1. Obtain the current full production HEAD SHA after merging. Run **Production release (manual)**
-   on `production`, with that exact SHA and `operation=preflight`. Approve the GitHub **Production**
-   environment. This runs the same exact-SHA CI and authenticated read-only checks, without publication.
-2. Review the result and recovery limitations below. Obtain separate explicit approval for the first
-   real deployment. Run the same workflow with the then-current SHA and `operation=publish`.
-   CI builds/tests once without credentials; environment approval gates the credentialed job.
-3. Review the active immutable Worker version, `release:<SHA>` annotation, manifest checksum and six
-   public GET health checks in the run. A failed or uncertain result requires inspection before another
-   attempt. There is no automatic retry, rollback, migration, restore, or print queue replay.
+1. Use the exact full SHA at the current `production` HEAD. Run **Production release (manual)** on
+   `production` with `operation=preflight`, then approve the GitHub **Production** environment review.
+   CI validates that SHA; the protected job checks the artifact, Cloudflare metadata, D1 ledger and
+   exact-artifact dry-run. `preflight` does not publish or apply migrations.
+2. Review all preflight evidence and the remaining recovery limits. A deployment requires a separate,
+   explicit user request for that exact SHA and scope. Only then run the workflow with
+   `operation=publish`; the Production environment review is still required. The workflow publishes
+   the tested artifact and performs read-only post-deploy metadata and six-route health checks.
+3. Inspect the active Worker version, release annotation, manifest checksum and health results. A
+   failed or uncertain result requires investigation before another attempt. There is no automatic
+   retry, rollback, migration, restore, or print queue replay.
 
 Production environment reviewer/branch restrictions and administrator bypass settings must remain
 unchanged. Cloudflare credentials exist only in that environment. Concurrency serializes the complete
@@ -54,29 +59,24 @@ code still needs human review for new data-mutating behavior. There is no automa
 ## Permissions and remaining recovery risk
 
 Existing account-scoped **Workers Scripts Edit** must permit Worker assets upload, version creation and
-activation; the token also needs its existing D1 ledger-query access. Read-only preflight alone does not
-prove write permission. No permission was expanded, and no live write permission was exercised in PR CI.
-New version/settings metadata reads will be checked at the first approved authenticated preflight.
-If denied, stop and report the endpoint, HTTP status and numeric error code without provider payloads.
+activation; the token also needs its D1 ledger-query access. Exact-SHA run #34 completed authenticated
+read-only metadata and ledger checks, but did not exercise publish permission. If a future preflight or
+publish check is denied, stop and report the endpoint, HTTP status and numeric error code without provider
+payloads.
 
-The existing daily D1 JSON backup in DOCUMENTS is not a full schema/ledger SQL backup or an independent
-R2 document/print backup. Its current success and retention have not been verified here. The reported
-7-day D1 Time Travel is limited to D1; it does not protect R2 or prove a restore drill. Real SQL and R2
-backup plus isolated restore remain separate, unperformed maintenance requiring explicit export/resource/
-cost approval. No new paid resource or controller is required by daily code releases.
-There is currently no demonstrated end-to-end production recovery or rollback drill. Publication may
-proceed only with this residual risk understood; the workflow does not label missing evidence as passed.
+The 23 October recovery evidence includes a D1 SQL export, Time Travel bookmark, isolated SQLite restore
+and `0028` rehearsal, plus a hash-verified R2 recovery copy and restore probe. The R2 copy is in the
+existing print bucket in the same Cloudflare account, so it is not an independent-account backup. The
+rollback check applies only to the current production schema; reassess it after `0028` and before any
+transition-route record is accepted. A new production migration or data restore remains a separate
+approved operation; this release workflow never applies migrations or restores data.
 
 ## 10057 compatibility correction
 
-The failed release run 38860053033 reached version creation and received HTTP 400 / 10057 before
-activation. No candidate-staged message or activation was reached. Static assets may have been staged;
-this is not an active Worker deployment. The former explicit UUID inheritance was incompatible with
-the account's API; UUIDs must not be sent as binding `version_id`. An SDK type accepting UUIDs was
-insufficient evidence of server support. Regression tests now model the actual latest-only contract.
-The current active UUID still needs an authenticated read; historical logs alone do not establish
-current state. The existing workflow's `operation=preflight` now records active/latest UUIDs and last
-deployment time in Actions logs/summary using only GET requests for this report. Differences stop the
-preflight. No Dashboard sharing, new token, or new workflow is needed. Because Production environment
-credentials allow only the production branch, this new diagnostic cannot run with those credentials
-before the fix has been separately approved and merged. This PR does not change that restriction.
+The historical failed run 38860053033 reached version creation and received HTTP 400 / 10057 before
+activation. Static assets may have been staged; this was not an active Worker deployment. The former
+explicit UUID inheritance was incompatible with the account API; binding `version_id` uses the
+API-supported `latest` value. Regression tests and the protected release workflow enforce that
+contract. The latest recorded active Worker is `c0a250d6-4ef8-4eff-bd27-b40246b5a5f9` (23 October
+2026); run #34 also completed the exact-SHA preflight checks. A later publish still requires explicit
+authorization and a fresh preflight against the then-current `production` SHA.

@@ -58,7 +58,7 @@ async function lookupReceipt(request, context) {
     requireMethod(request, 'POST');
     const body = await readJsonBody(request);
     requireKeys(body, ['student_number', 'application_type']);
-    if (!['initial', 'renewal'].includes(body.application_type)) throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru türünü seçin.');
+    if (!['initial', 'renewal', 'transition'].includes(body.application_type)) throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru türünü seçin.');
     const studentNumber = normalizePhysicalStudentNumber(body.student_number);
     const application = await context.repository.lookup(studentNumber, body.application_type);
     return { student_number: studentNumber, application };

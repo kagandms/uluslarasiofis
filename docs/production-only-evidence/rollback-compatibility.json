@@ -1,0 +1,50 @@
+{
+  "environment": "production",
+  "verified_at": "2026-10-23T16:31:28Z",
+  "current_version_id": "c0a250d6-4ef8-4eff-bd27-b40246b5a5f9",
+  "rollback_version_id": "3a5746c2-6254-4395-9068-2702fb49d093",
+  "evidence_ref": "ac789b37ef353b6158058f9709c59498365712bae787890588d496c45053d4f2",
+  "result": "passed",
+  "compatibility": {
+    "schema": true,
+    "runtime_secrets": true,
+    "d1_r2_bindings": true,
+    "cron_schedules": true
+  },
+  "source": {
+    "current_commit_sha": "8be47f394ca06080e7bc2426e0e0d8fd205b9b34",
+    "rollback_commit_sha": "5434d4ca368d73db70858ddd471a33403bc9a5a6",
+    "current_runtime_module_sha256": "b8cebf9ccae0411b6f0b3fd2a6d5be84020ddea7ad09e1888e6a0a155f7efc4e",
+    "rollback_artifact_sha256": "ac789b37ef353b6158058f9709c59498365712bae787890588d496c45053d4f2",
+    "rollback_artifact_manifest_verified": true,
+    "rollback_artifact_dry_run_passed": true
+  },
+  "database": {
+    "production_applied_through": "0027_application_policy_dates.sql",
+    "pending": [
+      "0028_student_transition_applications.sql"
+    ],
+    "post_rollback_schema_change": "0027 adds two nullable columns to applications; the 5434d4c rollback code does not reference or overwrite either column. 0026 staff_work_hours was already present in the rollback commit and production ledger.",
+    "migration_0028_applied": false,
+    "scope": "Compatibility is verified against the production schema as it exists at this timestamp, before migration 0028. Re-run this review after 0028 and before any route=transition data is accepted."
+  },
+  "runtime_metadata": {
+    "active_and_rollback_binding_count": 34,
+    "binding_name_type_and_nonsecret_values_match": true,
+    "secret_values_read": false,
+    "active_crons": [
+      "* * * * *",
+      "0 0 * * *"
+    ],
+    "rollback_crons": [
+      "* * * * *",
+      "0 0 * * *"
+    ],
+    "crons_match_reviewed_production_config": true
+  },
+  "limitations": [
+    "The rollback evidence is valid for the currently applied production schema only and must be refreshed after migration 0028.",
+    "The 5434d4c Worker does not implement transition-route behavior; do not use it as a feature-compatible fallback after accepting transition-route applications.",
+    "No migration, deployment, rollback, or production data write was performed."
+  ]
+}

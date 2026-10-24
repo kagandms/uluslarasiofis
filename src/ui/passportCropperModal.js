@@ -41,19 +41,31 @@ function getElements() {
 
 function updateSourceSelector(sources, selectedUrl) {
     const { sourceSelectorWrapper, sourceSelector } = getElements();
-    cropSources = Array.isArray(sources) ? sources : [];
+    cropSources = Array.isArray(sources) ? [...sources] : [];
     if (!sourceSelectorWrapper || !sourceSelector) return;
 
     sourceSelector.replaceChildren();
+    if (selectedUrl && !cropSources.some((source) => source.url === selectedUrl)) {
+        cropSources.unshift({ url: selectedUrl, label: 'Mevcut pasaport görseli', type: 'passport' });
+    }
+
     cropSources.forEach((source) => {
         const option = document.createElement('option');
         option.value = source.url;
         option.textContent = source.label || 'Diğer belge';
         sourceSelector.append(option);
     });
+    if (cropSources.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Apply profilinde başka belge bulunamadı';
+        option.disabled = true;
+        option.selected = true;
+        sourceSelector.append(option);
+    }
     sourceSelector.value = selectedUrl || cropSources[0]?.url || '';
-    sourceSelectorWrapper.style.display = cropSources.length > 1 ? 'block' : 'none';
-    sourceSelector.disabled = false;
+    sourceSelectorWrapper.style.display = 'block';
+    sourceSelector.disabled = cropSources.length === 0;
 }
 
 function updatePageSelectorUI() {
