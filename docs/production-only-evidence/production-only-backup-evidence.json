@@ -1,19 +1,19 @@
 {
   "environment": "production",
-  "backup_id": "75fd20b3808619750eff21d34d6cbfa4",
-  "backup_verified_at": "2026-10-23T16:13:51.371Z",
-  "method": "D1 Time Travel bookmark and SQL export plus an R2 object-level recovery copy in the existing print bucket; same Cloudflare account, not an independent account backup.",
+  "backup_id": "000000e4-00001158-0000510e-f04640abc22cb5fc173960ee4a0b5916",
+  "backup_verified_at": "2026-10-24T14:51:44Z",
+  "method": "Fresh production D1 Time Travel bookmark and SQL export, verified by isolated SQLite restore; the verified R2 object-level recovery copy is from 2026-10-23 15:58:58Z and remained within the 24-hour window. The R2 copy is in the same Cloudflare account, not an independent-account backup.",
   "coverage": {
     "d1_snapshot": true,
     "d1_sql_export": true,
     "r2_objects": true
   },
   "d1": {
-    "sql_export_bytes": 2215136,
-    "sql_export_sha256": "37c80d5ba5c7d592888a23fe43f32dea7408327299c972c1359c382b03d91774",
+    "sql_export_bytes": 2208689,
+    "sql_export_sha256": "5b585f96489b449815c76ee29fd6902b4d2aefd5a5fca77f34e1eb7ec78709da",
     "restored_database_integrity": "ok",
     "foreign_key_errors": 0,
-    "time_travel_bookmark": "000000dd-00000562-0000510d-afecad884d178a76a7af185188517c38"
+    "time_travel_bookmark": "000000e4-00001158-0000510e-f04640abc22cb5fc173960ee4a0b5916"
   },
   "r2": {
     "source_bucket": "uluslarasiofis-documents-production",
@@ -35,7 +35,7 @@
     "restore_probe_retained": true
   },
   "restore_drill": {
-    "verified_at": "2026-10-23T16:13:51.371Z",
+    "verified_at": "2026-10-24T14:53:58Z",
     "result": "passed",
     "coverage": {
       "d1": true,
@@ -44,7 +44,7 @@
     "r2_restored_bytes": 20,
     "r2_restored_object_sha256": "6ed645ef0e1abea1bf1e4e935ff04f9e18d39812387f63cda3415b46240f0405",
     "temporary_restore_object_removed": false,
-    "evidence_file": "docs/production-only-evidence/production-only-restore-drill-2026-10-23.json",
-    "evidence_ref": "8d1341a114f5d3605df31988d57e1fd341724217ff6ec12bbc580db56c1afcb9"
+    "evidence_file": "docs/production-only-evidence/production-only-restore-drill-2026-10-24.json",
+    "evidence_ref": "c88f6dc02096db6cc39f5cf1af322a98b179ea0f9d4345f0f03766d181889dd1"
   }
 }
