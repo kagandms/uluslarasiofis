@@ -1,6 +1,7 @@
 import QRCode from 'qrcode';
 import { mobileTransferSession } from '../services/mobile-transfer-session.js';
 
+const QR_WAIT_POLL_INTERVAL_MS = 15000;
 const PHOTO_POLL_INTERVAL_MS = 3000;
 const PHOTO_DOWNLOAD_CONCURRENCY = 2;
 
@@ -11,6 +12,19 @@ function showStatus(state, message) {
 function stopCountdown(state) {
     clearInterval(state.countdownTimer);
     state.countdownTimer = null;
+}
+
+function stopPhotoPolling(state) {
+    clearTimeout(state.pollTimer);
+    state.pollTimer = null;
+}
+
+function schedulePhotoPoll(state) {
+    stopPhotoPolling(state);
+    if (!state.transfer || !state.batchId || !state.container.isConnected || state.lifecycle.signal.aborted || state.isClosing) return;
+    const isPhonePaired = state.session.getSnapshot().isPhonePaired;
+    const interval = isPhonePaired ? PHOTO_POLL_INTERVAL_MS : QR_WAIT_POLL_INTERVAL_MS;
+    state.pollTimer = setTimeout(() => void pollPhotos(state), interval);
 }
 
 function updateCountdown(state) {
@@ -63,6 +77,7 @@ async function renderPairing(state) {
     if (snapshot.isPhonePaired) {
         hideClaimQr(state);
         startCountdown(state);
+        schedulePhotoPoll(state);
         return;
     }
     const canvas = document.createElement('canvas');
@@ -73,6 +88,7 @@ async function renderPairing(state) {
     state.button.textContent = '📱 QR hazır';
     showStatus(state, 'Telefonla bir kez okutun. Aynı telefon bu QR süresi boyunca bağlı kalır.');
     startCountdown(state);
+    schedulePhotoPoll(state);
 }
 
 function showBatchError(state, error) {
@@ -109,6 +125,7 @@ async function openPairing(state, options = {}) {
 }
 
 function resetClosedTransfer(state) {
+    stopPhotoPolling(state);
     stopCountdown(state);
     state.transfer = null;
     state.batchId = null;
@@ -127,6 +144,7 @@ async function endTransfer(state) {
         return;
     }
     state.isClosing = state.button.disabled = state.endButton.disabled = true;
+    stopPhotoPolling(state);
     try {
         await state.session.closeTransfer();
         if (!state.lifecycle.signal.aborted) resetClosedTransfer(state);
@@ -136,6 +154,7 @@ async function endTransfer(state) {
     } finally {
         state.isClosing = state.endButton.disabled = false;
         state.button.disabled = Boolean(state.transfer && state.session.getSnapshot().isPhonePaired);
+        schedulePhotoPoll(state);
     }
 }
 
@@ -188,7 +207,10 @@ async function pollPhotos(state) {
             console.warn('Phone photo polling failed.', { errorName: error.name });
             showStatus(state, `${error.message} Bağlantı düzelince tekrar denenecek.`);
         }
-    } finally { state.isPolling = false; }
+    } finally {
+        state.isPolling = false;
+        schedulePhotoPoll(state);
+    }
 }
 
 function createTransferInstructions() {
@@ -251,7 +273,7 @@ function createPanelState(container, receiveFiles, session) {
     qrSection.append(qr, countdown);
     container.append(button, discardButton, endButton, endHint, qrSection, status, createTransferInstructions());
     return { container, receiveFiles, session, button, discardButton, endButton, endHint, qr, countdown, status, transfer: null, batchId: null,
-        countdownTimer: null, received: new Set(), lifecycle: new AbortController(), isPolling: false, isOpening: false, isClosing: false };
+        countdownTimer: null, pollTimer: null, received: new Set(), lifecycle: new AbortController(), isPolling: false, isOpening: false, isClosing: false };
 }
 
 /** Connects a phone to the active student batch and reuses its paired session between modal instances. */
@@ -265,7 +287,6 @@ export function mountMobileTransferPanel(container, receiveFiles, session = mobi
     state.discardButton.addEventListener('click', discardPending);
     state.endButton.addEventListener('click', endConnection);
     document.addEventListener('visibilitychange', refreshCountdown);
-    const timer = setInterval(() => pollPhotos(state), PHOTO_POLL_INTERVAL_MS);
     const observer = new MutationObserver(() => {
         if (container.isConnected) return;
         observer.disconnect();
@@ -275,7 +296,7 @@ export function mountMobileTransferPanel(container, receiveFiles, session = mobi
     });
     observer.observe(document.body, { childList: true, subtree: true });
     state.lifecycle.signal.addEventListener('abort', () => {
-        clearInterval(timer);
+        stopPhotoPolling(state);
         stopCountdown(state);
         state.button.removeEventListener('click', openQr);
         state.discardButton.removeEventListener('click', discardPending);

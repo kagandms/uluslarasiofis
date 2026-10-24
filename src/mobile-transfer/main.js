@@ -17,6 +17,7 @@ let photos = [];
 let isSending = false;
 let isTransferEnded = false;
 let isCheckingStatus = false;
+let statusPollTimer = null;
 
 const PHOTO_STATUS_LABELS = {
     ready: 'Gönderilmeyi bekliyor', queued: 'Sırada', uploading: 'Gönderiliyor…',
@@ -119,6 +120,7 @@ function stopPhoneTransfer() {
     transferId = batchId = null;
     expiresAt = 0;
     clearInterval(statusPollTimer);
+    statusPollTimer = null;
     sessionStorage.removeItem('mobileDocumentTransfer');
     capture.disabled = choose.disabled = camera.disabled = gallery.disabled = true;
     markStalePhotos(null);
@@ -127,7 +129,7 @@ function stopPhoneTransfer() {
 }
 
 async function checkTransferStatus() {
-    if (isCheckingStatus || isTransferEnded) return;
+    if (isCheckingStatus || isTransferEnded || !transferId) return;
     isCheckingStatus = true;
     try {
         await refreshBatch();
@@ -135,6 +137,11 @@ async function checkTransferStatus() {
         if (error.code === 'TRANSFER_EXPIRED') return stopPhoneTransfer();
         console.warn('Transfer status check failed.', { errorName: error.name });
     } finally { isCheckingStatus = false; }
+}
+
+function startStatusPolling() {
+    if (statusPollTimer || !transferId || isTransferEnded) return;
+    statusPollTimer = setInterval(() => void checkTransferStatus(), 3000);
 }
 
 async function pairPhone() {
@@ -156,6 +163,7 @@ async function pairPhone() {
         if (!transferId || expiresAt * 1000 <= Date.now()) throw new Error('PC’den yeni QR açıp okutun.');
         showTransferStatus('Bağlantı ve öğrenci aktarımı doğrulanıyor…', 'sending');
         await refreshBatch();
+        startStatusPolling();
     } catch (error) {
         console.error('Phone pairing failed.', { errorName: error.name });
         if (error.code === 'TRANSFER_EXPIRED') return stopPhoneTransfer();
@@ -231,5 +239,4 @@ choose.addEventListener('click', () => gallery.click());
 camera.addEventListener('change', () => queuePhotos(camera, true));
 gallery.addEventListener('change', () => queuePhotos(gallery));
 send.addEventListener('click', () => void sendGalleryPhotos());
-const statusPollTimer = setInterval(() => void checkTransferStatus(), 3000);
 void pairPhone();
