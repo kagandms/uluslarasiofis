@@ -79,7 +79,12 @@ try {
     assert.equal(response.status, 200);
     assert.equal((await response.json()).found, false);
     assert.equal((await fetch(`${base}/api/public/applications/current`)).status, 401);
-    response = await post('/api/public/applications', { student_number: `CI${Date.now()}`, application_type: 'initial', email: 'ci@example.invalid', phone: '+905321234567' });
+    response = await fetch(`${base}/api/public/applications/privacy-notice`);
+    assert.equal(response.status, 200, 'Privacy notice GET');
+    const privacyNotice = await response.json();
+    assert.equal(privacyNotice.available, true, 'Default privacy notice is required for new applications');
+    assert.deepEqual(Object.keys(privacyNotice.content_by_locale).sort(), ['ar', 'en', 'ru', 'tk', 'tr']);
+    response = await post('/api/public/applications', { student_number: `CI${Date.now()}`, application_type: 'initial', email: 'ci@example.invalid', phone: '+905321234567', privacy_notice_version: privacyNotice.version });
     assert.equal(response.status, 201, 'Synthetic local draft');
     const created = await response.json();
     assert.equal(created.application?.status ?? created.status, 'draft');

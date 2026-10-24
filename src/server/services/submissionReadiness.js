@@ -2,15 +2,16 @@ import { ACCOMMODATION_TYPES, readAccommodationType, listMissingDocumentAnswers 
 import { isValidPhoneNumber } from '../../shared/phoneNumber.js';
 import { listDocumentPolicies } from '../domain/documentPolicy.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
-import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate } from '../../shared/age.js';
+import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate, requiresResidenceApplicationDate } from '../../shared/age.js';
+import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../../shared/academic-calendar.js';
 
 const APPLICATION_TYPES = new Set(['initial', 'renewal']);
+const APPLICATION_ROUTES = new Set(['standard', 'transition']);
 const ACCEPTED_REVISION_STATUSES = new Set(['submitted', 'approved']);
 const ACCEPTED_SCAN_STATUSES = new Set(['pending', 'clean']);
 const REQUIRED_FIELDS = Object.freeze([
     'student_number', 'application_type', 'student_email', 'student_phone', 'first_name',
     'last_name', 'passport_number', 'nationality', 'date_of_birth', 'is_under_18',
-    'residence_application_date', 'university_registration_date',
     'address_evidence_type'
 ]);
 
@@ -35,7 +36,10 @@ function isValidCoreField(field, application) {
     if (field === 'student_email') return isPresentText(value) && value.trim().length <= 254
         && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
     if (field === 'student_phone') return isValidPhoneNumber(value) && value.trim().length <= 40;
-    if (['date_of_birth', 'residence_application_date', 'university_registration_date'].includes(field)) return isValidDate(value);
+    if (field === 'date_of_birth') return isValidDate(value);
+    if (field === 'residence_application_date' || field === 'academic_year_start_date') {
+        return value === null || value === '' || isValidDate(value);
+    }
     if (field === 'is_under_18') return value === 0 || value === 1 || typeof value === 'boolean';
     if (field === 'address_evidence_type') return ACCOMMODATION_TYPES.includes(readAccommodationType(application));
     return isPresentText(value) && value.trim().length <= 255;
@@ -56,12 +60,25 @@ function uniqueSorted(values) {
 
 function readMissingFields(application, declarationVersion) {
     const missingFields = REQUIRED_FIELDS.filter((field) => !isValidCoreField(field, application));
-    const calculatedUnder18 = calculateUnder18(application.date_of_birth, application.residence_application_date);
+    const applicationRoute = application.application_route ?? 'standard';
+    if (!APPLICATION_ROUTES.has(applicationRoute)) missingFields.push('application_route');
+    if (applicationRoute === 'transition') {
+        if (!/^\d{11}$/.test(application.transition_foreign_id || '')) missingFields.push('transition_foreign_id');
+        if (!isPresentText(application.transition_card_serial) || application.transition_card_serial.trim().length > 20) missingFields.push('transition_card_serial');
+        if (!isPresentText(application.transition_card_number) || application.transition_card_number.trim().length > 20) missingFields.push('transition_card_number');
+        if (!['email', 'phone'].includes(application.transition_contact_preference)) missingFields.push('transition_contact_preference');
+        if (!['yes', 'no'].includes(application.transition_change_province)) missingFields.push('transition_change_province');
+    }
+    const ageDateIsRequired = requiresResidenceApplicationDate(application.date_of_birth);
+    const residenceDate = application.residence_application_date || readIstanbulDate();
+    const calculatedUnder18 = calculateUnder18(application.date_of_birth, residenceDate);
+    if (ageDateIsRequired && !application.residence_application_date) missingFields.push('residence_application_date');
     if (calculatedUnder18 === null || Number(application.is_under_18) !== Number(calculatedUnder18)) {
         missingFields.push('is_under_18');
     }
     if (application.insurance_basis === 'gss_pending') {
-        const deadline = calculateGssRegistrationDeadline(application.university_registration_date);
+        const startDate = application.academic_year_start_date || CURRENT_ACADEMIC_YEAR_START_DATE;
+        const deadline = calculateGssRegistrationDeadline(startDate);
         if (!deadline || readIstanbulDate() > deadline) missingFields.push('insurance_basis');
     }
     missingFields.push(...listMissingDocumentAnswers(application));

@@ -12,6 +12,10 @@ import { TestD1Database } from './helpers/d1-test-binding.js';
 
 const TEST_PASSWORD = 'Test-only passphrase 2026';
 const PASSWORD_HASH = await deriveStaffPasswordHash(TEST_PASSWORD);
+const TEST_APPLICATION_PRIVACY_NOTICE = JSON.stringify({
+    version: 'test-approved-v1',
+    content_by_locale: { tr: 'test', en: 'test', ru: 'test', tk: 'test', ar: 'test' }
+});
 
 function createEnvironment(options = {}) {
     const database = new TestD1Database();
@@ -57,6 +61,7 @@ function createEnvironment(options = {}) {
         STAFF_BOOTSTRAP_TOKEN: 'test-bootstrap-token-with-sufficient-entropy',
         STAFF_SHARED_USERNAME: 'admin',
         APP_ENV: 'test',
+        PUBLIC_APPLICATION_PRIVACY_NOTICE: TEST_APPLICATION_PRIVACY_NOTICE,
         ...options
     };
     return { environment, database, storedObjects };
@@ -90,10 +95,13 @@ function createRequest(path, { method = 'GET', body, cookie, origin = 'https://p
     headers.set('Origin', origin);
     if (body !== undefined) headers.set('Content-Type', 'application/json');
     if (cookie) headers.set('Cookie', cookie);
+    const requestBody = path === '/api/public/applications' && method === 'POST' && body !== undefined
+        ? { ...body, privacy_notice_version: body.privacy_notice_version ?? 'test-approved-v1' }
+        : body;
     return new Request(`https://portal.test${path}`, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body: requestBody === undefined ? undefined : JSON.stringify(requestBody)
     });
 }
 
@@ -141,7 +149,7 @@ async function createReadyApplication(environment, database, studentNumber, appl
     await database.prepare(`
         UPDATE applications SET first_name = 'Ayşe', last_name = 'Yılmaz', passport_number = 'P123456',
             nationality = 'Turkish', date_of_birth = '2000-01-01', residence_application_date = '2026-09-30',
-            university_registration_date = '2026-09-01', is_under_18 = 0,
+            academic_year_start_date = '2026-09-01', is_under_18 = 0,
             address_evidence_type = 'rental_contract', insurance_basis = 'system_verified', fingerprint_status = 'registered', fingerprint_code = 'FP-A/42',
             declaration_version = ?, declaration_accepted_at = ?
         WHERE id = ?
@@ -446,6 +454,76 @@ test('public routes remain available without a staff password or session', async
         assert.equal(response.status, 200, path);
         assert.equal(await response.text(), path);
     }
+});
+
+test('default five-language notice is available and allows draft creation when no override is configured', async () => {
+    const { environment, database } = createEnvironment();
+    delete environment.PUBLIC_APPLICATION_PRIVACY_NOTICE;
+
+    const noticeResponse = await worker.fetch(createRequest('/api/public/applications/privacy-notice'), environment, {});
+    const noticePayload = await readJson(noticeResponse);
+    const createResponse = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST',
+        body: {
+            student_number: '2026123400', application_type: 'initial',
+            email: 'student@example.edu', phone: '+905551112233', privacy_notice_version: noticePayload.version
+        }
+    }), environment, {});
+
+    assert.equal(noticeResponse.status, 200);
+    assert.equal(noticePayload.available, true);
+    assert.deepEqual(Object.keys(noticePayload.content_by_locale).sort(), ['ar', 'en', 'ru', 'tk', 'tr']);
+    assert.equal(createResponse.status, 201);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 1);
+});
+
+test('new draft rejects a phone number with more than 15 digits', async () => {
+    const { environment, database } = createEnvironment();
+    const response = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST',
+        body: {
+            student_number: '2026123403', application_type: 'initial',
+            email: 'student@example.edu', phone: '+9055511122334455'
+        }
+    }), environment, {});
+
+    assert.equal(response.status, 400);
+    assert.equal((await readJson(response)).error.code, 'VALIDATION_ERROR');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 0);
+});
+
+test('new draft creation fails closed when an explicit privacy notice override is malformed', async () => {
+    const { environment, database } = createEnvironment();
+    environment.PUBLIC_APPLICATION_PRIVACY_NOTICE = '{malformed';
+
+    const noticeResponse = await worker.fetch(createRequest('/api/public/applications/privacy-notice'), environment, {});
+    const createResponse = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST',
+        body: {
+            student_number: '2026123402', application_type: 'initial',
+            email: 'student@example.edu', phone: '+905551112233', privacy_notice_version: 'student-application-privacy-2026-10-24-v1'
+        }
+    }), environment, {});
+
+    assert.equal((await readJson(noticeResponse)).available, false);
+    assert.equal(createResponse.status, 503);
+    assert.equal((await readJson(createResponse)).error.code, 'APPLICATION_PRIVACY_NOTICE_UNAVAILABLE');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 0);
+});
+
+test('new draft creation rejects a stale privacy notice version before writing to D1', async () => {
+    const { environment, database } = createEnvironment();
+    const response = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST',
+        body: {
+            student_number: '2026123401', application_type: 'initial',
+            email: 'student@example.edu', phone: '+905551112233', privacy_notice_version: 'older-approved-v0'
+        }
+    }), environment, {});
+
+    assert.equal(response.status, 409);
+    assert.equal((await readJson(response)).error.code, 'APPLICATION_PRIVACY_NOTICE_VERSION_CONFLICT');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 0);
 });
 
 test('application API creates an opaque owner session and enforces the active application constraint', async () => {
@@ -1132,7 +1210,6 @@ test('staff current-document preview and download share application-scoped autho
     const detailResponse = await worker.fetch(createRequest(`/api/staff/applications/${applicationA}`, {
         cookie: staffCookie(adminToken)
     }), environment, {});
-    const preview = await readJson(sharedStaffPreview);
     const detail = await readJson(detailResponse);
     const auditRows = database.prepare(`
         SELECT event_type, actor_staff_id, application_id, document_record_id, request_id, safe_metadata_json
@@ -1150,14 +1227,13 @@ test('staff current-document preview and download share application-scoped autho
     assert.equal(adminDownload.status, 200);
     assert.equal(wrongApplication.status, 404);
     assert.equal(detail.documents.find((item) => item.code === 'passport').access_available, true);
-    assert.equal(preview.method, 'GET');
-    assert.equal(new URL(preview.url).searchParams.get('X-Amz-Expires'), '120');
-    assert.ok(Math.abs(Date.parse(preview.expires_at) - Date.now() - 120_000) < 10_000);
-    assert.equal(preview.media_type, 'application/pdf');
-    assert.equal(preview.filename, 'passport r_sum_.pdf');
-    assert.equal(sharedStaffPreview.headers.get('Cache-Control'), 'no-store');
+    assert.equal(sharedStaffPreview.headers.get('Content-Type'), 'application/pdf');
+    assert.equal(sharedStaffPreview.headers.get('Content-Disposition'), 'inline; filename="passport r_sum_.pdf"');
+    assert.equal(sharedStaffPreview.headers.get('Cache-Control'), 'private, no-store');
+    assert.equal(sharedStaffPreview.headers.get('X-Content-Type-Options'), 'nosniff');
+    assert.equal(await sharedStaffPreview.text(), 'private current document bytes');
     assert.equal(sharedStaffPreview.headers.has('Set-Cookie'), false);
-    assert.doesNotMatch(JSON.stringify(preview), /file_id|revision_id|document_record_id|storage_key|NEVER-RETURN-THIS-SECRET/);
+    assert.doesNotMatch(sharedStaffPreview.headers.get('Content-Disposition'), /storage_key|NEVER-RETURN-THIS-SECRET/);
     assert.equal(adminDownload.headers.get('Content-Type'), 'application/pdf');
     assert.equal(adminDownload.headers.get('Content-Disposition'), 'attachment; filename="passport r_sum_.pdf"');
     assert.equal(adminDownload.headers.get('Cache-Control'), 'private, no-store');
@@ -1170,7 +1246,7 @@ test('staff current-document preview and download share application-scoped autho
     assert.equal(previewAudit.document_record_id, document.recordId);
     assert.equal(previewAudit.request_id, sharedStaffPreview.headers.get('x-request-id'));
     assert.deepEqual(JSON.parse(previewAudit.safe_metadata_json), {
-        documentCode: 'passport', revisionNumber: 1, result: 'capability_issued'
+        documentCode: 'passport', revisionNumber: 1, result: 'stream_authorized'
     });
     assert.deepEqual(JSON.parse(downloadAudit.safe_metadata_json), {
         documentCode: 'passport', revisionNumber: 1, result: 'downloaded'
@@ -1256,7 +1332,7 @@ test('staff current-document access rejects unsafe, incomplete, stale, missing, 
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_events WHERE event_type = ?').bind('staff.document_downloaded').first().count, 1);
 });
 
-test('staff preview signing failure returns a safe service error and issues no audited capability', async () => {
+test('staff document preview streams without browser-facing R2 signing credentials', async () => {
     const { environment, database, storedObjects } = createEnvironment();
     const applicationId = await createStaffApplication(environment, database, 'ACCESS-SIGNING-ERROR');
     await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'passport');
@@ -1268,12 +1344,10 @@ test('staff preview signing failure returns a safe service error and issues no a
         `/api/staff/applications/${applicationId}/documents/passport/preview`,
         { method: 'POST', cookie: staffCookie(token) }
     ), environment, {});
-    const payload = await readJson(response);
-
-    assert.equal(response.status, 503);
-    assert.equal(payload.error.code, 'SERVICE_UNAVAILABLE');
-    assert.doesNotMatch(JSON.stringify(payload), /PUBLIC-KEY-ID-FOR-TESTS|NEVER-RETURN-THIS-SECRET|storage_key|quarantine/);
-    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.document_preview_issued'").first().count, 0);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Content-Type'), 'application/pdf');
+    assert.equal(await response.text(), 'private current document bytes');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.document_preview_issued'").first().count, 1);
 });
 
 
@@ -1300,12 +1374,20 @@ test('application draft updates ignore fields outside the public allowlist', asy
         method: 'POST', body: { student_number: '2026123460', application_type: 'initial', email: 'draft@example.edu', phone: '555' }
     }), environment, {});
     const cookie = created.headers.get('Set-Cookie').split(';')[0];
+    const oversizedPhone = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: {
+            lock_version: await readApplicationVersion(environment, cookie),
+            student_phone: '+9055511122334455'
+        }
+    }), environment, {});
     const response = await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie),
             student_email: 'updated@example.edu', status: 'submitted',
             storage_key: 'quarantine/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', staff_note: 'private'
         }
     }), environment, {});
+    assert.equal(oversizedPhone.status, 400);
+    assert.equal((await readJson(oversizedPhone)).error.code, 'VALIDATION_ERROR');
     const payload = await readJson(response);
     const row = database.prepare(`
         SELECT applications.status, applications.student_email, students.student_number
@@ -1365,6 +1447,78 @@ test('owner session can change draft application type and reload preserves it', 
     assert.equal(rejected.status, 409);
     assert.equal((await readJson(rejected)).error.code, 'APPLICATION_NOT_EDITABLE');
     assert.equal(database.prepare('SELECT application_type FROM applications').first().application_type, 'initial');
+});
+
+test('online transition applications persist transition data and use renewal document requirements', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123468', application_type: 'transition', email: 'transition@example.edu', phone: '555' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+    const version = await readApplicationVersion(environment, cookie);
+    const updated = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { lock_version: version, transition_foreign_id: '12345678901',
+            transition_card_serial: 'AB123', transition_card_number: '456789', transition_change_province: 'no',
+            transition_contact_preference: 'email' }
+    }), environment, {});
+    const refreshed = await readJson(await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {}));
+    const requirements = await readJson(await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {}));
+    const stored = database.prepare('SELECT application_type,application_route,transition_foreign_id,transition_card_serial,transition_card_number,transition_change_province,transition_contact_preference FROM applications').first();
+
+    assert.equal(created.status, 201);
+    assert.equal((await readJson(updated)).application.application_type, 'transition');
+    assert.equal(refreshed.application.application_type, 'transition');
+    assert.equal(requirements.requirements.some(({ code }) => code === 'uets'), true);
+    assert.deepEqual({ ...stored }, { application_type: 'renewal', application_route: 'transition', transition_foreign_id: '12345678901',
+        transition_card_serial: 'AB123', transition_card_number: '456789', transition_change_province: 'no', transition_contact_preference: 'email' });
+});
+
+test('changing a transition draft to a standard application clears transition-only personal data', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123470', application_type: 'transition', email: 'transition@example.edu', phone: '555' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+    const transitionFields = {
+        transition_foreign_id: '12345678901', transition_card_serial: 'AB123', transition_card_number: '456789',
+        transition_change_province: 'no', transition_contact_preference: 'email'
+    };
+    await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), ...transitionFields }
+    }), environment, {});
+
+    const changed = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), application_type: 'initial' }
+    }), environment, {});
+    const resubmittedTransitionData = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), ...transitionFields }
+    }), environment, {});
+    const resubmittedPayload = await readJson(resubmittedTransitionData);
+    const stored = database.prepare(`
+        SELECT application_route, transition_foreign_id, transition_card_serial, transition_card_number,
+            transition_change_province, transition_contact_preference FROM applications
+    `).first();
+
+    assert.equal(changed.status, 200);
+    assert.equal(resubmittedTransitionData.status, 200);
+    assert.deepEqual({ ...stored }, {
+        application_route: 'standard', transition_foreign_id: null, transition_card_serial: null,
+        transition_card_number: null, transition_change_province: null, transition_contact_preference: null
+    });
+    assert.deepEqual({
+        foreignId: resubmittedPayload.application.transition_foreign_id,
+        cardSerial: resubmittedPayload.application.transition_card_serial,
+        cardNumber: resubmittedPayload.application.transition_card_number
+    }, { foreignId: '', cardSerial: '', cardNumber: '' });
+
+    database.prepare(`UPDATE applications SET transition_foreign_id = '12345678901', transition_card_serial = 'AB123',
+        transition_card_number = '456789'`).run();
+    const legacyPayload = await readJson(await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {}));
+    assert.deepEqual({
+        foreignId: legacyPayload.application.transition_foreign_id,
+        cardSerial: legacyPayload.application.transition_card_serial,
+        cardNumber: legacyPayload.application.transition_card_number
+    }, { foreignId: '', cardSerial: '', cardNumber: '' });
 });
 
 test('draft address evidence is server-validated and restored after reload', async () => {

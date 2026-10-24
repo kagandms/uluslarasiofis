@@ -2,7 +2,6 @@ export const PILOT_UX_MESSAGES = Object.freeze({
     tr: Object.freeze({
         publicReturnHome: 'Ana sayfaya dön', publicHomeNavigationBlocked: 'Bekleyen belge yüklemesi tamamlanmadan ana sayfaya dönemezsiniz.',
         accessDeviceExplanation: 'Başvuru numaranız ve öğrenci numaranızla taslağınızı başka cihazdan düzenleyebilir ve belge yükleyebilirsiniz. Başvurunuz gönderildiyse genel bilgiler değiştirilemez; ofisin yeniden istediği belgeleri yükleyebilirsiniz.',
-        trackingOwnerAccess: 'Öğrenci numarasıyla durum sorgulama yalnızca takip sağlar. Düzenlemek veya istenen belgeyi yüklemek için güvenli giriş yapın.',
         trackingOwnerAccessLink: 'Güvenli başvuru girişine git', staffIdleHelp: '60 dakika işlem yapılmazsa yeniden giriş gerekir. Beni hatırla bu güvenlik süresini kaldırmaz.',
         phoneCountryLabel: 'Telefon ülkesi ve kodu', phoneCountryChoose: 'Ülke seçin', phoneCountryHelp: 'Ülke kodunu seçin; numarayı ülke kodu olmadan yazabilir veya tam + numarasını yapıştırabilirsiniz.',
         phoneCountryReview: 'Bu uluslararası numaranın ülkesi belirlenemedi. Ülkeyi seçip numarayı kontrol edin.',
@@ -21,7 +20,6 @@ export const PILOT_UX_MESSAGES = Object.freeze({
     en: Object.freeze({
         publicReturnHome: 'Return to home page', publicHomeNavigationBlocked: 'Wait for the document upload to finish before leaving this page.',
         accessDeviceExplanation: 'Use your application number and student number to edit a draft and upload documents from another device. After submission, general information cannot be changed; you can upload documents the office requests again.',
-        trackingOwnerAccess: 'Student-number status lookup is for tracking only. Sign in securely to edit a draft or upload a requested document.',
         trackingOwnerAccessLink: 'Open secure application access', staffIdleHelp: 'After 60 minutes without activity, you must sign in again. Remember me does not remove this security limit.',
         phoneCountryLabel: 'Phone country and calling code', phoneCountryChoose: 'Choose a country', phoneCountryHelp: 'Choose a country code and enter the national number, or paste a complete + number.',
         phoneCountryReview: 'The country for this international number could not be determined. Select a country and review the number.',
@@ -39,7 +37,6 @@ export const PILOT_UX_MESSAGES = Object.freeze({
     ru: Object.freeze({
         publicReturnHome: 'Вернуться на главную', publicHomeNavigationBlocked: 'Дождитесь завершения загрузки документа, прежде чем покинуть страницу.',
         accessDeviceExplanation: 'Используйте номер заявки и номер студента, чтобы редактировать черновик и загружать документы с другого устройства. После отправки общие сведения изменить нельзя; можно загрузить документы, повторно запрошенные офисом.',
-        trackingOwnerAccess: 'Поиск по номеру студента предназначен только для отслеживания. Для изменения черновика или загрузки запрошенного документа войдите безопасным способом.',
         trackingOwnerAccessLink: 'Перейти к защищённому входу в заявку', staffIdleHelp: 'После 60 минут бездействия потребуется войти снова. «Запомнить меня» не отменяет это ограничение.',
         phoneCountryLabel: 'Страна и телефонный код', phoneCountryChoose: 'Выберите страну', phoneCountryHelp: 'Выберите телефонный код и введите местный номер или вставьте полный номер с +.',
         phoneCountryReview: 'Не удалось определить страну для этого международного номера. Выберите страну и проверьте номер.',
@@ -57,7 +54,6 @@ export const PILOT_UX_MESSAGES = Object.freeze({
     tk: Object.freeze({
         publicReturnHome: 'Baş sahypa dolan', publicHomeNavigationBlocked: 'Sahypadan çykmazdan ozal resminamanyň ýüklenmeginiň tamamlanmagyna garaşyň.',
         accessDeviceExplanation: 'Arza belgiňiz we talyp belgiňiz bilen başga enjamdan taslamany üýtgedip, resminama ýükläp bilersiňiz. Arza iberilenden soň umumy maglumat üýtgedilmeýär; edaranyň gaýtadan soran resminamalaryny ýükläp bilersiňiz.',
-        trackingOwnerAccess: 'Talyp belgisi bilen ýagdaýy gözlemek diňe yzarlamak üçindir. Taslamany üýtgetmek ýa-da soralan resminamany ýüklemek üçin howpsuz giriň.',
         trackingOwnerAccessLink: 'Howpsuz arza girişine geç', staffIdleHelp: '60 minut hereketsizlikden soň täzeden girmek gerek. “Meni ýatda sakla” bu howpsuzlyk çägini aýyrmaýar.',
         phoneCountryLabel: 'Telefon ýurdy we kody', phoneCountryChoose: 'Ýurdy saýlaň', phoneCountryHelp: 'Ýurt koduny saýlaň we ýerli belgini giriziň ýa-da doly + belgini goýuň.',
         phoneCountryReview: 'Bu halkara belginiň ýurduny anyklap bolmady. Ýurdy saýlap, belgini barlaň.',
@@ -75,7 +71,6 @@ export const PILOT_UX_MESSAGES = Object.freeze({
     ar: Object.freeze({
         publicReturnHome: 'العودة إلى الصفحة الرئيسية', publicHomeNavigationBlocked: 'انتظر اكتمال رفع المستند قبل مغادرة الصفحة.',
         accessDeviceExplanation: 'استخدم رقم الطلب ورقم الطالب لتعديل المسودة ورفع المستندات من جهاز آخر. بعد الإرسال لا يمكن تعديل المعلومات العامة؛ ويمكنك رفع المستندات التي يطلب المكتب إعادة تقديمها.',
-        trackingOwnerAccess: 'البحث برقم الطالب مخصص للمتابعة فقط. سجّل الدخول بأمان لتعديل مسودة أو رفع مستند مطلوب.',
         trackingOwnerAccessLink: 'فتح الوصول الآمن إلى الطلب', staffIdleHelp: 'بعد 60 دقيقة من عدم النشاط، يجب تسجيل الدخول مجدداً. خيار تذكرني لا يلغي هذا الحد الأمني.',
         phoneCountryLabel: 'بلد الهاتف ورمز الاتصال', phoneCountryChoose: 'اختر البلد', phoneCountryHelp: 'اختر رمز البلد وأدخل الرقم المحلي، أو ألصق الرقم كاملاً مع +.',
         phoneCountryReview: 'تعذر تحديد بلد هذا الرقم الدولي. اختر البلد وراجع الرقم.',

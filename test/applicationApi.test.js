@@ -1,7 +1,40 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createResubmissionUploadIntent, finalizeResubmissionUpload, lookupApplicationTracking,
-    readCurrentApplicationTracking, readCurrentResubmissionEligibility, submitCurrentApplication } from '../src/public/applicationApi.js';
+import { createApplicationDraft, createResubmissionUploadIntent, finalizeResubmissionUpload, lookupApplicationTracking,
+    readApplicationPrivacyNotice, readCurrentApplicationTracking, readCurrentResubmissionEligibility, submitCurrentApplication } from '../src/public/applicationApi.js';
+
+test('privacy notice API reads the public five-language notice without sending personal data', async (context) => {
+    const notice = { available: false };
+    const fetchMock = context.mock.method(globalThis, 'fetch', async () => new Response(
+        JSON.stringify(notice), { status: 200, headers: { 'Content-Type': 'application/json' } }
+    ));
+
+    assert.deepEqual(await readApplicationPrivacyNotice(), notice);
+    const [path, options] = fetchMock.mock.calls[0].arguments;
+    assert.equal(path, '/api/public/applications/privacy-notice');
+    assert.equal(options.method, 'GET');
+    assert.equal(options.credentials, 'same-origin');
+    assert.equal(options.body, undefined);
+});
+
+test('new draft API sends only the current notice version and contact fields', async (context) => {
+    const fetchMock = context.mock.method(globalThis, 'fetch', async () => new Response(
+        JSON.stringify({ application: { status: 'draft' } }), { status: 201, headers: { 'Content-Type': 'application/json' } }
+    ));
+
+    await createApplicationDraft({
+        student_number: 'TEST-1', application_type: 'initial', email: 'student@example.edu',
+        phone: '+905551112233', privacy_notice_version: 'approved-v7'
+    });
+
+    const [path, options] = fetchMock.mock.calls[0].arguments;
+    assert.equal(path, '/api/public/applications');
+    assert.deepEqual(JSON.parse(options.body), {
+        student_number: 'TEST-1', application_type: 'initial', email: 'student@example.edu',
+        phone: '+905551112233', privacy_notice_version: 'approved-v7'
+    });
+    assert.doesNotMatch(options.body, /accepted_at|consent|acknowledgement/i);
+});
 
 test('submit API uses the owner session POST and returns the student-safe application', async (context) => {
     const application = { status: 'submitted', student_number: '2026123456' };
@@ -19,6 +52,20 @@ test('submit API uses the owner session POST and returns the student-safe applic
     assert.equal(options.method, 'POST');
     assert.equal(options.credentials, 'same-origin');
     assert.equal(options.body, undefined);
+});
+
+test('API errors preserve the server request ID for support diagnostics', async (context) => {
+    context.mock.method(globalThis, 'fetch', async () => new Response(
+        JSON.stringify({ error: { code: 'INTERNAL_ERROR' }, requestId: 'req_11111111-1111-4111-8111-111111111111' }),
+        { status: 500, headers: { 'Content-Type': 'application/json', 'X-Request-Id': 'req_11111111-1111-4111-8111-111111111111' } }
+    ));
+
+    await assert.rejects(submitCurrentApplication(), (error) => {
+        assert.equal(error.code, 'INTERNAL_ERROR');
+        assert.equal(error.status, 500);
+        assert.equal(error.requestId, 'req_11111111-1111-4111-8111-111111111111');
+        return true;
+    });
 });
 
 test('tracking API uses only the same-origin owner session and sends no application selector', async (context) => {

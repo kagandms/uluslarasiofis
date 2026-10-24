@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-10-24T14:53:58Z",
+  "result": "passed",
+  "coverage": {
+    "d1": true,
+    "r2": true
+  },
+  "d1": {
+    "isolatedSqliteRestore": true,
+    "integrityCheck": "ok",
+    "foreignKeyErrors": 0,
+    "sqlExportBytes": 2208689,
+    "sqlExportSha256": "5b585f96489b449815c76ee29fd6902b4d2aefd5a5fca77f34e1eb7ec78709da",
+    "timeTravelBookmark": "000000e4-00001158-0000510e-f04640abc22cb5fc173960ee4a0b5916",
+    "migrationRehearsal": {
+      "result": "passed",
+      "migrations": [
+        "0028_student_transition_applications.sql",
+        "0029_student_document_order_and_visa_page.sql",
+        "0030_academic_year_start_date.sql",
+        "0031_backfill_gss_academic_year_start.sql"
+      ],
+      "integrityCheck": "ok",
+      "foreignKeyErrors": 0,
+      "existingApplicationAndPhysicalIntakeRowsPreserved": true,
+      "gssAcademicYearBackfillVerified": true,
+      "optionalVisaRequirementsVerified": true,
+      "expectedPhysicalTriggersVerified": true
+    }
+  },
+  "r2": {
+    "verifiedAt": "2026-10-23T16:13:51.371Z",
+    "sourceBucket": "uluslarasiofis-documents-production",
+    "recoveryBucket": "uluslarasiofis-print-production",
+    "recoveryPrefix": "recovery/student-documents-2026-10-23T155858Z/",
+    "sourceObjectCount": 667,
+    "sourceBytes": 325909899,
+    "manifestSha256": "286cd160c41f5f97363af06dca8b9d80608db98ec2ec382b33cf1cf3d2cf9dd1",
+    "restoredProbeBytes": 20,
+    "restoredProbeSha256": "6ed645ef0e1abea1bf1e4e935ff04f9e18d39812387f63cda3415b46240f0405",
+    "temporaryRestoreObjectRetained": true
+  },
+  "limitations": [
+    "The R2 recovery copy was verified on 2026-10-23 and is in the same Cloudflare account.",
+    "This rehearsal used an isolated local SQLite restore; no D1 restore was performed against production."
+  ]
+}

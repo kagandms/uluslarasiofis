@@ -6,19 +6,24 @@ import { createSessionRepository } from '../src/server/repositories/d1/sessionRe
 import { generateAccessCode } from '../src/server/auth/applicationAccessCode.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
+import { withTestApplicationPrivacyNotice, withTestApplicationPrivacyNoticeVersion } from './helpers/application-privacy-notice.js';
 
 async function send(environment, path, options = {}) {
     const headers = { Origin: 'https://portal.test', 'CF-Connecting-IP': options.ip || '198.51.100.75' };
     if (options.cookie) headers.Cookie = options.cookie;
     if (options.body) headers['Content-Type'] = 'application/json';
+    const body = path === '/api/public/applications' && options.method !== 'PATCH'
+        ? withTestApplicationPrivacyNoticeVersion(options.body || {}) : options.body;
     return worker.fetch(new Request(`https://portal.test${path}`, { method: options.method || 'POST', headers,
-        ...(options.body ? { body: JSON.stringify(options.body) } : {}) }), environment);
+        ...(body ? { body: JSON.stringify(body) } : {}) }), environment);
 }
 
 async function createFixture() {
     const database = new TestD1Database();
     applyAllMigrations(database);
-    const environment = { DB: database, APP_ENV: 'test', STAFF_SHARED_USERNAME: 'integration-reviewer' };
+    const environment = withTestApplicationPrivacyNotice({
+        DB: database, APP_ENV: 'test', STAFF_SHARED_USERNAME: 'integration-reviewer'
+    });
     const response = await send(environment, '/api/public/applications', { body: {
         student_number: 'INTEGRATION-SYNTHETIC', application_type: 'initial', email: 'synthetic@example.invalid', phone: '+905551112233'
     } });

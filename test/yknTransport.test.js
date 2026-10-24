@@ -81,18 +81,19 @@ test('YKN one-click waits for crop confirmation before final YÖKSİS fill', { s
     assert.match(cropperBranch, /openOneClickCropper\(\)/);
     assert.doesNotMatch(cropperBranch, /postOneClickMessage\(['"]FILL_YOKSIS_FORM/);
     assert.match(manager, /isOneClickActive\(ONE_CLICK_STAGE\.CROPPER_WAITING\)/);
-    assert.match(manager, /postOneClickMessage\(['"]FILL_YOKSIS_FORM['"], \{ data: currentStudentData \}\)/);
+    assert.match(manager, /postOneClickMessage\(['"]FILL_YOKSIS_FORM['"], \{ data: currentStudentData, manualOverrideConfirmed \}\)/);
     assert.match(manager, /isOneClickActive\(ONE_CLICK_STAGE\.PASSPORT_READING\)/);
     assert.match(manager, /shouldOpenCropperWhenReady = true/);
 });
 
-test('Apply data retrieval and passport crop do not require YÖKSİS readiness, while final fill stays gated', { skip: !hasLocalExtensionCheckout }, async () => {
+test('Apply data retrieval and passport crop do not require YÖKSİS readiness, while manual fill requires confirmation', { skip: !hasLocalExtensionCheckout }, async () => {
     const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
+    const background = await readExtensionFile('background.js');
     const copyInfoStart = manager.indexOf('if (btnCopyInfo) {');
     const copyInfoEnd = manager.indexOf('\n    if (btnReadAcceptance)', copyInfoStart);
     const copyInfoHandler = manager.slice(copyInfoStart, copyInfoEnd);
-    const visibleCopyStart = manager.indexOf('if (btnCopy) {');
-    const visibleCopyEnd = manager.indexOf('\n    if (btnCropPhoto)', visibleCopyStart);
+    const visibleCopyStart = manager.indexOf('if (btnCopy) {\n        btnCopy.addEventListener');
+    const visibleCopyEnd = manager.indexOf('\n    if (btnCropPhoto) {', visibleCopyStart);
     const visibleCopyHandler = manager.slice(visibleCopyStart, visibleCopyEnd);
     const pasteStart = manager.indexOf('if (btnPasteYoksis) {');
     const pasteEnd = manager.indexOf('\n    if (btnExtensionRecheck)', pasteStart);
@@ -106,6 +107,8 @@ test('Apply data retrieval and passport crop do not require YÖKSİS readiness, 
     assert.ok(pasteStart >= 0, 'final YÖKSİS action should exist');
     assert.match(pasteHandler, /currentStudentData\.yoksisReady !== true/);
     assert.match(pasteHandler, /currentStudentData\.croppedPhotoBase64/);
+    assert.match(manager, /confirmManualYoksisTransfer\(\)/);
+    assert.match(background, /checkManualYoksisFill\(context\)/);
 });
 
 test('YÖKSİS search and fill are single-flight operations, not all-frame retries', { skip: !hasLocalExtensionCheckout }, async () => {

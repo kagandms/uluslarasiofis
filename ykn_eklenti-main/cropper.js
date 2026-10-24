@@ -17,6 +17,15 @@ import { isPointInSelection, moveSelection, resizeSelection, toDisplayBox } from
         status.classList.toggle('error', isError);
     };
 
+    const confirmManualYoksisOverride = async () => {
+        const stored = await new Promise((resolve) => chrome.storage.local.get('studentData', resolve));
+        const studentData = stored?.studentData;
+        if (studentData?.yoksisReady === true || studentData?.yoksisManualOverrideAvailable !== true) return false;
+        return window.confirm('YÖKSİS formu otomatik doğrulanamadı. YÖKSİS sekmesindeki öğrencinin bu başvuruya ait olduğunu kontrol edip bilgileri aktarmak istiyor musunuz?')
+            ? true
+            : null;
+    };
+
     const base64ToBytes = (value) => {
         const binary = atob(String(value || '').replace(/^data:[^,]+,/, ''));
         return Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -178,12 +187,19 @@ import { isPointInSelection, moveSelection, resizeSelection, toDisplayBox } from
         firstCandidate.click();
     };
 
-    const sendManualTransfer = () => {
+    const sendManualTransfer = async () => {
         confirmButton.disabled = true;
+        const manualOverrideConfirmed = await confirmManualYoksisOverride();
+        if (manualOverrideConfirmed === null) {
+            confirmButton.disabled = false;
+            setStatus('Manuel aktarım iptal edildi; YÖKSİS formu değiştirilmedi.');
+            return;
+        }
         setStatus('Fotoğraf bulunamadı; öğrenci bilgileri YÖKSİS’e aktarılıyor…');
         chrome.runtime.sendMessage({
             action: 'FILL_YOKSIS_WITHOUT_PHOTO',
-            requestId: `crop-${Date.now()}`
+            requestId: `crop-${Date.now()}`,
+            manualOverrideConfirmed
         }, (response) => {
             if (chrome.runtime.lastError || !response?.success) {
                 confirmButton.disabled = false;
@@ -202,13 +218,35 @@ import { isPointInSelection, moveSelection, resizeSelection, toDisplayBox } from
         });
     };
 
-    confirmButton.addEventListener('click', () => {
-        if (manualOnly) {
-            sendManualTransfer();
+    const handleCroppedPhotoResponse = (response) => {
+        if (chrome.runtime.lastError || !response?.success) {
+            confirmButton.disabled = false;
+            setStatus(response?.error || chrome.runtime.lastError?.message || 'YÖKSİS aktarımı başlatılamadı.', true);
             return;
         }
-        if (!box || !box.width || !box.height) return;
+        if (response.partial) {
+            const unavailable = Array.from(new Set([
+                ...(response.unavailableFields || []),
+                ...(response.missingFields || [])
+            ])).filter(Boolean);
+            const detail = unavailable.length > 0
+                ? ` Eksik kalan alanlar: ${unavailable.join(', ')}`
+                : ' Bazı alanlar YÖKSİS formunda doğrulanamadı.';
+            setStatus(`Fotoğraf aktarıldı.${detail} Lütfen YÖKSİS formunda kontrol edip tamamlayın.`, true);
+            return;
+        }
+        setStatus('Aktarım tamamlandı. YÖKSİS formunu son kez kontrol edin.');
+        window.setTimeout(() => window.close(), 900);
+    };
+
+    const sendCroppedPhoto = async () => {
         confirmButton.disabled = true;
+        const manualOverrideConfirmed = await confirmManualYoksisOverride();
+        if (manualOverrideConfirmed === null) {
+            confirmButton.disabled = false;
+            setStatus('Manuel aktarım iptal edildi; YÖKSİS formu değiştirilmedi.');
+            return;
+        }
         setStatus('Kırpılmış fotoğraf ve öğrenci bilgileri YÖKSİS’e aktarılıyor…');
         const output = document.createElement('canvas');
         output.width = Math.round(box.width);
@@ -218,26 +256,23 @@ import { isPointInSelection, moveSelection, resizeSelection, toDisplayBox } from
             action: 'CROPPED_PHOTO_CONFIRMED',
             requestId: `crop-${Date.now()}`,
             photoBase64: output.toDataURL('image/jpeg', 0.92),
-            fileName: 'ogrenci_foto.jpg'
-        }, (response) => {
-            if (chrome.runtime.lastError || !response?.success) {
+            fileName: 'ogrenci_foto.jpg',
+            manualOverrideConfirmed
+        }, handleCroppedPhotoResponse);
+    };
+
+    confirmButton.addEventListener('click', () => {
+        if (manualOnly) {
+            void sendManualTransfer().catch((error) => {
                 confirmButton.disabled = false;
-                setStatus(response?.error || chrome.runtime.lastError?.message || 'YÖKSİS aktarımı başlatılamadı.', true);
-                return;
-            }
-            if (response.partial) {
-                const unavailable = Array.from(new Set([
-                    ...(response.unavailableFields || []),
-                    ...(response.missingFields || [])
-                ])).filter(Boolean);
-                const detail = unavailable.length > 0
-                    ? ` Eksik kalan alanlar: ${unavailable.join(', ')}.`
-                    : ' Bazı alanlar YÖKSİS formunda doğrulanamadı.';
-                setStatus(`Fotoğraf aktarıldı.${detail} Lütfen YÖKSİS formunda kontrol edip tamamlayın.`, true);
-                return;
-            }
-            setStatus('Aktarım tamamlandı. YÖKSİS formunu son kez kontrol edin.');
-            window.setTimeout(() => window.close(), 900);
+                setStatus(error?.message || 'Manuel YÖKSİS aktarımı hazırlanamadı.', true);
+            });
+            return;
+        }
+        if (!box || !box.width || !box.height) return;
+        void sendCroppedPhoto().catch((error) => {
+            confirmButton.disabled = false;
+            setStatus(error?.message || 'YÖKSİS aktarımı hazırlanamadı.', true);
         });
     });
 

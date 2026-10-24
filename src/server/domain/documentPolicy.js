@@ -7,6 +7,7 @@ const TYPE_SWITCH_CODE_MAP = Object.freeze({
     residence_application_form: 'residence_application_form',
     passport_identity: 'passport_identity',
     passport: 'passport',
+    visa: 'visa',
     residence_card: 'residence_card',
     photographs: 'photographs',
     health_insurance: 'health_insurance',
@@ -36,41 +37,42 @@ const TYPE_SWITCH_CODE_MAP = Object.freeze({
 const POLICIES = Object.freeze([
     { code: 'residence_application_form', order: 1, label: 'documentResidenceApplicationForm', help: 'documentResidenceApplicationFormHelp' },
     { code: 'passport', order: 2, label: 'documentPassport', help: 'documentPassportHelp' },
-    { code: 'photographs', order: 3, label: 'documentPhotographs', help: 'documentPhotographsHelp' },
-    { code: 'health_insurance', order: 5, label: 'documentHealthInsurance', help: 'documentHealthInsuranceHelp', conditional_rule: 'health_insurance_document' },
-    { code: 'uets', order: 6, label: 'documentUets', help: 'documentUetsHelp', application_types: ['renewal'], conditional_rule: 'uets' },
-    { code: 'student_certificate', order: 7, label: 'documentStudentCertificate', help: 'documentStudentCertificateHelp' },
-    { code: 'residence_permit_fee', order: 8, label: 'documentResidencePermitFee', help: 'documentResidencePermitFeeHelp' },
+    { code: 'visa', required: false, order: 3, label: 'documentVisa', help: 'documentVisaHelp' },
+    { code: 'photographs', order: 4, label: 'documentPhotographs', help: 'documentPhotographsHelp' },
+    { code: 'student_certificate', order: 5, label: 'documentStudentCertificate', help: 'documentStudentCertificateHelp' },
+    { code: 'health_insurance', order: 6, label: 'documentHealthInsurance', help: 'documentHealthInsuranceHelp', conditional_rule: 'health_insurance_document' },
+    { code: 'uets', order: 22, label: 'documentUets', help: 'documentUetsHelp', application_types: ['renewal'], conditional_rule: 'uets' },
+    { code: 'residence_permit_fee', order: 23, label: 'documentResidencePermitFee', help: 'documentResidencePermitFeeHelp' },
     {
-        code: 'address_rental_contract', order: 9, label: 'documentAddressRentalContract', help: 'documentAddressRentalContractHelp',
+        code: 'address_rental_contract', order: 7, label: 'documentAddressRentalContract', help: 'documentAddressRentalContractHelp',
         address_evidence_type: 'rental_contract'
     },
     {
-        code: 'address_residence_certificate', order: 10, label: 'documentAddressResidenceCertificate', help: 'documentAddressResidenceCertificateHelp',
+        code: 'address_residence_certificate', order: 8, label: 'documentAddressResidenceCertificate', help: 'documentAddressResidenceCertificateHelp',
         conditional_rule: 'registered_address'
     },
     {
-        code: 'address_undertaking', order: 11, label: 'documentAddressUndertaking', help: 'documentAddressUndertakingHelp',
+        code: 'address_undertaking', order: 9, label: 'documentAddressUndertaking', help: 'documentAddressUndertakingHelp',
         address_evidence_type: 'undertaking'
     },
     {
-        code: 'host_residence_certificate', order: 12, label: 'documentHostResidenceCertificate', help: 'documentHostResidenceCertificateHelp',
-        address_evidence_type: 'undertaking', parent_code: 'address_undertaking', accepted_media_types: ['application/pdf']
+        code: 'host_residence_certificate', order: 10, label: 'documentHostResidenceCertificate', help: 'documentHostResidenceCertificateHelp',
+        address_evidence_type: 'undertaking', parent_code: 'address_undertaking'
     },
-    { code: 'home_utility_bill', order: 14, label: 'documentHomeUtilityBill', help: 'documentHomeUtilityBillHelp', conditional_rule: 'address_utility_bill' },
+    { code: 'home_utility_bill', order: 11, label: 'documentHomeUtilityBill', help: 'documentHomeUtilityBillHelp', conditional_rule: 'address_utility_bill' },
     {
-        code: 'birth_certificate_under18', order: 15, label: 'documentBirthCertificateUnder18', help: 'documentBirthCertificateUnder18Help',
+        code: 'birth_certificate_under18', order: 12, label: 'documentBirthCertificateUnder18', help: 'documentBirthCertificateUnder18Help',
         conditional_rule: 'under18'
     },
-    { code: 'address_title_deed', order: 16, label: 'documentAddressTitleDeed', help: 'documentAddressTitleDeedHelp', address_evidence_type: 'own_home' },
-    { code: 'address_numbering', order: 17, label: 'documentAddressNumbering', help: 'documentAddressNumberingHelp', address_evidence_type: 'own_home', parent_code: 'address_title_deed' },
-    { code: 'address_dormitory', order: 18, label: 'documentAddressDormitory', help: 'documentAddressDormitoryHelp', address_evidence_type: 'dormitory' },
-    { code: 'address_hotel', order: 19, label: 'documentAddressHotel', help: 'documentAddressHotelHelp', address_evidence_type: 'hotel' },
-    { code: 'address_hotel_receipt', order: 20, label: 'documentAddressHotelReceipt', help: 'documentAddressHotelReceiptHelp', address_evidence_type: 'hotel', parent_code: 'address_hotel' },
-    { code: 'host_spouse_undertaking', address_evidence_type: 'undertaking', order: 21, label: 'documentHostSpouseUndertaking', help: 'documentHostSpouseUndertakingHelp', parent_code: 'address_undertaking', conditional_rule: 'host_spouse_undertaking' },
-    { code: 'minor_consent', order: 22, label: 'documentMinorConsent', help: 'documentMinorConsentHelp', conditional_rule: 'minor_consent' },
-    { code: 'minor_family_evidence', order: 23, label: 'documentMinorFamilyEvidence', help: 'documentMinorFamilyEvidenceHelp', conditional_rule: 'minor_family_evidence' },
-    { code: 'parent_permit_copy', required: false, order: 24, label: 'documentParentPermitCopy', help: 'documentParentPermitCopyHelp', conditional_rule: 'minor_optional_parent_documents' }
+    { code: 'address_title_deed', order: 13, label: 'documentAddressTitleDeed', help: 'documentAddressTitleDeedHelp', address_evidence_type: 'own_home' },
+    { code: 'address_numbering', order: 14, label: 'documentAddressNumbering', help: 'documentAddressNumberingHelp', address_evidence_type: 'own_home', parent_code: 'address_title_deed' },
+    { code: 'address_dormitory', order: 15, label: 'documentAddressDormitory', help: 'documentAddressDormitoryHelp', address_evidence_type: 'dormitory' },
+    { code: 'address_hotel', order: 16, label: 'documentAddressHotel', help: 'documentAddressHotelHelp', address_evidence_type: 'hotel' },
+    { code: 'address_hotel_receipt', order: 17, label: 'documentAddressHotelReceipt', help: 'documentAddressHotelReceiptHelp', address_evidence_type: 'hotel', parent_code: 'address_hotel' },
+    { code: 'host_spouse_undertaking', address_evidence_type: 'undertaking', order: 18, label: 'documentHostSpouseUndertaking', help: 'documentHostSpouseUndertakingHelp', parent_code: 'address_undertaking', conditional_rule: 'host_spouse_undertaking' },
+    { code: 'minor_consent', order: 19, label: 'documentMinorConsent', help: 'documentMinorConsentHelp', conditional_rule: 'minor_consent' },
+    { code: 'minor_family_evidence', order: 20, label: 'documentMinorFamilyEvidence', help: 'documentMinorFamilyEvidenceHelp', conditional_rule: 'minor_family_evidence' },
+    { code: 'parent_permit_copy', required: false, order: 21, label: 'documentParentPermitCopy', help: 'documentParentPermitCopyHelp', conditional_rule: 'minor_optional_parent_documents' }
 ].map((policy) => Object.freeze({
     code: policy.code,
     application_types: Object.freeze([...(policy.application_types || APPLICATION_TYPES)]),

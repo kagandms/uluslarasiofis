@@ -376,6 +376,14 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                     callback(response || { success: true, formReady: true });
                     return;
                 }
+                if (message.action === 'CHECK_MANUAL_YOKSIS_FILL' && options.targetHarness) {
+                    void options.targetHarness.send(message).then(callback);
+                    return;
+                }
+                if (message.action === 'CHECK_MANUAL_YOKSIS_FILL') {
+                    callback(options.manualOverrideCheck || { success: true, manualOverrideAllowed: true });
+                    return;
+                }
                 if (message.action === 'verifyYoksisFields') {
                     if (options.targetHarness) {
                         void options.targetHarness.send(message).then(callback);
@@ -835,6 +843,9 @@ test('YÖKSİS hazır kontrolü önceki formu yeni aramanın sonucu saymaz', asy
         </table>
     `, 'https://yoksis.yok.gov.tr/student');
 
+    const readinessDiagnostics = [];
+    harness.dom.window.console.warn = (...args) => readinessDiagnostics.push(args);
+
     try {
         const state = await harness.send({ action: 'GET_YOKSIS_FORM_STATE', requestId: 'old-form-state' });
         const response = await harness.send({
@@ -848,6 +859,42 @@ test('YÖKSİS hazır kontrolü önceki formu yeni aramanın sonucu saymaz', asy
 
         assert.equal(response.success, false);
         assert.equal(response.formReady, false);
+        assert.equal(readinessDiagnostics[0]?.[0], '[YKN_FORM_READINESS] Öğrenci formu doğrulanamadı.');
+        assert.equal(readinessDiagnostics[0]?.[1]?.formSignals, 2);
+        assert.equal(Object.hasOwn(readinessDiagnostics[0]?.[1] || {}, 'fingerprint'), false);
+    } finally {
+        harness.close();
+    }
+});
+
+test('manuel YÖKSİS aktarımı yalnızca güncel arama ve çelişmeyen düzenlenebilir form için açılır', async () => {
+    const harness = createContentHarness(`
+        <table><tr><td>Kabul Mektup ID</td><td><input id="acceptance-id"></td>
+            <td><button id="search">Kabul Mektup ID ile Ara</button></td></tr></table>
+        <table>
+            <tr><td>Adı</td><td><input id="student-name"></td></tr>
+            <tr><td>Soyadı</td><td><input id="student-surname"></td></tr>
+            <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+
+    try {
+        const search = await harness.send({ action: 'searchWithId', kabulId: 'ZX-456-YW',
+            requestId: 'manual-search', waitForForm: false });
+        const student = { passportNo: 'EXPECTED-PASSPORT', firstName: 'ALPHA', lastName: 'BETA' };
+        const allowed = await harness.send({ action: 'CHECK_MANUAL_YOKSIS_FILL', requestId: 'manual-fill',
+            searchRequestId: 'manual-search', expectedKabulId: 'ZX-456-YW', expectedStudent: student });
+
+        assert.equal(search.searchTriggered, true);
+        assert.equal(allowed.manualOverrideAllowed, true);
+
+        harness.dom.window.document.getElementById('student-name').value = 'OTHER';
+        harness.dom.window.document.getElementById('student-surname').value = 'STUDENT';
+        harness.dom.window.document.getElementById('document-number').value = 'OTHER-PASSPORT';
+        const mismatch = await harness.send({ action: 'CHECK_MANUAL_YOKSIS_FILL', requestId: 'manual-fill-mismatch',
+            searchRequestId: 'manual-search', expectedKabulId: 'ZX-456-YW', expectedStudent: student });
+
+        assert.equal(mismatch.manualOverrideAllowed, false);
     } finally {
         harness.close();
     }
@@ -1387,6 +1434,7 @@ test('YKN timing diagnostics report stage metrics without acceptance or student 
     assert.ok(logText.includes('acceptance-input-readiness'));
     assert.ok(logText.includes('search-trigger'));
     assert.ok(logText.includes('fresh-form-wait-content'));
+    assert.ok(logText.includes('diagnostics-no-personal-data'));
     assert.ok(!logText.includes('PRIVATE-ACCEPTANCE-CODE'));
     assert.ok(!logText.includes('PRIVATE STUDENT NAME'));
     assert.ok(!logText.includes('PRIVATE-PASSPORT'));
@@ -2332,6 +2380,41 @@ test('successful acceptance search stores the verified target for the extension 
     assert.equal(harness.storageValues.studentData.yoksisReady, true);
     assert.equal(harness.storageValues.studentData.yoksisTabId, 42);
     assert.equal(harness.storageValues.studentData.firstName, 'SYNTHETIC');
+});
+
+test('confirmed manual YÖKSİS fill rechecks the bound search and then verifies the written fields', async () => {
+    const target = createContentHarness(`
+        <table><tr><td>Kabul Mektup ID</td><td><input id="acceptance-id"></td>
+            <td><button id="search">Kabul Mektup ID ile Ara</button></td></tr></table>
+        <table>
+            <tr><td>Adı</td><td><input id="student-name"></td></tr>
+            <tr><td>Soyadı</td><td><input id="student-surname"></td></tr>
+            <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const search = await target.send({ action: 'searchWithId', kabulId: 'ZX-456-YW',
+        requestId: 'manual-search', waitForForm: false });
+    const background = createBackgroundHarness({}, {}, {
+        targetHarness: target,
+        formReadyResponses: [{ success: false, formReady: false }]
+    });
+    const student = { yoksisReady: false, yoksisManualOverrideAvailable: true,
+        yoksisSearchRequestId: 'manual-search', yoksisId: 'ZX-456-YW', yoksisTabId: 42,
+        yoksisTabUrl: 'https://yoksis.yok.gov.tr/student', firstName: 'SYNTHETIC', lastName: 'STUDENT' };
+
+    try {
+        assert.equal(search.searchTriggered, true);
+        const response = await background.send({ source: 'IKAMET_PORTAL', action: 'FILL_YOKSIS_FORM',
+            requestId: 'manual-fill', data: student, manualOverrideConfirmed: true });
+
+        assert.equal(response.success, true, JSON.stringify(response));
+        assert.deepEqual(JSON.parse(JSON.stringify(response.filledFields)), ['Adı', 'Soyadı']);
+        assert.equal(target.dom.window.document.getElementById('student-name').value, 'SYNTHETIC');
+        assert.equal(target.dom.window.document.getElementById('student-surname').value, 'STUDENT');
+        assert.ok(background.calls.some(call => call.message?.action === 'CHECK_MANUAL_YOKSIS_FILL'));
+    } finally {
+        target.close();
+    }
 });
 
 

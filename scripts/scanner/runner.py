@@ -123,7 +123,10 @@ def run_once(config: ScannerConfig, transport: ScannerTransport) -> bool:
     transport.request('heartbeat', make_heartbeat(config, health))
     if health.health != 'ready':
         return False
-    job = parse_job(transport.request('claim', {'runner_id': config.runner_id}))
+    claim: dict[str, object] = {'runner_id': config.runner_id}
+    if config.application_ids:
+        claim['application_ids'] = list(config.application_ids)
+    job = parse_job(transport.request('claim', claim))
     if job is None:
         return False
     evidence = execute_job(config, transport, job)

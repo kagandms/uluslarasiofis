@@ -58,6 +58,11 @@ test('public landing exposes the requested student entry points and information 
 
     assert.equal(document.querySelector('[data-i18n="homeStartAction"]')?.getAttribute('href'), '/basvuru/');
     assert.equal(document.querySelector('[data-i18n="homeTrackAction"]')?.getAttribute('href'), '/basvurum/');
+    const privacyLink = document.querySelector('#home-privacy-notice');
+    assert.equal(privacyLink?.dataset.i18n, 'homeOfficialPrivacyNotice');
+    assert.equal(privacyLink?.getAttribute('href'), 'https://www.topkapi.edu.tr/tr-TR/gizlilik-politikasi/13455');
+    assert.equal(privacyLink?.getAttribute('target'), '_blank');
+    assert.match(privacyLink?.getAttribute('rel') || '', /noopener/);
     assert.ok(document.querySelector('.staff-entry[data-i18n="staffLink"][href="/yetkili/"]'));
     assert.ok(document.querySelector('.public-brand-copy [data-i18n="homeUniversityName"]'));
     assert.equal(document.querySelectorAll('[data-process-step]').length, 5);

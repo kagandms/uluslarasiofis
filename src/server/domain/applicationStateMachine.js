@@ -3,7 +3,7 @@ const STATUS_TRANSITIONS = Object.freeze({
     resubmission_required: Object.freeze(['under_review']),
     under_review: Object.freeze(['approved_for_processing']),
     approved_for_processing: Object.freeze(['sent_to_migration', 'under_review']),
-    sent_to_migration: Object.freeze(['migration_approved', 'approved_for_processing']),
+    sent_to_migration: Object.freeze(['migration_approved', 'approved_for_processing', 'rejected']),
     migration_approved: Object.freeze(['completed', 'sent_to_migration']),
     completed: Object.freeze(['migration_approved'])
 });

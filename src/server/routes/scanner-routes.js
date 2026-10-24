@@ -28,15 +28,30 @@ async function requireScanner(request, environment) {
 /** @param {Request} request Claim request. @param {object} repository Scanner operations. @param {string} now UTC time. @returns {Promise<object>} One leased job or null. */
 async function claim(request, repository, now) {
     requireMethod(request,'POST');
-    const body = await readJsonBody(request,1024);
-    if (Object.keys(body).length !== 1) throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
+    const body = await readJsonBody(request,4096);
+    const allowedKeys = new Set(['runner_id', 'application_ids']);
+    if (Object.keys(body).length < 1 || Object.keys(body).some((key) => !allowedKeys.has(key))) {
+        throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
+    }
     const runnerId = requireScannerIdentifier(body.runner_id);
+    const applicationIds = readApplicationScope(body.application_ids);
     await repository.reconcile(now);
     const token = [...crypto.getRandomValues(new Uint8Array(32))].map((byte)=>byte.toString(16).padStart(2,'0')).join('');
-    const job = await repository.claim({ now,runnerId,tokenHash:await hashScannerValue(token) });
+    const job = await repository.claim({ now,runnerId,tokenHash:await hashScannerValue(token),applicationIds });
     if (!job) return { job:null };
     return { job:{ id:job.id,file_id:job.file_id,revision_id:job.revision_id,storage_key:job.storage_key,
         byte_size:job.byte_size,media_type:job.media_type,lease_until:job.lease_until,lease_token:token } };
+}
+
+function readApplicationScope(value) {
+    if (value === undefined) return null;
+    const isApplicationId = (entry) => typeof entry === 'string'
+        && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(entry);
+    if (!Array.isArray(value) || value.length < 1 || value.length > 50
+        || value.some((entry) => !isApplicationId(entry)) || new Set(value).size !== value.length) {
+        throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
+    }
+    return value;
 }
 
 /** @param {object} input Job, request and repository context. @returns {Promise<object>} Current job and token digest. @throws {ApiError} Stale authority. */

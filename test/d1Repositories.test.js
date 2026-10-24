@@ -194,6 +194,27 @@ test('repeated application type switches preserve shared and renewal-only docume
     assert.deepEqual(database.prepare('PRAGMA foreign_key_check').all().results, []);
 });
 
+test('transition route changes preserve existing renewal document records without remapping', async () => {
+    const { database, repositories } = createRepositories();
+    const applicationId = 'app-transition-route';
+    await createDraft(repositories, applicationId, 'transition-route-student', 'renewal');
+    const uets = addFinalizedDocument(database, applicationId, 'renewal', 'uets', 'uets-transition-route');
+
+    const application = await repositories.applications.updateDraft(applicationId, {
+        applicationType: 'renewal', applicationRoute: 'transition'
+    }, { auditEventId: 'transition-route-change', requestId: 'transition-route-request' });
+    const record = database.prepare('SELECT application_type,requirement_id FROM document_records WHERE id=?').bind(uets.recordId).first();
+    const audit = database.prepare("SELECT safe_metadata_json FROM audit_events WHERE id='transition-route-change'").first();
+
+    assert.equal(application.application_route, 'transition');
+    assert.equal(application.application_type, 'renewal');
+    assert.deepEqual({ ...record }, { application_type: 'renewal', requirement_id: database.prepare('SELECT id FROM document_requirements WHERE code=? AND application_type=?').bind('uets', 'renewal').first().id });
+    assert.deepEqual(JSON.parse(audit.safe_metadata_json), {
+        previous_application_type: 'renewal', new_application_type: 'renewal',
+        previous_application_route: 'standard', new_application_route: 'transition'
+    });
+});
+
 test('application type remap aborts without changing a draft when a requirement code has no explicit compatibility mapping', async () => {
     const { database, repositories } = createRepositories();
     const applicationId = 'app-unmapped-record';

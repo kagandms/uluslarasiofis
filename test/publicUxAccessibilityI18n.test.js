@@ -62,13 +62,14 @@ test('CSS rules enforce word wrapping, touch targets, focus-visible, and stepper
 
     // Stepper non-color state indicator (check mark)
     assert.ok(css.includes('.application-progress li.is-complete::before'), 'public.css must indicate completed step with checkmark prefix');
+    assert.doesNotMatch(css, /\.application-progress li\.is-current span\s*\{[^}]*text-decoration:/u);
 
     // Touch targets >= 44px (2.75rem or 2.8rem)
     assert.ok(css.includes('min-height: 2.75rem;'), 'public.css must provide at least 2.75rem (44px) touch targets for buttons/controls');
     assert.ok(css.includes('min-height: 2.8rem;'), 'public.css must provide at least 2.8rem for text inputs/selects');
 });
 
-test('application tracking lookup preserves student number input across language switches', async () => {
+test('application tracking lookup omits student-number guidance and preserves its code across language switches', async () => {
     const { document, root } = createDom();
     const api = {
         async readCurrentApplicationTracking() {
@@ -82,7 +83,8 @@ test('application tracking lookup preserves student number input across language
 
     const ownerAccess = root.querySelector('.tracking-owner-access-link');
     assert.equal(ownerAccess?.getAttribute('href'), '/basvuru/#resume-application-form');
-    assert.match(root.querySelector('.tracking-owner-access-note')?.textContent || '', /yalnızca takip sağlar/u);
+    assert.equal(root.querySelector('.tracking-owner-access-note'), null);
+    assert.doesNotMatch(root.textContent, /öğrenci numarasıyla durum sorgulama/u);
 
     const input = root.querySelector('#tracking-application-reference');
     assert.ok(input, 'Tracking ITU reference input must exist');

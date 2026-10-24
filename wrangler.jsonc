@@ -48,6 +48,9 @@
   "env": {
     "staging": {
       "name": "goc-staging",
+      "triggers": {
+        "crons": []
+      },
       "vars": {
         "APP_ENV": "staging",
         "R2_BUCKET_NAME": "uluslarasiofis-documents-staging",
@@ -64,7 +67,7 @@
         {
           "binding": "DB",
           "database_name": "uluslarasiofis-staging",
-          "database_id": "8f034e90-17fc-43d7-aa5d-125571019612",
+          "database_id": "2ef78af7-be99-4a8d-bc63-0be2a9704e96",
           "migrations_dir": "migrations",
           "remote": false
         }

@@ -6,6 +6,7 @@ import { ACCOMMODATION_TYPES, listMissingDocumentAnswers, listRequiredDocumentAn
 import { evaluateSubmissionReadiness } from '../src/server/services/submissionReadiness.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
+import { withTestApplicationPrivacyNotice, withTestApplicationPrivacyNoticeVersion } from './helpers/application-privacy-notice.js';
 import worker from '../src/server/worker.js';
 
 function readCodes(application) {
@@ -88,16 +89,18 @@ test('unanswered and invalid conditional questions block server readiness even w
 });
 
 function createRequest(path, options = {}) {
+    const requestBody = path === '/api/public/applications' && options.method === 'POST'
+        ? withTestApplicationPrivacyNoticeVersion(options.body || {}) : options.body;
     return new Request(`https://portal.test${path}`, {
         method: options.method || 'GET', headers: { Origin: 'https://portal.test', 'Content-Type': 'application/json', ...(options.cookie ? { Cookie: options.cookie } : {}) },
-        ...(options.body ? { body: JSON.stringify(options.body) } : {})
+        ...(requestBody ? { body: JSON.stringify(requestBody) } : {})
     });
 }
 
 async function createDraft() {
     const DB = new TestD1Database();
     applyAllMigrations(DB);
-    const environment = { DB };
+    const environment = withTestApplicationPrivacyNotice({ DB });
     const response = await worker.fetch(createRequest('/api/public/applications', { method: 'POST', body: {
         student_number: 'CONDITIONS-1', application_type: 'initial', email: 'test@example.edu', phone: '+905551112233'
     } }), environment, {});

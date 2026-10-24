@@ -64,6 +64,13 @@ test('backend migration creates the complete Session 2 data foundation', () => {
     }
 });
 
+test('application policy migration stores the academic year start independently', () => {
+    const database = createDatabase();
+    const applicationColumns = database.prepare('PRAGMA table_info(applications)').all().map(({ name }) => name);
+
+    assert.ok(applicationColumns.includes('academic_year_start_date'));
+});
+
 test('public portal migration adds persisted address evidence and archives superseded requirements safely', () => {
     const database = createDatabase();
     const applicationColumns = database.prepare('PRAGMA table_info(applications)').all().map(({ name }) => name);
@@ -87,6 +94,32 @@ test('public portal migration adds persisted address evidence and archives super
     ]);
     assert.ok(newRequirements.some(({ code, application_type, is_required, is_active }) =>
         code === 'uets' && application_type === 'initial' && is_required === 0 && is_active === 0));
+});
+
+test('student document-order migration adds an optional visa page and puts UETS and fee after address documents', () => {
+    const database = createDatabase();
+    const requirements = database.prepare(`
+        SELECT code, application_type, is_required, display_order
+        FROM document_requirements
+        WHERE code IN ('visa', 'student_certificate', 'health_insurance', 'address_dormitory', 'uets', 'residence_permit_fee')
+          AND is_active = 1
+        ORDER BY display_order
+    `).all();
+
+    assert.deepEqual(requirements.map(({ code, application_type, is_required }) => ({ code, application_type, is_required })), [
+        { code: 'visa', application_type: 'initial', is_required: 0 },
+        { code: 'visa', application_type: 'renewal', is_required: 0 },
+        { code: 'student_certificate', application_type: 'initial', is_required: 1 },
+        { code: 'student_certificate', application_type: 'renewal', is_required: 1 },
+        { code: 'health_insurance', application_type: 'initial', is_required: 1 },
+        { code: 'health_insurance', application_type: 'renewal', is_required: 1 },
+        { code: 'address_dormitory', application_type: 'initial', is_required: 1 },
+        { code: 'address_dormitory', application_type: 'renewal', is_required: 1 },
+        { code: 'uets', application_type: 'renewal', is_required: 1 },
+        { code: 'residence_permit_fee', application_type: 'initial', is_required: 1 },
+        { code: 'residence_permit_fee', application_type: 'renewal', is_required: 1 }
+    ]);
+    assert.ok(requirements.every(({ display_order }, index) => index === 0 || display_order >= requirements[index - 1].display_order));
 });
 
 test('forward migration preserves a pre-existing renewal UETS document and seeds its inactive initial compatibility row', () => {

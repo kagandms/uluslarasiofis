@@ -23,7 +23,14 @@ export function readStudentDocumentStatus(requirement) {
     return 'not_uploaded';
 }
 
+function readStudentDocumentMessage(requirement) {
+    if (readStudentDocumentStatus(requirement) !== 'resubmission_required'
+        || typeof requirement?.student_message !== 'string') return undefined;
+    return requirement.student_message;
+}
+
 function createTrackingDocumentDto(policy, requirement) {
+    const studentMessage = readStudentDocumentMessage(requirement);
     return {
         code: policy.code,
         label_key: policy.label_key,
@@ -31,27 +38,30 @@ function createTrackingDocumentDto(policy, requirement) {
         revision_number: requirement?.revision_number ?? null,
         status: readStudentDocumentStatus(requirement),
         filename: isStudentVisibleFile(requirement) ? requirement.original_filename ?? null : null,
-        ...(typeof requirement?.student_message === 'string' ? { student_message: requirement.student_message } : {})
+        ...(studentMessage ? { student_message: studentMessage } : {})
     };
 }
 
 function createPublicTrackingDocumentDto(policy, requirement) {
+    const studentMessage = readStudentDocumentMessage(requirement);
     return {
         code: policy.code,
         label_key: policy.label_key,
         required: policy.required,
         status: readStudentDocumentStatus(requirement),
-        ...(typeof requirement?.student_message === 'string' ? { student_message: requirement.student_message } : {})
+        ...(studentMessage ? { student_message: studentMessage } : {})
     };
 }
 
-function createTrackingApplicationDto(application) {
+function createTrackingApplicationDto(application, rejectionReason = null) {
     return {
         status: application.status,
-        application_type: application.application_type,
+        application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
         created_at: application.created_at ?? null,
         updated_at: application.updated_at ?? null,
-        submitted_at: application.submitted_at ?? null
+        submitted_at: application.submitted_at ?? null,
+        ...(application.status === 'rejected' && typeof rejectionReason === 'string'
+            ? { rejection_reason: rejectionReason } : {})
     };
 }
 
@@ -120,16 +130,19 @@ export async function lookupApplicationTracking(request, environment) {
     const application = await repositories.applications.findTrackableByReferenceNumber(referenceNumber);
     if (!application) return { found: false, application: null, documents: [] };
 
-    const [storedRequirements, studentMessages] = await Promise.all([
+    const [storedRequirements, studentMessages, rejectionReason] = await Promise.all([
         repositories.documents.listStudentRequirements(application.id),
-        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id)
+        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id),
+        application.status === 'rejected'
+            ? repositories.applicationNotes.readLatestStudentApplicationRejection(application.id)
+            : null
     ]);
     const requirementsWithMessages = storedRequirements.map((requirement) => ({
         ...requirement, student_message: studentMessages.get(requirement.document_record_id)
     }));
     return {
         found: true,
-        application: createTrackingApplicationDto(application),
+        application: createTrackingApplicationDto(application, rejectionReason),
         documents: createDocumentTrackingView(application, requirementsWithMessages, createPublicTrackingDocumentDto)
     };
 }

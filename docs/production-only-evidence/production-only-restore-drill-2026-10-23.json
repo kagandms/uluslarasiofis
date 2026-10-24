@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-10-23T16:13:51.371Z",
+  "result": "passed",
+  "coverage": {
+    "d1": true,
+    "r2": true
+  },
+  "d1": {
+    "isolatedSqliteRestore": true,
+    "integrityCheck": "ok",
+    "foreignKeyErrors": 0,
+    "sqlExportBytes": 2215136,
+    "sqlExportSha256": "37c80d5ba5c7d592888a23fe43f32dea7408327299c972c1359c382b03d91774",
+    "timeTravelBookmark": "000000dd-00000562-0000510d-afecad884d178a76a7af185188517c38"
+  },
+  "r2": {
+    "sourceBucket": "uluslarasiofis-documents-production",
+    "recoveryBucket": "uluslarasiofis-print-production",
+    "recoveryPrefix": "recovery/student-documents-2026-10-23T155858Z/",
+    "sourceObjectCount": 667,
+    "sourceBytes": 325909899,
+    "manifestSha256": "286cd160c41f5f97363af06dca8b9d80608db98ec2ec382b33cf1cf3d2cf9dd1",
+    "restoredProbeBytes": 20,
+    "restoredProbeSha256": "6ed645ef0e1abea1bf1e4e935ff04f9e18d39812387f63cda3415b46240f0405",
+    "temporaryRestoreObjectRetained": true
+  }
+}

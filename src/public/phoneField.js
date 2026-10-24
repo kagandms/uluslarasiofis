@@ -69,7 +69,7 @@ export function createPhoneField(document, { value, locale, messages, country = 
     phoneInput.type = 'tel';
     phoneInput.required = true;
     phoneInput.setAttribute('aria-required', 'true');
-    phoneInput.maxLength = 40;
+    phoneInput.maxLength = 25;
     phoneInput.autocomplete = 'tel-national';
     phoneInput.value = initialPhone?.isPossible && initialPhone.country ? initialPhone.formattedNational : storedPhone;
     phoneInput.setAttribute('aria-describedby', 'phone-input-help phone-input-error');

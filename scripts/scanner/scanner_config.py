@@ -20,6 +20,7 @@ class ScannerConfig:
     freshclam_config: Path
     ca_file: str | None
     scan_timeout_seconds: int
+    application_ids: tuple[str, ...] = ()
 
 
 def read_secret(secret_path: Path) -> str:
@@ -52,9 +53,17 @@ def load_config(settings: Mapping[str, str]) -> ScannerConfig:
     timeout = int(settings.get('SCANNER_SCAN_TIMEOUT_SECONDS', '120'))
     if not 1 <= timeout <= 120:
         raise ValueError('scan_timeout_invalid')
+    raw_application_ids = settings.get('SCANNER_APPLICATION_IDS', '')
+    application_ids = tuple(value.strip() for value in raw_application_ids.split(',') if value.strip())
+    if len(application_ids) > 50 or len(set(application_ids)) != len(application_ids) or any(
+        not re.fullmatch(r'[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}', value, re.IGNORECASE)
+        for value in application_ids
+    ):
+        raise ValueError('application_scope_invalid')
     secret = read_secret(Path(settings['SCANNER_SECRET_FILE']))
     return ScannerConfig(origin.rstrip('/'), secret, runner_id, state,
         Path(settings.get('SCANNER_DATABASE_DIR', str(state / 'signatures'))),
         Path(settings.get('SCANNER_CERTS_DIR', str(Path(__file__).parent / 'certs'))),
         settings.get('SCANNER_CLAMSCAN', 'clamscan'),
-        settings.get('SCANNER_FRESHCLAM', 'freshclam'), state / 'freshclam.conf', settings.get('SCANNER_CA_FILE'), timeout)
+        settings.get('SCANNER_FRESHCLAM', 'freshclam'), state / 'freshclam.conf', settings.get('SCANNER_CA_FILE'), timeout,
+        application_ids)

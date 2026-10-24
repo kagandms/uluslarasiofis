@@ -8,7 +8,6 @@ import { requireMethod, requireSameOrigin } from './shared.js';
 import { createDocumentStorage } from '../storage/documentStorage.js';
 
 const STAFF_ROLES = Object.freeze(['reviewer', 'admin']);
-const PREVIEW_TTL_SECONDS = 120;
 const ZIP_ENTRY_EXTENSIONS = Object.freeze({ 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' });
 
 function unavailableDocument() {
@@ -184,11 +183,7 @@ export async function streamStaffApplicationArchiveFile({ request, environment, 
     } });
 }
 
-/**
- * Issues a short-lived capability for one authorized, clean current application document.
- * @param {{request: Request, environment: object, applicationId: string, code: string, requestId: string}} input Validated route context.
- * @returns {Promise<object>} Safe capability DTO for the authenticated staff UI.
- */
+/** Streams one authorized, clean current document inline for the same-origin staff preview. */
 export async function createStaffDocumentPreview({ request, environment, applicationId, code, requestId }) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
@@ -196,26 +191,31 @@ export async function createStaffDocumentPreview({ request, environment, applica
     const resolved = await resolveCurrentDocument(environment, applicationId, code);
     const storage = createDocumentStorage(environment);
     const object = await storage.head(resolved.file.storage_key);
-    if (!object) throw unavailableDocument();
-
-    let capability;
-    try {
-        capability = await storage.createReadCapability(resolved.file.storage_key, {
-            expiresInSeconds: PREVIEW_TTL_SECONDS
-        });
-    } catch {
-        throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'Belge önizlemesi şu anda açılamıyor. Daha sonra tekrar deneyin.', true);
+    if (!object || object.size !== resolved.file.byte_size || typeof object.etag !== 'string' || !object.etag) {
+        throw unavailableDocument();
+    }
+    const policy = readDocumentPolicy(code, resolved.application.application_type,
+        resolved.application.is_under_18 === 1, resolved.application);
+    if (!policy || resolved.file.byte_size > policy.max_byte_size) throw unavailableDocument();
+    const sourceIdentity = await archiveIdentity(applicationId, resolved.file, object);
+    const currentObject = await storage.get(resolved.file.storage_key, { etagMatches: object.etag });
+    if (!currentObject?.body || currentObject.size !== resolved.file.byte_size || currentObject.etag !== object.etag) {
+        throw unavailableDocument();
     }
     await writeAccessAudit({
         repositories: resolved.repositories, staff, application: resolved.application,
-        file: resolved.file, code, requestId, eventType: 'staff.document_preview_issued', result: 'capability_issued'
+        file: resolved.file, code, requestId, eventType: 'staff.document_preview_issued', result: 'stream_authorized'
     });
-    return routeResult({
-        method: capability.method,
-        url: capability.url,
-        expires_at: capability.expiresAt,
-        media_type: resolved.file.media_type,
-        filename: createSafeFilename(resolved.file.original_filename)
+    return new Response(guardArchiveStream(currentObject.body, environment, applicationId, code, sourceIdentity), {
+        status: 200,
+        headers: {
+            'Content-Type': resolved.file.media_type,
+            'Content-Disposition': `inline; filename="${createSafeFilename(resolved.file.original_filename)}"`,
+            'Content-Length': String(resolved.file.byte_size),
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': "default-src 'none'; sandbox"
+        }
     });
 }
 

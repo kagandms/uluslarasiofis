@@ -21,7 +21,7 @@ function createApplication(overrides = {}) {
         nationality: 'Turkish',
         date_of_birth: '2000-01-01',
         residence_application_date: '2026-10-23',
-        university_registration_date: '2026-09-01',
+        academic_year_start_date: '2026-09-01',
         is_under_18: 0,
         address_evidence_type: 'rental_contract',
         fingerprint_status: 'registered',
@@ -72,6 +72,31 @@ test('complete persisted application and current finalized required documents ar
         missing_fields: [],
         missing_documents: []
     });
+});
+
+test('clear-age adults do not need an exact residence application date', () => {
+    const readiness = evaluate(createApplication({ residence_application_date: null, academic_year_start_date: null }));
+
+    assert.equal(readiness.status, 'ready');
+});
+
+test('applicants between 18 and 19 must provide the e-İkamet date for the age decision', () => {
+    const readiness = evaluate(createApplication({
+        date_of_birth: '2008-10-24', residence_application_date: null, is_under_18: 0,
+        academic_year_start_date: null
+    }));
+
+    assert.equal(readiness.status, 'not_ready');
+    assert.ok(readiness.missing_fields.includes('residence_application_date'));
+});
+
+test('pending GSS uses the fixed academic year start date without asking the applicant', () => {
+    const readiness = evaluate(createApplication({
+        insurance_basis: 'gss_pending', academic_year_start_date: null
+    }));
+
+    assert.equal(readiness.status, 'ready');
+    assert.ok(!readiness.missing_fields.includes('academic_year_start_date'));
 });
 
 test('a finalized current document requiring resubmission is not ready', () => {
@@ -142,6 +167,22 @@ test('renewal requires current UETS while initial applications do not', () => {
     const renewal = createApplication({ application_type: 'renewal' });
     const readiness = evaluate(renewal, createReadyDocuments(renewal).filter(({ code }) => code !== 'uets'));
     assert.deepEqual(readiness.missing_documents, ['uets']);
+});
+
+test('transition applications require current permit identifiers and retain renewal document policy', () => {
+    const application = createApplication({ application_type: 'renewal', application_route: 'transition' });
+    const missing = evaluate(application, createReadyDocuments(application));
+
+    assert.deepEqual(missing.missing_fields, [
+        'transition_card_number', 'transition_card_serial', 'transition_change_province', 'transition_contact_preference', 'transition_foreign_id'
+    ]);
+    const complete = createApplication({ application_type: 'renewal', application_route: 'transition',
+        transition_foreign_id: '12345678901', transition_card_serial: 'AB123', transition_card_number: '456789',
+        transition_change_province: 'no', transition_contact_preference: 'email' });
+    const readiness = evaluate(complete, createReadyDocuments(complete));
+
+    assert.equal(readiness.status, 'ready');
+    assert.ok(listDocumentPolicies('renewal', false, complete).some(({ code, required }) => code === 'uets' && required));
 });
 
 test('under-18 applications require the birth certificate and adults do not', () => {

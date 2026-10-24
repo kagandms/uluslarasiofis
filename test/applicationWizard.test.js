@@ -3,11 +3,79 @@ import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import {
     createSubmissionConfirmation,
-    initializeApplicationWizard,
+    initializeApplicationWizard as initializeApplicationWizardRaw,
     renderFingerprintSection,
     renderStudentDocumentRequirements
 } from '../src/public/applicationWizard.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
+
+const TEST_PRIVACY_NOTICE = Object.freeze({
+    available: true,
+    version: 'test-approved-v1',
+    content_by_locale: Object.freeze(Object.fromEntries(SUPPORTED_LOCALES.map((locale) => [locale, `Test notice (${locale})`])))
+});
+
+async function initializeApplicationWizard(root, api, options = {}) {
+    if (!api.readApplicationPrivacyNotice) api.readApplicationPrivacyNotice = async () => TEST_PRIVACY_NOTICE;
+    return initializeApplicationWizardRaw(root, api, options);
+}
+
+test('new application stays blocked before contact fields when approved notice is unavailable', async () => {
+    const { document, root } = createRoot();
+    let createCalls = 0;
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async readApplicationPrivacyNotice() { return { available: false }; },
+        async createApplicationDraft() { createCalls += 1; throw new Error('Must remain blocked.'); }
+    };
+
+    const state = await initializeApplicationWizardRaw(root, api, { startNewApplication: true });
+
+    assert.equal(state.privacyNoticeAvailable, false);
+    assert.equal(root.querySelector('#application-step-form'), null);
+    assert.equal(root.querySelector('[name="student_email"]'), null);
+    assert.match(root.textContent, /başvuru.*kullanılamıyor/i);
+    assert.equal(createCalls, 0);
+    document.defaultView.close();
+});
+
+test('new application shows the privacy notice before contact fields without requesting acknowledgement', async () => {
+    const { document, root } = createRoot();
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async readApplicationPrivacyNotice() { return TEST_PRIVACY_NOTICE; }
+    };
+
+    const state = await initializeApplicationWizardRaw(root, api, { startNewApplication: true });
+
+    assert.ok(root.querySelector('#application-step-form'));
+    assert.ok(root.querySelector('[name="student_email"]'));
+    assert.equal(root.querySelector('[data-action="privacy-notice-continue"]'), null);
+    assert.equal(root.querySelector('[data-privacy-notice]')?.textContent, 'Test notice (tr)');
+    assert.equal(root.querySelector('[data-action="privacy-notice-read"]'), null);
+    assert.equal(state.privacyNotice.version, 'test-approved-v1');
+    document.documentElement.lang = 'en';
+    document.dispatchEvent(new document.defaultView.Event('public:locale-changed'));
+    assert.ok(root.querySelector('#application-step-form'));
+    assert.equal(root.querySelector('[data-privacy-notice]')?.textContent, 'Test notice (en)');
+    document.defaultView.close();
+});
+
+test('an existing draft opens without reading or accepting the new-application privacy notice', async () => {
+    const { document, root } = createRoot();
+    const application = { status: 'draft', student_number: 'EXISTING-1', student_email: 'student@example.edu' };
+    const api = {
+        async readCurrentApplication() { return application; },
+        async readApplicationPrivacyNotice() { throw new Error('Existing drafts must not depend on the new-intake notice.'); }
+    };
+
+    const state = await initializeApplicationWizardRaw(root, api);
+
+    assert.equal(state.application, application);
+    assert.ok(root.querySelector('#application-step-form'));
+    assert.equal(root.querySelector('[data-privacy-notice]'), null);
+    document.defaultView.close();
+});
 
 function createRoot() {
     const document = new JSDOM('<!doctype html><html lang="tr"><body><section></section></body></html>').window.document;
@@ -15,7 +83,7 @@ function createRoot() {
 }
 
 function fillRequiredResidenceFields(root) {
-    const fields = { first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish', date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01' };
+    const fields = { first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish', date_of_birth: '2000-01-01' };
     Object.entries(fields).forEach(([name, value]) => { root.querySelector(`[name="${name}"]`).value = value; });
 }
 
@@ -33,7 +101,7 @@ async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: addressEvidenceType, student_number: 'S3-FP-1',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish',
-        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01', is_under_18: 0,
+        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01', is_under_18: 0,
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true, accepted_at: '2026-09-29T00:00:00.000Z' },
         fingerprint_status: fingerprintStatus, fingerprint_code: fingerprintCode,
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAccuracy', accepted_current: false }
@@ -100,7 +168,9 @@ test('contact step keeps Continue disabled until valid contact fields and the se
     const phone = root.querySelector('[data-phone-visible]');
     const acknowledgement = root.querySelector('[name="contact_acknowledgement_accepted"]');
 
-    assert.equal(root.querySelector('h2')?.textContent, 'İletişim Bilgileri');
+    assert.equal(root.querySelector('h2[data-i18n="stepContact"]')?.textContent, 'İletişim Bilgileri');
+    assert.equal(phone.maxLength, 25);
+    assert.equal(root.querySelector('.notification-preference-group'), null);
     assert.equal(continueButton.disabled, true);
     assert.ok(acknowledgement);
     assert.equal(root.querySelector('[name="declaration_accepted"]'), null);
@@ -177,15 +247,86 @@ test('new application is never marked saved before a server draft exists and war
     document.defaultView.close();
 });
 
+test('save failure alert includes the safe server support request ID', async () => {
+    const { document, root } = createRoot();
+    const api = {
+        async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
+        async createApplicationDraft() {
+            throw Object.assign(new Error('Service unavailable.'), {
+                code: 'INTERNAL_ERROR',
+                requestId: 'req_11111111-1111-4111-8111-111111111111'
+            });
+        }
+    };
+    const state = await initializeApplicationWizard(root, api);
+    root.querySelector('[name="student_number"]').value = 'SYN-SUPPORT-1';
+    root.querySelector('[name="application_type"]').value = 'initial';
+    root.querySelector('[name="student_email"]').value = 'synthetic@example.edu';
+    root.querySelector('[data-phone-visible]').value = '+905551112233';
+    root.querySelector('[name="contact_acknowledgement_accepted"]').checked = true;
+    root.querySelector('[data-phone-visible]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    root.querySelector('[name="student_email"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    await submitWizard(root);
+
+    assert.equal(state.errorRequestId, 'req_11111111-1111-4111-8111-111111111111');
+    assert.match(root.querySelector('[role="alert"]').textContent, /Destek kodu/u);
+    assert.match(root.querySelector('[role="alert"]').textContent, /req_11111111-1111-4111-8111-111111111111/u);
+    document.defaultView.close();
+});
+
+test('Continue preserves the request ID and specific error from a failed autosave', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    api.updateCurrentApplication = async () => {
+        throw Object.assign(new Error('Service unavailable.'), {
+            code: 'INTERNAL_ERROR', requestId: 'req_22222222-2222-4222-8222-222222222222'
+        });
+    };
+    const firstName = root.querySelector('[name="first_name"]');
+    firstName.value = 'ChangedName';
+    firstName.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    await submitWizard(root);
+
+    assert.equal(state.errorRequestId, 'req_22222222-2222-4222-8222-222222222222');
+    assert.match(root.querySelector('[role="alert"]').textContent, /req_22222222-2222-4222-8222-222222222222/u);
+    assert.equal(state.errorKey, 'applicationSaveFailed');
+    assert.equal(root.querySelector('[name="first_name"]').value, 'ChangedName');
+    document.defaultView.close();
+});
+
+test('requirements refresh failure reports a load error after preserving the saved application', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    fillRequiredResidenceFields(root);
+    root.querySelector('[name="is_under_18"]').value = 'false';
+    root.querySelector('[name="fingerprint_status"][value="registered"]').checked = true;
+    root.querySelector('[name="fingerprint_code"]').value = 'FP-A/42';
+    api.readCurrentStudentDocumentRequirements = async () => {
+        throw Object.assign(new Error('Requirements unavailable.'), {
+            code: 'INTERNAL_ERROR', requestId: 'req_33333333-3333-4333-8333-333333333333'
+        });
+    };
+
+    await submitWizard(root);
+
+    assert.equal(state.errorKey, 'applicationLoadFailed');
+    assert.equal(state.errorRequestId, 'req_33333333-3333-4333-8333-333333333333');
+    assert.ok(state.application);
+    assert.equal(state.step, 1);
+    assert.match(root.querySelector('[role="alert"]').textContent, /req_33333333-3333-4333-8333-333333333333/u);
+    document.defaultView.close();
+});
+
 test('valid contact details create a server draft and survive a wizard refresh without Continue', async () => {
     const { document, root } = createRoot();
     let createCalls = 0;
     let savedPhone = '';
+    let savedPrivacyNoticeVersion = '';
     let application = null;
     const api = {
         async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
         async createApplicationDraft(fields) {
             createCalls += 1;
+            savedPrivacyNoticeVersion = fields.privacy_notice_version;
             application = {
                 id: 'draft-autosave-1', status: 'draft', student_number: fields.student_number,
                 application_type: fields.application_type, email: fields.email, phone: fields.phone,
@@ -210,6 +351,7 @@ test('valid contact details create a server draft and survive a wizard refresh w
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(createCalls, 1);
+    assert.equal(savedPrivacyNoticeVersion, 'test-approved-v1');
     assert.equal(state.application.id, 'draft-autosave-1');
     assert.equal(savedPhone, '+905551112233');
     assert.equal(root.querySelector('[name="student_number"]').value, 'SYN-CONTACT-KEEP');
@@ -315,9 +457,13 @@ test('residence step requires one address evidence branch and persists the selec
     undertaking.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     assert.equal(continueButton.disabled, false);
     assert.equal(state.formValues.address_evidence_type, 'undertaking');
+    document.documentElement.scrollTop = 123;
+    document.body.scrollTop = 123;
     await submitWizard(root);
 
     assert.equal(state.step, 2);
+    assert.equal(document.documentElement.scrollTop, 0);
+    assert.equal(document.body.scrollTop, 0);
     assert.equal(savedPatches.at(-1).address_evidence_type, 'undertaking');
     assert.equal(state.application.address_evidence_type, 'undertaking');
     document.defaultView.close();
@@ -412,6 +558,22 @@ test('birth date uses a keyboard-friendly day-month-year text field and saves a 
     assert.equal(state.application.date_of_birth, '2005-10-31');
     assert.equal(root.querySelector('[name="date_of_birth"]').value, '31.10.2005');
     assert.equal(root.querySelector('#application-step-form button[type="submit"]').disabled, false);
+    document.defaultView.close();
+});
+
+test('date fields insert day-month-year separators while the user types or pastes', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+    const birthDate = root.querySelector('[name="date_of_birth"]');
+    birthDate.value = '31102005';
+    birthDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.equal(birthDate.value, '31.10.2005');
+    birthDate.value = '24.10.2008';
+    birthDate.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    const residenceDate = root.querySelector('[name="residence_application_date"]');
+    residenceDate.value = '2026-10-20';
+    residenceDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(residenceDate.value, '20.10.2026');
     document.defaultView.close();
 });
 
@@ -529,6 +691,22 @@ test('public home navigation flushes autosave and retains fields when the save f
     document.defaultView.close();
 });
 
+test('previous step remains available and keeps residence fields when autosave fails', async () => {
+    const { document, root, state } = await createFingerprintWizard('registered', 'FP-A/42');
+    state.autosave = { schedule() {}, async flush() { return false; } };
+    root.querySelector('[name="first_name"]').value = 'Unsaved name';
+
+    root.querySelector('[data-action="previous"]').dispatchEvent(
+        new document.defaultView.MouseEvent('click', { bubbles: true, cancelable: true })
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(state.step, 0);
+    assert.equal(state.formValues.first_name, 'Unsaved name');
+    assert.equal(state.errorKey, null);
+    document.defaultView.close();
+});
+
 test('not-registered fingerprint status blocks progression without adding a fingerprint document', async () => {
     const { document, root, state } = await createFingerprintWizard('not_registered');
     state.step = 2;
@@ -607,6 +785,34 @@ test('under-18 answer is derived from the birth date and cannot be manually chan
     document.defaultView.close();
 });
 
+test('age boundary requires the e-İkamet date and calculates minor status from it', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+    const birthDate = root.querySelector('[name="date_of_birth"]');
+    birthDate.value = '24.10.2008';
+    birthDate.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    const residenceDate = root.querySelector('[name="residence_application_date"]');
+    assert.ok(residenceDate);
+    assert.equal(root.querySelector('[name="is_under_18"]').value, 'true');
+    residenceDate.value = '24.10.2026';
+    residenceDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.equal(root.querySelector('[name="is_under_18"]').value, 'false');
+    document.defaultView.close();
+});
+
+test('clear-age adults do not see an e-İkamet date field and GSS uses the fixed academic calendar date', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+
+    assert.equal(root.querySelector('[name="residence_application_date"]'), null);
+    assert.equal(root.querySelector('[name="academic_year_start_date"]'), null);
+    const insuranceBasis = root.querySelector('[name="insurance_basis"]');
+    insuranceBasis.value = 'gss_pending';
+    insuranceBasis.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    assert.equal(root.querySelector('[name="academic_year_start_date"]'), null);
+    assert.match(root.textContent, /21\.12\.2026/);
+    document.defaultView.close();
+});
+
 test('under-18 question and answer placeholder have complete translations in every supported locale', async () => {
     const { document, root, state } = await createFingerprintWizard('registered', 'FP-A/42');
     state.application.is_under_18 = null;
@@ -637,7 +843,7 @@ test('wizard saves under-18 and fingerprint state before loading the server requ
         student_email: 'student@example.edu', student_phone: '+905551112233',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null,
-        residence_application_date: '2026-10-23', university_registration_date: '2026-09-01'
+        residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01'
     };
     const api = {
         async readCurrentApplication() { return { ...application }; },
@@ -690,7 +896,7 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
     const saved = {
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-WIZ-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', first_name: '', last_name: '', passport_number: '', nationality: '', date_of_birth: '',
-        residence_application_date: '', university_registration_date: '',
+        residence_application_date: '', academic_year_start_date: '',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null,
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false, accepted_at: null }
@@ -759,7 +965,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     const application = {
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-UP-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
-        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01',
+        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }
     };
@@ -907,7 +1113,7 @@ test('closeout translations have parity and the wizard rerenders in Arabic RTL',
     const application = {
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', student_number: 'S3-RTL-1', student_email: 'student@example.edu',
         student_phone: '555', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
-        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01',
+        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }
     };

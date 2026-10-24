@@ -10,24 +10,40 @@ import { APPLICATION_CREATE_RATE_LIMIT } from '../security/application-rate-limi
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { normalizeStudentNumber } from '../repositories/d1/studentRepository.js';
 import { isValidPhoneNumber } from '../../shared/phoneNumber.js';
-import { calculateUnder18, readIstanbulDate } from '../../shared/age.js';
+import { calculateUnder18, readIstanbulDate, requiresResidenceApplicationDate } from '../../shared/age.js';
+import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../../shared/academic-calendar.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { readSubmissionReadiness } from '../services/submissionReadiness.js';
 import { listDocumentPolicies } from '../domain/documentPolicy.js';
 import { createAuditEvent, createRepositories, enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
+import { DEFAULT_APPLICATION_PRIVACY_NOTICE } from '../domain/applicationPrivacyNotice.js';
 
 const APPLICATION_SESSION_SECONDS = APPLICATION_OWNER_SESSION_DAYS * 24 * 60 * 60;
-const APPLICATION_TYPE_VALUES = new Set(['initial', 'renewal']);
+const APPLICATION_TYPE_VALUES = new Set(['initial', 'renewal', 'transition']);
 const ADDRESS_EVIDENCE_VALUES = new Set(['rental_contract', 'residence_certificate', 'undertaking']);
+const APPLICATION_PRIVACY_NOTICE_LOCALES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 const DRAFT_FIELDS = Object.freeze({
     first_name: 'firstName',
     last_name: 'lastName',
     passport_number: 'passportNumber',
     nationality: 'nationality',
     student_email: 'studentEmail',
-    student_phone: 'studentPhone'
+    student_phone: 'studentPhone',
+    transition_foreign_id: 'transitionForeignId',
+    transition_card_serial: 'transitionCardSerial',
+    transition_card_number: 'transitionCardNumber',
+    transition_contact_preference: 'transitionContactPreference'
 });
+
+function readApplicationType(applicationType) {
+    if (!APPLICATION_TYPE_VALUES.has(applicationType)) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru türünü kontrol edip tekrar deneyin.');
+    }
+    return applicationType === 'transition'
+        ? { applicationType: 'renewal', applicationRoute: 'transition' }
+        : { applicationType, applicationRoute: 'standard' };
+}
 
 function requireString(body, name, { min = 1, max = 255 } = {}) {
     const value = body[name];
@@ -37,20 +53,65 @@ function requireString(body, name, { min = 1, max = 255 } = {}) {
     return value.trim();
 }
 
+function countPhoneDigits(phone) {
+    return phone.match(/\d/g)?.length || 0;
+}
+
 function readDeclarationVersion(environment) {
     const version = environment.PUBLIC_DECLARATION_VERSION || 'student-information-accuracy-v1';
     if (typeof version === 'string' && /^[A-Za-z0-9._-]{1,80}$/.test(version)) return version;
     throw new ApiError(503, 'DECLARATION_CONFIGURATION_UNAVAILABLE', 'Başvuru onay bilgisi şu anda kullanılamıyor.', true);
 }
 
+function readConfiguredApplicationPrivacyNotice(environment) {
+    let configuredNotice = environment.PUBLIC_APPLICATION_PRIVACY_NOTICE;
+    if (configuredNotice === undefined || configuredNotice === null || configuredNotice === '') {
+        return DEFAULT_APPLICATION_PRIVACY_NOTICE;
+    }
+    if (typeof configuredNotice === 'string') {
+        try {
+            configuredNotice = JSON.parse(configuredNotice);
+        } catch {
+            return null;
+        }
+    }
+    if (!configuredNotice || typeof configuredNotice !== 'object' || Array.isArray(configuredNotice)) return null;
+    const { version, content_by_locale: contentByLocale } = configuredNotice;
+    if (typeof version !== 'string' || !/^[A-Za-z0-9._-]{1,80}$/.test(version)
+        || !contentByLocale || typeof contentByLocale !== 'object' || Array.isArray(contentByLocale)) return null;
+    const hasEveryLocale = APPLICATION_PRIVACY_NOTICE_LOCALES.every((locale) => {
+        const content = contentByLocale[locale];
+        return typeof content === 'string' && content.trim().length > 0 && content.length <= 20000;
+    });
+    if (!hasEveryLocale) return null;
+    return {
+        version,
+        content_by_locale: Object.fromEntries(APPLICATION_PRIVACY_NOTICE_LOCALES.map((locale) => [locale, contentByLocale[locale]]))
+    };
+}
+
+/**
+ * Returns the currently configured five-language privacy notice without recording a user acknowledgement.
+ * @param {Request} request Worker request.
+ * @param {object} environment Worker bindings.
+ * @returns {object} Public notice payload or an unavailable marker.
+ * @throws {ApiError} When the request method is invalid.
+ */
+export function readApplicationPrivacyNotice(request, environment) {
+    requireMethod(request, 'GET');
+    const notice = readConfiguredApplicationPrivacyNotice(environment);
+    return notice ? { available: true, ...notice } : { available: false };
+}
+
 function createApplicationDto(application, environment) {
     const currentDeclarationVersion = readDeclarationVersion(environment);
+    const isTransitionApplication = application.application_route === 'transition';
     return {
         reference_number: application.reference_number ?? null,
         lock_version: application.lock_version ?? 1,
         status: application.status,
         submitted_at: application.submitted_at ?? null,
-        application_type: application.application_type,
+        application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
         address_evidence_type: application.accommodation_type || application.address_evidence_type || null,
         document_policy_version: application.document_policy_version,
         ...Object.fromEntries(DOCUMENT_ANSWER_FIELDS.map((field) => [field, application[field] ?? null])),
@@ -63,7 +124,12 @@ function createApplicationDto(application, environment) {
         nationality: application.nationality,
         date_of_birth: application.date_of_birth,
         residence_application_date: application.residence_application_date ?? null,
-        university_registration_date: application.university_registration_date ?? null,
+        academic_year_start_date: application.academic_year_start_date ?? null,
+        transition_foreign_id: isTransitionApplication ? application.transition_foreign_id ?? '' : '',
+        transition_card_serial: isTransitionApplication ? application.transition_card_serial ?? '' : '',
+        transition_card_number: isTransitionApplication ? application.transition_card_number ?? '' : '',
+        transition_contact_preference: isTransitionApplication ? application.transition_contact_preference ?? null : null,
+        transition_change_province: isTransitionApplication ? application.transition_change_province ?? null : null,
         is_under_18: application.is_under_18,
         fingerprint_status: application.fingerprint_status ?? null,
         fingerprint_code: application.fingerprint_code ?? null,
@@ -87,11 +153,14 @@ function createApplicationDto(application, environment) {
 
 function readNewDraft(body) {
     const studentNumber = requireString(body, 'student_number', { max: 64 });
-    const applicationType = body.application_type;
-    if (!APPLICATION_TYPE_VALUES.has(applicationType)) throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru türünü kontrol edip tekrar deneyin.');
+    const applicationType = readApplicationType(body.application_type);
     const studentEmail = requireString(body, 'email', { max: 254 });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmail)) throw new ApiError(400, 'VALIDATION_ERROR', 'E-posta adresini kontrol edip tekrar deneyin.');
-    return { studentNumber, applicationType, studentEmail, studentPhone: requireString(body, 'phone', { max: 40 }) };
+    const studentPhone = requireString(body, 'phone', { max: 25 });
+    if (countPhoneDigits(studentPhone) > 15) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Telefon numarası en fazla 15 rakam içerebilir.');
+    }
+    return { studentNumber, ...applicationType, studentEmail, studentPhone };
 }
 
 async function persistDraftWithSession(repositories, draft, requestId) {
@@ -135,8 +204,8 @@ function readFingerprintCode(value) {
     return code || null;
 }
 
-function readOptionalApplicationDate(value, allowIncomplete) {
-    if (allowIncomplete && (value === '' || value === null)) return null;
+function readOptionalApplicationDate(value) {
+    if (value === '' || value === null) return null;
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru tarihlerini kontrol edip tekrar deneyin.');
     }
@@ -164,22 +233,44 @@ function readDocumentAnswerChanges(body) {
 function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
     const changes = readDocumentAnswerChanges(body);
     for (const [field, repositoryField] of Object.entries(DRAFT_FIELDS)) {
-        if (Object.hasOwn(body, field)) changes[repositoryField] = requireString(body, field, {
+        if (!Object.hasOwn(body, field)) continue;
+        const value = requireString(body, field, {
             min: allowIncomplete ? 0 : 1,
-            max: field === 'student_email' ? 254 : 255
+            max: field === 'student_email' ? 254 : (field === 'student_phone' ? 25 : 255)
         });
+        if (field === 'student_phone' && countPhoneDigits(value) > 15) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Telefon numarası en fazla 15 rakam içerebilir.');
+        }
+        changes[repositoryField] = value;
+    }
+    if (Object.hasOwn(body, 'transition_change_province')) {
+        if (body.transition_change_province !== null && !['yes', 'no'].includes(body.transition_change_province)) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Geçiş başvuru bilgilerini kontrol edip tekrar deneyin.');
+        }
+        changes.transitionChangeProvince = body.transition_change_province;
+    }
+    if (Object.hasOwn(body, 'transition_contact_preference')) {
+        if (body.transition_contact_preference !== null && !['email', 'phone'].includes(body.transition_contact_preference)) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Geçiş iletişim tercihini kontrol edip tekrar deneyin.');
+        }
+        changes.transitionContactPreference = body.transition_contact_preference;
     }
     if (Object.hasOwn(body, 'residence_application_date')) {
-        changes.residenceApplicationDate = readOptionalApplicationDate(body.residence_application_date, allowIncomplete);
-    }
-    if (Object.hasOwn(body, 'university_registration_date')) {
-        changes.universityRegistrationDate = readOptionalApplicationDate(body.university_registration_date, allowIncomplete);
+        changes.residenceApplicationDate = readOptionalApplicationDate(body.residence_application_date);
     }
     if (Object.hasOwn(body, 'application_type')) {
-        if (!APPLICATION_TYPE_VALUES.has(body.application_type)) {
-            throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru türünü kontrol edip tekrar deneyin.');
-        }
-        changes.applicationType = body.application_type;
+        Object.assign(changes, readApplicationType(body.application_type));
+    }
+    if ((changes.insuranceBasis ?? application.insurance_basis) === 'gss_pending') {
+        changes.academicYearStartDate = CURRENT_ACADEMIC_YEAR_START_DATE;
+    }
+    const targetRoute = changes.applicationRoute ?? application.application_route ?? 'standard';
+    if (targetRoute !== 'transition') {
+        changes.transitionForeignId = null;
+        changes.transitionCardSerial = null;
+        changes.transitionCardNumber = null;
+        changes.transitionContactPreference = null;
+        changes.transitionChangeProvince = null;
     }
     if (Object.hasOwn(body, 'address_evidence_type')) {
         if (body.address_evidence_type !== null && ![...ADDRESS_EVIDENCE_VALUES, ...ACCOMMODATION_TYPES].includes(body.address_evidence_type)) {
@@ -201,9 +292,13 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
         const birthDate = Object.hasOwn(changes, 'dateOfBirth') ? changes.dateOfBirth : application.date_of_birth;
         const residenceApplicationDate = Object.hasOwn(changes, 'residenceApplicationDate')
             ? changes.residenceApplicationDate : application.residence_application_date;
-        const under18 = calculateUnder18(birthDate, residenceApplicationDate);
+        const ageDateIsRequired = requiresResidenceApplicationDate(birthDate);
+        const under18 = calculateUnder18(birthDate, residenceApplicationDate || readIstanbulDate());
         if (under18 === null && !allowIncomplete) {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Doğum tarihi ve e-İkamet başvuru tarihini kontrol edip tekrar deneyin.');
+        }
+        if (ageDateIsRequired && !residenceApplicationDate && !allowIncomplete) {
+            throw new ApiError(400, 'VALIDATION_ERROR', '18 yaş hesabı için e-İkamet başvuru tarihini girin.');
         }
         changes.isUnder18 = under18 === null ? null : (under18 ? 1 : 0);
     }
@@ -236,7 +331,15 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
 export async function createApplicationDraft(request, environment, requestId) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
-    const draft = readNewDraft(await readJsonBody(request));
+    const notice = readConfiguredApplicationPrivacyNotice(environment);
+    if (!notice) {
+        throw new ApiError(503, 'APPLICATION_PRIVACY_NOTICE_UNAVAILABLE', 'Yeni başvuru şu anda kullanılamıyor.', true);
+    }
+    const body = await readJsonBody(request);
+    if (body.privacy_notice_version !== notice.version) {
+        throw new ApiError(409, 'APPLICATION_PRIVACY_NOTICE_VERSION_CONFLICT', 'Başvuru bilgilendirme metni güncellendi. Lütfen sayfayı yenileyin.');
+    }
+    const draft = readNewDraft(body);
     const repositories = createRepositories(environment);
     await enforceRateLimit(repositories, request, APPLICATION_CREATE_RATE_LIMIT);
     const { application, token, accessCode } = await persistDraftWithSession(repositories, draft, requestId);
@@ -324,6 +427,13 @@ async function updateCurrentApplicationFields(request, environment, requestId, {
         return { application: createApplicationDto(unchanged, environment) };
     }
     const changes = readDraftChanges(body, renumberedApplication || currentApplication, { allowIncomplete });
+    const passportNumber = changes.passportNumber ?? (renumberedApplication || currentApplication).passport_number;
+    const dateOfBirth = changes.dateOfBirth ?? (renumberedApplication || currentApplication).date_of_birth;
+    if (await repositories.applications.hasOtherActiveApplicationForPassportIdentity(
+        passportNumber, dateOfBirth, session.application_id
+    )) {
+        throw new ApiError(409, 'PASSPORT_IDENTITY_ALREADY_ACTIVE', 'Bu pasaport bilgileriyle etkin bir başvuru bulunuyor. Öğrenci numaranızı kontrol edin veya mevcut başvurunuza giriş yapın.');
+    }
     let application;
     try {
         application = await repositories.applications.updateDraft(session.application_id, changes, {
@@ -483,7 +593,7 @@ export async function readCurrentApplicationStatus(request, environment) {
     return {
         application: {
             status: application.status,
-            application_type: application.application_type,
+            application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
             updated_at: application.updated_at
         }
     };

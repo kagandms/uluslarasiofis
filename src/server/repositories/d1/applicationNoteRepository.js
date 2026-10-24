@@ -5,6 +5,26 @@
  */
 export function createApplicationNoteRepository(database) {
     return Object.freeze({
+        async readLatestStudentApplicationRejection(applicationId) {
+            const note = await database.prepare(`
+                SELECT notes.body FROM application_notes AS notes
+                JOIN applications ON applications.id = notes.application_id
+                WHERE notes.application_id = ? AND notes.document_record_id IS NULL
+                  AND notes.visibility = 'student' AND applications.status = 'rejected'
+                ORDER BY notes.created_at DESC, notes.id DESC LIMIT 1
+            `).bind(applicationId).first();
+            return note?.body ?? null;
+        },
+        prepareStudentApplicationRejection({ id, applicationId, staffId, body, createdAt }) {
+            return database.prepare(`
+                INSERT INTO application_notes (
+                    id, application_id, author_type, author_staff_id, visibility, body, created_at
+                ) SELECT ?, ?, 'staff', ?, 'student', ?, ?
+                WHERE EXISTS (
+                    SELECT 1 FROM applications WHERE id = ? AND status = 'rejected'
+                ) AND changes() = 1
+            `).bind(id, applicationId, staffId, body, createdAt, applicationId);
+        },
         async listLatestStudentDocumentMessages(applicationId) {
             const result = await database.prepare(`
                 SELECT document_record_id, body

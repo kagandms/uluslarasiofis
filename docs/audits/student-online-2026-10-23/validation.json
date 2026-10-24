@@ -1,0 +1,28 @@
+{
+  "recorded_on": "2026-10-23",
+  "head": "2f018395ebb7d58770d202a6fa32c73b2fa9b81e",
+  "working_tree": "dirty; unrelated concurrent edits preserved",
+  "tests": {
+    "total": 1141,
+    "passed": 1140,
+    "failed": 0,
+    "skipped": 1,
+    "skipped_test": "real MacBook ClamAV scans via HTTPS job protocol and preserves staff/review/ZIP/replacement gates"
+  },
+  "production_build": "passed",
+  "production_dry_run": "passed; build repeated by deploy script",
+  "replay": "passed; local in-memory only",
+  "deployed": false,
+  "source_hashes_captured_after_validation": {
+    "src/server/domain/documentPolicy.js": "bb38f80062af54764d4d68786f7d5c25a2d0157cbea2bc71bdb488ebcc3359ac",
+    "src/server/domain/applicationStateMachine.js": "78f4e2f7f680bac356367540ccd9cafa40d4a12d009a77bceb9ee72a4f40fbee",
+    "src/server/routes/applicationRoutes.js": "e469f3943f9ef0f1eade45bad6768c9b16ad90072b27297307a3dcbfe5766c0e",
+    "src/server/routes/applicationTrackingRoutes.js": "141f581cc1517a12a999b4e676c62c894d7d2db6e8862fbeaf8e5c227f84f6a8",
+    "src/server/repositories/d1/applicationRepository.js": "f93cd2175a03fdffa5b8d11603f578d3e2ec5451c740de86d61024de6ddc16e0",
+    "src/server/repositories/d1/applicationReviewRepository.js": "8b016149f33ec0b382e1e216b87f59d755a0a88cf02703ccb36357b41dfd21f9",
+    "src/server/services/submissionReadiness.js": "9cedc428443c6bd9b0c469fed9d6806908ba0d98bd4636d2da04a5d97c9ca239",
+    "src/public/applicationWizard.js": "5b727a19e61e31ab58a4719d87d89d33528d4039e0a5cce95c801fdd6daf180f",
+    "src/public/publicGuideModal.js": "3e3be61bca17e4f00eb6a17ee44d960a3719e25067a68586101f018d490be650",
+    "src/public/i18n/messages.js": "c2ae70d0a9e7fb8c34537ca216d606529203c69c33b129a4e87ba70342bfd5c4"
+  }
+}

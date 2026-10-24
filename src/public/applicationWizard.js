@@ -1,16 +1,17 @@
 import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_FIELDS, DOCUMENT_ANSWER_OPTIONS, listRequiredDocumentAnswers, listMissingDocumentAnswers } from '../shared/document-conditions.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { createDraftAutosave } from './draftAutosave.js';
-import { createNotificationPreferenceField, parseNotificationPreferences, WHATSAPP_CONSENT_VERSION } from './notificationPreferences.js';
 import { createPhoneField } from './phoneField.js';
 import { createNationalityField } from './nationalityField.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 import { isValidPhoneNumber } from '../shared/phoneNumber.js';
-import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate } from '../shared/age.js';
+import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate, requiresResidenceApplicationDate } from '../shared/age.js';
+import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../shared/academic-calendar.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
 const CONTACT_DRAFT_KEY = 'portal_draft_contact_fields';
+const PRIVACY_NOTICE_LOCALES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 
 function getDraftStorage(view) {
     try {
@@ -32,7 +33,6 @@ function saveContactDraftFields(view, fields) {
             student_phone: fields.student_phone || '',
             phone_country: fields.phone_country || '',
             application_type: fields.application_type || '',
-            whatsapp_opt_in: Boolean(fields.whatsapp_opt_in),
             contact_acknowledgement_accepted: Boolean(fields.contact_acknowledgement_accepted)
         };
         storage.setItem(CONTACT_DRAFT_KEY, JSON.stringify(payload));
@@ -69,13 +69,16 @@ const UPLOAD_ERROR_KEYS = Object.freeze({
     UPLOAD_CAPABILITY_EXPIRED: 'uploadCapabilityExpired', UPLOAD_NETWORK_ERROR: 'uploadNetworkFailed',
     UPLOAD_TIMEOUT: 'uploadNetworkFailed', R2_UPLOAD_FAILED: 'r2UploadFailed', UPLOAD_OBJECT_MISMATCH: 'finalizeFailed',
     UPLOAD_OBJECT_MISSING: 'uploadObjectMissing', UPLOAD_INTENT_EXPIRED: 'uploadIntentExpired',
-    UPLOAD_INTENT_UNAVAILABLE: 'uploadIntentExpired', NETWORK_ERROR: 'finalizeUnknown',
+    UPLOAD_INTENT_UNAVAILABLE: 'uploadIntentExpired',
     APPLICATION_SESSION_REQUIRED: 'sessionExpired', APPLICATION_NOT_EDITABLE: 'applicationNoLongerEditable',
     DOCUMENT_NOT_EDITABLE: 'applicationNoLongerEditable', DECLARATION_VERSION_CONFLICT: 'declarationVersionChanged',
     APPLICATION_TYPE_CHANGE_BLOCKED: 'applicationTypeChangeBlocked',
     APPLICATION_UPDATE_CONFLICT: 'applicationUpdateConflict',
     APPLICATION_ALREADY_ACTIVE: 'applicationAlreadyActive',
+    PASSPORT_IDENTITY_ALREADY_ACTIVE: 'passportIdentityAlreadyActive',
     RATE_LIMITED: 'applicationRateLimited',
+    APPLICATION_PRIVACY_NOTICE_VERSION_CONFLICT: 'applicationPrivacyNoticeVersionChanged',
+    APPLICATION_PRIVACY_NOTICE_UNAVAILABLE: 'applicationPrivacyNoticeUnavailable',
     CONTACT_ACKNOWLEDGEMENT_REQUIRED: 'contactAcknowledgementRequired',
     CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT: 'contactAcknowledgementVersionChanged',
     CONTACT_INFORMATION_INCOMPLETE: 'contactInformationIncomplete',
@@ -88,6 +91,32 @@ function readMessages(document) {
     const closeoutMessages = SESSION3_MESSAGES[locale] || SESSION3_MESSAGES.tr;
     const publicMessages = PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr;
     return { ...closeoutMessages, ...publicMessages, ...PILOT_UX_MESSAGES[locale] };
+}
+
+function isUsableApplicationPrivacyNotice(notice) {
+    if (notice?.available !== true || typeof notice.version !== 'string'
+        || !/^[A-Za-z0-9._-]{1,80}$/.test(notice.version)) return false;
+    const contentByLocale = notice.content_by_locale;
+    return Boolean(contentByLocale && PRIVACY_NOTICE_LOCALES.every((locale) => {
+        const content = contentByLocale[locale];
+        return typeof content === 'string' && content.trim().length > 0 && content.length <= 20000;
+    }));
+}
+
+async function prepareNewApplicationIntake(root, state, api) {
+    state.isNewApplicationIntake = true;
+    state.privacyNotice = null;
+    state.privacyNoticeAvailable = false;
+    try {
+        const notice = await api.readApplicationPrivacyNotice();
+        if (isUsableApplicationPrivacyNotice(notice)) {
+            state.privacyNotice = notice;
+            state.privacyNoticeAvailable = true;
+        }
+    } catch {
+        state.privacyNoticeAvailable = false;
+    }
+    renderWizard(root, state);
 }
 
 function createTranslatedElement(document, tag, key, text) {
@@ -156,6 +185,28 @@ function formatDateOfBirthInput(value) {
     return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 }
 
+function formatPartialDateInput(value) {
+    const normalized = String(value || '').trim();
+    const isoDate = /^\d{4}-\d{2}-\d{2}$/u.test(normalized) ? parseDateOfBirthInput(normalized) : null;
+    if (isoDate) return formatDateOfBirthInput(isoDate);
+    const digits = normalized.replace(/\D/gu, '').slice(0, 8);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
+}
+
+function applyDateInputMask(input) {
+    const oldValue = input.value;
+    const oldCaret = input.selectionStart ?? oldValue.length;
+    const digitsBeforeCaret = oldValue.slice(0, oldCaret).replace(/\D/gu, '').length;
+    const newValue = formatPartialDateInput(oldValue);
+    if (newValue === oldValue) return;
+    input.value = newValue;
+    const caret = digitsBeforeCaret <= 2 ? digitsBeforeCaret
+        : digitsBeforeCaret <= 4 ? digitsBeforeCaret + 1 : Math.min(newValue.length, digitsBeforeCaret + 2);
+    input.setSelectionRange(Math.min(caret, newValue.length), Math.min(caret, newValue.length));
+}
+
 function createDateOfBirthField(document, value, rawValue, messages) {
     const label = createTextField(document, { key: 'dateOfBirth', name: 'date_of_birth', value: '', required: true, maxLength: 10 });
     const input = document.createElement('input');
@@ -186,7 +237,7 @@ function updateDateOfBirthValidity(input, messages) {
     return birthDate;
 }
 
-function createPolicyDateField(document, { name, key, helpKey, value, messages }) {
+function createPolicyDateField(document, { name, key, helpKey, value, messages, required = true }) {
     const label = document.createElement('label');
     const title = createTranslatedElement(document, 'span', key, messages[key]);
     const input = document.createElement('input');
@@ -194,17 +245,63 @@ function createPolicyDateField(document, { name, key, helpKey, value, messages }
     input.type = 'text';
     input.name = name;
     input.id = `field-${name}`;
-    input.required = true;
+    input.required = required;
     input.maxLength = 10;
     input.inputMode = 'numeric';
+    input.autocomplete = 'off';
     input.placeholder = messages.dateOfBirthFormat;
     input.value = formatDateOfBirthInput(value);
     updatePolicyDateValidity(input, messages);
     help.id = `${name}-help`;
     input.setAttribute('aria-describedby', help.id);
     label.htmlFor = input.id;
+    label.className = 'application-policy-date-field';
     label.append(title, input, help);
     return label;
+}
+
+function createTransitionFields(document, fields, messages) {
+    const section = document.createElement('section');
+    section.className = 'application-transition-fields';
+    const heading = createTranslatedElement(document, 'h3', 'transitionApplication', messages.transitionApplication);
+    const description = createTranslatedElement(document, 'p', 'transitionApplicationHelp', messages.transitionApplicationHelp);
+    section.append(heading, description);
+    const foreignId = createTextField(document, {
+        key: 'transitionForeignId', name: 'transition_foreign_id', value: fields.transition_foreign_id,
+        required: true, maxLength: 11
+    });
+    const foreignIdInput = foreignId.querySelector('input');
+    foreignIdInput.inputMode = 'numeric';
+    foreignIdInput.pattern = '\\d{11}';
+    foreignIdInput.autocomplete = 'off';
+    section.append(foreignId);
+    section.append(createTextField(document, {
+        key: 'transitionCardSerial', name: 'transition_card_serial', value: fields.transition_card_serial,
+        required: true, maxLength: 20
+    }));
+    section.append(createTextField(document, {
+        key: 'transitionCardNumber', name: 'transition_card_number', value: fields.transition_card_number,
+        required: true, maxLength: 20
+    }));
+    section.append(createSelectField(document, {
+        key: 'transitionChangeProvince', name: 'transition_change_province',
+        value: fields.transition_change_province, required: true,
+        options: [
+            { value: '', key: 'under18SelectPlaceholder', disabled: true },
+            { value: 'yes', key: 'yes' },
+            { value: 'no', key: 'no' }
+        ]
+    }));
+    section.append(createSelectField(document, {
+        key: 'transitionContactPreference', name: 'transition_contact_preference',
+        value: fields.transition_contact_preference, required: true,
+        options: [
+            { value: '', key: 'under18SelectPlaceholder', disabled: true },
+            { value: 'email', key: 'email' },
+            { value: 'phone', key: 'phone' }
+        ]
+    }));
+    return section;
 }
 
 function updatePolicyDateValidity(input, messages) {
@@ -299,7 +396,7 @@ function updateContactContinueButton(root) {
     button.disabled = !canContinueContactStep(form);
 }
 
-function createContactStep(document, application, formValues, state, api) {
+function createContactStep(document, application, formValues) {
     const messages = readMessages(document);
     const fields = { ...application, ...formValues };
     const form = createWizardForm(document);
@@ -311,44 +408,14 @@ function createContactStep(document, application, formValues, state, api) {
     form.append(phoneField);
     form.append(createSelectField(document, {
         key: 'applicationType', name: 'application_type', value: fields.application_type, required: true,
-        options: [{ value: '', key: 'applicationType' }, { value: 'initial', key: 'initialApplication' }, { value: 'renewal', key: 'renewalApplication' }]
+        options: [{ value: '', key: 'applicationType' }, { value: 'initial', key: 'initialApplication' },
+            { value: 'renewal', key: 'renewalApplication' }, { value: 'transition', key: 'transitionApplication' }]
     }));
     form.querySelector('[name="student_number"]').disabled = Boolean(application && application.status !== 'draft');
     form.querySelector('[name="application_type"]').disabled = Boolean(application && application.status !== 'draft');
     const isContactAcknowledgementAccepted = application?.contact_acknowledgement?.accepted_current === true
         || fields.contact_acknowledgement_accepted === true;
     form.append(createContactAcknowledgement(document, messages, isContactAcknowledgementAccepted));
-    const preferenceField = createNotificationPreferenceField(document, {
-        application,
-        initialPreference: state?.notificationPreference,
-        formValues,
-        api: api || state?.api,
-        phoneInput: form.querySelector('[name="student_phone"]'),
-        onPhoneLockChange: (isLocked) => {
-            phoneField.querySelector('[data-phone-visible]').disabled = isLocked;
-            phoneField.querySelector('[name="phone_country"]').disabled = isLocked;
-        },
-        persistPhone: async () => {
-            const currentFields = readVisibleFields(form, state?.application || {});
-            if (state?.autosave) {
-                state.formValues = currentFields;
-                state.autosave.schedule(buildAutosaveValues(currentFields));
-                const saved = await state.autosave.flush();
-                if (!saved) return { success: false, error: new Error('Autosave failed') };
-            } else if (api?.updateCurrentApplication || api?.updateCurrentApplicationDraft) {
-                const saveFn = api.updateCurrentApplication || api.updateCurrentApplicationDraft;
-                state.application = await saveFn({ ...buildAutosaveValues(currentFields), lock_version: state.application?.lock_version });
-            }
-            return { success: true, application: state?.application };
-        },
-        onPreferenceChange: (checked) => {
-            if (state) {
-                if (!state.formValues) state.formValues = readVisibleFields(form, application || {});
-                state.formValues.whatsapp_opt_in = checked;
-            }
-        }
-    });
-    form.append(preferenceField);
     const continueButton = createContinueButton(document, messages);
     form.append(continueButton);
     setContactPhoneValidity(form);
@@ -432,15 +499,19 @@ function createResidenceStep(document, application, formValues) {
         const key = ({ first_name: 'firstName', last_name: 'lastName', passport_number: 'passportNumber', nationality: 'nationality', date_of_birth: 'dateOfBirth' })[field];
         form.append(createTextField(document, { key, name: field, value: fields[field], type: field === 'date_of_birth' ? 'date' : 'text', required: true }));
     });
-    form.append(createPolicyDateField(document, {
-        name: 'residence_application_date', key: 'residenceApplicationDate',
-        helpKey: 'residenceApplicationDateHelp', value: fields.residence_application_date, messages
-    }));
-    form.append(createPolicyDateField(document, {
-        name: 'university_registration_date', key: 'universityRegistrationDate',
-        helpKey: 'universityRegistrationDateHelp', value: fields.university_registration_date, messages
-    }));
-    const under18 = calculateUnder18(fields.date_of_birth, fields.residence_application_date);
+    if (fields.application_type === 'transition') form.append(createTransitionFields(document, fields, messages));
+    const policyDateFields = document.createElement('div');
+    policyDateFields.className = 'application-policy-date-fields';
+    if (requiresResidenceApplicationDate(fields.date_of_birth)) {
+        policyDateFields.append(createPolicyDateField(document, {
+            name: 'residence_application_date', key: 'residenceApplicationDate',
+            helpKey: 'residenceApplicationDateHelp', value: fields.residence_application_date, messages
+        }));
+    }
+    form.append(policyDateFields);
+    const ageDateIsRequired = requiresResidenceApplicationDate(fields.date_of_birth);
+    const under18 = ageDateIsRequired && !fields.residence_application_date
+        ? null : calculateUnder18(fields.date_of_birth, fields.residence_application_date || readIstanbulDate());
     const under18Field = createSelectField(document, {
         key: 'under18Question', name: 'is_under_18', value: under18 === null ? '' : String(under18), required: false,
         options: [
@@ -483,7 +554,7 @@ function appendDocumentQuestions(form, fields) {
                 ...DOCUMENT_ANSWER_OPTIONS[name].map((value) => ({ value, key: DOCUMENT_ANSWER_KEYS[value] }))]
         }));
         if (name === 'insurance_basis' && fields.insurance_basis === 'gss_pending') {
-            const deadline = calculateGssRegistrationDeadline(fields.university_registration_date);
+            const deadline = calculateGssRegistrationDeadline(CURRENT_ACADEMIC_YEAR_START_DATE);
             if (deadline) {
                 const notice = createTranslatedElement(document, 'p', 'gssDeadlineNotice',
                     messages.gssDeadlineNotice.replace('{date}', formatDateOfBirthInput(deadline)));
@@ -558,9 +629,10 @@ function isFingerprintUploadEligible(application) {
 function canContinueResidenceStep(form, fields) {
     const birthDate = parseDateOfBirthInput(form?.querySelector('[name="date_of_birth"]')?.value);
     const residenceDate = parseDateOfBirthInput(form?.querySelector('[name="residence_application_date"]')?.value);
-    const registrationDate = parseDateOfBirthInput(form?.querySelector('[name="university_registration_date"]')?.value);
-    return Boolean(form?.checkValidity() && registrationDate && registrationDate <= readIstanbulDate()
-        && calculateUnder18(birthDate, residenceDate) !== null
+    const ageDateIsRequired = requiresResidenceApplicationDate(birthDate);
+    return Boolean(form?.checkValidity()
+        && (!ageDateIsRequired || (residenceDate && residenceDate <= readIstanbulDate()))
+        && calculateUnder18(birthDate, residenceDate || readIstanbulDate()) !== null
         && isFingerprintUploadEligible(fields) && listMissingDocumentAnswers(fields).length === 0);
 }
 
@@ -801,13 +873,19 @@ function createApplicantReview(document, application) {
     const messages = readMessages(document);
     const values = [
         ['studentNumber', application.student_number], ['email', application.student_email], ['phone', application.student_phone],
-        ['applicationType', application.application_type === 'renewal' ? messages.renewalApplication : messages.initialApplication],
+        ['applicationType', messages[`${application.application_type}Application`] || messages.initialApplication],
         ['addressEvidenceTypeLabel', messages[getAddressEvidenceMessageKey(application.address_evidence_type)] || ''],
         ...listRequiredDocumentAnswers(application).map((field) => [DOCUMENT_QUESTION_KEYS[field], messages[DOCUMENT_ANSWER_KEYS[application[field]]] || '']),
         ['firstName', application.first_name], ['lastName', application.last_name], ['passportNumber', application.passport_number],
         ['nationality', application.nationality], ['dateOfBirth', application.date_of_birth],
         ['residenceApplicationDate', application.residence_application_date],
-        ['universityRegistrationDate', application.university_registration_date],
+        ...(application.application_type === 'transition' ? [
+            ['transitionForeignId', application.transition_foreign_id],
+            ['transitionCardSerial', application.transition_card_serial],
+            ['transitionCardNumber', application.transition_card_number],
+            ['transitionChangeProvince', messages[application.transition_change_province] || ''],
+            ['transitionContactPreference', messages[application.transition_contact_preference] || '']
+        ] : []),
         ['under18Question', application.is_under_18 === true || application.is_under_18 === 1 ? messages.yes
             : (application.is_under_18 === false || application.is_under_18 === 0 ? messages.no : '')]
     ];
@@ -1069,17 +1147,24 @@ function createReviewStep(document, state) {
 
 function isReviewFieldValid(field, application) {
     const value = application[field];
-    if (field === 'application_type') return ['initial', 'renewal'].includes(value);
+    if (field === 'application_type') return ['initial', 'renewal', 'transition'].includes(value);
     if (field === 'student_email') return typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value.trim());
     if (field === 'student_phone') return isValidPhoneNumber(value) && value.trim().length <= 40;
     if (field === 'address_evidence_type') return ACCOMMODATION_TYPES.includes(value);
     if (field === 'date_of_birth') {
-        return calculateUnder18(value, application.residence_application_date) !== null;
+        return calculateUnder18(value, application.residence_application_date || readIstanbulDate()) !== null;
     }
-    if (['residence_application_date', 'university_registration_date'].includes(field)) {
-        return typeof value === 'string' && parseDateOfBirthInput(value) !== null && value <= readIstanbulDate();
+    if (field === 'residence_application_date') {
+        return !requiresResidenceApplicationDate(application.date_of_birth)
+            || (typeof value === 'string' && parseDateOfBirthInput(value) !== null && value <= readIstanbulDate());
     }
     if (field === 'student_number') return typeof value === 'string' && value.trim().length > 0 && value.length <= 64;
+    if (field === 'transition_foreign_id') return /^\d{11}$/u.test(value || '');
+    if (['transition_card_serial', 'transition_card_number'].includes(field)) {
+        return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 20;
+    }
+    if (field === 'transition_change_province') return ['yes', 'no'].includes(value);
+    if (field === 'transition_contact_preference') return ['email', 'phone'].includes(value);
     return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 255;
 }
 
@@ -1091,15 +1176,24 @@ export function getReviewReadiness(application, requirements, uploads = {}, dele
         ['first_name', 'firstName', 1], ['last_name', 'lastName', 1], ['passport_number', 'passportNumber', 1],
         ['nationality', 'nationality', 1], ['date_of_birth', 'dateOfBirth', 1],
         ['residence_application_date', 'residenceApplicationDate', 1],
-        ['university_registration_date', 'universityRegistrationDate', 1]
     ];
     const issues = fields.filter(([field]) => !isReviewFieldValid(field, application))
         .map(([, messageKey, step]) => ({ kind: 'field', step, code: null, messageKey }));
+    if (application.application_type === 'transition') {
+        [
+            ['transition_foreign_id', 'transitionForeignId'],
+            ['transition_card_serial', 'transitionCardSerial'],
+            ['transition_card_number', 'transitionCardNumber'],
+            ['transition_change_province', 'transitionChangeProvince'],
+            ['transition_contact_preference', 'transitionContactPreference']
+        ].filter(([field]) => !isReviewFieldValid(field, application))
+            .forEach(([, messageKey]) => issues.push({ kind: 'field', step: 1, code: null, messageKey }));
+    }
     listMissingDocumentAnswers(application).forEach((field) => {
         issues.push({ kind: 'field', step: 1, code: null, messageKey: DOCUMENT_QUESTION_KEYS[field] });
     });
-    const gssDeadline = calculateGssRegistrationDeadline(application.university_registration_date);
-    if (application.insurance_basis === 'gss_pending' && (!gssDeadline || readIstanbulDate() > gssDeadline)) {
+    const gssDeadline = calculateGssRegistrationDeadline(CURRENT_ACADEMIC_YEAR_START_DATE);
+    if (application.insurance_basis === 'gss_pending' && gssDeadline && readIstanbulDate() > gssDeadline) {
         issues.push({ kind: 'field', step: 1, code: null, messageKey: 'gssDeadlineExpired' });
     }
     if (!isFingerprintUploadEligible(application)) {
@@ -1192,31 +1286,41 @@ function createProgress(document, step) {
     return list;
 }
 
-function createPreferenceWarningBanner(document, state, messages) {
-    const banner = document.createElement('div');
-    banner.className = 'application-notification-preference-banner';
-    banner.setAttribute('role', state.preferenceWarning.status === 'failed' ? 'alert' : 'status');
-    banner.setAttribute('aria-live', 'polite');
-    if (state.preferenceWarning.status === 'failed') {
-        const text = createTranslatedElement(document, 'p', 'whatsappDraftSavedPreferenceFailed', messages.whatsappDraftSavedPreferenceFailed);
-        const retryBtn = createButton(
-            document,
-            messages,
-            'whatsappRetryPreferenceAction',
-            'preference-retry',
-            'application-button application-button-secondary'
-        );
-        banner.append(text, retryBtn);
-    } else if (state.preferenceWarning.status === 'saved') {
-        const text = createTranslatedElement(document, 'p', 'whatsappPreferenceSaved', messages.whatsappPreferenceSaved);
-        banner.append(text);
-    }
-    return banner;
+function renderPrivacyNoticeUnavailable(root) {
+    const document = root.ownerDocument;
+    const messages = readMessages(document);
+    const section = document.createElement('section');
+    section.className = 'application-privacy-notice-gate';
+    section.append(createTranslatedElement(document, 'h2', 'applicationPrivacyNoticeHeading', messages.applicationPrivacyNoticeHeading));
+    section.append(createTranslatedElement(document, 'p', 'applicationPrivacyNoticeUnavailable', messages.applicationPrivacyNoticeUnavailable));
+    root.replaceChildren(section);
+}
+
+function createPrivacyNoticeDisclosure(document, state) {
+    const messages = readMessages(document);
+    const section = document.createElement('section');
+    section.className = 'application-privacy-notice';
+    section.append(createTranslatedElement(document, 'h2', 'applicationPrivacyNoticeHeading', messages.applicationPrivacyNoticeHeading));
+    const locale = PRIVACY_NOTICE_LOCALES.includes(document.documentElement.lang)
+        ? document.documentElement.lang : 'tr';
+    const noticeText = state.privacyNotice.content_by_locale[locale];
+    const article = document.createElement('article');
+    article.dataset.privacyNotice = 'true';
+    article.className = 'application-privacy-notice-content';
+    article.lang = locale;
+    article.dir = locale === 'ar' ? 'rtl' : 'auto';
+    article.textContent = noticeText;
+    section.append(article);
+    return section;
 }
 
 function renderWizard(root, state) {
     const document = root.ownerDocument;
     const messages = readMessages(document);
+    if (state.isNewApplicationIntake && !state.application && !state.privacyNoticeAvailable) {
+        renderPrivacyNoticeUnavailable(root);
+        return;
+    }
     const panel = document.createElement('div');
     const stage = document.createElement('section');
     panel.className = 'application-wizard';
@@ -1240,6 +1344,9 @@ function renderWizard(root, state) {
     }
     const heading = createTranslatedElement(document, 'h2', STEP_KEYS[state.step], messages[STEP_KEYS[state.step]]);
     heading.tabIndex = -1;
+    if (state.isNewApplicationIntake && !state.application) {
+        panel.append(createPrivacyNoticeDisclosure(document, state));
+    }
     panel.append(createProgress(document, state.step), heading);
     panel.append(createSaveStatus(document, state));
     const referenceNumber = state.application?.reference_number || state.application?.access_credentials?.reference_number;
@@ -1247,19 +1354,22 @@ function renderWizard(root, state) {
         if (!state.application.reference_number) state.application.reference_number = referenceNumber;
         panel.append(createReferenceBanner(document, state, messages));
     }
-    if (state.preferenceWarning) {
-        panel.append(createPreferenceWarningBanner(document, state, messages));
-    }
     let errorElement = null;
     if (state.errorKey) {
         errorElement = createTranslatedElement(document, 'p', state.errorKey, messages[state.errorKey]);
         errorElement.setAttribute('role', 'alert');
         errorElement.tabIndex = -1;
+        const requestId = readSafeRequestId(state.errorRequestId);
+        if (requestId) {
+            const supportCode = document.createElement('small');
+            supportCode.textContent = `${messages.supportRequestId}: ${requestId}`;
+            errorElement.append(document.createElement('br'), supportCode);
+        }
         panel.append(errorElement);
     }
     state.root = root;
     if (state.step === 0) {
-        stage.append(createContactStep(document, state.application, state.formValues, state, state.api));
+        stage.append(createContactStep(document, state.application, state.formValues));
         if (!state.application) {
             stage.append(createResumeWithCredentialsSection(document, state, messages));
         }
@@ -1282,7 +1392,9 @@ function renderWizard(root, state) {
         }
         state._focusSubmissionConfirmation = false;
     } else if (state._focusStepHeading) {
-        heading.focus();
+        heading.focus({ preventScroll: true });
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
         state._focusStepHeading = false;
     }
 }
@@ -1394,7 +1506,7 @@ function readVisibleFields(root, application = {}) {
             fields.date_of_birth = normalizedDate || (input.value.trim() ? application.date_of_birth || '' : '');
             return;
         }
-        if (['residence_application_date', 'university_registration_date'].includes(input.name)) {
+        if (input.name === 'residence_application_date') {
             const normalizedDate = parseDateOfBirthInput(input.value);
             fields[input.name] = normalizedDate || (input.value.trim() ? application[input.name] || '' : '');
             return;
@@ -1416,8 +1528,12 @@ function buildAutosaveValues(fields) {
         fingerprint_status: fields.fingerprint_status ?? null,
         fingerprint_code: fields.fingerprint_status === 'registered' ? (fields.fingerprint_code ?? '') : null
     };
+    values.transition_foreign_id = fields.transition_foreign_id ?? '';
+    values.transition_card_serial = fields.transition_card_serial ?? '';
+    values.transition_card_number = fields.transition_card_number ?? '';
+    values.transition_contact_preference = fields.transition_contact_preference ?? null;
+    values.transition_change_province = fields.transition_change_province ?? null;
     values.residence_application_date = fields.residence_application_date ?? '';
-    values.university_registration_date = fields.university_registration_date ?? '';
     DOCUMENT_ANSWER_FIELDS.forEach((field) => { values[field] = fields[field] || null; });
     RESIDENCE_FIELDS.forEach((field) => { values[field] = fields[field] ?? ''; });
     return values;
@@ -1445,7 +1561,11 @@ function createAutosave(state, api, root) {
     return createDraftAutosave({
         initialValues: createAutosaveValuesFromApplication(state.application),
         save,
-        onSaved: (application) => { state.application = application; state.sessionExpired = false; },
+        onSaved: (application) => {
+            state.application = application;
+            state.sessionExpired = false;
+            state.autosaveError = null;
+        },
         onStatus: (status) => {
             state.saveStatus = state.sessionExpired ? 'session_expired' : status;
             const node = root.querySelector('[data-save-status]');
@@ -1461,6 +1581,7 @@ function createAutosave(state, api, root) {
             }
         },
         onError: (error) => {
+            state.autosaveError = error;
             if (error.code === 'APPLICATION_SESSION_REQUIRED') state.sessionExpired = true;
             if (error.code === 'APPLICATION_UPDATE_CONFLICT') {
                 state.errorKey = 'applicationUpdateConflict';
@@ -1471,8 +1592,14 @@ function createAutosave(state, api, root) {
     });
 }
 
-function createContactDraft(fields) {
-    return { student_number: fields.student_number, application_type: fields.application_type, email: fields.student_email, phone: fields.student_phone };
+function createContactDraft(fields, privacyNoticeVersion) {
+    return {
+        student_number: fields.student_number,
+        application_type: fields.application_type,
+        email: fields.student_email,
+        phone: fields.student_phone,
+        privacy_notice_version: privacyNoticeVersion
+    };
 }
 
 function scheduleCurrentFields(root, state) {
@@ -1483,6 +1610,10 @@ function scheduleCurrentFields(root, state) {
 
 function createErrorKey(error, fallback) {
     return UPLOAD_ERROR_KEYS[error.code] || fallback;
+}
+
+function readSafeRequestId(requestId) {
+    return typeof requestId === 'string' && /^req_[a-f0-9-]{36}$/iu.test(requestId) ? requestId : null;
 }
 
 async function refreshRequirements(state, api) {
@@ -1517,8 +1648,9 @@ async function finalizeTask(code, task, state, api, root) {
             task.intentId = null;
             return 'unavailable';
         }
-        task.state = error.code === 'NETWORK_ERROR' || error.status >= 500 ? 'unknown_finalize_result' : 'failed_finalize';
-        task.errorKey = createErrorKey(error, 'finalizeFailed');
+        const hasUnknownFinalizeResult = error.code === 'NETWORK_ERROR' || error.status >= 500;
+        task.state = hasUnknownFinalizeResult ? 'unknown_finalize_result' : 'failed_finalize';
+        task.errorKey = hasUnknownFinalizeResult ? 'finalizeUnknown' : createErrorKey(error, 'finalizeFailed');
         updateDocumentCard(root, state, code);
         return 'failed';
     }
@@ -1623,19 +1755,26 @@ async function saveStep(root, state, api) {
     }
     state.formValues = fields;
     state.errorKey = null;
+    state.errorRequestId = null;
     state.isAdvancing = true;
+    let failureStage = 'application_save';
     try {
-        const isInitialDraftCreation = (state.step === 0 && !state.application);
         if (state.step === 0 && !state.application) {
-            state.application = await api.createApplicationDraft(createContactDraft(fields));
+            failureStage = 'draft_creation';
+            state.application = await api.createApplicationDraft(createContactDraft(fields, state.privacyNotice?.version));
             clearContactDraftFields(root.ownerDocument.defaultView);
             state.saveStatus = 'saved';
             state.autosave = createAutosave(state, api, root);
         } else if (state.application && state.step <= 1) {
+            failureStage = 'autosave';
+            state.autosaveError = null;
             state.autosave.schedule(buildAutosaveValues(fields));
-            if (!await state.autosave.flush()) throw Object.assign(new Error('Autosave failed.'), { code: 'AUTOSAVE_FAILED' });
+            if (!await state.autosave.flush()) {
+                throw state.autosaveError || Object.assign(new Error('Autosave failed.'), { code: 'AUTOSAVE_FAILED' });
+            }
         }
         if (state.step === 0 && !state.application.contact_acknowledgement?.accepted_current) {
+            failureStage = 'contact_acknowledgement';
             const version = state.application.contact_acknowledgement?.current_version;
             if (!version) throw Object.assign(new Error('Contact acknowledgement version is unavailable.'), { code: 'CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT' });
             state.application = await api.acceptCurrentContactAcknowledgement(version);
@@ -1643,31 +1782,16 @@ async function saveStep(root, state, api) {
                 throw Object.assign(new Error('Contact acknowledgement was not confirmed.'), { code: 'CONTACT_ACKNOWLEDGEMENT_REQUIRED' });
             }
         }
-        if (state.step === 0 && isInitialDraftCreation && fields.whatsapp_opt_in === true && typeof api.updateCurrentNotificationPreferences === 'function') {
-            try {
-                const locale = root.ownerDocument?.documentElement?.lang || 'tr';
-                const response = await api.updateCurrentNotificationPreferences({
-                    whatsapp_opt_in: true,
-                    consent_version: WHATSAPP_CONSENT_VERSION,
-                    language: locale
-                });
-                const parsed = parseNotificationPreferences(response, state.application?.id);
-                if (parsed.isValidContract && parsed.isVerified && parsed.effectiveWhatsappOptIn) {
-                    state.notificationPreference = parsed;
-                    state.preferenceWarning = null;
-                } else {
-                    state.preferenceWarning = { status: 'failed' };
-                }
-            } catch {
-                state.preferenceWarning = { status: 'failed' };
-            }
-        }
         if (state.step === 1 && !canContinueResidenceStep(form, state.application)) {
             state.errorKey = null;
             return;
         }
-        if (state.step === 0 || state.step === 1 || state.step === 2) await refreshRequirements(state, api);
+        if (state.step === 0 || state.step === 1 || state.step === 2) {
+            failureStage = 'requirements_refresh';
+            await refreshRequirements(state, api);
+        }
         if (state.step === 3) {
+            failureStage = 'declaration_acceptance';
             const declaration = state.application.declaration;
             const accepted = fields.declaration_accepted === true;
             if (!declaration?.accepted_current) {
@@ -1681,7 +1805,10 @@ async function saveStep(root, state, api) {
         state.formValues = null;
         state._focusStepHeading = true;
     } catch (error) {
-        state.errorKey = createErrorKey(error, error.code === 'DECLARATION_ACCEPTANCE_REQUIRED' ? 'declarationAcceptanceFailed' : 'applicationSaveFailed');
+        const fallbackKey = failureStage === 'requirements_refresh' ? 'applicationLoadFailed'
+            : error.code === 'DECLARATION_ACCEPTANCE_REQUIRED' ? 'declarationAcceptanceFailed' : 'applicationSaveFailed';
+        state.errorKey = createErrorKey(error, fallbackKey);
+        state.errorRequestId = readSafeRequestId(error.requestId);
         if (!state.application && state.step === 0) state.saveStatus = 'failed';
         state._focusError = true;
         if (error.code === 'DECLARATION_VERSION_CONFLICT') {
@@ -1690,6 +1817,10 @@ async function saveStep(root, state, api) {
             } catch {
                 state.errorKey = 'applicationLoadFailed';
             }
+        }
+        if (error.code === 'APPLICATION_PRIVACY_NOTICE_VERSION_CONFLICT'
+            || error.code === 'APPLICATION_PRIVACY_NOTICE_UNAVAILABLE') {
+            await prepareNewApplicationIntake(root, state, api);
         }
         if (error.code === 'APPLICATION_SESSION_REQUIRED') state.saveStatus = 'session_expired';
     } finally {
@@ -1701,52 +1832,13 @@ async function saveStep(root, state, api) {
 async function handlePrevious(root, state) {
     if (state.isAdvancing) return;
     if (state.step <= 0) return;
-    if (state.step === 1 && state.autosave) {
-        scheduleCurrentFields(root, state);
-        state.isAdvancing = true;
-        const saved = await state.autosave.flush();
-        state.isAdvancing = false;
-        if (!saved) {
-            state.errorKey = 'autosaveFailed';
-            state._focusError = true;
-            renderWizard(root, state);
-            return;
-        }
-    }
     state.formValues = readVisibleFields(root, state.application || {});
+    if (state.step === 1 && state.autosave) state.autosave.schedule(buildAutosaveValues(state.formValues));
     state.step -= 1;
     state._animateNextRender = true;
     state.errorKey = null;
     state._focusStepHeading = true;
     renderWizard(root, state);
-}
-
-async function retryNotificationPreference(root, state, api) {
-    if (!api?.updateCurrentNotificationPreferences || !state.application) return;
-    const button = root.querySelector('[data-action="preference-retry"]');
-    if (button) {
-        button.disabled = true;
-        button.setAttribute('aria-busy', 'true');
-    }
-    try {
-        const locale = root.ownerDocument?.documentElement?.lang || 'tr';
-        const response = await api.updateCurrentNotificationPreferences({
-            whatsapp_opt_in: true,
-            consent_version: WHATSAPP_CONSENT_VERSION,
-            language: locale
-        });
-        const parsed = parseNotificationPreferences(response, state.application?.id);
-        if (parsed.isValidContract && parsed.isVerified && parsed.effectiveWhatsappOptIn) {
-            state.notificationPreference = parsed;
-            state.preferenceWarning = { status: 'saved' };
-        } else {
-            state.preferenceWarning = { status: 'failed' };
-        }
-    } catch {
-        state.preferenceWarning = { status: 'failed' };
-    } finally {
-        renderWizard(root, state);
-    }
 }
 
 async function handleWizardClick(root, state, api, event) {
@@ -1769,7 +1861,6 @@ async function handleWizardClick(root, state, api, event) {
         renderWizard(root, state);
     }
     if (button.dataset.action === 'submit-application') await submitApplication(root, state, api);
-    if (button.dataset.action === 'preference-retry') await retryNotificationPreference(root, state, api);
     if (button.dataset.action === 'document-retry' && code) await runUploadTask(code, state.uploads[code], state, api, root, { isRetry: true });
     if (button.dataset.action === 'document-delete' && code) await handleDelete(root, state, api, code);
     if (button.dataset.action === 'document-cancel' && code) state.uploads[code]?.abortController?.abort();
@@ -1809,7 +1900,16 @@ function canCreateContactDraft(form) {
         .every((name) => form.querySelector(`[name="${name}"]`)?.checkValidity() === true);
 }
 
-function handleWizardInput(root, state, api) {
+function handleWizardInput(root, state, api, event) {
+    const target = event?.target;
+    if (target?.name === 'passport_number' && state.errorKey === 'passportIdentityAlreadyActive') {
+        state.errorKey = null;
+        root.querySelector('[role="alert"][data-i18n="passportIdentityAlreadyActive"]')?.remove();
+    }
+    if (target instanceof root.ownerDocument.defaultView.HTMLInputElement
+        && ['date_of_birth', 'residence_application_date'].includes(target.name)) {
+        applyDateInputMask(target);
+    }
     state.hasUnsubmittedFieldChanges = true;
     if (state.step === 0) {
         state.formValues = readVisibleFields(root, state.application || {});
@@ -1827,7 +1927,7 @@ function handleWizardInput(root, state, api) {
                     state.isCreatingContactDraft = true;
                     try {
                         const fields = readVisibleFields(root, {});
-                        state.application = await api.createApplicationDraft(createContactDraft(fields));
+                        state.application = await api.createApplicationDraft(createContactDraft(fields, state.privacyNotice?.version));
                         clearContactDraftFields(root.ownerDocument.defaultView);
                         state.autosave = createAutosave(state, api, root);
                         const latestFields = readVisibleFields(root, state.application);
@@ -1836,8 +1936,14 @@ function handleWizardInput(root, state, api) {
                         state.saveStatus = 'saved';
                         updateSaveStatus(root, state);
                         renderWizard(root, state);
-                    } catch {
+                    } catch (error) {
                         state.saveStatus = 'failed';
+                        if (error.code === 'APPLICATION_PRIVACY_NOTICE_VERSION_CONFLICT'
+                            || error.code === 'APPLICATION_PRIVACY_NOTICE_UNAVAILABLE') {
+                            state.errorKey = createErrorKey(error, 'applicationSaveFailed');
+                            state.errorRequestId = readSafeRequestId(error.requestId);
+                            await prepareNewApplicationIntake(root, state, api);
+                        }
                         updateSaveStatus(root, state);
                     } finally {
                         state.isCreatingContactDraft = false;
@@ -1852,10 +1958,6 @@ function handleWizardInput(root, state, api) {
             }
         }
         updateContactContinueButton(root);
-        const prefField = root.querySelector('.notification-preference-group');
-        if (prefField && typeof prefField.syncPhone === 'function') {
-            prefField.syncPhone(state.formValues.student_phone);
-        }
         return;
     }
     if (state.step === 1) {
@@ -1863,12 +1965,11 @@ function handleWizardInput(root, state, api) {
         const messages = readMessages(root.ownerDocument);
         const birthDate = updateDateOfBirthValidity(dateInput, messages);
         const residenceDateInput = root.querySelector('[name="residence_application_date"]');
-        const registrationDateInput = root.querySelector('[name="university_registration_date"]');
         const residenceDate = parseDateOfBirthInput(residenceDateInput?.value || '');
-        const ageAnswer = calculateUnder18(birthDate, residenceDate);
+        const ageAnswer = calculateUnder18(birthDate, residenceDate || readIstanbulDate());
         const ageField = root.querySelector('[name="is_under_18"]');
         if (ageField) ageField.value = ageAnswer === null ? '' : String(ageAnswer);
-        [residenceDateInput, registrationDateInput].filter(Boolean).forEach((dateInput) => {
+        [residenceDateInput].filter(Boolean).forEach((dateInput) => {
             updatePolicyDateValidity(dateInput, messages);
         });
     }
@@ -1901,13 +2002,13 @@ function handleWizardChange(root, state, api, event) {
         const birthDate = parseDateOfBirthInput(input.value);
         if (birthDate) input.value = formatDateOfBirthInput(birthDate);
     }
-    if (['residence_application_date', 'university_registration_date'].includes(input.name)) {
+    if (input.name === 'residence_application_date') {
         const dateValue = parseDateOfBirthInput(input.value);
         if (dateValue) input.value = formatDateOfBirthInput(dateValue);
     }
-    handleWizardInput(root, state, api);
+    handleWizardInput(root, state, api, event);
     if (['application_type', 'address_evidence_type', 'date_of_birth', 'residence_application_date',
-        'university_registration_date', ...DOCUMENT_ANSWER_FIELDS].includes(input.name)) {
+        ...DOCUMENT_ANSWER_FIELDS].includes(input.name)) {
         state.errorKey = null;
         renderWizard(root, state);
         void persistRequirementSelection(root, state, api);
@@ -1928,14 +2029,18 @@ export async function initializeApplicationWizard(root, api, options = {}) {
         requirements: [],
         step: 0,
         errorKey: null,
+        errorRequestId: null,
+        autosaveError: null,
         saveStatus: 'idle',
         isAdvancing: false,
         isSubmitting: false,
         formValues: null,
+        isNewApplicationIntake: false,
+        privacyNotice: null,
+        privacyNoticeAvailable: false,
         hasUnsubmittedFieldChanges: false,
         uploads: {},
         deleting: {},
-        notificationPreference: null,
         _animateNextRender: true,
         navigateHome: (path) => root.ownerDocument.defaultView.location.assign(path),
         navigateToTracking: typeof api.navigateToTracking === 'function'
@@ -1954,7 +2059,7 @@ export async function initializeApplicationWizard(root, api, options = {}) {
         event.preventDefault();
         void saveStep(root, state, api);
     });
-    root.addEventListener('input', () => handleWizardInput(root, state, api));
+    root.addEventListener('input', (event) => handleWizardInput(root, state, api, event));
     root.addEventListener('change', (event) => handleWizardChange(root, state, api, event));
     root.addEventListener('click', (event) => { void handleWizardClick(root, state, api, event); });
     root.ownerDocument.addEventListener('public:locale-changed', () => {
@@ -1976,7 +2081,7 @@ export async function initializeApplicationWizard(root, api, options = {}) {
     if (options.startNewApplication === true) {
         clearContactDraftFields(root.ownerDocument.defaultView);
         state.formValues = {};
-        renderWizard(root, state);
+        await prepareNewApplicationIntake(root, state, api);
         return state;
     }
     try {
@@ -1995,29 +2100,25 @@ export async function initializeApplicationWizard(root, api, options = {}) {
             state.saveStatus = 'idle';
             state.formValues = {};
             state.step = 0;
-            renderWizard(root, state);
+            await prepareNewApplicationIntake(root, state, api);
             return state;
         }
         clearContactDraftFields(root.ownerDocument.defaultView);
         state.step = state.application.status === 'submitted' ? 4
             : (state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0);
         state.autosave = createAutosave(state, api, root);
-        if (typeof api.readCurrentNotificationPreferences === 'function') {
-            try {
-                state.notificationPreference = await api.readCurrentNotificationPreferences();
-            } catch {
-                // Non-fatal if preference read fails
-            }
-        }
         await refreshRequirements(state, api);
     } catch (error) {
         state.errorKey = error.code === 'APPLICATION_SESSION_REQUIRED' ? null : 'applicationLoadFailed';
         if (!state.application) {
+            state.isNewApplicationIntake = true;
             const restored = loadContactDraftFields(root.ownerDocument.defaultView);
             if (restored) {
                 state.formValues = restored;
                 state.saveStatus = 'saved';
             }
+            await prepareNewApplicationIntake(root, state, api);
+            return state;
         }
     }
     renderWizard(root, state);

@@ -6,6 +6,7 @@ import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { createScannerRepository } from '../src/server/repositories/d1/scanner-repository.js';
 
 const SECRET = 's'.repeat(43);
+const APPLICATION_ID = 'a1111111-1111-4111-8111-111111111111';
 const KEY = 'quarantine/00000000-0000-4000-8000-000000000001';
 const BYTES = new TextEncoder().encode('%PDF-1.7\nsynthetic scan fixture\n%%EOF');
 function fixture() {
@@ -13,8 +14,8 @@ function fixture() {
     applyAllMigrations(database);
     database.exec(`
         INSERT INTO students(id, student_number, normalized_student_number) VALUES ('s', 'SCAN', 'SCAN');
-        INSERT INTO applications(id, student_id, application_type) VALUES ('a', 's', 'initial');
-        INSERT INTO document_records(id, application_id, requirement_id, application_type) VALUES ('d', 'a', 'req-initial-passport', 'initial');
+        INSERT INTO applications(id, student_id, application_type) VALUES ('${APPLICATION_ID}', 's', 'initial');
+        INSERT INTO document_records(id, application_id, requirement_id, application_type) VALUES ('d', '${APPLICATION_ID}', 'req-initial-passport', 'initial');
         INSERT INTO document_revisions(id, document_record_id, revision_number, status, is_current, submitted_by_type) VALUES ('r', 'd', 1, 'submitted', 1, 'student');
         INSERT INTO document_revision_files(id,revision_id,page_order,storage_key,original_filename,media_type,byte_size,upload_status,scan_status)
           VALUES ('f','r',0,'${KEY}','synthetic.pdf','application/pdf',${BYTES.length},'finalized','pending');
@@ -58,6 +59,31 @@ test('scanner requires dedicated secret; staff or anonymous callers cannot claim
 
     assert.equal(response.status, 401);
     assert.equal((await request(environment, 'jobs/random/result', { secret: 'wrong' })).status, 401);
+});
+
+test('scoped scanner claim leases only jobs belonging to the requested applications', async () => {
+    const { environment } = fixture();
+
+    const outOfScope = await request(environment, 'claim', {
+        body: { runner_id: 'synthetic-mac', application_ids: ['b2222222-2222-4222-8222-222222222222'] }
+    });
+    const inScope = await request(environment, 'claim', {
+        body: { runner_id: 'synthetic-mac', application_ids: [APPLICATION_ID] }
+    });
+    const job = (await inScope.json()).job;
+
+    assert.equal((await outOfScope.json()).job, null);
+    assert.equal(job.file_id, 'f');
+});
+
+test('scanner rejects malformed, empty, duplicate and oversized application scopes', async () => {
+    const { environment } = fixture();
+    const invalidScopes = [[], ['not-an-id'], [APPLICATION_ID, APPLICATION_ID], Array(51).fill(APPLICATION_ID)];
+
+    for (const application_ids of invalidScopes) {
+        const response = await request(environment, 'claim', { body: { runner_id: 'synthetic-mac', application_ids } });
+        assert.equal(response.status, 400);
+    }
 });
 
 test('authorized exact-content clean result is durable; replay and a different lease are rejected', async () => {

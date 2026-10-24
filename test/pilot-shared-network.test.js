@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import worker from '../src/server/worker.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
+import { withTestApplicationPrivacyNotice, withTestApplicationPrivacyNoticeVersion } from './helpers/application-privacy-notice.js';
 
 const CAMPUS_ADDRESS = '198.51.100.120';
 
@@ -10,13 +11,15 @@ function createFixture(context) {
     const database = new TestD1Database();
     applyAllMigrations(database);
     context.after(() => database.database.close());
-    return { database, environment: { DB: database, APP_ENV: 'test' } };
+    return { database, environment: withTestApplicationPrivacyNotice({ DB: database, APP_ENV: 'test' }) };
 }
 
 function request(environment, path, options) {
+    const body = path === '/api/public/applications'
+        ? withTestApplicationPrivacyNoticeVersion(options.body || {}) : options.body;
     return worker.fetch(new Request(`https://portal.test${path}`, {
         method: 'POST', headers: { Origin: 'https://portal.test', 'Content-Type': 'application/json',
-            'CF-Connecting-IP': options.address || CAMPUS_ADDRESS }, body: JSON.stringify(options.body)
+            'CF-Connecting-IP': options.address || CAMPUS_ADDRESS }, body: JSON.stringify(body)
     }), environment);
 }
 

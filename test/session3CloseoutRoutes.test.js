@@ -4,13 +4,14 @@ import { test } from 'node:test';
 import worker from '../src/server/worker.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
+import { withTestApplicationPrivacyNotice, withTestApplicationPrivacyNoticeVersion } from './helpers/application-privacy-notice.js';
 
 function createEnvironment(options = {}) {
     const database = new TestD1Database();
     applyAllMigrations(database);
     const removedKeys = [];
     const cleanupControl = { shouldFail: options.failDelete === true };
-    const environment = {
+    const environment = withTestApplicationPrivacyNotice({
         DB: database,
         DOCUMENTS: {
             async delete(key) {
@@ -20,7 +21,7 @@ function createEnvironment(options = {}) {
         },
         ASSETS: { async fetch() { return new Response('asset'); } },
         ...options
-    };
+    });
     return { environment, database, removedKeys, cleanupControl };
 }
 
@@ -29,7 +30,10 @@ function request(path, { method = 'GET', body, cookie, origin = 'https://portal.
     if (cookie) headers.set('Cookie', cookie);
     if (body !== undefined) headers.set('Content-Type', 'application/json');
     return new Request(`https://portal.test${path}`, {
-        method, headers, body: body === undefined ? undefined : JSON.stringify(body)
+        method, headers, body: body === undefined ? undefined : JSON.stringify(
+            path === '/api/public/applications' && method === 'POST'
+                ? withTestApplicationPrivacyNoticeVersion(body) : body
+        )
     });
 }
 

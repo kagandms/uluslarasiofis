@@ -22,6 +22,18 @@ function installDocument(context, document) {
     });
 }
 
+function installPdfJsMock(document) {
+    const page = {
+        getViewport: ({ scale }) => ({ width: 600 * scale, height: 800 * scale }),
+        render: () => ({ promise: Promise.resolve(), cancel() {} })
+    };
+    document.defaultView.pdfjsLib = { getDocument: () => ({
+        promise: Promise.resolve({ numPages: 2, getPage: async () => page }),
+        destroy: async () => {}
+    }) };
+    document.defaultView.HTMLCanvasElement.prototype.getContext = () => ({});
+}
+
 function createQueuePayload(items, page = 1, pageSize = 25, totalItems = items.length) {
     return {
         items,
@@ -258,6 +270,7 @@ test('applications manager submits filters, changes pages, renders detail safely
 test('document preview is lazy and closable while unsafe direct downloads are replaced by a gated ZIP action', async (context) => {
     const { document, root } = createStaffDom();
     installDocument(context, document);
+    installPdfJsMock(document);
     const previewRequests = [];
     const releasePreviews = [];
     const api = {
@@ -306,21 +319,24 @@ test('document preview is lazy and closable while unsafe direct downloads are re
     assert.deepEqual(previewRequests, [{ applicationId: 'app-001', code: 'passport' }]);
     assert.doesNotMatch(root.innerHTML, /X-Amz-Signature/);
     releasePreviews[0].resolve({
-        method: 'GET', url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?X-Amz-Signature=capability-1',
+        blob: new Blob(['pdf bytes'], { type: 'application/pdf' }),
+        url: 'blob:https://portal.test/capability-1',
         expires_at: new Date(Date.now() + 30_000).toISOString(), media_type: 'application/pdf', filename: 'passport.pdf'
     });
     await new Promise((resolve) => setImmediate(resolve));
-    const frame = root.querySelector('#staff-document-preview iframe');
-    assert.ok(frame);
-    assert.equal(frame.getAttribute('sandbox'), '');
-    assert.equal(frame.referrerPolicy, 'no-referrer');
-    assert.match(frame.src, /capability-1/);
+    assert.ok(root.querySelector('#staff-document-preview canvas'));
+    assert.match(root.textContent, /Sayfa 1 \/ 2/);
+    assert.equal(root.querySelector('[data-action="previous-preview-page"]').disabled, true);
+    root.querySelector('[data-action="next-preview-page"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.match(root.textContent, /Sayfa 2 \/ 2/);
 
     root.querySelectorAll('[data-action="preview-document"]')[1].click();
     assert.match(root.textContent, /Önizleme hazırlanıyor/);
     assert.doesNotMatch(root.innerHTML, /capability-1/);
     releasePreviews[1].resolve({
-        method: 'GET', url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?X-Amz-Signature=capability-2',
+        blob: new Blob(['image bytes'], { type: 'image/jpeg' }),
+        url: 'blob:https://portal.test/capability-2',
         expires_at: new Date(Date.now() + 200).toISOString(), media_type: 'image/jpeg', filename: 'residence-card.jpg'
     });
     await new Promise((resolve) => setImmediate(resolve));
@@ -335,7 +351,8 @@ test('document preview is lazy and closable while unsafe direct downloads are re
     root.querySelector('[data-action="retry-document-preview"]').click();
     assert.equal(previewRequests.length, 3);
     releasePreviews[2].resolve({
-        method: 'GET', url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?X-Amz-Signature=capability-3',
+        blob: new Blob(['image bytes'], { type: 'image/jpeg' }),
+        url: 'blob:https://portal.test/capability-3',
         expires_at: new Date(Date.now() + 30_000).toISOString(), media_type: 'image/jpeg', filename: 'residence-card.jpg'
     });
     await new Promise((resolve) => setImmediate(resolve));
@@ -379,6 +396,7 @@ test('document preview errors show safe recovery without provider details', asyn
 test('leaving applications for YKN removes a ready document preview from the DOM', async (context) => {
     const { document, root } = createStaffDom();
     installDocument(context, document);
+    installPdfJsMock(document);
     const api = {
         async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
         async readApplicationDetail() {
@@ -391,8 +409,8 @@ test('leaving applications for YKN removes a ready document preview from the DOM
         },
         async createPreviewCapability() {
             return {
-                method: 'GET',
-                url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?X-Amz-Signature=exit-ready',
+                blob: new Blob(['pdf bytes'], { type: 'application/pdf' }),
+                url: 'blob:https://portal.test/exit-ready',
                 expires_at: new Date(Date.now() + 30_000).toISOString(),
                 media_type: 'application/pdf', filename: 'passport.pdf'
             };
@@ -407,14 +425,14 @@ test('leaving applications for YKN removes a ready document preview from the DOM
     root.querySelector('[data-action="preview-document"]').click();
     await new Promise((resolve) => setImmediate(resolve));
 
-    assert.match(root.innerHTML, /exit-ready/);
+    assert.ok(root.querySelector('#staff-document-preview canvas'));
     document.querySelector('.workspace-nav [data-workspace-view="ykn"]').click();
 
     assert.equal(document.getElementById('view-ykn').hidden, false);
     assert.equal(document.querySelector('.workspace-nav [data-workspace-view="ykn"]').getAttribute('aria-current'), 'page');
-    assert.doesNotMatch(root.innerHTML, /exit-ready/);
+    assert.doesNotMatch(root.innerHTML, /staff-document-preview/);
     assert.equal(root.querySelector('#staff-document-preview'), null);
-    assert.equal(root.querySelector('#staff-document-preview iframe, #staff-document-preview img'), null);
+    assert.equal(root.querySelector('#staff-document-preview canvas, #staff-document-preview img'), null);
 });
 
 test('leaving applications invalidates a pending document preview request', async (context) => {
@@ -447,8 +465,8 @@ test('leaving applications invalidates a pending document preview request', asyn
 
     document.querySelector('.workspace-nav [data-workspace-view="ykn"]').click();
     resolvePreview({
-        method: 'GET',
-        url: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/private?X-Amz-Signature=exit-pending',
+        blob: new Blob(['pdf bytes'], { type: 'application/pdf' }),
+        url: 'blob:https://portal.test/exit-pending',
         expires_at: new Date(Date.now() + 30_000).toISOString(),
         media_type: 'application/pdf', filename: 'passport.pdf'
     });
@@ -729,6 +747,46 @@ test('staff application review does not expose an access-code reset action', asy
     assert.equal(resetCalledWith, null);
 });
 
+test('staff must enter an official reason before rejecting an application at Migration Authority', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const actions = [];
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM, status: 'sent_to_migration' },
+                assignment: null, allowed_status_transitions: ['rejected'], documents: []
+            };
+        },
+        async transitionApplication(...arguments_) { actions.push(arguments_); }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(root.querySelector('[data-action="application-rejection-reason"]'), null);
+    const rejectButton = root.querySelector('[data-action="begin-application-rejection"]');
+    rejectButton.click();
+    assert.equal(actions.length, 0);
+    const reason = root.querySelector('[data-action="application-rejection-reason"]');
+    assert.ok(reason);
+    assert.equal(reason.required, true);
+    assert.equal(reason.maxLength, 1000);
+
+    reason.value = 'Göç İdaresinin resmî ret kararı: eksik belge.';
+    reason.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    root.querySelector('[data-action="confirm-application-rejection"]').closest('form')
+        .dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(actions, [[
+        'app-001', 'rejected', QUEUE_ITEM.updated_at, 'Göç İdaresinin resmî ret kararı: eksik belge.'
+    ]]);
+});
+
 test('staff application workflow renders rollback action with outline style and revert label', async (context) => {
     const { document, root } = createStaffDom();
     installDocument(context, document);
@@ -796,6 +854,52 @@ test('staff application workflow renders rollback action when application is com
     assert.equal(revertButton.classList.contains('staff-status-revert-btn'), true);
     assert.equal(revertButton.dataset.isRevert, 'true');
     assert.equal(revertButton.textContent, '◀ Durumu Geri Al: Göç İdaresi Onayladı');
+});
+
+test('staff sees available status actions directly and rejection reason only after choosing reject', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const transitions = [];
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM, status: 'sent_to_migration' },
+                assignment: null,
+                allowed_status_transitions: ['migration_approved', 'approved_for_processing', 'rejected'],
+                documents: []
+            };
+        },
+        async transitionApplication(...arguments_) { transitions.push(arguments_); }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.ok(root.querySelector('[data-action="application-status-transition"][data-target-status="migration_approved"]'));
+    assert.ok(root.querySelector('[data-action="application-status-transition"][data-target-status="approved_for_processing"]'));
+    assert.equal(root.querySelector('[data-action="application-rejection-reason"]'), null);
+    const rejectChoice = root.querySelector('[data-action="begin-application-rejection"]');
+    assert.equal(rejectChoice.textContent, 'Başvuruyu Reddet');
+    assert.equal(rejectChoice.classList.contains('btn-danger'), true);
+    assert.equal(rejectChoice.dataset.isRevert, undefined);
+    assert.equal(transitions.length, 0);
+
+    rejectChoice.click();
+    const reason = root.querySelector('[data-action="application-rejection-reason"]');
+    assert.ok(reason);
+    assert.equal(transitions.length, 0);
+    reason.value = 'Göç İdaresinin resmî ret kararı.';
+    reason.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    root.querySelector('[data-action="confirm-application-rejection"]').closest('form')
+        .dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(transitions.length, 1);
+    assert.deepEqual(transitions[0].slice(1), ['rejected', QUEUE_ITEM.updated_at, 'Göç İdaresinin resmî ret kararı.']);
 });
 
 test('queue preserves row DOM while archiving and releases controls after an API rejection', async context => {

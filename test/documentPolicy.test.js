@@ -8,6 +8,8 @@ test('document policies expose passport and biometric photos without residence-c
     const codes = policies.map(({ code }) => code);
 
     assert.ok(codes.includes('passport'));
+    assert.ok(codes.includes('visa'));
+    assert.equal(policies.find(({ code }) => code === 'visa').required, false);
     assert.ok(codes.includes('photographs'));
     assert.ok(!codes.includes('residence_card'));
     assert.ok(!codes.includes('passport_identity'));
@@ -40,8 +42,12 @@ test('address policy exposes exactly the selected one-of-three evidence branch',
     assert.equal(rental.some(({ code }) => code === 'home_utility_bill'), false);
     assert.equal(readDocumentPolicy('host_residence_certificate', 'initial', false, 'rental_contract'), null);
     assert.deepEqual(readDocumentPolicy('host_residence_certificate', 'initial', false, 'undertaking').accepted_media_types, [
-        'application/pdf'
+        'application/pdf', 'image/jpeg', 'image/png', 'image/webp'
     ]);
+    assert.deepEqual(readDocumentPolicy('host_residence_certificate', 'initial', false, {
+        document_policy_version: 1,
+        address_evidence_type: 'undertaking'
+    }).accepted_media_types, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 });
 
 test('renewal UETS excludes minors while under-18 evidence follows official conditional cases', () => {
@@ -52,6 +58,18 @@ test('renewal UETS excludes minors while under-18 evidence follows official cond
     assert.equal(listDocumentPolicies('initial', true, { minor_parents_identified: 'no' }).some(({ code, required }) => code === 'birth_certificate_under18' && required), true);
     assert.equal(listDocumentPolicies('initial', true, { minor_parents_identified: 'yes' }).some(({ code }) => code === 'minor_consent'), true);
     assert.equal(listDocumentPolicies('initial', true, {}).some(({ code, required }) => code === 'minor_consent' && required), true);
+});
+
+test('student uploads follow the requested order and keep the permit fee last', () => {
+    const codes = listDocumentPolicies('renewal', false, {
+        address_evidence_type: 'dormitory', insurance_basis: 'bilateral_agreement'
+    }).map(({ code }) => code);
+
+    assert.deepEqual(codes, [
+        'residence_application_form', 'passport', 'visa', 'photographs', 'student_certificate',
+        'health_insurance', 'address_residence_certificate', 'home_utility_bill',
+        'address_dormitory', 'uets', 'residence_permit_fee'
+    ]);
 });
 
 test('public overview derives the new concise policy and address alternatives without legacy uploads', () => {
@@ -74,7 +92,7 @@ test('public overview derives the new concise policy and address alternatives wi
 
 test('application type remapping explicitly recognizes every legacy and current stable document code', () => {
     const codes = [
-        'residence_application_form', 'passport_identity', 'passport', 'residence_card', 'photographs',
+        'residence_application_form', 'passport_identity', 'passport', 'visa', 'residence_card', 'photographs',
         'health_insurance', 'uets', 'student_certificate', 'residence_permit_fee', 'address_document',
         'address_rental_contract', 'address_residence_certificate', 'address_undertaking',
         'host_residence_certificate', 'host_identity_copy', 'fingerprint', 'home_utility_bill', 'parent_permit_copy',

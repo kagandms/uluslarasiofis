@@ -25,7 +25,7 @@ function appendMetadataField(form,options) {
 function appendMetadataFields(form,options) {
     for (const [name,label] of [['application_date','Başvuru / Teslim Tarihi'],['first_name','Ad'],['last_name','Soyad'],['passport_number','Pasaport No']]) appendMetadataField(form,{...options,name,label});
     const type=form.ownerDocument.createElement('select'); type.id='receipt-application-type'; type.required=true; type.className='glass-input';
-    for (const [value,label] of [['','Başvuru türünü seçin'],['initial','İlk başvuru'],['renewal','Uzatma']]) {
+    for (const [value,label] of [['','Başvuru türünü seçin'],['initial','İlk başvuru'],['renewal','Uzatma'],['transition','Geçiş başvurusu']]) {
         const option=appendText(type,'option',label); option.value=value;
     }
     type.value=options.draft.application_type; type.disabled=Boolean(options.isLocked);

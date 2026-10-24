@@ -8,6 +8,7 @@ test('application state machine accepts only the specified forward transitions',
         ['resubmission_required', 'under_review'],
         ['under_review', 'approved_for_processing'],
         ['approved_for_processing', 'sent_to_migration'],
+        ['sent_to_migration', 'rejected'],
         ['sent_to_migration', 'migration_approved'],
         ['migration_approved', 'completed']
     ];

@@ -32,6 +32,17 @@ function readResubmissionReason(value) {
     return reason;
 }
 
+function readApplicationRejectionReason(value) {
+    if (typeof value !== 'string') throw new ApiError(400, 'VALIDATION_ERROR', 'Resmî ret gerekçesini girin.');
+    const reason = value.trim();
+    const length = [...reason].length;
+    const visibleLength = [...reason.replace(/[\s\p{C}]/gu, '')].length;
+    if (visibleLength < 5 || length > 1000) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Ret gerekçesi 5 ile 1000 karakter arasında olmalıdır.');
+    }
+    return reason;
+}
+
 function requireApplication(application) {
     if (!application || application.status === 'draft') {
         throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
@@ -172,7 +183,7 @@ export async function transitionStaffApplicationStatus({ request, environment, a
     requireSameOrigin(request);
     const staff = await requireStaff(request, environment, STAFF_ROLES);
     const body = await readJsonBody(request);
-    requireOnlyKeys(body, ['target_status', 'expected_updated_at']);
+    requireOnlyKeys(body, ['target_status', 'expected_updated_at', 'rejection_reason']);
     if (typeof body.target_status !== 'string' || typeof body.expected_updated_at !== 'string'
         || !body.expected_updated_at.trim() || body.expected_updated_at.length > 64) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru durumu ve sürümü kontrol edip tekrar deneyin.');
@@ -180,6 +191,14 @@ export async function transitionStaffApplicationStatus({ request, environment, a
     const repositories = createD1Repositories(environment.DB);
     const application = await repositories.applications.findById(applicationId);
     requireApplication(application);
+    const rejectionReason = body.target_status === 'rejected'
+        ? readApplicationRejectionReason(body.rejection_reason) : null;
+    if (body.target_status !== 'rejected' && Object.hasOwn(body, 'rejection_reason')) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Ret gerekçesi yalnız ret işleminde gönderilebilir.');
+    }
+    if (body.target_status === 'rejected' && application.status !== 'sent_to_migration') {
+        throw new ApiError(409, 'INVALID_APPLICATION_TRANSITION', 'Ret işlemi yalnız Göç İdaresine gönderilmiş başvuruda yapılabilir.');
+    }
     if (application.updated_at !== body.expected_updated_at) {
         throw new ApiError(409, 'APPLICATION_STATE_CONFLICT', 'Başvuru başka bir işlem nedeniyle değişti. Güncel durumu yeniden yükleyin.');
     }
@@ -211,7 +230,8 @@ export async function transitionStaffApplicationStatus({ request, environment, a
     const now = new Date().toISOString();
     const updated = await repositories.applicationReviews.transitionApplicationStatus({
         applicationId, currentStatus: application.status, expectedUpdatedAt: body.expected_updated_at,
-        targetStatus: body.target_status, staffId: staff.id, now, requestId, auditId: crypto.randomUUID()
+        targetStatus: body.target_status, rejectionReason, rejectionNoteId: rejectionReason ? crypto.randomUUID() : null,
+        staffId: staff.id, now, requestId, auditId: crypto.randomUUID()
     });
     if (!updated) {
         throw new ApiError(409, 'APPLICATION_STATE_CONFLICT', 'Başvuru başka bir işlem nedeniyle değişti. Güncel durumu yeniden yükleyin.');

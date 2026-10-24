@@ -75,7 +75,7 @@ function createQueueItemDto(application) {
         student_number: application.student_number,
         first_name: application.first_name,
         last_name: application.last_name,
-        application_type: application.application_type,
+        application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
         status: application.status,
         submitted_at: application.submitted_at,
         updated_at: application.updated_at,
@@ -84,12 +84,13 @@ function createQueueItemDto(application) {
 }
 
 function createApplicationDetailDto(application) {
+    const isTransitionApplication = application.application_route === 'transition';
     return {
         id: application.id,
         reference_number: application.reference_number ?? null,
         student_number: application.student_number,
         status: application.status,
-        application_type: application.application_type,
+        application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
         created_at: application.created_at,
         updated_at: application.updated_at,
         submitted_at: application.submitted_at,
@@ -101,7 +102,12 @@ function createApplicationDetailDto(application) {
         nationality: application.nationality,
         date_of_birth: application.date_of_birth,
         residence_application_date: application.residence_application_date ?? null,
-        university_registration_date: application.university_registration_date ?? null,
+        academic_year_start_date: application.academic_year_start_date ?? null,
+        transition_foreign_id: isTransitionApplication ? application.transition_foreign_id ?? null : null,
+        transition_card_serial: isTransitionApplication ? application.transition_card_serial ?? null : null,
+        transition_card_number: isTransitionApplication ? application.transition_card_number ?? null : null,
+        transition_contact_preference: isTransitionApplication ? application.transition_contact_preference ?? null : null,
+        transition_change_province: isTransitionApplication ? application.transition_change_province ?? null : null,
         is_under_18: application.is_under_18 === null ? null : application.is_under_18 === 1,
         address_evidence_type: application.accommodation_type || application.address_evidence_type || null,
         ...Object.fromEntries(DOCUMENT_ANSWER_FIELDS.map((field) => [field, application[field] ?? null])),

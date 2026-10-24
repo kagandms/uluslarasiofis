@@ -1,7 +1,6 @@
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { PHYSICAL_RECEIPT_MESSAGES } from './i18n/physical-receipt-messages.js';
 import { initializeResubmissionUpload } from './resubmissionUpload.js';
-import { mountTrackingNotificationPreferences } from './notificationPreferences.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 
 function readMessages(locale) {
@@ -77,7 +76,6 @@ function renderLookup(root, state, messages, submitLookup) {
     panel.append(
         createTextElement(document, 'h2', '', messages.trackingLookupHeading),
         createTextElement(document, 'p', '', messages.trackingLookupExplanation),
-        createTextElement(document, 'p', 'tracking-owner-access-note', messages.trackingOwnerAccess),
         createLink(document, '/basvuru/#resume-application-form', messages.trackingOwnerAccessLink, 'tracking-owner-access-link'),
         createLookupForm(document, state, messages, submitLookup)
     );
@@ -118,6 +116,9 @@ function createApplicationSummary(document, application, messages, locale) {
     appendDetail(document, details, messages.studentNumber, application.student_number || '');
     appendDetail(document, details, messages.applicationType, messages[`${application.application_type}Application`] || messages.trackingStatusUnknown);
     appendDetail(document, details, messages.trackingStatusLabel, readApplicationStatusLabel(messages, application.status));
+    if (application.rejection_reason) {
+        appendDetail(document, details, messages.trackingRejectionReasonLabel, application.rejection_reason);
+    }
 
     const dates = [
         ['created_at', 'trackingCreatedAt'],
@@ -189,7 +190,7 @@ function createDocumentList(document, documents, messages, allowFilename, replac
     return section;
 }
 
-function renderTracking(root, state, locale, submitLookup, api) {
+function renderTracking(root, state, locale, submitLookup) {
     const document = root.ownerDocument;
     const messages = readMessages(locale);
     root.className = 'application-tracking';
@@ -227,17 +228,6 @@ function renderTracking(root, state, locale, submitLookup, api) {
     } else {
         root.replaceChildren(summary, documentList);
     }
-    if (state.kind === 'ready' && typeof api?.readCurrentNotificationPreferences === 'function') {
-        void mountTrackingNotificationPreferences(root, {
-            application: state.payload.application,
-            api,
-            locale,
-            initialPreference: state.notificationPreference,
-            onPreferenceChange: (pref) => {
-                state.notificationPreference = pref;
-            }
-        });
-    }
 }
 
 /**
@@ -248,8 +238,8 @@ function renderTracking(root, state, locale, submitLookup, api) {
  */
 export async function initializeApplicationTracking(root, api) {
     const document = root.ownerDocument;
-    const state = { kind: 'lookup', payload: null, referenceNumber: '', replacementDocuments: [], notificationPreference: null, replacementSuccess: false, replacementCompleted: {} };
-    const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup, api);
+    const state = { kind: 'lookup', payload: null, referenceNumber: '', replacementDocuments: [], replacementSuccess: false, replacementCompleted: {} };
+    const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup);
     async function submitLookup(referenceNumber) {
         state.referenceNumber = referenceNumber.trim().toUpperCase();
         state.kind = 'lookupLoading';

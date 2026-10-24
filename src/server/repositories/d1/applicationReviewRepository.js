@@ -20,25 +20,33 @@ export function createApplicationReviewRepository(database, notes) {
         async findCurrentDocumentForResubmission(applicationId, code) {
             return findCurrentResubmissionTarget(database, { applicationId, code });
         },
-        async transitionApplicationStatus({ applicationId, currentStatus, expectedUpdatedAt, targetStatus, staffId, now, requestId, auditId }) {
+        async transitionApplicationStatus({ applicationId, currentStatus, expectedUpdatedAt, targetStatus, rejectionReason, rejectionNoteId, staffId, now, requestId, auditId }) {
             const isCompleted = targetStatus === 'completed';
-            const terminalAt = isCompleted ? now : null;
-            const retentionDueAt = isCompleted ? addUtcDays(now, OFFICIAL_APPLICATION_RETENTION_DAYS) : null;
+            const isTerminal = isCompleted || targetStatus === 'rejected';
+            const terminalAt = isTerminal ? now : null;
+            const retentionDueAt = isTerminal ? addUtcDays(now, OFFICIAL_APPLICATION_RETENTION_DAYS) : null;
             const statements = [
                 database.prepare(`
                     UPDATE applications SET status = ?, updated_at = ?, last_activity_at = ?,
                         terminal_at = ?, retention_due_at = ?
                     WHERE id = ? AND status = ? AND updated_at = ?
                 `).bind(targetStatus, now, now, terminalAt, retentionDueAt,
-                    applicationId, currentStatus, expectedUpdatedAt),
-                database.prepare(`
+                    applicationId, currentStatus, expectedUpdatedAt)
+            ];
+            if (targetStatus === 'rejected') {
+                statements.push(notes.prepareStudentApplicationRejection({
+                    id: rejectionNoteId, applicationId, staffId, body: rejectionReason, createdAt: now
+                }));
+            }
+            statements.push(database.prepare(`
                     INSERT INTO audit_events (
                         id, event_type, actor_type, actor_staff_id, application_id, request_id, safe_metadata_json
                     ) SELECT ?, ?, 'staff', ?, ?, ?, ? WHERE changes() = 1
-                `).bind(auditId, targetStatus === 'under_review' && currentStatus === 'submitted'
-                    ? 'staff.application_review_started' : 'staff.application_status_changed',
-                staffId, applicationId, requestId, JSON.stringify({ applicationStatus: targetStatus, result: 'success' }))
-            ];
+                `).bind(auditId, targetStatus === 'rejected' ? 'staff.application_rejected_at_migration'
+                    : targetStatus === 'under_review' && currentStatus === 'submitted'
+                        ? 'staff.application_review_started' : 'staff.application_status_changed',
+                staffId, applicationId, requestId, JSON.stringify({ applicationStatus: targetStatus,
+                    ...(targetStatus === 'rejected' ? { rejectionReasonRecorded: true } : {}), result: 'success' })));
             if (currentStatus === 'completed') {
                 statements.push(database.prepare(`
                     UPDATE application_sessions SET revoked_at = NULL
@@ -46,7 +54,11 @@ export function createApplicationReviewRepository(database, notes) {
                 `).bind(applicationId));
             }
             const results = await database.batch(statements);
-            return results[0]?.meta?.changes === 1 && results[1]?.meta?.changes === 1;
+            const auditIndex = targetStatus === 'rejected' ? 2 : 1;
+            const didPersistRejectionNote = targetStatus !== 'rejected' || results[1]?.meta?.changes === 1;
+            return results[0]?.meta?.changes === 1
+                && didPersistRejectionNote
+                && results[auditIndex]?.meta?.changes === 1;
         },
         async approveCurrentDocument({ applicationId, documentRecordId, revisionId, revisionNumber, code, staffId, now, requestId, auditId }) {
             const results = await database.batch([

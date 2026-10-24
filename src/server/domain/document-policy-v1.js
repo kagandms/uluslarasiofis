@@ -25,7 +25,7 @@ const POLICIES = Object.freeze([
     },
     {
         code: 'host_residence_certificate', order: 12, label: 'documentHostResidenceCertificate', help: 'documentHostResidenceCertificateHelp',
-        address_evidence_type: 'undertaking', parent_code: 'address_undertaking', accepted_media_types: ['application/pdf']
+        address_evidence_type: 'undertaking', parent_code: 'address_undertaking'
     },
     {
         code: 'host_identity_copy', order: 13, label: 'documentHostIdentityCopy', help: 'documentHostIdentityCopyHelp',

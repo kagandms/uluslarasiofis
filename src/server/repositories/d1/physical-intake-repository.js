@@ -1,4 +1,6 @@
-const INTAKE_COLUMNS = `id,student_number,first_name,last_name,passport_number,application_type,status,
+const INTAKE_COLUMNS = `id,student_number,first_name,last_name,passport_number,
+    CASE WHEN application_route='transition' THEN 'transition' ELSE application_type END AS application_type,
+    application_route,status,
     linked_application_id,current_pdf_id,submitted_at,updated_at,lock_version,deleted_at,rejection_reason,legacy_status,tracking_reference,application_date,metadata_version,registration_body_hash,
     processing_closed_at,processing_closed_by_staff_id,processing_closure_reason,
     (SELECT state FROM physical_intake_receipts WHERE intake_id=physical_intakes.id ORDER BY document_version DESC LIMIT 1) AS receipt_state,
@@ -101,13 +103,19 @@ export function createPhysicalIntakeRepository(database) {
         list: query => listIntakes(database, query),
         find: id => database.prepare(`SELECT ${INTAKE_COLUMNS} FROM physical_intakes WHERE id=?`).bind(id).first(),
         lookup: (studentNumber, applicationType) => database.prepare(`SELECT applications.id,applications.first_name,
-            applications.last_name,applications.passport_number,applications.application_type,applications.status
+            applications.last_name,applications.passport_number,
+            CASE WHEN applications.application_route='transition' THEN 'transition' ELSE applications.application_type END AS application_type,
+            applications.application_route,applications.status
             FROM applications JOIN students ON students.id=applications.student_id
-            WHERE upper(trim(students.student_number))=? AND applications.application_type=?
+            WHERE upper(trim(students.student_number))=?
+              AND applications.application_type=? AND applications.application_route=?
               AND applications.status NOT IN ('draft','completed','cancelled','rejected')
               AND NOT EXISTS(SELECT 1 FROM application_deletions WHERE application_id=applications.id)
-            ORDER BY applications.updated_at DESC LIMIT 1`).bind(studentNumber, applicationType).first(),
-        findLinked: id => database.prepare(`SELECT applications.id,students.student_number,applications.application_type
+            ORDER BY applications.updated_at DESC LIMIT 1`).bind(studentNumber,
+                applicationType === 'transition' ? 'renewal' : applicationType,
+                applicationType === 'transition' ? 'transition' : 'standard').first(),
+        findLinked: id => database.prepare(`SELECT applications.id,students.student_number,
+            applications.application_type,applications.application_route
             FROM applications JOIN students ON students.id=applications.student_id WHERE applications.id=?`).bind(id).first(),
         update: input => updateIntake(database, input),
         receipts: id => database.prepare('SELECT * FROM physical_intake_receipts WHERE intake_id=? ORDER BY document_version DESC').bind(id).all(),

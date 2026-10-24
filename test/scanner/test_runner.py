@@ -47,6 +47,23 @@ class RunnerContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'HTTPS'):
                 load_config(settings)
 
+    def test_config_reads_a_unique_bounded_application_scope(self) -> None:
+        from scanner_config import load_config
+        with tempfile.TemporaryDirectory() as directory:
+            secret_path = Path(directory) / 'secret'
+            secret_path.write_text('s' * 43)
+            secret_path.chmod(0o600)
+            settings = {'SCANNER_ORIGIN': 'https://scanner.example', 'SCANNER_SECRET_FILE': str(secret_path),
+                        'SCANNER_STATE_DIR': directory, 'SCANNER_RUNNER_ID': 'mac',
+                        'SCANNER_APPLICATION_IDS': 'a1111111-1111-4111-8111-111111111111,b2222222-2222-4222-8222-222222222222'}
+
+            config = load_config(settings)
+
+            self.assertEqual(config.application_ids, ('a1111111-1111-4111-8111-111111111111',
+                                                       'b2222222-2222-4222-8222-222222222222'))
+            with self.assertRaisesRegex(ValueError, 'application_scope_invalid'):
+                load_config({**settings, 'SCANNER_APPLICATION_IDS': 'not-a-uuid'})
+
     def test_download_requires_exact_size_and_expected_hash(self) -> None:
         from scanner_transport import verify_download
         import hashlib
@@ -111,6 +128,25 @@ class RunnerContractTests(unittest.TestCase):
             self.assertEqual(https_handler._context.verify_mode, 2)
 
 class RunnerFailureTests(unittest.TestCase):
+    def test_runner_includes_the_explicit_application_scope_in_claim(self) -> None:
+        from unittest.mock import Mock, patch
+        from scanner_config import ScannerConfig
+        from scanner_engine import EngineHealth
+        from runner import run_once
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            application_ids = ('a1111111-1111-4111-8111-111111111111', 'b2222222-2222-4222-8222-222222222222')
+            config = ScannerConfig('https://scanner.example', 's' * 43, 'mac', root, root, root,
+                                   'clamscan', 'freshclam', root / 'freshclam.conf', None, 120, application_ids)
+            transport = Mock()
+            transport.request.side_effect = [{'recorded': True}, {'job': None}]
+
+            with patch('runner.read_engine_health', return_value=EngineHealth('ready')):
+                self.assertFalse(run_once(config, transport))
+
+            self.assertEqual(transport.request.call_args_list[1].args,
+                             ('claim', {'runner_id': 'mac', 'application_ids': list(application_ids)}))
+
     def test_update_failure_is_retried_before_claim_when_heartbeat_also_fails(self) -> None:
         from unittest.mock import Mock, patch
         from runner import run_loop
