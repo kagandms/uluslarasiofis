@@ -1,7 +1,7 @@
 import QRCode from 'qrcode';
 import { mobileTransferSession } from '../services/mobile-transfer-session.js';
 
-const PHOTO_POLL_INTERVAL_MS = 1000;
+const PHOTO_POLL_INTERVAL_MS = 3000;
 const PHOTO_DOWNLOAD_CONCURRENCY = 2;
 
 function showStatus(state, message) {

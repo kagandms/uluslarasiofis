@@ -231,5 +231,5 @@ choose.addEventListener('click', () => gallery.click());
 camera.addEventListener('change', () => queuePhotos(camera, true));
 gallery.addEventListener('change', () => queuePhotos(gallery));
 send.addEventListener('click', () => void sendGalleryPhotos());
-const statusPollTimer = setInterval(() => void checkTransferStatus(), 1500);
+const statusPollTimer = setInterval(() => void checkTransferStatus(), 3000);
 void pairPhone();

@@ -147,8 +147,8 @@ test('only active-batch photos are imported and acknowledged', async (context) =
     fixture.button.click();
     await settle();
     fixture.photos.push({ id: 'photo-1', byte_size: 3 });
-    assert.ok([...fixture.intervals.values()].some(interval => interval.delay === 1000));
-    await tick(fixture, 1000);
+    assert.ok([...fixture.intervals.values()].some(interval => interval.delay === 3000));
+    await tick(fixture, 3000);
 
     assert.equal(fixture.imported.length, 1);
     assert.equal(fixture.imported[0].isValidatedTransferPhoto, true);
@@ -162,7 +162,7 @@ test('pending photos download two at a time while the PC import order stays stab
     fixture.photos.push({ id: 'photo-1', byte_size: 3 }, { id: 'photo-2', byte_size: 3 }, { id: 'photo-3', byte_size: 3 });
     fixture.downloadDelays.set('photo-1', 20);
 
-    await tick(fixture, 1000);
+    await tick(fixture, 3000);
 
     assert.equal(fixture.downloadMetrics.max, 2);
     assert.deepEqual(fixture.imported.map(file => file.name), [
@@ -197,7 +197,7 @@ test('ending a transfer stops PC requests and requires a newly created QR', asyn
     endButton.click();
     await settle();
     const requestCount = fixture.requests.length;
-    await tick(fixture, 1000);
+    await tick(fixture, 3000);
 
     assert.equal(fixture.session.getSnapshot().transfer, null);
     assert.equal(fixture.requests.length, requestCount);
@@ -233,7 +233,7 @@ test('ending a transfer preserves files already imported into the PC', async (co
     fixture.button.click();
     await settle();
     fixture.photos.push({ id: 'photo-1', byte_size: 3 });
-    await tick(fixture, 1000);
+    await tick(fixture, 3000);
     const importedFile = fixture.imported[0];
 
     fixture.panel.querySelector('[data-action="end-transfer"]').click();
