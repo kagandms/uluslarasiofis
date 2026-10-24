@@ -80,6 +80,19 @@ test('Cloudflare transport is target-restricted, sanitizes errors and never retr
     }
     let calls=0;await assert.rejects(cloudflareClient('a'.repeat(32),'synthetic',async()=>{calls++;throw Error('private');})('/workers/scripts/goc/deployments'));assert.equal(calls,1);
 });
+test('Cloudflare transport permits only the protected cron schedules PUT for configuration writes',async()=>{
+    const requests=[];const api=cloudflareClient('a'.repeat(32),'synthetic',async(url,options)=>{
+        requests.push({url,options});return{ok:true,status:200,json:async()=>({success:true,result:{schedules:[{cron:'*/5 * * * *'}]}})};
+    });
+    await api('/workers/scripts/goc/schedules');
+    await api('/workers/scripts/goc/schedules',{method:'PUT',headers:{'content-type':'application/json'},body:'[{"cron":"*/5 * * * *"}]'});
+    assert.equal(requests.length,2);
+    assert.equal(new URL(requests[1].url).pathname,'/client/v4/accounts/'+ 'a'.repeat(32) + '/workers/scripts/goc/schedules');
+    assert.equal(requests[1].options.method,'PUT');
+    await assert.rejects(api('/workers/scripts/goc/schedules',{method:'POST'}));
+    await assert.rejects(api('/workers/scripts/goc/settings',{method:'PUT'}));
+    assert.equal(requests.length,2);
+});
 const settings={compatibility_date:'2026-09-28',compatibility_flags:[],bindings:[{name:'ASSETS',type:'assets'},{name:'DB',type:'d1',id:'synthetic'},
     {name:'DOCUMENTS',type:'r2_bucket'},{name:'PRINT_FILES',type:'r2_bucket'},{name:'SECRET',type:'secret_text'},{name:'PRINT_ENABLED',type:'plain_text',text:'true'}],
     observability:{enabled:true},placement:{mode:'smart'},limits:{cpu_ms:100},logpush:true};

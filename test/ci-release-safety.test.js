@@ -187,6 +187,8 @@ test('production release workflow stays manual, serialized, environment-gated an
     assert.doesNotMatch(workflow, /check-(?:backup|rollback)-evidence|exit 1/);
     assert.match(workflow, /default: preflight/);
     assert.match(workflow, /inputs.operation == 'publish'/);
+    assert.match(workflow, /inputs.operation == 'cron-update'/);
+    assert.match(workflow, /update-production-crons\.mjs/);
     assert.match(workflow, /artifact-dry-run\.mjs/);
     assert.match(workflow, /needs: \[candidate, validate\]/);
     assert.doesNotMatch(workflow, /npm run (?:build|deploy)/);
