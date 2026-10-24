@@ -1,9 +1,9 @@
 {
   "environment": "production",
-  "verified_at": "2026-10-24T15:23:24Z",
-  "current_version_id": "c0a250d6-4ef8-4eff-bd27-b40246b5a5f9",
+  "verified_at": "2026-10-24T18:51:12Z",
+  "current_version_id": "4e83065f-a92f-45c2-82b5-a873aa94c478",
   "rollback_version_id": "3a5746c2-6254-4395-9068-2702fb49d093",
-  "evidence_ref": "59a866817434f6bcc36ba2ebfe53e0266399759342c016d23451b73287a7e5dd",
+  "evidence_ref": "https://github.com/kagandms/uluslarasiofis/actions/runs/40112775368",
   "result": "passed",
   "compatibility": {
     "schema": true,
@@ -12,9 +12,12 @@
     "cron_schedules": true
   },
   "source": {
-    "current_commit_sha": "8be47f394ca06080e7bc2426e0e0d8fd205b9b34",
+    "current_commit_sha": "14c944e3235b40789bc80b76d5e08d5b33e5f6f0",
     "rollback_commit_sha": "5434d4ca368d73db70858ddd471a33403bc9a5a6",
-    "current_runtime_module_sha256": "b8cebf9ccae0411b6f0b3fd2a6d5be84020ddea7ad09e1888e6a0a155f7efc4e",
+    "current_runtime_module_sha256": "0505900a1424965d0d8e9528be78c8e94d2fa3ea38714ea82f9b9ba5aeaa8f9a",
+    "current_candidate_artifact_sha256": "6982d5e5ace7dacd6154be398bd60108ab84d6b778f5c816d6cc90bc3a03c044",
+    "current_candidate_artifact_id": 12566993954,
+    "current_release_run_id": 40112775368,
     "rollback_artifact_sha256": "ac789b37ef353b6158058f9709c59498365712bae787890588d496c45053d4f2",
     "rollback_artifact_manifest_verified": true,
     "rollback_artifact_dry_run_passed": true
@@ -39,7 +42,7 @@
       "0 0 * * *"
     ],
     "crons_match_reviewed_production_config": true,
-    "cron_api_read_succeeded_at": "2026-10-24T15:13:00Z"
+    "cron_api_read_succeeded_at": "2026-10-24T18:37:00Z"
   },
   "limitations": [
     "The 5434d4c rollback rehearsal used isolated local D1 and synthetic rows, not a production-data restore. It verifies the existing student application paths only.",
