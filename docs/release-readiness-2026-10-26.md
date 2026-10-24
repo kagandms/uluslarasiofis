@@ -2,7 +2,7 @@
 
 Bu dosya Pazartesi hedefi için yaşayan kontrol listesidir. Her çalışma turunda ilgili maddenin durumu, tarihli kanıtı ve engeli güncellenir. “Yerelde doğrulandı” canlıda hazır olduğu anlamına gelmez.
 
-Son güncelleme: 24 Ekim 2026 12:07, Europe/Istanbul
+Son güncelleme: 24 Ekim 2026 12:12, Europe/Istanbul
 
 ## Karar
 
@@ -392,3 +392,10 @@ Bu adımlar operatör penceresi için hazırlandı. 23 Ekim'de production SQL ex
 - Güncel bağımlılıkla tam yerel doğrulama tekrarlandı: `npm test` **1.179 toplam / 1.178 geçti / 1 atlandı / 0 başarısız**, production build ve deploy dry-run geçti; `git diff --check` temiz. Yenilenen değişiklikler PR head'ine push edilip GitHub CI yeniden çalıştırılmalı.
 - PR 0028 migration dosyasını içeriyor; korumalı code-only scope kontrolü migration değişikliğini bilinçli olarak reddeder. Ayrı config/data onayı ve review edilmiş baseline güncellemesi olmadan PR production'a merge edilmeye veya release preflight'a sunulmaya hazır değil. Migration uygulanmadı, Worker yayımlanmadı.
 - Açık canlı kanıtlar aynı: gerçek save-failure `requestId`/Worker log kök nedeni ve kurum açıkken öğrenci uçtan uca UAT'si yok. Yüzdeler değişmedi: **#1 %33, #2 %40, #3 %100, #4 %60, #5 %0; ortalama %46,6, kalan %53,4**. Açılış **NO-GO**.
+
+### 2026-10-24 12:12 — Yerel Worker smoke testinin notice sürümüyle güncellenmesi
+
+- Undici düzeltmesinden sonraki PR CI, audit, iki tam JS koşusu, 20/20 native D1/R2 yarışı ve scanner/Print Agent testlerini geçti; temiz D1 migration provası da geçti. CI yerel Worker smoke'ta sentetik yeni taslağın `409` almasıyla durdu.
+- Log kök nedeni: `scripts/ci/local-worker-smoke.mjs` yeni notice API'sini okumadan yeni başvuru POST'u yapıyordu; uygulama geçerli `privacy_notice_version` olmadan 409 döndürüyor. Smoke şimdi yerel `/api/public/applications/privacy-notice` GET'ini, beş locale'i ve dönen sürümle taslak oluşturmayı doğruluyor. `npm run ci:local` yerelde başarıyla tamamlandı (28 migration idempotent; altı sayfa, missing lookup, anonim 401, sentetik draft 201 ve owner reload 200).
+- Bu CI hatası production D1/Worker'a ait değildir; yalnız boş yerel D1 ve geçici yerel Worker kullanıldı. Fix adaya eklendikten sonra GitHub CI tekrar çalıştırılmalı. Üretim migration/publish yapılmadı.
+- Yüzdeler aynı kanıta bağlı: **#1 %33, #2 %40, #3 %100, #4 %60, #5 %0; ortalama %46,6, kalan %53,4**. Gerçek öğrenci save-error korelasyonu ve ofis UAT'si bekliyor; açılış **NO-GO**.
