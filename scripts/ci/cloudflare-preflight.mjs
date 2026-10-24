@@ -3,6 +3,7 @@ import { readFileSync, appendFileSync } from 'node:fs';
 import { assertWorkerSettings } from './worker-settings.mjs';
 import { readOnlyVersionReport, assertPreflightVersion } from './worker-version.mjs';
 import { assertProductionRuntimeSecretMetadata } from './runtime-secret-metadata.mjs';
+import { assertProductionCronSchedules } from './cron-preflight.mjs';
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -64,10 +65,6 @@ for (const [name, value] of Object.entries(production.vars || {})) {
     assert.equal(actual?.text, value, `Production configuration variable differs from the reviewed configuration: ${name}.`);
 }
 
-const expectedCrons = [...(production.triggers?.crons || [])].sort();
-const actualCrons = (schedules?.schedules || []).map(item => item.cron).sort();
-assert.deepEqual(actualCrons, expectedCrons, 'Production cron schedules differ from the reviewed configuration.');
-
 const actualSecrets = assertProductionRuntimeSecretMetadata(secrets, production.secrets?.required || []);
 
 // Pin the currently active version before publication; reject gradual deployments.
@@ -75,6 +72,12 @@ const report = readOnlyVersionReport(
     await cloudflare(`${workerPath}/deployments`), await cloudflare(`${workerPath}/versions`)
 );
 const version = report.active_version;
+const cronState = assertProductionCronSchedules(
+    (schedules?.schedules || []).map(item => item.cron), production.triggers?.crons || [],
+    JSON.parse(readFileSync(new URL('../../docs/production-only-evidence/rollback-compatibility.json', import.meta.url), 'utf8')),
+    version
+);
+console.log(`Production cron schedules match ${cronState === 'target' ? 'the release target' : 'the fresh reviewed active baseline for this cron transition'}.`);
 // Safe identifiers/time only. Write even on mismatch so no Dashboard or token sharing is needed.
 console.log(`Read-only Worker version report: ${JSON.stringify(report)}`);
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
