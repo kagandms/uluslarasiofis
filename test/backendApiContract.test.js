@@ -149,7 +149,7 @@ async function createReadyApplication(environment, database, studentNumber, appl
     await database.prepare(`
         UPDATE applications SET first_name = 'Ayşe', last_name = 'Yılmaz', passport_number = 'P123456',
             nationality = 'Turkish', date_of_birth = '2000-01-01', residence_application_date = '2026-09-30',
-            university_registration_date = '2026-09-01', is_under_18 = 0,
+            academic_year_start_date = '2026-09-01', is_under_18 = 0,
             address_evidence_type = 'rental_contract', insurance_basis = 'system_verified', fingerprint_status = 'registered', fingerprint_code = 'FP-A/42',
             declaration_version = ?, declaration_accepted_at = ?
         WHERE id = ?
@@ -475,6 +475,21 @@ test('default five-language notice is available and allows draft creation when n
     assert.deepEqual(Object.keys(noticePayload.content_by_locale).sort(), ['ar', 'en', 'ru', 'tk', 'tr']);
     assert.equal(createResponse.status, 201);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 1);
+});
+
+test('new draft rejects a phone number with more than 15 digits', async () => {
+    const { environment, database } = createEnvironment();
+    const response = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST',
+        body: {
+            student_number: '2026123403', application_type: 'initial',
+            email: 'student@example.edu', phone: '+9055511122334455'
+        }
+    }), environment, {});
+
+    assert.equal(response.status, 400);
+    assert.equal((await readJson(response)).error.code, 'VALIDATION_ERROR');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM applications').first().count, 0);
 });
 
 test('new draft creation fails closed when an explicit privacy notice override is malformed', async () => {
@@ -1195,7 +1210,6 @@ test('staff current-document preview and download share application-scoped autho
     const detailResponse = await worker.fetch(createRequest(`/api/staff/applications/${applicationA}`, {
         cookie: staffCookie(adminToken)
     }), environment, {});
-    const preview = await readJson(sharedStaffPreview);
     const detail = await readJson(detailResponse);
     const auditRows = database.prepare(`
         SELECT event_type, actor_staff_id, application_id, document_record_id, request_id, safe_metadata_json
@@ -1213,14 +1227,13 @@ test('staff current-document preview and download share application-scoped autho
     assert.equal(adminDownload.status, 200);
     assert.equal(wrongApplication.status, 404);
     assert.equal(detail.documents.find((item) => item.code === 'passport').access_available, true);
-    assert.equal(preview.method, 'GET');
-    assert.equal(new URL(preview.url).searchParams.get('X-Amz-Expires'), '120');
-    assert.ok(Math.abs(Date.parse(preview.expires_at) - Date.now() - 120_000) < 10_000);
-    assert.equal(preview.media_type, 'application/pdf');
-    assert.equal(preview.filename, 'passport r_sum_.pdf');
-    assert.equal(sharedStaffPreview.headers.get('Cache-Control'), 'no-store');
+    assert.equal(sharedStaffPreview.headers.get('Content-Type'), 'application/pdf');
+    assert.equal(sharedStaffPreview.headers.get('Content-Disposition'), 'inline; filename="passport r_sum_.pdf"');
+    assert.equal(sharedStaffPreview.headers.get('Cache-Control'), 'private, no-store');
+    assert.equal(sharedStaffPreview.headers.get('X-Content-Type-Options'), 'nosniff');
+    assert.equal(await sharedStaffPreview.text(), 'private current document bytes');
     assert.equal(sharedStaffPreview.headers.has('Set-Cookie'), false);
-    assert.doesNotMatch(JSON.stringify(preview), /file_id|revision_id|document_record_id|storage_key|NEVER-RETURN-THIS-SECRET/);
+    assert.doesNotMatch(sharedStaffPreview.headers.get('Content-Disposition'), /storage_key|NEVER-RETURN-THIS-SECRET/);
     assert.equal(adminDownload.headers.get('Content-Type'), 'application/pdf');
     assert.equal(adminDownload.headers.get('Content-Disposition'), 'attachment; filename="passport r_sum_.pdf"');
     assert.equal(adminDownload.headers.get('Cache-Control'), 'private, no-store');
@@ -1233,7 +1246,7 @@ test('staff current-document preview and download share application-scoped autho
     assert.equal(previewAudit.document_record_id, document.recordId);
     assert.equal(previewAudit.request_id, sharedStaffPreview.headers.get('x-request-id'));
     assert.deepEqual(JSON.parse(previewAudit.safe_metadata_json), {
-        documentCode: 'passport', revisionNumber: 1, result: 'capability_issued'
+        documentCode: 'passport', revisionNumber: 1, result: 'stream_authorized'
     });
     assert.deepEqual(JSON.parse(downloadAudit.safe_metadata_json), {
         documentCode: 'passport', revisionNumber: 1, result: 'downloaded'
@@ -1319,7 +1332,7 @@ test('staff current-document access rejects unsafe, incomplete, stale, missing, 
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_events WHERE event_type = ?').bind('staff.document_downloaded').first().count, 1);
 });
 
-test('staff preview signing failure returns a safe service error and issues no audited capability', async () => {
+test('staff document preview streams without browser-facing R2 signing credentials', async () => {
     const { environment, database, storedObjects } = createEnvironment();
     const applicationId = await createStaffApplication(environment, database, 'ACCESS-SIGNING-ERROR');
     await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'passport');
@@ -1331,12 +1344,10 @@ test('staff preview signing failure returns a safe service error and issues no a
         `/api/staff/applications/${applicationId}/documents/passport/preview`,
         { method: 'POST', cookie: staffCookie(token) }
     ), environment, {});
-    const payload = await readJson(response);
-
-    assert.equal(response.status, 503);
-    assert.equal(payload.error.code, 'SERVICE_UNAVAILABLE');
-    assert.doesNotMatch(JSON.stringify(payload), /PUBLIC-KEY-ID-FOR-TESTS|NEVER-RETURN-THIS-SECRET|storage_key|quarantine/);
-    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.document_preview_issued'").first().count, 0);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Content-Type'), 'application/pdf');
+    assert.equal(await response.text(), 'private current document bytes');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.document_preview_issued'").first().count, 1);
 });
 
 
@@ -1363,12 +1374,20 @@ test('application draft updates ignore fields outside the public allowlist', asy
         method: 'POST', body: { student_number: '2026123460', application_type: 'initial', email: 'draft@example.edu', phone: '555' }
     }), environment, {});
     const cookie = created.headers.get('Set-Cookie').split(';')[0];
+    const oversizedPhone = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie, body: {
+            lock_version: await readApplicationVersion(environment, cookie),
+            student_phone: '+9055511122334455'
+        }
+    }), environment, {});
     const response = await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie),
             student_email: 'updated@example.edu', status: 'submitted',
             storage_key: 'quarantine/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', staff_note: 'private'
         }
     }), environment, {});
+    assert.equal(oversizedPhone.status, 400);
+    assert.equal((await readJson(oversizedPhone)).error.code, 'VALIDATION_ERROR');
     const payload = await readJson(response);
     const row = database.prepare(`
         SELECT applications.status, applications.student_email, students.student_number

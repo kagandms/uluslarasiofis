@@ -74,6 +74,22 @@ async function createDraft(environment, studentNumber) {
     };
 }
 
+test('choosing pending GSS records the fixed academic year start date without a submitted date', async () => {
+    const { environment } = createEnvironment();
+    const created = await createDraft(environment, '2026123898');
+    const response = await worker.fetch(createRequest('/api/public/applications/current', {
+        method: 'PATCH', cookie: created.cookie,
+        body: { lock_version: await readApplicationVersion(environment, created.cookie), insurance_basis: 'gss_pending' }
+    }), environment, {});
+    const currentResponse = await worker.fetch(createRequest('/api/public/applications/current', {
+        cookie: created.cookie
+    }), environment, {});
+    const current = await currentResponse.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(current.application.academic_year_start_date, '2026-09-21');
+});
+
 async function setFingerprintRegistration(environment, cookie, status, code = null) {
     return worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), fingerprint_status: status, fingerprint_code: code }
@@ -153,6 +169,32 @@ test('contact acknowledgement rejects a malformed persisted phone without record
     assert.equal(response.status, 400);
     assert.equal((await response.json()).error.code, 'CONTACT_INFORMATION_INCOMPLETE');
     assert.equal(acceptanceEvents.results.length, 0);
+});
+
+test('passport and birth date identify duplicate active applications without blocking completed history', async () => {
+    const { environment, database } = createEnvironment();
+    const original = await createDraft(environment, '2026123981');
+    const duplicate = await createDraft(environment, '2026123982');
+    const saveIdentity = async (cookie, passportNumber) => worker.fetch(createRequest('/api/public/applications/current/autosave', {
+        method: 'PATCH', cookie,
+        body: {
+            lock_version: await readApplicationVersion(environment, cookie),
+            passport_number: passportNumber,
+            date_of_birth: '2000-10-20'
+        }
+    }), environment, {});
+    const originalSaved = await saveIdentity(original.cookie, '61341605');
+    const duplicateBlocked = await saveIdentity(duplicate.cookie, ' 61341605 ');
+    const duplicateError = await duplicateBlocked.json();
+
+    assert.equal(originalSaved.status, 200);
+    assert.equal(duplicateBlocked.status, 409);
+    assert.equal(duplicateError.error.code, 'PASSPORT_IDENTITY_ALREADY_ACTIVE');
+    assert.equal(duplicateError.error.message.includes('61341605'), false);
+
+    database.prepare("UPDATE applications SET status = 'completed' WHERE passport_number = '61341605'").run();
+    const completedHistoryReuse = await saveIdentity(duplicate.cookie, '61341605');
+    assert.equal(completedHistoryReuse.status, 200);
 });
 
 test('registered fingerprint status persists a trimmed code without adding authorization fields', async () => {
@@ -308,7 +350,7 @@ test('server-calculated document requirements change with the saved under-18 sta
     const { environment, database } = createEnvironment();
     const adult = await createDraft(environment, '2026123908');
     const updateAge = async (cookie, isUnder18) => worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), date_of_birth: isUnder18 ? '2010-01-01' : '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01', minor_parents_identified: 'no', is_under_18: !isUnder18 }
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), date_of_birth: isUnder18 ? '2010-01-01' : '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01', minor_parents_identified: 'no', is_under_18: !isUnder18 }
     }), environment, {});
     const listRequirements = async (cookie) => worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {});
 
@@ -411,7 +453,7 @@ test('adult sessions cannot create a birth certificate upload intent by supplyin
     const { environment } = createEnvironment();
     const adult = await createDraft(environment, '2026123909');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: adult.cookie, body: { lock_version: await readApplicationVersion(environment, adult.cookie), date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01', is_under_18: false }
+        method: 'PATCH', cookie: adult.cookie, body: { lock_version: await readApplicationVersion(environment, adult.cookie), date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01', is_under_18: false }
     }), environment, {});
 
     const response = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
@@ -452,7 +494,7 @@ test('student document requirements and upload intents are scoped to the current
     const studentA = await createDraft(environment, '2026123910');
     const studentB = await createDraft(environment, '2026123911');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: studentB.cookie, body: { lock_version: await readApplicationVersion(environment, studentB.cookie), date_of_birth: '2010-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01', minor_parents_identified: 'no', is_under_18: true }
+        method: 'PATCH', cookie: studentB.cookie, body: { lock_version: await readApplicationVersion(environment, studentB.cookie), date_of_birth: '2010-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01', minor_parents_identified: 'no', is_under_18: true }
     }), environment, {});
 
     const studentARequirements = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie: studentA.cookie }), environment, {});
@@ -612,7 +654,7 @@ test('draft application-type changes preserve finalized document metadata and th
     assert.equal(storedObjects.has(storageKey), true);
 });
 
-test('host residence certificate accepts PDF only', async () => {
+test('host residence certificate accepts JPEG uploads', async () => {
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123951');
     await worker.fetch(createRequest('/api/public/applications/current', {
@@ -620,12 +662,11 @@ test('host residence certificate accepts PDF only', async () => {
     }), environment, {});
     const imageIntent = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
-        body: { code: 'host_residence_certificate', filename: 'host.png', media_type: 'image/png', byte_size: 4 }
+        body: { code: 'host_residence_certificate', filename: 'host.jpg', media_type: 'image/jpeg', byte_size: 4 }
     }), environment, {});
 
-    assert.equal(imageIntent.status, 400);
-    assert.equal((await imageIntent.json()).error.code, 'INVALID_FILE');
-    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM upload_intents').first().count, 0);
+    assert.equal(imageIntent.status, 201);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM upload_intents').first().count, 1);
 });
 
 test('finalize rejects a wrong-size object and does not mark the document complete', async () => {
@@ -650,7 +691,7 @@ test('birth certificate uploaded by an under-18 student cannot be finalized afte
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123915');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), date_of_birth: '2010-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01', minor_parents_identified: 'no', is_under_18: true }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), date_of_birth: '2010-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01', minor_parents_identified: 'no', is_under_18: true }
     }), environment, {});
     const intentResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
@@ -659,7 +700,7 @@ test('birth certificate uploaded by an under-18 student cannot be finalized afte
     const intent = await intentResponse.json();
     await putSignedFile(environment, intent.upload.url, 'application/pdf');
     await worker.fetch(createRequest('/api/public/applications/current', {
-        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01', is_under_18: false }
+        method: 'PATCH', cookie: created.cookie, body: { lock_version: await readApplicationVersion(environment, created.cookie), date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01', is_under_18: false }
     }), environment, {});
     const finalizeResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/finalize', {
         method: 'POST', cookie: created.cookie, body: { intent_id: intent.upload.intent_id }

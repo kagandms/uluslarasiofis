@@ -1,6 +1,6 @@
 const NOTICE_VERSION = 'topkapi-privacy-summary-v1';
 const STORAGE_KEY = 'portal.privacy-notice.acknowledged';
-const OFFICIAL_NOTICE_URL = 'https://www.topkapi.edu.tr/tr-TR/gizlilik-politikasi/13455';
+export const OFFICIAL_NOTICE_URL = 'https://www.topkapi.edu.tr/tr-TR/gizlilik-politikasi/13455';
 
 const NOTICE_MESSAGES = Object.freeze({
     tr: {

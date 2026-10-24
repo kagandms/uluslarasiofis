@@ -23,7 +23,14 @@ export function readStudentDocumentStatus(requirement) {
     return 'not_uploaded';
 }
 
+function readStudentDocumentMessage(requirement) {
+    if (readStudentDocumentStatus(requirement) !== 'resubmission_required'
+        || typeof requirement?.student_message !== 'string') return undefined;
+    return requirement.student_message;
+}
+
 function createTrackingDocumentDto(policy, requirement) {
+    const studentMessage = readStudentDocumentMessage(requirement);
     return {
         code: policy.code,
         label_key: policy.label_key,
@@ -31,17 +38,18 @@ function createTrackingDocumentDto(policy, requirement) {
         revision_number: requirement?.revision_number ?? null,
         status: readStudentDocumentStatus(requirement),
         filename: isStudentVisibleFile(requirement) ? requirement.original_filename ?? null : null,
-        ...(typeof requirement?.student_message === 'string' ? { student_message: requirement.student_message } : {})
+        ...(studentMessage ? { student_message: studentMessage } : {})
     };
 }
 
 function createPublicTrackingDocumentDto(policy, requirement) {
+    const studentMessage = readStudentDocumentMessage(requirement);
     return {
         code: policy.code,
         label_key: policy.label_key,
         required: policy.required,
         status: readStudentDocumentStatus(requirement),
-        ...(typeof requirement?.student_message === 'string' ? { student_message: requirement.student_message } : {})
+        ...(studentMessage ? { student_message: studentMessage } : {})
     };
 }
 

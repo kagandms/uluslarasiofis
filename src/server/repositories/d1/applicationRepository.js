@@ -30,7 +30,7 @@ const PUBLIC_APPLICATION_FIELDS = Object.freeze({
     nationality: 'nationality',
     dateOfBirth: 'date_of_birth',
     residenceApplicationDate: 'residence_application_date',
-    universityRegistrationDate: 'university_registration_date',
+    academicYearStartDate: 'academic_year_start_date',
     isUnder18: 'is_under_18',
     fingerprintStatus: 'fingerprint_status',
     fingerprintCode: 'fingerprint_code',
@@ -373,6 +373,20 @@ export function createApplicationRepository(database) {
                   AND applications.status NOT IN ('completed', 'cancelled', 'rejected')
                 LIMIT 1
             `).bind(normalizedStudentNumber).first();
+        },
+        async hasOtherActiveApplicationForPassportIdentity(passportNumber, dateOfBirth, applicationId) {
+            if (typeof passportNumber !== 'string' || !passportNumber.trim() || !dateOfBirth) return false;
+            const normalizedPassportNumber = passportNumber.trim().toUpperCase();
+            const match = await database.prepare(`
+                SELECT 1 AS found
+                FROM applications
+                WHERE upper(trim(passport_number)) = ?
+                  AND date_of_birth = ?
+                  AND id <> ?
+                  AND status NOT IN ('completed', 'cancelled', 'rejected')
+                LIMIT 1
+            `).bind(normalizedPassportNumber, dateOfBirth, applicationId).first();
+            return Boolean(match);
         },
         async updateDraft(applicationId, changes, auditContext = null, expectedLockVersion = null) {
             const fields = Object.entries(changes)

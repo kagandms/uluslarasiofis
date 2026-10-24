@@ -83,7 +83,7 @@ function createRoot() {
 }
 
 function fillRequiredResidenceFields(root) {
-    const fields = { first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish', date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01' };
+    const fields = { first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish', date_of_birth: '2000-01-01' };
     Object.entries(fields).forEach(([name, value]) => { root.querySelector(`[name="${name}"]`).value = value; });
 }
 
@@ -101,7 +101,7 @@ async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: addressEvidenceType, student_number: 'S3-FP-1',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish',
-        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01', is_under_18: 0,
+        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01', is_under_18: 0,
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true, accepted_at: '2026-09-29T00:00:00.000Z' },
         fingerprint_status: fingerprintStatus, fingerprint_code: fingerprintCode,
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAccuracy', accepted_current: false }
@@ -169,6 +169,8 @@ test('contact step keeps Continue disabled until valid contact fields and the se
     const acknowledgement = root.querySelector('[name="contact_acknowledgement_accepted"]');
 
     assert.equal(root.querySelector('h2[data-i18n="stepContact"]')?.textContent, 'İletişim Bilgileri');
+    assert.equal(phone.maxLength, 25);
+    assert.equal(root.querySelector('.notification-preference-group'), null);
     assert.equal(continueButton.disabled, true);
     assert.ok(acknowledgement);
     assert.equal(root.querySelector('[name="declaration_accepted"]'), null);
@@ -455,9 +457,13 @@ test('residence step requires one address evidence branch and persists the selec
     undertaking.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     assert.equal(continueButton.disabled, false);
     assert.equal(state.formValues.address_evidence_type, 'undertaking');
+    document.documentElement.scrollTop = 123;
+    document.body.scrollTop = 123;
     await submitWizard(root);
 
     assert.equal(state.step, 2);
+    assert.equal(document.documentElement.scrollTop, 0);
+    assert.equal(document.body.scrollTop, 0);
     assert.equal(savedPatches.at(-1).address_evidence_type, 'undertaking');
     assert.equal(state.application.address_evidence_type, 'undertaking');
     document.defaultView.close();
@@ -562,6 +568,8 @@ test('date fields insert day-month-year separators while the user types or paste
     birthDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
 
     assert.equal(birthDate.value, '31.10.2005');
+    birthDate.value = '24.10.2008';
+    birthDate.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     const residenceDate = root.querySelector('[name="residence_application_date"]');
     residenceDate.value = '2026-10-20';
     residenceDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
@@ -683,6 +691,22 @@ test('public home navigation flushes autosave and retains fields when the save f
     document.defaultView.close();
 });
 
+test('previous step remains available and keeps residence fields when autosave fails', async () => {
+    const { document, root, state } = await createFingerprintWizard('registered', 'FP-A/42');
+    state.autosave = { schedule() {}, async flush() { return false; } };
+    root.querySelector('[name="first_name"]').value = 'Unsaved name';
+
+    root.querySelector('[data-action="previous"]').dispatchEvent(
+        new document.defaultView.MouseEvent('click', { bubbles: true, cancelable: true })
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(state.step, 0);
+    assert.equal(state.formValues.first_name, 'Unsaved name');
+    assert.equal(state.errorKey, null);
+    document.defaultView.close();
+});
+
 test('not-registered fingerprint status blocks progression without adding a fingerprint document', async () => {
     const { document, root, state } = await createFingerprintWizard('not_registered');
     state.step = 2;
@@ -761,15 +785,31 @@ test('under-18 answer is derived from the birth date and cannot be manually chan
     document.defaultView.close();
 });
 
-test('under-18 answer shows the current-age result until the residence application date is entered', async () => {
+test('age boundary requires the e-İkamet date and calculates minor status from it', async () => {
     const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+    const birthDate = root.querySelector('[name="date_of_birth"]');
+    birthDate.value = '24.10.2008';
+    birthDate.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     const residenceDate = root.querySelector('[name="residence_application_date"]');
-    residenceDate.value = '';
-    residenceDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
-    root.querySelector('[name="date_of_birth"]').value = '04.10.2010';
-    root.querySelector('[name="date_of_birth"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
-
+    assert.ok(residenceDate);
     assert.equal(root.querySelector('[name="is_under_18"]').value, 'true');
+    residenceDate.value = '24.10.2026';
+    residenceDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+
+    assert.equal(root.querySelector('[name="is_under_18"]').value, 'false');
+    document.defaultView.close();
+});
+
+test('clear-age adults do not see an e-İkamet date field and GSS uses the fixed academic calendar date', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+
+    assert.equal(root.querySelector('[name="residence_application_date"]'), null);
+    assert.equal(root.querySelector('[name="academic_year_start_date"]'), null);
+    const insuranceBasis = root.querySelector('[name="insurance_basis"]');
+    insuranceBasis.value = 'gss_pending';
+    insuranceBasis.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    assert.equal(root.querySelector('[name="academic_year_start_date"]'), null);
+    assert.match(root.textContent, /21\.12\.2026/);
     document.defaultView.close();
 });
 
@@ -803,7 +843,7 @@ test('wizard saves under-18 and fingerprint state before loading the server requ
         student_email: 'student@example.edu', student_phone: '+905551112233',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null,
-        residence_application_date: '2026-10-23', university_registration_date: '2026-09-01'
+        residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01'
     };
     const api = {
         async readCurrentApplication() { return { ...application }; },
@@ -856,7 +896,7 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
     const saved = {
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-WIZ-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', first_name: '', last_name: '', passport_number: '', nationality: '', date_of_birth: '',
-        residence_application_date: '', university_registration_date: '',
+        residence_application_date: '', academic_year_start_date: '',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null,
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false, accepted_at: null }
@@ -925,7 +965,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     const application = {
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-UP-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
-        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01',
+        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }
     };
@@ -1073,7 +1113,7 @@ test('closeout translations have parity and the wizard rerenders in Arabic RTL',
     const application = {
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', student_number: 'S3-RTL-1', student_email: 'student@example.edu',
         student_phone: '555', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
-        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', university_registration_date: '2026-09-01',
+        date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         declaration: { current_version: 'ack-v1', content_key: 'studentInformationAcknowledgement', accepted_current: false }
     };

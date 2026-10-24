@@ -6,7 +6,7 @@ import { renderPublicDocumentOverview } from './home.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 import { initLiveClock } from '../ui/liveClock.js';
 import { openPublicGuideModal } from './publicGuideModal.js';
-import { initializePrivacyNoticeModal } from './privacyNoticeModal.js';
+import { initializePrivacyNoticeModal, OFFICIAL_NOTICE_URL } from './privacyNoticeModal.js';
 
 const LOCALE_STORAGE_KEY = 'portal_ui_locale';
 const FALLBACK_LOCALE = 'tr';
@@ -72,6 +72,9 @@ function applyLocale(locale) {
 }
 
 function initPublicPortal() {
+    const privacyLink = document.getElementById('home-privacy-notice');
+    if (privacyLink) privacyLink.href = OFFICIAL_NOTICE_URL;
+
     const localeSelect = document.getElementById('locale-select');
     localeSelect?.addEventListener('change', () => {
         const selectedLocale = localeSelect.value;

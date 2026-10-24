@@ -795,13 +795,6 @@ body:not([data-page="home"]) .public-section,
     }
 }
 
-.application-progress li.is-current span {
-    text-decoration: underline;
-    text-decoration-color: var(--public-burgundy);
-    text-decoration-thickness: 2px;
-    text-underline-offset: 0.2rem;
-}
-
 .application-policy-date-fields {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

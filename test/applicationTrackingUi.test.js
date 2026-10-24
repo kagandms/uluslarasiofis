@@ -357,7 +357,8 @@ test('tracking supports all locales and the public main entry keeps Arabic right
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(document.documentElement.lang, 'ar');
         assert.equal(document.documentElement.dir, 'rtl');
-        assert.match(document.querySelector('#application-tracking').textContent, /رقم الطالب/);
+        assert.doesNotMatch(document.querySelector('#application-tracking').textContent, /البحث برقم الطالب/);
+        assert.ok(document.querySelector('.tracking-owner-access-link'));
     } finally {
         if (previousDocument === undefined) delete globalThis.document;
         else globalThis.document = previousDocument;

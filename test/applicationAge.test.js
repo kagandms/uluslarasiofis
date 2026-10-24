@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { calculateGssRegistrationDeadline, calculateUnder18 } from '../src/shared/age.js';
+import { calculateGssRegistrationDeadline, calculateUnder18, requiresResidenceApplicationDate } from '../src/shared/age.js';
 
 test('age calculation treats the eighteenth birthday as adult on that date', () => {
     assert.equal(calculateUnder18('2008-10-04', '2026-10-03'), true);
@@ -20,8 +20,15 @@ test('February 29 reaches eighteen on February 28 in a non-leap year', () => {
     assert.equal(calculateUnder18('2008-02-29', '2026-03-01'), false);
 });
 
-test('GSS deadline is three calendar months after registration and clamps month ends', () => {
+test('GSS deadline is three calendar months after academic year start and clamps month ends', () => {
     assert.equal(calculateGssRegistrationDeadline('2026-08-23'), '2026-11-23');
     assert.equal(calculateGssRegistrationDeadline('2026-11-30'), '2027-02-28');
     assert.equal(calculateGssRegistrationDeadline('invalid'), null);
+});
+
+test('residence application date is needed only within the 18-to-19 age window', () => {
+    assert.equal(requiresResidenceApplicationDate('2008-10-24', '2026-10-24'), true);
+    assert.equal(requiresResidenceApplicationDate('2007-10-24', '2026-10-24'), false);
+    assert.equal(requiresResidenceApplicationDate('2010-10-24', '2026-10-24'), false);
+    assert.equal(requiresResidenceApplicationDate('invalid', '2026-10-24'), true);
 });

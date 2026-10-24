@@ -10,7 +10,8 @@ import { APPLICATION_CREATE_RATE_LIMIT } from '../security/application-rate-limi
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { normalizeStudentNumber } from '../repositories/d1/studentRepository.js';
 import { isValidPhoneNumber } from '../../shared/phoneNumber.js';
-import { calculateUnder18, readIstanbulDate } from '../../shared/age.js';
+import { calculateUnder18, readIstanbulDate, requiresResidenceApplicationDate } from '../../shared/age.js';
+import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../../shared/academic-calendar.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { readSubmissionReadiness } from '../services/submissionReadiness.js';
@@ -50,6 +51,10 @@ function requireString(body, name, { min = 1, max = 255 } = {}) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru bilgilerini kontrol edip tekrar deneyin.');
     }
     return value.trim();
+}
+
+function countPhoneDigits(phone) {
+    return phone.match(/\d/g)?.length || 0;
 }
 
 function readDeclarationVersion(environment) {
@@ -119,7 +124,7 @@ function createApplicationDto(application, environment) {
         nationality: application.nationality,
         date_of_birth: application.date_of_birth,
         residence_application_date: application.residence_application_date ?? null,
-        university_registration_date: application.university_registration_date ?? null,
+        academic_year_start_date: application.academic_year_start_date ?? null,
         transition_foreign_id: isTransitionApplication ? application.transition_foreign_id ?? '' : '',
         transition_card_serial: isTransitionApplication ? application.transition_card_serial ?? '' : '',
         transition_card_number: isTransitionApplication ? application.transition_card_number ?? '' : '',
@@ -151,7 +156,11 @@ function readNewDraft(body) {
     const applicationType = readApplicationType(body.application_type);
     const studentEmail = requireString(body, 'email', { max: 254 });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmail)) throw new ApiError(400, 'VALIDATION_ERROR', 'E-posta adresini kontrol edip tekrar deneyin.');
-    return { studentNumber, ...applicationType, studentEmail, studentPhone: requireString(body, 'phone', { max: 40 }) };
+    const studentPhone = requireString(body, 'phone', { max: 25 });
+    if (countPhoneDigits(studentPhone) > 15) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Telefon numarası en fazla 15 rakam içerebilir.');
+    }
+    return { studentNumber, ...applicationType, studentEmail, studentPhone };
 }
 
 async function persistDraftWithSession(repositories, draft, requestId) {
@@ -195,8 +204,8 @@ function readFingerprintCode(value) {
     return code || null;
 }
 
-function readOptionalApplicationDate(value, allowIncomplete) {
-    if (allowIncomplete && (value === '' || value === null)) return null;
+function readOptionalApplicationDate(value) {
+    if (value === '' || value === null) return null;
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru tarihlerini kontrol edip tekrar deneyin.');
     }
@@ -224,10 +233,15 @@ function readDocumentAnswerChanges(body) {
 function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
     const changes = readDocumentAnswerChanges(body);
     for (const [field, repositoryField] of Object.entries(DRAFT_FIELDS)) {
-        if (Object.hasOwn(body, field)) changes[repositoryField] = requireString(body, field, {
+        if (!Object.hasOwn(body, field)) continue;
+        const value = requireString(body, field, {
             min: allowIncomplete ? 0 : 1,
-            max: field === 'student_email' ? 254 : 255
+            max: field === 'student_email' ? 254 : (field === 'student_phone' ? 25 : 255)
         });
+        if (field === 'student_phone' && countPhoneDigits(value) > 15) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Telefon numarası en fazla 15 rakam içerebilir.');
+        }
+        changes[repositoryField] = value;
     }
     if (Object.hasOwn(body, 'transition_change_province')) {
         if (body.transition_change_province !== null && !['yes', 'no'].includes(body.transition_change_province)) {
@@ -242,13 +256,13 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
         changes.transitionContactPreference = body.transition_contact_preference;
     }
     if (Object.hasOwn(body, 'residence_application_date')) {
-        changes.residenceApplicationDate = readOptionalApplicationDate(body.residence_application_date, allowIncomplete);
-    }
-    if (Object.hasOwn(body, 'university_registration_date')) {
-        changes.universityRegistrationDate = readOptionalApplicationDate(body.university_registration_date, allowIncomplete);
+        changes.residenceApplicationDate = readOptionalApplicationDate(body.residence_application_date);
     }
     if (Object.hasOwn(body, 'application_type')) {
         Object.assign(changes, readApplicationType(body.application_type));
+    }
+    if ((changes.insuranceBasis ?? application.insurance_basis) === 'gss_pending') {
+        changes.academicYearStartDate = CURRENT_ACADEMIC_YEAR_START_DATE;
     }
     const targetRoute = changes.applicationRoute ?? application.application_route ?? 'standard';
     if (targetRoute !== 'transition') {
@@ -278,9 +292,13 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
         const birthDate = Object.hasOwn(changes, 'dateOfBirth') ? changes.dateOfBirth : application.date_of_birth;
         const residenceApplicationDate = Object.hasOwn(changes, 'residenceApplicationDate')
             ? changes.residenceApplicationDate : application.residence_application_date;
-        const under18 = calculateUnder18(birthDate, residenceApplicationDate);
+        const ageDateIsRequired = requiresResidenceApplicationDate(birthDate);
+        const under18 = calculateUnder18(birthDate, residenceApplicationDate || readIstanbulDate());
         if (under18 === null && !allowIncomplete) {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Doğum tarihi ve e-İkamet başvuru tarihini kontrol edip tekrar deneyin.');
+        }
+        if (ageDateIsRequired && !residenceApplicationDate && !allowIncomplete) {
+            throw new ApiError(400, 'VALIDATION_ERROR', '18 yaş hesabı için e-İkamet başvuru tarihini girin.');
         }
         changes.isUnder18 = under18 === null ? null : (under18 ? 1 : 0);
     }
@@ -409,6 +427,13 @@ async function updateCurrentApplicationFields(request, environment, requestId, {
         return { application: createApplicationDto(unchanged, environment) };
     }
     const changes = readDraftChanges(body, renumberedApplication || currentApplication, { allowIncomplete });
+    const passportNumber = changes.passportNumber ?? (renumberedApplication || currentApplication).passport_number;
+    const dateOfBirth = changes.dateOfBirth ?? (renumberedApplication || currentApplication).date_of_birth;
+    if (await repositories.applications.hasOtherActiveApplicationForPassportIdentity(
+        passportNumber, dateOfBirth, session.application_id
+    )) {
+        throw new ApiError(409, 'PASSPORT_IDENTITY_ALREADY_ACTIVE', 'Bu pasaport bilgileriyle etkin bir başvuru bulunuyor. Öğrenci numaranızı kontrol edin veya mevcut başvurunuza giriş yapın.');
+    }
     let application;
     try {
         application = await repositories.applications.updateDraft(session.application_id, changes, {

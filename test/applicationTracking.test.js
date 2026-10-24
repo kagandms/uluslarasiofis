@@ -280,7 +280,8 @@ test('public lookup returns submitted tracking with a strict DTO and creates no 
     assert.ok(payload.documents.some((document) => document.code === 'parent_permit_copy'));
     assert.ok(payload.documents.some((document) => document.code === 'birth_certificate_under18'));
     assert.equal(payload.documents.some((document) => document.code === 'lookup_legacy_marker'), false);
-    assert.ok(payload.documents.filter((document) => document.code !== 'parent_permit_copy').every((document) => document.required === true));
+    assert.ok(payload.documents.filter((document) => !['parent_permit_copy', 'visa'].includes(document.code))
+        .every((document) => document.required === true));
     assert.doesNotMatch(serialized, /PrivateName|PrivateSurname|private@example|\+905550000000|PASSPORT-SECRET|PrivateNation|2001-01-01|FINGERPRINT-SECRET|\.pdf|application_id|student_id|revision_number|storage_key|token_hash|https?:\/\//i);
     assert.equal(database.prepare('SELECT count(*) AS count FROM application_sessions').first().count, sessionsBefore);
 

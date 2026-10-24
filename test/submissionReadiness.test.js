@@ -21,7 +21,7 @@ function createApplication(overrides = {}) {
         nationality: 'Turkish',
         date_of_birth: '2000-01-01',
         residence_application_date: '2026-10-23',
-        university_registration_date: '2026-09-01',
+        academic_year_start_date: '2026-09-01',
         is_under_18: 0,
         address_evidence_type: 'rental_contract',
         fingerprint_status: 'registered',
@@ -72,6 +72,31 @@ test('complete persisted application and current finalized required documents ar
         missing_fields: [],
         missing_documents: []
     });
+});
+
+test('clear-age adults do not need an exact residence application date', () => {
+    const readiness = evaluate(createApplication({ residence_application_date: null, academic_year_start_date: null }));
+
+    assert.equal(readiness.status, 'ready');
+});
+
+test('applicants between 18 and 19 must provide the e-İkamet date for the age decision', () => {
+    const readiness = evaluate(createApplication({
+        date_of_birth: '2008-10-24', residence_application_date: null, is_under_18: 0,
+        academic_year_start_date: null
+    }));
+
+    assert.equal(readiness.status, 'not_ready');
+    assert.ok(readiness.missing_fields.includes('residence_application_date'));
+});
+
+test('pending GSS uses the fixed academic year start date without asking the applicant', () => {
+    const readiness = evaluate(createApplication({
+        insurance_basis: 'gss_pending', academic_year_start_date: null
+    }));
+
+    assert.equal(readiness.status, 'ready');
+    assert.ok(!readiness.missing_fields.includes('academic_year_start_date'));
 });
 
 test('a finalized current document requiring resubmission is not ready', () => {

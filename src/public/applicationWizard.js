@@ -1,12 +1,12 @@
 import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_FIELDS, DOCUMENT_ANSWER_OPTIONS, listRequiredDocumentAnswers, listMissingDocumentAnswers } from '../shared/document-conditions.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { createDraftAutosave } from './draftAutosave.js';
-import { createNotificationPreferenceField, parseNotificationPreferences, WHATSAPP_CONSENT_VERSION } from './notificationPreferences.js';
 import { createPhoneField } from './phoneField.js';
 import { createNationalityField } from './nationalityField.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 import { isValidPhoneNumber } from '../shared/phoneNumber.js';
-import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate } from '../shared/age.js';
+import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate, requiresResidenceApplicationDate } from '../shared/age.js';
+import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../shared/academic-calendar.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
@@ -33,7 +33,6 @@ function saveContactDraftFields(view, fields) {
             student_phone: fields.student_phone || '',
             phone_country: fields.phone_country || '',
             application_type: fields.application_type || '',
-            whatsapp_opt_in: Boolean(fields.whatsapp_opt_in),
             contact_acknowledgement_accepted: Boolean(fields.contact_acknowledgement_accepted)
         };
         storage.setItem(CONTACT_DRAFT_KEY, JSON.stringify(payload));
@@ -76,6 +75,7 @@ const UPLOAD_ERROR_KEYS = Object.freeze({
     APPLICATION_TYPE_CHANGE_BLOCKED: 'applicationTypeChangeBlocked',
     APPLICATION_UPDATE_CONFLICT: 'applicationUpdateConflict',
     APPLICATION_ALREADY_ACTIVE: 'applicationAlreadyActive',
+    PASSPORT_IDENTITY_ALREADY_ACTIVE: 'passportIdentityAlreadyActive',
     RATE_LIMITED: 'applicationRateLimited',
     APPLICATION_PRIVACY_NOTICE_VERSION_CONFLICT: 'applicationPrivacyNoticeVersionChanged',
     APPLICATION_PRIVACY_NOTICE_UNAVAILABLE: 'applicationPrivacyNoticeUnavailable',
@@ -237,7 +237,7 @@ function updateDateOfBirthValidity(input, messages) {
     return birthDate;
 }
 
-function createPolicyDateField(document, { name, key, helpKey, value, messages }) {
+function createPolicyDateField(document, { name, key, helpKey, value, messages, required = true }) {
     const label = document.createElement('label');
     const title = createTranslatedElement(document, 'span', key, messages[key]);
     const input = document.createElement('input');
@@ -245,7 +245,7 @@ function createPolicyDateField(document, { name, key, helpKey, value, messages }
     input.type = 'text';
     input.name = name;
     input.id = `field-${name}`;
-    input.required = true;
+    input.required = required;
     input.maxLength = 10;
     input.inputMode = 'numeric';
     input.autocomplete = 'off';
@@ -396,7 +396,7 @@ function updateContactContinueButton(root) {
     button.disabled = !canContinueContactStep(form);
 }
 
-function createContactStep(document, application, formValues, state, api) {
+function createContactStep(document, application, formValues) {
     const messages = readMessages(document);
     const fields = { ...application, ...formValues };
     const form = createWizardForm(document);
@@ -416,37 +416,6 @@ function createContactStep(document, application, formValues, state, api) {
     const isContactAcknowledgementAccepted = application?.contact_acknowledgement?.accepted_current === true
         || fields.contact_acknowledgement_accepted === true;
     form.append(createContactAcknowledgement(document, messages, isContactAcknowledgementAccepted));
-    const preferenceField = createNotificationPreferenceField(document, {
-        application,
-        initialPreference: state?.notificationPreference,
-        formValues,
-        api: api || state?.api,
-        phoneInput: form.querySelector('[name="student_phone"]'),
-        onPhoneLockChange: (isLocked) => {
-            phoneField.querySelector('[data-phone-visible]').disabled = isLocked;
-            phoneField.querySelector('[name="phone_country"]').disabled = isLocked;
-        },
-        persistPhone: async () => {
-            const currentFields = readVisibleFields(form, state?.application || {});
-            if (state?.autosave) {
-                state.formValues = currentFields;
-                state.autosave.schedule(buildAutosaveValues(currentFields));
-                const saved = await state.autosave.flush();
-                if (!saved) return { success: false, error: new Error('Autosave failed') };
-            } else if (api?.updateCurrentApplication || api?.updateCurrentApplicationDraft) {
-                const saveFn = api.updateCurrentApplication || api.updateCurrentApplicationDraft;
-                state.application = await saveFn({ ...buildAutosaveValues(currentFields), lock_version: state.application?.lock_version });
-            }
-            return { success: true, application: state?.application };
-        },
-        onPreferenceChange: (checked) => {
-            if (state) {
-                if (!state.formValues) state.formValues = readVisibleFields(form, application || {});
-                state.formValues.whatsapp_opt_in = checked;
-            }
-        }
-    });
-    form.append(preferenceField);
     const continueButton = createContinueButton(document, messages);
     form.append(continueButton);
     setContactPhoneValidity(form);
@@ -533,16 +502,16 @@ function createResidenceStep(document, application, formValues) {
     if (fields.application_type === 'transition') form.append(createTransitionFields(document, fields, messages));
     const policyDateFields = document.createElement('div');
     policyDateFields.className = 'application-policy-date-fields';
-    policyDateFields.append(createPolicyDateField(document, {
-        name: 'residence_application_date', key: 'residenceApplicationDate',
-        helpKey: 'residenceApplicationDateHelp', value: fields.residence_application_date, messages
-    }));
-    policyDateFields.append(createPolicyDateField(document, {
-        name: 'university_registration_date', key: 'universityRegistrationDate',
-        helpKey: 'universityRegistrationDateHelp', value: fields.university_registration_date, messages
-    }));
+    if (requiresResidenceApplicationDate(fields.date_of_birth)) {
+        policyDateFields.append(createPolicyDateField(document, {
+            name: 'residence_application_date', key: 'residenceApplicationDate',
+            helpKey: 'residenceApplicationDateHelp', value: fields.residence_application_date, messages
+        }));
+    }
     form.append(policyDateFields);
-    const under18 = calculateUnder18(fields.date_of_birth, fields.residence_application_date || readIstanbulDate());
+    const ageDateIsRequired = requiresResidenceApplicationDate(fields.date_of_birth);
+    const under18 = ageDateIsRequired && !fields.residence_application_date
+        ? null : calculateUnder18(fields.date_of_birth, fields.residence_application_date || readIstanbulDate());
     const under18Field = createSelectField(document, {
         key: 'under18Question', name: 'is_under_18', value: under18 === null ? '' : String(under18), required: false,
         options: [
@@ -585,7 +554,7 @@ function appendDocumentQuestions(form, fields) {
                 ...DOCUMENT_ANSWER_OPTIONS[name].map((value) => ({ value, key: DOCUMENT_ANSWER_KEYS[value] }))]
         }));
         if (name === 'insurance_basis' && fields.insurance_basis === 'gss_pending') {
-            const deadline = calculateGssRegistrationDeadline(fields.university_registration_date);
+            const deadline = calculateGssRegistrationDeadline(CURRENT_ACADEMIC_YEAR_START_DATE);
             if (deadline) {
                 const notice = createTranslatedElement(document, 'p', 'gssDeadlineNotice',
                     messages.gssDeadlineNotice.replace('{date}', formatDateOfBirthInput(deadline)));
@@ -660,9 +629,10 @@ function isFingerprintUploadEligible(application) {
 function canContinueResidenceStep(form, fields) {
     const birthDate = parseDateOfBirthInput(form?.querySelector('[name="date_of_birth"]')?.value);
     const residenceDate = parseDateOfBirthInput(form?.querySelector('[name="residence_application_date"]')?.value);
-    const registrationDate = parseDateOfBirthInput(form?.querySelector('[name="university_registration_date"]')?.value);
-    return Boolean(form?.checkValidity() && registrationDate && registrationDate <= readIstanbulDate()
-        && calculateUnder18(birthDate, residenceDate) !== null
+    const ageDateIsRequired = requiresResidenceApplicationDate(birthDate);
+    return Boolean(form?.checkValidity()
+        && (!ageDateIsRequired || (residenceDate && residenceDate <= readIstanbulDate()))
+        && calculateUnder18(birthDate, residenceDate || readIstanbulDate()) !== null
         && isFingerprintUploadEligible(fields) && listMissingDocumentAnswers(fields).length === 0);
 }
 
@@ -909,7 +879,6 @@ function createApplicantReview(document, application) {
         ['firstName', application.first_name], ['lastName', application.last_name], ['passportNumber', application.passport_number],
         ['nationality', application.nationality], ['dateOfBirth', application.date_of_birth],
         ['residenceApplicationDate', application.residence_application_date],
-        ['universityRegistrationDate', application.university_registration_date],
         ...(application.application_type === 'transition' ? [
             ['transitionForeignId', application.transition_foreign_id],
             ['transitionCardSerial', application.transition_card_serial],
@@ -1183,10 +1152,11 @@ function isReviewFieldValid(field, application) {
     if (field === 'student_phone') return isValidPhoneNumber(value) && value.trim().length <= 40;
     if (field === 'address_evidence_type') return ACCOMMODATION_TYPES.includes(value);
     if (field === 'date_of_birth') {
-        return calculateUnder18(value, application.residence_application_date) !== null;
+        return calculateUnder18(value, application.residence_application_date || readIstanbulDate()) !== null;
     }
-    if (['residence_application_date', 'university_registration_date'].includes(field)) {
-        return typeof value === 'string' && parseDateOfBirthInput(value) !== null && value <= readIstanbulDate();
+    if (field === 'residence_application_date') {
+        return !requiresResidenceApplicationDate(application.date_of_birth)
+            || (typeof value === 'string' && parseDateOfBirthInput(value) !== null && value <= readIstanbulDate());
     }
     if (field === 'student_number') return typeof value === 'string' && value.trim().length > 0 && value.length <= 64;
     if (field === 'transition_foreign_id') return /^\d{11}$/u.test(value || '');
@@ -1206,7 +1176,6 @@ export function getReviewReadiness(application, requirements, uploads = {}, dele
         ['first_name', 'firstName', 1], ['last_name', 'lastName', 1], ['passport_number', 'passportNumber', 1],
         ['nationality', 'nationality', 1], ['date_of_birth', 'dateOfBirth', 1],
         ['residence_application_date', 'residenceApplicationDate', 1],
-        ['university_registration_date', 'universityRegistrationDate', 1]
     ];
     const issues = fields.filter(([field]) => !isReviewFieldValid(field, application))
         .map(([, messageKey, step]) => ({ kind: 'field', step, code: null, messageKey }));
@@ -1223,8 +1192,8 @@ export function getReviewReadiness(application, requirements, uploads = {}, dele
     listMissingDocumentAnswers(application).forEach((field) => {
         issues.push({ kind: 'field', step: 1, code: null, messageKey: DOCUMENT_QUESTION_KEYS[field] });
     });
-    const gssDeadline = calculateGssRegistrationDeadline(application.university_registration_date);
-    if (application.insurance_basis === 'gss_pending' && (!gssDeadline || readIstanbulDate() > gssDeadline)) {
+    const gssDeadline = calculateGssRegistrationDeadline(CURRENT_ACADEMIC_YEAR_START_DATE);
+    if (application.insurance_basis === 'gss_pending' && gssDeadline && readIstanbulDate() > gssDeadline) {
         issues.push({ kind: 'field', step: 1, code: null, messageKey: 'gssDeadlineExpired' });
     }
     if (!isFingerprintUploadEligible(application)) {
@@ -1317,28 +1286,6 @@ function createProgress(document, step) {
     return list;
 }
 
-function createPreferenceWarningBanner(document, state, messages) {
-    const banner = document.createElement('div');
-    banner.className = 'application-notification-preference-banner';
-    banner.setAttribute('role', state.preferenceWarning.status === 'failed' ? 'alert' : 'status');
-    banner.setAttribute('aria-live', 'polite');
-    if (state.preferenceWarning.status === 'failed') {
-        const text = createTranslatedElement(document, 'p', 'whatsappDraftSavedPreferenceFailed', messages.whatsappDraftSavedPreferenceFailed);
-        const retryBtn = createButton(
-            document,
-            messages,
-            'whatsappRetryPreferenceAction',
-            'preference-retry',
-            'application-button application-button-secondary'
-        );
-        banner.append(text, retryBtn);
-    } else if (state.preferenceWarning.status === 'saved') {
-        const text = createTranslatedElement(document, 'p', 'whatsappPreferenceSaved', messages.whatsappPreferenceSaved);
-        banner.append(text);
-    }
-    return banner;
-}
-
 function renderPrivacyNoticeUnavailable(root) {
     const document = root.ownerDocument;
     const messages = readMessages(document);
@@ -1407,9 +1354,6 @@ function renderWizard(root, state) {
         if (!state.application.reference_number) state.application.reference_number = referenceNumber;
         panel.append(createReferenceBanner(document, state, messages));
     }
-    if (state.preferenceWarning) {
-        panel.append(createPreferenceWarningBanner(document, state, messages));
-    }
     let errorElement = null;
     if (state.errorKey) {
         errorElement = createTranslatedElement(document, 'p', state.errorKey, messages[state.errorKey]);
@@ -1425,7 +1369,7 @@ function renderWizard(root, state) {
     }
     state.root = root;
     if (state.step === 0) {
-        stage.append(createContactStep(document, state.application, state.formValues, state, state.api));
+        stage.append(createContactStep(document, state.application, state.formValues));
         if (!state.application) {
             stage.append(createResumeWithCredentialsSection(document, state, messages));
         }
@@ -1448,7 +1392,9 @@ function renderWizard(root, state) {
         }
         state._focusSubmissionConfirmation = false;
     } else if (state._focusStepHeading) {
-        heading.focus();
+        heading.focus({ preventScroll: true });
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
         state._focusStepHeading = false;
     }
 }
@@ -1560,7 +1506,7 @@ function readVisibleFields(root, application = {}) {
             fields.date_of_birth = normalizedDate || (input.value.trim() ? application.date_of_birth || '' : '');
             return;
         }
-        if (['residence_application_date', 'university_registration_date'].includes(input.name)) {
+        if (input.name === 'residence_application_date') {
             const normalizedDate = parseDateOfBirthInput(input.value);
             fields[input.name] = normalizedDate || (input.value.trim() ? application[input.name] || '' : '');
             return;
@@ -1588,7 +1534,6 @@ function buildAutosaveValues(fields) {
     values.transition_contact_preference = fields.transition_contact_preference ?? null;
     values.transition_change_province = fields.transition_change_province ?? null;
     values.residence_application_date = fields.residence_application_date ?? '';
-    values.university_registration_date = fields.university_registration_date ?? '';
     DOCUMENT_ANSWER_FIELDS.forEach((field) => { values[field] = fields[field] || null; });
     RESIDENCE_FIELDS.forEach((field) => { values[field] = fields[field] ?? ''; });
     return values;
@@ -1814,7 +1759,6 @@ async function saveStep(root, state, api) {
     state.isAdvancing = true;
     let failureStage = 'application_save';
     try {
-        const isInitialDraftCreation = (state.step === 0 && !state.application);
         if (state.step === 0 && !state.application) {
             failureStage = 'draft_creation';
             state.application = await api.createApplicationDraft(createContactDraft(fields, state.privacyNotice?.version));
@@ -1836,25 +1780,6 @@ async function saveStep(root, state, api) {
             state.application = await api.acceptCurrentContactAcknowledgement(version);
             if (!state.application.contact_acknowledgement?.accepted_current) {
                 throw Object.assign(new Error('Contact acknowledgement was not confirmed.'), { code: 'CONTACT_ACKNOWLEDGEMENT_REQUIRED' });
-            }
-        }
-        if (state.step === 0 && isInitialDraftCreation && fields.whatsapp_opt_in === true && typeof api.updateCurrentNotificationPreferences === 'function') {
-            try {
-                const locale = root.ownerDocument?.documentElement?.lang || 'tr';
-                const response = await api.updateCurrentNotificationPreferences({
-                    whatsapp_opt_in: true,
-                    consent_version: WHATSAPP_CONSENT_VERSION,
-                    language: locale
-                });
-                const parsed = parseNotificationPreferences(response, state.application?.id);
-                if (parsed.isValidContract && parsed.isVerified && parsed.effectiveWhatsappOptIn) {
-                    state.notificationPreference = parsed;
-                    state.preferenceWarning = null;
-                } else {
-                    state.preferenceWarning = { status: 'failed' };
-                }
-            } catch {
-                state.preferenceWarning = { status: 'failed' };
             }
         }
         if (state.step === 1 && !canContinueResidenceStep(form, state.application)) {
@@ -1907,52 +1832,13 @@ async function saveStep(root, state, api) {
 async function handlePrevious(root, state) {
     if (state.isAdvancing) return;
     if (state.step <= 0) return;
-    if (state.step === 1 && state.autosave) {
-        scheduleCurrentFields(root, state);
-        state.isAdvancing = true;
-        const saved = await state.autosave.flush();
-        state.isAdvancing = false;
-        if (!saved) {
-            state.errorKey = 'autosaveFailed';
-            state._focusError = true;
-            renderWizard(root, state);
-            return;
-        }
-    }
     state.formValues = readVisibleFields(root, state.application || {});
+    if (state.step === 1 && state.autosave) state.autosave.schedule(buildAutosaveValues(state.formValues));
     state.step -= 1;
     state._animateNextRender = true;
     state.errorKey = null;
     state._focusStepHeading = true;
     renderWizard(root, state);
-}
-
-async function retryNotificationPreference(root, state, api) {
-    if (!api?.updateCurrentNotificationPreferences || !state.application) return;
-    const button = root.querySelector('[data-action="preference-retry"]');
-    if (button) {
-        button.disabled = true;
-        button.setAttribute('aria-busy', 'true');
-    }
-    try {
-        const locale = root.ownerDocument?.documentElement?.lang || 'tr';
-        const response = await api.updateCurrentNotificationPreferences({
-            whatsapp_opt_in: true,
-            consent_version: WHATSAPP_CONSENT_VERSION,
-            language: locale
-        });
-        const parsed = parseNotificationPreferences(response, state.application?.id);
-        if (parsed.isValidContract && parsed.isVerified && parsed.effectiveWhatsappOptIn) {
-            state.notificationPreference = parsed;
-            state.preferenceWarning = { status: 'saved' };
-        } else {
-            state.preferenceWarning = { status: 'failed' };
-        }
-    } catch {
-        state.preferenceWarning = { status: 'failed' };
-    } finally {
-        renderWizard(root, state);
-    }
 }
 
 async function handleWizardClick(root, state, api, event) {
@@ -1975,7 +1861,6 @@ async function handleWizardClick(root, state, api, event) {
         renderWizard(root, state);
     }
     if (button.dataset.action === 'submit-application') await submitApplication(root, state, api);
-    if (button.dataset.action === 'preference-retry') await retryNotificationPreference(root, state, api);
     if (button.dataset.action === 'document-retry' && code) await runUploadTask(code, state.uploads[code], state, api, root, { isRetry: true });
     if (button.dataset.action === 'document-delete' && code) await handleDelete(root, state, api, code);
     if (button.dataset.action === 'document-cancel' && code) state.uploads[code]?.abortController?.abort();
@@ -2017,8 +1902,12 @@ function canCreateContactDraft(form) {
 
 function handleWizardInput(root, state, api, event) {
     const target = event?.target;
+    if (target?.name === 'passport_number' && state.errorKey === 'passportIdentityAlreadyActive') {
+        state.errorKey = null;
+        root.querySelector('[role="alert"][data-i18n="passportIdentityAlreadyActive"]')?.remove();
+    }
     if (target instanceof root.ownerDocument.defaultView.HTMLInputElement
-        && ['date_of_birth', 'residence_application_date', 'university_registration_date'].includes(target.name)) {
+        && ['date_of_birth', 'residence_application_date'].includes(target.name)) {
         applyDateInputMask(target);
     }
     state.hasUnsubmittedFieldChanges = true;
@@ -2069,10 +1958,6 @@ function handleWizardInput(root, state, api, event) {
             }
         }
         updateContactContinueButton(root);
-        const prefField = root.querySelector('.notification-preference-group');
-        if (prefField && typeof prefField.syncPhone === 'function') {
-            prefField.syncPhone(state.formValues.student_phone);
-        }
         return;
     }
     if (state.step === 1) {
@@ -2080,12 +1965,11 @@ function handleWizardInput(root, state, api, event) {
         const messages = readMessages(root.ownerDocument);
         const birthDate = updateDateOfBirthValidity(dateInput, messages);
         const residenceDateInput = root.querySelector('[name="residence_application_date"]');
-        const registrationDateInput = root.querySelector('[name="university_registration_date"]');
         const residenceDate = parseDateOfBirthInput(residenceDateInput?.value || '');
         const ageAnswer = calculateUnder18(birthDate, residenceDate || readIstanbulDate());
         const ageField = root.querySelector('[name="is_under_18"]');
         if (ageField) ageField.value = ageAnswer === null ? '' : String(ageAnswer);
-        [residenceDateInput, registrationDateInput].filter(Boolean).forEach((dateInput) => {
+        [residenceDateInput].filter(Boolean).forEach((dateInput) => {
             updatePolicyDateValidity(dateInput, messages);
         });
     }
@@ -2118,13 +2002,13 @@ function handleWizardChange(root, state, api, event) {
         const birthDate = parseDateOfBirthInput(input.value);
         if (birthDate) input.value = formatDateOfBirthInput(birthDate);
     }
-    if (['residence_application_date', 'university_registration_date'].includes(input.name)) {
+    if (input.name === 'residence_application_date') {
         const dateValue = parseDateOfBirthInput(input.value);
         if (dateValue) input.value = formatDateOfBirthInput(dateValue);
     }
     handleWizardInput(root, state, api, event);
     if (['application_type', 'address_evidence_type', 'date_of_birth', 'residence_application_date',
-        'university_registration_date', ...DOCUMENT_ANSWER_FIELDS].includes(input.name)) {
+        ...DOCUMENT_ANSWER_FIELDS].includes(input.name)) {
         state.errorKey = null;
         renderWizard(root, state);
         void persistRequirementSelection(root, state, api);
@@ -2157,7 +2041,6 @@ export async function initializeApplicationWizard(root, api, options = {}) {
         hasUnsubmittedFieldChanges: false,
         uploads: {},
         deleting: {},
-        notificationPreference: null,
         _animateNextRender: true,
         navigateHome: (path) => root.ownerDocument.defaultView.location.assign(path),
         navigateToTracking: typeof api.navigateToTracking === 'function'
@@ -2224,13 +2107,6 @@ export async function initializeApplicationWizard(root, api, options = {}) {
         state.step = state.application.status === 'submitted' ? 4
             : (state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0);
         state.autosave = createAutosave(state, api, root);
-        if (typeof api.readCurrentNotificationPreferences === 'function') {
-            try {
-                state.notificationPreference = await api.readCurrentNotificationPreferences();
-            } catch {
-                // Non-fatal if preference read fails
-            }
-        }
         await refreshRequirements(state, api);
     } catch (error) {
         state.errorKey = error.code === 'APPLICATION_SESSION_REQUIRED' ? null : 'applicationLoadFailed';

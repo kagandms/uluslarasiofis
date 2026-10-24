@@ -10,7 +10,7 @@ async function createWizard(overrides = {}) {
         student_number: 'CONDITIONAL-UI', student_email: 'test@example.edu', student_phone: '+905551112233',
         first_name: 'Test', last_name: 'Student', passport_number: 'P1234', nationality: 'Turkish',
         date_of_birth: '2000-01-01', is_under_18: 0, fingerprint_status: 'registered', fingerprint_code: 'FP-1',
-        residence_application_date: '2026-10-23', university_registration_date: '2026-09-01',
+        residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01',
         insurance_basis: 'system_verified',
         contact_acknowledgement: { accepted_current: true }, declaration: { accepted_current: false }, ...overrides };
     const api = {

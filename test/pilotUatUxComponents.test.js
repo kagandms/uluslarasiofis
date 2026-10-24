@@ -138,7 +138,7 @@ test('review readiness requires declaration but does not require a clean scan ve
         student_number: 'SYN-1', student_email: 'synthetic@example.test', student_phone: '+905551112233',
         application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', first_name: 'Test', last_name: 'Student',
         passport_number: 'P-1', nationality: 'Türkiye', date_of_birth: '2000-01-01',
-        residence_application_date: '2026-10-23', university_registration_date: '2026-09-01', is_under_18: 0,
+        residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01', is_under_18: 0,
         fingerprint_status: 'registered', fingerprint_code: 'FP-1', contact_acknowledgement: { accepted_current: true },
         declaration: { accepted_current: false }
     };
