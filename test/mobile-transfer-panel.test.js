@@ -20,9 +20,12 @@ function createFixture(context, seconds = 3600, options = {}) {
     installGlobals(context, dom.window);
     const panel = dom.window.document.querySelector('main');
     const fixture = { dom, panel, clock: { now: 1_800_000_000_000 }, intervals: new Map(), requests: [],
+        timeouts: new Map(),
         photos: [], imported: [], downloadMetrics: { active: 0, max: 0 }, downloadDelays: new Map(),
         transferCount: 0, batchCount: 0, activeBatchId: null,
+        wait: delay => new Promise(resolve => realSetTimeout(resolve, delay)),
         phonePaired: options.phonePaired === true, pending: options.pending === true };
+    const realSetTimeout = globalThis.setTimeout.bind(globalThis);
     let timerId = 0;
     context.mock.method(Date, 'now', () => fixture.clock.now);
     context.mock.method(globalThis, 'setInterval', (callback, delay) => {
@@ -30,6 +33,11 @@ function createFixture(context, seconds = 3600, options = {}) {
         return timerId;
     });
     context.mock.method(globalThis, 'clearInterval', id => fixture.intervals.delete(id));
+    context.mock.method(globalThis, 'setTimeout', (callback, delay) => {
+        fixture.timeouts.set(++timerId, { callback, delay });
+        return timerId;
+    });
+    context.mock.method(globalThis, 'clearTimeout', id => fixture.timeouts.delete(id));
     context.mock.method(QRCode, 'toCanvas', async () => {});
     context.mock.method(globalThis, 'fetch', async (path, request = {}) => {
         const method = request.method || 'GET';
@@ -63,7 +71,7 @@ function createFixture(context, seconds = 3600, options = {}) {
                 fixture.downloadMetrics.active += 1;
                 fixture.downloadMetrics.max = Math.max(fixture.downloadMetrics.max, fixture.downloadMetrics.active);
                 try {
-                    await new Promise(resolve => setTimeout(resolve, fixture.downloadDelays.get(photoId) || 0));
+                    await new Promise(resolve => realSetTimeout(resolve, fixture.downloadDelays.get(photoId) || 0));
                     return new Response(new Uint8Array([1, 2, 3]));
                 } finally { fixture.downloadMetrics.active -= 1; }
             }
@@ -84,6 +92,13 @@ async function tick(fixture, delay) {
     await settle();
 }
 
+async function tickTimeout(fixture, delay) {
+    const matching = [...fixture.timeouts.entries()].filter(([, timeout]) => timeout.delay === delay);
+    for (const [id] of matching) fixture.timeouts.delete(id);
+    for (const [, timeout] of matching) timeout.callback();
+    for (let attempt = 0; attempt < 5; attempt += 1) await settle();
+}
+
 test('countdown uses the server deadline and updates locally', async (context) => {
     const fixture = createFixture(context);
     fixture.button.click();
@@ -94,6 +109,14 @@ test('countdown uses the server deadline and updates locally', async (context) =
 
     assert.equal(fixture.countdown.textContent, 'QR kalan süre: 59:42');
     assert.equal(fixture.requests.filter(request => request.path === '/api/staff/mobile-transfers').length, 1);
+});
+
+test('an unopened QR creates no photo polling request', async (context) => {
+    const fixture = createFixture(context);
+    await settle();
+
+    assert.equal(fixture.timeouts.size, 0);
+    assert.equal(fixture.requests.length, 0);
 });
 
 test('an earlier server deadline is shown and warns during its final five minutes', async (context) => {
@@ -111,6 +134,7 @@ test('the paired transfer is reused and a new student batch opens on the next mo
     const fixture = createFixture(context, 3600, { phonePaired: true });
     fixture.button.click();
     await settle();
+    assert.ok([...fixture.timeouts.values()].some(timeout => timeout.delay === 3000));
     const transferId = fixture.session.getSnapshot().transfer.id;
     fixture.panel.remove();
     await settle();
@@ -147,8 +171,9 @@ test('only active-batch photos are imported and acknowledged', async (context) =
     fixture.button.click();
     await settle();
     fixture.photos.push({ id: 'photo-1', byte_size: 3 });
-    assert.ok([...fixture.intervals.values()].some(interval => interval.delay === 1000));
-    await tick(fixture, 1000);
+    assert.ok([...fixture.timeouts.values()].some(timeout => timeout.delay === 15000));
+    await tickTimeout(fixture, 15000);
+    await fixture.wait(30);
 
     assert.equal(fixture.imported.length, 1);
     assert.equal(fixture.imported[0].isValidatedTransferPhoto, true);
@@ -162,7 +187,8 @@ test('pending photos download two at a time while the PC import order stays stab
     fixture.photos.push({ id: 'photo-1', byte_size: 3 }, { id: 'photo-2', byte_size: 3 }, { id: 'photo-3', byte_size: 3 });
     fixture.downloadDelays.set('photo-1', 20);
 
-    await tick(fixture, 1000);
+    await tickTimeout(fixture, 15000);
+    await fixture.wait(30);
 
     assert.equal(fixture.downloadMetrics.max, 2);
     assert.deepEqual(fixture.imported.map(file => file.name), [
@@ -197,7 +223,7 @@ test('ending a transfer stops PC requests and requires a newly created QR', asyn
     endButton.click();
     await settle();
     const requestCount = fixture.requests.length;
-    await tick(fixture, 1000);
+    await tick(fixture, 3000);
 
     assert.equal(fixture.session.getSnapshot().transfer, null);
     assert.equal(fixture.requests.length, requestCount);
@@ -233,7 +259,8 @@ test('ending a transfer preserves files already imported into the PC', async (co
     fixture.button.click();
     await settle();
     fixture.photos.push({ id: 'photo-1', byte_size: 3 });
-    await tick(fixture, 1000);
+    await tickTimeout(fixture, 15000);
+    await fixture.wait(10);
     const importedFile = fixture.imported[0];
 
     fixture.panel.querySelector('[data-action="end-transfer"]').click();

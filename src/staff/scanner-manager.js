@@ -1,3 +1,6 @@
+const QUEUED_POLL_INTERVAL_MS = 15_000;
+const IDLE_POLL_INTERVAL_MS = 300_000;
+
 async function fetchScanner(path, options = {}) {
     const response = await fetch(`/api/staff/scanner/${path}`, { credentials: 'same-origin', ...options });
     if (!response.ok) throw new Error('Tarama durumu okunamadı.');
@@ -155,7 +158,7 @@ export function initializeScannerManager(root, api = createScannerApi()) {
             detailsRoot.append(cleanText);
         }
 
-        schedulePoll(backlog > 0 ? 6_000 : 30_000);
+        schedulePoll(backlog > 0 ? QUEUED_POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS);
     }
 
     let pollTimer = null;
@@ -184,7 +187,7 @@ export function initializeScannerManager(root, api = createScannerApi()) {
             const err = document.createElement('p');
             err.textContent = 'Tarama durumu alınamadı. Yenileyin; belgeler güvenli kabul edilmedi.';
             detailsRoot.append(err);
-            schedulePoll(30_000);
+            schedulePoll(IDLE_POLL_INTERVAL_MS);
         } finally {
             refresh.disabled = false;
         }

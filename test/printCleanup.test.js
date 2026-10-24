@@ -43,13 +43,13 @@ test('print cleanup deletes R2 object idempotently and marks the queue row compl
     assert.equal(job.cleanup_status, 'complete');
 });
 
-test('minute scheduled event runs print cleanup', async () => {
+test('15-minute scheduled event runs print cleanup', async () => {
     const { database, environment, objects } = createCleanupFixture();
     // This invocation uses the real clock; retain the row while checking object cleanup.
     database.prepare('UPDATE print_jobs SET purge_after=? WHERE id=?')
         .bind(new Date(Date.now() + 24 * 60 * 60_000).toISOString(), 'print-job-1').run();
 
-    await worker.scheduled({ cron: '* * * * *' }, environment);
+    await worker.scheduled({ cron: '*/15 * * * *' }, environment);
 
     const job = database.prepare('SELECT storage_key,cleanup_status FROM print_jobs WHERE id=?').bind('print-job-1').first();
     assert.equal(objects.size, 0);

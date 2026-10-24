@@ -104,6 +104,25 @@ test('printer machine endpoints reject absent and invalid secrets', async () => 
     }
 });
 
+test('production printer claims leave reconciliation to the minute cron', async () => {
+    const { environment, database } = createEnvironment({ APP_ENV: 'production' });
+    const originalPrepare = database.prepare.bind(database);
+    const reconciliationQueries = [];
+    database.prepare = (sql) => {
+        if (sql.includes('UPDATE print_jobs SET status=CASE WHEN attempts')) reconciliationQueries.push(sql);
+        return originalPrepare(sql);
+    };
+    await createPrintRepository(database).heartbeat({ printerId: 'office-printer', runnerId: 'runner-1', health: 'ready',
+        printerName: 'Office Printer', settingsProtocol: 3, now: new Date().toISOString() });
+
+    const response = await worker.fetch(request('/api/printer/claim', {
+        method: 'POST', body: { runner_id: 'runner-1' }, headers: printerHeaders()
+    }), environment);
+
+    assert.equal(response.status, 200);
+    assert.equal(reconciliationQueries.length, 0);
+});
+
 test('heartbeat protocol 3 is accepted while unsupported future protocols are rejected', async () => {
     const { environment, database } = createEnvironment();
     const legacyResponse = await worker.fetch(request('/api/printer/heartbeat', {

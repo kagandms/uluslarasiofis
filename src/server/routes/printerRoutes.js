@@ -75,8 +75,8 @@ async function claim(request, repository, environment) {
     const uatJobId = uatPolicy ? await readPrintUatJobId(environment.DB) : null;
     if (uatPolicy && !uatJobId) return { job: null };
     const leaseToken = [...crypto.getRandomValues(new Uint8Array(32))].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-    await repository.reconcile(new Date().toISOString());
     const now = new Date().toISOString();
+    if (environment.APP_ENV !== 'production') await repository.reconcile(now);
     const limits = readPrintLimits(environment);
     if (!limits.isValid) return { job: null };
     const job = await repository.claim({ now, runnerId, leaseTokenHash: await hashValue(leaseToken),

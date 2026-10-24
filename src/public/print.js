@@ -452,4 +452,6 @@ for (const job of jobs) {
     if (!['submitted', 'unknown', 'failed', 'expired', 'cancelled'].includes(job.status)) void monitorJob(job);
 }
 void requestAvailability();
-window.setInterval(() => void requestAvailability(), 15_000);
+window.setInterval(() => {
+    if (!document.hidden) void requestAvailability();
+}, 30_000);

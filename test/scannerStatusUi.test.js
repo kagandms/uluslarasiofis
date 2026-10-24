@@ -6,6 +6,8 @@ test('staff scanner panel exposes backlog, stale host and controlled failed-job 
     const module = await import('../src/staff/scanner-manager.js');
     const document = new JSDOM('<section></section>').window.document;
     const root = document.querySelector('section');
+    const pollDelays = [];
+    document.defaultView.setTimeout = (_callback, delay) => { pollDelays.push(delay); return pollDelays.length; };
     const retries = [];
     const api = {
         readStatus: async () => ({ jobs: [{ status: 'queued', count: 3 }, { status: 'leased', count: 1 }],
@@ -22,6 +24,7 @@ test('staff scanner panel exposes backlog, stale host and controlled failed-job 
     assert.match(root.textContent, /Kuyrukta veya işlemde: 4/);
     assert.match(root.textContent, /Doğrulanamayan dosya: 1/);
     assert.match(root.textContent, /çevrimdışı|bayat/);
+    assert.equal(pollDelays.at(-1), 15_000);
     const retry = root.querySelector('[data-action="retry-scan"]');
     retry.click();
     assert.equal(retry.disabled, true);
@@ -34,6 +37,8 @@ test('staff scanner panel does not offer replay for deterministic unsupported co
     const module = await import('../src/staff/scanner-manager.js');
     const document = new JSDOM('<section></section>').window.document;
     const root = document.querySelector('section');
+    const pollDelays = [];
+    document.defaultView.setTimeout = (_callback, delay) => { pollDelays.push(delay); return pollDelays.length; };
     const retries = [];
     const api = {
         readStatus: async () => ({ jobs: [], runners: [], last_successful_scan: null,
@@ -47,6 +52,7 @@ test('staff scanner panel does not offer replay for deterministic unsupported co
 
     assert.match(root.textContent, /replacement akışından yüklemeli/i);
     assert.match(root.textContent, /Kuyrukta veya işlemde: 0\. Doğrulanamayan dosya: 1/);
+    assert.equal(pollDelays.at(-1), 300_000);
     assert.equal(root.querySelector('[data-action="retry-scan"]'), null);
     assert.deepEqual(retries, []);
     document.defaultView.close();

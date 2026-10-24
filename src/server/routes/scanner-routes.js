@@ -26,7 +26,7 @@ async function requireScanner(request, environment) {
 }
 
 /** @param {Request} request Claim request. @param {object} repository Scanner operations. @param {string} now UTC time. @returns {Promise<object>} One leased job or null. */
-async function claim(request, repository, now) {
+async function claim(request, repository, now, environment) {
     requireMethod(request,'POST');
     const body = await readJsonBody(request,4096);
     const allowedKeys = new Set(['runner_id', 'application_ids']);
@@ -35,7 +35,7 @@ async function claim(request, repository, now) {
     }
     const runnerId = requireScannerIdentifier(body.runner_id);
     const applicationIds = readApplicationScope(body.application_ids);
-    await repository.reconcile(now);
+    if (environment.APP_ENV === 'local') await repository.reconcile(now);
     const token = [...crypto.getRandomValues(new Uint8Array(32))].map((byte)=>byte.toString(16).padStart(2,'0')).join('');
     const job = await repository.claim({ now,runnerId,tokenHash:await hashScannerValue(token),applicationIds });
     if (!job) return { job:null };
@@ -116,7 +116,6 @@ async function heartbeat(request, repository, now) {
         throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
     }
     await repository.heartbeat({ ...body,now });
-    await repository.reconcile(now);
     return { recorded:true };
 }
 
@@ -126,11 +125,10 @@ export async function handleScannerRequest(request,environment) {
     const repository = createScannerRepository(environment.DB);
     const now = new Date().toISOString();
     const pathname = new URL(request.url).pathname;
-    if (pathname==='/api/scanner/claim') return claim(request,repository,now);
+    if (pathname==='/api/scanner/claim') return claim(request,repository,now,environment);
     if (pathname==='/api/scanner/heartbeat') return heartbeat(request,repository,now);
     if (pathname==='/api/scanner/status') {
         requireMethod(request,'GET');
-        await repository.reconcile(now);
         return repository.readStatus();
     }
     const match = pathname.match(/^\/api\/scanner\/jobs\/([a-zA-Z0-9_-]{1,64})\/(content|result)$/);
@@ -147,8 +145,8 @@ export async function handleStaffScannerRequest(request,environment,requestId) {
     const staff = await requireStaff(request,environment,['reviewer','admin']);
     const repository = createScannerRepository(environment.DB);
     const now = new Date().toISOString();
-    await repository.reconcile(now);
     if (request.method==='GET') return repository.readStatus();
+    await repository.reconcile(now);
     const body = await readJsonBody(request,1024);
     if (Object.keys(body).length!==1) throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
     const jobId = requireScannerIdentifier(body.job_id);

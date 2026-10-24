@@ -2,7 +2,7 @@ import { hasPhysicalReceiptSchema } from '../config/physical-receipt-config.js';
 
 /** Cleans bounded receipt artefacts independently of scanner/print maintenance. @param {object} environment Bindings. @param {string} now UTC time.
  * @returns {Promise<void>} Cleanup pass. @throws {Error} Failed database operation. */
-export async function cleanupPhysicalReceipts(environment,now=new Date().toISOString()) {
+export async function cleanupPhysicalReceipts(environment, now = new Date().toISOString(), options = { includeOrphanSweep: true }) {
     if (!environment.DB || !environment.DOCUMENTS) return;
     if (!await hasPhysicalReceiptSchema(environment)) return;
     const candidates=(await environment.DB.prepare(`SELECT * FROM physical_intake_receipts WHERE state='ready' AND expires_at<=?
@@ -11,7 +11,7 @@ export async function cleanupPhysicalReceipts(environment,now=new Date().toISOSt
         OR (status IN ('failed','expired') AND submission_started_at IS NOT NULL)))
         ORDER BY expires_at LIMIT 25`).bind(now,now,now).all()).results;
     for (const receipt of candidates) await purgeReceipt(environment,receipt,now);
-    await cleanupOrphanReceipts(environment,now);
+    if (options.includeOrphanSweep) await cleanupOrphanReceipts(environment, now);
 }
 
 async function purgeReceipt(environment,receipt,now) {
