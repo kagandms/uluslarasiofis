@@ -2,7 +2,7 @@
 
 Bu dosya Pazartesi hedefi için yaşayan kontrol listesidir. Her çalışma turunda ilgili maddenin durumu, tarihli kanıtı ve engeli güncellenir. “Yerelde doğrulandı” canlıda hazır olduğu anlamına gelmez.
 
-Son güncelleme: 24 Ekim 2026 11:57, Europe/Istanbul
+Son güncelleme: 24 Ekim 2026 12:07, Europe/Istanbul
 
 ## Karar
 
@@ -384,3 +384,11 @@ Bu adımlar operatör penceresi için hazırlandı. 23 Ekim'de production SQL ex
 - Güncel Git kanıtı: yerel `production` HEAD `b9b83c94…`, remote `864556d…`; branch 1/1 ayrışmış ve 80 dosya/dizin değişmiş veya yeni. Bu kanıt, birleştirilmiş/gözden geçirilmiş release SHA'sı üretmez.
 - Tam testler öğrenci başvuru, takip ve evrak yeniden yükleme kodunu doğrular; canlı tarayıcı/R2/scanner davranışını kanıtlamaz. Gerçek kaydetme hatası için öğrenci kaynaklı `requestId` ve Worker log eşleşmesi yok; ofis kapalı olduğundan gerekli uçtan uca UAT yapılamadı. `0028_student_transition_applications.sql` production'da bekliyor; çalıştırılmadı.
 - Kalan yüzdeler kanıtla değişmedi: **#1 %33, #2 %40, #3 %100, #4 %60, #5 %0; ağırlıklı ortalama %46,6, kalan %53,4**. Üretim migration'ı veya publish yapılmadı; açılış kararı **NO-GO**.
+
+### 2026-10-24 12:07 — PR doğrulaması ve bağımlılık audit düzeltmesi
+
+- Korumalı `production` dalına doğrudan yazmamak için `codex/student-launch-candidate` adayı açıldı ve draft PR #32 (`production` tabanına) oluşturuldu. İlk aday SHA `7cb79eb2…`; PR CI `npm audit --audit-level=high` adımında durduğu için sonraki CI adımları çalışmadı.
+- CI hatası yerelde tekrarlandı ve kök neden doğrulandı: `undici@7.30.0` üç güvenlik advisory aralığındaydı. `package.json` override ve lockfile `7.30.1` yamalı sürümüne alındı. Resmî undici advisories ([EventSource bellek tüketimi](https://github.com/nodejs/undici/security/advisories/GHSA-4qv8-2p9j-2685), [SRI algorithm normalizasyonu](https://github.com/nodejs/undici/security/advisories/GHSA-f72v-6w45-q472), [excessive content-encoding DoS](https://github.com/nodejs/undici/security/advisories/GHSA-xjj6-f33q-929c)) bu sürümü yamalı sürüm olarak belirtiyor. `npm audit --audit-level=high`: **0 vulnerability**.
+- Güncel bağımlılıkla tam yerel doğrulama tekrarlandı: `npm test` **1.179 toplam / 1.178 geçti / 1 atlandı / 0 başarısız**, production build ve deploy dry-run geçti; `git diff --check` temiz. Yenilenen değişiklikler PR head'ine push edilip GitHub CI yeniden çalıştırılmalı.
+- PR 0028 migration dosyasını içeriyor; korumalı code-only scope kontrolü migration değişikliğini bilinçli olarak reddeder. Ayrı config/data onayı ve review edilmiş baseline güncellemesi olmadan PR production'a merge edilmeye veya release preflight'a sunulmaya hazır değil. Migration uygulanmadı, Worker yayımlanmadı.
+- Açık canlı kanıtlar aynı: gerçek save-failure `requestId`/Worker log kök nedeni ve kurum açıkken öğrenci uçtan uca UAT'si yok. Yüzdeler değişmedi: **#1 %33, #2 %40, #3 %100, #4 %60, #5 %0; ortalama %46,6, kalan %53,4**. Açılış **NO-GO**.
