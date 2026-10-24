@@ -21,3 +21,16 @@ export function assertProductionCronSchedules(actualCrons, targetCrons, evidence
         'Production cron schedules differ from both the target and reviewed active baseline.');
     return 'reviewed-transition';
 }
+
+export function assertProductionCronTransition(actualCrons, targetCrons, evidence, activeVersion, liveWorkerSha, now = Date.now()) {
+    assert.equal(evidence?.environment, 'production');
+    assert.equal(evidence?.result, 'passed');
+    assert.match(evidence?.verified_at || '', /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/);
+    const age = now - Date.parse(evidence.verified_at);
+    assert.ok(Number.isFinite(age) && age >= 0 && age <= 24 * 60 * 60 * 1000, 'Cron baseline must be no older than 24 hours.');
+    assert.equal(activeVersion, evidence.active_worker_version, 'Active Worker differs from the cron transition baseline.');
+    assert.equal(liveWorkerSha, evidence.active_worker_sha, 'Live Worker source differs from the reviewed cron baseline.');
+    assert.deepEqual([...actualCrons].sort(), [...evidence.active_crons].sort(), 'Production cron schedules drifted before update.');
+    assert.deepEqual([...targetCrons].sort(), [...evidence.target_crons].sort(), 'Cron target differs from reviewed production configuration.');
+    return 'reviewed-transition';
+}

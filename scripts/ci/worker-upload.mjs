@@ -1,4 +1,4 @@
-// Transport for a code/assets-only release. No SDK retries, settings PATCH, SQL, or R2 API.
+// Transport permits code/assets publication and the separately gated cron-only operation. No retries, settings PATCH, SQL, or R2 API.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, extname } from 'node:path';
@@ -18,11 +18,12 @@ export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export function cloudflareClient(account, token, fetchImpl = fetch) {
     assert.match(account || '', /^[a-f0-9]{32}$/); assert.ok(token);
     return async (path, options = {}, credential = token) => {
-        const read = /^\/workers\/scripts\/goc\/(?:settings|deployments|versions|versions\/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})$/.test(path);
+        const read = /^\/workers\/scripts\/goc\/(?:settings|deployments|schedules|versions|versions\/[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})$/.test(path);
         const write = /^\/workers\/scripts\/goc\/(?:assets-upload-session|versions\?bindings_inherit=strict|deployments)$/.test(path)
             || path === '/workers/assets/upload?base64=true' || /^\/workers\/assets\/upload\/[a-f0-9]{32}$/.test(path);
-        assert.ok((!options.method || options.method === 'GET') ? read : options.method === 'POST' && write,
-            'Only reviewed goc metadata reads and code/assets publication endpoints are allowed.');
+        assert.ok((!options.method || options.method === 'GET') ? read
+            : options.method === 'POST' && write || options.method === 'PUT' && path === '/workers/scripts/goc/schedules',
+        'Only reviewed goc metadata reads, code/assets publication, and the protected cron endpoint are allowed.');
         let response, body;
         try {
             response = await fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${account}${path}`, {

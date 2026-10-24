@@ -3,7 +3,7 @@ import { readFileSync, appendFileSync } from 'node:fs';
 import { assertWorkerSettings } from './worker-settings.mjs';
 import { readOnlyVersionReport, assertPreflightVersion } from './worker-version.mjs';
 import { assertProductionRuntimeSecretMetadata } from './runtime-secret-metadata.mjs';
-import { assertProductionCronSchedules } from './cron-preflight.mjs';
+import { assertProductionCronSchedules, assertProductionCronTransition } from './cron-preflight.mjs';
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -73,11 +73,21 @@ const report = readOnlyVersionReport(
 );
 const version = report.active_version;
 const actualCrons = (schedules?.schedules || []).map(item => item.cron);
-const cronState = assertProductionCronSchedules(
-    actualCrons, production.triggers?.crons || [],
-    JSON.parse(readFileSync(new URL('../../docs/production-only-evidence/rollback-compatibility.json', import.meta.url), 'utf8')),
-    version
-);
+const targetCrons = production.triggers?.crons || [];
+let cronState;
+if (process.env.RELEASE_OPERATION === 'cron-update') {
+    const evidence = JSON.parse(readFileSync(new URL('../../docs/production-only-evidence/cron-transition-baseline.json', import.meta.url), 'utf8'));
+    const active = await cloudflare(`${workerPath}/versions/${version}`);
+    const message = active.annotations?.['workers/message'] || '';
+    const liveSha = /^release:[a-f0-9]{40}$/.test(message) ? message.slice(8) : null;
+    cronState = assertProductionCronTransition(actualCrons, targetCrons, evidence, version, liveSha);
+} else {
+    cronState = assertProductionCronSchedules(
+        actualCrons, targetCrons,
+        JSON.parse(readFileSync(new URL('../../docs/production-only-evidence/rollback-compatibility.json', import.meta.url), 'utf8')),
+        version
+    );
+}
 console.log(`Production cron schedules match ${cronState === 'target' ? 'the release target' : 'the fresh reviewed active baseline for this cron transition'}.`);
 // Safe identifiers/time only. Write even on mismatch so no Dashboard or token sharing is needed.
 console.log(`Read-only Worker version report: ${JSON.stringify(report)}`);

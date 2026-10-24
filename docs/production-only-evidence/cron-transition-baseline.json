@@ -1,0 +1,11 @@
+{
+  "environment": "production",
+  "verified_at": "2026-10-24T19:30:00Z",
+  "result": "passed",
+  "evidence_ref": "https://github.com/kagandms/uluslarasiofis/actions/runs/40125000399",
+  "active_worker_version": "6b3c5d90-12bb-4a76-8847-e5bd7272be7f",
+  "active_worker_sha": "bd3310a16eda56bbfbd24fda5ad7d5fd9496b2db",
+  "active_crons": ["* * * * *", "0 0 * * *"],
+  "target_crons": ["*/5 * * * *", "*/15 * * * *", "0 1 1 * *", "0 0 * * *"],
+  "scope": "Cron trigger settings only. No Worker code, routes, secrets, D1, R2, or print settings are changed."
+}
