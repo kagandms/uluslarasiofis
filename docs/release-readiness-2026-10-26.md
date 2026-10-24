@@ -2,11 +2,11 @@
 
 Bu dosya Pazartesi hedefi için yaşayan kontrol listesidir. Her çalışma turunda ilgili maddenin durumu, tarihli kanıtı ve engeli güncellenir. “Yerelde doğrulandı” canlıda hazır olduğu anlamına gelmez.
 
-Son güncelleme: 24 Ekim 2026 12:12, Europe/Istanbul
+Son güncelleme: 24 Ekim 2026 12:16, Europe/Istanbul
 
 ## Karar
 
-**Şu an genel öğrenci kullanımına açılış: HAZIR DEĞİL.** Üretim D1'de `0028_student_transition_applications.sql` bekliyor ve öğrenci uçtan uca canlı UAT'si yapılmadı. Beş dilli varsayılan başvuru bilgilendirmesi ve ana sayfa ilk ziyaret KVKK penceresi yerel kaynakta; build ve production dry-run geçti, ancak canlı Worker hâlâ eski sürüm ve salt-okunur GET `/api/public/applications/privacy-notice` `404` veriyor. Aktif Worker yeni aydınlatma kapısını içermiyor. Canlı başvuru POST'u gönderilmedi. `production` yerel HEAD `b9b83c94…`, remote HEAD `864556d…`; dal 1/1 ayrışmış ve çalışma ağacında 80 değişmiş/yeni girdi var. Bu değişikliklerden seçilmiş temiz bir release adayı SHA yok. Mevcut production şemasına rollback kanıtlandı; 0028 sonrası yeniden incelenmeli.
+**Şu an genel öğrenci kullanımına açılış: HAZIR DEĞİL.** Üretim D1'de `0028_student_transition_applications.sql` bekliyor ve öğrenci uçtan uca canlı UAT'si yapılmadı. Beş dilli varsayılan başvuru bilgilendirmesi ve ana sayfa ilk ziyaret KVKK penceresi artık temiz aday SHA `b18f57d39b82c40861b608a423097947cafdd0f9` içinde; GitHub Actions CI #71 exact SHA için geçti ve artifact round-trip doğrulandı. Değişiklikler draft PR #32'de, `production` tabanına (`864556d652d087a17280d35ef8e352682c333150`) incelemeye hazır. Canlı Worker hâlâ eski sürüm; son salt-okunur GET `/api/public/applications/privacy-notice` `404` verdi ve canlı başvuru POST'u gönderilmedi. Production migration/publish yapılmadı. Checkout `codex/student-launch-candidate` dalında, `origin` ile aynı SHA'da; yalnız `test-homepage/staff-lab/` untracked çalışma dosyaları dışarıda ve korunuyor. Mevcut production şemasına rollback kanıtlandı; 0028 sonrası yeniden incelenmeli.
 
 **Öncelik — öğrenci tarafı:** Açılış kararı öncelikle öğrencinin (1) başvurusunu başlatıp tamamlayabilmesi, (2) online/fiziksel başvurusunu ITU koduyla sorgulayabilmesi ve (3) istenen belgeyi güvenle yeniden yükleyip sonucunu görebilmesi üzerinden verilecek. Personel işlemleri yalnız bu yolların gerekli tetikleyicisi olduğu ölçüde UAT kapsamına girer: örneğin belge iadesi isteme ve tarama/review sonucu. Yazdırma, YKN/YÖKSİS ve geniş personel kuyruğu UAT'si öğrenci ana akışını bloke eden bir bağımlılık yoksa ikincil sıradadır.
 
@@ -399,3 +399,11 @@ Bu adımlar operatör penceresi için hazırlandı. 23 Ekim'de production SQL ex
 - Log kök nedeni: `scripts/ci/local-worker-smoke.mjs` yeni notice API'sini okumadan yeni başvuru POST'u yapıyordu; uygulama geçerli `privacy_notice_version` olmadan 409 döndürüyor. Smoke şimdi yerel `/api/public/applications/privacy-notice` GET'ini, beş locale'i ve dönen sürümle taslak oluşturmayı doğruluyor. `npm run ci:local` yerelde başarıyla tamamlandı (28 migration idempotent; altı sayfa, missing lookup, anonim 401, sentetik draft 201 ve owner reload 200).
 - Bu CI hatası production D1/Worker'a ait değildir; yalnız boş yerel D1 ve geçici yerel Worker kullanıldı. Fix adaya eklendikten sonra GitHub CI tekrar çalıştırılmalı. Üretim migration/publish yapılmadı.
 - Yüzdeler aynı kanıta bağlı: **#1 %33, #2 %40, #3 %100, #4 %60, #5 %0; ortalama %46,6, kalan %53,4**. Gerçek öğrenci save-error korelasyonu ve ofis UAT'si bekliyor; açılış **NO-GO**.
+
+### 2026-10-24 12:16 — Exact-SHA aday CI ve artifact doğrulaması
+
+- Fix commit'i `b18f57d39b82c40861b608a423097947cafdd0f9` `codex/student-launch-candidate` dalında GitHub'a ulaştı; `production` HEAD değişmedi (`864556d652d087a17280d35ef8e352682c333150`). Draft PR #32'nin açıklaması exact SHA ve son CI kanıtıyla yenilendi.
+- GitHub Actions CI run #71 (`40081071584`) exact aday SHA'da başarıyla tamamlandı: dependency audit; iki tam JavaScript regresyon koşusu; D1/R2 receipt yarış testi; scanner ve Print Agent testleri; empty-local-D1 migration + sentetik Worker smoke; production build; artifact manifest/checksum; upload/download round-trip; indirilen artifact üzerinde dry-run. `npm run ci:local` da smoke düzeltmesiyle geçti.
+- Yerel tam `npm test`: 1.179 toplam, 1.178 geçti, 1 atlandı (MacBook/ClamAV HTTPS opt-in), 0 başarısız. `npm audit --audit-level=high` sıfır açık buldu; production build/dry-run ve `git diff --check` geçti.
+- Bu sonuç kod doğrulamasıdır; production preflight/publish, D1 migration veya canlı öğrenci UAT'si değildir. PR taslak kaldı. Migration 0028 için ayrı config/data onayı ve migration sonrası rollback gözden geçirmesi, gerçek save-failure requestId/log eşleştirmesi ve kurum açıldığında öğrenci browser UAT'si açık. Öğrenci veri POST'u yapılmadı.
+- Gate yüzdeleri değişmedi: **#1 %33, #2 %40, #3 %100, #4 %60, #5 %0; ortalama %46,6, kalan %53,4**. Açılış **NO-GO**.
