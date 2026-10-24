@@ -39,12 +39,18 @@ async function reconcile(database, now) {
 /** @param {D1Database} database Binding. @param {object} input Runner identity and time. @returns {Promise<object|null>} Atomically leased job. */
 async function claim(database, input) {
     const leaseUntil = new Date(new Date(input.now).valueOf() + 300_000).toISOString();
+    const applicationScope = input.applicationIds?.length
+        ? `AND EXISTS (SELECT 1 FROM document_revisions AS scoped_revisions
+            JOIN document_records AS scoped_records ON scoped_records.id=scoped_revisions.document_record_id
+            WHERE scoped_revisions.id=document_scan_jobs.revision_id
+              AND scoped_records.application_id IN (${input.applicationIds.map(() => '?').join(',')}))`
+        : '';
     return database.prepare(`UPDATE document_scan_jobs SET status='leased',attempts=attempts+1,
         runner_id=?,lease_token_hash=?,lease_until=?,updated_at=?,object_etag=NULL,content_sha256=NULL
         WHERE id=(SELECT id FROM document_scan_jobs WHERE status='queued' AND available_at<=?
-            AND attempts<3 AND ${CURRENT_JOB} ORDER BY available_at,id LIMIT 1)
+            AND attempts<3 AND ${CURRENT_JOB} ${applicationScope} ORDER BY available_at,id LIMIT 1)
           AND status='queued' RETURNING *
-    `).bind(input.runnerId, input.tokenHash, leaseUntil, input.now, input.now).first();
+    `).bind(input.runnerId, input.tokenHash, leaseUntil, input.now, input.now, ...(input.applicationIds || [])).first();
 }
 
 /** @param {D1Database} database Binding. @param {object} input Staff authority and job. @returns {Promise<boolean>} Audited retry. */
