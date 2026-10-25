@@ -41,9 +41,17 @@ export function readOnlyVersionReport(deployments, versions) {
 
 export async function assertPreflightVersion(report, context = {}, readVersion) {
     const staged = context.staged;
+    if (context.expectedActiveReleaseSha) {
+        assert.match(context.expectedActiveReleaseSha, /^[a-f0-9]{40}$/);
+        assert.notEqual(report.active_version, context.approvedActive);
+        assert.equal(report.latest_uploaded_version, report.active_version);
+        const active = await readVersion(report.active_version);
+        assert.equal(active.annotations?.['workers/message'], `release:${context.expectedActiveReleaseSha}`);
+        return;
+    }
     if (staged) {
         // The publisher may have just staged its own version; this is never an arbitrary latest bypass.
-        assert.equal(context.operation, 'publish');
+        assert.ok(['publish', 'cron-release'].includes(context.operation));
         assert.equal(report.active_version, context.approvedActive);
         assert.match(staged, /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/);
         assert.match(context.sha || '', /^[a-f0-9]{40}$/);

@@ -5,7 +5,7 @@ import { updateProductionCronSchedules } from '../scripts/ci/update-production-c
 const activeVersion = '6b3c5d90-12bb-4a76-8847-e5bd7272be7f';
 const activeSha = 'b'.repeat(40);
 const current = ['* * * * *', '0 0 * * *'];
-const target = ['*/5 * * * *', '*/15 * * * *', '0 1 1 * *', '0 0 * * *'];
+const target = ['*/5 * * * *'];
 const evidence = {
     environment: 'production', result: 'passed', verified_at: '2026-10-24T19:30:00Z',
     active_worker_version: activeVersion, active_worker_sha: activeSha,
@@ -73,4 +73,19 @@ test('does not report success if Cloudflare read-back differs from the target', 
         return base.api(path, options);
     };
     await assert.rejects(updateProductionCronSchedules({ api, target, evidence }));
+});
+
+test('accepts only the exact newly published release when applying the cron transition', async () => {
+    const releaseSha = 'c'.repeat(40);
+    const { api, calls } = createApi();
+    const releasedApi = async (path, options = {}) => {
+        if (path.endsWith('/deployments')) return { deployments: [{ versions: [{ version_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', percentage: 100 }] }] };
+        if (path.includes('/versions/')) return { annotations: { 'workers/message': `release:${releaseSha}` } };
+        return api(path, options);
+    };
+    const result = await updateProductionCronSchedules({ api: releasedApi, target, evidence,
+        expectedReleaseSha: releaseSha, now: Date.parse('2026-10-24T19:40:00Z') });
+
+    assert.equal(result.activeVersion, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    assert.equal(calls.filter(call => call.options.method === 'PUT').length, 1);
 });
