@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { artifactDryRunPlan } from './artifact-dry-run.mjs';
 import { singleWorkerVersion } from './worker-version.mjs';
-import { verifyCodeOnlyScope } from './code-only-scope.mjs';
+import { verifyCodeOnlyScope, verifyCronReleaseScope } from './code-only-scope.mjs';
 import { cloudflareClient, readPreparedBundle, assetPlan, publishPrepared } from './worker-upload.mjs';
 import { settingsSnapshot, assertStagedVersion } from './worker-settings.mjs';
 import { checkReadOnlyHealth } from './post-deploy-healthcheck.mjs';
@@ -91,7 +91,10 @@ async function main() {
                 node('../check-production-print-secrets.mjs');
             },
             verifyLedger() { node('./check-migration-ledger.mjs'); },
-            verifyScope() { verifyCodeOnlyScope(policy.code_only_baseline_sha, sha); },
+            verifyScope() {
+                if (updateCrons) verifyCronReleaseScope(policy.code_only_baseline_sha, sha);
+                else verifyCodeOnlyScope(policy.code_only_baseline_sha, sha);
+            },
             async verifyPreservedSettings() { assert.deepEqual(settingsSnapshot(await getSettings()), settingsSnapshot(beforeSettings), 'Worker settings changed; stop and inspect.'); },
             async activeVersion() {
                 const id = singleWorkerVersion(await api('/workers/scripts/goc/deployments'));
