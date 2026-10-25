@@ -197,6 +197,27 @@ test('public ITU tracking renders a rejected application reason as plain text', 
     document.defaultView.close();
 });
 
+test('matching owner session does not hide the public rejection reason', async () => {
+    const { document, root } = createTrackingRoot();
+    const rejectionReason = 'Sentetik UAT: eksik belge';
+    const api = {
+        async lookupApplicationTracking() {
+            return { found: true, ...createTrackingDto({
+                application: { status: 'rejected', rejection_reason: rejectionReason }, documents: []
+            }) };
+        },
+        async readCurrentApplicationTracking() {
+            return createTrackingDto({ application: { status: 'rejected' }, documents: [] });
+        }
+    };
+
+    await initializeAndLookup(document, root, api);
+
+    assert.match(root.textContent, /Resmî ret gerekçesi/);
+    assert.ok(root.textContent.includes(rejectionReason));
+    document.defaultView.close();
+});
+
 test('shared lookup routes physical ITU codes to physical tracking and displays the rejection reason safely', async () => {
     const { document, root } = createTrackingRoot();
     let physicalLookups = 0;
