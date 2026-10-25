@@ -390,7 +390,7 @@ test('physical uploads never enter the online scanner and leave its pending verd
     await context.database.exec(`INSERT INTO upload_intents(id,revision_file_id,idempotency_key,expires_at,status,completed_at)
         VALUES('i','f','ik','2000-01-01T00:00:00Z','completed','2000-01-01T00:00:00Z');`);
     await registerPortPdf(context);
-    await worker.scheduled({ cron: '*/5 * * * *' }, context.environment);
+    await worker.scheduled({ cron: '*/5 * * * *', scheduledTime: new Date('2026-10-07T12:05:00.000Z') }, context.environment);
 
     const scanner = await portRequest(context, '/api/scanner/claim', {method:'POST',json:{runner_id:'synthetic'},headers:{Authorization:`Bearer ${context.environment.SCANNER_SECRET}`}});
     const { job } = await scanner.json();

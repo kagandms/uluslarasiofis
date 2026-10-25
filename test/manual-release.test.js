@@ -26,6 +26,21 @@ test('manual publisher verifies all guards and confirms exact active version/sou
     assert.deepEqual(calls, ['verifySource', 'verifyArtifact', 'verifyScope', 'preflight', 'verifyLedger', 'verifySource', 'verifyArtifact',
         'publish', 'verifyArtifact', 'verifyPreservedSettings', 'preflight', 'health', 'record']);
 });
+test('cron release updates schedules only after exact publication and health verification', async () => {
+    const { io, calls } = ports();
+    io.updateCrons = async () => { calls.push('updateCrons'); };
+    await releaseWithPorts({ enabled: true }, { ...context, updateCrons: true }, io);
+    assert.deepEqual(calls.slice(-5), ['verifyPreservedSettings', 'preflight', 'health', 'updateCrons', 'record']);
+    assert.equal(calls.at(-1), 'record');
+});
+test('cron release records a successful Worker health check and does not retry a failed cron write', async () => {
+    const { io, calls } = ports();
+    io.updateCrons = async () => { calls.push('updateCrons'); throw new Error('synthetic schedule failure'); };
+    io.record = async result => { calls.push(`record:${result.health}:${result.cron}`); };
+    await assert.rejects(releaseWithPorts({ enabled: true }, { ...context, updateCrons: true }, io));
+    assert.equal(calls.filter(name => name === 'updateCrons').length, 1);
+    assert.ok(calls.includes('record:passed:failed'));
+});
 for (const fail of ['verifySource', 'verifyArtifact', 'verifyScope', 'preflight', 'verifyLedger', 'publish', 'verifyPreservedSettings', 'health']) {
     test(`publisher stops on ${fail}; never retries or rolls back`, async () => {
         const { io, calls } = ports(fail);

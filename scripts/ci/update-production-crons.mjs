@@ -5,7 +5,7 @@ import { cloudflareClient } from './worker-upload.mjs';
 import { singleWorkerVersion } from './worker-version.mjs';
 import { assertProductionCronTransition } from './cron-preflight.mjs';
 
-export async function updateProductionCronSchedules({ api, target, evidence, now = Date.now() }) {
+export async function updateProductionCronSchedules({ api, target, evidence, now = Date.now(), expectedReleaseSha = null }) {
     const deployments = await api('/workers/scripts/goc/deployments');
     const activeVersion = singleWorkerVersion(deployments);
     const version = await api(`/workers/scripts/goc/versions/${activeVersion}`);
@@ -13,7 +13,7 @@ export async function updateProductionCronSchedules({ api, target, evidence, now
     const activeSha = /^release:[a-f0-9]{40}$/.test(message) ? message.slice(8) : null;
     const schedules = await api('/workers/scripts/goc/schedules');
     const current = (schedules?.schedules || []).map(entry => entry.cron);
-    assertProductionCronTransition(current, target, evidence, activeVersion, activeSha, now);
+    assertProductionCronTransition(current, target, evidence, activeVersion, activeSha, now, expectedReleaseSha);
     const response = await api('/workers/scripts/goc/schedules', {
         method: 'PUT', headers: { 'content-type': 'application/json' },
         body: JSON.stringify(target.map(cron => ({ cron })))
@@ -38,7 +38,7 @@ async function main() {
     const evidence = JSON.parse(readFileSync(new URL('../../docs/production-only-evidence/cron-transition-baseline.json', import.meta.url), 'utf8'));
     const api = cloudflareClient(accountId, token);
     const target = config.env.production.triggers.crons;
-    const result = await updateProductionCronSchedules({ api, target, evidence });
+    const result = await updateProductionCronSchedules({ api, target, evidence, expectedReleaseSha: process.env.RELEASE_SHA });
     console.log(`Production cron triggers updated and read back (${result.schedules.length} schedules); Worker version and application data were not changed.`);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
         `Production cron triggers verified: ${[...result.schedules].sort().join(', ')}\nWorker version: ${result.activeVersion}\n`);

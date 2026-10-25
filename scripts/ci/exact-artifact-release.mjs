@@ -10,6 +10,7 @@ import { verifyCodeOnlyScope } from './code-only-scope.mjs';
 import { cloudflareClient, readPreparedBundle, assetPlan, publishPrepared } from './worker-upload.mjs';
 import { settingsSnapshot, assertStagedVersion } from './worker-settings.mjs';
 import { checkReadOnlyHealth } from './post-deploy-healthcheck.mjs';
+import { updateProductionCronSchedules } from './update-production-crons.mjs';
 
 // One approved code/assets activation. Recovery maintenance is independent of this flow.
 export async function releaseWithPorts(policy, context, io) {
@@ -29,13 +30,23 @@ export async function releaseWithPorts(policy, context, io) {
     assert.equal(active.release_sha, context.sha, 'Published version/source annotation mismatch.');
     await io.verifyArtifact();
     try {
-        await io.verifyPreservedSettings(); await io.preflight();
+        await io.verifyPreservedSettings(); await io.preflight({ afterPublication: true });
         await io.health();
     } catch (error) {
         await io.record({ sha: context.sha, previous_version: previous.id, version: active.id, health: 'failed' });
         throw error; // No rollback, migration, restore or print job replay.
     }
-    await io.record({ sha: context.sha, previous_version: previous.id, version: active.id, health: 'passed' });
+    let cron = 'unchanged';
+    if (context.updateCrons) {
+        try {
+            await io.updateCrons(active);
+            cron = 'passed';
+        } catch (error) {
+            await io.record({ sha: context.sha, previous_version: previous.id, version: active.id, health: 'passed', cron: 'failed' });
+            throw error;
+        }
+    }
+    await io.record({ sha: context.sha, previous_version: previous.id, version: active.id, health: 'passed', cron });
 }
 
 async function main() {
@@ -43,7 +54,7 @@ async function main() {
         assert.equal(process.argv.length, 2);
         const policy = JSON.parse(readFileSync(new URL('../../config/production-publication.json', import.meta.url), 'utf8'));
         assert.equal(policy.enabled, true, 'PUBLICATION_LOCKED');
-        assert.equal(process.env.RELEASE_OPERATION, 'publish');
+        assert.ok(['publish', 'cron-release'].includes(process.env.RELEASE_OPERATION));
         assert.equal(process.env.GITHUB_EVENT_NAME, 'workflow_dispatch');
         assert.equal(process.env.GITHUB_ACTIONS, 'true');
         const sha = process.env.RELEASE_SHA, root = resolve(process.env.ARTIFACT_ROOT || '');
@@ -60,7 +71,9 @@ async function main() {
         const api = cloudflareClient(process.env.CLOUDFLARE_ACCOUNT_ID, process.env.CLOUDFLARE_API_TOKEN);
         const getSettings = () => api('/workers/scripts/goc/settings');
         let beforeSettings;
-        await releaseWithPorts(policy, { sha, approvedCurrentVersion: process.env.CURRENT_WORKER_VERSION }, {
+        const updateCrons = process.env.RELEASE_OPERATION === 'cron-release';
+        const evidence = JSON.parse(readFileSync(new URL('../../docs/production-only-evidence/cron-transition-baseline.json', import.meta.url), 'utf8'));
+        await releaseWithPorts(policy, { sha, approvedCurrentVersion: process.env.CURRENT_WORKER_VERSION, updateCrons }, {
             verifySource() {
                 const fetched = spawnSync('git', ['fetch', '--no-tags', 'origin', 'production'], { stdio: 'pipe', timeout: 30_000 });
                 assert.equal(fetched.status, 0, 'Production HEAD refresh failed.');
@@ -72,7 +85,11 @@ async function main() {
                     `${createHash('sha256').update(readFileSync(new URL(`../../${name}`, import.meta.url))).digest('hex')}  ${name}\n`).join('');
                 assert.equal(readFileSync(join(root, 'candidate-config.sha256'), 'utf8'), expected, 'Artifact config checksum mismatch.');
             },
-            preflight() { node('./cloudflare-preflight.mjs'); node('../check-production-print-secrets.mjs'); },
+            preflight({ afterPublication = false } = {}) {
+                const releaseEnv = afterPublication && updateCrons ? { EXPECTED_ACTIVE_RELEASE_SHA: sha } : {};
+                node('./cloudflare-preflight.mjs', [], releaseEnv);
+                node('../check-production-print-secrets.mjs');
+            },
             verifyLedger() { node('./check-migration-ledger.mjs'); },
             verifyScope() { verifyCodeOnlyScope(policy.code_only_baseline_sha, sha); },
             async verifyPreservedSettings() { assert.deepEqual(settingsSnapshot(await getSettings()), settingsSnapshot(beforeSettings), 'Worker settings changed; stop and inspect.'); },
@@ -114,18 +131,25 @@ async function main() {
                     });
                 } finally { rmSync(out, { recursive: true, force: true }); }
             },
+            async updateCrons() {
+                const target = config.env.production.triggers.crons;
+                await updateProductionCronSchedules({ api, target, evidence, expectedReleaseSha: sha });
+            },
             health: () => checkReadOnlyHealth(),
             record(result) {
                 const manifest_sha256 = createHash('sha256').update(readFileSync(join(root, 'candidate-artifact.json'))).digest('hex');
                 writeFileSync(join(process.env.RUNNER_TEMP, 'release-result.json'), JSON.stringify({ ...result, manifest_sha256, at: new Date().toISOString() }), { mode: 0o600 });
-                const summary = `Worker: goc | source: ${result.sha} | active version: ${result.version} | previous: ${result.previous_version} | health: ${result.health} | manifest SHA-256: ${manifest_sha256}`;
+                const summary = `Worker: goc | source: ${result.sha} | active version: ${result.version} | previous: ${result.previous_version} | health: ${result.health} | cron: ${result.cron || 'unchanged'} | manifest SHA-256: ${manifest_sha256}`;
                 console.log(summary);
                 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
             }
         });
     } catch (error) {
         if (/^Cloudflare request (?:denied|failed)/.test(error.message)) console.error(error.message);
-        console.error('Publication blocked, failed or uncertain. Inspect live version before another attempt. No automatic retry, migration, restore or rollback.'); process.exitCode = 1;
+        const failure = process.env.RELEASE_OPERATION === 'cron-release'
+            ? 'Cron release blocked, failed or uncertain.' : 'Publication blocked, failed or uncertain.';
+        console.error(`${failure} Inspect live version and cron schedules before another attempt. No automatic retry, migration, restore or rollback.`);
+        process.exitCode = 1;
     }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

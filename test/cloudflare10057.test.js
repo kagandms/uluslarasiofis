@@ -118,3 +118,17 @@ test('ordinary preflight refuses a different latest; staged preflight accepts on
     await assert.rejects(assertPreflightVersion(staged,context,async()=>({annotations:{'workers/message':'unapproved'}})));
     await assert.rejects(assertPreflightVersion({...staged,latest_uploaded_version:other},context,reader));
 });
+test('post-publication preflight accepts only the active version annotated with the exact release SHA', async () => {
+    const activeRelease = readOnlyVersionReport(deployments(candidate), versions(candidate));
+    await assertPreflightVersion(activeRelease, {
+        expectedActiveReleaseSha: sha,
+        approvedActive: active
+    }, async id => {
+        assert.equal(id, candidate);
+        return { annotations: { 'workers/message': `release:${sha}` } };
+    });
+    await assert.rejects(assertPreflightVersion(activeRelease, {
+        expectedActiveReleaseSha: 'c'.repeat(40),
+        approvedActive: active
+    }, async () => ({ annotations: { 'workers/message': `release:${sha}` } })));
+});

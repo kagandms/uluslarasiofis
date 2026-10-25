@@ -409,7 +409,7 @@ test('scheduled orphan receipt sweep runs on the monthly maintenance trigger', a
     let listCalls = 0;
     context.storage.list = async () => { listCalls += 1; return { objects: [], truncated: false }; };
 
-    await worker.scheduled({ cron: '0 1 1 * *' }, context.environment);
+    await worker.scheduled({ cron: '*/5 * * * *', scheduledTime: new Date('2026-11-01T01:00:00.000Z') }, context.environment);
 
     assert.equal(listCalls, 1);
 });

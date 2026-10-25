@@ -37,6 +37,7 @@ import { createPublicPrintUploadIntent, finalizePublicPrintUpload, readPublicPri
 import { handleStaffPrintRequest } from './routes/staffPrintRoutes.js';
 import { handlePrinterRequest, readStaffPrintStatus } from './routes/printerRoutes.js';
 import { runPrintCleanup } from './services/printCleanupService.js';
+import { getScheduledWork } from './services/scheduled-work.js';
 import { readD1UsageMetrics } from './services/d1-usage-metrics.js';
 import { handleStaffWorkHours } from './routes/staffWorkHoursRoutes.js';
 
@@ -319,14 +320,14 @@ const worker = {
         }
     },
     async scheduled(controller, environment, executionContext) {
-        const isDailyMaintenance = controller.cron === '0 0 * * *';
-        const isMonthlyReceiptSweep = controller.cron === '0 1 1 * *';
-        if (isDailyMaintenance || isMonthlyReceiptSweep) {
-            const cleanup = runReceiptCleanupSafely(environment, { includeOrphanSweep: isMonthlyReceiptSweep });
+        if (!['*/5 * * * *', '* * * * *', '*/15 * * * *', '0 0 * * *', '0 1 1 * *'].includes(controller.cron)) return;
+        const scheduledWork = getScheduledWork(controller.scheduledTime ?? Date.now());
+        if (scheduledWork.shouldRunReceiptCleanup || scheduledWork.shouldSweepReceiptOrphans) {
+            const cleanup = runReceiptCleanupSafely(environment, { includeOrphanSweep: scheduledWork.shouldSweepReceiptOrphans });
             if (executionContext?.waitUntil) executionContext.waitUntil(cleanup);
             else await cleanup;
         }
-        if (controller.cron === '*/15 * * * *') {
+        if (scheduledWork.shouldRunPrintCleanup) {
             if (environment.DB && environment.PRINT_FILES) {
                 try {
                     await runPrintCleanup(environment);
@@ -335,9 +336,8 @@ const worker = {
                     throw cleanupError;
                 }
             }
-            return;
         }
-        if (controller.cron === '*/5 * * * *') {
+        if (scheduledWork.shouldRunScannerMaintenance) {
             if (environment.APP_ENV === 'production' && environment.DB) {
                 try {
                     await createScannerRepository(environment.DB).reconcile(new Date().toISOString());
@@ -348,9 +348,8 @@ const worker = {
             }
             try { await cleanupMobileTransfers(environment); }
             catch (error) { console.error('Temporary photo cleanup failed.', { errorName: error.name }); }
-            return;
         }
-        if (!isDailyMaintenance) return;
+        if (!scheduledWork.shouldRunDailyMaintenance) return;
         if (environment.DB && environment.DOCUMENTS && typeof environment.DOCUMENTS.put === 'function') {
             try {
                 await backupD1ToR2({

@@ -6,6 +6,6 @@
   "active_worker_version": "6b3c5d90-12bb-4a76-8847-e5bd7272be7f",
   "active_worker_sha": "bd3310a16eda56bbfbd24fda5ad7d5fd9496b2db",
   "active_crons": ["* * * * *", "0 0 * * *"],
-  "target_crons": ["*/5 * * * *", "*/15 * * * *", "0 1 1 * *", "0 0 * * *"],
-  "scope": "Cron trigger settings only. No Worker code, routes, secrets, D1, R2, or print settings are changed."
+  "target_crons": ["*/5 * * * *"],
+  "scope": "The scheduled-work handler and Cron Trigger timing only. No routes, secrets, bindings, or migrations are changed; existing backup and cleanup jobs retain their current behavior and cadence."
 }

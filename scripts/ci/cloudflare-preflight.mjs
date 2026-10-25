@@ -75,12 +75,14 @@ const version = report.active_version;
 const actualCrons = (schedules?.schedules || []).map(item => item.cron);
 const targetCrons = production.triggers?.crons || [];
 let cronState;
-if (process.env.RELEASE_OPERATION === 'cron-update') {
+if (['cron-update', 'cron-release'].includes(process.env.RELEASE_OPERATION)) {
     const evidence = JSON.parse(readFileSync(new URL('../../docs/production-only-evidence/cron-transition-baseline.json', import.meta.url), 'utf8'));
     const active = await cloudflare(`${workerPath}/versions/${version}`);
     const message = active.annotations?.['workers/message'] || '';
     const liveSha = /^release:[a-f0-9]{40}$/.test(message) ? message.slice(8) : null;
-    cronState = assertProductionCronTransition(actualCrons, targetCrons, evidence, version, liveSha);
+    const publishedSha = ['cron-update', 'cron-release'].includes(process.env.RELEASE_OPERATION)
+        ? process.env.RELEASE_SHA : null;
+    cronState = assertProductionCronTransition(actualCrons, targetCrons, evidence, version, liveSha, Date.now(), publishedSha);
 } else {
     cronState = assertProductionCronSchedules(
         actualCrons, targetCrons,
@@ -96,7 +98,8 @@ if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMM
 await assertPreflightVersion(report, {
     staged: process.env.EXPECTED_STAGED_WORKER_VERSION,
     operation: process.env.RELEASE_OPERATION, approvedActive: process.env.CURRENT_WORKER_VERSION,
-    sha: process.env.RELEASE_SHA
+    sha: process.env.RELEASE_SHA,
+    expectedActiveReleaseSha: process.env.EXPECTED_ACTIVE_RELEASE_SHA
 }, id => cloudflare(`${workerPath}/versions/${id}`));
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `current_version=${version}\n`);
 

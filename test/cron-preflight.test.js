@@ -4,7 +4,7 @@ import { assertProductionCronSchedules, assertProductionCronTransition } from '.
 
 const activeVersion = 'c0a250d6-4ef8-4eff-bd27-b40246b5a5f9';
 const previousCrons = ['* * * * *', '0 0 * * *'];
-const targetCrons = ['*/5 * * * *', '*/15 * * * *', '0 1 1 * *', '0 0 * * *'];
+const targetCrons = ['*/5 * * * *'];
 const now = Date.parse('2026-10-24T18:40:00Z');
 const evidence = {
     environment: 'production', result: 'passed', verified_at: '2026-10-24T15:23:24Z',
@@ -48,4 +48,20 @@ test('accepts the pinned cron-only transition and rejects source, version, sched
         cronBaseline.active_worker_version, cronBaseline.active_worker_sha));
     assert.throws(() => assertProductionCronTransition(previousCrons, ['*/10 * * * *'], cronBaseline,
         cronBaseline.active_worker_version, cronBaseline.active_worker_sha));
+});
+
+test('accepts the exact published release only while the old cron baseline remains unchanged', () => {
+    const cronBaseline = {
+        environment: 'production', result: 'passed', verified_at: '2026-10-24T19:30:00Z',
+        active_worker_version: activeVersion, active_worker_sha: 'b'.repeat(40),
+        active_crons: previousCrons, target_crons: targetCrons
+    };
+    const releasedVersion = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const releaseSha = 'c'.repeat(40);
+    assert.equal(assertProductionCronTransition(previousCrons, targetCrons, cronBaseline,
+        releasedVersion, releaseSha, Date.parse('2026-10-24T19:40:00Z'), releaseSha), 'reviewed-transition');
+    assert.throws(() => assertProductionCronTransition(['* * * * *'], targetCrons, cronBaseline,
+        releasedVersion, releaseSha, Date.now(), releaseSha));
+    assert.throws(() => assertProductionCronTransition(previousCrons, targetCrons, cronBaseline,
+        releasedVersion, 'd'.repeat(40), Date.now(), releaseSha));
 });

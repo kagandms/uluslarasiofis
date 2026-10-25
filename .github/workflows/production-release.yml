@@ -9,9 +9,9 @@ on:
         type: string
         required: true
       operation:
-        description: Preflight, publish the Worker, or update cron triggers after Production approval
+        description: Preflight, publish the Worker, update triggers, or publish code and reviewed cron settings together
         type: choice
-        options: [preflight, publish, cron-update]
+        options: [preflight, publish, cron-update, cron-release]
         default: preflight
         required: true
 
@@ -111,7 +111,7 @@ jobs:
           node scripts/ci/artifact-dry-run.mjs
           node scripts/ci/candidate-artifact.mjs verify "$RELEASE_SHA" "$ARTIFACT_ROOT"
       - name: Publish exact tested artifact once and verify active version and health
-        if: ${{ inputs.operation == 'publish' }}
+        if: ${{ inputs.operation == 'publish' || inputs.operation == 'cron-release' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

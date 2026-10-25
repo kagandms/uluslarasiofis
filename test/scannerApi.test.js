@@ -271,7 +271,7 @@ test('production five-minute schedule repairs the scanner queue', async () => {
         return originalPrepare(sql);
     };
 
-    await worker.scheduled({ cron: '*/5 * * * *' }, environment);
+    await worker.scheduled({ cron: '*/5 * * * *', scheduledTime: new Date('2026-10-07T12:05:00.000Z') }, environment);
 
     assert.equal(reconciliationQueries.length, 1);
 });
