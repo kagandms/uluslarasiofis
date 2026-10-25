@@ -88,6 +88,8 @@ jobs:
           node scripts/ci/candidate-artifact.mjs verify "$RELEASE_SHA" "$ARTIFACT_ROOT"
           sha256sum --check "$ARTIFACT_ROOT/candidate-config.sha256"
       - name: Enforce code-only release scope
+        env:
+          RELEASE_OPERATION: ${{ inputs.operation }}
         run: node scripts/ci/code-only-scope.mjs
       - name: Verify Cloudflare token, account, Worker bindings, runtime secrets and cron
         id: cloudflare

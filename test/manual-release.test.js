@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { releaseWithPorts } from '../scripts/ci/exact-artifact-release.mjs';
-import { verifyCodeOnlyScope, protectedPaths } from '../scripts/ci/code-only-scope.mjs';
+import { verifyCodeOnlyScope, verifyCronReleaseScope, protectedPaths } from '../scripts/ci/code-only-scope.mjs';
 import { singleWorkerVersion } from '../scripts/ci/worker-version.mjs';
 import { cloudflareClient, inheritWorkerMetadata, publishPrepared, uploadAssets, readPreparedBundle, assetPlan, digest } from '../scripts/ci/worker-upload.mjs';
 import { assertWorkerSettings, settingsSnapshot, assertStagedVersion } from '../scripts/ci/worker-settings.mjs';
@@ -80,6 +80,21 @@ test('code-only scope rejects schema/storage/secret configuration edits against 
         }
         assert.throws(()=>verifyCodeOnlyScope('invalid',baseline,run));
     }finally{rmSync(root,{recursive:true,force:true});}
+});
+test('cron release scope permits only the reviewed cron arrays and rejects all other config changes',()=>{
+    const root=mkdtempSync(join(tmpdir(),'cron-release-scope-'));const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',stdio:'pipe'}).trim();
+    const config={name:'uluslarasiofis-local',triggers:{crons:['*/5 * * * *','*/15 * * * *','0 1 1 * *','0 0 * * *']},vars:{APP_ENV:'local'},env:{
+        staging:{triggers:{crons:[]},vars:{APP_ENV:'staging'}},production:{name:'goc',triggers:{crons:['*/5 * * * *','*/15 * * * *','0 1 1 * *','0 0 * * *']},vars:{APP_ENV:'production'}}}};
+    const commit=message=>git('-c','user.name=Synthetic','-c','user.email=ci@example.invalid','commit','-m',message);
+    try {
+        git('init','--initial-branch=production');writeFileSync(join(root,'wrangler.jsonc'),JSON.stringify(config));git('add','.');commit('baseline');
+        const baseline=git('rev-parse','HEAD');
+        const candidate=structuredClone(config);candidate.triggers.crons=['*/5 * * * *'];candidate.env.production.triggers.crons=['*/5 * * * *'];
+        writeFileSync(join(root,'wrangler.jsonc'),JSON.stringify(candidate));git('add','.');commit('cron-only change');
+        verifyCronReleaseScope(baseline,git('rev-parse','HEAD'),args=>git(...args));
+        candidate.vars.APP_ENV='unsafe';writeFileSync(join(root,'wrangler.jsonc'),JSON.stringify(candidate));git('add','.');commit('unexpected worker config change');
+        assert.throws(()=>verifyCronReleaseScope(baseline,git('rev-parse','HEAD'),args=>git(...args)));
+    } finally {rmSync(root,{recursive:true,force:true});}
 });
 test('Cloudflare transport is target-restricted, sanitizes errors and never retries even on 429/503/timeout',async()=>{
     for(const status of [403,429,503]){
