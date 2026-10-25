@@ -291,9 +291,14 @@ function renderPhysicalResult(root, payload, locale) {
 
 async function attachMatchingOwnerSession(state, api, referenceNumber, render) {
     try {
+        const publicRejectionReason = state.payload?.application?.rejection_reason;
         const ownerPayload = await api.readCurrentApplicationTracking();
         if (normalizeReferenceNumber(ownerPayload.application?.reference_number) !== normalizeReferenceNumber(referenceNumber)) return;
-        state.payload = ownerPayload;
+        state.payload = ownerPayload.application.status === 'rejected'
+            && !ownerPayload.application.rejection_reason
+            && typeof publicRejectionReason === 'string'
+            ? { ...ownerPayload, application: { ...ownerPayload.application, rejection_reason: publicRejectionReason } }
+            : ownerPayload;
         state.kind = ownerPayload.application.status === 'draft' ? 'draft' : 'ready';
         if (ownerPayload.application.status !== 'resubmission_required'
             || typeof api.readCurrentResubmissionEligibility !== 'function') return;
