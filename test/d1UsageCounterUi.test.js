@@ -105,7 +105,7 @@ test('hidden staff counter is not rendered despite the widget grid style', async
     dom.window.close();
 });
 
-test('staff counter visibility button stays beside the widget and hides its grid layout', async () => {
+test('staff counter visibility button stays in the top-right header actions and hides its grid layout', async () => {
     const staffHtml = await readFile(resolve(repositoryRoot, 'yetkili/index.html'), 'utf8');
     const homeCss = await readFile(resolve(repositoryRoot, 'src/staff/home.css'), 'utf8');
     const dom = new JSDOM(staffHtml, { url: 'https://portal.test/yetkili/' });
@@ -116,13 +116,15 @@ test('staff counter visibility button stays beside the widget and hides its grid
 
     initD1UsageCounter({ root: document, fetcher: async () => Response.json({ rowsRead: 1, limit: 5_000_000, date: '2026-10-26' }) });
 
-    const shell = document.querySelector('.d1-usage-counter-shell');
+    const headerActions = document.querySelector('.header-actions');
     const widget = document.querySelector('#d1-usage-counter');
     const toggle = document.querySelector('#d1-usage-toggle');
     const icon = () => toggle.querySelector('svg path')?.getAttribute('d');
 
-    assert.ok(shell);
-    assert.equal(toggle.parentElement, shell);
+    assert.ok(headerActions);
+    assert.equal(toggle.parentElement, headerActions);
+    assert.ok(toggle.classList.contains('btn-header'));
+    assert.ok(toggle.classList.contains('icon-only'));
     assert.equal(toggle.textContent.trim(), '');
     assert.equal(toggle.getAttribute('aria-label'), 'Sayacı gizle');
     assert.equal(icon(), 'M5 15 12 8 19 15');
