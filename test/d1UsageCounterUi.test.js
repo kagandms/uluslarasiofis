@@ -76,14 +76,66 @@ test('staff can hide the daily counter persistently and defer analytics until it
     const widget = document.querySelector('#d1-usage-counter');
     const toggle = document.querySelector('#d1-usage-toggle');
     assert.equal(widget.hidden, true);
-    assert.equal(toggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(toggle.getAttribute('aria-expanded'), 'false');
     assert.equal(requestCount, 0);
 
     toggle.click();
     await new Promise((resolveRequest) => setImmediate(resolveRequest));
     assert.equal(widget.hidden, false);
-    assert.equal(toggle.getAttribute('aria-pressed'), 'true');
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
     assert.equal(localStorage.getItem('d1-usage-counter-hidden'), 'false');
     assert.equal(requestCount, 1);
+    dom.window.close();
+});
+
+test('hidden staff counter is not rendered despite the widget grid style', async () => {
+    const staffHtml = await readFile(resolve(repositoryRoot, 'yetkili/index.html'), 'utf8');
+    const homeCss = await readFile(resolve(repositoryRoot, 'src/staff/home.css'), 'utf8');
+    const dom = new JSDOM(staffHtml, { url: 'https://portal.test/yetkili/' });
+    const { document, localStorage, getComputedStyle } = dom.window;
+    const style = document.createElement('style');
+    style.textContent = homeCss;
+    document.head.append(style);
+    localStorage.setItem('d1-usage-counter-hidden', 'true');
+
+    initD1UsageCounter({ root: document, fetcher: async () => Response.json({ rowsRead: 1, limit: 5_000_000, date: '2026-10-26' }) });
+
+    assert.equal(document.querySelector('#d1-usage-counter').hidden, true);
+    assert.equal(getComputedStyle(document.querySelector('#d1-usage-counter')).display, 'none');
+    dom.window.close();
+});
+
+test('staff counter visibility button stays beside the widget and hides its grid layout', async () => {
+    const staffHtml = await readFile(resolve(repositoryRoot, 'yetkili/index.html'), 'utf8');
+    const homeCss = await readFile(resolve(repositoryRoot, 'src/staff/home.css'), 'utf8');
+    const dom = new JSDOM(staffHtml, { url: 'https://portal.test/yetkili/' });
+    const { document, getComputedStyle } = dom.window;
+    const style = document.createElement('style');
+    style.textContent = homeCss;
+    document.head.append(style);
+
+    initD1UsageCounter({ root: document, fetcher: async () => Response.json({ rowsRead: 1, limit: 5_000_000, date: '2026-10-26' }) });
+
+    const shell = document.querySelector('.d1-usage-counter-shell');
+    const widget = document.querySelector('#d1-usage-counter');
+    const toggle = document.querySelector('#d1-usage-toggle');
+    const icon = () => toggle.querySelector('svg path')?.getAttribute('d');
+
+    assert.ok(shell);
+    assert.equal(toggle.parentElement, shell);
+    assert.equal(toggle.textContent.trim(), '');
+    assert.equal(toggle.getAttribute('aria-label'), 'Sayacı gizle');
+    assert.equal(icon(), 'M5 15 12 8 19 15');
+    assert.equal(getComputedStyle(widget).display, 'grid');
+
+    toggle.click();
+    assert.equal(widget.hidden, true);
+    assert.equal(getComputedStyle(widget).display, 'none');
+    assert.equal(toggle.getAttribute('aria-label'), 'Sayacı göster');
+    assert.equal(icon(), 'M5 9 12 16 19 9');
+
+    toggle.click();
+    assert.equal(widget.hidden, false);
+    assert.equal(getComputedStyle(widget).display, 'grid');
     dom.window.close();
 });
