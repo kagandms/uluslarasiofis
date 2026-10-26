@@ -549,6 +549,7 @@ html[dir="rtl"] .public-home-link:hover {
     background: var(--public-burgundy-soft);
 }
 .application-resume-card { margin-block-start: 1.6rem; border-inline-start: 4px solid var(--public-burgundy); }
+#application-resume-card[hidden] { display: none; }
 .application-resume-card h3,
 .application-credentials-card h3 { margin: 0; color: var(--public-burgundy); }
 .application-resume-card > p,
