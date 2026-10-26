@@ -1,4 +1,4 @@
-const QUEUED_POLL_INTERVAL_MS = 15_000;
+const QUEUED_POLL_INTERVAL_MS = 60_000;
 const IDLE_POLL_INTERVAL_MS = 300_000;
 
 async function fetchScanner(path, options = {}) {

@@ -24,7 +24,7 @@ test('staff scanner panel exposes backlog, stale host and controlled failed-job 
     assert.match(root.textContent, /Kuyrukta veya işlemde: 4/);
     assert.match(root.textContent, /Doğrulanamayan dosya: 1/);
     assert.match(root.textContent, /çevrimdışı|bayat/);
-    assert.equal(pollDelays.at(-1), 15_000);
+    assert.equal(pollDelays.at(-1), 60_000);
     const retry = root.querySelector('[data-action="retry-scan"]');
     retry.click();
     assert.equal(retry.disabled, true);
