@@ -55,8 +55,9 @@ export function initD1UsageCounter({ root = document, fetcher = fetch } = {}) {
     const renderVisibility = () => {
         widget.hidden = hidden;
         if (!toggle) return;
-        toggle.setAttribute('aria-pressed', String(!hidden));
-        toggle.textContent = hidden ? 'Sayacı göster' : 'Sayacı gizle';
+        toggle.setAttribute('aria-expanded', String(!hidden));
+        toggle.setAttribute('aria-label', hidden ? 'Sayacı göster' : 'Sayacı gizle');
+        toggle.querySelector('svg path')?.setAttribute('d', hidden ? 'M5 9 12 16 19 9' : 'M5 15 12 8 19 15');
     };
     const loadUsage = () => {
         if (hasRequested) return;
