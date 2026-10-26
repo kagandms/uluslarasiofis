@@ -7,7 +7,7 @@ function createEnvironment(options = {}) {
     return { D1_ANALYTICS_ACCOUNT_ID: 'account-id', D1_ANALYTICS_API_TOKEN: 'analytics-token', ...options };
 }
 
-test('daily D1 usage sums account-wide database groups and caches the snapshot', async () => {
+test('daily D1 usage returns account and per-database read totals, then caches the snapshot', async () => {
     let requestCount = 0;
     const cached = new Map();
     const cache = {
@@ -21,16 +21,23 @@ test('daily D1 usage sums account-wide database groups and caches the snapshot',
         assert.equal(requestBody.variables.accountTag, 'account-id');
         assert.match(requestBody.variables.date, /^\d{4}-\d{2}-\d{2}$/);
         return Response.json({ data: { viewer: { accounts: [{ d1AnalyticsAdaptiveGroups: [
-            { sum: { rowsRead: 2400 } }, { sum: { rowsRead: 3600 } }
+            { dimensions: { databaseId: 'database-production' }, sum: { rowsRead: 2400 } },
+            { dimensions: { databaseId: 'database-staging' }, sum: { rowsRead: 3600 } },
+            { dimensions: { databaseId: 'database-production' }, sum: { rowsRead: 1000 } }
         ] }] } } });
     };
 
     const first = await readD1UsageMetrics({ environment: createEnvironment(), cache, fetcher });
     const second = await readD1UsageMetrics({ environment: createEnvironment(), cache, fetcher });
 
-    assert.equal(first.rowsRead, 6000);
+    assert.equal(first.rowsRead, 7000);
+    assert.deepEqual(first.databases, [
+        { databaseId: 'database-production', rowsRead: 3400 },
+        { databaseId: 'database-staging', rowsRead: 3600 }
+    ]);
     assert.equal(first.limit, 5_000_000);
-    assert.equal(second.rowsRead, 6000);
+    assert.equal(second.rowsRead, 7000);
+    assert.deepEqual(second.databases, first.databases);
     assert.equal(requestCount, 1);
 });
 

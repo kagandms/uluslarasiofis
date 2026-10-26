@@ -633,6 +633,48 @@ test('required documents block Continue until the current server revision is fin
     document.defaultView.close();
 });
 
+test('each document slot allows multiple pages and warns against mixing document types', async () => {
+    const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
+    await submitWizard(root);
+    const passportCard = root.querySelector('[data-document-code="passport"]');
+    const input = passportCard.querySelector('input[type="file"]');
+
+    assert.equal(input.multiple, true);
+    assert.match(passportCard.textContent, /yalnızca Pasaport.*yanlış alana yüklenen dosya doğru belgeyi tamamlamaz ve Devam et etkinleşmez/iu);
+    document.defaultView.close();
+});
+
+test('multiple files selected in one document slot upload as one ordered PDF', async () => {
+    const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+    const { PDFDocument } = await import('pdf-lib');
+    let uploadedFile = null;
+    api.createStudentDocumentUploadIntent = async (code, file) => {
+        assert.equal(code, 'passport');
+        uploadedFile = file;
+        return { upload: { intent_id: 'combined-intent', method: 'PUT', url: 'https://r2.invalid', required_headers: {} } };
+    };
+    api.putStudentDocumentDirect = async () => ({ ok: true });
+    api.finalizeStudentDocumentUpload = async () => ({ document: {} });
+    api.readCurrentStudentDocumentRequirements = async () => ({ requirements: createFingerprintRequirements().map(requirement => ({
+        ...requirement, revision_number: 1, revision_status: 'submitted', upload_status: 'finalized', scan_status: 'pending'
+    })) });
+    await submitWizard(root);
+    const makePdf = async (pages) => {
+        const pdf = await PDFDocument.create();
+        for (let page = 0; page < pages; page += 1) pdf.addPage([595, 842]);
+        return new document.defaultView.File([await pdf.save()], `page-${pages}.pdf`, { type: 'application/pdf' });
+    };
+    const input = root.querySelector('[data-document-code="passport"] input[type="file"]');
+    Object.defineProperty(input, 'files', { configurable: true, value: [await makePdf(2), await makePdf(1)] });
+    input.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    for (let pass = 0; pass < 6; pass += 1) await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(uploadedFile?.type, 'application/pdf');
+    assert.equal((await PDFDocument.load(await uploadedFile.arrayBuffer())).getPageCount(), 3);
+    assert.equal(state.uploads.passport.state, 'complete');
+    document.defaultView.close();
+});
+
 test('declaration Continue uses native disabled state and rejects programmatic unchecked submit', async () => {
     const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
     let acceptedVersion = null;
@@ -1369,29 +1411,16 @@ test('an existing resubmission owner session opens the owner tracking replacemen
     document.defaultView.close();
 });
 
-test('reference and student number login routes a resubmission application to owner tracking', async () => {
+test('starting a new application no longer embeds the owner credential form', async () => {
     const { document, root } = createRoot();
-    const destinations = [];
-    let currentReads = 0;
     const api = {
-        async readCurrentApplication() {
-            currentReads += 1;
-            if (currentReads === 1) throw Object.assign(new Error('no session'), { code: 'APPLICATION_SESSION_REQUIRED' });
-            return { status: 'resubmission_required' };
-        },
-        async accessApplicationWithReference() { return {}; },
-        navigateToTracking(path) { destinations.push(path); }
+        async readCurrentApplication() { throw Object.assign(new Error('no session'), { code: 'APPLICATION_SESSION_REQUIRED' }); }
     };
-    const state = await initializeApplicationWizard(root, api);
-    root.querySelector('[name="resume_reference_number"]').value = 'ITU-TEST-1234';
-    root.querySelector('[name="resume_student_number"]').value = 'STU-12345';
-    root.querySelector('#resume-application-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setImmediate(resolve));
+    await initializeApplicationWizard(root, api);
 
-    assert.deepEqual(destinations, ['/basvurum/']);
-    assert.equal(root.querySelector('input[type="file"]'), null);
-    assert.equal(root.querySelector('[data-action="document-delete"]'), null);
-    assert.equal(root.querySelector('a[href="/basvurum/"]')?.textContent, 'Başvurumu görüntüle');
+    assert.equal(root.querySelector('#resume-application-form'), null);
+    assert.equal(root.querySelector('[name="resume_reference_number"]'), null);
+    assert.equal(root.querySelector('[name="resume_student_number"]'), null);
     document.defaultView.close();
 });
 

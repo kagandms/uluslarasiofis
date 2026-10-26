@@ -56,6 +56,23 @@
         </nav>
       </section>
 
+      <section class="public-section application-resume-card" aria-labelledby="home-resume-heading">
+        <h2 id="home-resume-heading" data-i18n="homeResumeAction">Başvuruma Devam Et</h2>
+        <p data-i18n="accessDeviceExplanation">Başvuru numaranızı ve öğrenci numaranızı girerek başvurunuza başka bir cihazdan devam edebilirsiniz.</p>
+        <form id="resume-application-form" class="application-form">
+          <label class="application-form-field" for="resume-reference-number">
+            <span data-i18n="applicationReferenceNumber">Başvuru numarası</span>
+            <input type="text" id="resume-reference-number" name="resume_reference_number" placeholder="ITU-XXXX-XXXX" maxlength="32" autocomplete="off" required aria-required="true" />
+          </label>
+          <label class="application-form-field" for="resume-student-number">
+            <span data-i18n="studentNumber">Öğrenci numarası</span>
+            <input type="text" id="resume-student-number" name="resume_student_number" maxlength="64" autocomplete="off" required aria-required="true" />
+          </label>
+          <button type="submit" class="application-button application-button-secondary" data-i18n="accessDeviceSubmit">Başvuruya Giriş Yap</button>
+          <p class="application-message resume-feedback" role="alert" aria-live="assertive"></p>
+        </form>
+      </section>
+
       <section class="public-section" aria-labelledby="process-heading">
         <h2 id="process-heading" data-i18n="homeProcessHeading">Başvuru Nasıl İlerler?</h2>
         <ol class="process-overview">

@@ -82,9 +82,8 @@ test('application tracking lookup omits student-number guidance and preserves it
     await initializeApplicationTracking(root, api);
 
     const ownerAccess = root.querySelector('.tracking-owner-access-link');
-    assert.equal(ownerAccess?.getAttribute('href'), '/basvuru/#resume-application-form');
-    assert.equal(root.querySelector('.tracking-owner-access-note'), null);
-    assert.doesNotMatch(root.textContent, /öğrenci numarasıyla durum sorgulama/u);
+    assert.equal(ownerAccess?.getAttribute('href'), '/#resume-application-form');
+    assert.match(root.querySelector('.tracking-owner-access-note')?.textContent || '', /yalnızca takip sağlar/u);
 
     const input = root.querySelector('#tracking-application-reference');
     assert.ok(input, 'Tracking ITU reference input must exist');
