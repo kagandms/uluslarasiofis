@@ -18,15 +18,18 @@ export function createDocumentRepository(database) {
                        files.cleanup_status AS current_cleanup_status, intents.status AS upload_intent_status,
                        CASE
                          WHEN EXISTS (
-                           SELECT 1 FROM document_revision_files AS cleanup_files
-                           JOIN document_revisions AS cleanup_revisions ON cleanup_revisions.id = cleanup_files.revision_id
-                           WHERE cleanup_revisions.document_record_id = records.id
+                           SELECT 1 FROM document_revisions AS cleanup_revisions
+                           -- Record-first loops reuse the existing document and revision indexes.
+                           CROSS JOIN document_revision_files AS cleanup_files
+                           WHERE cleanup_files.revision_id = cleanup_revisions.id
+                             AND cleanup_revisions.document_record_id = records.id
                              AND cleanup_files.cleanup_status = 'pending'
                          ) THEN 'pending'
                          WHEN EXISTS (
-                           SELECT 1 FROM document_revision_files AS cleanup_files
-                           JOIN document_revisions AS cleanup_revisions ON cleanup_revisions.id = cleanup_files.revision_id
-                           WHERE cleanup_revisions.document_record_id = records.id
+                           SELECT 1 FROM document_revisions AS cleanup_revisions
+                           CROSS JOIN document_revision_files AS cleanup_files
+                           WHERE cleanup_files.revision_id = cleanup_revisions.id
+                             AND cleanup_revisions.document_record_id = records.id
                              AND cleanup_files.cleanup_status = 'complete'
                          ) THEN 'complete'
                          ELSE NULL

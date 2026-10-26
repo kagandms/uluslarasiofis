@@ -46,6 +46,21 @@ function addFinalizedDocument(database, applicationId, applicationType, code, su
     return { recordId, revisionId, fileId, storageKey: `quarantine/${suffix}` };
 }
 
+test('document cleanup probes seek revisions and files by document instead of cleanup status', () => {
+    const { database } = createRepositories();
+    const plan = database.prepare(`EXPLAIN QUERY PLAN
+        SELECT 1 FROM document_revisions AS cleanup_revisions
+        CROSS JOIN document_revision_files AS cleanup_files
+        WHERE cleanup_files.revision_id = cleanup_revisions.id
+          AND cleanup_revisions.document_record_id = ?
+          AND cleanup_files.cleanup_status = ?
+    `).bind('record-id', 'pending').all().results.map((row) => row.detail).join('\n');
+
+    assert.match(plan, /document_record_id=\?/);
+    assert.match(plan, /revision_id=\?/);
+    assert.doesNotMatch(plan, /idx_document_files_cleanup_status \(cleanup_status=\?\)/);
+});
+
 test('staff usernames normalize case and outer whitespace while accepting at and hash', () => {
     assert.equal(normalizeUsername('  Shared.Admin@Office#1  '), 'shared.admin@office#1');
     assert.equal(normalizeUsername('A@B#'), 'a@b#');
