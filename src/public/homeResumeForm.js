@@ -10,7 +10,18 @@ export function initHomeResumeForm({ root = document, api, navigate, getMessage 
     const studentNumberInput = form.elements.namedItem('resume_student_number');
     const submitButton = form.querySelector('[type="submit"]');
     const feedback = form.querySelector('.resume-feedback');
+    const panel = form.closest('.application-resume-card');
+    const openButton = root.getElementById('btn-home-resume');
     const goTo = navigate || ((path) => root.defaultView.location.assign(path));
+
+    if (panel && openButton) {
+        openButton.addEventListener('click', () => {
+            const isOpening = panel.hidden;
+            panel.hidden = !isOpening;
+            openButton.setAttribute('aria-expanded', String(isOpening));
+            if (isOpening) referenceInput.focus();
+        });
+    }
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();

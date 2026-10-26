@@ -51,12 +51,13 @@
         <nav class="home-actions" data-i18n-aria-label="studentActionsNavLabel" aria-label="Öğrenci işlemleri">
           <a class="home-cta home-cta-primary" href="/basvuru/" data-i18n="homeStartAction">Başvuruya Başla</a>
           <a class="home-cta home-cta-secondary" href="/basvurum/" data-i18n="homeTrackAction">Başvurumu Sorgula</a>
+          <button type="button" id="btn-home-resume" class="home-cta home-cta-tertiary" aria-controls="application-resume-card" aria-expanded="false" data-i18n="homeResumeAction">Başvuruma Devam Et</button>
           <button type="button" id="btn-hero-guide" class="home-cta home-cta-tertiary" data-i18n="homeGuideAction">Nasıl Kullanılır?</button>
           <a id="home-privacy-notice" class="home-cta home-cta-tertiary" href="https://www.topkapi.edu.tr/tr-TR/gizlilik-politikasi/13455" target="_blank" rel="noopener noreferrer" data-i18n="homeOfficialPrivacyNotice">Üniversitenin KVKK metni</a>
         </nav>
       </section>
 
-      <section class="public-section application-resume-card" aria-labelledby="home-resume-heading">
+      <section id="application-resume-card" class="public-section application-resume-card" aria-labelledby="home-resume-heading" hidden>
         <h2 id="home-resume-heading" data-i18n="homeResumeAction">Başvuruma Devam Et</h2>
         <p data-i18n="accessDeviceExplanation">Başvuru numaranızı ve öğrenci numaranızı girerek başvurunuza başka bir cihazdan devam edebilirsiniz.</p>
         <form id="resume-application-form" class="application-form">
