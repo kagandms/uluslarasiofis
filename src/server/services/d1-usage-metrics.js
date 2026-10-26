@@ -7,7 +7,7 @@ const CACHE_TTL_SECONDS = 300;
 /**
  * Reads the account-wide D1 rows-read metric for the current UTC day.
  * @param {object} options Worker environment, optional edge cache, and injectable fetch.
- * @returns {Promise<{rowsRead: number, limit: number, date: string, retrievedAt: string}>} Current usage snapshot.
+ * @returns {Promise<{rowsRead: number, databases: Array<{databaseId: string, rowsRead: number}>, limit: number, date: string, retrievedAt: string}>} Current usage snapshot.
  * @throws {ApiError} When analytics configuration or Cloudflare metrics are unavailable.
  */
 export async function readD1UsageMetrics({ environment, cache, fetcher = fetch }) {
@@ -24,8 +24,8 @@ export async function readD1UsageMetrics({ environment, cache, fetcher = fetch }
     const apiToken = environment.D1_ANALYTICS_API_TOKEN;
     if (!accountId || !apiToken) throw metricsUnavailable();
 
-    const rowsRead = await queryRowsRead({ accountId, apiToken, date, fetcher });
-    const metrics = { rowsRead, limit: D1_DAILY_ROWS_READ_LIMIT, date, retrievedAt: new Date().toISOString() };
+    const usage = await queryRowsRead({ accountId, apiToken, date, fetcher });
+    const metrics = { ...usage, limit: D1_DAILY_ROWS_READ_LIMIT, date, retrievedAt: new Date().toISOString() };
     try {
         await cache?.put(cacheKey, new Response(JSON.stringify(metrics), {
             headers: { 'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}` }
@@ -53,11 +53,22 @@ async function queryRowsRead({ accountId, apiToken, date, fetcher }) {
     if (!responsePayload || typeof responsePayload !== 'object' || responsePayload.errors?.length) throw metricsUnavailable();
     const groups = responsePayload.data?.viewer?.accounts?.[0]?.d1AnalyticsAdaptiveGroups;
     if (!Array.isArray(groups)) throw metricsUnavailable();
-    const rowCounts = groups.map(({ sum }) => sum?.rowsRead);
-    if (rowCounts.some((count) => !Number.isSafeInteger(count) || count < 0)) throw metricsUnavailable();
+    const databaseTotals = new Map();
+    const rowCounts = groups.map(({ dimensions, sum }) => {
+        const databaseId = dimensions?.databaseId;
+        const count = sum?.rowsRead;
+        if (typeof databaseId !== 'string' || !databaseId.trim() || !Number.isSafeInteger(count) || count < 0) {
+            throw metricsUnavailable();
+        }
+        databaseTotals.set(databaseId, (databaseTotals.get(databaseId) || 0) + count);
+        return count;
+    });
     const total = rowCounts.reduce((sum, count) => sum + count, 0);
     if (!Number.isSafeInteger(total)) throw metricsUnavailable();
-    return total;
+    const databases = [...databaseTotals.entries()]
+        .map(([databaseId, rowsRead]) => ({ databaseId, rowsRead }))
+        .sort((left, right) => left.databaseId.localeCompare(right.databaseId));
+    return { rowsRead: total, databases };
 }
 
 function metricsUnavailable() {
@@ -72,6 +83,7 @@ const D1_ROWS_READ_QUERY = `query D1DailyRowsRead($accountTag: string!, $date: D
         filter: { date_geq: $date, date_leq: $date }
       ) {
         sum { rowsRead }
+        dimensions { databaseId }
       }
     }
   }

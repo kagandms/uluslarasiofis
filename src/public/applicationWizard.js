@@ -7,6 +7,7 @@ import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 import { isValidPhoneNumber } from '../shared/phoneNumber.js';
 import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate, requiresResidenceApplicationDate } from '../shared/age.js';
 import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../shared/academic-calendar.js';
+import { createMultiPageDocumentPdf } from './multiFileDocument.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
@@ -66,6 +67,7 @@ function clearContactDraftFields(view) {
 
 const UPLOAD_ERROR_KEYS = Object.freeze({
     FILE_TOO_LARGE: 'fileTooLarge', INVALID_FILE: 'invalidFileType', STORAGE_UNAVAILABLE: 'uploadIntentFailed',
+    TOO_MANY_FILES: 'tooManyFiles', MULTI_FILE_PROCESSING_FAILED: 'multiFileProcessingFailed',
     UPLOAD_CAPABILITY_EXPIRED: 'uploadCapabilityExpired', UPLOAD_NETWORK_ERROR: 'uploadNetworkFailed',
     UPLOAD_TIMEOUT: 'uploadNetworkFailed', R2_UPLOAD_FAILED: 'r2UploadFailed', UPLOAD_OBJECT_MISMATCH: 'finalizeFailed',
     UPLOAD_OBJECT_MISSING: 'uploadObjectMissing', UPLOAD_INTENT_EXPIRED: 'uploadIntentExpired',
@@ -615,7 +617,11 @@ function getDocumentStatusTone(requirement, task, statusKey, isDeleting) {
 }
 
 function createFilePolicyText(document, requirement, messages) {
-    const types = requirement.accepted_media_types.join(', ');
+    const acceptedTypes = new Set(requirement.accepted_media_types);
+    if (acceptedTypes.has('application/pdf')) {
+        ['image/jpeg', 'image/png', 'image/webp'].forEach((type) => acceptedTypes.add(type));
+    }
+    const types = [...acceptedTypes].join(', ');
     const size = (requirement.max_byte_size / (1024 * 1024)).toLocaleString(document.documentElement.lang);
     return messages.filePolicy.replace('{types}', types).replace('{size}', `${size} MB`);
 }
@@ -660,11 +666,16 @@ function createFileInput(document, requirement, task, messages) {
     const help = document.createElement('small');
     input.type = 'file';
     input.id = `upload-${requirement.code}`;
-    input.accept = requirement.accepted_media_types.join(',');
+    const acceptedTypes = new Set(requirement.accepted_media_types);
+    if (acceptedTypes.has('application/pdf')) {
+        ['image/jpeg', 'image/png', 'image/webp'].forEach((type) => acceptedTypes.add(type));
+    }
+    input.accept = [...acceptedTypes].join(',');
+    input.multiple = true;
     input.dataset.documentCode = requirement.code;
     input.disabled = ['preparing', 'uploading', 'verifying'].includes(task?.state);
     help.id = `upload-help-${requirement.code}`;
-    help.textContent = createFilePolicyText(document, requirement, messages);
+    help.textContent = `${createFilePolicyText(document, requirement, messages)} ${messages.multiFileUploadWarning.replace('{document}', messages[requirement.label_key] || messages.documentNotUploaded)}`;
     input.setAttribute('aria-describedby', help.id);
     label.htmlFor = input.id;
     label.className = 'application-upload-control';
@@ -998,99 +1009,6 @@ function createReferenceBanner(document, state, messages) {
     return banner;
 }
 
-function createResumeWithCredentialsSection(document, state, messages) {
-    const card = document.createElement('section');
-    card.className = 'application-resume-card';
-    card.setAttribute('aria-label', messages.accessDeviceHeading);
-
-    const title = createTranslatedElement(document, 'h3', 'accessDeviceHeading', messages.accessDeviceHeading);
-    const explanation = createTranslatedElement(document, 'p', 'accessDeviceExplanation', messages.accessDeviceExplanation);
-
-    const form = document.createElement('form');
-    form.id = 'resume-application-form';
-    form.className = 'application-form';
-
-    const refLabel = document.createElement('label');
-    refLabel.className = 'application-form-field';
-    refLabel.htmlFor = 'resume-reference-number';
-    refLabel.append(createTranslatedElement(document, 'span', 'applicationReferenceNumber', messages.applicationReferenceNumber));
-    const refInput = document.createElement('input');
-    refInput.type = 'text';
-    refInput.id = 'resume-reference-number';
-    refInput.name = 'resume_reference_number';
-    refInput.placeholder = 'ITU-XXXX-XXXX';
-    refInput.maxLength = 32;
-    refInput.required = true;
-    refInput.setAttribute('aria-required', 'true');
-    refInput.autocomplete = 'off';
-    refLabel.append(refInput);
-
-    const numberLabel = document.createElement('label');
-    numberLabel.className = 'application-form-field';
-    numberLabel.htmlFor = 'resume-student-number';
-    numberLabel.append(createTranslatedElement(document, 'span', 'studentNumber', messages.studentNumber));
-    const numberInput = document.createElement('input');
-    numberInput.type = 'text';
-    numberInput.id = 'resume-student-number';
-    numberInput.name = 'resume_student_number';
-    numberInput.maxLength = 64;
-    numberInput.required = true;
-    numberInput.setAttribute('aria-required', 'true');
-    numberInput.autocomplete = 'off';
-    numberLabel.append(numberInput);
-
-    const submitBtn = createButton(document, messages, 'accessDeviceSubmit', 'resume-submit', 'application-button application-button-secondary');
-    submitBtn.type = 'submit';
-
-    const feedback = document.createElement('p');
-    feedback.className = 'application-message resume-feedback';
-    feedback.setAttribute('role', 'alert');
-
-    form.append(refLabel, numberLabel, submitBtn, feedback);
-
-    form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const ref = refInput.value.trim();
-        const studentNumber = numberInput.value.trim();
-        if (!ref || !studentNumber) return;
-        submitBtn.disabled = true;
-        feedback.textContent = '';
-        try {
-            if (typeof state.api.accessApplicationWithReference !== 'function') {
-                throw new Error('accessApplicationWithReference not supported');
-            }
-            await state.api.accessApplicationWithReference({
-                reference_number: ref,
-                student_number: studentNumber
-            });
-            state.application = await state.api.readCurrentApplication();
-            if (state.application.status === 'resubmission_required') {
-                state.redirectingToTracking = true;
-                state.navigateToTracking('/basvurum/');
-                renderWizard(state.root || document.querySelector('#application-wizard') || document.body, state);
-                return;
-            }
-            state.step = state.application.status === 'submitted' ? 4
-                : (state.application.contact_acknowledgement?.accepted_current === true ? 1 : 0);
-            state.autosave = createAutosave(state, state.api, state.root || document.querySelector('#application-wizard') || document.body);
-            await refreshRequirements(state, state.api);
-            renderWizard(state.root || document.querySelector('#application-wizard') || document.body, state);
-        } catch (error) {
-            submitBtn.disabled = false;
-            if (error?.status === 429 || error?.code === 'RATE_LIMITED') {
-                feedback.textContent = messages.trackingLookupRateLimited;
-            } else if (error?.status === 401 || error?.status === 404 || error?.code === 'INVALID_ACCESS_CREDENTIALS') {
-                feedback.textContent = messages.accessInvalidCredentials;
-            } else {
-                feedback.textContent = messages.applicationLoadFailed;
-            }
-        }
-    });
-
-    card.append(title, explanation, form);
-    return card;
-}
-
 function createSubmissionTime(document, submittedAt, messages) {
     const time = document.createElement('p');
     time.append(
@@ -1370,9 +1288,6 @@ function renderWizard(root, state) {
     state.root = root;
     if (state.step === 0) {
         stage.append(createContactStep(document, state.application, state.formValues));
-        if (!state.application) {
-            stage.append(createResumeWithCredentialsSection(document, state, messages));
-        }
     }
     if (state.step === 1) stage.append(createResidenceStep(document, state.application, state.formValues));
     if (state.step === 2) stage.append(createDocumentsStep(document, state));
@@ -1715,12 +1630,36 @@ async function runUploadTask(code, task, state, api, root, { isRetry = false } =
 
 async function handleFileSelection(root, state, api, input) {
     if (state.application?.status !== 'draft') return;
-    const file = input.files?.[0];
-    if (!file) return;
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
     const code = input.dataset.documentCode;
-    state.uploads[code] = { state: 'selected', progress: 0, file, intentId: null, abortController: null };
+    input.value = '';
+    const requirement = state.requirements.find((item) => item.code === code);
+    if (!requirement) return;
+    const isSingleAcceptedFile = files.length === 1 && requirement.accepted_media_types.includes(files[0].type);
+    const task = { state: isSingleAcceptedFile ? 'selected' : 'preparing', progress: 0, file: null, intentId: null, abortController: null };
+    state.uploads[code] = task;
     updateDocumentCard(root, state, code);
-    await runUploadTask(code, state.uploads[code], state, api, root);
+    if (isSingleAcceptedFile) {
+        task.file = files[0];
+    } else {
+        task.errorKey = 'multiFilePreparing';
+        updateDocumentCard(root, state, code);
+        try {
+            task.file = await createMultiPageDocumentPdf(files, {
+                maxByteSize: requirement.max_byte_size,
+                document: root.ownerDocument
+            });
+            task.state = 'selected';
+            task.errorKey = null;
+        } catch (error) {
+            task.state = 'failed_upload';
+            task.errorKey = createErrorKey(error, 'multiFileProcessingFailed');
+            updateDocumentCard(root, state, code);
+            return;
+        }
+    }
+    await runUploadTask(code, task, state, api, root);
 }
 
 async function handleDelete(root, state, api, code) {

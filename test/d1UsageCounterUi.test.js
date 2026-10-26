@@ -17,13 +17,22 @@ test('usage counter is limited to the authenticated staff home and renders daily
     assert.equal(publicDocument.querySelector('#d1-usage-counter'), null);
     initD1UsageCounter({
         root: document,
-        fetcher: async () => Response.json({ rowsRead: 12345, limit: 5_000_000, date: '2026-10-14' })
+        fetcher: async () => Response.json({
+            rowsRead: 12345,
+            databases: [
+                { databaseId: '74b45974-8665-4616-bce0-3380da71c22f', rowsRead: 12000 },
+                { databaseId: '2ef78af7-be99-4a8d-bc63-0be2a9704e96', rowsRead: 345 }
+            ],
+            limit: 5_000_000,
+            date: '2026-10-14'
+        })
     });
     await new Promise((resolveRequest) => setImmediate(resolveRequest));
 
     assert.equal(document.querySelector('#d1-usage-value').textContent, '12.345 / 5.000.000');
     assert.equal(document.querySelector('#d1-usage-percent').textContent, '0,25%');
     assert.equal(document.querySelector('#d1-usage-status').textContent, '2026-10-14 UTC');
+    assert.equal(document.querySelector('#d1-usage-breakdown').textContent, 'DB 74b45974: 12.000 · DB 2ef78af7: 345');
     assert.equal(document.querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '12345');
 
 });
@@ -47,5 +56,34 @@ test('staff counter rejects a zero limit instead of rendering an invalid percent
 
     assert.equal(dom.window.document.querySelector('#d1-usage-percent').textContent, '—');
     assert.equal(dom.window.document.querySelector('#d1-usage-status').textContent, 'Kullanım verisi alınamıyor');
+    dom.window.close();
+});
+
+test('staff can hide the daily counter persistently and defer analytics until it is shown', async () => {
+    const staffHtml = await readFile(resolve(repositoryRoot, 'yetkili/index.html'), 'utf8');
+    const dom = new JSDOM(staffHtml, { url: 'https://portal.test/yetkili/' });
+    const { document, localStorage } = dom.window;
+    localStorage.setItem('d1-usage-counter-hidden', 'true');
+    let requestCount = 0;
+    initD1UsageCounter({
+        root: document,
+        fetcher: async () => {
+            requestCount += 1;
+            return Response.json({ rowsRead: 1, limit: 5_000_000, date: '2026-10-26' });
+        }
+    });
+
+    const widget = document.querySelector('#d1-usage-counter');
+    const toggle = document.querySelector('#d1-usage-toggle');
+    assert.equal(widget.hidden, true);
+    assert.equal(toggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(requestCount, 0);
+
+    toggle.click();
+    await new Promise((resolveRequest) => setImmediate(resolveRequest));
+    assert.equal(widget.hidden, false);
+    assert.equal(toggle.getAttribute('aria-pressed'), 'true');
+    assert.equal(localStorage.getItem('d1-usage-counter-hidden'), 'false');
+    assert.equal(requestCount, 1);
     dom.window.close();
 });

@@ -3,6 +3,7 @@ import { initializeApplicationWizard } from './applicationWizard.js';
 import { initializeApplicationTracking } from './applicationTracking.js';
 import * as applicationApi from './applicationApi.js';
 import { renderPublicDocumentOverview } from './home.js';
+import { initHomeResumeForm } from './homeResumeForm.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 import { initLiveClock } from '../ui/liveClock.js';
 import { openPublicGuideModal } from './publicGuideModal.js';
@@ -98,6 +99,11 @@ function initPublicPortal() {
         if (trackingRoot) void initializeApplicationTracking(trackingRoot, applicationApi);
     }
     if (document.body.dataset.page === 'home') {
+        initHomeResumeForm({
+            root: document,
+            api: applicationApi,
+            getMessage: (key) => getMessage(document.documentElement.lang, key)
+        });
         initScrollReveal();
         initializePrivacyNoticeModal();
     }

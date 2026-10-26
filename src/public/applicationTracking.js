@@ -76,7 +76,8 @@ function renderLookup(root, state, messages, submitLookup) {
     panel.append(
         createTextElement(document, 'h2', '', messages.trackingLookupHeading),
         createTextElement(document, 'p', '', messages.trackingLookupExplanation),
-        createLink(document, '/basvuru/#resume-application-form', messages.trackingOwnerAccessLink, 'tracking-owner-access-link'),
+        createTextElement(document, 'p', 'tracking-owner-access-note', messages.trackingOwnerAccess),
+        createLink(document, '/#resume-application-form', messages.trackingOwnerAccessLink, 'tracking-owner-access-link'),
         createLookupForm(document, state, messages, submitLookup)
     );
     const feedbackKey = state.kind === 'notFound' ? 'trackingLookupNotFound'
