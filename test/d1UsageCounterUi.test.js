@@ -141,3 +141,46 @@ test('staff counter visibility button stays in the top-right header actions and 
     assert.equal(getComputedStyle(widget).display, 'grid');
     dom.window.close();
 });
+
+test('staff counter animates open and closed before changing its hidden state', async () => {
+    const staffHtml = await readFile(resolve(repositoryRoot, 'yetkili/index.html'), 'utf8');
+    const dom = new JSDOM(staffHtml, { url: 'https://portal.test/yetkili/' });
+    const { document } = dom.window;
+    const widget = document.querySelector('#d1-usage-counter');
+    const animations = [];
+    widget.animate = (keyframes, options) => {
+        const animation = {
+            keyframes,
+            options,
+            onfinish: null,
+            cancel() {},
+            finish() { this.onfinish?.(); }
+        };
+        animations.push(animation);
+        return animation;
+    };
+    initD1UsageCounter({
+        root: document,
+        fetcher: async () => Response.json({ rowsRead: 1, limit: 5_000_000, date: '2026-10-26' })
+    });
+
+    const toggle = document.querySelector('#d1-usage-toggle');
+    toggle.click();
+    assert.equal(widget.hidden, false);
+    assert.deepEqual(animations[0].keyframes, [
+        { opacity: 1, transform: 'translateY(0) scale(1)' },
+        { opacity: 0, transform: 'translateY(-8px) scale(0.98)' }
+    ]);
+    animations[0].finish();
+    assert.equal(widget.hidden, true);
+
+    toggle.click();
+    assert.equal(widget.hidden, false);
+    assert.deepEqual(animations[1].keyframes, [
+        { opacity: 0, transform: 'translateY(-8px) scale(0.98)' },
+        { opacity: 1, transform: 'translateY(0) scale(1)' }
+    ]);
+    animations[1].finish();
+    assert.equal(widget.hidden, false);
+    dom.window.close();
+});
