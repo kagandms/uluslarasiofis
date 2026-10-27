@@ -95,7 +95,7 @@ test('saved PDF pages can be reordered, removed and combined with a new page', a
     assert.equal((await PDFDocument.load(await original.save())).getPageCount(), 3);
 });
 
-test('reports the actual output ratio and warns when the 40% target is missed', async () => {
+test('reports the actual output ratio and accepts source PDF when it is already under YÖKSİS limit', async () => {
     const sourcePdf = await PDFDocument.create();
     sourcePdf.addPage([595, 842]);
     const bytes = await sourcePdf.save();
@@ -106,8 +106,10 @@ test('reports the actual output ratio and warns when the 40% target is missed', 
     assert.equal(result.metrics.inputBytes, bytes.length);
     assert.equal(result.metrics.outputBytes, result.bytes.length);
     assert.equal(result.metrics.ratio, result.bytes.length / bytes.length);
-    assert.equal(result.metrics.targetReached, false);
-    assert.match(result.metrics.warning, /%40 hedefe ulaşmadı/);
+    assert.equal(result.metrics.targetReached, true);
+    assert.equal(result.metrics.yoksisLimitReached, true);
+    assert.equal(result.metrics.compressionPercent, null);
+    assert.equal(result.metrics.warning, null);
 });
 
 test('re-encodes server-validated phone JPEGs before embedding them in the PDF', async () => {
@@ -127,7 +129,7 @@ test('re-encodes server-validated phone JPEGs before embedding them in the PDF',
     });
 });
 
-test('compresses phone JPEGs to the fixed 40 percent size target', async () => {
+test('compresses phone JPEGs at the initial staged level and keeps the output below YÖKSİS limit', async () => {
     const jpegBytes = new Uint8Array(await readFile(new URL('../header_logo.jpg', import.meta.url)));
     const qualities = [];
     const sourceBytes = new Uint8Array(jpegBytes.length * 3);
@@ -147,10 +149,49 @@ test('compresses phone JPEGs to the fixed 40 percent size target', async () => {
             mediaType: 'image/jpeg', isValidatedTransferPhoto: true }]);
 
         assert.ok(qualities.length > 0);
-        assert.ok(qualities[0] < 0.7);
+        assert.equal(qualities[0], 0.72);
         assert.equal(result.metrics.targetReached, true);
         assert.equal(result.metrics.yoksisLimitReached, true);
-        assert.ok(result.metrics.outputBytes <= sourceBytes.length * 0.4);
+        assert.equal(result.metrics.compressionPercent, 40);
+        assert.ok(result.metrics.outputBytes <= 9 * 1024 * 1024);
+    } finally {
+        if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
+        else delete globalThis.document;
+        if (originalBitmap) Object.defineProperty(globalThis, 'createImageBitmap', originalBitmap);
+        else delete globalThis.createImageBitmap;
+    }
+});
+
+test('increases image compression from 40 to 45 when the first merged PDF exceeds the safe limit', async () => {
+    const jpegBytes = new Uint8Array(await readFile(new URL('../header_logo.jpg', import.meta.url)));
+    const qualities = [];
+    const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    const originalBitmap = Object.getOwnPropertyDescriptor(globalThis, 'createImageBitmap');
+    globalThis.createImageBitmap = async () => ({ width: 2400, height: 3400, close() {} });
+    globalThis.document = { createElement: () => ({
+        getContext: () => ({ fillRect() {}, drawImage() {} }),
+        toBlob(callback, mediaType, quality) {
+            qualities.push(quality);
+            const size = quality > 0.7 ? 3_300_000 : 2_000_000;
+            const compressed = new Uint8Array(size);
+            compressed.set(jpegBytes);
+            callback(new Blob([compressed], { type: mediaType }));
+        }
+    }) };
+
+    try {
+        const files = Array.from({ length: 3 }, (_, index) => ({
+            bytes: jpegBytes,
+            name: `synthetic-page-${index + 1}.jpg`,
+            mediaType: 'image/jpeg'
+        }));
+        const result = await mergeDocumentsToPdf(files);
+        const mergedPdf = await PDFDocument.load(result.bytes);
+
+        assert.deepEqual(qualities, [0.72, 0.72, 0.72, 0.66, 0.66, 0.66]);
+        assert.equal(result.metrics.compressionPercent, 45);
+        assert.ok(result.metrics.outputBytes <= 9 * 1024 * 1024);
+        assert.equal(mergedPdf.getPageCount(), 3);
     } finally {
         if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
         else delete globalThis.document;
@@ -172,7 +213,7 @@ test('reads Blob content instead of mistaking Blob.bytes() for an image payload'
     });
 });
 
-test('requires the browser PDF renderer when raster compression is requested', async () => {
+test('preserves a small PDF without requiring the browser raster renderer', async () => {
     const sourcePdf = await PDFDocument.create();
     sourcePdf.addPage([595, 842]);
     const bytes = await sourcePdf.save();
@@ -180,10 +221,12 @@ test('requires the browser PDF renderer when raster compression is requested', a
     delete globalThis.window;
 
     try {
-        await assert.rejects(
-            mergeDocumentsToPdf([{ bytes, name: 'student.pdf', mediaType: 'application/pdf' }]),
-            /PDF sıkıştırma bileşeni hazır değil/
-        );
+        const result = await mergeDocumentsToPdf([{ bytes, name: 'student.pdf', mediaType: 'application/pdf' }]);
+        const mergedPdf = await PDFDocument.load(result.bytes);
+
+        assert.equal(result.metrics.targetReached, true);
+        assert.equal(result.metrics.rasterizedPdfs, false);
+        assert.equal(mergedPdf.getPageCount(), 1);
     } finally {
         if (priorWindow) globalThis.window = priorWindow;
     }

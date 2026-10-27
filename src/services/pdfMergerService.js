@@ -6,16 +6,18 @@ import { DOCUMENT_IMAGE_LONG_EDGE } from '../config/mobile-transfer-policy.js';
 const A4_PORTRAIT = PageSizes.A4;
 const A4_LANDSCAPE = [PageSizes.A4[1], PageSizes.A4[0]];
 const PAGE_MARGIN = 20;
-const TARGET_RATIO = 0.4;
 const YOKSIS_SAFE_LIMIT_BYTES = 9 * 1024 * 1024;
-const COMPRESSION_PROFILES = [
-    { dpi: 180, quality: 0.68 },
-    { dpi: 144, quality: 0.55 },
-    { dpi: 120, quality: 0.45 },
-    { dpi: 96, quality: 0.35 },
-    { dpi: 72, quality: 0.25 },
-    { dpi: 60, quality: 0.18 }
-];
+const INITIAL_COMPRESSION_PERCENT = 40;
+const COMPRESSION_STEP_PERCENT = 5;
+const MAX_COMPRESSION_PERCENT = 95;
+
+function readCompressionProfile(compressionPercent) {
+    const step = (compressionPercent - INITIAL_COMPRESSION_PERCENT) / COMPRESSION_STEP_PERCENT;
+    return {
+        dpi: Math.max(60, Math.round(180 * (0.9 ** step))),
+        quality: Math.max(0.18, Number((0.72 - (step * 0.06)).toFixed(2)))
+    };
+}
 
 async function readBytes(input) {
     if (input instanceof Blob) return new Uint8Array(await input.arrayBuffer());
@@ -139,32 +141,51 @@ async function buildPdf(files, profile, onProgress, options) {
 }
 
 /**
- * Builds an ordered PDF and compresses its pages and images to 40% of source bytes and a safe YÖKSİS size.
+ * Builds an ordered PDF, preserving source PDF pages unless staged compression is needed to meet the YÖKSİS size limit.
  * @param {Array<{ name?: string, bytes?: Uint8Array|ArrayBuffer|Blob, mediaType?: string, type?: string, size?: number, isValidatedTransferPhoto?: boolean }|Blob>} files
  * @param {(progress: { current?: number, total?: number, message: string }) => void} [onProgress]
  * @param {{ rasterizePdfs?: boolean }} [options]
- * @returns {Promise<{ bytes: Uint8Array, metrics: { inputBytes: number, outputBytes: number, ratio: number, targetReached: boolean, warning: string|null }>}>
+ * @returns {Promise<{ bytes: Uint8Array, metrics: { inputBytes: number, outputBytes: number, ratio: number, targetReached: boolean, yoksisLimitReached: boolean, rasterizedPdfs: boolean, compressionPercent: number|null, warning: string|null }}>}
  */
 export async function mergeDocumentsToPdf(files, onProgress, options = {}) {
     if (!Array.isArray(files) || files.length === 0) throw new Error('Birleştirilecek dosya bulunamadı.');
     const inputBytes = files.reduce((total, file) => total + getInputSize(file), 0);
     const containsPdf = files.some(isPdfFile);
     const containsImages = files.some(file => !isPdfFile(file));
-    const shouldRasterizePdfs = containsPdf && options.rasterizePdfs !== false;
-    const profiles = shouldRasterizePdfs || containsImages ? COMPRESSION_PROFILES : [null];
-    const targetBytes = Math.min(inputBytes * TARGET_RATIO, YOKSIS_SAFE_LIMIT_BYTES);
-    let bytes;
-    for (const profile of profiles) {
-        bytes = await buildPdf(files, profile, onProgress, options);
-        if (!profile || bytes.byteLength <= targetBytes) break;
+    const initialProfile = containsImages ? readCompressionProfile(INITIAL_COMPRESSION_PERCENT) : null;
+    const initialOptions = { ...options, rasterizePdfs: false };
+    let bytes = null;
+    let compressionPercent = containsImages ? INITIAL_COMPRESSION_PERCENT : null;
+    try {
+        onProgress?.({ message: containsImages
+            ? `PDF hızlıca birleştiriliyor; görseller için %${INITIAL_COMPRESSION_PERCENT} kademesi uygulanıyor…`
+            : 'PDF sayfaları korunarak hızlıca birleştiriliyor…' });
+        bytes = await buildPdf(files, initialProfile, onProgress, initialOptions);
+    } catch (error) {
+        if (!containsPdf || options.rasterizePdfs === false) throw error;
     }
+    let rasterizedPdfs = false;
+    if (!bytes || bytes.byteLength > YOKSIS_SAFE_LIMIT_BYTES) {
+        const canRasterizePdfs = options.rasterizePdfs !== false;
+        const firstCompressionPercent = containsPdf && canRasterizePdfs
+            ? INITIAL_COMPRESSION_PERCENT
+            : INITIAL_COMPRESSION_PERCENT + COMPRESSION_STEP_PERCENT;
+        for (let level = firstCompressionPercent; level <= MAX_COMPRESSION_PERCENT; level += COMPRESSION_STEP_PERCENT) {
+            if (!containsImages && (!containsPdf || !canRasterizePdfs)) break;
+            onProgress?.({ message: `PDF 10 MB sınırını aşıyor; %${level} sıkıştırma kademesi deneniyor…` });
+            bytes = await buildPdf(files, readCompressionProfile(level), onProgress,
+                { ...options, rasterizePdfs: canRasterizePdfs });
+            rasterizedPdfs = containsPdf && canRasterizePdfs;
+            compressionPercent = level;
+            if (bytes.byteLength <= YOKSIS_SAFE_LIMIT_BYTES) break;
+        }
+    }
+    if (!bytes) throw new Error('PDF oluşturulamadı.');
     const ratio = inputBytes > 0 ? bytes.byteLength / inputBytes : 1;
-    const sizeRatioReached = ratio <= TARGET_RATIO;
     const yoksisLimitReached = bytes.byteLength <= YOKSIS_SAFE_LIMIT_BYTES;
-    const targetReached = sizeRatioReached && yoksisLimitReached;
-    const warning = targetReached ? null : !yoksisLimitReached
-        ? 'PDF 9 MB güvenli sınırın altında değil. YÖKSİS yüklemesi için sayfa veya fotoğraf sayısını azaltın.'
-        : 'PDF %40 hedefe ulaşmadı. Sayfa sayısını azaltıp yeniden deneyin.';
+    const targetReached = yoksisLimitReached;
+    const warning = targetReached ? null
+        : `%${MAX_COMPRESSION_PERCENT} sıkıştırma kademesinde de PDF 10 MB sınırının altına inmedi. Sayfa sayısını azaltıp tekrar deneyin.`;
     return {
         bytes,
         metrics: {
@@ -173,7 +194,8 @@ export async function mergeDocumentsToPdf(files, onProgress, options = {}) {
             ratio,
             targetReached,
             yoksisLimitReached,
-            rasterizedPdfs: containsPdf && options.rasterizePdfs !== false,
+            rasterizedPdfs,
+            compressionPercent,
             warning
         }
     };

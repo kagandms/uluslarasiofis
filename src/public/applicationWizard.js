@@ -8,6 +8,7 @@ import { isValidPhoneNumber } from '../shared/phoneNumber.js';
 import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate, requiresResidenceApplicationDate } from '../shared/age.js';
 import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../shared/academic-calendar.js';
 import { createMultiPageDocumentPdf } from './multiFileDocument.js';
+import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
@@ -729,6 +730,10 @@ function createDocumentCard(document, requirement, state, { allowUpload }) {
     if (progress) card.append(progress);
     if (!allowUpload) return card;
     card.append(createFileInput(document, requirement, task, messages));
+    const compose = createButton(document, messages, 'addDocumentPages', 'document-compose');
+    compose.disabled = ['preparing', 'uploading', 'verifying'].includes(task?.state)
+        || !requirement.accepted_media_types.includes('application/pdf');
+    card.append(compose);
     if (task && ['failed_upload', 'failed_finalize', 'unknown_finalize_result', 'cancelled'].includes(task.state)) {
         card.append(createButton(document, messages, 'retryUpload', 'document-retry'));
     }
@@ -922,6 +927,7 @@ export function createSubmissionConfirmation(document, application, messages) {
     confirmation.setAttribute('aria-live', 'polite');
     confirmation.append(createTranslatedElement(document, 'h3', 'submissionSuccessHeading', messages.submissionSuccessHeading));
     confirmation.append(createTranslatedElement(document, 'p', 'submissionStatusSubmitted', messages.submissionStatusSubmitted));
+    confirmation.append(createApplicationPdfDownloadControl(document, application, messages));
     if (application.reference_number) {
         const refElement = document.createElement('p');
         refElement.className = 'submission-reference-number';
@@ -1801,6 +1807,7 @@ async function handleWizardClick(root, state, api, event) {
     }
     if (button.dataset.action === 'submit-application') await submitApplication(root, state, api);
     if (button.dataset.action === 'document-retry' && code) await runUploadTask(code, state.uploads[code], state, api, root, { isRetry: true });
+    if (button.dataset.action === 'document-compose' && code) await openDocumentComposer(root, state, api, code);
     if (button.dataset.action === 'document-delete' && code) await handleDelete(root, state, api, code);
     if (button.dataset.action === 'document-cancel' && code) state.uploads[code]?.abortController?.abort();
     if (button.dataset.action === 'autosave-retry' && state.autosave) {
@@ -1809,6 +1816,31 @@ async function handleWizardClick(root, state, api, event) {
         if (!saved) state._focusError = true;
         renderWizard(root, state);
     }
+}
+
+async function openDocumentComposer(root, state, api, code) {
+    const requirement = state.requirements.find(item => item.code === code);
+    if (!requirement || !requirement.accepted_media_types.includes('application/pdf')
+        || ['preparing', 'uploading', 'verifying'].includes(state.uploads[code]?.state)) return;
+    const messages = readMessages(root.ownerDocument);
+    const openPdfMergerModal = state.openPdfMergerModal
+        || (await import('../ui/pdfMergerModal.js')).openPdfMergerModal;
+    openPdfMergerModal({
+        contextLabel: messages.documentPagesHelp,
+        confirmLabel: messages.documentPagesConfirm,
+        successMessage: messages.documentPagesUploaded,
+        maxFiles: 30,
+        onSave: async (bytes) => {
+            const FileClass = root.ownerDocument.defaultView.File;
+            const file = new FileClass([bytes], `${code}_sayfalar.pdf`, { type: 'application/pdf' });
+            const task = { state: 'selected', progress: 0, file, intentId: null, abortController: null };
+            state.uploads[code] = task;
+            await runUploadTask(code, task, state, api, root);
+            if (task.state !== 'complete') {
+                throw new Error(messages[task.errorKey] || messages.documentPagesConfirm);
+            }
+        }
+    });
 }
 
 async function submitApplication(root, state, api) {
@@ -1985,6 +2017,7 @@ export async function initializeApplicationWizard(root, api, options = {}) {
         navigateToTracking: typeof api.navigateToTracking === 'function'
             ? api.navigateToTracking
             : (path) => root.ownerDocument.defaultView.location.assign(path),
+        openPdfMergerModal: options.openPdfMergerModal,
         api
     };
     const guardUnsavedNavigation = (event) => {

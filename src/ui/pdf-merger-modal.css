@@ -1,7 +1,5 @@
 .pdf-merger-modal-card .pdf-merger-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 280px;
-    gap: 20px;
+    display: block;
     height: auto;
     max-height: calc(92dvh - 150px);
     min-height: 0;
@@ -41,27 +39,10 @@
 .pdf-merger-preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .pdf-merger-preview-header button { min-height: 40px; padding: 8px 12px; font-size: .85rem; }
 .pdf-merger-preview-content { display: block; width: 100%; min-height: 0; flex: 1; object-fit: contain; border: 0; }
-.pdf-merger-documents .pdf-merger-dropzone { padding: 10px !important; margin-bottom: 10px !important; }
-.pdf-merger-transfer { min-width: 0; min-height: 0; overflow-y: auto; padding-left: 16px; border-left: 1px solid var(--card-border, #ddd); }
-.pdf-merger-transfer [hidden] { display: none !important; }
-.pdf-merger-transfer > .btn { width: 100%; padding: 9px 12px; }
-.pdf-merger-transfer > .btn[data-action="end-transfer"] {
-    margin-top: 12px;
-    min-height: 40px;
-    padding: 7px 12px;
-    font-size: .85rem;
-    background: transparent;
-    color: var(--text-secondary, #64748b);
-    border: 1px solid var(--card-border, #ddd);
-}
-.pdf-merger-transfer .transfer-end-hint { display: block; margin: 6px 0 12px; }
-.pdf-merger-transfer .transfer-qr canvas { display: block; width: min(100%, 220px); height: auto; margin: 8px auto; }
-.pdf-merger-transfer > p { font-size: .85rem; margin: 8px 0; }
-.pdf-merger-transfer .transfer-instructions { margin: 10px 0 0; padding: 8px; }
 .pdf-merger-modal-card .staff-modal-header, .pdf-merger-modal-card .staff-modal-footer { padding: 12px 16px; }
 .pdf-merger-modal-card .staff-modal-footer .btn { padding: 9px 14px; }
 @media (max-width: 760px) {
-    .pdf-merger-modal-card .pdf-merger-body { grid-template-columns: 1fr; max-height: calc(92dvh - 150px); }
+    .pdf-merger-modal-card .pdf-merger-body { max-height: calc(92dvh - 150px); }
+    .pdf-merger-modal-card .pdf-merger-documents > div:first-child { grid-template-columns: 1fr !important; }
     .pdf-merger-documents .pdf-merger-file-list { grid-template-columns: 1fr; }
-    .pdf-merger-transfer { overflow: visible; padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--card-border, #ddd); }
 }

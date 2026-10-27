@@ -2188,21 +2188,42 @@ body.dark-mode .history-badge {
     margin-bottom: 1rem;
 }
 
+.staff-application-pdf-control { display: grid; gap: 0.35rem; justify-items: start; margin-bottom: 1rem; }
+.staff-application-pdf-control .application-pdf-download-status { color: var(--text-secondary); margin: 0; }
+
 .staff-application-details-grid {
     display: grid;
     gap: 0.8rem 1rem;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.staff-application-details-grid dt,
-.staff-application-details-grid dd {
+.staff-application-detail-item {
+    align-content: start;
+    background: color-mix(in srgb, var(--card-bg) 94%, var(--accent) 6%);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+    padding: 0.75rem 0.85rem;
+}
+
+.staff-application-detail-item dt {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.35;
     min-width: 0;
     overflow-wrap: anywhere;
 }
 
-.staff-application-details-grid dd {
+.staff-application-detail-item dd {
     color: var(--text-primary);
-    margin-top: 0.2rem;
+    font-size: 0.97rem;
+    line-height: 1.45;
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .staff-application-document-list {

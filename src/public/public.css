@@ -601,6 +601,8 @@ html[dir="rtl"] .public-home-link:hover {
 .application-submission-confirmation h3,
 .application-submission-confirmation p { margin: 0; color: inherit; }
 .application-submission-confirmation h3 { font-size: 1.2rem; }
+.application-pdf-download-control { display: grid; gap: 0.35rem; justify-items: start; }
+.application-pdf-download-status { font-size: 0.9rem; }
 .tracking-owner-access-note { padding-block-start: 0.4rem; }
 
 .tracking-success-banner {

@@ -95,7 +95,7 @@ function createFingerprintRequirements() {
     }));
 }
 
-async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null, addressEvidenceType = 'rental_contract') {
+async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null, addressEvidenceType = 'rental_contract', options = {}) {
     const { document, root } = createRoot();
     const application = {
         status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: addressEvidenceType, student_number: 'S3-FP-1',
@@ -124,7 +124,7 @@ async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null
             })) };
         }
     };
-    const state = await initializeApplicationWizard(root, api);
+    const state = await initializeApplicationWizard(root, api, options);
     return { document, root, state, api, savedPatches };
 }
 
@@ -610,6 +610,35 @@ test('registered fingerprint with a non-empty code can Continue to passport and 
     assert.equal(root.querySelector('[data-document-code="fingerprint"]'), null);
     assert.ok(root.querySelector('[data-document-code="passport"] input[type="file"]'));
     assert.ok(root.querySelector('[data-document-code="residence_card"] input[type="file"]'));
+    assert.ok(root.querySelector('[data-document-code="passport"] [data-action="document-compose"]'));
+    document.defaultView.close();
+});
+
+test('applicant can add ordered page photos and upload them as one PDF for a document category', async () => {
+    const modalOptions = [];
+    const uploaded = [];
+    const { document, root, api } = await createFingerprintWizard('registered', 'FP-A/42', 'rental_contract', {
+        openPdfMergerModal: (options) => modalOptions.push(options)
+    });
+    api.createStudentDocumentUploadIntent = async (code, file) => {
+        uploaded.push({ code, file });
+        return { upload: { intent_id: 'upload-intent-1' } };
+    };
+    api.putStudentDocumentDirect = async () => {};
+    api.finalizeStudentDocumentUpload = async () => ({ code: 'passport', revision_number: 2 });
+    await submitWizard(root);
+    root.querySelector('[data-document-code="passport"] [data-action="document-compose"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(modalOptions.length, 1);
+    assert.equal(modalOptions[0].maxFiles, 30);
+    assert.match(modalOptions[0].contextLabel, /fotoğraflayın/u);
+    await modalOptions[0].onSave(new Uint8Array([37, 80, 68, 70]));
+
+    assert.equal(uploaded.length, 1);
+    assert.equal(uploaded[0].code, 'passport');
+    assert.equal(uploaded[0].file.type, 'application/pdf');
+    assert.equal(uploaded[0].file.name, 'passport_sayfalar.pdf');
     document.defaultView.close();
 });
 
@@ -1355,6 +1384,7 @@ test('submission confirmation displays reference number and access credentials r
         assert.match(root.textContent, new RegExp(messages.accessReferenceNumberLabel));
         assert.match(root.textContent, new RegExp(messages.submissionCredentialsReminder.slice(0, 20)));
         assert.ok(root.querySelector('[data-i18n="submissionNewStudentApplicationAction"]'));
+        assert.ok(root.querySelector('[data-action="download-application-pdf"]'));
         assert.doesNotMatch(root.textContent, /2026-10-02T12:00:00\.000Z/);
         dom.window.close();
     }

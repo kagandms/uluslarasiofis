@@ -23,7 +23,7 @@ async function loadMerger() {
     } finally { await bundle.close(); }
 }
 
-test('PC file and camera selection append documents and expose the separate phone transfer control', async () => {
+test('PC file and camera selection append documents without the removed QR transfer control', async () => {
     const dom = new JSDOM('<body></body>',{pretendToBeVisual:true});
     const originals = new Map();
     for (const [key,value] of Object.entries({document:dom.window.document,window:dom.window,MutationObserver:dom.window.MutationObserver,
@@ -46,7 +46,8 @@ test('PC file and camera selection append documents and expose the separate phon
         assert.ok(dom.window.document.body.textContent.includes('Eklenen Belgeler: 2 / 30'));
         assert.ok(dom.window.document.body.textContent.includes('pc.pdf'));
         assert.ok(dom.window.document.body.textContent.includes('Foto_2.jpg'));
-        assert.ok(dom.window.document.body.textContent.includes('Telefondan ekle (QR)'));
+        assert.doesNotMatch(dom.window.document.body.textContent, /Telefondan ekle|QR ile fotoğraf/u);
+        assert.equal(dom.window.document.querySelector('.pdf-merger-transfer'), null);
         assert.equal(camera.getAttribute('accept'),'image/*');
         assert.equal(files.multiple,true);
     } finally {
