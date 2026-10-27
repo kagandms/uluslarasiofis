@@ -12,6 +12,7 @@ test('distributed YKN package supports only staging, production, Apply, and YÖK
     const content = await readFile(resolve(extensionRoot, 'content.js'), 'utf8');
     const fieldTargets = await readFile(resolve(extensionRoot, 'yoksis-field-targets.js'), 'utf8');
     const zkControls = await readFile(resolve(extensionRoot, 'zk-form-controls.js'), 'utf8');
+    const bridgeSource = await readFile(resolve(extensionRoot, 'bridge.js'), 'utf8');
     const portalOrigins = [
         'https://goc-staging.topkapiuni.workers.dev/*',
         'https://goc.topkapiuni.workers.dev/*',
@@ -25,12 +26,19 @@ test('distributed YKN package supports only staging, production, Apply, and YÖK
     assert.ok(manifest.host_permissions.includes('https://yoksis.yok.gov.tr/*'));
     assert.doesNotMatch(JSON.stringify(manifest), /\*\.vercel\.app|\*\.topkapi\.edu\.tr|\*\.yok\.gov\.tr/);
     const targetScript = manifest.content_scripts.find(({ matches }) => matches.includes('https://yoksis.yok.gov.tr/*'));
+    const auditScript = manifest.content_scripts.find(({ js }) => js.includes('yoksis-document-audit-controller.js'));
+    assert.deepEqual(auditScript.matches, ['https://yoksis.yok.gov.tr/*']);
+    assert.equal(auditScript.all_frames, undefined);
+    assert.ok(auditScript.js.includes('yoksis-document-audit.js'));
+    await readFile(resolve(extensionRoot, 'yoksis-document-audit.js'));
+    await readFile(resolve(extensionRoot, 'yoksis-document-audit-controller.js'));
     assert.ok(targetScript.js.indexOf('yoksis-field-targets.js') < targetScript.js.indexOf('content.js'));
     assert.ok(targetScript.js.includes('yoksis-field-targets.js'));
     assert.ok(targetScript.js.indexOf('yoksis-student-identity.js') < targetScript.js.indexOf('content.js'));
     assert.match(content, new RegExp(`CONTENT_SCRIPT_VERSION = '${manifest.version}'`));
     assert.match(fieldTargets, new RegExp(`const VERSION = '${manifest.version}'`));
     assert.match(zkControls, new RegExp(`version: '${manifest.version}'`));
+    assert.match(bridgeSource, new RegExp(`BRIDGE_VERSION = '${manifest.version}'`));
     for (const file of ['pdf.min.js', 'pdf.worker.min.js', 'document-parser.js', 'cropper.js', 'cropper.html', 'cropper-selection.js', 'yoksis-field-targets.js', 'yoksis-student-identity.js']) {
         await readFile(resolve(extensionRoot, file));
     }

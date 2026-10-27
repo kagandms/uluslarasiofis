@@ -28,14 +28,14 @@ test('number shortcuts switch workspaces and Escape returns home without clearin
     const visited = [];
     document.addEventListener('workspace:view-changed', event => visited.push(event.detail.viewName));
 
-    for (const key of ['3', '7']) document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true }));
+    for (const key of ['3', '7', '9']) document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true }));
     document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
-    assert.deepEqual(visited, ['ykn', 'print']);
+    assert.deepEqual(visited, ['ykn', 'print', 'yoksis-audit']);
     assert.equal(document.getElementById('home-screen').hidden, false);
     assert.equal(document.getElementById('workspace-content').hidden, true);
     assert.equal(draft.value, 'Unsaved passport');
-    assert.equal(document.querySelectorAll('#home-screen [aria-keyshortcuts]').length, 8);
+    assert.equal(document.querySelectorAll('#home-screen [aria-keyshortcuts]').length, 9);
 });
 
 test('YKN and Teblig workspaces focus their headings instead of search inputs', (context) => {

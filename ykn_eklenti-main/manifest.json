@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YKN ve Pasaport Aktarıcı",
-  "version": "1.2.109",
+  "version": "1.2.110",
   "description": "Topkapı Üniversitesi - YÖKSİS Veri Aktarım Eklentisi",
   "permissions": [
     "storage",
@@ -39,6 +39,16 @@
       "run_at": "document_end",
       "all_frames": true,
       "match_about_blank": true
+    },
+    {
+      "matches": [
+        "https://yoksis.yok.gov.tr/*"
+      ],
+      "js": [
+        "yoksis-document-audit.js",
+        "yoksis-document-audit-controller.js"
+      ],
+      "run_at": "document_idle"
     },
     {
       "matches": [

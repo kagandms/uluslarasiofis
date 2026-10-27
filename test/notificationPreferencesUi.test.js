@@ -379,7 +379,7 @@ test('tracking lookup removes student-number guidance and does not request Whats
 
     await initializeApplicationTracking(root, api);
     assert.doesNotMatch(root.textContent, /öğrenci numarasıyla|student-number|رقم الطالب|talyp belgisi/i);
-    assert.ok(root.querySelector('.tracking-owner-access-link'));
+    assert.equal(root.querySelector('.tracking-owner-access-link')?.getAttribute('href'), '/basvuruya-devam-et/');
     const input = root.querySelector('#tracking-application-reference');
     input.value = 'ITU-7K9M-4X2P';
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', {

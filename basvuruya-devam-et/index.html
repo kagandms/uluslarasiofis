@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="tr" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#7e1830" />
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="stylesheet" href="/src/public/public.css" />
+    <title>Başvuruma devam et</title>
+  </head>
+  <body data-page="resume">
+    <header class="public-header">
+      <a class="public-brand" href="/" data-i18n-aria-label="homeBrandAriaLabel" aria-label="İstanbul Topkapı Üniversitesi ana sayfa">
+        <img src="/topkapi_logo.jpg" alt="" />
+        <span class="public-brand-copy"><strong data-i18n="homeUniversityName">İstanbul Topkapı Üniversitesi</strong><span data-i18n="portalTitle">Uluslararası Öğrenci Portalı</span></span>
+      </a>
+      <div id="header-live-clock" class="header-live-clock" aria-label="Canlı Saat" title="Türkiye Saati (TSİ)">
+        <div class="live-clock-badge"><span class="live-clock-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span><span id="live-clock-time" class="live-clock-time">--:--:--</span></div>
+        <span id="live-clock-date" class="live-clock-date">--</span>
+      </div>
+      <div class="public-header-actions">
+        <label class="language-picker"><span data-i18n="languageLabel">Dil seçimi</span><select id="locale-select" data-i18n-aria-label="languageLabel"><option value="tr">Türkçe</option><option value="en">English</option><option value="ru">Русский</option><option value="tk">Türkmençe</option><option value="ar">العربية</option></select></label>
+        <a class="staff-entry" href="/yetkili/" data-i18n="staffLink">Yetkili girişi</a>
+      </div>
+    </header>
+    <main class="public-main">
+      <section class="application-panel" aria-labelledby="page-heading">
+        <a class="public-home-link" href="/basvurum/" data-i18n="trackingPageTitle">Başvuru takibi</a>
+        <p class="public-eyebrow" data-i18n="homeResumeAction">Başvuruma devam et</p>
+        <h1 id="page-heading" data-i18n="homeResumeAction">Başvuruma devam et</h1>
+        <p id="page-description" data-i18n="accessDeviceExplanation">Mevcut başvurunuza başka bir cihazdan güvenli şekilde erişin.</p>
+        <form id="resume-application-form" class="application-form application-resume-form">
+          <label class="application-form-field" for="resume-reference-number"><span data-i18n="applicationReferenceNumber">Başvuru numarası</span><input type="text" id="resume-reference-number" name="resume_reference_number" placeholder="ITU-XXXX-XXXX" maxlength="32" autocomplete="off" required aria-required="true" /></label>
+          <label class="application-form-field" for="resume-student-number"><span data-i18n="studentNumber">Öğrenci numarası</span><input type="text" id="resume-student-number" name="resume_student_number" maxlength="64" autocomplete="off" required aria-required="true" /></label>
+          <button type="submit" class="application-button application-button-primary" data-i18n="accessDeviceSubmit">Başvuruya Giriş Yap</button>
+          <p class="application-message resume-feedback" role="alert" aria-live="assertive"></p>
+        </form>
+      </section>
+    </main>
+    <footer class="public-footer"><span data-i18n="footerText">İstanbul Topkapı Üniversitesi Uluslararası Öğrenci Ofisi</span></footer>
+    <script type="module" src="/src/public/main.js"></script>
+  </body>
+</html>
