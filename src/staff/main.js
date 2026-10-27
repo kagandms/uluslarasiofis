@@ -23,6 +23,7 @@ import { initializeStaffPrintStatus } from './print-status.js';
 import { initializeConnectivityStatus } from './connectivity-status.js';
 import { initD1UsageCounter } from '../ui/d1-usage-counter.js';
 import { initWorkHours } from './work-hours.js';
+import { initializeYoksisDocumentAuditManager } from '../managers/yoksisDocumentAuditManager.js';
 
 const staffAuthReady = document.readyState === 'loading'
     ? new Promise((resolve) => {
@@ -90,6 +91,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!await staffAuthReady) return;
     initD1UsageCounter();
     initWorkHours();
+    const yoksisAuditRoot = document.getElementById('staff-yoksis-audit');
+    if (yoksisAuditRoot) initializeYoksisDocumentAuditManager(yoksisAuditRoot);
     try {
         await import('./pdfjs-bootstrap.js');
     } catch (error) {

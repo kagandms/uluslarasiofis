@@ -2,7 +2,7 @@
 // İkamet Portalı (Web Sayfası) ile Eklenti (Background) arasında köprü görevi görür.
 (() => {
     if (window !== window.top) return;
-    const BRIDGE_VERSION = '1.2.75';
+    const BRIDGE_VERSION = '1.2.110';
     const isStaffRoute = () => window.location.pathname === '/yetkili'
         || window.location.pathname.startsWith('/yetkili/');
     if (!isStaffRoute()) return;
@@ -156,6 +156,28 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
                     ? { success: true, text }
                     : { success: false, error: 'OCR metin döndürmedi.' };
             })().then(sendResponse).catch(() => sendResponse({ success: false, error: 'OCR isteği tamamlanamadı.' }));
+            return true;
+        }
+        if (request.source === 'YOKSIS_DOCUMENT_AUDIT' && isStaffRoute()) {
+            if (!globalThis.YKN_PORTAL_SECURITY?.isValidYoksisAuditEvent(request)) {
+                sendResponse({ success: false, error: 'YÖKSİS kontrol sonucu doğrulanamadı.' });
+                return false;
+            }
+            void hasStaffSession().then((isAuthenticated) => {
+                if (!isAuthenticated || !isStaffRoute()) {
+                    sendResponse({ success: false, error: 'Yetkili oturumu gerekli.' });
+                    return;
+                }
+                window.postMessage({
+                    source: 'EXTENSION',
+                    type: 'EVENT',
+                    action: request.action,
+                    requestId: request.requestId,
+                    scanId: request.scanId,
+                    data: request.data
+                }, window.location.origin);
+                sendResponse({ success: true });
+            }).catch(() => sendResponse({ success: false, error: 'YÖKSİS sonucu portala iletilemedi.' }));
             return true;
         }
         if (request.source === 'APPLY_TOPKAPI' && isStaffRoute()) {

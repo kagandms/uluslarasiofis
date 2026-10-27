@@ -2102,6 +2102,48 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return false;
         }
         ikametTabId = sender.tab ? sender.tab.id : null;
+
+        if (['CHECK_YOKSIS_DOCUMENT_AUDIT', 'START_YOKSIS_DOCUMENT_AUDIT', 'STOP_YOKSIS_DOCUMENT_AUDIT'].includes(request.action)) {
+            void (async () => {
+                try {
+                    const targetTab = request.action === 'STOP_YOKSIS_DOCUMENT_AUDIT'
+                        ? await getVerifiedYoksisTarget(request.targetTabId)
+                        : await getVerifiedYoksisTarget((await resolveYoksisTab()).id);
+                    if (request.action === 'STOP_YOKSIS_DOCUMENT_AUDIT') {
+                        const stopResult = await sendTabMessage(targetTab.yoksisTabId, {
+                            action: 'YOKSIS_DOCUMENT_AUDIT_STOP',
+                            scanId: request.scanId
+                        }, { frameId: 0 });
+                        sendResponse({ success: stopResult?.success === true, yoksisTabId: targetTab.yoksisTabId });
+                        return;
+                    }
+
+                    const readiness = await sendTabMessage(targetTab.yoksisTabId, {
+                        action: 'YOKSIS_DOCUMENT_AUDIT_CHECK',
+                        scanId: request.scanId
+                    }, { frameId: 0 });
+                    if (request.action === 'CHECK_YOKSIS_DOCUMENT_AUDIT') {
+                        sendResponse({ ...readiness, yoksisTabId: targetTab.yoksisTabId });
+                        return;
+                    }
+                    if (readiness?.ready !== true || !Number.isInteger(sender.tab?.id)) {
+                        sendResponse({ success: false, error: 'YÖKSİS kayıt listesi doğrulanamadı; tarama başlatılmadı.' });
+                        return;
+                    }
+
+                    const startResult = await sendTabMessage(targetTab.yoksisTabId, {
+                        action: 'YOKSIS_DOCUMENT_AUDIT_START',
+                        requestId: request.requestId,
+                        scanId: request.scanId,
+                        portalTabId: sender.tab.id
+                    }, { frameId: 0 });
+                    sendResponse({ ...startResult, yoksisTabId: targetTab.yoksisTabId });
+                } catch {
+                    sendResponse({ success: false, error: 'YÖKSİS sekmesine erişilemedi; tarama başlatılmadı.' });
+                }
+            })();
+            return true;
+        }
         
         if (request.action === 'SEARCH_STUDENT') {
             startApplySearch(request)
@@ -2331,6 +2373,36 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         notifyPortal(request);
         sendResponse({ success: true });
         return false;
+    }
+    else if (request.source === 'YOKSIS_DOCUMENT_AUDIT') {
+        if (!isYoksisUrl(sender?.tab?.url || '') || sender.frameId !== 0
+            || !portalSecurity?.isValidYoksisAuditEvent(request)) {
+            sendResponse({ success: false, error: 'YÖKSİS kontrol sonucu doğrulanamadı.' });
+            return false;
+        }
+
+        void new Promise((resolve) => {
+            chrome.tabs.get(request.portalTabId, (tab) => {
+                if (chrome.runtime.lastError) resolve(null);
+                else resolve(tab || null);
+            });
+        }).then(async (portalTab) => {
+            if (!portalTab?.url || !isAllowedPortalUrl(portalTab.url)) {
+                sendResponse({ success: false, error: 'Yetkili portal sekmesi doğrulanamadı.' });
+                return;
+            }
+            await sendTabMessage(portalTab.id, {
+                source: 'YOKSIS_DOCUMENT_AUDIT',
+                type: 'EVENT',
+                action: request.action,
+                requestId: request.requestId,
+                scanId: request.scanId,
+                portalTabId: request.portalTabId,
+                data: request.data
+            });
+            sendResponse({ success: true });
+        }).catch(() => sendResponse({ success: false, error: 'Tarama sonucu portala iletilemedi.' }));
+        return true;
     }
     
     return false;

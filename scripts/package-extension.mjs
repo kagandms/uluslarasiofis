@@ -15,6 +15,8 @@ const extensionFiles = [
     'zk-form-controls.js',
     'yoksis-field-targets.js',
     'yoksis-student-identity.js',
+    'yoksis-document-audit.js',
+    'yoksis-document-audit-controller.js',
     'portal-security.js',
     'storage-lifecycle.js',
     'document-parser.js',

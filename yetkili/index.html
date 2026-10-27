@@ -120,7 +120,7 @@
                 <div class="home-intro">
                     <p class="home-eyebrow">Uluslararası Öğrenci Ofisi</p>
                     <h2 id="home-screen-title" tabindex="-1">İşlem seçin</h2>
-                    <p>Devam etmek için bir çalışma alanı seçin veya kart numarasına (1–8) basın.</p>
+                    <p>Devam etmek için bir çalışma alanı seçin veya kart numarasına (1–9) basın.</p>
                 </div>
                 <div class="home-actions">
                     <button type="button" class="home-action" data-intake-entry data-workspace-view="applications" aria-controls="view-applications">
@@ -155,6 +155,10 @@
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
                         <span class="home-action-content"><strong>Çalışma Saatleri</strong><small>Günlük süre kayıtları ve aylık toplamlar</small></span>
                     </button>
+                    <button type="button" class="home-action" data-workspace-view="yoksis-audit" aria-controls="view-yoksis-audit">
+                        <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 4 4M8 10h6M8 13h4"></path></svg></span>
+                        <span class="home-action-content"><strong>YÖKSİS Eksik Evrak</strong><small>Kayıt listesini doğrulayarak kontrol et</small></span>
+                    </button>
                 </div>
                 <div class="d1-usage-counter-shell">
                     <aside id="d1-usage-counter" class="d1-usage-counter" role="group" aria-label="D1 günlük okuma">
@@ -174,7 +178,7 @@
                     <button type="button" id="btn-workspace-home" class="btn btn-outline" aria-label="Ana menüye dön">Geri</button>
                     <h2 id="workspace-title" class="workspace-title-badge" tabindex="-1"><span class="workspace-title-dot" aria-hidden="true"></span><span>Çalışma alanı</span></h2>
                 </div>
-                <p class="workspace-shortcut-hint"><kbd>1–8</kbd> çalışma alanına geç <kbd>Esc</kbd> ana sayfaya dön</p>
+                <p class="workspace-shortcut-hint"><kbd>1–9</kbd> çalışma alanına geç <kbd>Esc</kbd> ana sayfaya dön</p>
                 <nav class="workspace-nav" aria-label="Çalışma alanları">
                     <button type="button" data-intake-entry data-workspace-view="applications" aria-controls="view-applications">İkamet Başvuruları</button>
                     <button type="button" data-workspace-view="archive" aria-controls="view-archive">Arşiv</button>
@@ -184,6 +188,7 @@
                     <button type="button" data-workspace-view="documents" aria-controls="view-documents">Belgeler</button>
                     <button type="button" data-workspace-view="print" aria-controls="view-print">Yazdırma</button>
                     <button type="button" data-workspace-view="work-hours" aria-controls="view-work-hours">Çalışma Saatleri</button>
+                    <button type="button" data-workspace-view="yoksis-audit" aria-controls="view-yoksis-audit">YÖKSİS Eksik Evrak</button>
                 </nav>
 
                 <section id="view-intake" class="view-panel" hidden aria-labelledby="intake-title">
@@ -206,6 +211,32 @@
                 <section id="view-archive" class="view-panel" hidden aria-labelledby="archive-title">
                     <h3 id="archive-title" class="sr-only" tabindex="-1">Arşiv</h3>
                     <div id="staff-archive-manager"></div>
+                </section>
+
+                <section id="view-yoksis-audit" class="view-panel yoksis-audit-workspace" hidden aria-labelledby="yoksis-audit-title">
+                    <div class="yoksis-audit-heading">
+                        <p class="home-eyebrow">YKN aktarımından ayrı · yalnızca okuma</p>
+                        <h3 id="yoksis-audit-title" tabindex="-1">YÖKSİS Eksik Evrak Kontrolü</h3>
+                        <p>Açık YÖKSİS sekmesindeki kayıtlar sırayla seçilir; başvuru ve öğrenci numarası doğrulandıktan sonra durum ve eksik evrak satırları okunur.</p>
+                    </div>
+                    <div id="staff-yoksis-audit" class="yoksis-audit-panel">
+                        <div class="yoksis-audit-warning" role="note">
+                            <strong>YÖKSİS formu değişebilir.</strong> Tarama sırasında kayıt seçimi yapılır. Evrak yükleme, silme veya YÖKSİS işlemi kaydetme yapılmaz. Sonuçlar yalnızca bu sekmenin belleğinde tutulur.
+                        </div>
+                        <label class="yoksis-audit-confirm"><input id="audit-confirm" type="checkbox"> Form seçiminin değişebileceğini anladım.</label>
+                        <div class="yoksis-audit-controls">
+                            <button id="audit-start" class="btn btn-primary" type="button">YÖKSİS listesini tara</button>
+                            <button id="audit-stop" class="btn btn-outline" type="button" hidden>Durdur</button>
+                        </div>
+                        <p id="audit-status" role="status" aria-live="polite">Tarama için yetkili YÖKSİS sekmesi ve kayıt listesi gerekir.</p>
+                        <p id="audit-progress" class="yoksis-audit-progress" aria-live="polite"></p>
+                        <div class="yoksis-audit-table-wrap">
+                            <table class="yoksis-audit-table">
+                                <thead><tr><th>Başvuru No</th><th>Ad Soyad</th><th>Öğrenci No</th><th>Telefon</th><th>YÖKSİS durumu</th><th>Eksik evrak</th></tr></thead>
+                                <tbody id="audit-results"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </section>
 
                 <section id="view-ykn" class="view-panel" hidden aria-labelledby="ykn-title">

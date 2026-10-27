@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="tr">
+<body>
+  <section aria-labelledby="application-title">
+    <h2 id="application-title">E-İkamet Başvuru Sorgulama</h2>
+    <label for="application-number">E-İkamet Başvuru No:</label><input id="application-number" value="2026-00-0000001" readonly>
+    <label for="student-number">Öğrenci No (*):</label><input id="student-number" value="2600000001" readonly>
+    <label for="first-name">Adı:</label><input id="first-name" value="TESTAD" readonly>
+    <label for="last-name">Soyadı:</label><input id="last-name" value="TESTSOYAD" readonly>
+    <label for="phone">İrtibat Telefonu (*):</label><input id="phone" value="5000000000" readonly>
+    <label for="application-status">Başvuru Durumu:</label><input id="application-status" value="Eksik Belge Bekliyor" readonly>
+  </section>
+  <section aria-labelledby="missing-title">
+    <h2 id="missing-title">GöçNet Tarafından Talep Edilen EKSİK Belgeler &amp; Yükleme İşlemleri</h2>
+    <table>
+      <thead><tr><th>Kod</th><th>Belge Başlığı</th><th>Zorunluluk</th><th>Not / Açıklama</th><th>Yükleme Durumu</th><th>GöçNet Belge Kayıt No</th><th>İşlemler</th></tr></thead>
+      <tbody><tr><td>99</td><td>Diğer Belge</td><td>EVET (Zorunlu)</td><td>AKTİF ÖĞRENCİ BELGESİ</td><td>Yüklenmedi</td><td>-</td><td><button>Yükle</button></td></tr></tbody>
+    </table>
+  </section>
+</body>
+</html>

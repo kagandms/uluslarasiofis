@@ -39,6 +39,45 @@ test('extension rejects unknown portal actions and malformed high-impact payload
     assert.equal(security.isValidPortalMessage({ action: 'SAVE_CROPPED_PHOTO', requestId: 'r1', photoBase64: '<svg onload=x>' }), false);
 });
 
+test('extension accepts only correlated YÖKSİS audit commands with a bounded scan id', () => {
+    const security = evaluateScript(portalSecuritySource, 'YKN_PORTAL_SECURITY');
+    const start = { action: 'START_YOKSIS_DOCUMENT_AUDIT', requestId: 'request-1', scanId: 'scan-1' };
+    const stop = { action: 'STOP_YOKSIS_DOCUMENT_AUDIT', requestId: 'request-2', scanId: 'scan-1', targetTabId: 12 };
+
+    assert.equal(security.isValidPortalMessage(start), true);
+    assert.equal(security.isValidPortalMessage(stop), true);
+    assert.equal(security.isValidPortalMessage({ ...start, scanId: '' }), false);
+    assert.equal(security.isValidPortalMessage({ ...start, scanId: 's'.repeat(129) }), false);
+    assert.equal(security.isValidPortalMessage({ ...start, requestId: {} }), false);
+    assert.equal(security.isValidPortalMessage({ ...stop, targetTabId: '12' }), false);
+});
+
+test('extension audit events require the originating scan and identity-bound bounded results', () => {
+    const security = evaluateScript(portalSecuritySource, 'YKN_PORTAL_SECURITY');
+    const validRecord = {
+        source: 'YOKSIS_DOCUMENT_AUDIT',
+        action: 'YOKSIS_DOCUMENT_AUDIT_RECORD',
+        requestId: 'request-1',
+        scanId: 'scan-1',
+        portalTabId: 12,
+        data: {
+            type: 'record', index: 1, total: 1,
+            entry: { applicationNumber: '2026-00-0000001', studentNumber: '2600000001' },
+            result: {
+                status: 'verified',
+                identity: { applicationNumber: '2026-00-0000001', studentNumber: '2600000001', firstName: 'TEST', lastName: 'STUDENT', phone: '5000000000' },
+                applicationStatus: 'Eksik Belge Bekliyor',
+                documents: [{ code: '99', name: 'Diğer Belge', required: true, note: 'Aktif öğrenci belgesi', uploadStatus: 'Yüklenmedi' }]
+            }
+        }
+    };
+
+    assert.equal(security.isValidYoksisAuditEvent(validRecord), true);
+    assert.equal(security.isValidYoksisAuditEvent({ ...validRecord, portalTabId: -1 }), false);
+    assert.equal(security.isValidYoksisAuditEvent({ ...validRecord, data: { ...validRecord.data, entry: { ...validRecord.data.entry, studentNumber: 'wrong' } } }), false);
+    assert.equal(security.isValidYoksisAuditEvent({ ...validRecord, data: { ...validRecord.data, result: { ...validRecord.data.result, identity: { ...validRecord.data.result.identity, applicationNumber: '2026-00-0000002' } } } }), false);
+});
+
 test('extension accepts Apply events only from the Apply applications origin', () => {
     const security = evaluateScript(portalSecuritySource, 'YKN_PORTAL_SECURITY');
 
