@@ -259,6 +259,8 @@ test('applications manager submits filters, changes pages, renders detail safely
     assert.match(root.textContent, /passport\.pdf/);
     assert.match(root.textContent, /Onaylandı/);
     assert.match(root.textContent, /Yüklenmemiş/);
+    assert.ok(root.querySelector('[data-action="download-application-pdf"]'));
+    assert.ok(root.querySelector('.staff-application-details-grid .staff-application-detail-item'));
     assert.doesNotMatch(root.textContent, /Atanan Personel|Atanmamış|Reviewer One/);
     assert.ok(root.querySelector('[data-action="back-to-queue"]'));
     assert.equal(root.querySelectorAll('[data-action*="approve"], [data-action*="assign"], [data-action="download-document"], [data-action*="preview"]').length, 0);
