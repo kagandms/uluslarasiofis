@@ -20,18 +20,37 @@ function formatDocuments(documents) {
     }).join('\n') || 'Eksik evrak bulunmadı';
 }
 
+function classifyApplicationStatus(status) {
+    const normalized = String(status || '')
+        .toLocaleLowerCase('tr-TR')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/ı/g, 'i')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+
+    if (normalized === 'islem tamamlandi') return { key: 'success', label: 'Başarılı' };
+    if (normalized === 'islem bekliyor') return { key: 'pending', label: 'Beklemede' };
+    if (normalized === 'eksik belge bekliyor') return { key: 'failure', label: 'Başarısız' };
+    return { key: 'unclassified', label: 'Sınıflandırılamadı' };
+}
+
 function appendRecord(root, data) {
     const document = root.ownerDocument;
     const row = document.createElement('tr');
     const verified = data.result?.status === 'verified';
     const identity = verified ? data.result.identity : null;
+    const classification = verified
+        ? classifyApplicationStatus(data.result.applicationStatus)
+        : { key: 'unclassified', label: 'Sınıflandırılamadı' };
     const values = [
         data.entry?.applicationNumber || '—',
         identity ? `${identity.firstName} ${identity.lastName}`.trim() : '—',
         data.entry?.studentNumber || '—',
         identity?.phone || '—',
         verified ? data.result.applicationStatus : 'Kontrol edilemedi',
-        verified ? formatDocuments(data.result.documents || []) : 'Kayıt güvenli biçimde okunamadı'
+        verified ? formatDocuments(data.result.documents || []) : 'Kayıt güvenli biçimde okunamadı',
+        classification.label
     ];
     for (const value of values) {
         const cell = document.createElement('td');
@@ -39,6 +58,8 @@ function appendRecord(root, data) {
         row.append(cell);
     }
     row.dataset.auditResult = verified ? 'verified' : 'unreadable';
+    row.dataset.auditClassification = classification.key;
+    row.cells[6].dataset.auditClassification = classification.key;
     root.querySelector('#audit-results')?.append(row);
 }
 
