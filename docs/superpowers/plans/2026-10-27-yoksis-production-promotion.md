@@ -64,10 +64,15 @@
 
 ### Task 4: Separate plan for “Başvuruma Devam Et” removal
 
-- [ ] Map homepage CTA/form, cross-device reference + student-number access, draft continuation, submitted application tracking/resubmission, and deep links.
+- [ ] Remove the homepage CTA `#btn-home-resume`, hidden `#application-resume-card` and `#resume-application-form` from `index.html` only after the replacement path is decided.
+- [ ] Remove the `initHomeResumeForm` import and initializer from `src/public/main.js`; `src/public/homeResumeForm.js` can then be deleted once no callers remain.
+- [ ] Keep `accessApplicationWithReference()` in `src/public/applicationApi.js` unless the replacement explicitly retires cross-device owner access; it establishes the owner session used by draft continuation at `/basvuru/` and submitted tracking/resubmission at `/basvurum/`.
+- [ ] Replace `/#resume-application-form` in `src/public/applicationTracking.js` with the chosen recovery route so a public tracking result does not point to a removed form.
+- [ ] Update localization entries and homepage/access/tracking tests for the chosen behavior, including rate-limit and invalid-credential feedback if that path remains.
+- [ ] Roll out independently from YÖKSİS/PDF work and verify that existing draft and submitted applicants can still recover from another device.
+
 - [ ] Decide the replacement recovery path with the product owner before removal.
-- [ ] Remove the homepage entry point only in a separate change; preserve owner-session access and `/basvurum/` unless explicitly included in that decision.
-- [ ] Add regression tests for the chosen recovery path and release independently.
+- [ ] Do not remove the owner-session API or delete user drafts as a side effect of hiding the homepage CTA.
 
 ## Self-Review
 
