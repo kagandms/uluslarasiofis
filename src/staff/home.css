@@ -568,7 +568,10 @@ body.dark-mode::after { opacity: 1; }
 .yoksis-audit-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .yoksis-audit-table th, .yoksis-audit-table td { padding: 0.7rem; border: 1px solid var(--card-border); text-align: start; vertical-align: top; }
 .yoksis-audit-table th { background: color-mix(in srgb, var(--staff-home-rose) 28%, var(--card-bg)); }
-.yoksis-audit-table td:last-child { min-width: 16rem; white-space: pre-line; }
+.yoksis-audit-table td:nth-child(6) { min-width: 16rem; white-space: pre-line; }
+.yoksis-audit-table td[data-audit-classification="success"] { color: #167344; font-weight: 700; }
+.yoksis-audit-table td[data-audit-classification="pending"] { color: #875d00; font-weight: 700; }
+.yoksis-audit-table td[data-audit-classification="failure"] { color: #a12622; font-weight: 700; }
 .yoksis-audit-table tr[data-audit-result="unreadable"] { background: color-mix(in srgb, #ffe9b8 35%, var(--card-bg)); }
 
 #workspace-content .view-panel[hidden] { display: none !important; }

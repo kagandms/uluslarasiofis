@@ -8,7 +8,7 @@ const markup = `<!doctype html><html><body><section id="audit-root">
   <button id="audit-start" type="button">Taramayı başlat</button>
   <button id="audit-stop" type="button" hidden>Taramayı durdur</button>
   <p id="audit-status" role="status"></p><p id="audit-progress"></p>
-  <table><thead><tr><th>Başvuru No</th><th>Ad Soyad</th><th>Öğrenci No</th><th>Telefon</th><th>Durum</th><th>Eksik Evrak</th></tr></thead><tbody id="audit-results"></tbody></table>
+  <table><thead><tr><th>Başvuru No</th><th>Ad Soyad</th><th>Öğrenci No</th><th>Telefon</th><th>Durum</th><th>Eksik Evrak</th><th>Sonuç</th></tr></thead><tbody id="audit-results"></tbody></table>
 </section></body></html>`;
 
 test('staff audit manager starts only after confirmation and renders YÖKSİS text as plain text', async () => {
@@ -68,5 +68,61 @@ test('staff audit manager starts only after confirmation and renders YÖKSİS te
     assert.equal(row.querySelector('img, b'), null);
     assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/);
     assert.match(row.textContent, /<b>Diğer Belge<\/b>/);
+    window.close();
+});
+
+test('staff audit manager classifies completed, pending, and missing-document statuses separately', async () => {
+    const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
+    const { window } = dom;
+    const root = window.document.getElementById('audit-root');
+    window.postMessage = (data) => {
+        queueMicrotask(() => window.dispatchEvent(new window.MessageEvent('message', {
+            source: window,
+            origin: window.location.origin,
+            data: { source: 'EXTENSION', type: 'RESPONSE', action: data.payload.action,
+                requestId: data.payload.requestId,
+                response: data.payload.action === 'CHECK_YOKSIS_DOCUMENT_AUDIT'
+                    ? { ready: true, queueCount: 4, yoksisTabId: 4 }
+                    : { success: true, yoksisTabId: 4 } }
+        })));
+    };
+    initializeYoksisDocumentAuditManager(root);
+    root.querySelector('#audit-confirm').checked = true;
+    root.querySelector('#audit-start').click();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    const scanId = root.dataset.auditScanId;
+
+    const statusLabels = ['İşlem Tamamlandı', 'İşlem Bekliyor', 'Eksik Belge Bekliyor', 'Başka Durum'];
+    for (const [index, applicationStatus] of statusLabels.entries()) {
+        window.dispatchEvent(new window.MessageEvent('message', {
+            source: window,
+            origin: window.location.origin,
+            data: {
+                source: 'EXTENSION',
+                type: 'EVENT',
+                action: 'YOKSIS_DOCUMENT_AUDIT_RECORD',
+                scanId,
+                requestId: root.dataset.auditRequestId,
+                data: {
+                    entry: { applicationNumber: `2026-00-000000${index + 1}`, studentNumber: `260000000${index + 1}` },
+                    result: {
+                        status: 'verified',
+                        identity: { firstName: 'TEST', lastName: 'KAYIT', phone: '5000000000' },
+                        applicationStatus,
+                        documents: []
+                    }
+                }
+            }
+        }));
+    }
+
+    assert.deepEqual(
+        Array.from(root.querySelectorAll('#audit-results tr'), (row) => row.cells[6]?.textContent),
+        ['Başarılı', 'Beklemede', 'Başarısız', 'Sınıflandırılamadı']
+    );
+    assert.deepEqual(
+        Array.from(root.querySelectorAll('#audit-results tr'), (row) => row.dataset.auditClassification),
+        ['success', 'pending', 'failure', 'unclassified']
+    );
     window.close();
 });
