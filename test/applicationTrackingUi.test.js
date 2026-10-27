@@ -379,7 +379,7 @@ test('tracking supports all locales and the public main entry keeps Arabic right
         assert.equal(document.documentElement.lang, 'ar');
         assert.equal(document.documentElement.dir, 'rtl');
         assert.doesNotMatch(document.querySelector('#application-tracking').textContent, /البحث برقم الطالب/);
-        assert.ok(document.querySelector('.tracking-owner-access-link'));
+        assert.equal(document.querySelector('.tracking-owner-access-link')?.getAttribute('href'), '/basvuruya-devam-et/');
     } finally {
         if (previousDocument === undefined) delete globalThis.document;
         else globalThis.document = previousDocument;

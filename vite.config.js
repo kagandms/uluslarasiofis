@@ -67,6 +67,7 @@ export default defineConfig({
                         portal: resolve(projectRoot, 'index.html'),
                         application: resolve(projectRoot, 'basvuru/index.html'),
                         tracking: resolve(projectRoot, 'basvurum/index.html'),
+                        resume: resolve(projectRoot, 'basvuruya-devam-et/index.html'),
                         print: resolve(projectRoot, 'yazdir/index.html'),
                         staff: resolve(projectRoot, 'yetkili/index.html'),
                         mobileTransfer: resolve(projectRoot, 'mobile-transfer/index.html')

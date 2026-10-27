@@ -1441,7 +1441,7 @@ test('an existing resubmission owner session opens the owner tracking replacemen
     document.defaultView.close();
 });
 
-test('starting a new application no longer embeds the owner credential form', async () => {
+test('application wizard does not duplicate the dedicated resume form', async () => {
     const { document, root } = createRoot();
     const api = {
         async readCurrentApplication() { throw Object.assign(new Error('no session'), { code: 'APPLICATION_SESSION_REQUIRED' }); }

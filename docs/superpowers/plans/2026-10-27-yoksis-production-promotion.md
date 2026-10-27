@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Promote the already implemented YÖKSİS missing-document audit and ordered single-PDF workflow to production without changing unrelated applicant flows.
+**Goal:** Align staging and production with the YÖKSİS missing-document audit and ordered single-PDF workflow, while keeping “Başvuruma Devam Et” on a dedicated page outside the crowded homepage.
 
-**Architecture:** Port only the YÖKSİS audit integration from the staging candidate onto the current production base; retain the PDF code already merged in production. Keep audit data transient in the staff page and preserve the extension's origin and message boundaries. Publish through the guarded production workflow after automated checks and supervised staging acceptance.
+**Architecture:** Port only the YÖKSİS audit integration from the staging candidate onto the current production base; retain the PDF code already merged in production. Move cross-device continuation to `/basvuruya-devam-et/`, linked from the application tracking page, and preserve the owner-access API. Keep audit data transient and preserve extension origin/message boundaries. Publish the matching candidate to staging and through the guarded production workflow after checks and supervised staging acceptance.
 
 **Tech Stack:** JavaScript modules, Manifest V3 extension, Node test runner, Vite, Wrangler, GitHub Actions.
 
@@ -15,7 +15,8 @@
 - Do not alter the dirty primary checkout or unrelated optimization work.
 - Keep YÖKSİS scanning read-only: no upload, delete, save, API, D1, R2, or persistent audit results.
 - Preserve the existing single-PDF sequence and 9 MiB ceiling already merged in production.
-- Do not remove or change “Başvuruma Devam Et” in this release.
+- Keep the cross-device continuation flow and owner-session API; host the form on its own page and link to it from application tracking, not the homepage action group.
+- Preserve drafts, submitted applications, and existing owner-session behavior.
 - Keep real YÖKSİS DOM acceptance as an explicit release gate; synthetic fixtures do not prove authenticated live behavior.
 - Use `npm test`, `npm run build:production`, and `npm run deploy:dry-run:production` before delivery.
 - Deploy only through the guarded `production-release.yml`; do not approve or cancel another person's pending run.
@@ -26,7 +27,7 @@
 - A delayed selection or identity mismatch must not attach another student's data to a result.
 - “Eksik Belge Bekliyor” with no readable document rows must be `Kontrol edilemedi`, not complete.
 - Portal commands must remain restricted to the authorized staff page and YÖKSİS tab.
-- Production publication must use the reviewed merge SHA and pass the configured environment gate.
+- Both environments must expose the same requested UI/features; production publication must use the reviewed merge SHA and pass the configured environment gate.
 
 ---
 
@@ -37,7 +38,7 @@
 - `src/managers/yoksisDocumentAuditManager.js`, `src/staff/main.js`, `src/staff/home.css`, `src/ui/workspaceNavigation.js`, `yetkili/index.html`: staff-only launch panel and transient results.
 - `scripts/package-extension.mjs`: include audit scripts in the downloadable extension.
 - `test/fixtures/yoksis-document-audit/` and focused audit/package/security tests: synthetic behavior contracts.
-- `docs/superpowers/plans/2026-10-27-yoksis-production-promotion.md`: promotion and separate “Başvuruma Devam Et” removal plan.
+- `docs/superpowers/plans/2026-10-27-yoksis-production-promotion.md`: coordinated feature and environment promotion plan.
 
 ## Tasks
 
@@ -62,17 +63,12 @@
 - [ ] Publish the exact reviewed production merge SHA through the guarded workflow only after staging acceptance; retain Production environment approval.
 - [ ] Verify the production Worker version and served assets after publication.
 
-### Task 4: Separate plan for “Başvuruma Devam Et” removal
+### Task 4: Move the public continuation entry point off the homepage
 
-- [ ] Remove the homepage CTA `#btn-home-resume`, hidden `#application-resume-card` and `#resume-application-form` from `index.html` only after the replacement path is decided.
-- [ ] Remove the `initHomeResumeForm` import and initializer from `src/public/main.js`; `src/public/homeResumeForm.js` can then be deleted once no callers remain.
-- [ ] Keep `accessApplicationWithReference()` in `src/public/applicationApi.js` unless the replacement explicitly retires cross-device owner access; it establishes the owner session used by draft continuation at `/basvuru/` and submitted tracking/resubmission at `/basvurum/`.
-- [ ] Replace `/#resume-application-form` in `src/public/applicationTracking.js` with the chosen recovery route so a public tracking result does not point to a removed form.
-- [ ] Update localization entries and homepage/access/tracking tests for the chosen behavior, including rate-limit and invalid-credential feedback if that path remains.
-- [ ] Roll out independently from YÖKSİS/PDF work and verify that existing draft and submitted applicants can still recover from another device.
-
-- [ ] Decide the replacement recovery path with the product owner before removal.
-- [ ] Do not remove the owner-session API or delete user drafts as a side effect of hiding the homepage CTA.
+- [x] Remove the continuation CTA/form from the homepage action area.
+- [x] Add a dedicated `/basvuruya-devam-et/` page with the existing credentials flow and locale support.
+- [x] Link the dedicated page from the application tracking page and preserve `accessApplicationWithReference()` plus its endpoint.
+- [ ] Release the same reviewed code state to staging and production after the acceptance and release gates pass.
 
 ## Self-Review
 

@@ -539,7 +539,6 @@ html[dir="rtl"] .public-home-link:hover {
 .application-button-primary:disabled { background: #e5e7eb; border-color: #e5e7eb; color: #68707c; }
 .application-button:disabled { cursor: not-allowed; opacity: 0.58; }
 
-.application-resume-card,
 .application-credentials-card {
     display: grid;
     gap: 1rem;
@@ -548,15 +547,9 @@ html[dir="rtl"] .public-home-link:hover {
     border-radius: 0.9rem;
     background: var(--public-burgundy-soft);
 }
-.application-resume-card { margin-block-start: 1.6rem; border-inline-start: 4px solid var(--public-burgundy); }
-#application-resume-card[hidden] { display: none; }
-.application-resume-card h3,
 .application-credentials-card h3 { margin: 0; color: var(--public-burgundy); }
-.application-resume-card > p,
 .credentials-draft-notice,
 .credentials-warning { margin: 0; color: #505766; line-height: 1.55; }
-.application-resume-card form,
-#resume-application-form { display: grid; gap: 1rem; }
 .application-credentials-card { border-inline-start: 4px solid var(--public-burgundy); background: linear-gradient(135deg, var(--public-burgundy-soft), #fff); }
 .credentials-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .credential-field-group { display: grid; align-content: start; gap: 0.65rem; min-width: 0; padding: 0.9rem; border: 1px solid #eadde0; border-radius: 0.7rem; background: #fff; }
@@ -567,6 +560,7 @@ html[dir="rtl"] .public-home-link:hover {
 .credential-field-group > button { min-height: 2.75rem; }
 .credential-copy-status { margin: 0; color: #8d2638; font-size: 0.84rem; line-height: 1.45; }
 .application-form-field { min-width: 0; }
+.application-resume-form { max-width: 44rem; margin-block-start: 1.25rem; }
 
 .phone-field { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 0.55rem 0.7rem; }
 .phone-field > label,
@@ -913,7 +907,6 @@ body:not([data-page="home"]) .public-section,
 }
 
 html[dir="rtl"] .credential-value { direction: ltr; text-align: left; }
-html[dir="rtl"] .application-resume-card,
 html[dir="rtl"] .application-credentials-card { text-align: right; }
 
 @media (max-width: 640px) {

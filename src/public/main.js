@@ -36,12 +36,12 @@ function applyLocale(locale) {
     const page = document.body.dataset.page;
     const isApplicationPage = page === 'application';
     const isTrackingPage = page === 'tracking';
+    const isResumePage = page === 'resume';
 
     document.documentElement.lang = selectedLocale;
     document.documentElement.dir = selectedLocale === 'ar' ? 'rtl' : 'ltr';
-    const titleKey = isApplicationPage
-        ? 'applicationPageTitle'
-        : (isTrackingPage ? 'trackingPageTitle' : 'portalTitle');
+    const titleKey = isApplicationPage ? 'applicationPageTitle'
+        : (isTrackingPage ? 'trackingPageTitle' : (isResumePage ? 'homeResumeAction' : 'portalTitle'));
     document.title = getMessage(selectedLocale, titleKey);
 
     document.querySelectorAll('[data-i18n]').forEach((element) => {
@@ -58,9 +58,12 @@ function applyLocale(locale) {
 
     const pageHeading = document.getElementById('page-heading');
     const pageDescription = document.getElementById('page-description');
-    if (pageHeading && pageDescription && (isApplicationPage || isTrackingPage)) {
-        pageHeading.textContent = getMessage(selectedLocale, isApplicationPage ? 'applicationPageTitle' : 'trackingPageTitle');
-        pageDescription.textContent = getMessage(selectedLocale, isApplicationPage ? 'applicationPageText' : 'trackingPageText');
+    if (pageHeading && pageDescription && (isApplicationPage || isTrackingPage || isResumePage)) {
+        const headingKey = isApplicationPage ? 'applicationPageTitle' : (isResumePage ? 'homeResumeAction' : 'trackingPageTitle');
+        const descriptionKey = isApplicationPage ? 'applicationPageText'
+            : (isResumePage ? 'accessDeviceExplanation' : 'trackingPageText');
+        pageHeading.textContent = getMessage(selectedLocale, headingKey);
+        pageDescription.textContent = getMessage(selectedLocale, descriptionKey);
     }
 
     const localeSelect = document.getElementById('locale-select');
@@ -98,12 +101,10 @@ function initPublicPortal() {
         const trackingRoot = document.getElementById('application-tracking');
         if (trackingRoot) void initializeApplicationTracking(trackingRoot, applicationApi);
     }
+    if (document.body.dataset.page === 'resume') {
+        initHomeResumeForm({ root: document, api: applicationApi, getMessage: (key) => getMessage(document.documentElement.lang, key) });
+    }
     if (document.body.dataset.page === 'home') {
-        initHomeResumeForm({
-            root: document,
-            api: applicationApi,
-            getMessage: (key) => getMessage(document.documentElement.lang, key)
-        });
         initScrollReveal();
         initializePrivacyNoticeModal();
     }
