@@ -22,6 +22,8 @@ export function initD1UsageCounter({ root = document, fetcher = fetch } = {}) {
     let usage = null;
     let hasLoaded = false;
     let hasRequested = false;
+    let visibilityAnimation = null;
+    let visibilityRevision = 0;
     const render = () => {
         const numberFormat = new Intl.NumberFormat('tr-TR');
         const limit = usage?.limit || FALLBACK_LIMIT;
@@ -52,12 +54,52 @@ export function initD1UsageCounter({ root = document, fetcher = fetch } = {}) {
         }
     };
 
-    const renderVisibility = () => {
-        widget.hidden = hidden;
-        if (!toggle) return;
+    const renderVisibility = (animate = false) => {
+        const revision = ++visibilityRevision;
+        visibilityAnimation?.cancel();
+        visibilityAnimation = null;
+        if (!toggle) {
+            widget.hidden = hidden;
+            return;
+        }
         toggle.setAttribute('aria-expanded', String(!hidden));
         toggle.setAttribute('aria-label', hidden ? 'Sayacı göster' : 'Sayacı gizle');
         toggle.querySelector('svg path')?.setAttribute('d', hidden ? 'M5 9 12 16 19 9' : 'M5 15 12 8 19 15');
+
+        const reducedMotion = root.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+        if (!animate || reducedMotion || typeof widget.animate !== 'function') {
+            widget.hidden = hidden;
+            return;
+        }
+
+        const collapsed = { opacity: 0, transform: 'translateY(-8px) scale(0.98)' };
+        const expanded = { opacity: 1, transform: 'translateY(0) scale(1)' };
+        if (hidden) {
+            visibilityAnimation = widget.animate([expanded, collapsed], {
+                duration: 220,
+                easing: 'ease-in',
+                fill: 'both'
+            });
+            visibilityAnimation.onfinish = () => {
+                if (revision !== visibilityRevision || !hidden) return;
+                widget.hidden = true;
+                visibilityAnimation?.cancel();
+                visibilityAnimation = null;
+            };
+            return;
+        }
+
+        widget.hidden = false;
+        visibilityAnimation = widget.animate([collapsed, expanded], {
+            duration: 260,
+            easing: 'ease-out',
+            fill: 'both'
+        });
+        visibilityAnimation.onfinish = () => {
+            if (revision !== visibilityRevision || hidden) return;
+            visibilityAnimation?.cancel();
+            visibilityAnimation = null;
+        };
     };
     const loadUsage = () => {
         if (hasRequested) return;
@@ -85,7 +127,7 @@ export function initD1UsageCounter({ root = document, fetcher = fetch } = {}) {
     renderVisibility();
     toggle?.addEventListener('click', () => {
         hidden = !hidden;
-        renderVisibility();
+        renderVisibility(true);
         try {
             root.defaultView?.localStorage.setItem(HIDDEN_PREFERENCE_KEY, String(hidden));
         } catch {
