@@ -102,10 +102,10 @@ function createUatUploadCapability(jobId, uploadToken) {
         requiredHeaders: { 'Content-Type': 'application/pdf', 'X-Print-Upload-Token': uploadToken } };
 }
 
-function createPrintUploadCapability(jobId, uploadToken, staffActor) {
+function createPrintUploadCapability(jobId, uploadToken, staffActor, contentType) {
     const route = staffActor ? '/api/staff/print/jobs' : '/api/public/print/jobs';
     return { url: `${route}/${jobId}/content`, method: 'PUT',
-        requiredHeaders: { 'Content-Type': 'application/pdf', 'X-Print-Upload-Token': uploadToken } };
+        requiredHeaders: { 'Content-Type': contentType, 'X-Print-Upload-Token': uploadToken } };
 }
 
 /**
@@ -133,7 +133,7 @@ async function createPrintUploadIntent(request, environment, staffActor = null) 
     readPrintUatDeadline(environment);
     if (job.status !== 'uploading') return { job_id: job.id, status: job.status, upload: null };
     const capability = intent.uatExpiresAt ? createUatUploadCapability(job.id, context.uploadToken)
-        : createPrintUploadCapability(job.id, context.uploadToken, staffActor);
+        : createPrintUploadCapability(job.id, context.uploadToken, staffActor, job.media_type);
     return { job_id: job.id, status: job.status, upload: capability };
 }
 

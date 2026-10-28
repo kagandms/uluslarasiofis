@@ -145,6 +145,25 @@ test('print upload rejects a body whose stream exceeds the size declared by its 
     assert.equal(objects.size, 0);
 });
 
+test('image print capabilities preserve the intent MIME type through the Worker upload', async () => {
+    const { environment, database } = createEnvironment();
+    await createPrintRepository(database).heartbeat({ printerId: 'office-printer', runnerId: 'runner-1', health: 'ready',
+        printerName: 'Office Printer', now: new Date().toISOString() });
+    const tokens = { idempotency_key: 'a'.repeat(64), tracking_token: 'b'.repeat(64), upload_token: 'c'.repeat(64) };
+    const intentResponse = await worker.fetch(request('/api/public/print/upload-intents', {
+        method: 'POST', body: { byte_size: 3, copies: 1, media_type: 'image/jpeg', paper_size: 'A4',
+            color_mode: 'monochrome', duplex: 'simplex', orientation: 'portrait', ...tokens }
+    }), environment);
+    const intent = await intentResponse.json();
+
+    assert.equal(intent.upload.requiredHeaders['Content-Type'], 'image/jpeg');
+    const uploadResponse = await worker.fetch(new Request(`https://portal.test${intent.upload.url}`, {
+        method: 'PUT', headers: { Origin: 'https://portal.test', ...intent.upload.requiredHeaders },
+        body: new Uint8Array([0xff, 0xd8, 0xff])
+    }), environment);
+    assert.equal(uploadResponse.status, 200);
+});
+
 test('printer machine endpoints reject absent and invalid secrets', async () => {
     const { environment } = createEnvironment();
     for (const secret of ['', 'wrong']) {
