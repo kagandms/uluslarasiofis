@@ -12,6 +12,21 @@ function createEnvironment(settings = {}) {
     applyAllMigrations(database);
     const objects = new Map();
     const bucket = {
+        async put(key, body, options) {
+            if (objects.has(key) && options?.onlyIf?.etagDoesNotMatch === '*') return null;
+            const chunks = [];
+            const reader = body.getReader();
+            while (true) {
+                const result = await reader.read();
+                if (result.done) break;
+                chunks.push(result.value);
+            }
+            const stored = new Blob(chunks, { type: options?.httpMetadata?.contentType });
+            const object = { size: stored.size, type: stored.type, etag: 'test-etag', get body() { return stored.stream(); },
+                async arrayBuffer() { return stored.arrayBuffer(); } };
+            objects.set(key, object);
+            return object;
+        },
         async head(key) {
             const object = objects.get(key);
             return object ? { key, size: object.size, etag: object.etag, httpMetadata: { contentType: object.type } } : null;
@@ -57,8 +72,16 @@ test('public print upload, machine validation, page count, and status follow the
     assert.equal(intent.status, 'uploading');
     assert.equal(intent.upload.method, 'PUT');
     assert.equal(intent.job_id.includes('.pdf'), false);
+    assert.equal(intent.upload.url, `/api/public/print/jobs/${intent.job_id}/content`);
+    const uploadResponse = await worker.fetch(new Request(`https://portal.test${intent.upload.url}`, {
+        method: 'PUT', headers: { Origin: 'https://portal.test', 'Content-Type': 'application/pdf',
+            'X-Print-Upload-Token': tokens.upload_token, 'Content-Length': String(pdf.length) }, body: pdf
+    }), environment);
+    assert.equal(uploadResponse.status, 200);
     const uploadJob = database.prepare('SELECT storage_key FROM print_jobs WHERE id=?').bind(intent.job_id).first();
-    objects.set(uploadJob.storage_key, new Blob([pdf], { type: 'application/pdf' }));
+    objects.get(uploadJob.storage_key).arrayBuffer = async () => {
+        throw new Error('Print finalize must inspect only a bounded signature.');
+    };
     const finalizeResponse = await worker.fetch(request(`/api/public/print/jobs/${intent.job_id}/finalize`, {
         method: 'POST', headers: { 'X-Print-Upload-Token': tokens.upload_token }
     }), environment);
@@ -77,6 +100,13 @@ test('public print upload, machine validation, page count, and status follow the
     assert.equal(claimed.orientation, 'portrait');
     assert.deepEqual(claimed.limits, { max_copies: 50, max_page_copies: 200 });
     const leaseHeader = { 'X-Print-Lease': claimed.lease_token };
+    const contentResponse = await worker.fetch(request(`/api/printer/jobs/${intent.job_id}/content`, {
+        headers: printerHeaders(PRINTER_SECRET, leaseHeader)
+    }), environment);
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', pdf));
+    const expectedSha256 = [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    assert.equal(contentResponse.headers.get('X-Content-SHA256'), expectedSha256);
+    assert.deepEqual(new Uint8Array(await contentResponse.arrayBuffer()), pdf);
     const validationResponse = await worker.fetch(request(`/api/printer/jobs/${intent.job_id}/validation-result`, {
         method: 'POST', body: { status: 'ready', page_count: 2 }, headers: printerHeaders(PRINTER_SECRET, leaseHeader)
     }), environment);
@@ -92,6 +122,46 @@ test('public print upload, machine validation, page count, and status follow the
         headers: { 'X-Print-Tracking-Token': 'd'.repeat(64) }
     }), environment);
     assert.equal(isolatedResponse.status, 404);
+});
+
+test('print upload rejects a body whose stream exceeds the size declared by its intent', async () => {
+    const { environment, database, objects } = createEnvironment();
+    await createPrintRepository(database).heartbeat({ printerId: 'office-printer', runnerId: 'runner-1', health: 'ready',
+        printerName: 'Office Printer', now: new Date().toISOString() });
+    const tokens = { idempotency_key: '7'.repeat(64), tracking_token: '8'.repeat(64), upload_token: '9'.repeat(64) };
+    const intentResponse = await worker.fetch(request('/api/public/print/upload-intents', {
+        method: 'POST', body: { byte_size: 8, copies: 1, media_type: 'application/pdf', paper_size: 'A4',
+            color_mode: 'monochrome', duplex: 'simplex', orientation: 'portrait', ...tokens }
+    }), environment);
+    const intent = await intentResponse.json();
+    const response = await worker.fetch(new Request(`https://portal.test/api/public/print/jobs/${intent.job_id}/content`, {
+        method: 'PUT', headers: { Origin: 'https://portal.test', 'Content-Type': 'application/pdf',
+            'X-Print-Upload-Token': tokens.upload_token },
+        body: new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55, 0])
+    }), environment);
+
+    assert.equal(response.status, 409);
+    assert.equal(database.prepare('SELECT status FROM print_jobs WHERE id=?').bind(intent.job_id).first().status, 'uploading');
+    assert.equal(objects.size, 0);
+});
+
+test('image print capabilities preserve the intent MIME type through the Worker upload', async () => {
+    const { environment, database } = createEnvironment();
+    await createPrintRepository(database).heartbeat({ printerId: 'office-printer', runnerId: 'runner-1', health: 'ready',
+        printerName: 'Office Printer', now: new Date().toISOString() });
+    const tokens = { idempotency_key: 'a'.repeat(64), tracking_token: 'b'.repeat(64), upload_token: 'c'.repeat(64) };
+    const intentResponse = await worker.fetch(request('/api/public/print/upload-intents', {
+        method: 'POST', body: { byte_size: 3, copies: 1, media_type: 'image/jpeg', paper_size: 'A4',
+            color_mode: 'monochrome', duplex: 'simplex', orientation: 'portrait', ...tokens }
+    }), environment);
+    const intent = await intentResponse.json();
+
+    assert.equal(intent.upload.requiredHeaders['Content-Type'], 'image/jpeg');
+    const uploadResponse = await worker.fetch(new Request(`https://portal.test${intent.upload.url}`, {
+        method: 'PUT', headers: { Origin: 'https://portal.test', ...intent.upload.requiredHeaders },
+        body: new Uint8Array([0xff, 0xd8, 0xff])
+    }), environment);
+    assert.equal(uploadResponse.status, 200);
 });
 
 test('printer machine endpoints reject absent and invalid secrets', async () => {
@@ -203,10 +273,9 @@ test('configured print settings are stored and returned to the printer claim', a
         .bind(intent.job_id).first();
     assert.deepEqual({ ...job }, { paper_size: 'A3', color_mode: 'color', duplex: 'duplexlong', orientation: 'portrait' });
     const object = database.prepare('SELECT storage_key FROM print_jobs WHERE id=?').bind(intent.job_id).first();
-    objects.set(object.storage_key, Object.assign(
-        new Blob([new Uint8Array([37,80,68,70,45,49,46,55])], { type: 'application/pdf' }),
-        { etag: 'etag-test' }
-    ));
+    const objectPdf = new Blob([new Uint8Array([37,80,68,70,45,49,46,55])], { type: 'application/pdf' });
+    objects.set(object.storage_key, { size: objectPdf.size, type: objectPdf.type, etag: 'etag-test',
+        body: objectPdf.stream(), arrayBuffer: () => objectPdf.arrayBuffer() });
     const finalizeResponse = await worker.fetch(request(`/api/public/print/jobs/${intent.job_id}/finalize`, {
         method: 'POST', headers: { 'X-Print-Upload-Token': tokens.upload_token }
     }), environment);
@@ -239,8 +308,9 @@ test('protocol 3 carries landscape and higher copies while protocol 2 cannot cla
     assert.equal(intentResponse.status, 200);
     const intent = await intentResponse.json();
     const stored = database.prepare('SELECT storage_key FROM print_jobs WHERE id=?').bind(intent.job_id).first();
-    objects.set(stored.storage_key, Object.assign(new Blob([new Uint8Array([37,80,68,70,45,49,46,55])],
-        { type: 'application/pdf' }), { etag: 'etag-protocol-2' }));
+    const storedPdf = new Blob([new Uint8Array([37,80,68,70,45,49,46,55])], { type: 'application/pdf' });
+    objects.set(stored.storage_key, { size: storedPdf.size, type: storedPdf.type, etag: 'etag-protocol-2',
+        body: storedPdf.stream(), arrayBuffer: () => storedPdf.arrayBuffer() });
     const finalizeResponse = await worker.fetch(request(`/api/public/print/jobs/${intent.job_id}/finalize`, {
         method: 'POST', headers: { 'X-Print-Upload-Token': tokens.upload_token }
     }), environment);
@@ -273,8 +343,9 @@ test('Worker rejects a verified page count that exceeds the configured impressio
     }), environment);
     const intent = await intentResponse.json();
     const stored = database.prepare('SELECT storage_key FROM print_jobs WHERE id=?').bind(intent.job_id).first();
-    objects.set(stored.storage_key, Object.assign(new Blob([new Uint8Array([37,80,68,70,45,49,46,55])],
-        { type: 'application/pdf' }), { etag: 'etag-budget' }));
+    const budgetPdf = new Blob([new Uint8Array([37,80,68,70,45,49,46,55])], { type: 'application/pdf' });
+    objects.set(stored.storage_key, { size: budgetPdf.size, type: budgetPdf.type, etag: 'etag-budget',
+        body: budgetPdf.stream(), arrayBuffer: () => budgetPdf.arrayBuffer() });
     await worker.fetch(request(`/api/public/print/jobs/${intent.job_id}/finalize`, {
         method: 'POST', headers: { 'X-Print-Upload-Token': tokens.upload_token }
     }), environment);

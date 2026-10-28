@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import types
 import unittest
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -456,6 +457,33 @@ class PrintAgentTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "signature"):
                 validate_document(source, "image/png", target)
+
+    def test_pdf_over_10_mib_is_accepted_under_the_100_mib_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            source = Path(temporary_directory) / "source.pdf"
+            target = Path(temporary_directory) / "ready.pdf"
+            document = fitz.open()
+            document.new_page()
+            document.embfile_add("payload.bin", os.urandom(10 * 1024 * 1024))
+            document.save(source)
+            document.close()
+
+            self.assertGreater(source.stat().st_size, 10 * 1024 * 1024)
+
+            page_count = validate_document(source, "application/pdf", target)
+
+            self.assertEqual(page_count, 1)
+
+    def test_document_over_100_mib_is_rejected_before_parsing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            source = Path(temporary_directory) / "oversized.pdf"
+            target = Path(temporary_directory) / "ready.pdf"
+            with source.open("wb") as file_handle:
+                file_handle.write(b"%PDF-")
+                file_handle.truncate(100_000_001)
+
+            with self.assertRaisesRegex(ValueError, "configured size limit"):
+                validate_document(source, "application/pdf", target)
 
     def test_startup_requires_writable_temporary_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

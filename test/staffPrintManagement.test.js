@@ -20,7 +20,12 @@ function createEnvironment(role = 'admin') {
             return object ? { key, size: object.size, etag: object.etag,
                 httpMetadata: { contentType: object.type } } : null;
         },
-        async get(key) { return objects.get(key) || null; },
+        async get(key) {
+            const object = objects.get(key);
+            if (!object) return null;
+            return object instanceof Blob ? { size: object.size, type: object.type, etag: object.etag,
+                body: object.stream(), arrayBuffer: () => object.arrayBuffer() } : object;
+        },
         async delete(key) { objects.delete(key); }
     };
     const username = `${role}@test`;

@@ -6,7 +6,7 @@ import { submitPrintEntries } from './printQueue.js';
 import { PRINT_LOCALES, translatePrintMessage } from './i18n/printMessages.js';
 import { readPrintLocale, savePrintLocale } from './i18n/print-locale.js';
 
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 100_000_000;
 const MAX_PRINT_PAGES = 20;
 const ACCEPTED_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
 const fileInput = document.getElementById('print-file-input');

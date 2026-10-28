@@ -102,6 +102,12 @@ function createUatUploadCapability(jobId, uploadToken) {
         requiredHeaders: { 'Content-Type': 'application/pdf', 'X-Print-Upload-Token': uploadToken } };
 }
 
+function createPrintUploadCapability(jobId, uploadToken, staffActor, contentType) {
+    const route = staffActor ? '/api/staff/print/jobs' : '/api/public/print/jobs';
+    return { url: `${route}/${jobId}/content`, method: 'PUT',
+        requiredHeaders: { 'Content-Type': contentType, 'X-Print-Upload-Token': uploadToken } };
+}
+
 /**
  * Create an ordinary upload intent or the single authenticated UAT reservation.
  * @param {Request} request Same-origin browser POST.
@@ -127,7 +133,7 @@ async function createPrintUploadIntent(request, environment, staffActor = null) 
     readPrintUatDeadline(environment);
     if (job.status !== 'uploading') return { job_id: job.id, status: job.status, upload: null };
     const capability = intent.uatExpiresAt ? createUatUploadCapability(job.id, context.uploadToken)
-        : await storage.createUploadCapability(job.storage_key, { contentType: job.media_type });
+        : createPrintUploadCapability(job.id, context.uploadToken, staffActor, job.media_type);
     return { job_id: job.id, status: job.status, upload: capability };
 }
 
@@ -141,17 +147,104 @@ export async function createStaffPrintUploadIntent(request, environment, staffAc
     return createPrintUploadIntent(request, environment, staffActor);
 }
 
-async function readVerifiedPrintBytes(storage, job) {
+async function streamPrintUpload(request, environment, jobId) {
+    requireMethod(request, 'PUT');
+    requireSameOrigin(request);
+    if (!request.body || !['application/pdf', 'image/jpeg', 'image/png'].includes(request.headers.get('Content-Type'))) {
+        throw new ApiError(409, 'PRINT_UPLOAD_INVALID', 'Dosya yeniden seçin.');
+    }
+    const repository = createPrintRepository(environment.DB);
+    await enforceRateLimit({ rateLimits: createRateLimitRepository(environment.DB) }, request,
+        { endpoint: 'print-upload-body', maxRequests: 5, windowSeconds: 300 });
+    const tokenHash = await hashValue(requireToken(request.headers.get('X-Print-Upload-Token')));
+    const job = await repository.findUploadIntent({ id: jobId, tokenHash, now: new Date().toISOString() });
+    if (!job || job.media_type !== request.headers.get('Content-Type')) {
+        throw new ApiError(404, 'PRINT_JOB_NOT_FOUND', 'Yazdırma isteği bulunamadı.');
+    }
+    const contentLength = request.headers.get('Content-Length');
+    if (contentLength !== null && Number(contentLength) !== job.byte_size) {
+        throw new ApiError(409, 'PRINT_UPLOAD_INVALID', 'Dosya boyutu doğrulanamadı. Dosyayı yeniden seçin.');
+    }
+    const storage = createStorage(environment);
+    let received = 0;
+    let invalidSize = false;
+    const boundedBody = request.body.pipeThrough(new TransformStream({
+        transform(chunk, controller) {
+            received += chunk.byteLength;
+            if (received > job.byte_size || received > MAX_PRINT_BYTES) {
+                invalidSize = true;
+                controller.error(new Error('Print upload exceeded its declared size.'));
+                return;
+            }
+            controller.enqueue(chunk);
+        },
+        flush(controller) {
+            if (received !== job.byte_size) {
+                invalidSize = true;
+                controller.error(new Error('Print upload did not match its declared size.'));
+            }
+        }
+    }));
+    let stored;
+    try {
+        stored = await storage.put(job.storage_key, boundedBody, {
+            httpMetadata: { contentType: job.media_type }, onlyIf: { etagDoesNotMatch: '*' }
+        });
+    } catch (error) {
+        if (invalidSize) throw new ApiError(409, 'PRINT_UPLOAD_INVALID', 'Dosya boyutu doğrulanamadı. Dosyayı yeniden seçin.');
+        throw error;
+    }
+    if (!stored) throw new ApiError(409, 'PRINT_UPLOAD_EXISTS', 'Dosya zaten yüklendi.');
+    return { uploaded: true };
+}
+
+/** Streams a public upload through the Worker with an exact declared-byte limit. */
+export async function uploadPublicPrintDocument(request, environment, jobId) {
+    return streamPrintUpload(request, environment, jobId);
+}
+
+/** Streams a staff upload through the Worker after its staff route authorizes the session. */
+export async function uploadStaffPrintDocument(request, environment, jobId) {
+    return streamPrintUpload(request, environment, jobId);
+}
+
+async function readPrintSignature(body) {
+    if (!body || typeof body.getReader !== 'function') {
+        throw new ApiError(409, 'PRINT_UPLOAD_INVALID', 'Dosya yeniden seçin.');
+    }
+    const reader = body.getReader();
+    const signature = new Uint8Array(8);
+    let length = 0;
+    let streamEnded = false;
+    try {
+        while (length < signature.length) {
+            const result = await reader.read();
+            if (result.done) {
+                streamEnded = true;
+                break;
+            }
+            const bytesToCopy = Math.min(result.value.byteLength, signature.length - length);
+            signature.set(result.value.subarray(0, bytesToCopy), length);
+            length += bytesToCopy;
+        }
+    } finally {
+        if (!streamEnded) await reader.cancel();
+        reader.releaseLock();
+    }
+    return signature.subarray(0, length);
+}
+
+async function readVerifiedPrintBytes(storage, job, { readAll = false } = {}) {
     const object = await storage.head(job.storage_key);
     if (!object || object.size !== job.byte_size || object.httpMetadata?.contentType !== job.media_type) {
         throw new ApiError(409, 'PRINT_UPLOAD_INVALID', 'Dosya doğrulanamadı. Dosyayı yeniden seçin.');
     }
     const content = await storage.get(job.storage_key);
-    if (!content || typeof content.arrayBuffer !== 'function' || content.size !== job.byte_size) {
+    if (!content || content.size !== job.byte_size) {
         throw new ApiError(409, 'PRINT_UPLOAD_INVALID', 'Dosyayı yeniden seçin.');
     }
-    const bytes = new Uint8Array(await content.arrayBuffer());
-    if (bytes.length > MAX_PRINT_BYTES || !validatePrintMagicBytes(job.media_type, bytes)) {
+    const bytes = readAll ? new Uint8Array(await content.arrayBuffer()) : await readPrintSignature(content.body);
+    if (content.size > MAX_PRINT_BYTES || !validatePrintMagicBytes(job.media_type, bytes)) {
         throw new ApiError(415, 'PRINT_UPLOAD_INVALID', 'PDF, JPG veya PNG dosyası seçin.');
     }
     return bytes;
@@ -177,7 +270,9 @@ async function finalizePrintUpload(request, environment, jobId, staffActor = nul
     const now = new Date().toISOString();
     const job = await repository.findUploadIntent({ id: jobId, tokenHash, now });
     if (!job) throw new ApiError(404, 'PRINT_JOB_NOT_FOUND', 'Yazdırma isteği bulunamadı.');
-    await requirePrintUatContent(await readVerifiedPrintBytes(storage, job), environment);
+    const uatPolicy = readPrintUatPolicy(environment);
+    const bytes = await readVerifiedPrintBytes(storage, job, { readAll: uatPolicy !== null });
+    await requirePrintUatContent(bytes, environment);
     if (!staffActor && readPrintUatPolicy(environment)) await requireStaff(request, environment, ['reviewer', 'admin']);
     const queued = await repository.markQueued({ id: job.id, tokenHash, now,
         expiresAt: new Date(Date.parse(now) + PRINT_FAILURE_RETENTION_MS).toISOString(),

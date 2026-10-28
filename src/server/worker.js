@@ -33,7 +33,7 @@ import { backupD1ToR2, getLatestBackupMetadata } from './services/d1BackupServic
 import { requireStaff } from './auth/staffAuth.js';
 import { requireMethod } from './routes/shared.js';
 import { createPublicPrintUploadIntent, finalizePublicPrintUpload, readPublicPrintJobStatus,
-    readPublicPrintStatus } from './routes/printRoutes.js';
+    readPublicPrintStatus, uploadPublicPrintDocument } from './routes/printRoutes.js';
 import { handleStaffPrintRequest } from './routes/staffPrintRoutes.js';
 import { handlePrinterRequest, readStaffPrintStatus } from './routes/printerRoutes.js';
 import { runPrintCleanup } from './services/printCleanupService.js';
@@ -107,6 +107,8 @@ async function routeApi(request, environment, requestId, cache) {
     if (pathname === '/api/staff/print/uat/status') return readStaffPrintUatStatus(request, environment);
     const uatUploadMatch = pathname.match(/^\/api\/public\/print\/jobs\/([A-Za-z0-9_-]{1,64})\/upload$/);
     if (uatUploadMatch) return uploadPrintUatDocument(request, environment, uatUploadMatch[1]);
+    const printContentMatch = pathname.match(/^\/api\/public\/print\/jobs\/([0-9a-f-]{36})\/content$/i);
+    if (printContentMatch) return uploadPublicPrintDocument(request, environment, printContentMatch[1]);
     if (pathname === '/api/public/print/upload-intents') return createPublicPrintUploadIntent(request, environment);
     if (pathname === '/api/public/print/jobs/status') return readPublicPrintJobStatus(request, environment);
     const printFinalizeMatch = pathname.match(/^\/api\/public\/print\/jobs\/([A-Za-z0-9_-]{1,64})\/finalize$/);

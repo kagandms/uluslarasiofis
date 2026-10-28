@@ -108,6 +108,15 @@ test('print settings whitelist permits only configured options', () => {
         paperSize: 'A3', colorMode: 'color', duplex: 'duplexlong', orientation: 'portrait', requiredProtocol: 1 });
 });
 
+test('print uploads accept files up to 100 MB and reject larger files', () => {
+    const base = { media_type: 'application/pdf', copies: 1, paper_size: 'A4', color_mode: 'monochrome',
+        duplex: 'simplex' };
+
+    assert.equal(validatePrintUpload({ ...base, byte_size: 100_000_000 }).byteSize, 100_000_000);
+    assert.throws(() => validatePrintUpload({ ...base, byte_size: 100_000_001 }),
+        { code: 'PRINT_FILE_SIZE_INVALID' });
+});
+
 test('print settings reject unsupported values and options disabled for this environment', () => {
     const defaults = { paperSizes: ['A4'], colorModes: ['monochrome'], duplexModes: ['simplex'] };
     const unsafeValues = [

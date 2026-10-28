@@ -1,6 +1,6 @@
 import { PDFDocument } from 'pdf-lib';
 
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 100_000_000;
 
 /** Create a bounded PDF containing exactly the zero-based selected source pages. */
 export async function extractPdfPages(file, pageIndexes) {
@@ -17,7 +17,7 @@ export async function extractPdfPages(file, pageIndexes) {
     const copiedPages = await outputPdf.copyPages(sourcePdf, pageIndexes);
     for (const page of copiedPages) outputPdf.addPage(page);
     const bytes = await outputPdf.save();
-    if (bytes.byteLength > MAX_BYTES) throw new Error('Seçilen sayfaların PDF dosyası 10 MB sınırını aşıyor.');
+    if (bytes.byteLength > MAX_BYTES) throw new Error('Seçilen sayfaların PDF dosyası 100 MB sınırını aşıyor.');
     const baseName = file.name.replace(/\.pdf$/i, '');
     return new File([bytes], `${baseName}-sayfalar.pdf`, { type: 'application/pdf' });
 }

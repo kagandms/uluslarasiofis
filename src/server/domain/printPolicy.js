@@ -1,6 +1,7 @@
 import { ApiError } from './errors.js';
 
-export const MAX_PRINT_BYTES = 10 * 1024 * 1024;
+// Cloudflare Workers request bodies are capped at 100,000,000 bytes on Free/Pro.
+export const MAX_PRINT_BYTES = 100_000_000;
 export const MAX_PRINT_PAGES = 20;
 export const MAX_PRINT_COPIES = 50;
 export const MAX_PRINT_PAGE_COPIES = 1000;
