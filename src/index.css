@@ -27,6 +27,8 @@ body.dark-mode {
     --accent: #75b7e5;
     --accent-hover: #93c8eb;
     --accent-rgb: 117 183 229;
+    --header-brand-blue-rgb: 117 183 229;
+    --header-brand-burgundy-rgb: 90 14 39;
     --accent-gradient: linear-gradient(112deg, #75b7e5 0%, #8a5b78 52%, #5a0e27 100%);
     --accent-secondary: #d9e6ed;
     --accent-secondary-hover: #ffffff;
@@ -164,7 +166,7 @@ h1 {
 
 body.dark-mode .app-header h1 {
     animation: trabzonspor-title-colorflow 3.2s linear infinite alternate;
-    background-image: linear-gradient(105deg, rgb(117 183 229) 0%, rgb(90 14 39) 50%, rgb(117 183 229) 100%);
+    background-image: linear-gradient(105deg, rgb(var(--header-brand-blue-rgb)) 0%, rgb(var(--header-brand-burgundy-rgb)) 50%, rgb(var(--header-brand-blue-rgb)) 100%);
     background-position: 0% 50%;
     background-size: 300% 100%;
     background-clip: text;
@@ -1654,7 +1656,7 @@ select.glass-input {
 
 body.dark-mode .version-badge {
     animation: trabzonspor-title-colorflow 3.2s linear infinite alternate;
-    background-image: linear-gradient(105deg, rgb(117 183 229) 0%, rgb(90 14 39) 50%, rgb(117 183 229) 100%);
+    background-image: linear-gradient(105deg, rgb(var(--header-brand-blue-rgb)) 0%, rgb(var(--header-brand-burgundy-rgb)) 50%, rgb(var(--header-brand-blue-rgb)) 100%);
     background-position: 0% 50%;
     background-size: 300% 100%;
 }

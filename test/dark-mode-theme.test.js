@@ -30,7 +30,9 @@ test('dark mode animates the header title colors only on the letters and respect
 test('header title and version badge use RGB brand colors in light and dark modes', () => {
     assert.match(indexCss, /\.app-header h1\s*\{[^}]*color:\s*rgb\(var\(--accent-rgb\)\)/);
     assert.match(indexCss, /\.version-badge\s*\{[^}]*color:\s*rgb\(255 255 255\)/);
-    assert.match(indexCss, /body\.dark-mode \.version-badge\s*\{[^}]*background-image:\s*linear-gradient\(105deg,\s*rgb\(117 183 229\) 0%,\s*rgb\(90 14 39\) 50%,\s*rgb\(117 183 229\) 100%\)/);
+    assert.match(indexCss, /--header-brand-blue-rgb:\s*117 183 229/);
+    assert.match(indexCss, /--header-brand-burgundy-rgb:\s*90 14 39/);
+    assert.match(indexCss, /body\.dark-mode \.version-badge\s*\{[^}]*background-image:\s*linear-gradient\(105deg,\s*rgb\(var\(--header-brand-blue-rgb\)\) 0%,\s*rgb\(var\(--header-brand-burgundy-rgb\)\) 50%,\s*rgb\(var\(--header-brand-blue-rgb\)\) 100%\)/);
     assert.match(indexCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?body\.dark-mode \.version-badge\s*\{[^}]*animation:\s*none;/);
 });
 
@@ -52,5 +54,5 @@ test('home card lasers follow both rounded card edges from top center to bottom 
 
 test('header title uses a high-contrast, faster Trabzonspor color cycle', () => {
     assert.match(indexCss, /animation:\s*trabzonspor-title-colorflow\s+3\.2s\s+linear\s+infinite\s+alternate/);
-    assert.match(indexCss, /background-image:\s*linear-gradient\(105deg,\s*rgb\(117 183 229\) 0%,\s*rgb\(90 14 39\) 50%,\s*rgb\(117 183 229\) 100%\)/);
+    assert.match(indexCss, /background-image:\s*linear-gradient\(105deg,\s*rgb\(var\(--header-brand-blue-rgb\)\) 0%,\s*rgb\(var\(--header-brand-burgundy-rgb\)\) 50%,\s*rgb\(var\(--header-brand-blue-rgb\)\) 100%\)/);
 });
