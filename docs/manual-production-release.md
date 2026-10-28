@@ -1,12 +1,13 @@
 # Manual code/assets release from a tablet
 
 Only `.github/workflows/production-release.yml` publishes. The reviewed code-only baseline in
-`config/production-publication.json` is `8be47f394ca06080e7bc2426e0e0d8fd205b9b34`; PR #31 advanced
-`production` to `864556d652d087a17280d35ef8e352682c333150`. At the latest verified ledger check,
-migrations through `0027` were applied and `0028_student_transition_applications.sql` remained pending.
-Exact-SHA run #34 passed `operation=preflight`; its publish step was skipped. No Worker deployment or
-production migration resulted from that run. Fresh backup/restore and current-schema rollback evidence
-are recorded under `docs/production-only-evidence/`; the R2 copy is in the same Cloudflare account.
+`config/production-publication.json` points to commit `741856b30bcf64292faef38fef2e9fe17a5b6ed4`,
+which includes the source for production migration `0033_d1_rows_read_indexes_and_scan_counts.sql`.
+The production D1 ledger recorded migration 0033 as
+applied at `2026-10-28 07:54:41 UTC`; its table and trigger definitions matched the recovered source.
+This baseline update records that existing schema state and does not apply a migration. The earlier
+release and rollback evidence remains under `docs/production-only-evidence/`; the R2 copy is in the
+same Cloudflare account.
 
 ## Release procedure
 
