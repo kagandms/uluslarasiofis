@@ -126,3 +126,39 @@ test('staff audit manager classifies completed, pending, and missing-document st
     );
     window.close();
 });
+
+test('staff audit manager surfaces a correlated extension bridge failure immediately', async () => {
+    const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
+    const { window } = dom;
+    const root = window.document.getElementById('audit-root');
+    window.postMessage = (data) => {
+        queueMicrotask(() => window.dispatchEvent(new window.MessageEvent('message', {
+            source: window,
+            origin: window.location.origin,
+            data
+        })));
+    };
+    initializeYoksisDocumentAuditManager(root);
+
+    window.addEventListener('message', (event) => {
+        if (event.source !== window || event.origin !== window.location.origin || event.data?.source !== 'WEB_APP') return;
+        const { requestId } = event.data.payload;
+        window.postMessage({
+            source: 'EXTENSION',
+            type: 'EVENT',
+            action: 'REQUEST_FAILED',
+            requestId,
+            code: 'EXTENSION_CONTEXT_INVALIDATED',
+            error: 'Eklenti güncellendi veya yeniden yüklendi. Bu sayfayı yenileyin ve tekrar deneyin.'
+        }, window.location.origin);
+    });
+
+    root.querySelector('#audit-confirm').checked = true;
+    root.querySelector('#audit-start').click();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    assert.equal(root.querySelector('#audit-status').textContent,
+        'Eklenti güncellendi veya yeniden yüklendi. Bu sayfayı yenileyin ve tekrar deneyin.');
+    assert.equal(root.querySelector('#audit-start').disabled, false);
+    window.close();
+});
