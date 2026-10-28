@@ -7,6 +7,8 @@
     --accent: #7e1830;
     --accent-hover: #641126;
     --accent-rgb: 126 24 48;
+    --light-brand-burgundy-rgb: 126 24 48;
+    --light-brand-rose-rgb: 166 57 78;
     --accent-secondary: #000000;
     --accent-secondary-hover: #333333;
     --danger: #dc3545;
@@ -19,9 +21,9 @@
 }
 
 body.dark-mode {
-    --bg-color: #111820;
-    --card-bg: #1a2630;
-    --card-border: #354652;
+    --bg-color: #242321;
+    --card-bg: #2d2b28;
+    --card-border: #45413d;
     --text-primary: #f5f8fa;
     --text-secondary: #bdcbd4;
     --accent: #75b7e5;
@@ -35,20 +37,20 @@ body.dark-mode {
 }
 
 body.dark-mode .glass-input {
-    background-color: #2a2a35;
+    background-color: #383632;
     color: #f4f6f8;
 }
 
 body.dark-mode .mini-dropzone {
-    background: #1a1a1f;
+    background: #302e2b;
 }
 
 body.dark-mode .toast {
-    background: #2a2a35;
+    background: #383632;
 }
 
 body.dark-mode .modal-card {
-    background: #1e1e24;
+    background: #302e2b;
 }
 
 body.dark-mode select.glass-input {
@@ -157,6 +159,10 @@ h1 {
 
 .app-header h1 {
     color: rgb(var(--accent-rgb));
+    background-image: linear-gradient(105deg, rgb(var(--light-brand-burgundy-rgb)) 0%, rgb(var(--light-brand-rose-rgb)) 50%, rgb(var(--light-brand-burgundy-rgb)) 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 @keyframes trabzonspor-title-colorflow {
@@ -1646,6 +1652,7 @@ select.glass-input {
 
 .version-badge {
     background: rgb(var(--accent-rgb));
+    background-image: linear-gradient(105deg, rgb(var(--light-brand-burgundy-rgb)) 0%, rgb(var(--light-brand-rose-rgb)) 50%, rgb(var(--light-brand-burgundy-rgb)) 100%);
     color: rgb(255 255 255);
     padding: 4px 8px;
     border-radius: 4px;

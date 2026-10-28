@@ -12,6 +12,21 @@ test('dark mode exposes Trabzonspor blue-to-burgundy accent colors', () => {
     assert.match(darkTheme, /--accent-gradient:\s*linear-gradient\([^;]*#75b7e5[^;]*#5a0e27/i);
 });
 
+test('light mode renders the header title and version badge with a visible RGB burgundy gradient', () => {
+    assert.match(indexCss, /--light-brand-burgundy-rgb:\s*126 24 48/);
+    assert.match(indexCss, /--light-brand-rose-rgb:\s*166 57 78/);
+    assert.match(indexCss, /\.app-header h1\s*\{[^}]*background-image:\s*linear-gradient\(105deg,\s*rgb\(var\(--light-brand-burgundy-rgb\)\) 0%,\s*rgb\(var\(--light-brand-rose-rgb\)\) 50%,\s*rgb\(var\(--light-brand-burgundy-rgb\)\) 100%\)[^}]*background-clip:\s*text;[^}]*-webkit-text-fill-color:\s*transparent;/);
+    assert.match(indexCss, /\.version-badge\s*\{[^}]*background-image:\s*linear-gradient\(105deg,\s*rgb\(var\(--light-brand-burgundy-rgb\)\) 0%,\s*rgb\(var\(--light-brand-rose-rgb\)\) 50%,\s*rgb\(var\(--light-brand-burgundy-rgb\)\) 100%\)/);
+});
+
+test('dark mode uses a warm charcoal canvas and matching card surfaces', () => {
+    const darkTheme = indexCss.match(/body\.dark-mode\s*\{([^}]+)\}/)?.[1] ?? '';
+
+    assert.match(darkTheme, /--bg-color:\s*#242321/i);
+    assert.match(darkTheme, /--card-bg:\s*#2d2b28/i);
+    assert.match(darkTheme, /--card-border:\s*#45413d/i);
+});
+
 test('dark mode uses the shared accent gradient for selected, hovered, and focused workspace controls', () => {
     assert.match(indexCss, /body\.dark-mode \.workspace-toolbar \.btn,\s*body\.dark-mode \.workspace-nav button\.is-active,\s*body\.dark-mode \.workspace-nav button:hover,\s*body\.dark-mode \.workspace-nav button:focus-visible,[\s\S]*?\{[^}]*background:\s*var\(--accent-gradient\)/);
     assert.match(staffHomeCss, /body\.dark-mode #home-screen \.home-action:hover,\s*body\.dark-mode #home-screen \.home-action:focus-visible\s*\{[^}]*background:\s*var\(--accent-gradient\)/);
