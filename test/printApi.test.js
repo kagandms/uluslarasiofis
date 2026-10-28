@@ -58,7 +58,14 @@ test('public print upload, machine validation, page count, and status follow the
     assert.equal(intent.upload.method, 'PUT');
     assert.equal(intent.job_id.includes('.pdf'), false);
     const uploadJob = database.prepare('SELECT storage_key FROM print_jobs WHERE id=?').bind(intent.job_id).first();
-    objects.set(uploadJob.storage_key, new Blob([pdf], { type: 'application/pdf' }));
+    const storedPdf = new Blob([pdf], { type: 'application/pdf' });
+    objects.set(uploadJob.storage_key, {
+        size: storedPdf.size,
+        type: storedPdf.type,
+        etag: 'test-etag',
+        get body() { return storedPdf.stream(); },
+        async arrayBuffer() { throw new Error('Print finalize must inspect only a bounded signature.'); }
+    });
     const finalizeResponse = await worker.fetch(request(`/api/public/print/jobs/${intent.job_id}/finalize`, {
         method: 'POST', headers: { 'X-Print-Upload-Token': tokens.upload_token }
     }), environment);
@@ -77,6 +84,13 @@ test('public print upload, machine validation, page count, and status follow the
     assert.equal(claimed.orientation, 'portrait');
     assert.deepEqual(claimed.limits, { max_copies: 50, max_page_copies: 200 });
     const leaseHeader = { 'X-Print-Lease': claimed.lease_token };
+    const contentResponse = await worker.fetch(request(`/api/printer/jobs/${intent.job_id}/content`, {
+        headers: printerHeaders(PRINTER_SECRET, leaseHeader)
+    }), environment);
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', pdf));
+    const expectedSha256 = [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    assert.equal(contentResponse.headers.get('X-Content-SHA256'), expectedSha256);
+    assert.deepEqual(new Uint8Array(await contentResponse.arrayBuffer()), pdf);
     const validationResponse = await worker.fetch(request(`/api/printer/jobs/${intent.job_id}/validation-result`, {
         method: 'POST', body: { status: 'ready', page_count: 2 }, headers: printerHeaders(PRINTER_SECRET, leaseHeader)
     }), environment);
@@ -203,10 +217,9 @@ test('configured print settings are stored and returned to the printer claim', a
         .bind(intent.job_id).first();
     assert.deepEqual({ ...job }, { paper_size: 'A3', color_mode: 'color', duplex: 'duplexlong', orientation: 'portrait' });
     const object = database.prepare('SELECT storage_key FROM print_jobs WHERE id=?').bind(intent.job_id).first();
-    objects.set(object.storage_key, Object.assign(
-        new Blob([new Uint8Array([37,80,68,70,45,49,46,55])], { type: 'application/pdf' }),
-        { etag: 'etag-test' }
-    ));
+    const objectPdf = new Blob([new Uint8Array([37,80,68,70,45,49,46,55])], { type: 'application/pdf' });
+    objects.set(object.storage_key, { size: objectPdf.size, type: objectPdf.type, etag: 'etag-test',
+        body: objectPdf.stream(), arrayBuffer: () => objectPdf.arrayBuffer() });
     const finalizeResponse = await worker.fetch(request(`/api/public/print/jobs/${intent.job_id}/finalize`, {
         method: 'POST', headers: { 'X-Print-Upload-Token': tokens.upload_token }
     }), environment);
@@ -239,8 +252,9 @@ test('protocol 3 carries landscape and higher copies while protocol 2 cannot cla
     assert.equal(intentResponse.status, 200);
     const intent = await intentResponse.json();
     const stored = database.prepare('SELECT storage_key FROM print_jobs WHERE id=?').bind(intent.job_id).first();
-    objects.set(stored.storage_key, Object.assign(new Blob([new Uint8Array([37,80,68,70,45,49,46,55])],
-        { type: 'application/pdf' }), { etag: 'etag-protocol-2' }));
+    const storedPdf = new Blob([new Uint8Array([37,80,68,70,45,49,46,55])], { type: 'application/pdf' });
+    objects.set(stored.storage_key, { size: storedPdf.size, type: storedPdf.type, etag: 'etag-protocol-2',
+        body: storedPdf.stream(), arrayBuffer: () => storedPdf.arrayBuffer() });
     const finalizeResponse = await worker.fetch(request(`/api/public/print/jobs/${intent.job_id}/finalize`, {
         method: 'POST', headers: { 'X-Print-Upload-Token': tokens.upload_token }
     }), environment);
@@ -273,8 +287,9 @@ test('Worker rejects a verified page count that exceeds the configured impressio
     }), environment);
     const intent = await intentResponse.json();
     const stored = database.prepare('SELECT storage_key FROM print_jobs WHERE id=?').bind(intent.job_id).first();
-    objects.set(stored.storage_key, Object.assign(new Blob([new Uint8Array([37,80,68,70,45,49,46,55])],
-        { type: 'application/pdf' }), { etag: 'etag-budget' }));
+    const budgetPdf = new Blob([new Uint8Array([37,80,68,70,45,49,46,55])], { type: 'application/pdf' });
+    objects.set(stored.storage_key, { size: budgetPdf.size, type: budgetPdf.type, etag: 'etag-budget',
+        body: budgetPdf.stream(), arrayBuffer: () => budgetPdf.arrayBuffer() });
     await worker.fetch(request(`/api/public/print/jobs/${intent.job_id}/finalize`, {
         method: 'POST', headers: { 'X-Print-Upload-Token': tokens.upload_token }
     }), environment);

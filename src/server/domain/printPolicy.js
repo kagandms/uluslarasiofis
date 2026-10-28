@@ -1,6 +1,6 @@
 import { ApiError } from './errors.js';
 
-export const MAX_PRINT_BYTES = 10 * 1024 * 1024;
+export const MAX_PRINT_BYTES = 100 * 1024 * 1024;
 export const MAX_PRINT_PAGES = 20;
 export const MAX_PRINT_COPIES = 50;
 export const MAX_PRINT_PAGE_COPIES = 1000;

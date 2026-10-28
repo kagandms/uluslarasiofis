@@ -8,6 +8,7 @@ import { createPrintStorage } from '../storage/printStorage.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { requireMethod } from './shared.js';
 import { requireStaff } from '../auth/staffAuth.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 async function hashValue(value) {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
@@ -17,6 +18,24 @@ async function hashValue(value) {
 async function hashBytes(value) {
     const digest = await crypto.subtle.digest('SHA-256', value);
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function hashStream(body) {
+    if (!body || typeof body.getReader !== 'function') {
+        throw new ApiError(409, 'PRINT_CONTENT_INVALID', 'Yazdırma dosyası doğrulanamadı.');
+    }
+    const reader = body.getReader();
+    const hash = sha256.create();
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            hash.update(value);
+        }
+    } finally {
+        reader.releaseLock();
+    }
+    return [...hash.digest()].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 async function requirePrinter(request, environment) {
@@ -102,17 +121,35 @@ async function readContent(request, environment, repository, jobId) {
         throw new ApiError(409, 'PRINT_CONTENT_INVALID', 'Yazdırma dosyası doğrulanamadı.');
     }
     const content = await storage.get(job.storage_key);
-    if (!content || typeof content.arrayBuffer !== 'function' || content.etag !== object.etag) {
+    if (!content || content.etag !== object.etag || content.size !== job.byte_size) {
         throw new ApiError(409, 'PRINT_CONTENT_INVALID', 'Yazdırma dosyası doğrulanamadı.');
     }
-    const bytes = new Uint8Array(await content.arrayBuffer());
-    await requirePrintUatContent(bytes, environment);
-    if (bytes.length !== job.byte_size || !await repository.touchLease({ id: job.id, tokenHash, now: new Date().toISOString() })) {
+    const uatPolicy = readPrintUatPolicy(environment);
+    let sha256Header;
+    let responseBody;
+    if (uatPolicy) {
+        if (typeof content.arrayBuffer !== 'function') {
+            throw new ApiError(409, 'PRINT_CONTENT_INVALID', 'Yazdırma dosyası doğrulanamadı.');
+        }
+        const bytes = new Uint8Array(await content.arrayBuffer());
+        await requirePrintUatContent(bytes, environment);
+        if (bytes.length !== job.byte_size) throw new ApiError(409, 'PRINT_CONTENT_INVALID', 'Yazdırma dosyası doğrulanamadı.');
+        sha256Header = await hashBytes(bytes);
+        responseBody = bytes;
+    } else {
+        sha256Header = await hashStream(content.body);
+        const responseContent = await storage.get(job.storage_key);
+        if (!responseContent || responseContent.etag !== object.etag || responseContent.size !== job.byte_size
+            || !responseContent.body) {
+            throw new ApiError(409, 'PRINT_CONTENT_INVALID', 'Yazdırma dosyası doğrulanamadı.');
+        }
+        responseBody = responseContent.body;
+    }
+    if (!await repository.touchLease({ id: job.id, tokenHash, now: new Date().toISOString() })) {
         throw new ApiError(409, 'PRINT_LEASE_INVALID', 'Yazdırma işi artık bu agent tarafından sahiplenilemiyor.');
     }
-    const sha256 = await hashBytes(bytes);
-    return new Response(bytes, { headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(bytes.length),
-        'X-Content-SHA256': sha256, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
+    return new Response(responseBody, { headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(job.byte_size),
+        'X-Content-SHA256': sha256Header, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
 }
 
 async function handleJobRequest(request, environment, repository, jobId, action) {

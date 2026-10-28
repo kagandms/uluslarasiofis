@@ -53,6 +53,7 @@
     "undici": "7.30.1"
   },
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "@zip.js/zip.js": "2.22.0",
     "aws4fetch": "^1.0.20",
     "html2canvas": "1.4.1",
