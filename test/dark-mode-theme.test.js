@@ -27,6 +27,13 @@ test('dark mode animates the header title colors only on the letters and respect
     assert.match(indexCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?body\.dark-mode \.app-header h1\s*\{[^}]*animation:\s*none;/);
 });
 
+test('header title and version badge use RGB brand colors in light and dark modes', () => {
+    assert.match(indexCss, /\.app-header h1\s*\{[^}]*color:\s*rgb\(var\(--accent-rgb\)\)/);
+    assert.match(indexCss, /\.version-badge\s*\{[^}]*color:\s*rgb\(255 255 255\)/);
+    assert.match(indexCss, /body\.dark-mode \.version-badge\s*\{[^}]*background-image:\s*linear-gradient\(105deg,\s*rgb\(117 183 229\) 0%,\s*rgb\(90 14 39\) 50%,\s*rgb\(117 183 229\) 100%\)/);
+    assert.match(indexCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?body\.dark-mode \.version-badge\s*\{[^}]*animation:\s*none;/);
+});
+
 test('dark mode prevents transparent nav edges from exposing slivers beside the gradient', () => {
     assert.match(indexCss, /body\.dark-mode \.workspace-nav button\.is-active,[\s\S]*?\{[^}]*border-color:\s*color-mix\(in srgb, #75b7e5 45%, #5a0e27\);/);
 });
@@ -45,5 +52,5 @@ test('home card lasers follow both rounded card edges from top center to bottom 
 
 test('header title uses a high-contrast, faster Trabzonspor color cycle', () => {
     assert.match(indexCss, /animation:\s*trabzonspor-title-colorflow\s+3\.2s\s+linear\s+infinite\s+alternate/);
-    assert.match(indexCss, /background-image:\s*linear-gradient\(105deg,\s*#75b7e5\s+0%,\s*#5a0e27\s+50%,\s*#75b7e5\s+100%\)/);
+    assert.match(indexCss, /background-image:\s*linear-gradient\(105deg,\s*rgb\(117 183 229\) 0%,\s*rgb\(90 14 39\) 50%,\s*rgb\(117 183 229\) 100%\)/);
 });
