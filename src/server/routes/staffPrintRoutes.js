@@ -2,7 +2,7 @@ import { requireStaff } from '../auth/staffAuth.js';
 import { ApiError } from '../domain/errors.js';
 import { createPrintRepository } from '../repositories/d1/printRepository.js';
 import { readPrintLimits } from '../domain/printPolicy.js';
-import { createStaffPrintUploadIntent, finalizeStaffPrintUpload } from './printRoutes.js';
+import { createStaffPrintUploadIntent, finalizeStaffPrintUpload, uploadStaffPrintDocument } from './printRoutes.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
 
@@ -101,6 +101,11 @@ export async function handleStaffPrintRequest(request, environment) {
     if (pathname === '/api/staff/print/upload-intents') {
         const staff = await requireStaff(request, environment, ['reviewer', 'admin']);
         return createStaffPrintUploadIntent(request, environment, staff);
+    }
+    const contentMatch = pathname.match(/^\/api\/staff\/print\/jobs\/([0-9a-f-]{36})\/content$/i);
+    if (contentMatch) {
+        await requireStaff(request, environment, ['reviewer', 'admin']);
+        return uploadStaffPrintDocument(request, environment, contentMatch[1]);
     }
     if (pathname === '/api/staff/print/queue/pause' || pathname === '/api/staff/print/queue/resume') {
         const staff = await requireStaff(request, environment, ['admin']);

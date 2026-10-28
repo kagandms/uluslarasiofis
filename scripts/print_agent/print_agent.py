@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 import fitz
 from PIL import Image, ImageOps
 
-MAX_FILE_BYTES = 100 * 1024 * 1024
+MAX_FILE_BYTES = 100_000_000
 MAX_PAGE_COUNT = 20
 MAX_COPIES_PER_JOB = 50
 MAX_PAGE_COPIES = 1000

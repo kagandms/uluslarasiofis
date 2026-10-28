@@ -480,7 +480,7 @@ class PrintAgentTests(unittest.TestCase):
             target = Path(temporary_directory) / "ready.pdf"
             with source.open("wb") as file_handle:
                 file_handle.write(b"%PDF-")
-                file_handle.truncate(100 * 1024 * 1024 + 1)
+                file_handle.truncate(100_000_001)
 
             with self.assertRaisesRegex(ValueError, "configured size limit"):
                 validate_document(source, "application/pdf", target)

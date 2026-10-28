@@ -1,6 +1,6 @@
 import { PDFDocument } from 'pdf-lib';
 
-const MAX_BYTES = 100 * 1024 * 1024;
+const MAX_BYTES = 100_000_000;
 
 /** Create a bounded PDF containing exactly the zero-based selected source pages. */
 export async function extractPdfPages(file, pageIndexes) {
