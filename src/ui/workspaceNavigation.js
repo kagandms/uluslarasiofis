@@ -31,6 +31,12 @@ function getViewPanel(viewName) {
     return document.getElementById(`view-${viewName}`);
 }
 
+export function isWorkspaceNavigationActive(button, viewName) {
+    const isIntakeChannel = button.hasAttribute('data-intake-entry')
+        && ['applications', 'physical'].includes(viewName);
+    return button.dataset.workspaceView === viewName || isIntakeChannel;
+}
+
 function focusView(viewName) {
     const targetId = viewName === 'print'
         ? 'print-status-title'
@@ -53,7 +59,7 @@ function openTebligatSearch() {
 
 function updateActiveView(viewName) {
     getViewButtons().forEach((button) => {
-        const isActive = button.dataset.workspaceView === viewName;
+        const isActive = isWorkspaceNavigationActive(button, viewName);
         button.classList.toggle('is-active', isActive);
         button.setAttribute('aria-current', isActive ? 'page' : 'false');
     });

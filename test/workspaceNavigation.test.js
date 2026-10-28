@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
-import { initWorkspaceNavigation } from '../src/ui/workspaceNavigation.js';
+import { initWorkspaceNavigation, isWorkspaceNavigationActive } from '../src/ui/workspaceNavigation.js';
 
 function installWorkspace(context) {
     const html = readFileSync(new URL('../yetkili/index.html', import.meta.url), 'utf8');
@@ -63,6 +63,18 @@ test('YKN and Teblig workspaces focus their headings instead of search inputs', 
 
     assert.deepEqual(visited, []);
     assert.equal(document.activeElement.id, 'tebligat-search-input');
+});
+
+test('İkamet Başvuruları navigation stays active for online and physical intake views', (context) => {
+    const dom = installWorkspace(context);
+    const document = dom.window.document;
+    const intakeNavigation = document.querySelector('.workspace-nav [data-intake-entry]');
+    intakeNavigation.dataset.workspaceView = 'intake';
+
+    assert.equal(isWorkspaceNavigationActive(intakeNavigation, 'intake'), true);
+    assert.equal(isWorkspaceNavigationActive(intakeNavigation, 'applications'), true);
+    assert.equal(isWorkspaceNavigationActive(intakeNavigation, 'physical'), true);
+    assert.equal(isWorkspaceNavigationActive(intakeNavigation, 'archive'), false);
 });
 
 test('YKN family and birth date fields are open when the result form renders', (context) => {
