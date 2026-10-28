@@ -48,8 +48,30 @@ function escapeLikeTerm(value) {
     return `%${value.replace(/[\\%_]/g, '\\$&')}%`;
 }
 
+function readQueueDate(value) {
+    if (value === undefined || value === '') return null;
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Tarih filtresini kontrol edip tekrar deneyin.');
+    }
+    const [year, month, day] = value.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Tarih filtresini kontrol edip tekrar deneyin.');
+    }
+    return value;
+}
+
+function istanbulMidnightUtc(date) {
+    return new Date(`${date}T00:00:00+03:00`).toISOString();
+}
+
+function nextCalendarDate(date) {
+    const [year, month, day] = date.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
+}
+
 function readApplicationQuery(body) {
-    const allowedKeys = new Set(['q', 'status', 'page', 'page_size']);
+    const allowedKeys = new Set(['q', 'status', 'page', 'page_size', 'from_date', 'to_date']);
     if (Object.keys(body).some((key) => !allowedKeys.has(key))) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Arama ve filtre bilgilerini kontrol edip tekrar deneyin.');
     }
@@ -59,11 +81,18 @@ function readApplicationQuery(body) {
     }
     const pageSize = readPageNumber(body.page_size, 25, MAX_PAGE_SIZE);
     const maximumPage = Math.floor(Number.MAX_SAFE_INTEGER / pageSize);
+    const fromDate = readQueueDate(body.from_date);
+    const toDate = readQueueDate(body.to_date);
+    if (fromDate && toDate && fromDate > toDate) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Başlangıç tarihi bitiş tarihinden sonra olamaz.');
+    }
     return {
         searchTerm: readSearchTerm(body.q),
         statuses: APPLICATION_STATUS_FILTERS[statusFilter],
         isDeleted: statusFilter === 'deleted',
         includeDeleted: statusFilter === 'archive_all',
+        submittedAtFrom: fromDate ? istanbulMidnightUtc(fromDate) : null,
+        submittedAtUntil: toDate ? istanbulMidnightUtc(nextCalendarDate(toDate)) : null,
         page: readPageNumber(body.page, 1, maximumPage),
         pageSize
     };
@@ -208,6 +237,8 @@ export async function queryStaffApplications(request, environment) {
         statuses: query.statuses,
         isDeleted: query.isDeleted,
         includeDeleted: query.includeDeleted,
+        submittedAtFrom: query.submittedAtFrom,
+        submittedAtUntil: query.submittedAtUntil,
         searchPattern: query.searchTerm ? escapeLikeTerm(query.searchTerm) : null,
         pageSize: query.pageSize,
         offset

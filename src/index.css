@@ -2090,7 +2090,19 @@ body.dark-mode .history-badge {
     align-items: end;
     display: grid;
     gap: 0.75rem;
-    grid-template-columns: minmax(220px, 2fr) minmax(180px, 1fr) auto;
+    grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(140px, 1fr)) auto;
+}
+
+.staff-applications-filters > div {
+    min-width: 0;
+}
+
+.staff-applications-filters > div label {
+    display: block;
+}
+
+.staff-applications-filters > div .glass-input {
+    box-sizing: border-box;
 }
 
 .staff-applications-filters label,
@@ -2742,6 +2754,14 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
 }
 
 @media (max-width: 900px) {
+    .staff-applications-filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .staff-applications-filters .physical-filter-search {
+        grid-column: 1 / -1;
+    }
+
     .staff-application-details-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }

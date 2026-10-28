@@ -97,20 +97,31 @@ function appendText(document, parent, tagName, className, text) {
 }
 
 /** Builds local-only, textContent-safe A4 page markup for the shared student/staff PDF exporter. */
-export function createApplicationDocumentPages(document, application) {
+export function createApplicationDocumentPages(document, application, logos = null) {
     const sections = buildApplicationDocumentSections(application);
-    const pages = [];
     const reference = displayValue(application.reference_number) || displayValue(application.student_number);
+    const page = document.createElement('article');
+    page.className = 'physical-receipt-sheet online-application-pdf-page';
+    page.setAttribute('aria-label', 'Çevrimiçi başvuru formu');
+    page.lang = 'tr';
+    page.dir = 'ltr';
+    const header = document.createElement('header');
+    for (const [key, label] of [['university', 'İstanbul Topkapı Üniversitesi'], ['migration', 'Göç İdaresi']]) {
+        const image = document.createElement('img');
+        image.alt = label;
+        image.dataset.documentLogo = key;
+        image.src = logos?.[key] || '';
+        header.append(image);
+    }
+    page.append(header);
+    appendText(document, page, 'h1', '', 'Çevrimiçi Başvuru Formu');
+    appendText(document, page, 'h2', '', 'Başvuru Takip No / Application Reference');
+    const referenceCode = appendText(document, page, 'p', 'physical-receipt-code', reference || '—');
+    referenceCode.dir = 'ltr';
     for (const section of sections) {
-        const page = document.createElement('article');
-        page.className = 'online-application-pdf-page';
-        page.setAttribute('aria-label', section.title);
-        const header = document.createElement('header');
-        appendText(document, header, 'p', 'online-application-pdf-brand', 'İstanbul Topkapı Üniversitesi');
-        appendText(document, header, 'h1', '', 'Çevrimiçi Başvuru Formu');
-        appendText(document, header, 'p', 'online-application-pdf-reference', `Başvuru: ${reference}`);
-        page.append(header);
-        appendText(document, page, 'h2', '', section.title);
+        const group = document.createElement('section');
+        group.className = 'online-application-pdf-section';
+        appendText(document, group, 'h2', '', section.title);
         const fields = document.createElement('dl');
         fields.className = 'online-application-pdf-fields';
         for (const field of section.fields) {
@@ -120,9 +131,9 @@ export function createApplicationDocumentPages(document, application) {
             appendText(document, item, 'dd', '', field.value);
             fields.append(item);
         }
-        page.append(fields);
-        appendText(document, page, 'p', 'online-application-pdf-footer', 'Bu belge, başvuru sırasında kaydedilen çevrimiçi bilgilerden oluşturulmuştur.');
-        pages.push(page);
+        group.append(fields);
+        page.append(group);
     }
-    return pages;
+    appendText(document, page, 'p', 'online-application-pdf-footer', 'Bu belge, başvuru sırasında kaydedilen çevrimiçi bilgilerden oluşturulmuştur.');
+    return [page];
 }

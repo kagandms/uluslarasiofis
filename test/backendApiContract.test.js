@@ -1083,6 +1083,32 @@ test('staff application queue maps every supported status filter and paginates d
     assert.deepEqual(stablePage.pagination, { page: 1, page_size: 2, total_items: 9, total_pages: 5 });
 });
 
+test('staff application queue filters inclusive Istanbul submission days and rejects invalid date ranges', async () => {
+    const { environment, database } = createEnvironment();
+    const before = await createStaffApplication(environment, database, 'DATE-BEFORE');
+    const firstDay = await createStaffApplication(environment, database, 'DATE-FIRST-DAY');
+    const lastDay = await createStaffApplication(environment, database, 'DATE-LAST-DAY');
+    const after = await createStaffApplication(environment, database, 'DATE-AFTER');
+    await database.prepare('UPDATE applications SET submitted_at=? WHERE id=?').bind('2026-10-10T20:59:59.999Z', before).run();
+    await database.prepare('UPDATE applications SET submitted_at=? WHERE id=?').bind('2026-10-10T21:00:00.000Z', firstDay).run();
+    await database.prepare('UPDATE applications SET submitted_at=? WHERE id=?').bind('2026-10-12T20:59:59.999Z', lastDay).run();
+    await database.prepare('UPDATE applications SET submitted_at=? WHERE id=?').bind('2026-10-12T21:00:00.000Z', after).run();
+    await seedStaff(environment, database, { id: 'staff-date-reviewer', username: 'date-reviewer' });
+    const token = 'date-reviewer-session-token-000000000000000';
+    await seedStaffSession(database, 'staff-date-reviewer', token);
+    const query = body => worker.fetch(createRequest('/api/staff/applications/query', {
+        method: 'POST', body, cookie: staffCookie(token)
+    }), environment, {});
+
+    const response = await query({ status: 'all', from_date: '2026-10-11', to_date: '2026-10-12', page: 1, page_size: 25 });
+    const payload = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(payload.items.map(item => item.id).sort(), [firstDay, lastDay].sort());
+    assert.equal(payload.pagination.total_items, 2);
+    assert.equal((await query({ status: 'all', from_date: '2026-02-30' })).status, 400);
+    assert.equal((await query({ status: 'all', from_date: '2026-10-12', to_date: '2026-10-11' })).status, 400);
+});
+
 test('staff application search matches student number, names, and passport literally without echoing the query', async () => {
     const { environment, database } = createEnvironment();
     const targetId = await createStaffApplication(environment, database, 'SEARCH-123', {

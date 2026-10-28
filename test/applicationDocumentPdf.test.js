@@ -56,3 +56,25 @@ test('application document builder preserves applicant text as data and omits em
     assert.ok(fields.some(field => field.value === '<img src=x onerror=alert(1)>'));
     assert.ok(fields.every(field => field.value !== ''));
 });
+
+test('application PDF packs all answered sections into one physical-style A4 page without internal fields', () => {
+    const dom = new JSDOM('<!doctype html><html><body></body></html>');
+    const application = {
+        reference_number: 'ITU-7K9M-4X2P', student_number: 'STU-1', status: 'submitted', application_type: 'renewal',
+        submitted_at: '2026-10-12T09:00:00.000Z', first_name: 'Leyli', last_name: 'Dovladova',
+        passport_number: 'A1905164', nationality: 'Türkmenistan', email: 'student@example.edu',
+        insurance_basis: 'bilateral_agreement', host_is_married: 'yes', fingerprint_status: 'registered',
+        owner_session_id: 'private-session', access_credentials: { token: 'private-token' }
+    };
+
+    const pages = createApplicationDocumentPages(dom.window.document, application);
+
+    assert.equal(pages.length, 1);
+    assert.equal(pages[0].classList.contains('physical-receipt-sheet'), true);
+    for (const sectionTitle of ['Başvuru bilgileri', 'Öğrenci ve iletişim bilgileri', 'Başvuru ve eğitim bilgileri', 'Beyan ve işlem bilgileri']) {
+        assert.ok(pages[0].textContent.includes(sectionTitle));
+    }
+    assert.ok(pages[0].textContent.includes('student@example.edu'));
+    assert.doesNotMatch(pages[0].textContent, /private-session|private-token/u);
+    dom.window.close();
+});

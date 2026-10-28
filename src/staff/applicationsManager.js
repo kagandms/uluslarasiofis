@@ -4,6 +4,7 @@ import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
+import { createApplicationQueueFilters } from './application-queue-filters.js';
 
 const STATUS_LABELS = Object.freeze({
     submitted: 'Gönderildi', under_review: 'İncelemede', resubmission_required: 'Yeniden yükleme gerekli',
@@ -95,32 +96,13 @@ function createSelect(document, name, value, options) {
 }
 
 function createSearchForm(document, state, onSubmit) {
-    const form = document.createElement('form');
-    const search = document.createElement('input');
-    const label = createText(document, 'label', '', 'Başvuru ara');
-    search.className = 'glass-input';
-    search.name = 'q';
-    search.maxLength = 120;
-    search.value = state.query.q;
-    search.placeholder = 'Öğrenci no, ad, soyad veya pasaport no';
-    label.htmlFor = 'staff-application-search';
-    search.id = label.htmlFor;
-    const statusLabel = createText(document, 'label', '', 'Durum');
-    const status = createSelect(document, 'status', state.query.status, STATUS_FILTERS);
-    statusLabel.htmlFor = 'staff-application-status';
-    status.id = statusLabel.htmlFor;
-    const submit = document.createElement('button');
-    submit.type = 'submit';
-    submit.className = 'btn btn-primary';
-    submit.disabled = state.loading;
-    submit.textContent = 'Filtrele';
-    form.className = 'staff-applications-filters';
-    form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        onSubmit({ q: search.value, status: status.value });
+    return createApplicationQueueFilters(document, {
+        query: state.query,
+        statusOptions: STATUS_FILTERS,
+        idPrefix: 'staff-application',
+        disabled: state.loading,
+        onSubmit
     });
-    form.append(label, search, statusLabel, status, submit);
-    return form;
 }
 
 function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId) {
@@ -871,7 +853,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
         combinedPdfApplicationId: null, combinedPdfController: null,
         archiveError: null, archiveMessage: null,
-        query: { q: '', status: 'all', page: 1, page_size: 25 }
+        query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queueRequestId = 0;
     let archiveRequestId = 0;
@@ -1209,9 +1191,9 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             await loadQueue();
         }
     }
-    async function submitSearch({ q, status }) {
+    async function submitSearch({ q, status, from_date, to_date }) {
         if (state.actionPending) return;
-        state.query = { ...state.query, q, status, page: 1 };
+        state.query = { ...state.query, q, status, from_date, to_date, page: 1 };
         await loadQueue();
     }
     async function changePage(page) {

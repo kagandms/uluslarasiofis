@@ -1,4 +1,5 @@
 import { createApplicationDocumentPages } from '../shared/applicationDocumentPdf.js';
+import { loadDocumentLogos, waitDocumentAssets } from './document-logo-loader.js';
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -6,17 +7,18 @@ const RENDER_WIDTH = 794;
 
 const PAGE_STYLES = `
 .online-application-pdf-mount{position:fixed;left:-10000px;top:0;pointer-events:none}
-.online-application-pdf-page{box-sizing:border-box;width:${RENDER_WIDTH}px;height:1123px;padding:54px;color:#24232a;background:#fff;font-family:Arial,sans-serif;font-size:18px;line-height:1.45;display:flex;flex-direction:column;overflow:hidden}
-.online-application-pdf-page header{border-bottom:3px solid #87162f;padding-bottom:24px;margin-bottom:30px}
-.online-application-pdf-brand{color:#87162f;font-size:18px;font-weight:700;letter-spacing:1px;margin:0 0 14px}
-.online-application-pdf-page h1{font-size:32px;line-height:1.15;margin:0 0 12px}
-.online-application-pdf-reference{font-size:17px;font-weight:700;margin:0;color:#51515c}
-.online-application-pdf-page h2{font-size:23px;margin:0 0 24px;color:#87162f}
-.online-application-pdf-fields{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:0}
-.online-application-pdf-field{box-sizing:border-box;border:1px solid #d9d9df;border-radius:10px;padding:14px;min-height:92px;overflow-wrap:anywhere}
-.online-application-pdf-field dt{font-size:14px;color:#656571;font-weight:700;margin:0 0 8px}
-.online-application-pdf-field dd{font-size:18px;color:#24232a;font-weight:600;margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
-.online-application-pdf-footer{color:#777782;font-size:13px;margin:auto 0 0;padding-top:26px;border-top:1px solid #e5e5e9}
+.online-application-pdf-page{box-sizing:border-box;width:${RENDER_WIDTH}px;height:1123px;padding:49px;color:#111;background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.4;overflow:visible}
+.online-application-pdf-page header{display:flex;justify-content:space-between;height:72px;margin-bottom:19px}
+.online-application-pdf-page header img{max-width:151px;height:72px;object-fit:contain}
+.online-application-pdf-page h1{font-size:21px;line-height:1.2;margin:0 0 19px}
+.online-application-pdf-page h2{font-size:15px;margin:0 0 7px}
+.online-application-pdf-page .physical-receipt-code{font-size:34px;font-weight:700;letter-spacing:1px;margin:3px 0 14px}
+.online-application-pdf-section{margin-top:10px;break-inside:avoid}
+.online-application-pdf-fields{display:grid;grid-template-columns:1fr 1fr;column-gap:18px;row-gap:4px;margin:0}
+.online-application-pdf-field{box-sizing:border-box;overflow-wrap:anywhere;break-inside:avoid}
+.online-application-pdf-field dt{font-size:10px;font-weight:700;margin:0}
+.online-application-pdf-field dd{font-size:12px;margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.online-application-pdf-footer{font-size:10px;margin:12px 0 0;padding-top:8px;border-top:1px solid #777}
 `;
 
 function readPdfReference(application) {
@@ -27,7 +29,8 @@ function readPdfReference(application) {
 /** Renders and downloads a local A4 PDF from a student-safe application DTO. */
 export async function downloadOnlineApplicationPdf(application, document = globalThis.document) {
     if (!document?.body || !application || typeof application !== 'object') throw new Error('Başvuru belgesi oluşturulamadı.');
-    const pages = createApplicationDocumentPages(document, application);
+    const logos = await loadDocumentLogos();
+    const pages = createApplicationDocumentPages(document, application, logos);
     if (pages.length === 0) throw new Error('Başvuru belgesi için gösterilebilir bilgi bulunamadı.');
     const { default: html2canvas } = await import('html2canvas');
     const { PDFDocument } = await import('pdf-lib');
@@ -38,10 +41,14 @@ export async function downloadOnlineApplicationPdf(application, document = globa
     mount.append(style, ...pages);
     document.body.append(mount);
     try {
+        await waitDocumentAssets(mount);
         await document.fonts?.ready;
         const pdf = await PDFDocument.create();
         pdf.setTitle('Çevrimiçi Başvuru Formu');
         for (const pageElement of pages) {
+            if (pageElement.scrollHeight > pageElement.clientHeight + 1 || pageElement.scrollWidth > pageElement.clientWidth + 1) {
+                throw new Error('Başvuru bilgileri tek A4 sayfasına sığmadı; bilgi kesilmeden PDF oluşturulamadı.');
+            }
             const canvas = await html2canvas(pageElement, {
                 scale: 1.25, backgroundColor: '#ffffff', logging: false, scrollX: 0, scrollY: 0,
                 onclone: (_clonedDocument, clonedPage) => {
