@@ -161,6 +161,18 @@ export function initializeYoksisDocumentAuditManager(root) {
             pending.get(event.data.requestId)?.(event.data.response || { success: false });
             return;
         }
+        if (event.data.source === 'EXTENSION' && event.data.type === 'EVENT'
+            && event.data.action === 'REQUEST_FAILED') {
+            const error = typeof event.data.error === 'string' && event.data.error.trim()
+                ? event.data.error.slice(0, 300)
+                : 'Eklenti bağlantı isteği başarısız oldu.';
+            pending.get(event.data.requestId)?.({
+                success: false,
+                error,
+                code: typeof event.data.code === 'string' ? event.data.code.slice(0, 80) : undefined
+            });
+            return;
+        }
         if (event.data.source !== 'EXTENSION' || event.data.type !== 'EVENT'
             || !AUDIT_EVENT_ACTIONS.has(event.data.action)
             || !state.busy || event.data.scanId !== state.scanId
