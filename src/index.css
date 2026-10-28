@@ -27,6 +27,8 @@ body.dark-mode {
     --accent: #75b7e5;
     --accent-hover: #93c8eb;
     --accent-rgb: 117 183 229;
+    --header-brand-blue-rgb: 117 183 229;
+    --header-brand-burgundy-rgb: 90 14 39;
     --accent-gradient: linear-gradient(112deg, #75b7e5 0%, #8a5b78 52%, #5a0e27 100%);
     --accent-secondary: #d9e6ed;
     --accent-secondary-hover: #ffffff;
@@ -153,6 +155,10 @@ h1 {
     padding-left: 1.5rem;
 }
 
+.app-header h1 {
+    color: rgb(var(--accent-rgb));
+}
+
 @keyframes trabzonspor-title-colorflow {
     from { background-position: 0% 50%; }
     to { background-position: 100% 50%; }
@@ -160,7 +166,7 @@ h1 {
 
 body.dark-mode .app-header h1 {
     animation: trabzonspor-title-colorflow 3.2s linear infinite alternate;
-    background-image: linear-gradient(105deg, #75b7e5 0%, #5a0e27 50%, #75b7e5 100%);
+    background-image: linear-gradient(105deg, rgb(var(--header-brand-blue-rgb)) 0%, rgb(var(--header-brand-burgundy-rgb)) 50%, rgb(var(--header-brand-blue-rgb)) 100%);
     background-position: 0% 50%;
     background-size: 300% 100%;
     background-clip: text;
@@ -171,6 +177,11 @@ body.dark-mode .app-header h1 {
 
 @media (prefers-reduced-motion: reduce) {
     body.dark-mode .app-header h1 {
+        animation: none;
+        background-position: 50% 50%;
+    }
+
+    body.dark-mode .version-badge {
         animation: none;
         background-position: 50% 50%;
     }
@@ -1633,7 +1644,22 @@ select.glass-input {
     color: var(--accent);
 }
 
-.version-badge { background: var(--accent); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; font-family: var(--font-body); }
+.version-badge {
+    background: rgb(var(--accent-rgb));
+    color: rgb(255 255 255);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    font-family: var(--font-body);
+}
+
+body.dark-mode .version-badge {
+    animation: trabzonspor-title-colorflow 3.2s linear infinite alternate;
+    background-image: linear-gradient(105deg, rgb(var(--header-brand-blue-rgb)) 0%, rgb(var(--header-brand-burgundy-rgb)) 50%, rgb(var(--header-brand-blue-rgb)) 100%);
+    background-position: 0% 50%;
+    background-size: 300% 100%;
+}
 
 
 /* Cropper Modal */
