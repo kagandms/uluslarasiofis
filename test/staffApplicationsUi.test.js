@@ -170,6 +170,39 @@ test('applications workspace is prominent and opening it loads a queue without d
     assert.equal(document.getElementById('view-teblig').hidden, false);
 });
 
+test('online application queue uses physical search and date filter layout and submits all filters', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const requests = [];
+    const api = {
+        async queryApplications(query) {
+            requests.push(query);
+            return createQueuePayload([QUEUE_ITEM]);
+        },
+        async readApplicationDetail() { return { application: QUEUE_ITEM, documents: [] }; }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+
+    const form = root.querySelector('.staff-applications-filters');
+    assert.ok(form.querySelector('.physical-filter-search'));
+    assert.equal(form.querySelectorAll('input[type="date"]').length, 2);
+    assert.ok(form.querySelector('#staff-application-from-date'));
+    assert.ok(form.querySelector('#staff-application-to-date'));
+    form.querySelector('input[name="q"]').value = 'Ayşe';
+    form.querySelector('select[name="status"]').value = 'under_review';
+    form.querySelector('#staff-application-from-date').value = '2026-10-01';
+    form.querySelector('#staff-application-to-date').value = '2026-10-12';
+    form.dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.deepEqual(requests.at(-1), {
+        q: 'Ayşe', status: 'under_review', from_date: '2026-10-01', to_date: '2026-10-12', page: 1, page_size: 25
+    });
+});
+
 test('applications manager shows loading, empty, and safe recoverable error states', async (context) => {
     const { dom, document, root } = createStaffDom();
     installDocument(context, document);

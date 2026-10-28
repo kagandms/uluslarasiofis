@@ -4,6 +4,7 @@ import { renderPhysicalReceiptDraft, renderPhysicalReceiptControls } from './phy
 import { createApplicationQueueTable, formatQueueDate } from './application-queue-table.js';
 import { buildPhysicalPdfUrl } from './physical-intake-client.js';
 import { bindPhysicalUppercaseInput } from './physical-uppercase-input.js';
+import { createApplicationQueueFilters } from './application-queue-filters.js';
 
 const STATUS_LABELS = PHYSICAL_STATUS_LABELS;
 const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['sent_to_migration', 'Göçe Gönderildi'], ['migration_approved', 'Göç Onayladı'], ['completed', 'Tamamlandı'], ['rejected', 'Reddedildi'], ['deleted', 'Silinen']];
@@ -34,13 +35,6 @@ function select(document, options) {
     return node;
 }
 
-function filterField(document, label, input, className) {
-    const field = document.createElement('div');
-    field.className = className;
-    field.append(label, input);
-    return field;
-}
-
 function formatDeliveryDate(document, item) {
     const cell = document.createElement('span');
     const date = String(item.application_date || item.submitted_at || '').slice(0, 10);
@@ -61,45 +55,12 @@ function formatDeliveryDate(document, item) {
 }
 
 function createFilters(document, state, handlers) {
-    const form = document.createElement('form');
-    form.className = 'staff-applications-filters';
-    const search = document.createElement('input');
-    search.className = 'glass-input';
-    search.value = state.query.q;
-    search.placeholder = 'Öğrenci no, ad, soyad veya pasaport no';
-    search.maxLength = 120;
-    search.id = 'staff-physical-search';
-    const searchLabel = text(document, 'label', 'Başvuru ara');
-    searchLabel.htmlFor = search.id;
-    const status = select(document, FILTERS);
-    status.value = state.query.status;
-    status.id = 'staff-physical-status';
-    const statusLabel = text(document, 'label', 'Durum');
-    statusLabel.htmlFor = status.id;
-    const startDate = document.createElement('input');
-    startDate.type = 'date';
-    startDate.className = 'glass-input';
-    startDate.value = state.query.from_date || '';
-    startDate.id = 'staff-physical-from-date';
-    const startDateLabel = text(document, 'label', 'Başlangıç tarihi');
-    startDateLabel.htmlFor = startDate.id;
-    const endDate = document.createElement('input');
-    endDate.type = 'date';
-    endDate.className = 'glass-input';
-    endDate.value = state.query.to_date || '';
-    endDate.id = 'staff-physical-to-date';
-    const endDateLabel = text(document, 'label', 'Bitiş tarihi');
-    endDateLabel.htmlFor = endDate.id;
-    const submit = button(document, 'Filtrele', () => {});
-    submit.type = 'submit';
-    submit.className = 'btn btn-primary';
-    form.addEventListener('submit', event => { event.preventDefault(); handlers.search({ q: search.value, status: status.value,
-        from_date: startDate.value, to_date: endDate.value }); });
-    form.append(filterField(document, searchLabel, search, 'physical-filter-search'),
-        filterField(document, statusLabel, status, 'physical-filter-status'),
-        filterField(document, startDateLabel, startDate, 'physical-filter-start-date'),
-        filterField(document, endDateLabel, endDate, 'physical-filter-end-date'), submit);
-    return form;
+    return createApplicationQueueFilters(document, {
+        query: state.query,
+        statusOptions: FILTERS,
+        idPrefix: 'staff-physical',
+        onSubmit: handlers.search
+    });
 }
 
 function createPagination(document, pagination, handlers) {

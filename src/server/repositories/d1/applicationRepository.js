@@ -220,7 +220,7 @@ export function createApplicationRepository(database) {
             if (!selected) return null;
             return this.findById(selected.id);
         },
-        async queryStaffApplications({ statuses, isDeleted = false, includeDeleted = false, searchPattern, pageSize, offset }) {
+        async queryStaffApplications({ statuses, isDeleted = false, includeDeleted = false, searchPattern, submittedAtFrom = null, submittedAtUntil = null, pageSize, offset }) {
             const conditions = ["applications.status <> 'draft'"];
             const queryValues = [];
             const deletedClause = "EXISTS (SELECT 1 FROM application_deletions WHERE application_id=applications.id AND state IN ('soft_deleted','purge_pending'))";
@@ -236,6 +236,14 @@ export function createApplicationRepository(database) {
             if (statuses?.length && !includeDeleted) {
                 conditions.push(`applications.status IN (${statuses.map(() => '?').join(', ')})`);
                 queryValues.push(...statuses);
+            }
+            if (submittedAtFrom) {
+                conditions.push('applications.submitted_at >= ?');
+                queryValues.push(submittedAtFrom);
+            }
+            if (submittedAtUntil) {
+                conditions.push('applications.submitted_at < ?');
+                queryValues.push(submittedAtUntil);
             }
             if (searchPattern) {
                 conditions.push(`(
