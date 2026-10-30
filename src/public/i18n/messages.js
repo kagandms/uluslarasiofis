@@ -1151,7 +1151,7 @@ export const SESSION3_MESSAGES = Object.freeze({
         declarationAcceptedAt: 'Onay zamanı:',
         reviewApplicantHeading: 'Başvuru sahibi bilgileri',
                 documentResidenceApplicationFormHelp: 'E-ikamet başvuru formu.',
-        documentPassportHelp: 'Pasaportunuzun kimlik ve fotoğraf bilgilerinin bulunduğu sayfanın net bir fotoğrafını yükleyin. İlk başvuru ve geçişte pasaportun aslını dosya teslim gününde yanınızda bulundurun; uzatmada fiziksel aslını göndermeyin.',
+        documentPassportHelp: 'Pasaportunuzun kimlik ve fotoğraf bilgilerinin bulunduğu sayfanın net bir fotoğrafını yükleyin. İlk başvuru ve geçişte dosya teslim günü pasaportun aslını yanınızda bulundurun; uzatmada fiziksel aslını göndermeyin.',
         documentVisaHelp: 'Varsa vize bilgilerinin bulunduğu sayfanın net taraması. Vize sayfasını pasaport belgesinden ayrı yükleyin.',
         documentResidenceCardHelp: 'İkamet kartının ön ve arka yüzünün net taraması.',
         documentPhotographsHelp: 'Son 6 ay içinde çekilmiş, beyaz fonlu ve ICAO standardında iki (2) biyometrik fotoğrafı tek dosya olarak yükleyin.',

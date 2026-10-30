@@ -29,7 +29,7 @@ export const DOCUMENT_CONDITION_MESSAGES = Object.freeze({
         "documentMinorConsent": "Veli muvafakatnamesi ve Türkiye’deki sorumlunun taahhütnamesi",
         "documentMinorFamilyEvidence": "Velayet / vefat / gaiplik / tek ebeveyn belgesi",
         "documentPhotographs": "Biyometrik fotoğraflar (2 adet)",
-        "documentPassportHelp": "Pasaportunuzun kimlik ve fotoğraf bilgilerinin bulunduğu sayfanın net bir fotoğrafını yükleyin. İlk başvuru ve geçişte pasaportun aslını dosya teslim gününde yanınızda bulundurun; uzatmada fiziksel aslını göndermeyin.",
+        "documentPassportHelp": "Pasaportunuzun kimlik ve fotoğraf bilgilerinin bulunduğu sayfanın net bir fotoğrafını yükleyin. İlk başvuru ve geçişte dosya teslim günü pasaportun aslını yanınızda bulundurun; uzatmada fiziksel aslını göndermeyin.",
         "documentAddressTitleDeedHelp": "Kendi evinizde kalıyorsanız tapu fotokopisini yükleyin.",
         "documentAddressNumberingHelp": "Kendi eviniz için tapuya ek numarataj belgesini yükleyin.",
         "documentAddressDormitoryHelp": "Yurtta kaldığınızı gösteren e-imzalı veya imzalı ve mühürlü/kaşeli belge.",
