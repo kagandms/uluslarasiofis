@@ -109,15 +109,18 @@ function isPolicyApplicable(policy, applicationType, isUnder18, addressContext) 
     case 'minor_consent': return isUnder18;
     case 'minor_family_evidence': return isUnder18
         && ['divorced', 'deceased', 'single_parent', 'absent'].includes(context.minor_family_status);
-    case 'health_insurance_document': return context.insurance_basis === 'bilateral_agreement';
+    case 'health_insurance_document': return context.insurance_basis === 'bilateral_agreement'
+        || (['renewal', 'transition'].includes(applicationType) && context.insurance_basis === 'system_verified');
     default: return true;
     }
 }
 
-function createStudentPolicyDto(policy) {
+function createStudentPolicyDto(policy, addressContext) {
+    const context = readPolicyContext(addressContext);
     return {
         code: policy.code,
-        required: policy.required,
+        required: policy.code === 'health_insurance' && context.insurance_basis === 'system_verified'
+            ? false : policy.required,
         display_order: policy.display_order,
         label_key: policy.label_key,
         description_key: policy.description_key,
@@ -141,7 +144,7 @@ export function readDocumentPolicy(code, applicationType, isUnder18, addressEvid
     }
     const policy = POLICIES.find((entry) => entry.code === code);
     return policy && isPolicyApplicable(policy, applicationType, isUnder18, addressEvidenceType)
-        ? createStudentPolicyDto(policy) : null;
+        ? createStudentPolicyDto(policy, addressEvidenceType) : null;
 }
 
 /**
@@ -194,7 +197,7 @@ export function listDocumentPolicies(applicationType, isUnder18, addressEvidence
     }
     return POLICIES.filter((policy) => isPolicyApplicable(policy, applicationType, isUnder18, addressEvidenceType))
         .sort((left, right) => left.display_order - right.display_order)
-        .map(createStudentPolicyDto);
+        .map((policy) => createStudentPolicyDto(policy, addressEvidenceType));
 }
 
 /**
