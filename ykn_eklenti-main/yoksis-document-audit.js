@@ -16,19 +16,42 @@ function isStudentNumber(value) {
     return /^\d{8,14}$/.test(cleanText(value));
 }
 
+function getAccessibleDocuments(rootDocument) {
+    const docs = [];
+    function scan(doc) {
+        if (!doc || docs.includes(doc)) return;
+        docs.push(doc);
+        try {
+            const frames = doc.querySelectorAll('iframe, frame');
+            for (const frame of frames) {
+                try {
+                    const childDoc = frame.contentDocument || frame.contentWindow?.document;
+                    if (childDoc) scan(childDoc);
+                } catch {}
+            }
+        } catch {}
+    }
+    scan(rootDocument);
+    return docs;
+}
+
 function findHeaderIndex(table, aliases) {
     const headers = Array.from(table.querySelectorAll('thead th, thead td'));
     return headers.findIndex((header) => aliases.includes(normalizeLabel(header.textContent)));
 }
 
 function findRecordTable(rootDocument) {
-    return Array.from(rootDocument.querySelectorAll('table')).find((table) => {
-        const applicationIndex = findHeaderIndex(table, ['e ikamet basvuru no']);
-        const studentIndex = findHeaderIndex(table, ['ogrenci no']);
-        const hasSelectAction = Array.from(table.querySelectorAll('button, input[type="button"], input[type="submit"], a'))
-            .some((control) => normalizeLabel(control.textContent || control.value).replace(/ /g, '') === 'secyukle');
-        return applicationIndex >= 0 && studentIndex >= 0 && hasSelectAction;
-    }) || null;
+    for (const doc of getAccessibleDocuments(rootDocument)) {
+        const match = Array.from(doc.querySelectorAll('table')).find((table) => {
+            const applicationIndex = findHeaderIndex(table, ['e ikamet basvuru no']);
+            const studentIndex = findHeaderIndex(table, ['ogrenci no']);
+            const hasSelectAction = Array.from(table.querySelectorAll('button, input[type="button"], input[type="submit"], a'))
+                .some((control) => normalizeLabel(control.textContent || control.value).replace(/ /g, '') === 'secyukle');
+            return applicationIndex >= 0 && studentIndex >= 0 && hasSelectAction;
+        });
+        if (match) return match;
+    }
+    return null;
 }
 
 function findYoksisAuditRecordButton(rootDocument, expectedEntry) {
@@ -91,12 +114,14 @@ function collectYoksisAuditQueue(rootDocument) {
 
 function readLabeledValue(rootDocument, requestedLabel) {
     const requested = normalizeLabel(requestedLabel);
-    const labels = Array.from(rootDocument.querySelectorAll('label'))
+    const labels = getAccessibleDocuments(rootDocument)
+        .flatMap((doc) => Array.from(doc.querySelectorAll('label')))
         .filter((label) => normalizeLabel(label.textContent).replace(/\s*\(\s*\*\s*\)\s*/g, ' ').replace(/\s+/g, ' ').trim() === requested);
     if (labels.length !== 1) return '';
 
     const label = labels[0];
-    const control = label.control || (label.htmlFor ? rootDocument.getElementById(label.htmlFor) : null);
+    const ownerDoc = label.ownerDocument || rootDocument;
+    const control = label.control || (label.htmlFor ? ownerDoc.getElementById(label.htmlFor) : null);
     if (control) return cleanText(control.value || control.textContent);
 
     const siblingControl = label.parentElement?.querySelector('input, select, textarea');
@@ -105,7 +130,8 @@ function readLabeledValue(rootDocument, requestedLabel) {
 }
 
 function findMissingDocumentsTable(rootDocument) {
-    const heading = Array.from(rootDocument.querySelectorAll('h1, h2, h3, h4, legend, .section-title'))
+    const heading = getAccessibleDocuments(rootDocument)
+        .flatMap((doc) => Array.from(doc.querySelectorAll('h1, h2, h3, h4, legend, .section-title')))
         .find((element) => normalizeLabel(element.textContent).includes('eksik belgeler'));
     if (!heading) return null;
 
@@ -178,6 +204,7 @@ globalThis.YoksisDocumentAudit = Object.freeze({
     readSelectedYoksisAuditRecord,
     findYoksisAuditRecordButton,
     findYoksisAuditRecordTable: findRecordTable,
+    getAccessibleDocuments,
     readSelectedAuditIdentity: (rootDocument) => ({
         applicationNumber: readLabeledValue(rootDocument, 'E-İkamet Başvuru No:'),
         studentNumber: readLabeledValue(rootDocument, 'Öğrenci No (*)')

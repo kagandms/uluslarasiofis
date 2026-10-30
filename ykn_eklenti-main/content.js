@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.110';
+const CONTENT_SCRIPT_VERSION = '1.2.112';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -3616,8 +3616,11 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
     }
 
     else if (request.action === 'CHECK_MANUAL_YOKSIS_FILL') {
-        const isBoundSearch = pendingYoksisSearch?.requestId === request.searchRequestId
-            && pendingYoksisSearch.code === normalizeYoksisIdValue(request.expectedKabulId);
+        const expectedCode = normalizeYoksisIdValue(request.expectedKabulId);
+        const hasPendingSearch = Boolean(pendingYoksisSearch?.requestId || pendingYoksisSearch?.code);
+        const isBoundSearch = !hasPendingSearch
+            || ((!request.searchRequestId || pendingYoksisSearch.requestId === request.searchRequestId)
+                && (!expectedCode || !pendingYoksisSearch.code || pendingYoksisSearch.code === expectedCode));
         const rejectionMessage = checkYoksisErrorModal();
         const hasEditableStudentFields = hasEditableYoksisStudentFields();
         const semanticMatch = checkSemanticStudentMatch(request.expectedStudent || null);

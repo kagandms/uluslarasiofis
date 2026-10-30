@@ -86,7 +86,7 @@ test('YKN one-click waits for crop confirmation before final YÖKSİS fill', { s
     assert.match(manager, /shouldOpenCropperWhenReady = true/);
 });
 
-test('Apply data retrieval and passport crop do not require YÖKSİS readiness, while manual fill requires confirmation', { skip: !hasLocalExtensionCheckout }, async () => {
+test('Apply data retrieval, passport crop, and manual fill do not block on YÖKSİS readiness notification', { skip: !hasLocalExtensionCheckout }, async () => {
     const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
     const background = await readExtensionFile('background.js');
     const copyInfoStart = manager.indexOf('if (btnCopyInfo) {');
@@ -105,9 +105,9 @@ test('Apply data retrieval and passport crop do not require YÖKSİS readiness, 
     assert.ok(visibleCopyStart >= 0, 'visible second step should exist');
     assert.doesNotMatch(visibleCopyHandler, /yoksisReady/, 'visible Apply/photo step must remain available');
     assert.ok(pasteStart >= 0, 'final YÖKSİS action should exist');
-    assert.match(pasteHandler, /currentStudentData\.yoksisReady !== true/);
+    assert.doesNotMatch(pasteHandler, /currentStudentData\.yoksisReady !== true/, 'final YÖKSİS action must not block when completion message is missing');
+    assert.match(pasteHandler, /isManualYoksisOverrideAvailable\(\)/);
     assert.match(pasteHandler, /currentStudentData\.croppedPhotoBase64/);
-    assert.match(manager, /confirmManualYoksisTransfer\(\)/);
     assert.match(background, /checkManualYoksisFill\(context\)/);
 });
 
@@ -125,12 +125,12 @@ test('YÖKSİS search and fill are single-flight operations, not all-frame retri
     assert.match(content, /Native click tek gerçek tıklama olsun/);
 });
 
-test('YÖKSİS fill is blocked until a fresh acceptance-code search has opened its form', { skip: !hasLocalExtensionCheckout }, async () => {
+test('YÖKSİS fill verifies fresh form or safe manual override in background', { skip: !hasLocalExtensionCheckout }, async () => {
     const background = await readExtensionFile('background.js');
     const manager = await readFile(resolve(testDirectory, '../src/managers/yknManager.js'), 'utf8');
     const content = await readExtensionFile('content.js');
 
-    assert.match(manager, /currentStudentData\.yoksisReady !== true/);
+    assert.match(manager, /isManualYoksisOverrideAvailable\(\)/);
     assert.match(background, /studentData\.yoksisReady !== true/);
     assert.match(content, /requireFreshResult: true/);
     assert.match(content, /domChangedAfterSearch/);

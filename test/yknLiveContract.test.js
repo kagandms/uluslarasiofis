@@ -2562,3 +2562,40 @@ test('real MAIN and content transfer keep nested student fields distinct across 
         assert.equal(background.calls.filter(call => call.message?.action === 'fillRemainingData').length, 1);
     } finally { target.close(); }
 });
+
+test('manual YÖKSİS fill succeeds without prior completion notification or bound tab id', async () => {
+    const target = createContentHarness(`
+        <table>
+            <tr><td>Adı</td><td><input id="student-name"></td></tr>
+            <tr><td>Soyadı</td><td><input id="student-surname"></td></tr>
+            <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const background = createBackgroundHarness({}, {}, {
+        targetHarness: target,
+        formReadyResponses: [{ success: false, formReady: false }]
+    });
+    const student = {
+        yoksisReady: false,
+        yoksisId: 'ZX-456-YW',
+        firstName: 'SYNTHETIC',
+        lastName: 'STUDENT'
+    };
+
+    try {
+        const response = await background.send({
+            source: 'IKAMET_PORTAL',
+            action: 'FILL_YOKSIS_FORM',
+            requestId: 'manual-fill-without-ready-msg',
+            data: student,
+            manualOverrideConfirmed: true
+        });
+
+        assert.equal(response.success, true, JSON.stringify(response));
+        assert.deepEqual(JSON.parse(JSON.stringify(response.filledFields)), ['Adı', 'Soyadı']);
+        assert.equal(target.dom.window.document.getElementById('student-name').value, 'SYNTHETIC');
+        assert.equal(target.dom.window.document.getElementById('student-surname').value, 'STUDENT');
+    } finally {
+        target.close();
+    }
+});

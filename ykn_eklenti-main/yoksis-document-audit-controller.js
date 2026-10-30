@@ -1,4 +1,7 @@
 (() => {
+    if (globalThis.__YOKSIS_DOCUMENT_AUDIT_CONTROLLER_LOADED__) return;
+    globalThis.__YOKSIS_DOCUMENT_AUDIT_CONTROLLER_LOADED__ = true;
+
     const reader = globalThis.YoksisDocumentAudit;
     const activeScans = new Map();
     const SELECTION_TIMEOUT_MS = 12_000;
@@ -18,9 +21,11 @@
     function findScrollableListContainer(rootDocument) {
         const table = reader.findYoksisAuditRecordTable(rootDocument);
         if (!table) return null;
+        const ownerDoc = table.ownerDocument || rootDocument;
+        const view = ownerDoc.defaultView || rootDocument.defaultView;
         let ancestor = table.parentElement;
-        while (ancestor && ancestor !== rootDocument.body && ancestor !== rootDocument.documentElement) {
-            const style = rootDocument.defaultView?.getComputedStyle(ancestor);
+        while (ancestor && ancestor !== ownerDoc.body && ancestor !== ownerDoc.documentElement) {
+            const style = view?.getComputedStyle(ancestor);
             const overflow = `${style?.overflowY || ''} ${style?.overflow || ''}`;
             if (/(auto|scroll)/.test(overflow) && ancestor.clientHeight > 0) return ancestor;
             ancestor = ancestor.parentElement;
@@ -120,6 +125,22 @@
         return null;
     }
 
+    function observeAccessibleRoots(observer, rootDocument) {
+        const docs = typeof reader.getAccessibleDocuments === 'function'
+            ? reader.getAccessibleDocuments(rootDocument)
+            : [rootDocument];
+        for (const doc of docs) {
+            if (doc?.documentElement) {
+                observer.observe(doc.documentElement, {
+                    attributes: true,
+                    childList: true,
+                    characterData: true,
+                    subtree: true
+                });
+            }
+        }
+    }
+
     function waitForSelectedIdentity(rootDocument, expectedIdentity, timeoutMs = SELECTION_TIMEOUT_MS) {
         return new Promise((resolve) => {
             const Observer = rootDocument.defaultView?.MutationObserver || globalThis.MutationObserver;
@@ -142,7 +163,7 @@
                 if (selected.applicationNumber === expectedIdentity.applicationNumber
                     && selected.studentNumber === expectedIdentity.studentNumber) finish(true);
             }
-            observer.observe(rootDocument.documentElement, { attributes: true, childList: true, characterData: true, subtree: true });
+            observeAccessibleRoots(observer, rootDocument);
             check();
         });
     }
@@ -185,12 +206,7 @@
                 }
             }
 
-            observer.observe(rootDocument.documentElement, {
-                attributes: true,
-                childList: true,
-                characterData: true,
-                subtree: true
-            });
+            observeAccessibleRoots(observer, rootDocument);
             check();
         });
     }

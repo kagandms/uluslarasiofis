@@ -99,3 +99,20 @@ test('collectYoksisAuditQueue marks a row without a student identity as incomple
         reason: 'row-identity-incomplete'
     });
 });
+
+test('collectYoksisAuditQueue and readSelectedYoksisAuditRecord inspect same-origin child frames', () => {
+    const dom = new JSDOM('<!doctype html><html><body><iframe id="yoksis-frame"></iframe></body></html>');
+    const frame = dom.window.document.getElementById('yoksis-frame');
+    frame.contentDocument.open();
+    frame.contentDocument.write(readFixture('missing-documents.html'));
+    frame.contentDocument.close();
+
+    const record = readSelectedYoksisAuditRecord(dom.window.document, {
+        applicationNumber: '2026-00-0000001',
+        studentNumber: '2600000001'
+    });
+
+    assert.equal(record.status, 'verified');
+    assert.equal(record.identity.applicationNumber, '2026-00-0000001');
+    assert.equal(record.documents.length, 1);
+});

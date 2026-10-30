@@ -670,38 +670,28 @@ export function initYknManager() {
     }
 
     async function startManualYoksisFillAfterCrop() {
-        if (currentStudentData?.yoksisReady !== true && !isManualYoksisOverrideAvailable()) {
-            if (currentStudentData?.yoksisId) {
-                addStatus('YÖKSİS formu hazırlanıyor: kabul kodu aratılıyor...', 'info');
-                showToast('YÖKSİS formu hazırlanıyor...', 'info');
-                try {
-                    const preparation = await postExtensionRequest('TRANSFER_TO_YOKSIS', {
-                        data: getYoksisTransportData(currentStudentData),
-                        kabulId: currentStudentData.yoksisId,
-                        waitForForm: true,
-                        requestId: createRequestId('auto-yoksis-prep')
-                    }, 35000);
-                    if (preparation?.success !== true || !bindYoksisTarget(preparation)) {
-                        throw new Error(preparation?.error || 'Doğrulanmış YÖKSİS sekmesi alınamadı.');
-                    }
-                    currentStudentData.yoksisReady = true;
-                } catch (prepErr) {
-                    console.warn('[YKN] YÖKSİS kabul kodu otomatik arama uyarısı:', prepErr);
-                    addStatus(`YÖKSİS formu hazırlanamadı: ${prepErr?.message || 'Form açılamadı'}. Lütfen önce 1. Adımdaki kabul mektubu arama butonuna basın.`, 'error');
-                    showToast('YÖKSİS formu hazır değil. Önce kabul kodunu aratın.', 'error');
-                    return;
+        const hasBoundTarget = Number.isInteger(currentStudentData?.yoksisTabId)
+            && typeof currentStudentData?.yoksisTabUrl === 'string'
+            && Boolean(currentStudentData.yoksisTabUrl);
+        if (currentStudentData?.yoksisReady !== true && !hasBoundTarget && !activeTransferRequestId && currentStudentData?.yoksisId) {
+            addStatus('YÖKSİS formu hazırlanıyor: kabul kodu aratılıyor...', 'info');
+            showToast('YÖKSİS formu hazırlanıyor...', 'info');
+            try {
+                const prepRequestId = createRequestId('auto-yoksis-prep');
+                activeTransferRequestId = prepRequestId;
+                const preparation = await postExtensionRequest('TRANSFER_TO_YOKSIS', {
+                    data: getYoksisTransportData(currentStudentData),
+                    kabulId: currentStudentData.yoksisId,
+                    waitForForm: true,
+                    requestId: prepRequestId
+                }, 35000);
+                if (preparation?.success && bindYoksisTarget(preparation)) {
+                    currentStudentData.yoksisReady = preparation.formReady === true;
+                    currentStudentData.yoksisManualOverrideAvailable = preparation.formReady !== true;
                 }
-            } else {
-                addStatus('Fotoğraf kaydedildi. Her şeyi YÖKSİS’e aktarmak için önce kabul kodunu YÖKSİS’te aratın.', 'warning');
-                showToast('Önce kabul kodunu YÖKSİS’te aratın.', 'warning');
-                return;
+            } catch (prepErr) {
+                console.warn('[YKN] YÖKSİS kabul kodu otomatik arama uyarısı:', prepErr);
             }
-        }
-
-        if (currentStudentData?.yoksisReady !== true && !isManualYoksisOverrideAvailable()) {
-            addStatus('YÖKSİS kabul kodu aranamadı veya form doğrulanamadı. Lütfen önce 1. Adımdaki butona tıklayın.', 'error');
-            showToast('YÖKSİS formu hazır değil.', 'error');
-            return;
         }
 
         if (!beginButtonAction('paste-yoksis', btnPasteYoksis, 30_000, () => {
@@ -713,11 +703,6 @@ export function initYknManager() {
         activeSearchRequestId = createRequestId();
         syncUserEnteredPassportDates();
         const manualOverrideConfirmed = isManualYoksisOverrideAvailable();
-        if (manualOverrideConfirmed && !confirmManualYoksisTransfer()) {
-            addStatus('Manuel aktarım iptal edildi; YÖKSİS formu değiştirilmedi.', 'info');
-            showToast('YÖKSİS’e aktarım iptal edildi.', 'info');
-            return;
-        }
         addStatus('Fotoğraf onaylandı. Öğrenci bilgileri ve fotoğraf YÖKSİS’e aktarılıyor...', 'info');
         showToast('Tüm bilgiler YÖKSİS’e aktarılıyor...', 'info');
 
@@ -896,6 +881,7 @@ export function initYknManager() {
 
     let currentStudentData = null;
     let activeSearchRequestId = null;
+    let activeTransferRequestId = null;
     let currentStudentRequestId = null;
     let searchTimeoutTimer = null;
     let extensionBridgeActive = false;
@@ -1136,6 +1122,7 @@ export function initYknManager() {
         cropSourceObjectUrls.clear();
         activeCropSourceUrl = '';
         activeCropSourcePages = [];
+        activeTransferRequestId = null;
         cancelButtonActions();
         oneClickWorkflow = null;
         if (pasteTimeoutTimer) {
@@ -1273,6 +1260,17 @@ export function initYknManager() {
         clearOneClickTimeout();
         oneClickTimeoutTimer = setTimeout(() => {
             if (!isOneClickActive(stage)) return;
+            if (stage === ONE_CLICK_STAGE.YOKSIS_SEARCHING) {
+                currentStudentData = {
+                    ...currentStudentData,
+                    yoksisReady: false,
+                    yoksisManualOverrideAvailable: true
+                };
+                setWorkflowStepStatus(2, 'partial');
+                addStatus('YÖKSİS tamamlandı bildirimi beklenmeden öğrenci bilgileri hazırlanarak devam ediliyor...', 'warning');
+                startOneClickApplyData();
+                return;
+            }
             failOneClick('STAGE_TIMEOUT', `${stage} aşaması zamanında tamamlanmadı.`);
         }, timeoutMs);
     }
@@ -1300,7 +1298,10 @@ export function initYknManager() {
     }
 
     function isManualYoksisOverrideAvailable(studentData = currentStudentData) {
-        return studentData?.yoksisReady !== true && studentData?.yoksisManualOverrideAvailable === true;
+        return studentData?.yoksisReady !== true
+            || !Number.isInteger(studentData?.yoksisTabId)
+            || typeof studentData?.yoksisTabUrl !== 'string'
+            || !studentData.yoksisTabUrl;
     }
 
     function confirmManualYoksisTransfer() {
@@ -2138,6 +2139,7 @@ export function initYknManager() {
                         btnReadAcceptance.classList.remove('is-loading');
                     }
                     activeSearchRequestId = createRequestId();
+                    activeTransferRequestId = activeSearchRequestId;
                     syncUserEnteredPassportDates();
                     addStatus(`Kabul kodu YÖKSİS sekmesinde aranıyor: ${yoksisId}`, 'info');
                     postAppMessage({
@@ -2327,6 +2329,7 @@ export function initYknManager() {
                 btnReadAcceptance.classList.add('is-loading');
 
                 activeSearchRequestId = createRequestId();
+                activeTransferRequestId = activeSearchRequestId;
                 syncUserEnteredPassportDates();
 
                 postAppMessage({
@@ -2595,14 +2598,6 @@ export function initYknManager() {
             }
             syncUserEnteredPassportDates();
             const manualOverrideConfirmed = isManualYoksisOverrideAvailable();
-            if (currentStudentData?.yoksisReady !== true && !manualOverrideConfirmed) {
-                showToast('Önce kabul kodunu YÖKSİS’te aratıp aktarılabilir formu açın.', 'warning');
-                return;
-            }
-            if (manualOverrideConfirmed && !confirmManualYoksisTransfer()) {
-                addStatus('Manuel aktarım iptal edildi; YÖKSİS formu değiştirilmedi.', 'info');
-                return;
-            }
             btnSyncYoksisFields.disabled = true;
             btnSyncYoksisFields.classList.add('is-loading');
             addStatus('Pasaport ve öğrenci alanları YÖKSİS formuna aktarılıyor...', 'info');
@@ -2726,10 +2721,6 @@ export function initYknManager() {
         if (isOneClickActive(ONE_CLICK_STAGE.CROPPER_WAITING)) {
             syncUserEnteredPassportDates();
             const manualOverrideConfirmed = isManualYoksisOverrideAvailable();
-            if (manualOverrideConfirmed && !confirmManualYoksisTransfer()) {
-                failOneClick('MANUAL_YOKSIS_TRANSFER_CANCELLED', 'Manuel YÖKSİS aktarımı iptal edildi; form değiştirilmedi.');
-                return;
-            }
             setOneClickStage(ONE_CLICK_STAGE.YOKSIS_FILLING, 'Fotoğraf onaylandı. Tüm öğrenci bilgileri YÖKSİS’e aktarılıyor...');
             armOneClickTimeout(ONE_CLICK_STAGE.YOKSIS_FILLING, 30_000);
             postOneClickMessage('FILL_YOKSIS_FORM', { data: currentStudentData, manualOverrideConfirmed });
@@ -2769,14 +2760,23 @@ export function initYknManager() {
                 return;
             }
             if (!beginButtonAction('transfer-yoksis', btnTransferYoksis, 45_000, () => {
-                setWorkflowStepStatus(2, 'error');
-                addStatus('YÖKSİS araması yanıt vermedi. Tekrar deneyebilirsiniz.', 'error');
-                showToast('YÖKSİS yanıt vermedi.', 'error');
+                currentStudentData = {
+                    ...currentStudentData,
+                    yoksisReady: false,
+                    yoksisManualOverrideAvailable: true
+                };
+                setWorkflowStepStatus(2, 'partial');
+                if (currentWorkflowStep <= 2) {
+                    updateWorkflowUI(3);
+                }
+                addStatus('YÖKSİS tamamlandı bildirimi gelmedi. YÖKSİS’te form açıldıysa bilgileri ve alanları doğrudan aktarabilirsiniz.', 'warning');
+                showToast('YÖKSİS’te form açıldıysa bilgileri aktarabilirsiniz.', 'warning');
             })) return;
 
             // Manuel her deneme kendi istek kimliğini alır. Böylece önceki
             // yanıt, yeni tıklamanın sonucu gibi işlenemez.
             activeSearchRequestId = createRequestId();
+            activeTransferRequestId = activeSearchRequestId;
             syncUserEnteredPassportDates();
 
             showToast('Kabul kodu YÖKSİS\'e aktarılıyor, lütfen bekleyin...', 'info');
@@ -2800,15 +2800,6 @@ export function initYknManager() {
                 return;
             }
             const manualOverrideConfirmed = isManualYoksisOverrideAvailable();
-            if (currentStudentData.yoksisReady !== true && !manualOverrideConfirmed) {
-                showToast('Önce kabul kodunu YÖKSİS’te aratıp yeni öğrenci formunun açılmasını bekleyin.', 'warning');
-                addStatus('Bilgi aktarımı başlatılmadı: YÖKSİS için doğrulanmış yeni öğrenci formu yok.', 'warning');
-                return;
-            }
-            if (manualOverrideConfirmed && !confirmManualYoksisTransfer()) {
-                addStatus('Manuel aktarım iptal edildi; YÖKSİS formu değiştirilmedi.', 'info');
-                return;
-            }
             if (!currentStudentData.croppedPhotoBase64) {
                 showToast('Önce pasaport fotoğrafını kırpıp onaylayın.', 'warning');
                 addStatus('YÖKSİS’e aktarım bekletildi: pasaport fotoğrafı henüz onaylanmadı.', 'warning');
@@ -2870,6 +2861,7 @@ export function initYknManager() {
         const isCurrentYoksisTransferResponse = isCurrentYknTransferResponse({
             responseRequestId: requestId,
             activeRequestId: activeSearchRequestId,
+            activeTransferRequestId,
             workflow: oneClickWorkflow,
             currentStudentRequestId
         });
@@ -2879,7 +2871,7 @@ export function initYknManager() {
         ].includes(event.data.action);
         if (isStudentLookupEvent && !isCurrentStudentRequest) return;
         if (requestId && activeSearchRequestId && requestId !== activeSearchRequestId
-            && !isCurrentWorkflowResponse && !isCurrentStudentRequest) return;
+            && !isCurrentWorkflowResponse && !isCurrentStudentRequest && !isCurrentYoksisTransferResponse) return;
         if (event.data.type === 'RESPONSE' && event.data.action === 'TRANSFER_TO_YOKSIS'
             && !isCurrentYoksisTransferResponse) return;
 
@@ -2906,34 +2898,35 @@ export function initYknManager() {
             } else if (event.data.action === 'TRANSFER_TO_YOKSIS'
                 && isOneClickActive(ONE_CLICK_STAGE.YOKSIS_SEARCHING)) {
                 clearOneClickTimeout();
-                if (response?.success && response.searchTriggered !== false && bindYoksisTarget(response)) {
+                const errorMessage = String(response?.error || response?.message || '');
+                const isExplicitYoksisRejection = errorMessage.startsWith('YÖKSİS:');
+                bindYoksisTarget(response);
+                if (response?.success) {
                     currentStudentData = {
                         ...currentStudentData,
                         yoksisReady: response.formReady === true,
-                        yoksisManualOverrideAvailable: response.manualOverrideAvailable === true,
+                        yoksisManualOverrideAvailable: response.formReady !== true,
                         yoksisSearchRequestId: response.yoksisSearchRequestId || requestId
                     };
                     completedWorkflowSteps.add(2);
                     updateWorkflowUI(3);
                     if (response.formReady === false) {
-                        addStatus('Kabul kodu YÖKSİS’te aratıldı. Öğrenci formu yüklenmeye devam ediyor.', 'info');
+                        addStatus('Kabul kodu YÖKSİS’te aratıldı. Tamamlandı bildirimi beklenmeden öğrenci bilgileri hazırlanıyor...', 'info');
                     }
                     startOneClickApplyData();
-                } else if (response?.success && response.manualOverrideAvailable === true && bindYoksisTarget(response)) {
+                } else if (!isExplicitYoksisRejection) {
                     currentStudentData = {
                         ...currentStudentData,
                         yoksisReady: false,
                         yoksisManualOverrideAvailable: true,
-                        yoksisSearchRequestId: response.yoksisSearchRequestId || requestId
+                        yoksisSearchRequestId: response?.yoksisSearchRequestId || requestId
                     };
                     setWorkflowStepStatus(2, 'partial');
-                    updateStudentActions(currentStudentData);
-                    addStatus('Kabul kodu aratıldı; form otomatik doğrulanamadı. YÖKSİS kaydını kontrol edip “Alanları YÖKSİS’e Gönder” ile manuel aktarabilirsiniz.', 'warning');
-                    showToast('YÖKSİS kaydını kontrol ederek manuel aktarabilirsiniz.', 'warning');
-                } else if (response?.success) {
-                    failOneClick('YOKSIS_FORM_NOT_READY', 'YÖKSİS araması çalıştı ancak öğrenci bilgi formu aktifleşmedi.');
+                    updateWorkflowUI(3);
+                    addStatus('YÖKSİS tamamlandı bildirimi alınamadı; öğrenci bilgileri hazırlanarak devam ediliyor...', 'warning');
+                    startOneClickApplyData();
                 } else {
-                    failOneClick('YOKSIS_SEARCH_FAILED', response?.error || response?.message || 'YÖKSİS araması başlatılamadı.');
+                    failOneClick('YOKSIS_SEARCH_FAILED', errorMessage || 'YÖKSİS araması başlatılamadı.');
                 }
                 return;
             } else if (event.data.action === 'COPY_APPLY_DATA'
@@ -3016,8 +3009,14 @@ export function initYknManager() {
                     btnReadAcceptance.classList.remove('is-loading');
                 }
 
-                if (response?.success && response.formReady !== false && bindYoksisTarget(response)) {
-                    currentStudentData = { ...currentStudentData, yoksisReady: true };
+                bindYoksisTarget(response);
+                if (response?.success && response.formReady !== false) {
+                    currentStudentData = {
+                        ...currentStudentData,
+                        yoksisReady: true,
+                        yoksisManualOverrideAvailable: false,
+                        yoksisSearchRequestId: response.yoksisSearchRequestId || requestId
+                    };
                     setWorkflowStepStatus(2, 'success');
                     if (currentWorkflowStep <= 2) {
                         updateWorkflowUI(3);
@@ -3028,15 +3027,35 @@ export function initYknManager() {
                     addStatus('Kabul kodu YÖKSİS sekmesinde aratıldı ve öğrenci formu hazır.', 'success');
                     showToast('YÖKSİS araması tamamlandı.', 'success');
                 } else if (response?.success) {
-                    currentStudentData = { ...currentStudentData, yoksisReady: false };
+                    currentStudentData = {
+                        ...currentStudentData,
+                        yoksisReady: false,
+                        yoksisManualOverrideAvailable: true,
+                        yoksisSearchRequestId: response.yoksisSearchRequestId || requestId
+                    };
                     setWorkflowStepStatus(2, 'partial');
-                    addStatus('Kabul kodu YÖKSİS sekmesine aktarıldı ancak öğrenci formu henüz hazır değil.', 'warning');
-                    showToast('YÖKSİS formu henüz hazır değil.', 'warning');
+                    if (currentWorkflowStep <= 2) {
+                        updateWorkflowUI(3);
+                    } else {
+                        updateWorkflowUI();
+                    }
+                    updateStudentActions(currentStudentData);
+                    addStatus('Kabul kodu YÖKSİS sekmesine gönderildi. Tamamlandı bildirimi gelmese de bilgileri ve alanları YÖKSİS’e aktarabilirsiniz.', 'warning');
+                    showToast('YÖKSİS’te form açıldıysa bilgileri aktarabilirsiniz.', 'info');
                 } else {
-                    setWorkflowStepStatus(2, 'error');
-                    const errMsg = response?.error || response?.message || 'Kabul kodu YÖKSİS\'e aktarılamadı. Lütfen YÖKSİS sekmesinde öğrenci başvuru/kayıt ekranının açık olduğunu kontrol edin.';
-                    addStatus(errMsg, 'error');
-                    showToast(errMsg, 'error');
+                    currentStudentData = {
+                        ...currentStudentData,
+                        yoksisReady: false,
+                        yoksisManualOverrideAvailable: true,
+                        yoksisSearchRequestId: response?.yoksisSearchRequestId || requestId
+                    };
+                    setWorkflowStepStatus(2, 'partial');
+                    if (currentWorkflowStep <= 2) {
+                        updateWorkflowUI(3);
+                    }
+                    const errMsg = response?.error || response?.message || 'YÖKSİS tamamlandı bildirimi alınamadı. YÖKSİS’te öğrenci formu açıksa bilgileri doğrudan aktarabilirsiniz.';
+                    addStatus(errMsg, 'warning');
+                    showToast(errMsg, 'warning');
                 }
             } else if (event.data.action === 'FILL_YOKSIS_FORM') {
                 finishButtonAction('paste-yoksis');
@@ -3152,6 +3171,7 @@ export function initYknManager() {
                                 btnReadAcceptance.classList.remove('is-loading');
                             }
                             activeSearchRequestId = createRequestId();
+                            activeTransferRequestId = activeSearchRequestId;
                             syncUserEnteredPassportDates();
                             addStatus(`Kabul kodu YÖKSİS sekmesinde aranıyor: ${validCode}`, 'info');
                             postAppMessage({
