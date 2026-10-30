@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.112';
+const CONTENT_SCRIPT_VERSION = '1.2.113';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -150,15 +150,12 @@ function getExpectedYoksisFieldsForVerification(studentData) {
 }
 
 async function verifyYoksisFields(data, requestId) {
-    if (!(await runZkCommand({ action: 'waitForIdle' }))?.success) {
-        const pendingLabels = getExpectedYoksisFieldsForVerification(data);
-        return {
-            success: false,
-            filledFields: [],
-            missingFields: pendingLabels,
-            failedFields: pendingLabels,
-            error: 'YÖKSİS güncellemesi zamanında tamamlanmadı; alanlar doğrulanamadı.'
-        };
+    let idleTimedOut = false;
+    try {
+        const idle = await runZkCommand({ action: 'waitForIdle' });
+        if (!idle?.success) idleTimedOut = true;
+    } catch (_) {
+        idleTimedOut = true;
     }
     const hasValue = (...values) => values.some((value) => String(value ?? '').trim() !== '');
     const expectedValues = new Map();
@@ -197,7 +194,7 @@ async function verifyYoksisFields(data, requestId) {
             const selection = await runZkCommand({
                 action: 'verifyCountry', field: YOKSIS_COUNTRY_FIELDS[label], value: expected.value, requestId
             });
-            (selection.verified ? filledFields : missingFields).push(label);
+            (selection?.verified ? filledFields : missingFields).push(label);
             continue;
         }
         const currentValue = control?.value;
@@ -214,9 +211,19 @@ async function verifyYoksisFields(data, requestId) {
             continue;
         }
         const result = await runZkCommand({ action: 'verifyRadio', field, value, requestId });
-        (result.verified ? filledFields : missingFields).push(label);
+        (result?.verified ? filledFields : missingFields).push(label);
     }
-    return { success: missingFields.length === 0, filledFields, missingFields };
+    const success = missingFields.length === 0;
+    const error = (!success && idleTimedOut && filledFields.length === 0)
+        ? 'YÖKSİS güncellemesi zamanında tamamlanmadı; alanlar doğrulanamadı.'
+        : undefined;
+    return {
+        success,
+        filledFields,
+        missingFields,
+        failedFields: missingFields,
+        ...(error ? { error } : {})
+    };
 }
 
 function getAllDocs(rootDoc = document) {
@@ -1929,16 +1936,28 @@ function toApplyUrl(value) {
 }
 
 function extractElementUrl(element) {
-    const directValue = element.href
-        || element.src
-        || element.getAttribute('src')
-        || element.getAttribute('data-href')
-        || element.getAttribute('data-url')
-        || element.getAttribute('data-link');
-    const directUrl = toApplyUrl(directValue);
-    if (directUrl) return directUrl;
+    if (!element) return '';
+    const rawHref = element.getAttribute?.('href') || '';
+    const usableHref = rawHref && rawHref !== '#' && !rawHref.startsWith('#') && !rawHref.toLowerCase().startsWith('javascript:')
+        ? element.href
+        : '';
+    const candidateValues = [
+        usableHref,
+        element.src,
+        element.getAttribute?.('src'),
+        element.getAttribute?.('data-href'),
+        element.getAttribute?.('data-url'),
+        element.getAttribute?.('data-link'),
+        element.getAttribute?.('data-src'),
+        element.getAttribute?.('data-file'),
+        element.getAttribute?.('data')
+    ];
+    for (const candidate of candidateValues) {
+        const resolved = toApplyUrl(candidate);
+        if (resolved && !isNavigationOrInvalidUrl(resolved)) return resolved;
+    }
 
-    const onclick = element.getAttribute('onclick') || '';
+    const onclick = element.getAttribute?.('onclick') || '';
     const embeddedValue = onclick.match(/['"]((?:https?:\/\/|\/)[^'"]+)['"]/i);
     return embeddedValue ? toApplyUrl(embeddedValue[1]) : '';
 }
@@ -2047,34 +2066,166 @@ function getDocumentType(text) {
     return '';
 }
 
-function getCropSourceType(text) {
-    const norm = normalizeApplyText(text);
-    if (norm.includes('fotoğraf') || norm.includes('fotograf') || norm.includes('photo')) return 'photo';
+function getCropSourceType(text, url = '') {
+    const norm = normalizeApplyText(`${text || ''} ${url || ''}`);
+    if (norm.includes('fotoğraf') || norm.includes('fotograf') || norm.includes('photo') || norm.includes('vesikalik') || norm.includes('vesikalık') || norm.includes('biometrik')) return 'photo';
     if (norm.includes('pasaport') || norm.includes('passport')) return 'passport';
     return 'other';
 }
 
-function getCropSourceLabel(type, titleText, itemText) {
+function cleanCropSourceCandidateLabel(rawPart) {
+    if (!rawPart) return '';
+    const cleaned = String(rawPart)
+        .replace(/\d{2}[./-]\d{2}[./-]\d{4}(?:\s+\d{2}:\d{2}(?::\d{2})?)?/g, ' ')
+        .replace(/\b(?:görüntüle|goruntule|indir|download|view|önizle|onizle|preview|aç|ac|sil|delete)\b/gi, ' ')
+        .replace(/^[\s\-:|•·]+|[\s\-:|•·]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!cleaned || cleaned.length < 2 || cleaned.length > 80) return '';
+    const norm = normalizeApplyText(cleaned);
+    if (!norm) return '';
+    if (norm === 'yuklenendosyalar' || norm === 'yuklenenbelgeler' || norm === 'uploadedfiles'
+        || norm === 'olusturulandosyalar' || norm === 'olusturulanbelgeler' || norm === 'generatedfiles'
+        || norm === 'belgeler' || norm === 'dosyalar' || norm === 'islemler' || norm === 'actions') {
+        return '';
+    }
+    return cleaned;
+}
+
+function getCropSourceLabel(type, titleText, itemText, selfText = '', itemContainer = null) {
     if (type === 'photo') return 'Fotoğraf';
     if (type === 'passport') return 'Pasaport';
-    const label = String(titleText || itemText || '').split(/\n|\r/)
-        .map((part) => part.trim())
-        .find((part) => part && !/görüntüle|indir|download|view|\d{2}[./-]\d{2}[./-]\d{4}/i.test(part));
-    return label || 'Diğer belge';
+
+    const rawCandidates = [];
+    if (titleText) rawCandidates.push(titleText);
+    if (selfText) rawCandidates.push(selfText);
+    if (itemContainer) {
+        const labelNodes = itemContainer.querySelectorAll('.fw-bolder, .fw-bold, .title, strong, b, h6, h5, a, span, td, div');
+        for (const node of labelNodes) {
+            const nodeText = node.innerText || node.textContent || '';
+            if (nodeText) rawCandidates.push(nodeText);
+        }
+    }
+    if (itemText) rawCandidates.push(itemText);
+
+    for (const candidate of rawCandidates) {
+        const parts = String(candidate).split(/\n|\r/);
+        for (const part of parts) {
+            const cleaned = cleanCropSourceCandidateLabel(part);
+            if (cleaned) return cleaned;
+        }
+    }
+    return 'Diğer belge';
 }
 
 function isNavigationOrInvalidUrl(url) {
     if (!url || url === '#' || url.startsWith('javascript:')) return true;
     try {
         const parsed = new URL(url, location.href);
+        const current = new URL(location.href);
         const path = parsed.pathname.replace(/\/$/, '');
+        const currentPath = current.pathname.replace(/\/$/, '');
         if (path === '/panel/applications' || path.endsWith('/edit') || path.endsWith('/delete')) return true;
-        if (path === '/panel/dashboard' || path === '/panel') return true;
-        if (parsed.hash && !parsed.pathname) return true;
+        if (path === '/panel/dashboard' || path === '/panel' || path === '/logout' || path === '/login') return true;
+        if (parsed.hash && (!parsed.pathname || (parsed.origin === current.origin && path === currentPath))) return true;
         return false;
     } catch (_) {
         return true;
     }
+}
+
+function isDocumentFileUrl(url) {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return lower.includes('/uploads')
+        || lower.includes('/storage')
+        || lower.includes('/download')
+        || lower.includes('/document')
+        || lower.includes('/files')
+        || lower.includes('/media')
+        || lower.includes('/belge')
+        || lower.includes('/dosya')
+        || lower.includes('/view')
+        || /\.(?:pdf|jpe?g|png|webp|bmp)(?:$|\?)/i.test(lower);
+}
+
+function hasKnownUploadedDocumentKeyword(text) {
+    if (!text) return false;
+    const norm = normalizeApplyText(text);
+    return norm.includes('pasaport')
+        || norm.includes('passport')
+        || norm.includes('diploma')
+        || norm.includes('transkript')
+        || norm.includes('transcript')
+        || norm.includes('fotograf')
+        || norm.includes('fotoğraf')
+        || norm.includes('photo')
+        || norm.includes('vesikalik')
+        || norm.includes('vesikalık')
+        || norm.includes('kimlik')
+        || norm.includes('denklik')
+        || norm.includes('dekont')
+        || norm.includes('makbuz')
+        || norm.includes('ikamet')
+        || norm.includes('sinav')
+        || norm.includes('sınav')
+        || norm.includes('dilbelge');
+}
+
+function findApplyDocumentSection(matchKeywords, oppositeKeywords) {
+    const candidates = Array.from(document.querySelectorAll(
+        'h1, h2, h3, h4, h5, h6, .card-title, .card-header, .card-label, .fw-bolder, .fw-bold, .fs-3, .fs-4, .fs-5, .fs-6, strong, b, span, p, label, div'
+    ));
+    for (const el of candidates) {
+        const rawText = (el.innerText || el.textContent || '').trim();
+        const norm = normalizeApplyText(rawText);
+        if (!norm || norm.length > 45) continue;
+        if (!matchKeywords.some((kw) => norm.includes(kw))) continue;
+
+        let bestContainer = null;
+        let curr = el.parentElement;
+        while (curr && curr !== document.body) {
+            const currNorm = normalizeApplyText(curr.innerText || curr.textContent || '');
+            if (oppositeKeywords.some((kw) => currNorm.includes(kw))) {
+                break;
+            }
+            bestContainer = curr;
+            if (curr.classList?.contains('card') || curr.tagName === 'SECTION') {
+                return curr;
+            }
+            curr = curr.parentElement;
+        }
+        if (bestContainer) return bestContainer;
+    }
+    return null;
+}
+
+function getDocumentItemContainer(el, sectionRoot = null) {
+    if (!el) return null;
+    let best = el.closest('tr, li, .document-item') || null;
+    if (best) return best;
+
+    let curr = el.parentElement;
+    while (curr && curr !== document.body && curr !== sectionRoot) {
+        if (curr.classList?.contains('card')
+            || curr.classList?.contains('card-body')
+            || curr.classList?.contains('tab-pane')
+            || curr.tagName === 'TBODY'
+            || curr.tagName === 'TABLE'
+            || curr.tagName === 'SECTION') {
+            break;
+        }
+        const currText = (curr.innerText || curr.textContent || '').trim();
+        const timestampMatches = currText.match(/\d{2}[./-]\d{2}[./-]\d{4}/g) || [];
+        if (timestampMatches.length > 1) {
+            break;
+        }
+        if (cleanCropSourceCandidateLabel(currText) || timestampMatches.length === 1) {
+            best = curr;
+        }
+        curr = curr.parentElement;
+    }
+    return best || el.closest('.d-flex, .row, .col, div') || el.parentElement;
 }
 
 function isValidYoksisId(code) {
@@ -2181,22 +2332,12 @@ function findDocumentLinks() {
     if (directCode) links.kabulId = directCode;
 
     // Detect section cards: "Oluşturulan Dosyalar" vs "Yüklenen Dosyalar"
-    const allContainers = Array.from(document.querySelectorAll('.card, .row, .col, div, section'));
-    let generatedSection = null;
-    let uploadedSection = null;
+    const generatedKeywords = ['olusturulandosya', 'olusturulanbelge', 'generatedfiles', 'generateddocuments'];
+    const uploadedKeywords = ['yuklenendosya', 'yuklenenbelge', 'uploadedfiles', 'uploadeddocuments'];
+    const generatedSection = findApplyDocumentSection(generatedKeywords, uploadedKeywords);
+    const uploadedSection = findApplyDocumentSection(uploadedKeywords, generatedKeywords);
 
-    for (const container of allContainers) {
-        const h = container.querySelector('h1, h2, h3, h4, h5, h6, .card-title, .fs-4, .fs-5, .fw-bolder, strong, span');
-        const text = h ? normalizeApplyText(h.innerText) : '';
-        if (!generatedSection && (text.includes('olusturulandosya') || text.includes('olusturulanbelge') || text.includes('generatedfiles'))) {
-            generatedSection = container;
-        }
-        if (!uploadedSection && (text.includes('yuklenendosya') || text.includes('yuklenenbelge') || text.includes('uploadedfiles'))) {
-            uploadedSection = container;
-        }
-    }
-
-    const allClickables = Array.from(document.querySelectorAll('a[href], [data-url], [data-href], [data-link], button, [onclick], img[src], iframe[src], embed[src]'));
+    const allClickables = Array.from(document.querySelectorAll('a[href], [data-url], [data-href], [data-link], [data-src], [data-file], button, [onclick], img[src], iframe[src], embed[src], object[data]'));
     const acceptanceCandidates = [];
     const passportCandidates = [];
     const cropSourceCandidates = [];
@@ -2204,27 +2345,42 @@ function findDocumentLinks() {
     for (const el of allClickables) {
         const url = extractElementUrl(el);
         if (!url || isNavigationOrInvalidUrl(url)) continue;
+        if (el.closest('nav, aside, .aside, .sidebar, .navbar, .menu, .breadcrumb, .nav-tabs, [role="tablist"], header, footer')) {
+            continue;
+        }
 
-        const selfText = el.innerText || el.textContent || '';
-        const titleEl = el.querySelector('.fw-bold, .title, strong, b, h6, span');
-        const titleText = titleEl ? titleEl.innerText : '';
-        const parentContainer = el.closest('.d-flex, .card, tr, li, .document-item, .row');
-        const parentText = parentContainer ? parentContainer.innerText : '';
+        const selfText = (el.innerText || el.textContent || '').trim();
+        const titleEl = el.querySelector('.fw-bolder, .fw-bold, .title, strong, b, h6, h5, span');
+        const titleText = titleEl ? (titleEl.innerText || titleEl.textContent || '').trim() : '';
+        const inGenerated = Boolean(generatedSection && generatedSection.contains(el));
+        const inUploaded = Boolean(uploadedSection && uploadedSection.contains(el));
+        const parentContainer = getDocumentItemContainer(el, uploadedSection || generatedSection);
+        const parentText = parentContainer ? (parentContainer.innerText || parentContainer.textContent || '').trim() : '';
 
         const fullItemText = `${titleText} ${selfText} ${parentText}`;
         const isOffer = isOfferText(fullItemText) || isOfferText(titleText) || isOfferText(selfText);
+        const isAcceptanceItem = isTrueAcceptanceText(titleText)
+            || isTrueAcceptanceText(selfText)
+            || isTrueAcceptanceText(fullItemText)
+            || isAcceptanceLetterUrl(url);
         const timestamp = parseDateTimestamp(fullItemText) || parseDateTimestamp(selfText);
-        const inGenerated = generatedSection && generatedSection.contains(el);
-        const inUploaded = uploadedSection && uploadedSection.contains(el);
+        const isUploadedDocumentCandidate = inUploaded
+            || (!inGenerated && (
+                timestamp > 0
+                || hasKnownUploadedDocumentKeyword(fullItemText)
+                || isPassportUrl(url)
+                || (isDocumentFileUrl(url) && Boolean(el.closest('.card, .tab-pane, table, .document-item, .row')))
+            ));
 
-        if (inUploaded && !isTrueAcceptanceText(fullItemText) && !isOffer) {
-            const sourceType = getCropSourceType(fullItemText);
-            const sourceLabel = getCropSourceLabel(sourceType, titleText, parentText);
+        if (!inGenerated && !isAcceptanceItem && !isOffer && isUploadedDocumentCandidate) {
+            const sourceType = getCropSourceType(fullItemText, url);
+            const sourceLabel = getCropSourceLabel(sourceType, titleText, parentText, selfText, parentContainer);
             cropSourceCandidates.push({
                 url,
                 label: sourceLabel,
                 type: sourceType,
                 priority: sourceType === 'photo' ? 0 : sourceType === 'passport' ? 1 : 2,
+                inUploaded: inUploaded ? 1 : 0,
                 timestamp
             });
         }
@@ -2280,16 +2436,33 @@ function findDocumentLinks() {
 
     const uniqueCropSources = new Map();
     cropSourceCandidates
-        .sort((a, b) => a.priority - b.priority || b.timestamp - a.timestamp)
+        .sort((a, b) => a.priority - b.priority || b.inUploaded - a.inUploaded || b.timestamp - a.timestamp)
         .forEach((source) => {
-            if (!uniqueCropSources.has(source.url)) {
+            const existing = uniqueCropSources.get(source.url);
+            if (!existing) {
                 uniqueCropSources.set(source.url, {
                     url: source.url,
                     label: source.label,
                     type: source.type
                 });
+            } else if ((existing.label === 'Diğer belge' && source.label && source.label !== 'Diğer belge')
+                || (existing.type === 'other' && source.type !== 'other')) {
+                uniqueCropSources.set(source.url, {
+                    url: source.url,
+                    label: source.label && source.label !== 'Diğer belge' ? source.label : existing.label,
+                    type: source.type !== 'other' ? source.type : existing.type
+                });
             }
         });
+    for (const passportUrl of uniquePassportUrls) {
+        if (passportUrl && !uniqueCropSources.has(passportUrl)) {
+            uniqueCropSources.set(passportUrl, {
+                url: passportUrl,
+                label: 'Pasaport',
+                type: 'passport'
+            });
+        }
+    }
     links.cropSources = Array.from(uniqueCropSources.values());
 
     // Fallback ONLY if absolutely no true acceptance letter with "kabul" text was found

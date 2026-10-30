@@ -2,7 +2,7 @@
 // İkamet Portalı (Web Sayfası) ile Eklenti (Background) arasında köprü görevi görür.
 (() => {
     if (window !== window.top) return;
-    const BRIDGE_VERSION = '1.2.112';
+    const BRIDGE_VERSION = '1.2.113';
     const isStaffRoute = () => window.location.pathname === '/yetkili'
         || window.location.pathname.startsWith('/yetkili/');
     if (!isStaffRoute()) return;

@@ -17,7 +17,8 @@ import {
     isPassportCropperOpen,
     appendPassportPages,
     replacePassportPages,
-    setCropperSourceLoading
+    setCropperSourceLoading,
+    updateCropperSources
 } from '../ui/passportCropperModal.js';
 import { PDFJS_VERSION } from '../config/pdfjs-version.js';
 import {
@@ -1348,16 +1349,55 @@ export function initYknManager() {
         setOneClickStage(ONE_CLICK_STAGE.CROPPER_WAITING, 'Pasaport fotoğrafı hazır. Lütfen fotoğrafı kırpıp aktarımı onaylayın.');
         shouldOpenCropperWhenReady = false;
         if (isPassportCropperOpen()) return;
+        const initialPageIndex = pages === currentStudentData?.passportPages
+            ? (currentStudentData?.bestPassportPageIndex || 0)
+            : 0;
         openPassportCropper({
-            imageSrc: pages[0]?.dataUrl || currentStudentData?.passportImageSrc,
+            imageSrc: pages[initialPageIndex]?.dataUrl || pages[0]?.dataUrl || currentStudentData?.passportImageSrc,
             pages,
-            initialPageIndex: 0,
+            initialPageIndex,
             studentName: currentStudentData.fullName || '',
             passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
             studentData: currentStudentData,
             sources: currentStudentData.cropSources || [],
             selectedSourceUrl: activeCropSourceUrl
         });
+    }
+
+    function mergeStudentCropSources(incomingSources, existingSources = [], passportUrls = []) {
+        const merged = new Map();
+        const addSource = (item) => {
+            if (!item?.url) return;
+            const existing = merged.get(item.url);
+            if (!existing) {
+                merged.set(item.url, {
+                    url: item.url,
+                    label: item.label || 'Diğer belge',
+                    type: item.type || 'other'
+                });
+            } else if ((existing.label === 'Diğer belge' && item.label && item.label !== 'Diğer belge')
+                || (existing.type === 'other' && item.type && item.type !== 'other')) {
+                merged.set(item.url, {
+                    url: item.url,
+                    label: item.label && item.label !== 'Diğer belge' ? item.label : existing.label,
+                    type: item.type && item.type !== 'other' ? item.type : existing.type
+                });
+            }
+        };
+        if (Array.isArray(incomingSources)) incomingSources.forEach(addSource);
+        if (Array.isArray(existingSources)) existingSources.forEach(addSource);
+        if (Array.isArray(passportUrls)) {
+            passportUrls.filter(Boolean).forEach((url) => {
+                if (!merged.has(url)) {
+                    merged.set(url, { url, label: 'Pasaport', type: 'passport' });
+                }
+            });
+        }
+        const result = Array.from(merged.values());
+        if (isPassportCropperOpen()) {
+            updateCropperSources(result, activeCropSourceUrl || currentStudentData?.passportDocumentUrl || '');
+        }
+        return result;
     }
 
     function getPreferredCropSource() {
@@ -1371,12 +1411,19 @@ export function initYknManager() {
     function openPreferredCropSource(requestId = activeSearchRequestId) {
         const source = getPreferredCropSource();
         if (!source) return false;
+        if (source.type === 'passport' && !currentStudentData?.passportPages?.length) {
+            return false;
+        }
         activeCropSourceUrl = source.url;
         if (source.type === 'passport' && currentStudentData?.passportPages?.length) {
             activeCropSourcePages = currentStudentData.passportPages;
+            const initialPageIndex = currentStudentData.bestPassportPageIndex || 0;
             openPassportCropper({
-                imageSrc: activeCropSourcePages[0]?.dataUrl || currentStudentData.passportImageSrc,
+                imageSrc: activeCropSourcePages[initialPageIndex]?.dataUrl
+                    || activeCropSourcePages[0]?.dataUrl
+                    || currentStudentData.passportImageSrc,
                 pages: activeCropSourcePages,
+                initialPageIndex,
                 studentName: currentStudentData.fullName || '',
                 passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
                 studentData: currentStudentData,
@@ -1779,7 +1826,8 @@ export function initYknManager() {
                 }
 
                 if (renderedPages.length > 0) {
-                    const existingPages = currentStudentData?.passportPages || [];
+                    const isSamePassportUrl = Boolean(documentUrl && currentStudentData?.loadedPassportDocumentUrl === documentUrl);
+                    const existingPages = isSamePassportUrl ? [] : (currentStudentData?.passportPages || []);
                     const initialTotal = existingPages.length;
                     const adjustedPages = renderedPages.map((p, idx) => ({
                         ...p,
@@ -1794,13 +1842,14 @@ export function initYknManager() {
                     activeCropSourceUrl = documentUrl;
                     currentStudentData = {
                         ...currentStudentData,
+                        loadedPassportDocumentUrl: documentUrl,
                         passportPages: allPages,
                         passportImageSrc: selectedPage.dataUrl,
                         bestPassportPageIndex: initialTotal + bestPageIndex
                     };
                     updateStudentActions(currentStudentData);
 
-                    if (isPassportCropperOpen()) {
+                    if (isPassportCropperOpen() && !isSamePassportUrl) {
                         appendPassportPages(adjustedPages);
                     } else if (shouldOpenCropperWhenReady) {
                         if (isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)) {
@@ -2933,8 +2982,13 @@ export function initYknManager() {
                 && isOneClickActive(ONE_CLICK_STAGE.APPLY_DATA_READING)) {
                 clearOneClickTimeout();
                 if (response?.success && response.data) {
+                    const existingCropSources = currentStudentData?.cropSources || [];
                     currentStudentData = mergeApplyProfile(currentStudentData, response.data);
-                    currentStudentData.cropSources = response.data.cropSources || currentStudentData.cropSources || [];
+                    currentStudentData.cropSources = mergeStudentCropSources(
+                        response.data.cropSources,
+                        existingCropSources,
+                        response.data.passportCandidates || [response.data.passportDocumentUrl || currentStudentData.passportDocumentUrl]
+                    );
                     applyCountryDefaultsToStudent(currentStudentData);
                     copyStudentInfoToClipboard(currentStudentData);
                     completedWorkflowSteps.add(3);
@@ -3114,8 +3168,13 @@ export function initYknManager() {
                 finishButtonAction('copy-info');
                 if (response?.success && response.data) {
                     const data = response.data;
+                    const existingCropSources = currentStudentData?.cropSources || [];
                     currentStudentData = mergeApplyProfile(currentStudentData, data);
-                    currentStudentData.cropSources = data.cropSources || currentStudentData.cropSources || [];
+                    currentStudentData.cropSources = mergeStudentCropSources(
+                        data.cropSources,
+                        existingCropSources,
+                        data.passportCandidates || [data.passportDocumentUrl || currentStudentData.passportDocumentUrl]
+                    );
                     applyCountryDefaultsToStudent(currentStudentData);
                     copyStudentInfoToClipboard(currentStudentData);
                     setWorkflowStepStatus(3, 'success');
@@ -3139,7 +3198,9 @@ export function initYknManager() {
                             initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
                             studentName: currentStudentData.fullName || '',
                             passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
-                            studentData: currentStudentData
+                            studentData: currentStudentData,
+                            sources: currentStudentData.cropSources || [],
+                            selectedSourceUrl: currentStudentData.passportDocumentUrl || currentStudentData.passportImageUrl || ''
                         });
                         addStatus('Öğrenci bilgileri kopyalandı. Fotoğraf kırpma ekranı açıldı.', 'success');
                     } else {
@@ -3155,6 +3216,13 @@ export function initYknManager() {
                 }
             } else if (event.data.action === 'EXTRACT_KABUL_CODE') {
                 if (response?.success) {
+                    if (Array.isArray(response.cropSources) && response.cropSources.length > 0 && currentStudentData) {
+                        currentStudentData.cropSources = mergeStudentCropSources(
+                            response.cropSources,
+                            currentStudentData.cropSources,
+                            response.passportCandidates || [response.passportDocumentUrl || currentStudentData.passportDocumentUrl]
+                        );
+                    }
                     const validCode = isValidYoksisId(response.kabulId) ? response.kabulId : '';
                     if (validCode) {
                         finishButtonAction('copy-letter');
@@ -3336,7 +3404,11 @@ export function initYknManager() {
                 currentCandidateIndex: 0,
                 passportDocumentUrl: passCandidates[0] || incoming.passportDocumentUrl || incoming.passportImageUrl || '',
                 passportCandidates: passCandidates,
-                cropSources: incoming.cropSources || currentStudentData?.cropSources || [],
+                cropSources: mergeStudentCropSources(
+                    incoming.cropSources,
+                    currentStudentData?.cropSources,
+                    passCandidates
+                ),
                 currentPassportCandidateIndex: 0,
                 yoksisId: safeYoksisId,
                 documentsReady: true

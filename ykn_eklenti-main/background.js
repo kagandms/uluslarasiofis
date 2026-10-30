@@ -1634,20 +1634,23 @@ async function verifyTransferredYoksisFields(context) {
 }
 
 async function completeMissingYoksisFields(context, mainResponse) {
-    if (mainResponse.error) return { ...mergeYoksisFillResponses(mainResponse, null, context.studentData), success: false, partial: true };
+    if (mainResponse.error && (!mainResponse.filledFields || mainResponse.filledFields.length === 0)) {
+        return { ...mergeYoksisFillResponses(mainResponse, null, context.studentData), success: false, partial: true };
+    }
     const combined = mergeYoksisFillResponses(mainResponse, null, context.studentData);
     if (!combined.partial) return combined;
     const fallbackStartedAt = startYknTiming();
     const fieldData = { ...context.studentData, ...(mainResponse.photoUploaded ? { croppedPhotoBase64: '', photoBase64: '' } : {}) };
     try {
         const fallback = await sendTabMessage(context.tabId, {
-            action: 'fillRemainingData', data: fieldData, requestId: context.requestId
+            action: 'fillRemainingData', data: fieldData, requestId: context.requestId,
+            missingFields: combined.missingFields
         }, { frameId: 0 });
         const verification = await verifyTransferredYoksisFields(context);
         const verified = buildVerifiedFillResponse({ ...mainResponse, photoUploaded: mainResponse.photoUploaded || fallback?.photoUploaded === true }, verification, context.studentData);
         const result = mergeYoksisFillResponses(verified, null, context.studentData);
         finishYknTiming('content-script-fill-fallback', fallbackStartedAt, result.partial ? 'partial' : 'ok');
-        return verification?.error ? { ...result, success: false, partial: true } : result;
+        return verification?.error && (!result.filledFields || result.filledFields.length === 0) ? { ...result, success: false, partial: true } : result;
     } catch (error) {
         finishYknTiming('content-script-fill-fallback', fallbackStartedAt, 'failed', 'content_fallback_unavailable');
         console.warn('YÖKSİS remaining field transfer failed.', { errorName: error.name });
@@ -1661,7 +1664,9 @@ async function transferYoksisFieldsAndPhoto(context) {
         phase: 'fields', requestId: context.requestId
     });
     const settled = await verifyTransferredYoksisFields(context);
-    if (settled?.error) return { ...buildVerifiedFillResponse(mainResponse, settled, context.studentData), success: false, partial: true };
+    if (settled?.error && (!settled.filledFields || settled.filledFields.length === 0)) {
+        return { ...buildVerifiedFillResponse(mainResponse, settled, context.studentData), success: false, partial: true };
+    }
     let photoResponse = null;
     if (context.studentData.croppedPhotoBase64) {
         photoResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, {

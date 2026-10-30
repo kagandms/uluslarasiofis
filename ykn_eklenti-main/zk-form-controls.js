@@ -1,5 +1,5 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.112') return;
+    if (window.YknZkForm?.version === '1.2.113') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
     const COUNTRY_ALIAS_GROUPS = [
@@ -659,5 +659,5 @@
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.112', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.113', execute });
 })();
