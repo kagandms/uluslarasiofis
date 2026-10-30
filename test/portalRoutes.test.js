@@ -81,7 +81,7 @@ test('landing document guidance renders policy-derived titles and highlights the
 
     const overview = listPublicDocumentOverview();
     assert.equal(root.querySelectorAll('.public-document-card').length,
-        overview.filter(({ group_key, required }) => !group_key && required).length + 1);
+        overview.filter(({ group_key, required, code }) => !group_key && (required || code === 'parent_permit_copy')).length + 1);
     assert.ok([...root.querySelectorAll('.public-document-card h3')].some(({ textContent }) => textContent === 'Doğum belgesi'));
     assert.equal(root.querySelectorAll('.public-document-badge:not(.is-renewal)').length, 3);
     assert.match(root.textContent, /anne\/baba bilgileri pasaport veya kimlikten tespit edilemiyorsa/);
@@ -96,10 +96,15 @@ test('landing document guidance renders policy-derived titles and highlights the
     assert.equal(uetsCard.querySelectorAll('.public-document-badge.is-renewal').length, 1);
     assert.match(root.textContent, /Noter onaylı kira sözleşmesi/);
     assert.match(root.textContent, /Taahhüt veren kişinin yerleşim yeri belgesi/);
+    assert.match(root.textContent, /noter taahhüdünü veren kişi adına güncel/i);
     assert.match(root.textContent, /Pasaport/);
+    assert.match(root.textContent, /teslim günü.*aslı.*yanınızda/i);
+    assert.match(root.textContent, /e-imzalı.*e-Devlet/i);
+    assert.match(root.textContent, /talep edilen ikamet süresinin tamamını kapsamalı/i);
     assert.doesNotMatch(root.textContent, /İkamet kartı/);
     assert.match(root.textContent, /Biyometrik fotoğraflar \(2 adet\)/);
     assert.match(root.textContent, /Güncel fatura veya yeni abonelik sözleşmesi/);
+    assert.match(root.textContent, /Anne\/babaya ait ikamet\/çalışma izni/);
     assert.doesNotMatch(root.textContent, /parmak izi belgesi|Kaynak liste/i);
     assert.doesNotMatch(root.textContent, /application\/pdf|10 MB|conditional_rule/i);
 });
@@ -115,7 +120,8 @@ test('document policy copy is localized, source-free, and treats utility evidenc
         assert.ok(SESSION3_MESSAGES[locale].documentHomeUtilityBillHelp.length > 0, locale);
         assert.equal(Object.hasOwn(PUBLIC_MESSAGES[locale], 'documentFingerprint'), false, locale);
     }
-    assert.match(PUBLIC_MESSAGES.tr.documentHomeUtilityBillHelp, /yalnızca uzatma başvurusunda/i);
+    assert.match(SESSION3_MESSAGES.tr.documentHomeUtilityBillHelp, /veren kişi adına/i);
+    assert.match(SESSION3_MESSAGES.tr.documentAddressResidenceCertificateHelp, /uzatma ve geçiş/i);
 });
 
 test('public locale dictionaries have matching keys for all five supported languages', () => {

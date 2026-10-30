@@ -1,5 +1,5 @@
 import { evaluateResubmissionEligibility } from '../domain/resubmissionUploadPolicy.js';
-import { readDocumentPolicy, listDocumentPolicies } from '../domain/documentPolicy.js';
+import { readApplicationDocumentPolicy, listApplicationDocumentPolicies } from '../domain/documentPolicy.js';
 import { readStudentUploadMetadata } from '../domain/studentUploadMetadata.js';
 import { ApiError } from '../domain/errors.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
@@ -39,8 +39,7 @@ function createEligibilityInput(row, policy) {
 function readEligibleRow(rows, code, application) {
     const row = rows.find((entry) => entry.code === code);
     if (!row) return null;
-    const policy = readDocumentPolicy(code, row.application_type, row.is_under_18 === 1,
-        application);
+    const policy = readApplicationDocumentPolicy(code, application);
     const eligibility = evaluateResubmissionEligibility(createEligibilityInput(row, policy));
     if (!eligibility.allowed) return null;
     return { row, policy, mode: eligibility.mode };
@@ -113,8 +112,7 @@ export async function readCurrentResubmissionEligibility(request, environment) {
     const { application, repositories, rows } = await readOwnerContext(request, environment);
     await expireAbandonedIntents(repositories, application.id);
     await retryExpiredCleanup(repositories, application.id, createCleanupStorage(environment));
-    const policies = listDocumentPolicies(application.application_type,
-        application.is_under_18 === 1, application);
+    const policies = listApplicationDocumentPolicies(application);
     const documents = rows.flatMap((row) => {
         const policy = policies.find((entry) => entry.code === row.code);
         const eligibility = evaluateResubmissionEligibility(createEligibilityInput(row, policy));

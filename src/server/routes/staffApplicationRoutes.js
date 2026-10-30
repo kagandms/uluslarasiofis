@@ -1,6 +1,6 @@
 import { DOCUMENT_ANSWER_FIELDS } from '../../shared/document-conditions.js';
 import { ApiError } from '../domain/errors.js';
-import { listDocumentPolicies } from '../domain/documentPolicy.js';
+import { listApplicationDocumentPolicies } from '../domain/documentPolicy.js';
 import { evaluateApplicationTransition, listApplicationStatusTransitions } from '../domain/applicationStateMachine.js';
 import { requireStaff } from '../auth/staffAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
@@ -157,11 +157,7 @@ function readSafeFilename(filename) {
 
 function createDocumentDetailDtos(application, storedRequirements) {
     const requirementsByCode = new Map(storedRequirements.map((requirement) => [requirement.code, requirement]));
-    return listDocumentPolicies(
-        application.application_type,
-        application.is_under_18 === 1,
-        application
-    ).map((policy) => {
+    return listApplicationDocumentPolicies(application).map((policy) => {
         const requirement = requirementsByCode.get(policy.code) || {};
         const hasFinalizedCurrentDocument = READABLE_REVISION_STATUSES.has(requirement.revision_status)
             && requirement.upload_status === 'finalized'
@@ -200,11 +196,8 @@ function createDocumentDetailDtos(application, storedRequirements) {
 
 function readAllowedStatusTransitions(application, requirements) {
     const requirementsByCode = new Map(requirements.map((requirement) => [requirement.code, requirement]));
-    const applicableRequirements = listDocumentPolicies(
-        application.application_type,
-        application.is_under_18 === 1,
-        application
-    ).map((policy) => ({ ...requirementsByCode.get(policy.code), is_required: policy.required ? 1 : 0 }));
+    const applicableRequirements = listApplicationDocumentPolicies(application)
+        .map((policy) => ({ ...requirementsByCode.get(policy.code), is_required: policy.required ? 1 : 0 }));
     const hasResubmissionRequiredDocuments = applicableRequirements.some((requirement) =>
         requirement.review_status === 'resubmission_required' || requirement.revision_status === 'resubmission_required');
     const allRequiredDocumentsApproved = applicableRequirements.filter((requirement) => requirement.is_required === 1)

@@ -1,6 +1,6 @@
 import { ACCOMMODATION_TYPES, readAccommodationType, listMissingDocumentAnswers } from '../../shared/document-conditions.js';
 import { isValidPhoneNumber } from '../../shared/phoneNumber.js';
-import { listDocumentPolicies } from '../domain/documentPolicy.js';
+import { listApplicationDocumentPolicies } from '../domain/documentPolicy.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate, requiresResidenceApplicationDate } from '../../shared/age.js';
 import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../../shared/academic-calendar.js';
@@ -155,11 +155,7 @@ export async function readSubmissionReadiness(applicationId, environment, declar
             missing_fields: [], missing_documents: []
         });
     }
-    const policies = listDocumentPolicies(
-        application.application_type,
-        application.is_under_18 === 1,
-        application
-    );
+    const policies = listApplicationDocumentPolicies(application);
     const documents = await repositories.documents.listSubmissionRequirementStates(applicationId);
     return evaluateSubmissionReadiness(application, policies, documents, {
         declarationVersion

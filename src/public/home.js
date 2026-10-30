@@ -18,7 +18,7 @@ export function renderPublicDocumentOverview(root, locale) {
     list.className = 'public-document-list';
     const policies = listPublicDocumentOverview();
 
-    policies.filter((policy) => !policy.group_key && policy.required).forEach((policy) => {
+    policies.filter((policy) => !policy.group_key && (policy.required || policy.code === 'parent_permit_copy')).forEach((policy) => {
         const item = document.createElement('li');
         const title = document.createElement('h3');
         const description = document.createElement('p');
@@ -32,16 +32,16 @@ export function renderPublicDocumentOverview(root, locale) {
             badge.textContent = messages.homeDocumentUnder18Badge;
             item.append(badge);
         }
-        if (policy.scope_key === 'homeDocumentRenewal') {
+        if (policy.scope_key === 'homeDocumentExtensionTransfer') {
             const badge = document.createElement('span');
             badge.className = 'public-document-badge is-renewal';
-            badge.textContent = messages.homeDocumentRenewal;
+            badge.textContent = messages.homeDocumentExtensionTransfer;
             item.append(badge);
         }
-        if (policy.scope_key === 'homeDocumentRenewalAdults') {
+        if (policy.scope_key === 'homeDocumentExtensionTransferAdults') {
             const badge = document.createElement('span');
             badge.className = 'public-document-badge is-renewal';
-            badge.textContent = messages.homeDocumentRenewalAdults;
+            badge.textContent = messages.homeDocumentExtensionTransferAdults;
             item.append(badge);
         }
         list.append(item);

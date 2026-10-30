@@ -2,7 +2,7 @@ import { readAccommodationType } from '../../shared/document-conditions.js';
 import { listDocumentPolicies as listLegacyPolicies, readDocumentPolicy as readLegacyPolicy } from './document-policy-v1.js';
 const MEDIA_TYPES = Object.freeze(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
-const APPLICATION_TYPES = Object.freeze(['initial', 'renewal']);
+const APPLICATION_TYPES = Object.freeze(['initial', 'renewal', 'transition']);
 const TYPE_SWITCH_CODE_MAP = Object.freeze({
     residence_application_form: 'residence_application_form',
     passport_identity: 'passport_identity',
@@ -41,7 +41,7 @@ const POLICIES = Object.freeze([
     { code: 'photographs', order: 4, label: 'documentPhotographs', help: 'documentPhotographsHelp' },
     { code: 'student_certificate', order: 5, label: 'documentStudentCertificate', help: 'documentStudentCertificateHelp' },
     { code: 'health_insurance', order: 6, label: 'documentHealthInsurance', help: 'documentHealthInsuranceHelp', conditional_rule: 'health_insurance_document' },
-    { code: 'uets', order: 22, label: 'documentUets', help: 'documentUetsHelp', application_types: ['renewal'], conditional_rule: 'uets' },
+    { code: 'uets', order: 22, label: 'documentUets', help: 'documentUetsHelp', application_types: ['renewal', 'transition'], conditional_rule: 'uets' },
     { code: 'residence_permit_fee', order: 23, label: 'documentResidencePermitFee', help: 'documentResidencePermitFeeHelp' },
     {
         code: 'address_rental_contract', order: 7, label: 'documentAddressRentalContract', help: 'documentAddressRentalContractHelp',
@@ -100,9 +100,9 @@ function isPolicyApplicable(policy, applicationType, isUnder18, addressContext) 
     if (!policy.active || !policy.application_types.includes(applicationType)) return false;
     if (policy.address_evidence_type && policy.address_evidence_type !== accommodation) return false;
     switch (policy.conditional_rule) {
-    case 'uets': return applicationType === 'renewal' && !isUnder18;
-    case 'address_utility_bill': return applicationType === 'renewal';
-    case 'registered_address': return applicationType === 'renewal' || accommodation === 'residence_certificate';
+    case 'uets': return ['renewal', 'transition'].includes(applicationType) && !isUnder18;
+    case 'address_utility_bill': return ['renewal', 'transition'].includes(applicationType) || accommodation === 'undertaking';
+    case 'registered_address': return ['renewal', 'transition'].includes(applicationType) || accommodation === 'residence_certificate';
     case 'under18': return isUnder18 && context.minor_parents_identified === 'no';
     case 'minor_optional_parent_documents': return isUnder18;
     case 'host_spouse_undertaking': return accommodation === 'undertaking' && context.host_is_married === 'yes';
@@ -145,6 +145,43 @@ export function readDocumentPolicy(code, applicationType, isUnder18, addressEvid
 }
 
 /**
+ * Resolves the document-policy type for a persisted application, including transfer routes.
+ * @param {object} application Persisted application and route.
+ * @returns {string} Current public document-policy application type.
+ */
+export function readDocumentPolicyApplicationType(application) {
+    return application.application_route === 'transition' ? 'transition' : application.application_type;
+}
+
+/**
+ * Lists applicable document policies from a persisted application.
+ * @param {object} application Persisted application and applicant conditions.
+ * @returns {Array<object>} Current public document policies.
+ */
+export function listApplicationDocumentPolicies(application) {
+    return listDocumentPolicies(
+        readDocumentPolicyApplicationType(application),
+        application.is_under_18 === 1,
+        application
+    );
+}
+
+/**
+ * Reads one applicable document policy from a persisted application.
+ * @param {string} code Stable public document code.
+ * @param {object} application Persisted application and applicant conditions.
+ * @returns {object|null} Current policy metadata or null.
+ */
+export function readApplicationDocumentPolicy(code, application) {
+    return readDocumentPolicy(
+        code,
+        readDocumentPolicyApplicationType(application),
+        application.is_under_18 === 1,
+        application
+    );
+}
+
+/**
  * Lists safe document policies in product-defined order for the current application.
  * @param {string} applicationType Application type loaded from D1.
  * @param {boolean} isUnder18 Server-calculated age condition.
@@ -167,8 +204,8 @@ export function listDocumentPolicies(applicationType, isUnder18, addressEvidence
 export function listPublicDocumentOverview() {
     return POLICIES.map((policy) => {
         let scopeKey = 'homeDocumentAllApplications';
-        if (policy.code === 'uets') scopeKey = 'homeDocumentRenewalAdults';
-        else if (policy.code === 'address_residence_certificate' || policy.application_types.length === 1) scopeKey = 'homeDocumentRenewal';
+        if (policy.code === 'uets') scopeKey = 'homeDocumentExtensionTransferAdults';
+        else if (policy.code === 'address_residence_certificate' || policy.application_types.length === 1) scopeKey = 'homeDocumentExtensionTransfer';
         else if (['under18', 'minor_consent', 'minor_family_evidence'].includes(policy.conditional_rule)) scopeKey = 'homeDocumentUnder18';
         else if (policy.conditional_rule) scopeKey = 'homeDocumentConditional';
         return Object.freeze({
