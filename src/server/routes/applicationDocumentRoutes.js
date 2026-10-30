@@ -1,5 +1,5 @@
 import { ApiError } from '../domain/errors.js';
-import { listDocumentPolicies, readDocumentPolicy } from '../domain/documentPolicy.js';
+import { listApplicationDocumentPolicies, readApplicationDocumentPolicy } from '../domain/documentPolicy.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { createDocumentStorage } from '../storage/documentStorage.js';
@@ -15,11 +15,7 @@ async function readCurrentStudentRequirements(session, environment) {
     const application = await repositories.applications.findById(session.application_id);
     if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     const storedRequirements = await repositories.documents.listStudentRequirements(application.id);
-    const policies = listDocumentPolicies(
-        application.application_type,
-        application.is_under_18 === 1,
-        application
-    );
+    const policies = listApplicationDocumentPolicies(application);
     const requirements = policies.filter((policy) => storedRequirements.some((entry) => entry.code === policy.code))
         .map((policy) => {
             const stored = storedRequirements.find((entry) => entry.code === policy.code);
@@ -119,12 +115,7 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
     const body = await readJsonBody(request);
     const requestedCode = typeof body.code === 'string' ? body.code.trim() : '';
     requireOwnedRequirement(requirements, requestedCode);
-    const policy = readDocumentPolicy(
-        requestedCode,
-        application.application_type,
-        application.is_under_18 === 1,
-        application
-    );
+    const policy = readApplicationDocumentPolicy(requestedCode, application);
     const metadata = readStudentUploadMetadata(body, policy);
     requireDraftApplication(application);
     requireOwnedRequirement(requirements, metadata.code);
@@ -225,12 +216,7 @@ export async function finalizeCurrentStudentDocument(request, environment) {
     if (!object) throw new ApiError(409, 'UPLOAD_OBJECT_MISSING', 'Yüklenen belge bulunamadı. Yüklemeyi yeniden deneyin.');
     const actualSize = object.size;
     const actualMediaType = object.httpMetadata?.contentType;
-    const policy = readDocumentPolicy(
-        intent.code,
-        application.application_type,
-        application.is_under_18 === 1,
-        application
-    );
+    const policy = readApplicationDocumentPolicy(intent.code, application);
     if (!policy || actualSize !== intent.byte_size || actualSize > policy.max_byte_size
         || !policy.accepted_media_types.includes(actualMediaType) || actualMediaType !== intent.media_type) {
         await repositories.documents.rejectStudentUpload(application.id, intent.id);

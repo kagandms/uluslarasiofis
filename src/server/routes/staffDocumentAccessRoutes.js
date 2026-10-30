@@ -1,5 +1,5 @@
 import { requireStaff } from '../auth/staffAuth.js';
-import { readDocumentPolicy } from '../domain/documentPolicy.js';
+import { readApplicationDocumentPolicy } from '../domain/documentPolicy.js';
 import { ApiError } from '../domain/errors.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { routeResult } from '../http/routeResult.js';
@@ -42,12 +42,7 @@ async function resolveCurrentDocument(environment, applicationId, code) {
     const deletion = await environment.DB.prepare(`SELECT state FROM application_deletions WHERE application_id=?`)
         .bind(applicationId).first();
     if (deletion?.state === 'purge_pending') throw unavailableApplication();
-    const policy = readDocumentPolicy(
-        code,
-        application.application_type,
-        application.is_under_18 === 1,
-        application
-    );
+    const policy = readApplicationDocumentPolicy(code, application);
     if (!policy) throw unavailableDocument();
     const file = await repositories.documents.findCurrentPrivateFileByApplicationAndCode(applicationId, code);
     if (!file || !isSafeDocumentMediaType(file.media_type) || !policy.accepted_media_types.includes(file.media_type)) {
@@ -124,8 +119,7 @@ export async function createStaffApplicationArchiveManifest({ request, environme
     const files = [];
     let totalSourceBytes = 0;
     for (const requirement of requirements) {
-        const policy = readDocumentPolicy(requirement.code, application.application_type,
-            application.is_under_18 === 1, application);
+        const policy = readApplicationDocumentPolicy(requirement.code, application);
         if (!policy || requirement.revision_number === null || requirement.revision_number === undefined) continue;
         const resolved = await resolveArchiveFile(environment, applicationId, requirement.code);
         if (resolved.file.revision_number !== requirement.revision_number) {
@@ -194,8 +188,7 @@ export async function createStaffDocumentPreview({ request, environment, applica
     if (!object || object.size !== resolved.file.byte_size || typeof object.etag !== 'string' || !object.etag) {
         throw unavailableDocument();
     }
-    const policy = readDocumentPolicy(code, resolved.application.application_type,
-        resolved.application.is_under_18 === 1, resolved.application);
+    const policy = readApplicationDocumentPolicy(code, resolved.application);
     if (!policy || resolved.file.byte_size > policy.max_byte_size) throw unavailableDocument();
     const sourceIdentity = await archiveIdentity(applicationId, resolved.file, object);
     const currentObject = await storage.get(resolved.file.storage_key, { etagMatches: object.etag });

@@ -1,6 +1,6 @@
 import { requireStaff } from '../auth/staffAuth.js';
 import { evaluateApplicationTransition } from '../domain/applicationStateMachine.js';
-import { listDocumentPolicies, readDocumentPolicy } from '../domain/documentPolicy.js';
+import { listApplicationDocumentPolicies, readApplicationDocumentPolicy } from '../domain/documentPolicy.js';
 import { ApiError } from '../domain/errors.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { readJsonBody } from '../http/requestBody.js';
@@ -52,8 +52,7 @@ function requireApplication(application) {
 async function resolveReviewTarget(repositories, applicationId, code, expectedRevisionNumber) {
     const application = await repositories.applications.findById(applicationId);
     requireApplication(application);
-    if (!readDocumentPolicy(code, application.application_type, application.is_under_18 === 1,
-        application)) {
+    if (!readApplicationDocumentPolicy(code, application)) {
         throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya incelemeye uygun değil.');
     }
     const document = await repositories.documents.findCurrentPrivateFileByApplicationAndCode(applicationId, code);
@@ -67,8 +66,7 @@ async function resolveReviewTarget(repositories, applicationId, code, expectedRe
         || document.scan_status !== 'clean' || document.cleanup_status !== 'none') {
         throw new ApiError(409, 'DOCUMENT_NOT_REVIEWABLE', 'Belge güncel ve güvenli incelemeye uygun değil.');
     }
-    const policy = readDocumentPolicy(code, application.application_type, application.is_under_18 === 1,
-        application);
+    const policy = readApplicationDocumentPolicy(code, application);
     if (!policy.accepted_media_types.includes(document.media_type)) {
         throw new ApiError(409, 'DOCUMENT_NOT_REVIEWABLE', 'Belge güncel ve güvenli incelemeye uygun değil.');
     }
@@ -82,8 +80,7 @@ function reviewConflict() {
 async function resolveResubmissionTarget({ repositories, applicationId, code, revisionNumber }) {
     const application = await repositories.applications.findById(applicationId);
     requireApplication(application);
-    const policy = readDocumentPolicy(code, application.application_type, application.is_under_18 === 1,
-        application);
+    const policy = readApplicationDocumentPolicy(code, application);
     if (!policy) throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya yenilemeye uygun değil.');
     const document = await repositories.applicationReviews.findCurrentDocumentForResubmission(applicationId, code);
     if (!document) throw new ApiError(409, 'DOCUMENT_NOT_REVIEWABLE', 'Belge güncel ve yenilemeye uygun değil.');
@@ -131,8 +128,7 @@ export async function unapproveStaffApplicationDocument({ request, environment, 
     const repositories = createD1Repositories(environment.DB);
     const application = await repositories.applications.findById(applicationId);
     requireApplication(application);
-    if (!readDocumentPolicy(code, application.application_type, application.is_under_18 === 1,
-        application)) {
+    if (!readApplicationDocumentPolicy(code, application)) {
         throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya incelemeye uygun değil.');
     }
     const document = await repositories.documents.findCurrentPrivateFileByApplicationAndCode(applicationId, code);
@@ -204,8 +200,7 @@ export async function transitionStaffApplicationStatus({ request, environment, a
     }
     const storedRequirements = await repositories.documents.listStudentRequirements(applicationId);
     const requirementsByCode = new Map(storedRequirements.map((requirement) => [requirement.code, requirement]));
-    const requirements = listDocumentPolicies(application.application_type, application.is_under_18 === 1,
-        application).map((policy) => ({
+    const requirements = listApplicationDocumentPolicies(application).map((policy) => ({
         ...requirementsByCode.get(policy.code), is_required: policy.required ? 1 : 0
     }));
     const transition = evaluateApplicationTransition(application.status, body.target_status, {

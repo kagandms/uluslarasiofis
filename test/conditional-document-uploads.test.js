@@ -2,7 +2,7 @@ import { readSubmissionReadiness } from '../src/server/services/submissionReadin
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRealScannerFixture, createSyntheticDraft, finalizeSyntheticFile, portalRequest } from './helpers/scanner-real-fixture.js';
-import { listDocumentPolicies } from '../src/server/domain/documentPolicy.js';
+import { listApplicationDocumentPolicies } from '../src/server/domain/documentPolicy.js';
 import { readDocumentConditionSql } from '../src/server/repositories/d1/document-condition-sql.js';
 
 const SCENARIOS = [
@@ -10,9 +10,10 @@ const SCENARIOS = [
     { address_evidence_type: 'own_home', codes: ['address_title_deed', 'address_numbering'] },
     { address_evidence_type: 'dormitory', codes: ['address_dormitory'] },
     { address_evidence_type: 'hotel', codes: ['address_hotel', 'address_hotel_receipt'] },
-    { address_evidence_type: 'undertaking', host_is_married: 'yes', codes: ['host_spouse_undertaking'] },
+    { address_evidence_type: 'undertaking', host_is_married: 'yes', codes: ['home_utility_bill', 'host_spouse_undertaking'] },
+    { application_type: 'transition', address_evidence_type: 'rental_contract', codes: ['address_residence_certificate', 'home_utility_bill', 'uets'] },
     { application_type: 'renewal', address_evidence_type: 'rental_contract', codes: ['address_residence_certificate', 'home_utility_bill'] },
-    { address_evidence_type: 'undertaking', host_is_married: 'no', codes: [] },
+    { address_evidence_type: 'undertaking', host_is_married: 'no', codes: ['home_utility_bill'] },
     { insurance_basis: 'system_verified', codes: [] },
     { insurance_basis: 'bilateral_agreement', codes: ['health_insurance'] },
     { date_of_birth: '2012-01-01', minor_parents_identified: 'no', minor_family_status: 'divorced',
@@ -81,7 +82,7 @@ test('atomic persistence guards agree with the policy for every conditional docu
     for (const scenario of SCENARIOS) {
         await applyScenario(context, app, scenario);
         const application = context.database.prepare('SELECT * FROM applications WHERE id=?').bind(app.applicationId).first();
-        const policies = listDocumentPolicies(application.application_type, application.is_under_18 === 1, application);
+        const policies = listApplicationDocumentPolicies(application);
         for (const policy of policies) {
             const matches = context.database.prepare(`SELECT id FROM applications WHERE id=? ${readDocumentConditionSql(policy.conditional_rule)}`)
                 .bind(app.applicationId).first();

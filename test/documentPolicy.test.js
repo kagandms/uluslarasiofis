@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as documentPolicy from '../src/server/domain/documentPolicy.js';
-import { listDocumentPolicies, listPublicDocumentOverview, readDocumentPolicy } from '../src/server/domain/documentPolicy.js';
+import { listApplicationDocumentPolicies, listDocumentPolicies, listPublicDocumentOverview, readDocumentPolicy } from '../src/server/domain/documentPolicy.js';
 
 test('document policies expose passport and biometric photos without residence-card or fingerprint uploads', () => {
     const policies = listDocumentPolicies('initial', false, { has_residence_card: 'yes', insurance_basis: 'bilateral_agreement' });
@@ -36,9 +36,10 @@ test('address policy exposes exactly the selected one-of-three evidence branch',
         'address_residence_certificate'
     ]);
     assert.deepEqual(undertaking.filter(({ conditional_rule }) => conditional_rule?.startsWith('address_')).map(({ code }) => code), [
-        'address_undertaking', 'host_residence_certificate'
+        'address_undertaking', 'host_residence_certificate', 'home_utility_bill'
     ]);
-    assert.equal(undertaking.some(({ code }) => code === 'home_utility_bill'), false);
+    assert.equal(undertaking.some(({ code }) => code === 'host_residence_certificate'), true);
+    assert.equal(undertaking.some(({ code }) => code === 'home_utility_bill'), true);
     assert.equal(rental.some(({ code }) => code === 'home_utility_bill'), false);
     assert.equal(readDocumentPolicy('host_residence_certificate', 'initial', false, 'rental_contract'), null);
     assert.deepEqual(readDocumentPolicy('host_residence_certificate', 'initial', false, 'undertaking').accepted_media_types, [
@@ -58,6 +59,20 @@ test('renewal UETS excludes minors while under-18 evidence follows official cond
     assert.equal(listDocumentPolicies('initial', true, { minor_parents_identified: 'no' }).some(({ code, required }) => code === 'birth_certificate_under18' && required), true);
     assert.equal(listDocumentPolicies('initial', true, { minor_parents_identified: 'yes' }).some(({ code }) => code === 'minor_consent'), true);
     assert.equal(listDocumentPolicies('initial', true, {}).some(({ code, required }) => code === 'minor_consent' && required), true);
+});
+
+test('transition applications receive address, utility, and adult UETS documents required by e-Ikamet', () => {
+    const codes = listApplicationDocumentPolicies({
+        application_type: 'renewal', application_route: 'transition', is_under_18: 0,
+        address_evidence_type: 'rental_contract', insurance_basis: 'bilateral_agreement'
+    }).map(({ code }) => code);
+
+    assert.ok(codes.includes('home_utility_bill'));
+    assert.ok(codes.includes('address_residence_certificate'));
+    assert.ok(codes.includes('uets'));
+    assert.equal(listApplicationDocumentPolicies({
+        application_type: 'renewal', application_route: 'transition', is_under_18: 1
+    }).some(({ code }) => code === 'uets'), false);
 });
 
 test('student uploads follow the requested order and keep the permit fee last', () => {
@@ -82,11 +97,12 @@ test('public overview derives the new concise policy and address alternatives wi
     assert.ok(!byCode.has('residence_card'));
     assert.ok(!byCode.has('passport_identity'));
     assert.ok(!byCode.has('fingerprint'));
-    assert.equal(byCode.get('uets').scope_key, 'homeDocumentRenewalAdults');
+    assert.equal(byCode.get('uets').scope_key, 'homeDocumentExtensionTransferAdults');
     assert.equal(byCode.get('birth_certificate_under18').scope_key, 'homeDocumentUnder18');
     assert.equal(byCode.get('address_rental_contract').group_key, 'address_evidence');
     assert.equal(byCode.get('address_residence_certificate').group_key, null);
-    assert.equal(byCode.get('address_residence_certificate').scope_key, 'homeDocumentRenewal');
+    assert.equal(byCode.get('address_residence_certificate').scope_key, 'homeDocumentExtensionTransfer');
+    assert.equal(byCode.get('parent_permit_copy').required, false);
     assert.equal(byCode.get('address_undertaking').group_key, 'address_evidence');
 });
 

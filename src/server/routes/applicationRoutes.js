@@ -15,7 +15,7 @@ import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../../shared/academic-calendar
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { readSubmissionReadiness } from '../services/submissionReadiness.js';
-import { listDocumentPolicies } from '../domain/documentPolicy.js';
+import { listApplicationDocumentPolicies } from '../domain/documentPolicy.js';
 import { createAuditEvent, createRepositories, enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
 import { DEFAULT_APPLICATION_PRIVACY_NOTICE } from '../domain/applicationPrivacyNotice.js';
 
@@ -629,7 +629,7 @@ export async function submitCurrentApplication(request, environment, requestId) 
         applicationId: session.application_id,
         expectedLockVersion: application.lock_version,
         ownerSessionId: session.session_id,
-        requiredDocumentCodes: listDocumentPolicies(application.application_type, application.is_under_18 === 1, application)
+        requiredDocumentCodes: listApplicationDocumentPolicies(application)
             .filter((policy) => policy.required).map((policy) => policy.code),
         submittedAt: new Date().toISOString(),
         auditEventId: crypto.randomUUID(),

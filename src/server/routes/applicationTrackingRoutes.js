@@ -1,5 +1,5 @@
 import { ApiError } from '../domain/errors.js';
-import { listDocumentPolicies } from '../domain/documentPolicy.js';
+import { listApplicationDocumentPolicies } from '../domain/documentPolicy.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { isValidApplicationReference, normalizeApplicationReference } from '../auth/applicationAccessCode.js';
@@ -66,11 +66,7 @@ function createTrackingApplicationDto(application, rejectionReason = null) {
 }
 
 function createDocumentTrackingView(application, storedRequirements, createDto) {
-    const policies = listDocumentPolicies(
-        application.application_type,
-        application.is_under_18 === 1,
-        application
-    );
+    const policies = listApplicationDocumentPolicies(application);
     const requirementsByCode = new Map(storedRequirements.map((requirement) => [requirement.code, requirement]));
     return policies.map((policy) => createDto(policy, requirementsByCode.get(policy.code)));
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
-import { listDocumentPolicies, readDocumentPolicy } from '../src/server/domain/documentPolicy.js';
+import { listApplicationDocumentPolicies, listDocumentPolicies, readDocumentPolicy } from '../src/server/domain/documentPolicy.js';
 import { ACCOMMODATION_TYPES, listMissingDocumentAnswers, listRequiredDocumentAnswers, readAccommodationType } from '../src/shared/document-conditions.js';
 import { evaluateSubmissionReadiness } from '../src/server/services/submissionReadiness.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
@@ -31,17 +31,27 @@ test('current applications request the official form documents without a residen
 
 test('renewal adds residence registration and bill independently to every accommodation branch', () => {
     const expected = { rental_contract: ['address_rental_contract'], own_home: ['address_title_deed', 'address_numbering'],
-        dormitory: ['address_dormitory'], hotel: ['address_hotel', 'address_hotel_receipt'], undertaking: ['address_undertaking', 'host_residence_certificate'] };
+        dormitory: ['address_dormitory'], hotel: ['address_hotel', 'address_hotel_receipt'], undertaking: ['address_undertaking', 'host_residence_certificate', 'home_utility_bill'] };
     for (const accommodation_type of ACCOMMODATION_TYPES) {
         const application = { ...ADULT, accommodation_type, host_is_married: 'no' };
         const initial = readCodes(application);
         const renewal = readCodes({ ...application, application_type: 'renewal' });
         for (const code of expected[accommodation_type]) assert.ok(initial.includes(code), code);
         assert.equal(initial.includes('address_residence_certificate'), false);
-        assert.equal(initial.includes('home_utility_bill'), false);
+        assert.equal(initial.includes('home_utility_bill'), accommodation_type === 'undertaking');
         assert.ok(renewal.includes('address_residence_certificate'));
         assert.ok(renewal.includes('home_utility_bill'));
     }
+});
+
+test('transition route applies extension address and adult UETS policy to its stored renewal type', () => {
+    const codes = listApplicationDocumentPolicies({ ...ADULT, application_type: 'renewal', application_route: 'transition', accommodation_type: 'rental_contract' })
+        .filter(({ required }) => required).map(({ code }) => code);
+    for (const code of ['address_rental_contract', 'address_residence_certificate', 'home_utility_bill', 'uets']) {
+        assert.ok(codes.includes(code), code);
+    }
+    assert.equal(listApplicationDocumentPolicies({ ...ADULT, application_type: 'renewal', application_route: 'transition', is_under_18: 1 })
+        .some(({ code }) => code === 'uets'), false);
 });
 
 test('married hosts require spouse undertaking and host identity copy is not requested', () => {
