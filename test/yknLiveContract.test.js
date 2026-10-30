@@ -1313,6 +1313,41 @@ test('Apply document discovery returns real acceptance and passport candidates',
     }
 });
 
+test('Apply document discovery returns all uploaded files as crop sources', async () => {
+    const harness = createContentHarness(`
+        <input name="mothersName" value="ANNE">
+        <input name="fathersName" value="BABA">
+        <input name="passportNumber" value="P123456">
+        <input name="birthDate" value="02.01.2000">
+        <div class="card">
+            <h5>Yüklenen Dosyalar</h5>
+            <div class="document-item"><span class="title">Diploma</span><a href="/uploads/diploma.pdf">İndir</a></div>
+            <div class="document-item"><span class="title">Transkript</span><a href="/uploads/transkript.pdf">İndir</a></div>
+            <div class="document-item"><span class="title">Pasaport</span><a href="/uploads/passport.pdf">İndir</a></div>
+        </div>
+        <div class="card">
+            <h5>Oluşturulan Dosyalar</h5>
+            <div class="document-item"><span class="title">Kabul Mektubu</span><a href="/uploads/kabul.pdf">İndir</a></div>
+        </div>
+    `, 'https://apply.topkapi.edu.tr/panel/applications/123');
+
+    try {
+        const response = await harness.send({
+            action: 'GET_KABUL_CODE_OR_DOCUMENT',
+            requestId: 'crop-sources-test'
+        });
+
+        assert.equal(response.success, true);
+        const urls = (response.cropSources || []).map(s => s.url);
+        assert.ok(urls.includes('https://apply.topkapi.edu.tr/uploads/passport.pdf'), 'passport should be in crop sources');
+        assert.ok(urls.includes('https://apply.topkapi.edu.tr/uploads/diploma.pdf'), 'diploma should be in crop sources');
+        assert.ok(urls.includes('https://apply.topkapi.edu.tr/uploads/transkript.pdf'), 'transcript should be in crop sources');
+        assert.equal(urls.includes('https://apply.topkapi.edu.tr/uploads/kabul.pdf'), false, 'acceptance letter should not be a crop source');
+    } finally {
+        harness.close();
+    }
+});
+
 test('background transfer accepts only a fresh content-search result or a fresh MAIN-world fallback', async () => {
     const contentHarness = createBackgroundHarness(
         { inputFound: false, buttonFound: false },
@@ -2561,4 +2596,41 @@ test('real MAIN and content transfer keep nested student fields distinct across 
         }
         assert.equal(background.calls.filter(call => call.message?.action === 'fillRemainingData').length, 1);
     } finally { target.close(); }
+});
+
+test('manual YÖKSİS fill succeeds without prior completion notification or bound tab id', async () => {
+    const target = createContentHarness(`
+        <table>
+            <tr><td>Adı</td><td><input id="student-name"></td></tr>
+            <tr><td>Soyadı</td><td><input id="student-surname"></td></tr>
+            <tr><td>Belge No</td><td><input id="document-number"></td></tr>
+        </table>
+    `, 'https://yoksis.yok.gov.tr/student');
+    const background = createBackgroundHarness({}, {}, {
+        targetHarness: target,
+        formReadyResponses: [{ success: false, formReady: false }]
+    });
+    const student = {
+        yoksisReady: false,
+        yoksisId: 'ZX-456-YW',
+        firstName: 'SYNTHETIC',
+        lastName: 'STUDENT'
+    };
+
+    try {
+        const response = await background.send({
+            source: 'IKAMET_PORTAL',
+            action: 'FILL_YOKSIS_FORM',
+            requestId: 'manual-fill-without-ready-msg',
+            data: student,
+            manualOverrideConfirmed: true
+        });
+
+        assert.equal(response.success, true, JSON.stringify(response));
+        assert.deepEqual(JSON.parse(JSON.stringify(response.filledFields)), ['Adı', 'Soyadı']);
+        assert.equal(target.dom.window.document.getElementById('student-name').value, 'SYNTHETIC');
+        assert.equal(target.dom.window.document.getElementById('student-surname').value, 'STUDENT');
+    } finally {
+        target.close();
+    }
 });

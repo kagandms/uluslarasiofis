@@ -261,6 +261,32 @@ test('scanner status reads do not reconcile or write the queue', async () => {
     assert.equal(reconciliationQueries.length, 0);
 });
 
+test('scanner status reads job counts from the maintained status table', async () => {
+    const { database } = fixture();
+    const statements = [];
+    const observedDatabase = {
+        prepare(sql) {
+            statements.push(sql);
+            return database.prepare(sql);
+        },
+        batch: statements_ => database.batch(statements_)
+    };
+
+    const scanner = createScannerRepository(observedDatabase);
+    await scanner.reconcile('2026-10-30T00:00:00.000Z');
+    const status = await scanner.readStatus();
+
+    const countsSql = statements.find(sql => sql.includes('GROUP BY status')
+        || sql.includes('FROM document_scan_job_status_counts'));
+    assert.ok(countsSql);
+    const plan = database.prepare(`EXPLAIN QUERY PLAN ${countsSql}`).all().results
+        .map(row => row.detail).join('\n');
+    assert.deepEqual(status.jobs.map(row => ({ status: row.status, count: row.count })),
+        [{ status: 'queued', count: 1 }]);
+    assert.match(countsSql, /FROM document_scan_job_status_counts/);
+    assert.doesNotMatch(plan, /SCAN document_scan_jobs/);
+});
+
 test('production five-minute schedule repairs the scanner queue', async () => {
     const { environment, database } = fixture();
     environment.APP_ENV = 'production';

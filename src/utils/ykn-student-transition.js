@@ -36,11 +36,12 @@ export function isCurrentYknWorkflowResponse(context) {
 
 /**
  * Accepts a YÖKSİS search response only for the active operation or its current-student workflow.
- * @param {{ responseRequestId: string | null, activeRequestId: string | null, workflow: object | null, currentStudentRequestId: string | null }} context
+ * @param {{ responseRequestId: string | null, activeRequestId: string | null, activeTransferRequestId?: string | null, workflow: object | null, currentStudentRequestId: string | null }} context
  * @returns {boolean} True when the search result is correlated to the active student operation.
  */
 export function isCurrentYknTransferResponse(context) {
     if (!context.responseRequestId) return false;
     if (context.responseRequestId === context.activeRequestId) return true;
+    if (context.activeTransferRequestId && context.responseRequestId === context.activeTransferRequestId) return true;
     return isCurrentYknWorkflowResponse(context);
 }
