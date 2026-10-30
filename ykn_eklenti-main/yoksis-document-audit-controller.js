@@ -333,7 +333,8 @@
 
     if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage && location.hostname === 'yoksis.yok.gov.tr' && window === window.top) {
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-            if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !isValidScanId(request?.scanId)) return false;
+            // Service-worker messages have no tab or frameId; only the background routes audit commands.
+            if (sender.id !== chrome.runtime.id || sender.tab || !isValidScanId(request?.scanId)) return false;
             if (request.action === 'YOKSIS_DOCUMENT_AUDIT_CHECK') {
                 void checkYoksisDocumentAuditReadiness(document).then(sendResponse)
                     .catch(() => sendResponse({ ready: false, queueCount: 0, reason: 'readiness-check-failed' }));

@@ -1,3 +1,6 @@
+(() => {
+if (globalThis.YoksisDocumentAudit) return;
+
 const normalizeLabel = (value) => String(value || '')
     .toLocaleLowerCase('tr-TR')
     .normalize('NFKD')
@@ -210,3 +213,4 @@ globalThis.YoksisDocumentAudit = Object.freeze({
         studentNumber: readLabeledValue(rootDocument, 'Öğrenci No (*)')
     })
 });
+})();
