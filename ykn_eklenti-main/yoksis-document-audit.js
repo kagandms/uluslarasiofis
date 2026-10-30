@@ -39,8 +39,15 @@ function getAccessibleDocuments(rootDocument) {
 }
 
 function findHeaderIndex(table, aliases) {
-    const headers = Array.from(table.querySelectorAll('thead th, thead td'));
+    // ZK renders list headers in a separate table from the scrollable rows.
+    const headers = Array.from(table.closest('.z-listbox-body')
+        ? table.closest('.z-listbox').querySelectorAll('.z-listbox-header th')
+        : table.querySelectorAll('thead th, thead td'));
     return headers.findIndex((header) => aliases.includes(normalizeLabel(header.textContent)));
+}
+
+function readTableRows(table) {
+    return Array.from(table.querySelectorAll(table.closest('.z-listbox-body') ? 'tbody tr.z-listitem' : 'tbody tr'));
 }
 
 function findRecordTable(rootDocument) {
@@ -118,7 +125,8 @@ function collectYoksisAuditQueue(rootDocument) {
 function readLabeledValue(rootDocument, requestedLabel) {
     const requested = normalizeLabel(requestedLabel);
     const labels = getAccessibleDocuments(rootDocument)
-        .flatMap((doc) => Array.from(doc.querySelectorAll('label')))
+        .flatMap((doc) => Array.from(doc.querySelectorAll('label, .z-label')))
+        .filter((label) => !requestedLabel.includes('*') || label.textContent.includes('*'))
         .filter((label) => normalizeLabel(label.textContent).replace(/\s*\(\s*\*\s*\)\s*/g, ' ').replace(/\s+/g, ' ').trim() === requested);
     if (labels.length !== 1) return '';
 
@@ -129,19 +137,22 @@ function readLabeledValue(rootDocument, requestedLabel) {
 
     const siblingControl = label.parentElement?.querySelector('input, select, textarea');
     if (siblingControl) return cleanText(siblingControl.value || siblingControl.textContent);
+    const adjacentControl = label.closest('td')?.nextElementSibling?.querySelector('input, select, textarea');
+    if (adjacentControl) return cleanText(adjacentControl.value || adjacentControl.textContent);
     return '';
 }
 
 function findMissingDocumentsTable(rootDocument) {
     const heading = getAccessibleDocuments(rootDocument)
-        .flatMap((doc) => Array.from(doc.querySelectorAll('h1, h2, h3, h4, legend, .section-title')))
-        .find((element) => normalizeLabel(element.textContent).includes('eksik belgeler'));
+        .flatMap((doc) => Array.from(doc.querySelectorAll('h1, h2, h3, h4, legend, .section-title, .z-caption')))
+        .find((element) => /eksik belgeler|gocnet tarafindan istenen belgeler/.test(normalizeLabel(element.textContent)));
     if (!heading) return null;
 
-    const section = heading.closest('section, fieldset, .panel, .card') || heading.parentElement;
+    const section = heading.closest('section, fieldset, .panel, .card, .z-groupbox') || heading.parentElement;
     if (!section) return null;
     return Array.from(section.querySelectorAll('table')).find((table) => (
-        findHeaderIndex(table, ['belge basligi']) >= 0
+        (!table.closest('.z-listbox') || table.closest('.z-listbox-body'))
+        && findHeaderIndex(table, ['belge basligi']) >= 0
         && findHeaderIndex(table, ['not aciklama']) >= 0
         && findHeaderIndex(table, ['yukleme durumu']) >= 0
     )) || null;
@@ -156,7 +167,7 @@ function readDocumentRows(table) {
         uploadStatus: findHeaderIndex(table, ['yukleme durumu'])
     };
 
-    return Array.from(table.querySelectorAll('tbody tr')).map((row) => {
+    return readTableRows(table).map((row) => {
         const requiredText = normalizeLabel(getCellText(row, indexes.required));
         return {
             code: getCellText(row, indexes.code),
@@ -195,7 +206,7 @@ function readSelectedYoksisAuditRecord(rootDocument, expectedEntry) {
     if (normalizeLabel(applicationStatus).includes('eksik belge bekliyor') && documents.length === 0) {
         return { status: 'unreadable', reason: 'missing-documents-table-empty' };
     }
-    if (Array.from(table.querySelectorAll('tbody tr')).length !== documents.length) {
+    if (readTableRows(table).length !== documents.length) {
         return { status: 'unreadable', reason: 'missing-documents-row-malformed' };
     }
 

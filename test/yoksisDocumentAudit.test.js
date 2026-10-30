@@ -116,3 +116,59 @@ test('collectYoksisAuditQueue and readSelectedYoksisAuditRecord inspect same-ori
     assert.equal(record.identity.applicationNumber, '2026-00-0000001');
     assert.equal(record.documents.length, 1);
 });
+
+test('collectYoksisAuditQueue reads ZK split header/body tables and ignores the hidden empty placeholder', () => {
+    const document = new JSDOM(readFixture('zk-split-listboxes.html')).window.document;
+
+    assert.deepEqual(collectYoksisAuditQueue(document), {
+        status: 'complete',
+        entries: [
+            { applicationNumber: '2026-00-0000001', studentNumber: '2600000001' },
+            { applicationNumber: '2026-00-0000002', studentNumber: '2600000002' }
+        ]
+    });
+    assert.equal(globalThis.YoksisDocumentAudit.findYoksisAuditRecordButton(document, {
+        applicationNumber: '2026-00-0000002', studentNumber: '2600000002'
+    }), document.querySelector('#records .z-listbox-rows tr:nth-child(2) button'));
+});
+
+test('readSelectedYoksisAuditRecord reads ZK sibling-cell labels and GöçNet split document list', () => {
+    const document = new JSDOM(readFixture('zk-split-listboxes.html')).window.document;
+
+    assert.deepEqual(readSelectedYoksisAuditRecord(document, {
+        applicationNumber: '2026-00-0000001', studentNumber: '2600000001'
+    }), {
+        status: 'verified',
+        identity: {
+            applicationNumber: '2026-00-0000001', studentNumber: '2600000001',
+            firstName: 'TESTAD', lastName: 'TESTSOYAD', phone: '5000000000'
+        },
+        applicationStatus: 'Eksik Belge Bekliyor',
+        documents: [{ code: '99', name: 'Diğer Belge', required: true, note: 'AKTİF ÖĞRENCİ BELGESİ', uploadStatus: 'Yüklenmedi' }]
+    });
+});
+
+test('readSelectedYoksisAuditRecord accepts an explicit ZK empty document placeholder for a completed application', () => {
+    const document = new JSDOM(readFixture('zk-split-listboxes.html')).window.document;
+    document.getElementById('application-status').value = 'Tamamlandı';
+    document.querySelector('#documents .z-listbox-rows').replaceChildren();
+    document.querySelector('#documents .z-listbox-emptybody').style.display = '';
+
+    const result = readSelectedYoksisAuditRecord(document, {
+        applicationNumber: '2026-00-0000001', studentNumber: '2600000001'
+    });
+
+    assert.equal(result.status, 'verified');
+    assert.equal(result.applicationStatus, 'Tamamlandı');
+    assert.deepEqual(result.documents, []);
+});
+
+test('readSelectedYoksisAuditRecord protects both ZK application and student identity before returning personal data', () => {
+    const document = new JSDOM(readFixture('zk-split-listboxes.html')).window.document;
+    for (const expectedEntry of [
+        { applicationNumber: '2026-00-0000002', studentNumber: '2600000001' },
+        { applicationNumber: '2026-00-0000001', studentNumber: '2600000002' }
+    ]) {
+        assert.deepEqual(readSelectedYoksisAuditRecord(document, expectedEntry), { status: 'identity-mismatch' });
+    }
+});
