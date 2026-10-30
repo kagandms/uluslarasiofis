@@ -10,7 +10,7 @@ const CONDITIONS = Object.freeze({
     minor_family_evidence: "applications.is_under_18 = 1 AND (applications.document_policy_version = 1 OR applications.minor_family_status IN ('divorced','deceased','single_parent','absent'))",
     parent_permit_copy: 'applications.is_under_18 = 1',
     minor_optional_parent_documents: 'applications.is_under_18 = 1',
-    health_insurance_document: "applications.insurance_basis = 'bilateral_agreement'",
+    health_insurance_document: "(applications.insurance_basis = 'bilateral_agreement' OR ((applications.application_type = 'renewal' OR applications.application_route = 'transition') AND applications.insurance_basis = 'system_verified'))",
     'address_evidence:rental_contract': `${ACCOMMODATION_SQL} = 'rental_contract'`,
     'address_evidence:residence_certificate': `${ACCOMMODATION_SQL} = 'residence_certificate'`,
     'address_evidence:undertaking': `${ACCOMMODATION_SQL} = 'undertaking'`,
