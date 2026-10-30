@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
+import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
 import { listApplicationDocumentPolicies, listDocumentPolicies, readDocumentPolicy } from '../src/server/domain/documentPolicy.js';
 import { ACCOMMODATION_TYPES, listMissingDocumentAnswers, listRequiredDocumentAnswers, readAccommodationType } from '../src/shared/document-conditions.js';
 import { evaluateSubmissionReadiness } from '../src/server/services/submissionReadiness.js';
@@ -15,6 +16,13 @@ function readCodes(application) {
 }
 
 const ADULT = Object.freeze({ application_type: 'initial', is_under_18: 0 });
+
+test('public document guidance requests four biometric photos in every supported locale', () => {
+    for (const locale of SUPPORTED_LOCALES) {
+        assert.match(PUBLIC_MESSAGES[locale].documentPhotographs, /4/);
+        assert.match(SESSION3_MESSAGES[locale].documentPhotographsHelp, /4/);
+    }
+});
 
 test('current applications request the official form documents without a residence-card upload', () => {
     for (const application_type of ['initial', 'renewal']) {
