@@ -500,6 +500,24 @@ test('extension rejects staff bridge messages from an untrusted page before runn
     assert.equal(harness.calls.some((call) => call.type === 'message' && call.message.action === 'searchWithId'), false);
 });
 
+test('background forwards the audit start to one controller preflight without a duplicate queue check', async () => {
+    const harness = createBackgroundHarness({}, {});
+
+    const response = await harness.send({
+        source: 'IKAMET_PORTAL',
+        action: 'START_YOKSIS_DOCUMENT_AUDIT',
+        requestId: 'audit-start-once',
+        scanId: 'audit-scan-once'
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.yoksisTabId, 42);
+    assert.deepEqual(
+        harness.calls.filter((call) => call.type === 'message').map((call) => call.message.action),
+        ['YOKSIS_DOCUMENT_AUDIT_START']
+    );
+});
+
 test('country commands require the YÖKSİS main frame, a known field and a bounded request', async () => {
     for (const [url, frameId, override] of [
         ['https://evil.example/', 0, {}], ['https://yoksis.yok.gov.tr/student', 1, {}],

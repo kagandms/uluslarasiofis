@@ -116,16 +116,8 @@ export function initializeYoksisDocumentAuditManager(root) {
         setText(root, '#audit-progress', '');
         updateControls();
 
-        const readiness = await requestExtension('CHECK_YOKSIS_DOCUMENT_AUDIT', { scanId: state.scanId }, 30_000);
-        if (readiness.response?.ready !== true || !Number.isInteger(readiness.response.yoksisTabId)) {
-            state.busy = false;
-            setText(root, '#audit-status', readiness.response?.error || 'Açık YÖKSİS sekmesinde doğrulanabilir kayıt listesi bulunamadı.');
-            updateControls();
-            return;
-        }
-
-        state.targetTabId = readiness.response.yoksisTabId;
-        const start = await requestExtension('START_YOKSIS_DOCUMENT_AUDIT', { scanId: state.scanId }, 15_000);
+        setText(root, '#audit-status', 'YÖKSİS sekmesi ve kayıt listesi tarama başlamadan doğrulanıyor…');
+        const start = await requestExtension('START_YOKSIS_DOCUMENT_AUDIT', { scanId: state.scanId }, 30_000);
         if (start.response?.success !== true) {
             state.busy = false;
             state.targetTabId = null;
@@ -136,7 +128,7 @@ export function initializeYoksisDocumentAuditManager(root) {
 
         state.requestId = start.requestId;
         root.dataset.auditRequestId = state.requestId;
-        state.targetTabId = start.response.yoksisTabId || state.targetTabId;
+        state.targetTabId = start.response.yoksisTabId || null;
         setText(root, '#audit-status', 'Tarama sürüyor. Evrak yükleme veya kaydetme yapılmıyor.');
         updateControls();
     }
