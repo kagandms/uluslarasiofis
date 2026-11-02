@@ -21,7 +21,7 @@ function createFixture(context, seconds = 3600, options = {}) {
     const panel = dom.window.document.querySelector('main');
     const fixture = { dom, panel, clock: { now: 1_800_000_000_000 }, intervals: new Map(), requests: [],
         timeouts: new Map(),
-        photos: [], imported: [], downloadMetrics: { active: 0, max: 0 }, downloadDelays: new Map(),
+        photos: [], imported: [], downloadMetrics: { active: 0, max: 0 },
         transferCount: 0, batchCount: 0, activeBatchId: null,
         wait: delay => new Promise(resolve => realSetTimeout(resolve, delay)),
         phonePaired: options.phonePaired === true, pending: options.pending === true };
@@ -71,7 +71,8 @@ function createFixture(context, seconds = 3600, options = {}) {
                 fixture.downloadMetrics.active += 1;
                 fixture.downloadMetrics.max = Math.max(fixture.downloadMetrics.max, fixture.downloadMetrics.active);
                 try {
-                    await new Promise(resolve => realSetTimeout(resolve, fixture.downloadDelays.get(photoId) || 0));
+                    if (options.downloadPhoto) await options.downloadPhoto(photoId);
+                    else await new Promise(resolve => realSetTimeout(resolve, 0));
                     return new Response(new Uint8Array([1, 2, 3]));
                 } finally { fixture.downloadMetrics.active -= 1; }
             }
@@ -81,7 +82,10 @@ function createFixture(context, seconds = 3600, options = {}) {
         return Response.json({ batchId: fixture.activeBatchId, phonePaired: fixture.phonePaired, files: [...fixture.photos] });
     });
     const session = createMobileTransferSession();
-    mountMobileTransferPanel(panel, files => fixture.imported.push(...files), session);
+    mountMobileTransferPanel(panel, files => {
+        fixture.imported.push(...files);
+        options.onImported?.(fixture.imported);
+    }, session);
     context.after(async () => { panel.remove(); await settle(); dom.window.close(); });
     return { ...fixture, button: panel.querySelector('button'), countdown: panel.querySelector('.transfer-countdown'), session };
 }
@@ -181,14 +185,35 @@ test('only active-batch photos are imported and acknowledged', async (context) =
 });
 
 test('pending photos download two at a time while the PC import order stays stable', async (context) => {
-    const fixture = createFixture(context);
+    const downloads = new Map(['photo-1', 'photo-2', 'photo-3'].map(id => [id, {
+        started: Promise.withResolvers(), completed: Promise.withResolvers()
+    }]));
+    const imported = Promise.withResolvers();
+    context.after(() => { for (const download of downloads.values()) download.completed.resolve(); });
+    const fixture = createFixture(context, 3600, {
+        downloadPhoto: async id => {
+            const download = downloads.get(id);
+            download.started.resolve();
+            await download.completed.promise;
+        },
+        onImported: files => { if (files.length === 3) imported.resolve(); }
+    });
     fixture.button.click();
     await settle();
     fixture.photos.push({ id: 'photo-1', byte_size: 3 }, { id: 'photo-2', byte_size: 3 }, { id: 'photo-3', byte_size: 3 });
-    fixture.downloadDelays.set('photo-1', 20);
-
     await tickTimeout(fixture, 15000);
-    await fixture.wait(30);
+    await Promise.all([downloads.get('photo-1').started.promise, downloads.get('photo-2').started.promise]);
+    assert.equal(fixture.downloadMetrics.active, 2);
+    assert.equal(fixture.requests.some(request => request.path.endsWith('/files/photo-3')), false);
+
+    downloads.get('photo-2').completed.resolve();
+    await settle();
+    assert.equal(fixture.imported.length, 0);
+    downloads.get('photo-1').completed.resolve();
+    await downloads.get('photo-3').started.promise;
+    assert.deepEqual(fixture.imported.map(file => file.name), ['Telefondan_photo-1.jpg', 'Telefondan_photo-2.jpg']);
+    downloads.get('photo-3').completed.resolve();
+    await imported.promise;
 
     assert.equal(fixture.downloadMetrics.max, 2);
     assert.deepEqual(fixture.imported.map(file => file.name), [

@@ -12,8 +12,22 @@ const CURRENT_REVISION_ID = 'revision-resubmit-1';
 const CURRENT_FILE_ID = 'file-resubmit-1';
 const CURRENT_INTENT_ID = 'intent-resubmit-current';
 
+class TriggerAwareD1Database extends TestD1Database {
+    async batch(statements) {
+        return super.batch(statements.map((statement) => ({
+            run: () => {
+                // D1 metadata includes trigger writes; SQLite's statement changes excludes them.
+                const before = this.database.prepare('SELECT total_changes() AS count').get().count;
+                const result = statement.run();
+                const after = this.database.prepare('SELECT total_changes() AS count').get().count;
+                return { ...result, meta: { ...result.meta, changes: Number(after - before) } };
+            }
+        })));
+    }
+}
+
 async function createRepositoryFixture() {
-    const database = new TestD1Database();
+    const database = new TriggerAwareD1Database();
     applyAllMigrations(database);
     await database.prepare(`
         INSERT INTO students (id, student_number, normalized_student_number)
@@ -285,7 +299,7 @@ test('replacement cleanup waits until the invalidated capability expiry and list
         'none');
 });
 
-test('finalize atomically swaps the current revision, updates application state, completes intent, and writes safe audit', async () => {
+test('finalize succeeds with trigger-inclusive D1 metadata and atomically persists the replacement and audit', async () => {
     const { database, repository } = await createRepositoryFixture();
     await createReplacementIntent(repository);
     const finalized = await repository.finalizeReplacement(createFinalizeInput());
@@ -313,6 +327,10 @@ test('finalize atomically swaps the current revision, updates application state,
     assert.deepEqual(JSON.parse(audit.safe_metadata_json), {
         documentCode: 'passport', revisionNumber: 2, documentStatus: 'submitted', result: 'success'
     });
+    assert.equal(database.prepare(`SELECT COUNT(*) AS count FROM document_scan_jobs
+        WHERE file_id = 'file-resubmit-2'`).first().count, 1);
+    assert.equal(database.prepare(`SELECT job_count FROM document_scan_job_status_counts
+        WHERE status = 'queued'`).first().job_count, 1);
 });
 
 test('a guarded finalize step miss rolls back every earlier D1 mutation', async (context) => {

@@ -101,15 +101,25 @@ const GUIDE_TRANSLATIONS = {
     }
 };
 
+let closeActiveGuide = null;
+
 export function openPublicGuideModal() {
-    let existingModal = document.getElementById('public-guide-modal-overlay');
-    if (existingModal) existingModal.remove();
+    closeActiveGuide?.();
+    const trigger = document.activeElement;
 
     const currentLocale = document.documentElement.lang || 'tr';
     const t = GUIDE_TRANSLATIONS[currentLocale] || GUIDE_TRANSLATIONS.tr;
     const isRtl = currentLocale === 'ar';
 
     const overlay = document.createElement('div');
+    const background = new Map([...document.body.children].map(element => [element, element.inert]));
+    const close = () => {
+        document.removeEventListener('keydown', handleKeydown);
+        overlay.remove();
+        for (const [element, wasInert] of background) element.inert = wasInert;
+        closeActiveGuide = null;
+        if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+    };
     overlay.id = 'public-guide-modal-overlay';
     overlay.className = 'public-modal-overlay';
     overlay.setAttribute('role', 'dialog');
@@ -132,7 +142,7 @@ export function openPublicGuideModal() {
     closeBtn.className = 'public-modal-close';
     closeBtn.textContent = '✕';
     closeBtn.setAttribute('aria-label', t.closeAria);
-    closeBtn.addEventListener('click', () => overlay.remove());
+    closeBtn.addEventListener('click', close);
 
     header.append(title, closeBtn);
 
@@ -205,19 +215,30 @@ export function openPublicGuideModal() {
     closeBottomBtn.style.padding = '0.4rem 1.4rem';
     closeBottomBtn.style.fontSize = '0.9rem';
     closeBottomBtn.textContent = t.understoodBtn;
-    closeBottomBtn.addEventListener('click', () => overlay.remove());
+    closeBottomBtn.addEventListener('click', close);
 
     footer.append(closeBottomBtn);
 
     modal.append(header, body, footer);
     overlay.append(modal);
     document.body.append(overlay);
+    for (const element of background.keys()) element.inert = true;
 
     const handleKeydown = (e) => {
         if (e.key === 'Escape') {
-            document.removeEventListener('keydown', handleKeydown);
-            overlay.remove();
+            e.preventDefault();
+            close();
+        } else if (e.key === 'Tab') {
+            if (!overlay.contains(document.activeElement) || (e.shiftKey && document.activeElement === closeBtn)) {
+                e.preventDefault();
+                (e.shiftKey ? closeBottomBtn : closeBtn).focus();
+            } else if (!e.shiftKey && document.activeElement === closeBottomBtn) {
+                e.preventDefault();
+                closeBtn.focus();
+            }
         }
     };
     document.addEventListener('keydown', handleKeydown);
+    closeActiveGuide = close;
+    closeBtn.focus();
 }

@@ -1,3 +1,4 @@
+import { formatApplicationTimestamp } from '../shared/application-timestamps.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { PHYSICAL_RECEIPT_MESSAGES } from './i18n/physical-receipt-messages.js';
 import { initializeResubmissionUpload } from './resubmissionUpload.js';
@@ -25,8 +26,7 @@ function createLink(document, href, label, className = 'application-button appli
 }
 
 function formatDate(value, locale) {
-    if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return null;
-    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+    return formatApplicationTimestamp(value, locale);
 }
 
 function appendDetail(document, list, label, value) {

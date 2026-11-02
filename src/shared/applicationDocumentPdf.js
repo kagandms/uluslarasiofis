@@ -1,3 +1,5 @@
+import { formatApplicationTimestamp } from './application-timestamps.js';
+
 const STATUS_LABELS = Object.freeze({
     submitted: 'Gönderildi', under_review: 'İncelemede', resubmission_required: 'Yeniden yükleme gerekli',
     approved_for_processing: 'İşleme alınmak üzere onaylandı', sent_to_migration: 'Göç İdaresine aktarıldı',
@@ -15,6 +17,7 @@ const ANSWER_LABELS = Object.freeze({
 
 function dateLabel(value, includeTime = false) {
     if (!value) return '';
+    if (includeTime) return formatApplicationTimestamp(value) || String(value);
     const date = /^\d{4}-\d{2}-\d{2}$/u.test(value)
         ? new Date(`${value}T12:00:00Z`) : new Date(value);
     if (!Number.isFinite(date.valueOf())) return String(value);
