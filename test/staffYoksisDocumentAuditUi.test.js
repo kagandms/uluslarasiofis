@@ -29,9 +29,7 @@ test('staff audit manager starts only after confirmation and renders YÖKSİS te
         if (event.source !== window || event.origin !== window.location.origin || event.data?.source !== 'WEB_APP') return;
         const { action, requestId, scanId } = event.data.payload;
         requests.push(action);
-        const response = action === 'CHECK_YOKSIS_DOCUMENT_AUDIT'
-            ? { ready: true, queueCount: 1, yoksisTabId: 4 }
-            : { success: true, scanId };
+        const response = { success: true, scanId, yoksisTabId: 4 };
         window.postMessage({ source: 'EXTENSION', type: 'RESPONSE', action, requestId, response }, window.location.origin);
     });
 
@@ -42,7 +40,7 @@ test('staff audit manager starts only after confirmation and renders YÖKSİS te
     root.querySelector('#audit-confirm').checked = true;
     root.querySelector('#audit-start').click();
     await new Promise((resolve) => window.setTimeout(resolve, 10));
-    assert.deepEqual(requests, ['CHECK_YOKSIS_DOCUMENT_AUDIT', 'START_YOKSIS_DOCUMENT_AUDIT']);
+    assert.deepEqual(requests, ['START_YOKSIS_DOCUMENT_AUDIT']);
 
     const scanId = root.dataset.auditScanId;
     window.dispatchEvent(new window.MessageEvent('message', {
@@ -81,9 +79,7 @@ test('staff audit manager classifies completed, pending, and missing-document st
             origin: window.location.origin,
             data: { source: 'EXTENSION', type: 'RESPONSE', action: data.payload.action,
                 requestId: data.payload.requestId,
-                response: data.payload.action === 'CHECK_YOKSIS_DOCUMENT_AUDIT'
-                    ? { ready: true, queueCount: 4, yoksisTabId: 4 }
-                    : { success: true, yoksisTabId: 4 } }
+                response: { success: true, yoksisTabId: 4 } }
         })));
     };
     initializeYoksisDocumentAuditManager(root);
@@ -163,7 +159,7 @@ test('staff audit manager surfaces a correlated extension bridge failure immedia
     window.close();
 });
 
-test('staff audit manager allows background readiness checks more than ten seconds', async () => {
+test('staff audit manager sends one start request and relies on the controller preflight', async () => {
     const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
     const { window } = dom;
     const root = window.document.getElementById('audit-root');
@@ -179,8 +175,8 @@ test('staff audit manager allows background readiness checks more than ten secon
     root.querySelector('#audit-confirm').checked = true;
     root.querySelector('#audit-start').click();
 
-    assert.equal(messages[0].payload.action, 'CHECK_YOKSIS_DOCUMENT_AUDIT');
-    assert.equal(timeouts[0], 30_000);
+    assert.equal(messages[0].payload.action, 'START_YOKSIS_DOCUMENT_AUDIT');
+    assert.equal(timeouts[0], 15_000);
 
     const dispatchResponse = (message, response) => window.dispatchEvent(new window.MessageEvent('message', {
         source: window,
@@ -193,11 +189,7 @@ test('staff audit manager allows background readiness checks more than ten secon
             response
         }
     }));
-    dispatchResponse(messages[0], { ready: true, queueCount: 613, yoksisTabId: 4 });
-    await Promise.resolve();
-    await Promise.resolve();
-    assert.equal(messages[1].payload.action, 'START_YOKSIS_DOCUMENT_AUDIT');
-    dispatchResponse(messages[1], { success: true, yoksisTabId: 4 });
+    dispatchResponse(messages[0], { success: true, yoksisTabId: 4 });
     await Promise.resolve();
     await Promise.resolve();
 
