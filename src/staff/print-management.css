@@ -32,3 +32,15 @@
     .print-section-heading { align-items: start; flex-direction: column; }
     .staff-print-frame { min-height: 980px; }
 }
+
+body.dark-mode #print-staff-status { color: var(--text-primary); background: #26313a; border: 1px solid #43515d; }
+body.dark-mode #print-staff-status[data-state="ready"] { color: #b7e4c7; background: #173326; border-color: #2d6544; }
+body.dark-mode #print-staff-status[data-state="paused"] { color: #f3d79a; background: #3a301b; border-color: #665321; }
+body.dark-mode #print-staff-status[data-state="unavailable"] { color: #f2bac5; background: #3d222a; border-color: #70404c; }
+
+body.dark-mode #staff-applications-manager .btn-outline { color: #d7dce1; background: #2b3038; border-color: #4c535d; }
+body.dark-mode #staff-applications-manager .btn-outline:hover,
+body.dark-mode #staff-applications-manager .btn-outline:focus-visible { color: #fff; background: #41404a; border-color: #81717c; }
+body.dark-mode #staff-applications-manager .btn-primary { color: #f4e9ee; background: #563541; border-color: #76515e; }
+body.dark-mode #staff-applications-manager .btn-primary:hover,
+body.dark-mode #staff-applications-manager .btn-primary:focus-visible { color: #fff; background: #704958; border-color: #a07b88; }

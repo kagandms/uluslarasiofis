@@ -445,3 +445,42 @@ test('expired abandoned intent is closed before cleanup and cannot become curren
     assert.equal(database.prepare(`SELECT id FROM document_revisions WHERE id = 'revision-api-reviewed' AND is_current = 1`).first().id,
         'revision-api-reviewed');
 });
+
+test('owner can upload requested missing insurance and the first revision enters the scan queue', async () => {
+    const { environment, database } = createEnvironment();
+    const { cookie, applicationId } = await createResubmissionApplicant(environment, database, 'MISSING-INSURANCE');
+    database.prepare("UPDATE applications SET insurance_basis = 'bilateral_agreement' WHERE id = ?").bind(applicationId).run();
+    database.prepare("DELETE FROM upload_intents WHERE revision_file_id = 'file-api-reviewed'").run();
+    database.prepare("DELETE FROM document_revision_files WHERE id = 'file-api-reviewed'").run();
+    database.prepare("DELETE FROM document_revisions WHERE id = 'revision-api-reviewed'").run();
+    database.prepare("UPDATE document_records SET requirement_id = 'req-initial-health-insurance' WHERE id = 'record-api-resubmit'").run();
+    const eligibility = await worker.fetch(createRequest(`${RESUBMISSION_PATH}/resubmission-eligibility`, { cookie }), environment);
+    assert.deepEqual((await eligibility.json()).documents.map(({ code, mode }) => ({ code, mode })), [
+        { code: 'health_insurance', mode: 'missing_upload' }
+    ]);
+    const created = await worker.fetch(createRequest(`${RESUBMISSION_PATH}/resubmission-upload-intent`, {
+        method: 'POST', cookie, body: {
+            code: 'health_insurance', filename: 'insurance.pdf', media_type: 'application/pdf', byte_size: 4
+        }
+    }), environment);
+    assert.equal(created.status, 201);
+    const { upload } = await created.json();
+    const file = database.prepare(`SELECT files.storage_key FROM upload_intents AS intents
+        JOIN document_revision_files AS files ON files.id = intents.revision_file_id WHERE intents.id = ?`)
+        .bind(upload.intent_id).first();
+    await environment.DOCUMENTS.put(file.storage_key, new Uint8Array([1, 2, 3, 4]), {
+        httpMetadata: { contentType: 'application/pdf' }
+    });
+    const finalized = await worker.fetch(createRequest(`${RESUBMISSION_PATH}/resubmission-finalize`, {
+        method: 'POST', cookie, body: { intent_id: upload.intent_id }
+    }), environment);
+    assert.equal(finalized.status, 200, JSON.stringify(await finalized.clone().json()));
+    assert.deepEqual((await finalized.json()).document, {
+        code: 'health_insurance', revision_number: 1, upload_status: 'finalized', scan_status: 'pending'
+    });
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM document_scan_jobs').first().count, 1);
+    const tracking = await worker.fetch(createRequest('/api/public/applications/current/tracking', { cookie }), environment);
+    assert.equal(tracking.status, 200);
+    assert.equal((await tracking.json()).documents.find(({ code }) => code === 'health_insurance').status, 'waiting_review');
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status, 'resubmission_required');
+});

@@ -145,7 +145,7 @@ export async function unapproveStaffApplicationDocument({ request, environment, 
 }
 
 /**
- * Requests replacement of a finalized current document without opening it; stores the reason atomically.
+ * Requests a missing document or replacement without opening it; stores the reason atomically.
  * @param {{request: Request, environment: object, applicationId: string, code: string, requestId: string}} input Staff route context.
  * @returns {Promise<object>} Safe mutation result.
  */
@@ -155,9 +155,23 @@ export async function requestStaffDocumentResubmission({ request, environment, a
     const staff = await requireStaff(request, environment, STAFF_ROLES);
     const body = await readJsonBody(request);
     requireOnlyKeys(body, ['expected_revision_number', 'reason']);
-    const revisionNumber = readExpectedRevisionNumber(body.expected_revision_number);
+    const revisionNumber = body.expected_revision_number === null
+        ? null : readExpectedRevisionNumber(body.expected_revision_number);
     const reason = readResubmissionReason(body.reason);
     const repositories = createD1Repositories(environment.DB);
+    if (revisionNumber === null) {
+        const application = await repositories.applications.findById(applicationId);
+        requireApplication(application);
+        if (!readApplicationDocumentPolicy(code, application)) {
+            throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya yenilemeye uygun değil.');
+        }
+        const updated = await repositories.applicationReviews.requestMissingDocumentUpload({
+            applicationId, code, staffId: staff.id, reason, now: new Date().toISOString(), requestId,
+            documentRecordId: crypto.randomUUID(), auditId: crypto.randomUUID(), noteId: crypto.randomUUID()
+        });
+        if (!updated) throw reviewConflict();
+        return { application_status: 'resubmission_required', document_status: 'resubmission_required', revision_number: null };
+    }
     const document = await resolveResubmissionTarget({ repositories, applicationId, code, revisionNumber });
     const now = new Date().toISOString();
     const updated = await repositories.applicationReviews.requestCurrentDocumentResubmission({
@@ -179,7 +193,7 @@ export async function transitionStaffApplicationStatus({ request, environment, a
     requireSameOrigin(request);
     const staff = await requireStaff(request, environment, STAFF_ROLES);
     const body = await readJsonBody(request);
-    requireOnlyKeys(body, ['target_status', 'expected_updated_at', 'rejection_reason']);
+    requireOnlyKeys(body, ['target_status', 'expected_updated_at', 'rejection_reason', 'direct_transfer']);
     if (typeof body.target_status !== 'string' || typeof body.expected_updated_at !== 'string'
         || !body.expected_updated_at.trim() || body.expected_updated_at.length > 64) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru durumu ve sürümü kontrol edip tekrar deneyin.');
@@ -212,7 +226,12 @@ export async function transitionStaffApplicationStatus({ request, environment, a
                 && requirement.upload_status === 'finalized' && requirement.scan_status === 'clean'
                 && requirement.current_cleanup_status === 'none' && requirement.upload_intent_status === 'completed')
     });
-    if (!transition.allowed) {
+    const directTransfer = body.direct_transfer === true && body.target_status === 'sent_to_migration'
+        && ['submitted', 'under_review', 'resubmission_required', 'approved_for_processing'].includes(application.status);
+    if (body.direct_transfer !== undefined && !directTransfer) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Doğrudan aktarım isteğini kontrol edin.');
+    }
+    if (!transition.allowed && !directTransfer) {
         const code = transition.code === 'APPLICATION_NOT_READY_FOR_APPROVAL'
             ? transition.code : transition.code === 'RESUBMISSION_DOCUMENTS_REMAIN'
                 ? 'APPLICATION_NOT_READY_FOR_REVIEW' : 'INVALID_APPLICATION_TRANSITION';

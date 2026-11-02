@@ -18,11 +18,6 @@ function todayInIstanbul() {
     }).format(new Date());
 }
 
-function isWeekend(date) {
-    const weekday = new Date(`${date}T12:00:00+03:00`).getUTCDay();
-    return weekday === 0 || weekday === 6;
-}
-
 async function readMonth(request, environment, requestId) {
     requireMethod(request, 'GET');
     const today = todayInIstanbul();
@@ -47,7 +42,6 @@ async function saveToday(request, environment, requestId) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Kişi ve çalışma süresini kontrol edin.');
     }
     const today = todayInIstanbul();
-    if (isWeekend(today)) throw new ApiError(409, 'WORK_HOURS_CLOSED', 'Cumartesi ve pazar günleri kayıt yapılamaz.');
     const now = new Date().toISOString();
     await environment.DB.prepare(`
         INSERT INTO staff_work_hours (id, staff_key, work_date, minutes, created_at, updated_at)

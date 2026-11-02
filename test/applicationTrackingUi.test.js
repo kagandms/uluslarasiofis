@@ -414,3 +414,22 @@ test('language changes preserve the shared ITU code without new lookups', async 
     assert.equal(lookups, 1);
     document.defaultView.close();
 });
+
+test('public resubmission lookup links students to the secure page where upload is available', async () => {
+    const { document, root } = createTrackingRoot();
+    const api = {
+        async lookupApplicationTracking() {
+            return { found: true, ...createTrackingDto({ application: { status: 'resubmission_required' }, documents: [
+                { code: 'health_insurance', label_key: 'documentHealthInsurance', required: true,
+                    status: 'resubmission_required', student_message: 'Sigorta dosyanızı yükleyebilirsiniz.' }
+            ] }) };
+        },
+        async readCurrentApplicationTracking() { throw new Error('No owner session on this device'); }
+    };
+    await initializeAndLookup(document, root, api);
+    const link = root.querySelector('.tracking-owner-access-link');
+    assert.ok(link);
+    assert.equal(link.getAttribute('href'), '/basvuruya-devam-et/');
+    assert.match(root.textContent, /Sigorta dosyanızı yükleyebilirsiniz/);
+    document.defaultView.close();
+});

@@ -95,6 +95,7 @@ function showBatchError(state, error) {
     showStatus(state, error.message);
     if (error.code !== 'BATCH_PENDING_PHOTOS') return;
     state.discardButton.hidden = false;
+    if (state.connectionActions) state.connectionActions.open = true;
     state.button.disabled = true;
 }
 
@@ -236,14 +237,16 @@ function createTransferInstructions() {
     return instructions;
 }
 
-function createPanelState(container, receiveFiles, session) {
+function createPanelState(container, receiveFiles, session, options) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn btn-outline';
-    button.textContent = '📱 Telefondan ekle (QR)';
+    button.textContent = options.sidebar ? 'QR kodu oluştur' : '📱 Telefondan ekle (QR)';
+    if (options.sidebar) button.classList.add('btn-primary');
     const discardButton = document.createElement('button');
     discardButton.type = 'button';
     discardButton.className = 'btn btn-outline';
+    discardButton.dataset.action = 'discard-pending-photos';
     discardButton.textContent = 'Bekleyen fotoğrafları silip devam et';
     discardButton.hidden = true;
     const endButton = document.createElement('button');
@@ -271,14 +274,25 @@ function createPanelState(container, receiveFiles, session) {
     qrSection.className = 'transfer-qr-section';
     qrSection.style.textAlign = 'center';
     qrSection.append(qr, countdown);
-    container.append(button, discardButton, endButton, endHint, qrSection, status, createTransferInstructions());
-    return { container, receiveFiles, session, button, discardButton, endButton, endHint, qr, countdown, status, transfer: null, batchId: null,
+    let connectionActions = null;
+    if (options.sidebar) {
+        connectionActions = document.createElement('details');
+        connectionActions.className = 'transfer-connection-actions';
+        const summary = document.createElement('summary');
+        summary.textContent = 'Bağlantı seçenekleri';
+        connectionActions.append(summary, discardButton, endButton, endHint);
+    }
+    container.append(button, qrSection, status, createTransferInstructions());
+    if (connectionActions) container.append(connectionActions);
+    else container.append(discardButton, endButton, endHint);
+    return { container, receiveFiles, session, button, discardButton, endButton, endHint, qr, countdown, status,
+        connectionActions, transfer: null, batchId: null,
         countdownTimer: null, pollTimer: null, received: new Set(), lifecycle: new AbortController(), isPolling: false, isOpening: false, isClosing: false };
 }
 
 /** Connects a phone to the active student batch and reuses its paired session between modal instances. */
-export function mountMobileTransferPanel(container, receiveFiles, session = mobileTransferSession) {
-    const state = createPanelState(container, receiveFiles, session);
+export function mountMobileTransferPanel(container, receiveFiles, session = mobileTransferSession, options = {}) {
+    const state = createPanelState(container, receiveFiles, session, options);
     const openQr = () => openPairing(state);
     const discardPending = () => openPairing(state, { discardPending: true });
     const endConnection = () => endTransfer(state);

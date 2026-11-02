@@ -125,7 +125,7 @@ async function persistResult(database, input) {
             WHERE id=? AND changes()=1`).bind(crypto.randomUUID(), `scanner_${crypto.randomUUID()}`, JSON.stringify({ outcome: result.outcome,
                 resultCode: result.result_code, attempt: job.attempts }), now, job.revision_id)
     ]);
-    return results[0].meta.changes === 1;
+    return (results[0]?.meta?.changes || 0) >= 1;
 }
 
 /** @param {D1Database} database Binding. @param {object} input Current job and digest. @returns {Promise<boolean>} Whether content was pinned. */

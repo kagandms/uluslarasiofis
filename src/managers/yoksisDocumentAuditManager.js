@@ -117,7 +117,7 @@ export function initializeYoksisDocumentAuditManager(root) {
         updateControls();
 
         setText(root, '#audit-status', 'YÖKSİS sekmesi ve kayıt listesi tarama başlamadan doğrulanıyor…');
-        const start = await requestExtension('START_YOKSIS_DOCUMENT_AUDIT', { scanId: state.scanId }, 15_000);
+        const start = await requestExtension('START_YOKSIS_DOCUMENT_AUDIT', { scanId: state.scanId }, 30_000);
         if (start.response?.success !== true) {
             state.busy = false;
             state.targetTabId = null;

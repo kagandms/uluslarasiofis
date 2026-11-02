@@ -1,6 +1,7 @@
 import { createScanJobStatement } from './scanner-job-statement.js';
 
 function readModeGuard(mode) {
+    if (mode === 'missing_upload') return `records.review_status = 'resubmission_required' AND current_revision.id IS NULL`;
     if (mode === 'first_replacement') {
         return `records.review_status = 'resubmission_required'
             AND current_revision.status = 'resubmission_required'
@@ -69,11 +70,12 @@ function readExactReplacementEligibilitySql(mode) {
         AND applications.address_evidence_type IS ?
         AND requirements.id = ? AND requirements.code = ? AND requirements.is_active = 1
         AND records.id = ? AND records.application_id = applications.id
-        AND current_revision.id = ? AND current_revision.document_record_id = records.id
-        AND current_revision.is_current = 1
-        AND current_file.revision_id = current_revision.id AND current_file.page_order = 0
-        AND current_file.upload_status = 'finalized' AND current_file.cleanup_status <> 'pending'
-        AND current_intent.status = 'completed'
+        AND ${mode === 'missing_upload' ? '? IS NULL AND current_revision.id IS NULL' : `
+            current_revision.id = ? AND current_revision.document_record_id = records.id
+            AND current_revision.is_current = 1
+            AND current_file.revision_id = current_revision.id AND current_file.page_order = 0
+            AND current_file.upload_status = 'finalized' AND current_file.cleanup_status <> 'pending'
+            AND current_intent.status = 'completed'`}
         AND EXISTS (
             SELECT 1 FROM application_notes
             WHERE application_notes.application_id = applications.id
@@ -96,8 +98,9 @@ function encodeIntentGuard(input) {
 function readIntentGuard(value) {
     try {
         const [expectedCurrentRevisionId, mode] = JSON.parse(value);
-        if (typeof expectedCurrentRevisionId === 'string'
-            && ['first_replacement', 'unsafe_scan_retry'].includes(mode)) {
+        if ((typeof expectedCurrentRevisionId === 'string'
+            && ['first_replacement', 'unsafe_scan_retry'].includes(mode))
+            || (expectedCurrentRevisionId === null && mode === 'missing_upload')) {
             return { expected_current_revision_id: expectedCurrentRevisionId, mode };
         }
     } catch {
@@ -109,7 +112,20 @@ function readIntentGuard(value) {
 function readFinalizeStatements(database, input) {
     const modeGuard = readModeGuard(input.mode);
     return [
-        database.prepare(`
+        // With no old revision, a guarded record update starts the same atomic finalize chain.
+        input.mode === 'missing_upload' ? database.prepare(`
+            UPDATE document_records SET updated_at = updated_at
+            WHERE id = ? AND application_id = ? AND EXISTS (
+                SELECT 1 FROM applications
+                JOIN document_requirements AS requirements ON requirements.application_type = applications.application_type
+                JOIN document_records AS records ON records.application_id = applications.id
+                  AND records.requirement_id = requirements.id
+                LEFT JOIN document_revisions AS current_revision ON current_revision.document_record_id = records.id
+                  AND current_revision.is_current = 1
+                WHERE applications.id = ? AND ${readExactReplacementEligibilitySql('missing_upload')}
+            )
+        `).bind(input.documentRecordId, input.applicationId, input.applicationId, ...bindModeFacts(input))
+            : database.prepare(`
             UPDATE document_revisions AS current_revision
             SET is_current = 0, status = 'superseded'
             WHERE current_revision.id = ? AND current_revision.document_record_id = ?
@@ -169,7 +185,7 @@ function readFinalizeStatements(database, input) {
                   AND is_current = 1 AND status = 'submitted'
               )
         `).bind(input.finalizedAt, input.documentRecordId, input.applicationId,
-            input.mode === 'first_replacement' ? 'resubmission_required' : 'pending', input.replacementRevisionId),
+            input.mode === 'unsafe_scan_retry' ? 'pending' : 'resubmission_required', input.replacementRevisionId),
         database.prepare(`
             UPDATE applications SET updated_at = ?, last_activity_at = ?
             WHERE id = ? AND status = 'resubmission_required' AND changes() = 1
@@ -224,11 +240,11 @@ export function createResubmissionUploadRepository(database) {
                     JOIN document_requirements AS requirements ON requirements.application_type = applications.application_type
                     JOIN document_records AS records ON records.application_id = applications.id
                       AND records.requirement_id = requirements.id
-                    JOIN document_revisions AS current_revision ON current_revision.document_record_id = records.id
+                    LEFT JOIN document_revisions AS current_revision ON current_revision.document_record_id = records.id
                       AND current_revision.is_current = 1
-                    JOIN document_revision_files AS current_file ON current_file.revision_id = current_revision.id
+                    LEFT JOIN document_revision_files AS current_file ON current_file.revision_id = current_revision.id
                       AND current_file.page_order = 0
-                    JOIN upload_intents AS current_intent ON current_intent.revision_file_id = current_file.id
+                    LEFT JOIN upload_intents AS current_intent ON current_intent.revision_file_id = current_file.id
                     WHERE applications.id = ? AND ${modePredicate}
                     GROUP BY records.id
                 `).bind(input.revisionId, input.applicationId, ...modeValues),

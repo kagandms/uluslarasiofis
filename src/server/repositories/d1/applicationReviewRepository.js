@@ -20,6 +20,46 @@ export function createApplicationReviewRepository(database, notes) {
         async findCurrentDocumentForResubmission(applicationId, code) {
             return findCurrentResubmissionTarget(database, { applicationId, code });
         },
+        async requestMissingDocumentUpload({ applicationId, code, staffId, reason, now, requestId, documentRecordId, noteId, auditId }) {
+            const results = await database.batch([
+                database.prepare(`
+                    INSERT INTO document_records (id, application_id, requirement_id, application_type, review_status, updated_at)
+                    SELECT ?, applications.id, requirements.id, applications.application_type, 'resubmission_required', ?
+                    FROM applications JOIN document_requirements AS requirements
+                      ON requirements.application_type = applications.application_type
+                    WHERE applications.id = ? AND applications.status IN ('under_review', 'resubmission_required')
+                      AND requirements.code = ? AND requirements.is_active = 1
+                      AND NOT EXISTS (
+                        SELECT 1 FROM document_records AS records
+                        JOIN document_revisions AS revisions ON revisions.document_record_id = records.id
+                        WHERE records.application_id = applications.id AND records.requirement_id = requirements.id
+                          AND revisions.is_current = 1
+                      )
+                    ON CONFLICT(application_id, requirement_id) DO UPDATE
+                    SET review_status = 'resubmission_required', updated_at = excluded.updated_at
+                    WHERE document_records.review_status IN ('pending', 'under_review')
+                `).bind(documentRecordId, now, applicationId, code),
+                database.prepare(`
+                    UPDATE applications SET status = 'resubmission_required', updated_at = ?, last_activity_at = ?
+                    WHERE id = ? AND status IN ('under_review', 'resubmission_required') AND changes() = 1
+                `).bind(now, now, applicationId),
+                database.prepare(`
+                    INSERT INTO application_notes (id, application_id, document_record_id, author_type,
+                        author_staff_id, visibility, body, created_at)
+                    SELECT ?, records.application_id, records.id, 'staff', ?, 'student', ?, ?
+                    FROM document_records AS records JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
+                    WHERE records.application_id = ? AND requirements.code = ? AND changes() = 1
+                `).bind(noteId, staffId, reason, now, applicationId, code),
+                database.prepare(`
+                    INSERT INTO audit_events (id, event_type, actor_type, actor_staff_id, application_id,
+                        document_record_id, request_id, safe_metadata_json)
+                    SELECT ?, 'staff.document_resubmission_requested', 'staff', ?, application_id,
+                        document_record_id, ?, ? FROM application_notes WHERE id = ? AND changes() = 1
+                `).bind(auditId, staffId, requestId, JSON.stringify({ documentCode: code, revisionNumber: null,
+                    documentStatus: 'resubmission_required', applicationStatus: 'resubmission_required', result: 'success' }), noteId)
+            ]);
+            return results.every((result) => result?.meta?.changes === 1);
+        },
         async transitionApplicationStatus({ applicationId, currentStatus, expectedUpdatedAt, targetStatus, rejectionReason, rejectionNoteId, staffId, now, requestId, auditId }) {
             const isCompleted = targetStatus === 'completed';
             const isTerminal = isCompleted || targetStatus === 'rejected';

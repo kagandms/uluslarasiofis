@@ -36,6 +36,10 @@ test('PC file and camera selection append documents without the removed QR trans
 
     try {
         merger.openPdfMergerModal();
+        assert.doesNotMatch(dom.window.document.body.textContent, /Telefondan ekle|QR ile fotoğraf/u);
+        dom.window.document.getElementById('pdf-merger-modal-overlay').remove();
+        merger.openPdfMergerModal({ allowPhoneTransfer: true });
+        assert.ok(dom.window.document.body.textContent.includes('QR kodu oluştur'));
         const camera = dom.window.document.querySelector('input[capture="environment"]');
         const files = [...dom.window.document.querySelectorAll('input[type="file"]')].find(input=>input!==camera);
         Object.defineProperty(files,'files',{value:[new File(['synthetic'],'pc.pdf',{type:'application/pdf'})]});
@@ -46,8 +50,11 @@ test('PC file and camera selection append documents without the removed QR trans
         assert.ok(dom.window.document.body.textContent.includes('Eklenen Belgeler: 2 / 30'));
         assert.ok(dom.window.document.body.textContent.includes('pc.pdf'));
         assert.ok(dom.window.document.body.textContent.includes('Foto_2.jpg'));
-        assert.doesNotMatch(dom.window.document.body.textContent, /Telefondan ekle|QR ile fotoğraf/u);
-        assert.equal(dom.window.document.querySelector('.pdf-merger-transfer'), null);
+        assert.ok(dom.window.document.querySelector('.pdf-merger-documents.has-phone-transfer'));
+        assert.ok(dom.window.document.querySelector('.pdf-merger-transfer-sidebar'));
+        assert.equal(dom.window.document.querySelector('.transfer-connection-actions').open, false);
+        assert.ok(dom.window.document.querySelector('.transfer-connection-actions [data-action="end-transfer"]'));
+        assert.ok(dom.window.document.querySelector('.transfer-connection-actions [data-action="discard-pending-photos"]'));
         assert.equal(camera.getAttribute('accept'),'image/*');
         assert.equal(files.multiple,true);
     } finally {

@@ -19,6 +19,7 @@ async function loadDate(root, date) {
         const payload = await response.json();
         if (!response.ok) throw new Error(payload?.error?.message || 'Kayıtlar yüklenemedi.');
         renderMonth(root, payload);
+        if (payload.selectedDate === payload.today) updateReminder(root.ownerDocument, payload);
         status.textContent = formatDisplayDate(payload.selectedDate);
         root.querySelector('[data-work-hours-display]').textContent = `Seçili gün: ${formatDisplayDate(payload.selectedDate)}`;
     } catch (error) {
@@ -26,12 +27,19 @@ async function loadDate(root, date) {
     }
 }
 
+function updateReminder(document, payload) {
+    const reminder = document.querySelector('[data-work-hours-reminder]');
+    if (!reminder) return;
+    const saved = new Set(payload.records.filter(record => record.work_date === payload.today).map(record => record.staff_key));
+    reminder.hidden = Array.isArray(payload.people) && payload.people.length > 0
+        && payload.people.every(({ key }) => saved.has(key));
+}
+
 function renderMonth(root, payload) {
     const records = new Map(payload.records.map((record) => [`${record.work_date}:${record.staff_key}`, record.minutes]));
     const selectedDate = payload.selectedDate;
     const today = payload.today;
-    const isWeekend = [0, 6].includes(new Date(`${selectedDate}T12:00:00+03:00`).getUTCDay());
-    const canEdit = selectedDate === today && !isWeekend;
+    const canEdit = selectedDate === today;
     const peopleRows = HOURS_PEOPLE.map(([key, name]) => {
         const value = records.get(`${selectedDate}:${key}`);
         const options = Array.from({ length: 49 }, (_, index) => index * 30)
@@ -42,11 +50,22 @@ function renderMonth(root, payload) {
     root.querySelector('[data-work-hours-table]').innerHTML = `<div class="work-hours-people-grid">${peopleRows}</div>`;
     const notice = root.querySelector('[data-work-hours-holiday]');
     notice.hidden = canEdit;
-    notice.textContent = isWeekend ? 'Cumartesi ve pazar günleri kayıt girilemez.' : 'Geçmiş tarih kayıtları görüntülenebilir, değiştirilemez.';
+    notice.textContent = 'Geçmiş tarih kayıtları görüntülenebilir, değiştirilemez.';
     root.querySelector('[data-work-hours-history]').innerHTML = payload.records.map((record) => {
         const name = HOURS_PEOPLE.find(([key]) => key === record.staff_key)?.[1] || record.staff_key;
         return `<article class="work-hours-history-item"><time datetime="${escapeHtml(record.work_date)}">${escapeHtml(record.work_date)}</time><strong>${escapeHtml(name)}</strong><span>${record.minutes / 60} saat</span></article>`;
     }).join('') || '<p class="work-hours-empty-history">Bu ay için kayıt yok.</p>';
+}
+
+async function refreshReminder(document) {
+    try {
+        const response = await fetch('/api/staff/work-hours', { credentials: 'same-origin' });
+        if (!response.ok) throw new Error('Çalışma saati kayıtları alınamadı.');
+        updateReminder(document, await response.json());
+    } catch {
+        const reminder = document.querySelector('[data-work-hours-reminder]');
+        if (reminder) reminder.hidden = false;
+    }
 }
 
 export function initWorkHours() {
@@ -56,6 +75,12 @@ export function initWorkHours() {
     dateInput.value = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     dateInput.max = dateInput.value;
     dateInput.addEventListener('change', () => loadDate(root, dateInput.value));
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) void refreshReminder(document);
+    });
+    for (const id of ['btn-workspace-home', 'btn-go-home-global', 'staff-home-link']) {
+        document.getElementById(id)?.addEventListener('click', () => void refreshReminder(document));
+    }
     root.addEventListener('click', async (event) => {
         const button = event.target.closest('[data-save]');
         if (!button) return;

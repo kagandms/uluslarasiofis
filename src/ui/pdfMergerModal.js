@@ -5,6 +5,7 @@ import { createDocumentPreviewDialog } from './document-preview-dialog.js';
 import { createPdfMergerGallery } from './pdf-merger-gallery.js';
 import { mergeDocumentsToPdf, downloadPdfFile } from '../services/pdfMergerService.js';
 import { showToast } from './toastManager.js';
+import { mountMobileTransferPanel } from './mobile-transfer-panel.js';
 
 const DEFAULT_MAX_FILES = 30;
 const YOKSIS_SAFE_LIMIT_BYTES = 9 * 1024 * 1024;
@@ -167,6 +168,14 @@ export function openPdfMergerModal(options = {}) {
     btnFileSelect.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg> Galeri veya dosya seç`;
 
     actionGrid.append(btnCameraMode, btnFileSelect);
+    let transferPanel = null;
+    if (options.allowPhoneTransfer === true) {
+        transferPanel = document.createElement('div');
+        transferPanel.className = 'pdf-merger-transfer pdf-merger-transfer-sidebar';
+        const transferHeading = document.createElement('h4');
+        transferHeading.textContent = 'Telefonla belge ekle';
+        transferPanel.append(transferHeading);
+    }
 
     // Continuous capture banner (Active during camera mode)
     const cameraBanner = document.createElement('div');
@@ -258,10 +267,12 @@ export function openPdfMergerModal(options = {}) {
 
     const documentsPanel=document.createElement('div');
     documentsPanel.className='pdf-merger-documents';
+    if (transferPanel) documentsPanel.classList.add('has-phone-transfer');
     const listHint = document.createElement('p');
     listHint.className = 'pdf-merger-list-hint';
     listHint.textContent = 'Eklenen sayfaları önizleyip sıralayabilirsiniz.';
-    documentsPanel.append(actionGrid, cameraBanner, listHeader, listHint, fileListEl);
+    documentsPanel.append(actionGrid, ...(transferPanel ? [transferPanel] : []), cameraBanner, listHeader, listHint, fileListEl);
+    if (transferPanel) mountMobileTransferPanel(transferPanel, files => addFiles(files), undefined, { sidebar: true });
     body.append(documentsPanel);
 
     // Footer with merge action

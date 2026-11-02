@@ -220,8 +220,8 @@ export function createApplicationRepository(database) {
             if (!selected) return null;
             return this.findById(selected.id);
         },
-        async queryStaffApplications({ statuses, isDeleted = false, includeDeleted = false, searchPattern, submittedAtFrom = null, submittedAtUntil = null, pageSize, offset }) {
-            const conditions = ["applications.status <> 'draft'"];
+        async queryStaffApplications({ statuses, isDraft = false, isDeleted = false, includeDeleted = false, searchPattern, submittedAtFrom = null, submittedAtUntil = null, pageSize, offset }) {
+            const conditions = [isDraft ? "applications.status = 'draft'" : "applications.status <> 'draft'"];
             const queryValues = [];
             const deletedClause = "EXISTS (SELECT 1 FROM application_deletions WHERE application_id=applications.id AND state IN ('soft_deleted','purge_pending'))";
             if (includeDeleted && statuses?.length) {
@@ -238,11 +238,11 @@ export function createApplicationRepository(database) {
                 queryValues.push(...statuses);
             }
             if (submittedAtFrom) {
-                conditions.push('applications.submitted_at >= ?');
+                conditions.push(isDraft ? 'applications.created_at >= ?' : 'applications.submitted_at >= ?');
                 queryValues.push(submittedAtFrom);
             }
             if (submittedAtUntil) {
-                conditions.push('applications.submitted_at < ?');
+                conditions.push(isDraft ? 'applications.created_at < ?' : 'applications.submitted_at < ?');
                 queryValues.push(submittedAtUntil);
             }
             if (searchPattern) {
@@ -267,7 +267,7 @@ export function createApplicationRepository(database) {
                 database.prepare(`
                     SELECT applications.id, students.student_number, applications.first_name,
                            applications.last_name, applications.application_type, applications.application_route, applications.status,
-                           applications.submitted_at, applications.updated_at,
+                           applications.submitted_at, applications.created_at, applications.updated_at,
                            application_deletions.state AS deletion_state
                     FROM applications
                     JOIN students ON students.id = applications.student_id

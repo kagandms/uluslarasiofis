@@ -10,6 +10,7 @@ import { requireMethod, requireSameOrigin } from './shared.js';
 const STAFF_ROLES = Object.freeze(['reviewer', 'admin']);
 const APPLICATION_STATUS_FILTERS = Object.freeze({
     all: null,
+    draft: Object.freeze(['draft']),
     new: Object.freeze(['submitted']),
     under_review: Object.freeze(['under_review']),
     resubmission_required: Object.freeze(['resubmission_required']),
@@ -89,6 +90,7 @@ function readApplicationQuery(body) {
     return {
         searchTerm: readSearchTerm(body.q),
         statuses: APPLICATION_STATUS_FILTERS[statusFilter],
+        isDraft: statusFilter === 'draft',
         isDeleted: statusFilter === 'deleted',
         includeDeleted: statusFilter === 'archive_all',
         submittedAtFrom: fromDate ? istanbulMidnightUtc(fromDate) : null,
@@ -107,6 +109,7 @@ function createQueueItemDto(application) {
         application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
         status: application.status,
         submitted_at: application.submitted_at,
+        created_at: application.created_at,
         updated_at: application.updated_at,
         deletion_state: application.deletion_state ?? null
     };
@@ -176,9 +179,11 @@ function createDocumentDetailDtos(application, storedRequirements) {
             can_unapprove: hasSafeCurrentDocument && requirement.revision_status === 'approved'
                 && requirement.review_status === 'approved'
                 && ['under_review', 'resubmission_required'].includes(application.status),
-            can_request_resubmission: hasFinalizedCurrentDocument
+            can_request_resubmission: (requirement.revision_number == null
+                && (requirement.review_status == null || ['pending', 'under_review'].includes(requirement.review_status))
+                || hasFinalizedCurrentDocument
                 && ['clean', 'unsafe', 'failed'].includes(requirement.scan_status) && requirement.revision_status === 'submitted'
-                && ['pending', 'under_review'].includes(requirement.review_status)
+                && ['pending', 'under_review'].includes(requirement.review_status))
                 && ['under_review', 'resubmission_required'].includes(application.status),
             revision_number: requirement.revision_number ?? null,
             review_status: requirement.review_status ?? null,
@@ -228,6 +233,7 @@ export async function queryStaffApplications(request, environment) {
     const offset = (query.page - 1) * query.pageSize;
     const result = await createD1Repositories(environment.DB).applications.queryStaffApplications({
         statuses: query.statuses,
+        isDraft: query.isDraft,
         isDeleted: query.isDeleted,
         includeDeleted: query.includeDeleted,
         submittedAtFrom: query.submittedAtFrom,

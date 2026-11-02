@@ -159,7 +159,7 @@ test('staff audit manager surfaces a correlated extension bridge failure immedia
     window.close();
 });
 
-test('staff audit manager sends one start request and relies on the controller preflight', async () => {
+test('staff audit manager allows the controller preflight up to thirty seconds', async () => {
     const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
     const { window } = dom;
     const root = window.document.getElementById('audit-root');
@@ -176,7 +176,7 @@ test('staff audit manager sends one start request and relies on the controller p
     root.querySelector('#audit-start').click();
 
     assert.equal(messages[0].payload.action, 'START_YOKSIS_DOCUMENT_AUDIT');
-    assert.equal(timeouts[0], 15_000);
+    assert.equal(timeouts[0], 30_000);
 
     const dispatchResponse = (message, response) => window.dispatchEvent(new window.MessageEvent('message', {
         source: window,
