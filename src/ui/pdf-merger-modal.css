@@ -9,6 +9,21 @@
     box-sizing: border-box;
 }
 .pdf-merger-documents { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.pdf-merger-documents.has-phone-transfer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .72fr); column-gap: 16px; align-items: start; }
+.pdf-merger-documents.has-phone-transfer > :not(.pdf-merger-file-list) { grid-column: 1 / -1; }
+.pdf-merger-documents.has-phone-transfer > div:first-child { grid-column: 1; grid-row: 1 / span 2; display: grid; grid-template-columns: 1fr !important; align-content: start; }
+.pdf-merger-documents.has-phone-transfer .pdf-merger-transfer-sidebar { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--card-border, #e3d4d8); border-radius: 12px; background: var(--card-bg, #faf8f9); }
+.pdf-merger-transfer-sidebar h4 { margin: 0; font-size: 1rem; }
+.pdf-merger-transfer-sidebar > .btn { width: 100%; }
+.pdf-merger-transfer-sidebar .transfer-qr-section { display: grid; min-height: 240px; place-items: center; align-content: center; gap: 8px; padding: 8px; border-radius: 8px; background: #fff; }
+.pdf-merger-transfer-sidebar .transfer-qr canvas { display: block; max-width: 100%; height: auto; }
+.pdf-merger-transfer-sidebar .transfer-countdown { color: var(--text-secondary, #64748b); }
+.pdf-merger-transfer-sidebar > [role="status"] { margin: 0; font-size: .85rem; color: var(--text-secondary, #64748b); }
+.pdf-merger-transfer-sidebar .transfer-instructions { margin: 0; }
+.transfer-connection-actions { font-size: .8rem; }
+.transfer-connection-actions summary { cursor: pointer; color: var(--text-secondary, #64748b); }
+.transfer-connection-actions > * { margin-block-start: 8px; }
+.pdf-merger-documents.has-phone-transfer .pdf-merger-file-list { grid-column: 1 / -1; }
 .pdf-merger-documents > :not(.pdf-merger-file-list) { flex-shrink: 0; }
 .pdf-merger-documents .pdf-merger-file-list {
     display: grid !important;
@@ -45,4 +60,7 @@
     .pdf-merger-modal-card .pdf-merger-body { max-height: calc(92dvh - 150px); }
     .pdf-merger-modal-card .pdf-merger-documents > div:first-child { grid-template-columns: 1fr !important; }
     .pdf-merger-documents .pdf-merger-file-list { grid-template-columns: 1fr; }
+    .pdf-merger-documents.has-phone-transfer { grid-template-columns: 1fr; }
+    .pdf-merger-documents.has-phone-transfer > div:first-child,
+    .pdf-merger-documents.has-phone-transfer .pdf-merger-transfer-sidebar { grid-column: 1; grid-row: auto; }
 }

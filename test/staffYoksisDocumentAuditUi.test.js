@@ -162,3 +162,45 @@ test('staff audit manager surfaces a correlated extension bridge failure immedia
     assert.equal(root.querySelector('#audit-start').disabled, false);
     window.close();
 });
+
+test('staff audit manager allows background readiness checks more than ten seconds', async () => {
+    const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
+    const { window } = dom;
+    const root = window.document.getElementById('audit-root');
+    const messages = [];
+    const timeouts = [];
+    window.setTimeout = (_callback, delay) => {
+        timeouts.push(delay);
+        return timeouts.length;
+    };
+    window.clearTimeout = () => {};
+    window.postMessage = (data) => messages.push(data);
+    initializeYoksisDocumentAuditManager(root);
+    root.querySelector('#audit-confirm').checked = true;
+    root.querySelector('#audit-start').click();
+
+    assert.equal(messages[0].payload.action, 'CHECK_YOKSIS_DOCUMENT_AUDIT');
+    assert.equal(timeouts[0], 30_000);
+
+    const dispatchResponse = (message, response) => window.dispatchEvent(new window.MessageEvent('message', {
+        source: window,
+        origin: window.location.origin,
+        data: {
+            source: 'EXTENSION',
+            type: 'RESPONSE',
+            action: message.payload.action,
+            requestId: message.payload.requestId,
+            response
+        }
+    }));
+    dispatchResponse(messages[0], { ready: true, queueCount: 613, yoksisTabId: 4 });
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(messages[1].payload.action, 'START_YOKSIS_DOCUMENT_AUDIT');
+    dispatchResponse(messages[1], { success: true, yoksisTabId: 4 });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.match(root.querySelector('#audit-status').textContent, /Tarama sürüyor/);
+    dom.window.close();
+});

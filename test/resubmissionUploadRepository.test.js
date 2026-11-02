@@ -386,3 +386,82 @@ function readFinalizeState(database) {
         auditCount: database.prepare(`SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'student.document_resubmitted'`).first().count
     };
 }
+
+test('a requested missing document allows its first upload only with the exact request and student message', () => {
+    const input = { ...validFirstReplacement(), currentRevision: null };
+    assert.deepEqual(evaluateResubmissionEligibility(input), { allowed: true, mode: 'missing_upload' });
+    for (const change of [
+        { hasStudentMessageForDocument: false },
+        { policyIsApplicable: false },
+        { documentRecord: { ...input.documentRecord, reviewStatus: 'pending' } },
+        { application: { ...input.application, status: 'under_review' } }
+    ]) assert.deepEqual(evaluateResubmissionEligibility({ ...input, ...change }), { allowed: false, mode: null });
+});
+
+async function createMissingUploadFixture() {
+    const fixture = await createRepositoryFixture();
+    fixture.database.prepare('DELETE FROM upload_intents WHERE id = ?').bind(CURRENT_INTENT_ID).run();
+    fixture.database.prepare('DELETE FROM document_revision_files WHERE id = ?').bind(CURRENT_FILE_ID).run();
+    fixture.database.prepare('DELETE FROM document_revisions WHERE id = ?').bind(CURRENT_REVISION_ID).run();
+    return fixture;
+}
+
+test('a missing-document upload creates its first real revision and finalizes with scan job and audit', async () => {
+    const { database, repository } = await createMissingUploadFixture();
+    assert.equal(await createReplacementIntent(repository, { expectedCurrentRevisionId: null, mode: 'missing_upload' }), true);
+    const intent = await repository.findIntent(APPLICATION_ID, 'intent-resubmit-next');
+    assert.equal(intent.expected_current_revision_id, null);
+    assert.equal(intent.mode, 'missing_upload');
+    assert.equal(intent.revision_number, 1);
+    assert.equal(await repository.finalizeReplacement(createFinalizeInput({ expectedCurrentRevisionId: null,
+        mode: 'missing_upload', revisionNumber: 1 })), true);
+    assert.deepEqual(readRows(database.prepare('SELECT status, is_current, revision_number FROM document_revisions')), [
+        { status: 'submitted', is_current: 1, revision_number: 1 }
+    ]);
+    assert.equal(database.prepare('SELECT review_status FROM document_records').first().review_status, 'pending');
+    assert.equal(database.prepare('SELECT status FROM upload_intents').first().status, 'completed');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM document_scan_jobs').first().count, 1);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'student.document_resubmitted'").first().count, 1);
+});
+
+test('missing-upload finalize rolls back if its request or application changes after intent creation', async () => {
+    for (const sql of ["UPDATE document_records SET review_status = 'approved'",
+        "UPDATE applications SET status = 'under_review'",
+        'DELETE FROM application_notes']) {
+        const { database, repository } = await createMissingUploadFixture();
+        await createReplacementIntent(repository, { expectedCurrentRevisionId: null, mode: 'missing_upload' });
+        database.prepare(sql).run();
+        const before = readFinalizeState(database);
+        assert.equal(await repository.finalizeReplacement(createFinalizeInput({ expectedCurrentRevisionId: null,
+            mode: 'missing_upload', revisionNumber: 1 })), false);
+        assert.deepEqual(readFinalizeState(database), before);
+    }
+});
+
+test('missing-upload intent retries invalidate abandoned attempts and retain one current revision', async () => {
+    const { database, repository } = await createMissingUploadFixture();
+    const missing = { expectedCurrentRevisionId: null, mode: 'missing_upload' };
+    assert.equal(await createReplacementIntent(repository, missing), true);
+    assert.equal(await createReplacementIntent(repository, { ...missing, intentId: 'intent-newer',
+        revisionId: 'revision-newer', fileId: 'file-newer', storageKey: 'quarantine/newer',
+        idempotencyKey: 'newer' }), true);
+    assert.equal((await repository.findIntent(APPLICATION_ID, 'intent-resubmit-next')).intent_status, 'rejected');
+    assert.equal(database.prepare("SELECT cleanup_status FROM document_revision_files WHERE id = 'file-resubmit-2'").first().cleanup_status, 'pending');
+    assert.equal(await repository.finalizeReplacement(createFinalizeInput({ ...missing, revisionNumber: 1 })), false);
+    assert.equal(await repository.finalizeReplacement(createFinalizeInput({ ...missing,
+        replacementRevisionId: 'revision-newer', replacementFileId: 'file-newer', intentId: 'intent-newer',
+        revisionNumber: 2 })), true);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM document_revisions WHERE is_current = 1').first().count, 1);
+});
+
+test('missing-upload compare-and-swap rejects a revision that became current after eligibility was read', async () => {
+    const { database, repository } = await createMissingUploadFixture();
+    const missing = { expectedCurrentRevisionId: null, mode: 'missing_upload' };
+    await createReplacementIntent(repository, missing);
+    database.prepare(`INSERT INTO document_revisions (id, document_record_id, revision_number, status, is_current, submitted_by_type)
+        VALUES ('concurrent-current', ?, 2, 'submitted', 1, 'student')`).bind(DOCUMENT_RECORD_ID).run();
+    assert.equal(await createReplacementIntent(repository, { ...missing, revisionId: 'stale-new-revision' }), false);
+    const before = readFinalizeState(database);
+    assert.equal(await repository.finalizeReplacement(createFinalizeInput({ ...missing, revisionNumber: 1 })), false);
+    assert.deepEqual(readFinalizeState(database), before);
+});

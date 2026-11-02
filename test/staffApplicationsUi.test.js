@@ -53,7 +53,7 @@ const QUEUE_ITEM = {
     assigned_staff: { staff_id: 'staff-001', display_name: 'Reviewer One' }
 };
 
-for (const scanStatus of ['unsafe', 'failed']) {
+for (const scanStatus of ['unsafe', 'failed', null]) {
     test(`staff can request ${scanStatus} replacement without preview, download or approve actions`, async (context) => {
         const { document, root } = createStaffDom();
         installDocument(context, document);
@@ -61,8 +61,9 @@ for (const scanStatus of ['unsafe', 'failed']) {
         const api = {
             async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
             async readApplicationDetail() { return { application: QUEUE_ITEM, documents: [{
-                code: 'passport', label_key: 'documentPassport', revision_number: 1, revision_status: 'submitted',
-                upload_status: 'finalized', scan_status: scanStatus, access_available: false,
+                code: 'passport', label_key: 'documentPassport', revision_number: scanStatus === null ? null : 1,
+                revision_status: scanStatus === null ? null : 'submitted',
+                upload_status: scanStatus === null ? null : 'finalized', scan_status: scanStatus, access_available: false,
                 can_approve: false, can_request_resubmission: true }] }; },
             async requestDocumentResubmission(...arguments_) { actions.push(arguments_); }
         };
@@ -75,11 +76,15 @@ for (const scanStatus of ['unsafe', 'failed']) {
 
         assert.equal(root.querySelectorAll('[data-action="preview-document"], [data-action="download-document"], [data-action="approve-document"]').length, 0);
         assert.ok(root.querySelector('[data-action="request-document-resubmission"]'));
+        if (scanStatus === null) {
+            assert.equal(root.querySelector('[data-action="request-document-resubmission"]').textContent, 'Belge Yüklemesini İste');
+            assert.match(root.querySelector('.staff-application-document-unavailable').textContent, /yüklenmemiş/i);
+        }
         root.querySelector('[data-action="request-document-resubmission"]').click();
         root.querySelector('textarea').value = 'Yeni açılabilir dosya gönderin.';
         root.querySelector('.staff-resubmission-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
         await new Promise((resolve) => setImmediate(resolve));
-        assert.deepEqual(actions, [['app-001', 'passport', 1, 'Yeni açılabilir dosya gönderin.']]);
+        assert.deepEqual(actions, [['app-001', 'passport', scanStatus === null ? null : 1, 'Yeni açılabilir dosya gönderin.']]);
     });
 }
 
@@ -201,6 +206,42 @@ test('online application queue uses physical search and date filter layout and s
     assert.deepEqual(requests.at(-1), {
         q: 'Ayşe', status: 'under_review', from_date: '2026-10-01', to_date: '2026-10-12', page: 1, page_size: 25
     });
+});
+
+test('draft queue offers verified code reset without a cancellation action', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const draft = { ...QUEUE_ITEM, status: 'draft', submitted_at: null, created_at: '2026-10-01T10:00:00.000Z' };
+    const calls = [];
+    let shownCode = null;
+    document.defaultView.confirm = () => true;
+    document.defaultView.prompt = (_message, value) => { shownCode = value; return value; };
+    const api = {
+        async queryApplications(query) {
+            calls.push(['query', query.status]);
+            return createQueuePayload(query.status === 'draft' ? [draft] : []);
+        },
+        async resetAccessCode(id) {
+            calls.push(['reset', id]);
+            return { reference_number: 'ITU-ABCD-EFGH', access_code: 'CODE-ONLY-ONCE' };
+        },
+        async cancelDraft(id) { calls.push(['cancel', id]); }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('select[name="status"]').value = 'draft';
+    root.querySelector('.staff-applications-filters').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.match(root.textContent, /Taslak/);
+    root.querySelector('[data-action="staff-reset-access-code"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(shownCode, 'CODE-ONLY-ONCE');
+    assert.deepEqual(calls.find((call) => call[0] === 'reset'), ['reset', 'app-001']);
+    assert.equal(root.querySelector('[data-action="cancel-draft"]'), null);
+    assert.equal(calls.some((call) => call[0] === 'cancel'), false);
 });
 
 test('applications manager shows loading, empty, and safe recoverable error states', async (context) => {
@@ -1032,4 +1073,36 @@ test('detail ZIP action starts, cancels and restarts an archive without waiting 
 
     assert.equal(archiveSignals.length, 2);
     assert.equal(archiveSignals[1].aborted, false);
+});
+
+
+test('home reminder opens work hours', (context) => {
+    const { document } = createStaffDom();
+    installDocument(context, document);
+    initWorkspaceNavigation();
+    const reminder = document.querySelector('[data-work-hours-reminder]');
+    assert.match(reminder.textContent, /Çalışma saatlerinizi girdiniz mi/);
+    reminder.querySelector('button').click();
+    assert.equal(document.getElementById('view-work-hours').hidden, false);
+});
+
+
+test('queue shortcut marks an approved application sent to migration', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const calls = [];
+    const item = { ...QUEUE_ITEM, status: 'approved_for_processing' };
+    const api = {
+        async queryApplications() { return createQueuePayload([item]); },
+        async transitionApplication(...args) { calls.push(args); }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    const sendButton = root.querySelector('[data-action="send-to-migration"]');
+    assert.equal(sendButton.textContent, 'Göç İdaresine İletildi Olarak İşaretle');
+    sendButton.click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls, [[item.id, 'sent_to_migration', item.updated_at, null, true]]);
 });

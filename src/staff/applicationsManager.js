@@ -7,6 +7,7 @@ import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloa
 import { createApplicationQueueFilters } from './application-queue-filters.js';
 
 const STATUS_LABELS = Object.freeze({
+    draft: 'Taslak',
     submitted: 'Gönderildi', under_review: 'İncelemede', resubmission_required: 'Yeniden yükleme gerekli',
     approved_for_processing: 'İşleme alınmak üzere onaylandı', sent_to_migration: 'Göç İdaresine gönderildi',
     migration_approved: 'Göç İdaresi onayladı', completed: 'Tamamlandı', cancelled: 'İptal edildi', rejected: 'Reddedildi'
@@ -18,7 +19,7 @@ const DOCUMENT_STATE_LABELS = Object.freeze({
     complete: 'Tamamlandı'
 });
 const STATUS_FILTERS = Object.freeze([
-    ['all', 'Tüm durumlar'], ['new', 'Yeni'], ['under_review', 'İncelemede'],
+    ['all', 'Tüm durumlar'], ['draft', 'Taslaklar'], ['new', 'Yeni'], ['under_review', 'İncelemede'],
     ['resubmission_required', 'Yeniden yükleme gerekli'], ['approved', 'Onaylandı'],
     ['migration', 'Göç İdaresi'], ['completed', 'Tamamlanan'], ['terminal', 'Terminal']
 ]);
@@ -105,7 +106,7 @@ function createSearchForm(document, state, onSubmit) {
     });
 }
 
-function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId) {
+function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess) {
     const table = document.createElement('table');
     table.className = 'staff-applications-table';
     const headers = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
@@ -121,7 +122,7 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
             [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
             item.application_type === 'transition' ? 'Geçiş başvurusu' : item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru',
             readStatusLabel(item.status),
-            formatDate(item.submitted_at),
+            formatDate(item.submitted_at || item.created_at),
             formatDate(item.updated_at)
         ];
         values.forEach((value, index) => {
@@ -131,27 +132,46 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
         });
         const actionCell = document.createElement('td');
         actionCell.dataset.label = 'Detay';
-        const action = document.createElement('button');
-        action.type = 'button';
-        action.className = 'btn btn-outline';
-        action.dataset.action = 'open-detail';
-        action.textContent = 'Detay';
-        action.addEventListener('click', () => onOpenDetail(item.id));
-        const download = document.createElement('button');
-        download.type = 'button';
-        download.className = 'btn btn-outline';
-        download.dataset.action = 'download-application-archive';
-        download.textContent = archiveApplicationId === item.id ? 'İptal' : 'İndir';
-        download.setAttribute('aria-label', archiveApplicationId === item.id ? 'ZIP indirmeyi iptal et' : 'Virüs taramasından geçmiş belgeleri ZIP olarak indir');
-        download.addEventListener('click', () => onDownloadArchive(item.id));
-        const archive = document.createElement('button');
-        archive.type = 'button';
-        archive.className = 'btn btn-outline';
-        archive.dataset.action = 'archive-application';
-        archive.textContent = 'Sil';
-        archive.setAttribute('aria-label', `${item.student_number} başvurusunu Silinen arşivine taşı`);
-        archive.addEventListener('click', () => onArchiveApplication(item.id));
-        actionCell.append(action, download, archive);
+        if (item.status === 'draft') {
+            const reset = document.createElement('button');
+            reset.type = 'button';
+            reset.className = 'btn btn-outline';
+            reset.dataset.action = 'staff-reset-access-code';
+            reset.textContent = 'Devam kodunu yenile';
+            reset.addEventListener('click', () => onResetDraftAccess(item.id));
+            actionCell.append(reset);
+        } else {
+            const action = document.createElement('button');
+            action.type = 'button';
+            action.className = 'btn btn-outline';
+            action.dataset.action = 'open-detail';
+            action.textContent = 'Detay';
+            action.addEventListener('click', () => onOpenDetail(item.id));
+            const download = document.createElement('button');
+            download.type = 'button';
+            download.className = 'btn btn-outline';
+            download.dataset.action = 'download-application-archive';
+            download.textContent = archiveApplicationId === item.id ? 'İptal' : 'İndir';
+            download.setAttribute('aria-label', archiveApplicationId === item.id ? 'ZIP indirmeyi iptal et' : 'Virüs taramasından geçmiş belgeleri ZIP olarak indir');
+            download.addEventListener('click', () => onDownloadArchive(item.id));
+            const archive = document.createElement('button');
+            archive.type = 'button';
+            archive.className = 'btn btn-outline';
+            archive.dataset.action = 'archive-application';
+            archive.textContent = 'Sil';
+            archive.setAttribute('aria-label', `${item.student_number} başvurusunu Silinen arşivine taşı`);
+            archive.addEventListener('click', () => onArchiveApplication(item.id));
+            actionCell.append(action, download, archive);
+        }
+        if (['submitted', 'under_review', 'resubmission_required', 'approved_for_processing'].includes(item.status)) {
+            const send = document.createElement('button');
+            send.type = 'button';
+            send.className = 'btn btn-outline';
+            send.dataset.action = 'send-to-migration';
+            send.textContent = 'Göç İdaresine İletildi Olarak İşaretle';
+            send.addEventListener('click', () => onSendToMigration(item));
+            actionCell.append(send);
+        }
         row.append(actionCell);
         body.append(row);
     });
@@ -253,9 +273,15 @@ function renderQueue(root, state, handlers) {
         panel.append(createQueueError(document, state, handlers.onRetry));
     } else if (state.result?.items.length === 0) {
         panel.append(createText(document, 'p', 'staff-applications-state', 'Görüntülenecek başvuru bulunamadı.'));
+        if (state.archiveMessage || state.archiveError) {
+            const message = createText(document, 'p', 'staff-applications-state', state.archiveError || state.archiveMessage);
+            message.setAttribute('role', state.archiveError ? 'alert' : 'status');
+            panel.append(message);
+        }
     } else if (state.result) {
         panel.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
-            handlers.onDownloadArchive, handlers.onArchiveApplication, state.archiveApplicationId));
+            handlers.onDownloadArchive, handlers.onArchiveApplication, state.archiveApplicationId, handlers.onSendToMigration,
+            handlers.onResetDraftAccess));
         if (state.archiveMessage) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveMessage));
         if (state.archiveError) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveError));
         if (state.archiveMessage || state.archiveError) {
@@ -342,7 +368,7 @@ function createResubmissionButton(document, item, options) {
     request.className = 'btn btn-outline';
     request.dataset.action = 'request-document-resubmission';
     request.disabled = options.isPending;
-    request.textContent = 'Yeniden Yükleme İste';
+    request.textContent = item.revision_number == null ? 'Belge Yüklemesini İste' : 'Yeniden Yükleme İste';
     request.addEventListener('click', () => options.handlers.onOpenResubmission(item));
     return request;
 }
@@ -412,13 +438,15 @@ function createDocumentAccessActions(document, item, options) {
 }
 
 function createUnavailableDocumentState(document, item) {
-    return createText(document, 'p', 'staff-application-document-unavailable', readDocumentAccessMessage(item));
+    return createText(document, 'p', 'staff-application-document-unavailable', item.revision_number == null
+        ? item.review_status === 'resubmission_required' ? 'Öğrenciden belge yüklemesi bekleniyor.' : 'Belge henüz yüklenmemiş.'
+        : readDocumentAccessMessage(item));
 }
 
 function createResubmissionForm(document, item, state, handlers) {
     if (state.resubmissionDocument?.code !== item.code) return null;
     const form = document.createElement('form');
-    const label = createText(document, 'label', '', `Yeniden yükleme nedeni: ${PUBLIC_MESSAGES.tr[item.label_key] || item.code}`);
+    const label = createText(document, 'label', '', `${item.revision_number == null ? 'Belge talebi' : 'Yeniden yükleme'} nedeni: ${PUBLIC_MESSAGES.tr[item.label_key] || item.code}`);
     const reason = document.createElement('textarea');
     const cancel = document.createElement('button');
     const submit = document.createElement('button');
@@ -800,6 +828,9 @@ function createStaffApplicationsApi() {
         archiveApplication(applicationId) {
             return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/archive`, {});
         },
+        resetAccessCode(applicationId) {
+            return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/reset-access-code`, {});
+        },
         readArchiveFile(applicationId, file, signal) {
             const query = new URLSearchParams({
                 revision: String(file.expected_revision_number), identity: file.object_identity
@@ -829,9 +860,10 @@ function createStaffApplicationsApi() {
                 expected_revision_number: revisionNumber, reason
             });
         },
-        transitionApplication(applicationId, targetStatus, updatedAt, rejectionReason = null) {
+        transitionApplication(applicationId, targetStatus, updatedAt, rejectionReason = null, directTransfer = false) {
             return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/status`, {
                 target_status: targetStatus, expected_updated_at: updatedAt,
+                ...(directTransfer ? { direct_transfer: true } : {}),
                 ...(targetStatus === 'rejected' ? { rejection_reason: rejectionReason } : {})
             });
         }
@@ -904,7 +936,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         else renderQueue(root, state, {
             onSearch: submitSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,
             onDownloadArchive: downloadArchive, onArchiveApplication: archiveApplication,
-            onDismissToast: dismissToast
+            onResetDraftAccess: resetDraftAccess,
+            onSendToMigration: sendToMigration, onDismissToast: dismissToast
         });
         root.dataset.staffView = state.view;
         try {
@@ -1191,6 +1224,31 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             await loadQueue();
         }
     }
+    async function resetDraftAccess(applicationId) {
+        if (state.actionPending || typeof api.resetAccessCode !== 'function') return;
+        const confirmed = document.defaultView.confirm(
+            'Öğrencinin resmi kimliğini ve öğrenci kaydını doğruladınız mı? Devam kodu yalnız doğrulanmış öğrenciye iletilmelidir.'
+        );
+        if (!confirmed) return;
+        state.actionPending = `reset:${applicationId}`;
+        state.archiveError = null;
+        state.archiveMessage = null;
+        render();
+        try {
+            const credentials = await api.resetAccessCode(applicationId);
+            document.defaultView.prompt(
+                `Başvuru numarası: ${credentials.reference_number}\nYeni devam kodunu doğrulanmış öğrenciye güvenli kanaldan iletin.`,
+                credentials.access_code
+            );
+            state.archiveMessage = 'Devam kodu yenilendi. Başvuru numarasını ve yeni kodu öğrenciye iletin.';
+        } catch (error) {
+            console.error('Draft access reset failed.', { errorName: error.name });
+            state.archiveError = 'Devam kodu yenilenemedi. Listeyi yenileyip başvurunun durumunu kontrol edin.';
+        } finally {
+            state.actionPending = null;
+            await loadQueue();
+        }
+    }
     async function submitSearch({ q, status, from_date, to_date }) {
         if (state.actionPending) return;
         state.query = { ...state.query, q, status, from_date, to_date, page: 1 };
@@ -1368,6 +1426,24 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         return completeAction(`resubmission:${item.code}`, () => api.requestDocumentResubmission(
             state.detail.application.id, item.code, item.revision_number, reason
         ));
+    }
+    async function sendToMigration(item) {
+        if (state.actionPending) return;
+        state.actionPending = 'send-to-migration';
+        state.archiveError = null;
+        state.archiveMessage = null;
+        render();
+        try {
+            await api.transitionApplication(item.id, 'sent_to_migration', item.updated_at, null, true);
+            state.archiveMessage = 'Başvuru Göç İdaresine iletildi olarak işaretlendi.';
+            state.actionPending = null;
+            await loadQueue();
+        } catch (error) {
+            state.archiveError = error?.message || 'Başvuru durumu güncellenemedi.';
+        } finally {
+            state.actionPending = null;
+            render();
+        }
     }
     function transitionApplication(targetStatus, rejectionReason = null) {
         if (targetStatus !== 'rejected') {

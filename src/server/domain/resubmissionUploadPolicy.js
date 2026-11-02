@@ -33,10 +33,13 @@ function isUnsafeScanRetry(input) {
 /**
  * Evaluates the persisted facts required for an initial replacement or unsafe-scan retry.
  * @param {object} input Server-loaded application, record, revision, file, policy, and note facts.
- * @returns {{allowed: boolean, mode: 'first_replacement'|'unsafe_scan_retry'|null}} Eligibility hint.
+ * @returns {{allowed: boolean, mode: 'missing_upload'|'first_replacement'|'unsafe_scan_retry'|null}} Eligibility hint.
  */
 export function evaluateResubmissionEligibility(input) {
     if (!hasCompatibleRecord(input)) return { allowed: false, mode: null };
+    if (input.currentRevision === null && input.documentRecord.reviewStatus === 'resubmission_required') {
+        return { allowed: true, mode: 'missing_upload' };
+    }
     if (isFirstReplacement(input)) return { allowed: true, mode: 'first_replacement' };
     if (isUnsafeScanRetry(input)) return { allowed: true, mode: 'unsafe_scan_retry' };
     return { allowed: false, mode: null };

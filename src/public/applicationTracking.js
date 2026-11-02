@@ -134,7 +134,7 @@ function createApplicationSummary(document, application, messages, locale) {
     return section;
 }
 
-function createDocumentList(document, documents, messages, allowFilename, replacementDocuments, onReplacementComplete, onSessionFailure, replacementCompleted) {
+function createDocumentList(document, documents, messages, allowFilename, replacementDocuments, onReplacementComplete, onSessionFailure, replacementCompleted, showOwnerAccessLink) {
     const section = document.createElement('section');
     const list = document.createElement('ul');
     section.className = 'tracking-documents-section';
@@ -153,6 +153,12 @@ function createDocumentList(document, documents, messages, allowFilename, replac
             card.append(
                 createTextElement(document, 'strong', 'tracking-document-message-label', messages.trackingDocumentMessageLabel),
                 createTextElement(document, 'p', 'tracking-document-message', item.student_message)
+            );
+        }
+        if (showOwnerAccessLink && item.status === 'resubmission_required') {
+            card.append(
+                createTextElement(document, 'p', 'tracking-owner-access-note', messages.trackingOwnerAccess),
+                createLink(document, '/basvuruya-devam-et/', messages.trackingOwnerAccessLink, 'tracking-owner-access-link')
             );
         }
         const replacementInfo = replacementCompleted?.[item.code];
@@ -217,7 +223,8 @@ function renderTracking(root, state, locale, submitLookup) {
     }
     const summary = createApplicationSummary(document, state.payload.application, messages, locale);
     const documentList = createDocumentList(document, state.payload.documents, messages, state.kind === 'ready',
-        state.replacementDocuments, state.onReplacementComplete, state.onSessionFailure, state.replacementCompleted);
+        state.replacementDocuments, state.onReplacementComplete, state.onSessionFailure, state.replacementCompleted,
+        state.kind === 'publicReady');
     if (state.replacementSuccess) {
         const successNotice = document.createElement('div');
         successNotice.className = 'tracking-success-banner';

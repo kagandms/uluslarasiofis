@@ -18,7 +18,6 @@ import { initializeStaffApplicationsManager } from './applicationsManager.js';
 import { initializeStaffArchiveManager } from './archiveManager.js';
 import { initDocumentsManager } from '../ui/documents-manager.js';
 import { initLiveClock } from '../ui/liveClock.js';
-import { openStaffGuideModal } from '../ui/staffGuideModal.js';
 import { initializeStaffPrintStatus } from './print-status.js';
 import { initializeConnectivityStatus } from './connectivity-status.js';
 import { initD1UsageCounter } from '../ui/d1-usage-counter.js';
@@ -143,19 +142,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
 
-    // --- Header Tools: Staff Guide ---
-    const btnStaffGuide = document.getElementById('btn-staff-guide');
-    if (btnStaffGuide) {
-        btnStaffGuide.addEventListener('click', () => {
-            try {
-                openStaffGuideModal();
-            } catch (err) {
-                console.error('Staff guide modal error:', err);
-                showToast('Rehber açılamadı.', 'error');
-            }
-        });
-    }
-    
     try { initDraftAutoSave(); } catch (e) { console.error('initDraftAutoSave error:', e); }
     try { setActiveStep(STEP_IDS.UPLOAD); } catch (e) { console.error('setActiveStep error:', e); }
     try { renderStudentForms([{}]); } catch (e) { console.error('renderStudentForms error:', e); }

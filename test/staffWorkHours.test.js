@@ -76,7 +76,7 @@ test('work hours accept boundaries and half-hour values and update the same pers
     assert.equal(rows[0].minutes, 1440);
 });
 
-test('work hours reject invalid values, unknown people, weekends and cross-origin writes', async () => {
+test('work hours reject invalid values, unknown people and cross-origin writes', async () => {
     for (const body of [
         { person: 'unknown', minutes: 30 },
         { person: 'asaf', minutes: -30 },
@@ -93,15 +93,6 @@ test('work hours reject invalid values, unknown people, weekends and cross-origi
     }), environment, {});
     assert.equal(crossOrigin.status, 403);
 
-    for (const weekendDay of ['2026-10-24T10:00:00.000Z', '2026-10-25T10:00:00.000Z']) {
-        const response = await withFixedDate(weekendDay, async () => {
-            const { environment: weekendEnvironment } = await createFixture();
-            return worker.fetch(createRequest('/api/staff/work-hours', {
-                method: 'POST', body: { person: 'asaf', minutes: 30 }
-            }), weekendEnvironment, {});
-        });
-        assert.equal(response.status, 409);
-    }
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM staff_work_hours').first().count, 0);
 });
 
@@ -111,4 +102,15 @@ test('work hours reject invalid selected dates before querying history', async (
         const response = await worker.fetch(createRequest(`/api/staff/work-hours?date=${date}`), environment, {});
         assert.equal(response.status, 400);
     }
+});
+
+test('zero hours can be saved for a weekend day', async () => {
+    await withFixedDate('2026-10-24T10:00:00.000Z', async () => {
+        const { database, environment } = await createFixture();
+        const response = await worker.fetch(createRequest('/api/staff/work-hours', {
+            method: 'POST', body: { person: 'asaf', minutes: 0 }
+        }), environment, {});
+        assert.equal(response.status, 200);
+        assert.equal(database.prepare("SELECT minutes FROM staff_work_hours WHERE staff_key='asaf'").first().minutes, 0);
+    });
 });

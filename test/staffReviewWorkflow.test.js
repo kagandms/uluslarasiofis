@@ -147,6 +147,26 @@ test('staff identity-check detail includes the stable reference without exposing
     }, { foreignId: null, cardSerial: null, cardNumber: null, contactPreference: null, changeProvince: null });
 });
 
+test('staff can find drafts without a cancellation route', async () => {
+    const { environment, database } = createEnvironment();
+    const applicationId = await seedApplication(database, { studentNumber: 'STUDENT-ABANDONED', status: 'draft' });
+    const staffCookie = await seedStaff(environment, database);
+
+    const query = await worker.fetch(request('/api/staff/applications/query', {
+        method: 'POST', cookie: staffCookie, body: { q: 'STUDENT-ABANDONED', status: 'draft' }
+    }), environment);
+    assert.equal(query.status, 200);
+    assert.equal((await query.json()).items[0].id, applicationId);
+
+    const cancellation = await worker.fetch(request(`/api/staff/applications/${applicationId}/cancel-draft`, {
+        method: 'POST', cookie: staffCookie, body: {}
+    }), environment);
+    assert.equal(cancellation.status, 404);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id=?').bind(applicationId).first().status, 'draft');
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE application_id=? AND event_type='staff.application_draft_cancelled'")
+        .bind(applicationId).first().count, 0);
+});
+
 test('staff starts review explicitly and application status updates use optimistic concurrency', async () => {
     const { environment, database } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'submitted' });
@@ -1036,4 +1056,86 @@ test('failed rejection audit rolls back the terminal status and student-visible 
         .bind(applicationId).first().count, 0);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_events WHERE application_id = ?')
         .bind(applicationId).first().count, 0);
+});
+
+test('explicit migration shortcut updates an in-review application with an audit record', async () => {
+    const { database, environment } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+    const id = await seedApplication(database, { status: 'under_review' });
+    const application = await database.prepare('SELECT updated_at FROM applications WHERE id=?').bind(id).first();
+    const response = await worker.fetch(request(`/api/staff/applications/${id}/status`, { method: 'POST', cookie,
+        body: { target_status: 'sent_to_migration', expected_updated_at: application.updated_at, direct_transfer: true } }), environment, {});
+    assert.equal(response.status, 200);
+    assert.equal((await database.prepare('SELECT status FROM applications WHERE id=?').bind(id).first()).status, 'sent_to_migration');
+    assert.equal((await database.prepare("SELECT count(*) AS total FROM audit_events WHERE application_id=? AND event_type='staff.application_status_changed'").bind(id).first()).total, 1);
+});
+
+for (const existingRecord of [false, true, 'superseded']) {
+    test(`staff requests never-uploaded insurance with existing record=${existingRecord} and owner sees upload request`, async () => {
+        const { database, environment } = createEnvironment();
+        const applicationId = await seedApplication(database);
+        database.prepare("UPDATE applications SET insurance_basis = 'bilateral_agreement' WHERE id = ?").bind(applicationId).run();
+        const cookie = await seedStaff(environment, database);
+        const ownerCookie = await seedOwnerSession(database, applicationId, 'missing-insurance-owner-token-000000000000');
+        if (existingRecord) {
+            database.prepare(`INSERT INTO document_records (id, application_id, requirement_id, application_type)
+                VALUES ('missing-insurance', ?, 'req-initial-health-insurance', 'initial')`).bind(applicationId).run();
+        }
+        if (existingRecord === 'superseded') {
+            database.prepare(`INSERT INTO document_revisions (id, document_record_id, revision_number, status, is_current, submitted_by_type)
+                VALUES ('old-abandoned', 'missing-insurance', 1, 'superseded', 0, 'student')`).run();
+        }
+        const detail = await (await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment)).json();
+        const insurance = detail.documents.find((item) => item.code === 'health_insurance');
+        assert.equal(insurance.can_request_resubmission, true);
+        assert.equal(insurance.can_approve, false);
+        assert.equal(insurance.access_available, false);
+        const path = `/api/staff/applications/${applicationId}/documents/health_insurance/request-resubmission`;
+        const body = { expected_revision_number: null, reason: 'Lütfen sağlık sigortanızı yükleyin.' };
+        const response = await worker.fetch(request(path, { method: 'POST', cookie, body }), environment);
+        assert.equal(response.status, 200, JSON.stringify(await response.json()));
+        const tracking = await (await worker.fetch(request('/api/public/applications/current/tracking', { cookie: ownerCookie }), environment)).json();
+        const document = tracking.documents.find((item) => item.code === 'health_insurance');
+        assert.equal(tracking.application.status, 'resubmission_required');
+        assert.equal(document.status, 'resubmission_required');
+        assert.equal(document.student_message, body.reason);
+        assert.equal(document.revision_number, null);
+        assert.equal(database.prepare('SELECT COUNT(*) AS total FROM document_revisions').first().total, existingRecord === 'superseded' ? 1 : 0);
+        assert.equal(database.prepare('SELECT COUNT(*) AS total FROM audit_events WHERE application_id = ?').bind(applicationId).first().total, 1);
+        const repeat = await worker.fetch(request(path, { method: 'POST', cookie, body }), environment);
+        assert.equal(repeat.status, 409);
+        const eligibility = await (await worker.fetch(request('/api/public/applications/current/documents/resubmission-eligibility', { cookie: ownerCookie }), environment)).json();
+        assert.ok(eligibility.documents.some((item) => item.code === 'health_insurance'));
+    });
+}
+
+test('missing-document request cannot bypass an uploaded revision or terminal application', async () => {
+    const { database, environment } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+    const applicationId = await seedApplication(database);
+    database.prepare("UPDATE applications SET insurance_basis = 'bilateral_agreement' WHERE id = ?").bind(applicationId).run();
+    await seedReviewableDocument(database, applicationId, 'health_insurance');
+    const path = `/api/staff/applications/${applicationId}/documents/health_insurance/request-resubmission`;
+    const body = { expected_revision_number: null, reason: 'Lütfen sigorta yükleyin.' };
+    assert.equal((await worker.fetch(request(path, { method: 'POST', cookie, body }), environment)).status, 409);
+    database.prepare("UPDATE applications SET status = 'completed' WHERE id = ?").bind(applicationId).run();
+    const missingPath = `/api/staff/applications/${applicationId}/documents/passport/request-resubmission`;
+    assert.equal((await worker.fetch(request(missingPath, { method: 'POST', cookie, body }), environment)).status, 409);
+    assert.equal(database.prepare('SELECT COUNT(*) AS total FROM application_notes').first().total, 0);
+});
+
+test('missing-document audit failure rolls back the new record, reason and application status', async () => {
+    const { database, environment } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+    const applicationId = await seedApplication(database);
+    database.exec(`CREATE TRIGGER reject_missing_audit BEFORE INSERT ON audit_events
+        WHEN NEW.event_type = 'staff.document_resubmission_requested'
+        BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;`);
+    const response = await worker.fetch(request(`/api/staff/applications/${applicationId}/documents/passport/request-resubmission`, {
+        method: 'POST', cookie, body: { expected_revision_number: null, reason: 'Lütfen pasaport yükleyin.' }
+    }), environment);
+    assert.equal(response.status, 500);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status, 'under_review');
+    assert.equal(database.prepare('SELECT COUNT(*) AS total FROM document_records').first().total, 0);
+    assert.equal(database.prepare('SELECT COUNT(*) AS total FROM application_notes').first().total, 0);
 });
