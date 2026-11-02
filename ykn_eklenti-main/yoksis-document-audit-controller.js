@@ -35,6 +35,11 @@
 
     function waitForNextPaint(rootDocument) {
         const view = rootDocument.defaultView;
+        // Background tabs pause animation frames; queue traversal must still yield and advance.
+        if (rootDocument.visibilityState === 'hidden') {
+            if (typeof view?.scheduler?.postTask === 'function') return view.scheduler.postTask(() => {});
+            return new Promise((resolve) => view.setTimeout(resolve, 0));
+        }
         if (typeof view?.requestAnimationFrame === 'function') {
             return new Promise((resolve) => view.requestAnimationFrame(() => resolve()));
         }
