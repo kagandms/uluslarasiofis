@@ -116,7 +116,7 @@ export function initializeYoksisDocumentAuditManager(root) {
         setText(root, '#audit-progress', '');
         updateControls();
 
-        const readiness = await requestExtension('CHECK_YOKSIS_DOCUMENT_AUDIT', { scanId: state.scanId });
+        const readiness = await requestExtension('CHECK_YOKSIS_DOCUMENT_AUDIT', { scanId: state.scanId }, 30_000);
         if (readiness.response?.ready !== true || !Number.isInteger(readiness.response.yoksisTabId)) {
             state.busy = false;
             setText(root, '#audit-status', readiness.response?.error || 'Açık YÖKSİS sekmesinde doğrulanabilir kayıt listesi bulunamadı.');
