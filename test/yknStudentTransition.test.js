@@ -76,6 +76,18 @@ test('current manual YÖKSİS search response is accepted', () => {
     assert.equal(isCurrent, true);
 });
 
+test('current manual YÖKSİS search response is accepted even when activeRequestId moved to a later step', () => {
+    const isCurrent = isCurrentYknTransferResponse({
+        responseRequestId: 'transfer-2',
+        activeRequestId: 'copy-3',
+        activeTransferRequestId: 'transfer-2',
+        workflow: null,
+        currentStudentRequestId: 'student-request-2'
+    });
+
+    assert.equal(isCurrent, true);
+});
+
 test('student event handlers reset context on transition and preserve it for the same request', async () => {
     const manager = await readFile(resolve(projectRoot, 'src/managers/yknManager.js'), 'utf8');
     const studentFoundStart = manager.indexOf("event.data.action === 'STUDENT_FOUND'");

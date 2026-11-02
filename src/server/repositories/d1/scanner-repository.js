@@ -149,7 +149,8 @@ async function recordHeartbeat(database, input) {
 /** @param {D1Database} database Binding. @returns {Promise<object>} Counts and safe health metadata. */
 async function readStatus(database) {
     const [counts, runners, latest, failures] = await Promise.all([
-        database.prepare('SELECT status,count(*) AS count FROM document_scan_jobs GROUP BY status').all(),
+        database.prepare(`SELECT status,job_count AS count FROM document_scan_job_status_counts
+            WHERE job_count > 0 ORDER BY status`).all(),
         database.prepare('SELECT * FROM scanner_heartbeats ORDER BY seen_at DESC LIMIT 10').all(),
         database.prepare("SELECT max(scanned_at) AS last_successful_scan FROM document_scan_jobs WHERE outcome='clean'").first(),
         database.prepare("SELECT id,attempts,result_code,updated_at FROM document_scan_jobs WHERE status='failed' ORDER BY updated_at DESC LIMIT 20").all()

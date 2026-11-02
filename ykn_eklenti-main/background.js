@@ -111,7 +111,16 @@ function clearTemporaryStudentData() {
     });
 }
 
+function clearStaleSessionOperationLocks() {
+    const sessionStorage = chrome.storage?.session;
+    if (!sessionStorage?.remove) return Promise.resolve();
+    return new Promise((resolve) => {
+        sessionStorage.remove('activeYoksisOperations', () => resolve());
+    });
+}
+
 function cleanupExpiredTemporaryStudentData() {
+    void clearStaleSessionOperationLocks();
     chrome.storage.local.get([...TEMPORARY_STUDENT_DATA_KEYS, TEMPORARY_STORAGE_TIMESTAMP_KEY], (snapshot) => {
         const plan = temporaryStorage?.getCleanupPlan(snapshot || {});
         if (!plan) return;
@@ -144,7 +153,10 @@ function runYoksisOperation(tabId, operation, requestId, task) {
 
     const queueKey = String(tabId);
     const previous = yoksisOperationQueues.get(queueKey) || Promise.resolve();
-    const current = previous.catch(() => {}).then(task);
+    const current = previous.catch(() => {}).then(async () => {
+        await clearStaleSessionOperationLocks();
+        return task();
+    });
     yoksisOperationQueues.set(queueKey, current);
     yoksisOperationResults.set(key, current);
 
@@ -177,6 +189,21 @@ function sendTabMessage(tabId, message, options = {}) {
             chrome.tabs.sendMessage(tabId, message, callback);
         }
     });
+}
+
+async function sendYoksisAuditCheck(tabId, scanId) {
+    const message = { action: 'YOKSIS_DOCUMENT_AUDIT_CHECK', scanId };
+    try {
+        return await sendTabMessage(tabId, message, { frameId: 0 });
+    } catch (initialError) {
+        if (!chrome.scripting?.executeScript) throw initialError;
+
+        await chrome.scripting.executeScript({
+            target: { tabId, frameIds: [0] },
+            files: ['yoksis-document-audit.js', 'yoksis-document-audit-controller.js']
+        });
+        return sendTabMessage(tabId, message, { frameId: 0 });
+    }
 }
 
 function updateTab(tabId, updateProperties) {
@@ -1607,20 +1634,23 @@ async function verifyTransferredYoksisFields(context) {
 }
 
 async function completeMissingYoksisFields(context, mainResponse) {
-    if (mainResponse.error) return { ...mergeYoksisFillResponses(mainResponse, null, context.studentData), success: false, partial: true };
+    if (mainResponse.error && (!mainResponse.filledFields || mainResponse.filledFields.length === 0)) {
+        return { ...mergeYoksisFillResponses(mainResponse, null, context.studentData), success: false, partial: true };
+    }
     const combined = mergeYoksisFillResponses(mainResponse, null, context.studentData);
     if (!combined.partial) return combined;
     const fallbackStartedAt = startYknTiming();
     const fieldData = { ...context.studentData, ...(mainResponse.photoUploaded ? { croppedPhotoBase64: '', photoBase64: '' } : {}) };
     try {
         const fallback = await sendTabMessage(context.tabId, {
-            action: 'fillRemainingData', data: fieldData, requestId: context.requestId
+            action: 'fillRemainingData', data: fieldData, requestId: context.requestId,
+            missingFields: combined.missingFields
         }, { frameId: 0 });
         const verification = await verifyTransferredYoksisFields(context);
         const verified = buildVerifiedFillResponse({ ...mainResponse, photoUploaded: mainResponse.photoUploaded || fallback?.photoUploaded === true }, verification, context.studentData);
         const result = mergeYoksisFillResponses(verified, null, context.studentData);
         finishYknTiming('content-script-fill-fallback', fallbackStartedAt, result.partial ? 'partial' : 'ok');
-        return verification?.error ? { ...result, success: false, partial: true } : result;
+        return verification?.error && (!result.filledFields || result.filledFields.length === 0) ? { ...result, success: false, partial: true } : result;
     } catch (error) {
         finishYknTiming('content-script-fill-fallback', fallbackStartedAt, 'failed', 'content_fallback_unavailable');
         console.warn('YÖKSİS remaining field transfer failed.', { errorName: error.name });
@@ -1634,7 +1664,9 @@ async function transferYoksisFieldsAndPhoto(context) {
         phase: 'fields', requestId: context.requestId
     });
     const settled = await verifyTransferredYoksisFields(context);
-    if (settled?.error) return { ...buildVerifiedFillResponse(mainResponse, settled, context.studentData), success: false, partial: true };
+    if (settled?.error && (!settled.filledFields || settled.filledFields.length === 0)) {
+        return { ...buildVerifiedFillResponse(mainResponse, settled, context.studentData), success: false, partial: true };
+    }
     let photoResponse = null;
     if (context.studentData.croppedPhotoBase64) {
         photoResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, {
@@ -1679,12 +1711,16 @@ async function checkManualYoksisFill(context) {
 }
 
 async function fillBoundYoksisStudent(studentData, requestId, options = {}) {
-    const isManualOverride = options.manualOverrideConfirmed === true
-        && studentData.yoksisManualOverrideAvailable === true;
+    const isManualOverride = options.manualOverrideConfirmed === true;
     if (studentData.yoksisReady !== true && !isManualOverride) {
         throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
     }
-    const tab = await resolveExpectedYoksisTab(studentData.yoksisTabId, studentData.yoksisTabUrl);
+    const hasBoundTab = Number.isInteger(studentData.yoksisTabId)
+        && typeof studentData.yoksisTabUrl === 'string'
+        && Boolean(studentData.yoksisTabUrl);
+    const tab = (!hasBoundTab && isManualOverride)
+        ? await resolveYoksisTab()
+        : await resolveExpectedYoksisTab(studentData.yoksisTabId, studentData.yoksisTabUrl);
     await updateTab(tab.id, { active: true });
     if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true }).catch(error => {
         console.warn('YÖKSİS window focus failed.', { errorName: error.name });
@@ -1964,7 +2000,11 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                     }
                     finishYknTiming('acceptance-id-input-and-search', fallbackStartedAt, 'failed', 'main_search_not_dispatched', request.requestId);
                 }
-                if (waitOptions.lastErrorMessage) {
+                const delayedManualOverride = waitOptions.manualOverrideAvailable === true;
+                if (delayedManualOverride) {
+                    response = { ...response, manualOverrideAvailable: true };
+                }
+                if (waitOptions.lastErrorMessage && (!delayedManualOverride || waitOptions.lastErrorMessage.startsWith('YÖKSİS:'))) {
                     throw new Error(waitOptions.lastErrorMessage);
                 }
             }
@@ -2118,10 +2158,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         return;
                     }
 
-                    const readiness = await sendTabMessage(targetTab.yoksisTabId, {
-                        action: 'YOKSIS_DOCUMENT_AUDIT_CHECK',
-                        scanId: request.scanId
-                    }, { frameId: 0 });
+                    const readiness = await sendYoksisAuditCheck(targetTab.yoksisTabId, request.scanId);
                     if (request.action === 'CHECK_YOKSIS_DOCUMENT_AUDIT') {
                         sendResponse({ ...readiness, yoksisTabId: targetTab.yoksisTabId });
                         return;

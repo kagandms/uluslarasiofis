@@ -39,14 +39,15 @@ function getElements() {
     };
 }
 
-function updateSourceSelector(sources, selectedUrl) {
+export function updateCropperSources(sources, selectedUrl) {
     const { sourceSelectorWrapper, sourceSelector } = getElements();
     cropSources = Array.isArray(sources) ? [...sources] : [];
     if (!sourceSelectorWrapper || !sourceSelector) return;
 
+    const effectiveSelectedUrl = selectedUrl || sourceSelector.value || '';
     sourceSelector.replaceChildren();
-    if (selectedUrl && !cropSources.some((source) => source.url === selectedUrl)) {
-        cropSources.unshift({ url: selectedUrl, label: 'Mevcut pasaport görseli', type: 'passport' });
+    if (effectiveSelectedUrl && !cropSources.some((source) => source.url === effectiveSelectedUrl)) {
+        cropSources.unshift({ url: effectiveSelectedUrl, label: 'Mevcut pasaport görseli', type: 'passport' });
     }
 
     cropSources.forEach((source) => {
@@ -63,7 +64,7 @@ function updateSourceSelector(sources, selectedUrl) {
         option.selected = true;
         sourceSelector.append(option);
     }
-    sourceSelector.value = selectedUrl || cropSources[0]?.url || '';
+    sourceSelector.value = effectiveSelectedUrl || cropSources[0]?.url || '';
     sourceSelectorWrapper.style.display = 'block';
     sourceSelector.disabled = cropSources.length === 0;
 }
@@ -264,7 +265,14 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
     }
 
     currentStudentInfo = { name: studentName, passport: passportNo };
-    updateSourceSelector(sources, selectedSourceUrl);
+    const effectiveSources = Array.isArray(sources) && sources.length > 0
+        ? sources
+        : (Array.isArray(studentData?.cropSources) ? studentData.cropSources : []);
+    const effectiveSelectedUrl = selectedSourceUrl
+        || studentData?.passportDocumentUrl
+        || studentData?.passportImageUrl
+        || '';
+    updateCropperSources(effectiveSources, effectiveSelectedUrl);
     baseRotation = 0;
     if (slider) slider.value = 0;
     if (angleLabel) angleLabel.textContent = '0°';

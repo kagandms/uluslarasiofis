@@ -39,6 +39,32 @@ test('collectYoksisAuditQueueAcrossInnerScroll reaches the bottom and restores t
     assert.equal(container.scrollTop, 15);
 });
 
+test('collectYoksisAuditQueueAcrossInnerScroll completes in a hidden tab without requesting animation frames', async () => {
+    for (const hasScheduler of [true, false]) {
+        const dom = createDocument({ twoRows: true });
+        const document = dom.window.document;
+        const container = document.querySelector('.table-scroll');
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden' });
+        dom.window.requestAnimationFrame = () => { throw new Error('Hidden tabs cannot depend on animation frames'); };
+        dom.window.scheduler = hasScheduler ? {
+            postTask: (callback) => new Promise((resolve) => setImmediate(() => resolve(callback())))
+        } : undefined;
+
+        try {
+            const result = await collectYoksisAuditQueueAcrossInnerScroll(document);
+
+            assert.equal(result.status, 'complete');
+            assert.deepEqual(result.entries, [
+                { applicationNumber: '2026-00-0000001', studentNumber: '2600000001' },
+                { applicationNumber: '2026-00-0000002', studentNumber: '2600000002' }
+            ]);
+            assert.equal(container.scrollTop, 15);
+        } finally {
+            dom.window.close();
+        }
+    }
+});
+
 test('collectYoksisAuditQueueAcrossInnerScroll includes rows revealed near the bottom of a virtualized list', async () => {
     const dom = createDocument();
     const document = dom.window.document;
