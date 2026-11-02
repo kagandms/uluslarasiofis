@@ -2158,13 +2158,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         return;
                     }
 
-                    const readiness = await sendYoksisAuditCheck(targetTab.yoksisTabId, request.scanId);
                     if (request.action === 'CHECK_YOKSIS_DOCUMENT_AUDIT') {
+                        const readiness = await sendYoksisAuditCheck(targetTab.yoksisTabId, request.scanId);
                         sendResponse({ ...readiness, yoksisTabId: targetTab.yoksisTabId });
                         return;
                     }
-                    if (readiness?.ready !== true || !Number.isInteger(sender.tab?.id)) {
-                        sendResponse({ success: false, error: 'YÖKSİS kayıt listesi doğrulanamadı; tarama başlatılmadı.' });
+                    if (!Number.isInteger(sender.tab?.id)) {
+                        sendResponse({ success: false, error: 'Yetkili portal sekmesi doğrulanamadı; tarama başlatılmadı.' });
                         return;
                     }
 
