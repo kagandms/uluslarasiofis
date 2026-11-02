@@ -2435,7 +2435,7 @@ test('successful acceptance search stores the verified target for the extension 
     assert.equal(harness.storageValues.studentData.firstName, 'SYNTHETIC');
 });
 
-test('confirmed manual YÖKSİS fill rechecks the bound search and then verifies the written fields', async () => {
+test('explicit manual YÖKSİS fill ignores stale form readiness and verifies the written fields', async () => {
     const target = createContentHarness(`
         <table><tr><td>Kabul Mektup ID</td><td><input id="acceptance-id"></td>
             <td><button id="search">Kabul Mektup ID ile Ara</button></td></tr></table>
@@ -2464,7 +2464,7 @@ test('confirmed manual YÖKSİS fill rechecks the bound search and then verifies
         assert.deepEqual(JSON.parse(JSON.stringify(response.filledFields)), ['Adı', 'Soyadı']);
         assert.equal(target.dom.window.document.getElementById('student-name').value, 'SYNTHETIC');
         assert.equal(target.dom.window.document.getElementById('student-surname').value, 'STUDENT');
-        assert.ok(background.calls.some(call => call.message?.action === 'CHECK_MANUAL_YOKSIS_FILL'));
+        assert.equal(background.calls.some(call => call.message?.action === 'CHECK_MANUAL_YOKSIS_FILL'), false);
     } finally {
         target.close();
     }

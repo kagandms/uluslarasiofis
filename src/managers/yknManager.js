@@ -1298,11 +1298,9 @@ export function initYknManager() {
         return true;
     }
 
-    function isManualYoksisOverrideAvailable(studentData = currentStudentData) {
-        return studentData?.yoksisReady !== true
-            || !Number.isInteger(studentData?.yoksisTabId)
-            || typeof studentData?.yoksisTabUrl !== 'string'
-            || !studentData.yoksisTabUrl;
+    function isManualYoksisOverrideAvailable() {
+        // Intentional operator policy: explicit transfer buttons do not require the form-open signal.
+        return true;
     }
 
     function confirmManualYoksisTransfer() {
