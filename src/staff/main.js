@@ -88,6 +88,9 @@ let updateState = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!await staffAuthReady) return;
+    try { initializeStaffPrintStatus(); } catch (error) {
+        console.error('Print status failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
     initD1UsageCounter();
     initWorkHours();
     const yoksisAuditRoot = document.getElementById('staff-yoksis-audit');
@@ -136,9 +139,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (physicalRoot) initializePhysicalIntakeManager(physicalRoot);
     try { initDocumentsManager(); } catch (error) {
         console.error('Documents workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
-    }
-    try { initializeStaffPrintStatus(); } catch (error) {
-        console.error('Print status failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
     try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
 
