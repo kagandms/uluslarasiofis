@@ -254,7 +254,7 @@ export async function queryStaffApplications(request, environment) {
 }
 
 /**
- * Returns one non-draft application detail and its current policy-based document metadata.
+ * Returns one staff-visible application detail and its current policy-based document metadata.
  * @param {Request} request Authenticated staff GET request.
  * @param {object} environment Worker bindings containing D1.
  * @param {string} applicationId Exact application identifier from the route.
@@ -266,7 +266,7 @@ export async function readStaffApplicationDetail(request, environment, applicati
     await requireStaff(request, environment, STAFF_ROLES);
     const repositories = createD1Repositories(environment.DB);
     const application = await repositories.applications.findById(applicationId);
-    if (!application || application.status === 'draft') {
+    if (!application) {
         throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     }
     const deletion = await environment.DB.prepare(`SELECT state FROM application_deletions WHERE application_id=?`)

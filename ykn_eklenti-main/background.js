@@ -1683,7 +1683,8 @@ async function transferYoksisFieldsAndPhoto(context) {
 }
 
 async function fillReadyYoksisStudent(context, options = {}) {
-    const formReady = await waitForYoksisFormReady(context.tabId, context.requestId, {
+    // Intentional operator policy: manual transfer bypasses unreliable form-open detection.
+    const formReady = options.manualOverrideConfirmed === true || await waitForYoksisFormReady(context.tabId, context.requestId, {
         requireBoundSearch: true, expectedKabulId: context.studentData.yoksisId || context.studentData.kabulId || '', expectedStudent: context.studentData
     });
     if (!formReady && options.manualOverrideConfirmed !== true) {

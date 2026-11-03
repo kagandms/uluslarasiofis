@@ -49,6 +49,14 @@ function apiErrorFromUnknown(error) {
     return new ApiError(500, 'INTERNAL_ERROR', 'İşlem tamamlanamadı. Lütfen daha sonra tekrar deneyin.', true);
 }
 
+/** @param {Response} response Routed response. @returns {Response} Stream-preserving security defaults. */
+function withSecurityHeaders(response) {
+    const headers = new Headers(response.headers);
+    headers.set('X-Content-Type-Options', 'nosniff');
+    if (!headers.has('Referrer-Policy')) headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 function safeRouteResponse(result, requestId) {
     if (result instanceof Response) {
         const headers = new Headers(result.headers);
@@ -300,15 +308,15 @@ async function routeApi(request, environment, requestId, cache) {
 const worker = {
     async fetch(request, environment) {
         const requestId = createRequestId();
-        if (environment.RECOVERY_MODE === 'maintenance') return recoveryModeResponse(request, requestId);
+        if (environment.RECOVERY_MODE === 'maintenance') return withSecurityHeaders(recoveryModeResponse(request, requestId));
         const { pathname } = new URL(request.url);
         if (!pathname.startsWith('/api/')) {
-            if (environment.ASSETS) return environment.ASSETS.fetch(request);
-            return new Response('Not Found', { status: 404 });
+            if (environment.ASSETS) return withSecurityHeaders(await environment.ASSETS.fetch(request));
+            return withSecurityHeaders(new Response('Not Found', { status: 404 }));
         }
 
         try {
-            return safeRouteResponse(await routeApi(request, environment, requestId, globalThis.caches?.default), requestId);
+            return withSecurityHeaders(safeRouteResponse(await routeApi(request, environment, requestId, globalThis.caches?.default), requestId));
         } catch (error) {
             const apiError = apiErrorFromUnknown(error);
             if (apiError.status >= 500) {
@@ -318,7 +326,7 @@ const worker = {
                     errorCode: apiError.code
                 });
             }
-            return errorResponse(requestId, apiError.status, apiError.code, apiError.message, apiError.retryable);
+            return withSecurityHeaders(errorResponse(requestId, apiError.status, apiError.code, apiError.message, apiError.retryable));
         }
     },
     async scheduled(controller, environment, executionContext) {

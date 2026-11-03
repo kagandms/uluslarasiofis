@@ -221,7 +221,8 @@ export function createApplicationRepository(database) {
             return this.findById(selected.id);
         },
         async queryStaffApplications({ statuses, isDraft = false, isDeleted = false, includeDeleted = false, searchPattern, submittedAtFrom = null, submittedAtUntil = null, pageSize, offset }) {
-            const conditions = [isDraft ? "applications.status = 'draft'" : "applications.status <> 'draft'"];
+            const conditions = [isDraft && !isDeleted && !includeDeleted ? "applications.status = 'draft'"
+                : isDeleted || includeDeleted ? '1=1' : "applications.status <> 'draft'"];
             const queryValues = [];
             const deletedClause = "EXISTS (SELECT 1 FROM application_deletions WHERE application_id=applications.id AND state IN ('soft_deleted','purge_pending'))";
             if (includeDeleted && statuses?.length) {

@@ -43,10 +43,10 @@ export const PRINT_MESSAGES = Object.freeze({
         rateLimited: 'Güvenlik sınırına ulaşıldı. Kalan dosyaları birkaç dakika sonra gönderin.',
         someFilesFailed: 'Bazı dosyalar gönderilemedi. Sonuçları dosya listesinde kontrol edin.',
         queued: 'Yazdırma sıranız oluşturuldu.', uploadingFile: '“{name}” yükleniyor…',
-        statusSubmitted: 'Dosyanız yazıcıya iletildi.',
+        statusSubmitted: '✓ Gönderim başarılı: dosya yazıcıya iletildi. Kağıt çıktısını kontrol edin.',
         statusUnknown: 'İşlemin sonucu henüz doğrulanamadı. Aynı dosyayı yeniden göndermeyin.',
         statusFailed: 'Bu dosya gönderilemedi. Tekrar deneyin.', statusUploading: 'Dosyanız yükleniyor…',
-        statusQueued: 'Yazdırma sıranız oluşturuldu.', statusPreparing: 'Yazdırma isteğiniz hazırlanıyor.',
+        statusQueued: 'Sıraya alındı: yükleme tamamlandı, yazıcı bekleniyor.', statusPreparing: 'Yazdırma isteğiniz hazırlanıyor.',
         statusSending: 'Dosyanız yazıcıya gönderiliyor.', statusChecking: 'Gönderim durumu kontrol ediliyor…'
     }),
     en: Object.freeze({

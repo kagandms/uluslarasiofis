@@ -25,7 +25,8 @@ async function checkHiddenDraft(context, candidate, studentNumber) {
     assert.equal(list.status, 200);
     assert.deepEqual((await list.json()).items, []);
     const detail = await portalRequest(context, `/api/staff/applications/${candidate.application_id}`, { cookie: context.staffCookie });
-    assert.equal(detail.status, 404);
+    assert.equal(detail.status, 200);
+    assert.deepEqual((await detail.json()).allowed_status_transitions, []);
     const duplicate = await portalRequest(context, '/api/public/applications', { method: 'POST', body: {
         student_number: studentNumber, application_type: 'initial', email: 'synthetic@example.invalid', phone: '+905551112233' } });
     assert.equal(duplicate.status, 409);

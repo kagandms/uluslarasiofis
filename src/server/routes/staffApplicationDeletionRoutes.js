@@ -12,7 +12,7 @@ function requireEmptyBody(body) {
 
 async function verifyApplication(repository, applicationId) {
     const application = await repository.applications.findById(applicationId);
-    if (!application || application.status === 'draft') {
+    if (!application) {
         throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
     }
     return application;
@@ -25,9 +25,9 @@ async function archiveApplication({ environment, applicationId, staff, requestId
     const result = await environment.DB.batch([
         environment.DB.prepare(`INSERT INTO application_deletions
             (application_id,previous_status,state,deleted_by_staff_id,deleted_at)
-            SELECT ?,?,'soft_deleted',?,? WHERE EXISTS(SELECT 1 FROM applications WHERE id=? AND status<>'draft')
+            SELECT ?,?,'soft_deleted',?,? WHERE EXISTS(SELECT 1 FROM applications WHERE id=? AND status=?)
             ON CONFLICT(application_id) DO NOTHING`)
-            .bind(applicationId, application.status, staff.id, now, applicationId),
+            .bind(applicationId, application.status, staff.id, now, applicationId, application.status),
         environment.DB.prepare(`DELETE FROM application_sessions WHERE application_id=? AND changes()=1`).bind(applicationId),
         environment.DB.prepare(`INSERT OR IGNORE INTO audit_events
             (id,event_type,actor_type,actor_staff_id,application_id,request_id,safe_metadata_json,created_at)

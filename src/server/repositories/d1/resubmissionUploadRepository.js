@@ -381,7 +381,9 @@ export function createResubmissionUploadRepository(database) {
         async finalizeReplacement(input) {
             try {
                 const results = await database.batch(readFinalizeStatements(database, input));
-                return results.every((result) => result?.meta?.changes === 1);
+                // Only the final scanner insert includes the status-counter trigger's write in D1 metadata.
+                return results.slice(0, -1).every((result) => result?.meta?.changes === 1)
+                    && (results.at(-1)?.meta?.changes ?? 0) >= 1;
             } catch (error) {
                 if (readRevisionMismatchError(error)) return false;
                 throw error;

@@ -187,7 +187,10 @@ async function streamPrintUpload(request, environment, jobId) {
     }));
     let stored;
     try {
-        stored = await storage.put(job.storage_key, boundedBody, {
+        // R2 requires a known-length stream; TransformStream loses the request body length.
+        const uploadBody = typeof FixedLengthStream === 'function'
+            ? boundedBody.pipeThrough(new FixedLengthStream(job.byte_size)) : boundedBody;
+        stored = await storage.put(job.storage_key, uploadBody, {
             httpMetadata: { contentType: job.media_type }, onlyIf: { etagDoesNotMatch: '*' }
         });
     } catch (error) {

@@ -73,7 +73,11 @@ export function assetPlan(root) {
         assert.ok(!name.split('/').some(p => p.startsWith('.')));
         const bytes = readFileSync(join(root, 'dist', entry.path));
         assert.equal(bytes.length, entry.bytes); assert.equal(digest(bytes), entry.sha256);
-        assert.ok(!['/wrangler.json', '/.dev.vars', '/_headers', '/_redirects', '/_worker.js'].includes(`/${name}`), 'Unexpected asset control file requires review.');
+        if (name === '_headers') {
+            assert.equal(bytes.toString(), '/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n');
+            continue;
+        }
+        assert.ok(!['/wrangler.json', '/.dev.vars', '/_redirects', '/_worker.js'].includes(`/${name}`), 'Unexpected asset control file requires review.');
         const extension = extname(name);
         const contentHash = hash(bytes.toString('base64') + extension.slice(1)).toString('hex').slice(0, 32);
         manifest[`/${name}`] = { hash: contentHash, size: bytes.length };

@@ -186,8 +186,12 @@ test('local serialization preserves original code and map bytes, rejects changed
 test('asset manifest excludes ignore file, binds exact bytes/sizes and rejects new ignore semantics',()=>{
     const root=mkdtempSync(join(tmpdir(),'asset-plan-'));
     try{mkdirSync(join(root,'dist/client'),{recursive:true});writeFileSync(join(root,'dist/client/.assetsignore'),'wrangler.json\n.dev.vars\n');
-        writeFileSync(join(root,'dist/client/index.html'),'test');writeFileSync(join(root,'candidate-artifact.json'),JSON.stringify({files:[{path:'client/index.html',bytes:4,sha256:digest('test')},{path:'client/.assetsignore'}]}));
+        writeFileSync(join(root,'dist/client/index.html'),'test');
+        const headers='/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n';
+        writeFileSync(join(root,'dist/client/_headers'),headers);
+        writeFileSync(join(root,'candidate-artifact.json'),JSON.stringify({files:[{path:'client/index.html',bytes:4,sha256:digest('test')},{path:'client/_headers',bytes:Buffer.byteLength(headers),sha256:digest(headers)},{path:'client/.assetsignore'}]}));
         assert.deepEqual(Object.keys(assetPlan(root).manifest),['/index.html']);writeFileSync(join(root,'dist/client/index.html'),'tampered');assert.throws(()=>assetPlan(root));
+        writeFileSync(join(root,'dist/client/index.html'),'test');writeFileSync(join(root,'dist/client/_headers'),'unexpected');assert.throws(()=>assetPlan(root));
         writeFileSync(join(root,'dist/client/.assetsignore'),'*');assert.throws(()=>assetPlan(root));
     }finally{rmSync(root,{recursive:true,force:true});}
 });

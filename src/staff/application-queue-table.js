@@ -1,9 +1,10 @@
+import { formatApplicationTimestamp } from '../shared/application-timestamps.js';
+
 const HEADERS = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
 
 /** Formats a queue timestamp. @param {string} value ISO timestamp. @returns {string} Turkish date or placeholder. */
 export function formatQueueDate(value) {
-    if (!value || !Number.isFinite(Date.parse(value))) return '—';
-    return new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+    return formatApplicationTimestamp(value) || '—';
 }
 
 function createRow(document, item, options, index) {

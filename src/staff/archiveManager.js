@@ -1,3 +1,4 @@
+import { formatApplicationTimestamp } from '../shared/application-timestamps.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
@@ -30,8 +31,7 @@ function createText(document, tag, className, value) {
 }
 
 function formatDate(value) {
-    if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return '—';
-    return new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+    return formatApplicationTimestamp(value) || '—';
 }
 
 function displayValue(value) {

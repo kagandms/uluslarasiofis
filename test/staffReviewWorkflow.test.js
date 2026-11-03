@@ -817,6 +817,33 @@ test('staff soft-delete hides an application, revokes its applicant session, and
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_deletions WHERE application_id=?').bind(applicationId).first().count, 0);
 });
 
+test('staff can reversibly archive a draft and restore it without enabling permanent purge', async () => {
+    const { database, environment } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'draft' });
+    const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-draft-before-delete-00000000000000');
+    const staffCookie = await seedStaff(environment, database);
+
+    const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
+        method: 'POST', cookie: staffCookie, body: {}
+    }), environment);
+    assert.equal(archived.status, 200);
+    assert.equal(database.prepare('SELECT state FROM application_deletions WHERE application_id=?').bind(applicationId).first().state, 'soft_deleted');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_sessions WHERE application_id=?').bind(applicationId).first().count, 0);
+    assert.equal((await worker.fetch(request('/api/public/applications/current', { cookie: ownerCookie }), environment)).status, 401);
+
+    const deletedQueue = await worker.fetch(request('/api/staff/applications/query', {
+        method: 'POST', cookie: staffCookie, body: { status: 'deleted', page: 1, page_size: 25 }
+    }), environment);
+    assert.ok((await readJson(deletedQueue)).items.some((item) => item.id === applicationId));
+
+    const restored = await worker.fetch(request(`/api/staff/applications/${applicationId}/restore`, {
+        method: 'POST', cookie: staffCookie, body: {}
+    }), environment);
+    assert.equal(restored.status, 200);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id=?').bind(applicationId).first().status, 'draft');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_deletions WHERE application_id=?').bind(applicationId).first().count, 0);
+});
+
 test('permanent purge is administrator-only and keeps only a non-identifying audit record', async () => {
     const { database, environment } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'completed' });

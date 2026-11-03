@@ -96,6 +96,7 @@ function renderHistory() {
     for (const job of jobs) {
         const item = document.createElement('article');
         item.className = 'print-history-item';
+        item.dataset.status = job.status;
         const name = document.createElement('p');
         name.textContent = job.name;
         const status = document.createElement('p');
@@ -374,13 +375,20 @@ async function submitEntry(entry) {
         throw error;
     }
     updateJob(job, upload.status || 'uploading');
-    void monitorJob(job);
     if (!upload.upload) {
+        void monitorJob(job);
         return;
     }
-    await uploadFile(preparedFile, upload.upload);
-    await finalizeUpload(upload.job_id, upload.tokens.upload_token);
+    try {
+        await uploadFile(preparedFile, upload.upload);
+        await finalizeUpload(upload.job_id, upload.tokens.upload_token);
+    } catch (error) {
+        updateJob(job, 'unknown');
+        void monitorJob(job);
+        throw error;
+    }
     updateJob(job, 'queued');
+    void monitorJob(job);
 }
 
 function applySubmitOutcomes(outcomes) {
@@ -430,6 +438,7 @@ async function submitAll() {
     submitButton.textContent = t('submit');
     updateBasket();
     showSubmitOutcome(outcomes);
+    historySection.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
 }
 
 addFileButton.addEventListener('click', () => fileInput.click());
