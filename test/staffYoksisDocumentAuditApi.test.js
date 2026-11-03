@@ -100,3 +100,33 @@ test('shared YÖKSİS writes reject cross-origin and malformed records', async (
     assert.equal(malformed.status, 400);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM yoksis_document_audit_records').first().count, 0);
 });
+
+test('shared YÖKSİS write failures log a safe category without record data', async () => {
+    const { database, environment } = await createFixture();
+    environment.DB = {
+        prepare: database.prepare.bind(database),
+        batch: async () => { throw new Error('FOREIGN KEY constraint failed'); }
+    };
+    const logs = [];
+    const originalError = console.error;
+    console.error = (...values) => logs.push(values);
+    let response;
+    try {
+        response = await worker.fetch(request('records', { body: {
+            scanId: 'scan-diagnostic',
+            records: [record('2026-00-0000001', '2600000001', 'verified', { firstName: 'PRIVATE', lastName: 'STUDENT' })]
+        } }), environment, {});
+    } finally {
+        console.error = originalError;
+    }
+
+    assert.equal(response.status, 500);
+    assert.equal(logs.length, 2);
+    assert.deepEqual(logs[0][1], {
+        requestId: response.headers.get('X-Request-Id'),
+        errorName: 'Error',
+        failureKind: 'foreign-key-constraint',
+        recordCount: 1
+    });
+    assert.doesNotMatch(JSON.stringify(logs), /PRIVATE|STUDENT|2600000001/);
+});
