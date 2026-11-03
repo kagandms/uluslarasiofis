@@ -581,7 +581,7 @@ body.dark-mode #home-screen .home-action:focus-visible {
 .yoksis-audit-search input { width: 100%; min-width: 0; }
 .yoksis-audit-search .btn { min-height: 2.75rem; white-space: nowrap; }
 .yoksis-audit-filter-field select { min-width: 0; }
-.yoksis-audit-pagination { display: flex; flex-wrap: wrap; align-items: end; gap: 0.7rem; margin: 1rem 0; }
+.yoksis-audit-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; margin: 1rem 0; }
 .yoksis-audit-pagination p { flex: 1 1 auto; margin: 0; color: var(--staff-home-card-secondary); }
 .yoksis-audit-table-wrap { max-width: 100%; overflow-x: auto; }
 .yoksis-audit-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
