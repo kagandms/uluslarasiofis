@@ -357,10 +357,15 @@ export function initializeYoksisDocumentAuditManager(root) {
             const scanLabel = labels[completion.status] || 'Tarama tamamlandı.';
             if (pendingBatches.length) {
                 setText(root, '#audit-status', `${scanLabel} Ortak depoya kaydedilemeyen kayıtlar var; Yenile ile tekrar deneyin.`);
+            } else if (completion.completed > 0) {
+                const savedLabel = completion.status === 'complete'
+                    ? 'Sonuçlar ortak depoya kaydedildi.'
+                    : 'Okunan sonuçlar ortak depoya kaydedildi.';
+                setText(root, '#audit-status', `${scanLabel} ${savedLabel}`);
             } else {
-                setText(root, '#audit-status', `${scanLabel} Sonuçlar ortak depoya kaydedildi.`);
-                await loadSharedRecords();
+                setText(root, '#audit-status', scanLabel);
             }
+            if (!pendingBatches.length) await loadSharedRecords();
             state.targetTabId = null;
             updateControls();
         }

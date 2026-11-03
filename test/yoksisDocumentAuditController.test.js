@@ -100,6 +100,34 @@ test('startYoksisDocumentAudit selects and verifies queue entries serially', asy
     assert.deepEqual(result, { status: 'complete', completed: 1, remaining: 0, selectionRestored: true });
 });
 
+test('startYoksisDocumentAudit reads verifiable entries but keeps an incomplete queue incomplete', async () => {
+    const dom = createDocument({ twoRows: true });
+    const document = dom.window.document;
+    const listRows = document.querySelectorAll('.table-scroll tbody tr');
+    const applicationInput = document.getElementById('application-number');
+    const studentInput = document.getElementById('student-number');
+    const events = [];
+    let selectedCount = 0;
+    for (const row of listRows) {
+        row.querySelector('button').addEventListener('click', () => {
+            selectedCount += 1;
+            applicationInput.value = row.cells[1].textContent;
+            studentInput.value = row.cells[2].textContent;
+        });
+    }
+    listRows[1].insertAdjacentHTML('afterend', '<tr><td>3</td><td>—</td><td>2600000003</td><td><button>Seç &amp; Yükle</button></td></tr>');
+
+    const result = await startYoksisDocumentAudit('scan-test-incomplete-queue', document,
+        (event) => events.push(event));
+
+    assert.equal(selectedCount, 3);
+    assert.equal(events.filter((event) => event.type === 'record').length, 2);
+    assert.equal(result.status, 'incomplete');
+    assert.equal(result.completed, 2);
+    assert.equal(result.remaining, 0);
+    dom.window.close();
+});
+
 test('startYoksisDocumentAudit waits for the selected record document rows to finish rendering', async () => {
     const dom = createDocument();
     const document = dom.window.document;

@@ -92,6 +92,58 @@ test('staff audit manager starts only after confirmation and renders YÖKSİS te
     window.close();
 });
 
+test('incomplete scans say that only their read results were saved', async () => {
+    const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
+    const { window } = dom;
+    const root = window.document.getElementById('audit-root');
+    window.fetch = async (url) => ({
+        ok: true,
+        status: 200,
+        json: async () => url.endsWith('/records') ? { storedCount: 1 } : { total: 0, records: [] }
+    });
+    window.postMessage = (message) => queueMicrotask(() => window.dispatchEvent(new window.MessageEvent('message', {
+        source: window,
+        origin: window.location.origin,
+        data: { source: 'EXTENSION', type: 'RESPONSE', requestId: message.payload.requestId,
+            response: { success: true, yoksisTabId: 4 } }
+    })));
+    initializeYoksisDocumentAuditManager(root);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    root.querySelector('#audit-confirm').checked = true;
+    root.querySelector('#audit-start').click();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    const sendEvent = (action, data) => window.dispatchEvent(new window.MessageEvent('message', {
+        source: window,
+        origin: window.location.origin,
+        data: {
+            source: 'EXTENSION', type: 'EVENT', action,
+            requestId: root.dataset.auditRequestId,
+            scanId: root.dataset.auditScanId,
+            data
+        }
+    }));
+    sendEvent('YOKSIS_DOCUMENT_AUDIT_RECORD', {
+        type: 'record', index: 1, total: 1,
+        entry: { applicationNumber: '2026-00-0000001', studentNumber: '2600000001' },
+        result: {
+            status: 'verified',
+            identity: {
+                applicationNumber: '2026-00-0000001', studentNumber: '2600000001',
+                firstName: 'TEST', lastName: 'STUDENT', phone: '5000000000'
+            },
+            applicationStatus: 'İşlem Bekliyor',
+            documents: []
+        }
+    });
+    sendEvent('YOKSIS_DOCUMENT_AUDIT_COMPLETE', { status: 'incomplete', completed: 1, remaining: 0 });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    assert.equal(root.querySelector('#audit-status').textContent,
+        'Kuyruk tam doğrulanamadı; sonuçları eksiksiz kabul etmeyin. Okunan sonuçlar ortak depoya kaydedildi.');
+    window.close();
+});
+
 test('staff audit manager loads the shared records and queries by passport, status and page', async () => {
     const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
     const { window } = dom;

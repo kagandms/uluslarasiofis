@@ -238,10 +238,11 @@
         try {
             const queue = await collectYoksisAuditQueueAcrossInnerScroll(rootDocument);
             total = queue.entries.length;
-            if (queue.status !== 'complete' || queue.entries.length === 0) {
+            if (queue.entries.length === 0) {
                 emitEvent({ type: 'progress', completed, total: queue.entries.length, remaining: queue.entries.length, status: 'queue-incomplete' });
                 return { status: 'incomplete', completed, remaining: queue.entries.length, reason: queue.reason || 'empty-queue' };
             }
+            if (queue.status !== 'complete') completionStatus = 'incomplete';
 
             if (initialListContainer?.isConnected) {
                 initialListContainer.scrollTop = 0;
@@ -252,7 +253,7 @@
             emitEvent({ type: 'progress', completed, total: queue.entries.length, remaining: queue.entries.length, status: 'running' });
             for (let index = 0; index < queue.entries.length; index += 1) {
                 if (scan.stopRequested) {
-                    completionStatus = 'stopped';
+                    if (completionStatus !== 'incomplete') completionStatus = 'stopped';
                     remaining = queue.entries.length - index;
                     break;
                 }
