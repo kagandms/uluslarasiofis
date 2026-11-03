@@ -962,7 +962,7 @@ test('staff bootstrap rejects a username different from the configured common ac
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM staff_users').first().count, 0);
 });
 
-test('shared staff account can read application queue and detail while drafts remain excluded', async () => {
+test('shared staff account can read application queue and draft detail while drafts remain excluded from the normal queue', async () => {
     const { environment, database } = createEnvironment();
     const draftId = await createStaffApplication(environment, database, 'STAFF-DRAFT', { status: 'draft' });
     const applicationA = await createStaffApplication(environment, database, 'STAFF-A', {
@@ -1010,7 +1010,7 @@ test('shared staff account can read application queue and detail while drafts re
     assert.equal(crossOrigin.status, 403);
     assert.equal(reviewerQueue.status, 200);
     assert.equal(adminDetail.status, 200);
-    assert.equal(draftDetail.status, 404);
+    assert.equal(draftDetail.status, 200);
     assert.equal(invalidDetail.status, 404);
     assert.equal(queuePayload.items.some((item) => item.id === draftId), false);
     assert.ok(queuePayload.items.some((item) => item.id === applicationA));
@@ -1019,6 +1019,10 @@ test('shared staff account can read application queue and detail while drafts re
     assert.equal(detailPayload.application.student_number, 'STAFF-A');
     assert.equal(detailPayload.application.passport_number, 'PASSPORT-PRIVATE-A');
     assert.notEqual(detailPayload.application.id, applicationB);
+    const draftDetailPayload = await draftDetail.json();
+    assert.equal(draftDetailPayload.application.status, 'draft');
+    assert.deepEqual(draftDetailPayload.allowed_status_transitions, []);
+    assert.ok(draftDetailPayload.documents.every((document) => !document.can_approve && !document.can_request_resubmission));
     assert.doesNotMatch(JSON.stringify(queuePayload), /PASSPORT-PRIVATE|password_hash|token_hash|session|storage_key|safe_metadata_json/i);
     assert.doesNotMatch(JSON.stringify(detailPayload), /password_hash|token_hash|session_id|storage_key|secret-object-key|safe_metadata_json|https?:\/\//i);
 });
@@ -1295,6 +1299,7 @@ test('staff current-document access rejects unsafe, incomplete, stale, missing, 
     await database.prepare('UPDATE applications SET is_under_18 = 0, address_evidence_type = ? WHERE id = ?')
         .bind('undertaking', applicationId).run();
     const accessible = await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'passport');
+    await seedAccessibleStaffDocument(database, storedObjects, draftId, 'initial', 'passport');
     await seedAccessibleStaffDocument(database, storedObjects, applicationId, 'initial', 'address_rental_contract');
     await seedStaff(environment, database, { id: 'staff-invalid-access', username: 'invalid-access' });
     const token = 'invalid-access-session-token-0000000000000000';
@@ -1335,8 +1340,7 @@ test('staff current-document access rejects unsafe, incomplete, stale, missing, 
     await assertUnavailable(await requestDownload(applicationId, 'birth_certificate_under18'));
     await assertUnavailable(await requestDownload(applicationId, 'address_rental_contract'));
     const draftResponse = await requestDownload(draftId);
-    assert.equal(draftResponse.status, 404);
-    assert.equal((await readJson(draftResponse)).error.code, 'APPLICATION_NOT_FOUND');
+    assert.equal(draftResponse.status, 200);
     const unknownApplication = await requestDownload('not-an-application');
     assert.equal(unknownApplication.status, 404);
     assert.equal((await readJson(unknownApplication)).error.code, 'APPLICATION_NOT_FOUND');
@@ -1355,7 +1359,7 @@ test('staff current-document access rejects unsafe, incomplete, stale, missing, 
     });
     await assertUnavailable(await requestDownload(unsupportedMediaApplication));
 
-    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_events WHERE event_type = ?').bind('staff.document_downloaded').first().count, 1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM audit_events WHERE event_type = ?').bind('staff.document_downloaded').first().count, 2);
 });
 
 test('staff document preview streams without browser-facing R2 signing credentials', async () => {
@@ -1589,6 +1593,8 @@ test('archive manifest and pinned file stream require shared staff and reject re
     const { environment, database, storedObjects } = createEnvironment();
     const appA = await createStaffApplication(environment, database, 'ZIP-A');
     const appB = await createStaffApplication(environment, database, 'ZIP-B');
+    const draftId = await createStaffApplication(environment, database, 'ZIP-DRAFT', { status: 'draft' });
+    await seedAccessibleStaffDocument(database, storedObjects, draftId, 'initial', 'passport');
     const current = await seedAccessibleStaffDocument(database, storedObjects, appA, 'initial', 'passport');
     await database.prepare('UPDATE document_revisions SET revision_number = 2 WHERE id = ?').bind(current.revisionId).run();
     const oldRevisionId = crypto.randomUUID();
@@ -1616,7 +1622,11 @@ test('archive manifest and pinned file stream require shared staff and reject re
     const manifestResponse = await worker.fetch(createRequest(manifestPath, {
         method: 'POST', cookie: staffCookie(token)
     }), environment, {});
+    const draftManifestResponse = await worker.fetch(createRequest(
+        `/api/staff/applications/${draftId}/documents/archive-manifest`, { method: 'POST', cookie: staffCookie(token) }
+    ), environment, {});
     const manifest = await readJson(manifestResponse);
+    const draftManifest = await readJson(draftManifestResponse);
     const filePath = `/api/staff/applications/${appA}/documents/passport/archive-file`;
     const item = manifest.files[0];
     const fileUrl = (applicationId, revision = item.expected_revision_number, identity = item.object_identity) =>
@@ -1634,6 +1644,8 @@ test('archive manifest and pinned file stream require shared staff and reject re
     assert.equal(manifestDenied.status, 401);
     assert.equal(crossOriginManifest.status, 403);
     assert.equal(manifestResponse.status, 200);
+    assert.equal(draftManifestResponse.status, 200);
+    assert.equal(draftManifest.files.length, 1);
     assert.equal(manifest.files.length, 1);
     assert.equal(item.entry_name, '01-passport.pdf');
     assert.equal(item.expected_revision_number, 2);
@@ -1651,7 +1663,7 @@ test('archive manifest and pinned file stream require shared staff and reject re
     assert.ok([404, 409].includes(changed.status));
     const audit = database.prepare("SELECT event_type FROM audit_events WHERE event_type LIKE 'staff.application_archive_%'").all().results;
     assert.deepEqual(audit.map((row) => row.event_type).sort(), [
-        'staff.application_archive_document_stream_authorized', 'staff.application_archive_requested'
+        'staff.application_archive_document_stream_authorized', 'staff.application_archive_requested', 'staff.application_archive_requested'
     ]);
 });
 

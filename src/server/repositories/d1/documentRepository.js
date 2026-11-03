@@ -350,7 +350,7 @@ export function createDocumentRepository(database) {
                 JOIN document_revisions AS revisions ON revisions.document_record_id = records.id
                 JOIN document_revision_files AS files ON files.revision_id = revisions.id AND files.page_order = 0
                 JOIN upload_intents AS intents ON intents.revision_file_id = files.id
-                WHERE applications.id = ? AND applications.status <> 'draft'
+                WHERE applications.id = ?
                   AND records.application_type = applications.application_type
                   AND requirements.application_type = applications.application_type
                   AND requirements.code = ? AND requirements.is_active = 1

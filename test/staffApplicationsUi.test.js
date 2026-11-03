@@ -236,6 +236,9 @@ test('draft queue offers verified code reset without a cancellation action', asy
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.match(root.textContent, /Taslak/);
+    assert.ok(root.querySelector('[data-action="open-detail"]'));
+    assert.ok(root.querySelector('[data-action="download-application-archive"]'));
+    assert.ok(root.querySelector('[data-action="archive-application"]'));
     root.querySelector('[data-action="staff-reset-access-code"]').click();
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(shownCode, 'CODE-ONLY-ONCE');

@@ -38,7 +38,7 @@ async function resolveCurrentDocument(environment, applicationId, code) {
     }
     const repositories = createD1Repositories(environment.DB);
     const application = await repositories.applications.findById(applicationId);
-    if (!application || application.status === 'draft') throw unavailableApplication();
+    if (!application) throw unavailableApplication();
     const deletion = await environment.DB.prepare(`SELECT state FROM application_deletions WHERE application_id=?`)
         .bind(applicationId).first();
     if (deletion?.state === 'purge_pending') throw unavailableApplication();
@@ -114,7 +114,7 @@ export async function createStaffApplicationArchiveManifest({ request, environme
     const staff = await requireStaff(request, environment, STAFF_ROLES);
     const repositories = createD1Repositories(environment.DB);
     const application = await repositories.applications.findById(applicationId);
-    if (!application || application.status === 'draft') throw unavailableApplication();
+    if (!application) throw unavailableApplication();
     const requirements = await repositories.documents.listStudentRequirements(applicationId);
     const files = [];
     let totalSourceBytes = 0;
