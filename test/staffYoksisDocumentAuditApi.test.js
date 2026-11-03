@@ -126,7 +126,30 @@ test('shared YÖKSİS write failures log a safe category without record data', a
         requestId: response.headers.get('X-Request-Id'),
         errorName: 'Error',
         failureKind: 'foreign-key-constraint',
+        failureCode: 'UNCLASSIFIED',
         recordCount: 1
     });
     assert.doesNotMatch(JSON.stringify(logs), /PRIVATE|STUDENT|2600000001/);
+});
+
+test('shared YÖKSİS write failures classify D1 causes without logging their messages', async () => {
+    const { database, environment } = await createFixture();
+    environment.DB = {
+        prepare: database.prepare.bind(database),
+        batch: async () => { throw new Error('D1 operation failed', { cause: new Error('D1_ERROR: Network connection lost.') }); }
+    };
+    const logs = [];
+    const originalError = console.error;
+    console.error = (...values) => logs.push(values);
+    try {
+        await worker.fetch(request('records', { body: {
+            scanId: 'scan-d1-cause', records: [record('2026-00-0000001', '2600000001', 'verified')]
+        } }), environment, {});
+    } finally {
+        console.error = originalError;
+    }
+
+    assert.equal(logs[0][1].failureKind, 'database-transient');
+    assert.equal(logs[0][1].failureCode, 'D1_ERROR');
+    assert.doesNotMatch(JSON.stringify(logs), /Network connection lost|2600000001/);
 });
