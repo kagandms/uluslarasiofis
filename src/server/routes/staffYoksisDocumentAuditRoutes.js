@@ -42,6 +42,17 @@ function classifyStatus(applicationStatus, resultStatus) {
     return 'other';
 }
 
+function classifyWriteFailure(error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    if (message.includes('foreign key constraint')) return 'foreign-key-constraint';
+    if (message.includes('check constraint')) return 'check-constraint';
+    if (message.includes('not null constraint')) return 'not-null-constraint';
+    if (message.includes('unique constraint')) return 'unique-constraint';
+    if (message.includes('overloaded')) return 'database-overloaded';
+    if (message.includes('locked') || message.includes('busy')) return 'database-busy';
+    return 'database-write-failed';
+}
+
 function validateDocuments(value) {
     if (!Array.isArray(value) || value.length > 100) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Eksik evrak satırları okunamadı.');
@@ -146,7 +157,17 @@ async function writeRecords(request, environment, requestId, staff) {
             record.resultStatus, JSON.stringify(record.documents), searchText, scannedAt, staff.id
         );
     });
-    await environment.DB.batch(statements);
+    try {
+        await environment.DB.batch(statements);
+    } catch (error) {
+        console.error('YÖKSİS ortak kayıt yazımı başarısız.', {
+            requestId,
+            errorName: error?.name || 'UnknownError',
+            failureKind: classifyWriteFailure(error),
+            recordCount: records.length
+        });
+        throw error;
+    }
     return jsonResponse({ storedCount: records.length, scannedAt }, 200, requestId);
 }
 
