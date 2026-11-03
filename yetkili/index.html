@@ -231,19 +231,23 @@
                         <p id="audit-status" role="status" aria-live="polite">Tarama için yetkili YÖKSİS sekmesi ve kayıt listesi gerekir.</p>
                         <p id="audit-progress" class="yoksis-audit-progress" aria-live="polite"></p>
                         <div class="yoksis-audit-search">
-                            <label for="audit-search">Ad, öğrenci numarası veya pasaport numarası</label>
-                            <input id="audit-search" type="search" autocomplete="off">
+                            <div class="yoksis-audit-search-field">
+                                <label for="audit-search">Ad, öğrenci numarası veya pasaport numarası</label>
+                                <input id="audit-search" type="search" autocomplete="off">
+                            </div>
                             <button id="audit-search-submit" class="btn btn-outline" type="button">Ara</button>
-                            <label for="audit-filter">YÖKSİS durumu</label>
-                            <select id="audit-filter">
-                                <option value="all">Tüm durumlar</option>
-                                <option value="successful">Başarılı</option>
-                                <option value="pending">Bekleyen</option>
-                                <option value="rejected">Reddedilen</option>
-                                <option value="missing_documents">Eksik evrak</option>
-                                <option value="unreadable">Okunamayan</option>
-                                <option value="other">Diğer</option>
-                            </select>
+                            <div class="yoksis-audit-filter-field">
+                                <label for="audit-filter">YÖKSİS durumu</label>
+                                <select id="audit-filter">
+                                    <option value="all">Tüm durumlar</option>
+                                    <option value="successful">Başarılı</option>
+                                    <option value="pending">Bekleyen</option>
+                                    <option value="rejected">Reddedilen</option>
+                                    <option value="missing_documents">Eksik evrak</option>
+                                    <option value="unreadable">Okunamayan</option>
+                                    <option value="other">Diğer</option>
+                                </select>
+                            </div>
                             <button id="audit-refresh" class="btn btn-outline" type="button">Ortak kayıtları yenile</button>
                         </div>
                         <div class="yoksis-audit-pagination">
