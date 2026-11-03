@@ -40,6 +40,7 @@ import { runPrintCleanup } from './services/printCleanupService.js';
 import { getScheduledWork } from './services/scheduled-work.js';
 import { readD1UsageMetrics } from './services/d1-usage-metrics.js';
 import { handleStaffWorkHours } from './routes/staffWorkHoursRoutes.js';
+import { handleStaffYoksisDocumentAudit } from './routes/staffYoksisDocumentAuditRoutes.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -105,6 +106,9 @@ async function routeApi(request, environment, requestId, cache) {
         return readD1UsageMetrics({ environment, cache });
     }
     if (pathname === '/api/staff/work-hours') return handleStaffWorkHours(request, environment, requestId);
+    if (pathname.startsWith('/api/staff/yoksis-document-audit/')) {
+        return handleStaffYoksisDocumentAudit(request, environment, requestId);
+    }
     if (['/api/staff/physical-access', '/api/staff/physical-access/session'].includes(pathname)) return readPhysicalAccess(request, environment);
     if (pathname === '/api/public/physical-intakes/tracking-lookup') return lookupPhysicalTracking(request, environment);
     if (pathname.startsWith('/api/staff/physical-intakes')) return handlePhysicalIntakes(request, environment, requestId);

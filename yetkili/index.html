@@ -221,7 +221,7 @@
                     </div>
                     <div id="staff-yoksis-audit" class="yoksis-audit-panel">
                         <div class="yoksis-audit-warning" role="note">
-                            <strong>YÖKSİS formu değişebilir.</strong> Tarama sırasında kayıt seçimi yapılır. Evrak yükleme, silme veya YÖKSİS işlemi kaydetme yapılmaz. Sonuçlar yalnızca bu sekmenin belleğinde tutulur.
+                            <strong>YÖKSİS formu değişebilir.</strong> Tarama sırasında kayıt seçimi yapılır. Evrak yükleme, silme veya YÖKSİS işlemi kaydetme yapılmaz. Okunan sonuçlar yetkili personelin ortak listesine kaydedilir; pasaport numarası YÖKSİS kaydında görünüyorsa alınır.
                         </div>
                         <label class="yoksis-audit-confirm"><input id="audit-confirm" type="checkbox"> Form seçiminin değişebileceğini anladım.</label>
                         <div class="yoksis-audit-controls">
@@ -230,9 +230,31 @@
                         </div>
                         <p id="audit-status" role="status" aria-live="polite">Tarama için yetkili YÖKSİS sekmesi ve kayıt listesi gerekir.</p>
                         <p id="audit-progress" class="yoksis-audit-progress" aria-live="polite"></p>
+                        <div class="yoksis-audit-search">
+                            <label for="audit-search">Ad, öğrenci numarası veya pasaport numarası</label>
+                            <input id="audit-search" type="search" autocomplete="off">
+                            <button id="audit-search-submit" class="btn btn-outline" type="button">Ara</button>
+                            <label for="audit-filter">YÖKSİS durumu</label>
+                            <select id="audit-filter">
+                                <option value="all">Tüm durumlar</option>
+                                <option value="successful">Başarılı</option>
+                                <option value="pending">Bekleyen</option>
+                                <option value="rejected">Reddedilen</option>
+                                <option value="missing_documents">Eksik evrak</option>
+                                <option value="unreadable">Okunamayan</option>
+                                <option value="other">Diğer</option>
+                            </select>
+                            <button id="audit-refresh" class="btn btn-outline" type="button">Ortak kayıtları yenile</button>
+                        </div>
+                        <div class="yoksis-audit-pagination">
+                            <p id="audit-shared-count" aria-live="polite">Ortak kayıtlar yükleniyor…</p>
+                            <button id="audit-page-previous" class="btn btn-outline" type="button">Önceki</button>
+                            <span id="audit-page" aria-live="polite"></span>
+                            <button id="audit-page-next" class="btn btn-outline" type="button">Sonraki</button>
+                        </div>
                         <div class="yoksis-audit-table-wrap">
                             <table class="yoksis-audit-table">
-                                <thead><tr><th>Başvuru No</th><th>Ad Soyad</th><th>Öğrenci No</th><th>Telefon</th><th>YÖKSİS durumu</th><th>Eksik evrak</th><th>Sonuç</th></tr></thead>
+                                <thead><tr><th>Başvuru No</th><th>Ad Soyad</th><th>Öğrenci No</th><th>Pasaport No</th><th>Telefon</th><th>YÖKSİS durumu</th><th>Eksik evrak</th><th>Sonuç</th></tr></thead>
                                 <tbody id="audit-results"></tbody>
                             </table>
                         </div>

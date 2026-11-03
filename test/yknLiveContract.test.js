@@ -878,8 +878,10 @@ test('YÖKSİS hazır kontrolü önceki formu yeni aramanın sonucu saymaz', asy
         assert.equal(response.success, false);
         assert.equal(response.formReady, false);
         assert.equal(readinessDiagnostics[0]?.[0], '[YKN_FORM_READINESS] Öğrenci formu doğrulanamadı.');
-        assert.equal(readinessDiagnostics[0]?.[1]?.formSignals, 2);
-        assert.equal(Object.hasOwn(readinessDiagnostics[0]?.[1] || {}, 'fingerprint'), false);
+        const diagnostic = JSON.parse(readinessDiagnostics[0]?.[1]);
+        assert.equal(diagnostic.formSignals, 2);
+        assert.ok(diagnostic.failureReasons.includes('no_fresh_search_result'));
+        assert.equal(Object.hasOwn(diagnostic, 'fingerprint'), false);
     } finally {
         harness.close();
     }

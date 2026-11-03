@@ -171,6 +171,7 @@
             && isBoundedText(identity?.firstName)
             && isBoundedText(identity?.lastName)
             && isBoundedText(identity?.phone, 40)
+            && (identity?.passportNumber === undefined || isBoundedText(identity.passportNumber, 64))
             && isBoundedText(applicationStatus)
             && Array.isArray(documents) && documents.length <= 100
             && documents.every((document) => document && typeof document === 'object'
