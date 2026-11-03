@@ -574,10 +574,14 @@ body.dark-mode #home-screen .home-action:focus-visible {
 .yoksis-audit-controls { display: flex; flex-wrap: wrap; gap: 0.7rem; }
 #audit-status { margin: 1rem 0 0.3rem; font-weight: 700; }
 .yoksis-audit-progress { min-height: 1.4em; color: var(--staff-home-card-secondary); }
-.yoksis-audit-search, .yoksis-audit-pagination { display: flex; flex-wrap: wrap; align-items: end; gap: 0.7rem; margin: 1rem 0; }
-.yoksis-audit-search label { font-weight: 600; }
+.yoksis-audit-search { display: grid; grid-template-columns: minmax(16rem, 1fr) auto minmax(11rem, auto) auto; align-items: end; gap: 0.7rem; margin: 1rem 0; }
+.yoksis-audit-search-field, .yoksis-audit-filter-field { display: grid; min-width: 0; gap: 0.35rem; }
+.yoksis-audit-search label { font-weight: 600; line-height: 1.3; }
 .yoksis-audit-search input, .yoksis-audit-search select { min-height: 2.75rem; padding: 0.55rem 0.75rem; border: 1px solid var(--card-border); border-radius: 10px; background: var(--card-bg); color: var(--text-primary); }
-.yoksis-audit-search input { flex: 1 1 16rem; }
+.yoksis-audit-search input { width: 100%; min-width: 0; }
+.yoksis-audit-search .btn { min-height: 2.75rem; white-space: nowrap; }
+.yoksis-audit-filter-field select { min-width: 0; }
+.yoksis-audit-pagination { display: flex; flex-wrap: wrap; align-items: end; gap: 0.7rem; margin: 1rem 0; }
 .yoksis-audit-pagination p { flex: 1 1 auto; margin: 0; color: var(--staff-home-card-secondary); }
 .yoksis-audit-table-wrap { max-width: 100%; overflow-x: auto; }
 .yoksis-audit-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -588,6 +592,12 @@ body.dark-mode #home-screen .home-action:focus-visible {
 .yoksis-audit-table td[data-audit-classification="pending"] { color: #875d00; font-weight: 700; }
 .yoksis-audit-table td[data-audit-classification="rejected"], .yoksis-audit-table td[data-audit-classification="missing_documents"] { color: #a12622; font-weight: 700; }
 .yoksis-audit-table tr[data-audit-result="unreadable"] { background: color-mix(in srgb, #ffe9b8 35%, var(--card-bg)); }
+
+@media (max-width: 760px) {
+    .yoksis-audit-search { grid-template-columns: minmax(0, 1fr) auto; }
+    .yoksis-audit-filter-field { grid-column: 1; }
+    #audit-refresh { grid-column: 2; }
+}
 
 #workspace-content .view-panel[hidden] { display: none !important; }
 
