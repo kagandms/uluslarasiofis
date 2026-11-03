@@ -76,6 +76,16 @@ function readWriteFailureCode(error) {
     return code ? code.toUpperCase() : 'UNCLASSIFIED';
 }
 
+function readWriteFailureDetail(error) {
+    const causes = [error, error?.cause, error?.cause?.cause];
+    return causes.map((cause) => cause?.message).filter((value) => typeof value === 'string').join(' | ')
+        .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted]')
+        .replace(/\b\d{4}-\d{2}-\d{7}\b/g, '[redacted]')
+        .replace(/\b(?=[A-Z0-9]{6,32}\b)(?=[A-Z0-9]*\d)[A-Z0-9]+\b/gi, '[redacted]')
+        .replace(/\b\d{6,}\b/g, '[redacted]')
+        .slice(0, 400) || 'no-message';
+}
+
 function validateDocuments(value) {
     if (!Array.isArray(value) || value.length > 100) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Eksik evrak satırları okunamadı.');
@@ -188,6 +198,7 @@ async function writeRecords(request, environment, requestId, staff) {
             errorName: error?.name || 'UnknownError',
             failureKind: classifyWriteFailure(error),
             failureCode: readWriteFailureCode(error),
+            failureDetail: readWriteFailureDetail(error),
             recordCount: records.length
         });
         throw error;
