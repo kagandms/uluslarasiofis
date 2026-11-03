@@ -65,7 +65,7 @@
         }
     }
 
-    async function collectYoksisAuditQueueAcrossInnerScroll(rootDocument) {
+    async function collectYoksisAuditQueueAcrossInnerScroll(rootDocument, targetEntries) {
         const container = findScrollableListContainer(rootDocument);
         if (!container) return { status: 'incomplete', entries: [], reason: 'record-list-scroll-container-not-found' };
 
@@ -78,10 +78,19 @@
         const maxSteps = 1000;
 
         try {
+            if (targetEntries) {
+                container.scrollTop = 0;
+                container.dispatchEvent(new rootDocument.defaultView.Event('scroll', { bubbles: true }));
+                await waitForNextPaint(rootDocument);
+            }
             for (let step = 0; step < maxSteps; step += 1) {
                 const snapshot = reader.collectYoksisAuditQueue(rootDocument);
                 mergeQueueEntries(entries, snapshot);
                 if (snapshot.reason && snapshot.reason !== 'no-verifiable-records') incompleteReason ||= snapshot.reason;
+                if (targetEntries?.every((target) => entries.some((entry) => (
+                    entry.applicationNumber === target.applicationNumber
+                    && entry.studentNumber === target.studentNumber
+                )))) break;
                 const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
                 if (maxScrollTop === 0) {
                     reachedBottom = true;
@@ -114,6 +123,13 @@
             container.dispatchEvent(new rootDocument.defaultView.Event('scroll', { bubbles: true }));
         }
 
+        if (targetEntries?.every((target) => entries.some((entry) => (
+            entry.applicationNumber === target.applicationNumber
+            && entry.studentNumber === target.studentNumber
+        )))) {
+            if (incompleteReason) return { status: 'incomplete', entries, reason: incompleteReason };
+            return { status: 'complete', entries };
+        }
         if (!reachedBottom) return { status: 'incomplete', entries, reason: 'record-list-bottom-not-confirmed' };
         if (incompleteReason) return { status: 'incomplete', entries, reason: incompleteReason };
         return entries.length ? { status: 'complete', entries } : { status: 'incomplete', entries, reason: 'no-verifiable-records' };
@@ -252,7 +268,7 @@
         const initialListScrollTop = initialListContainer?.scrollTop ?? null;
 
         try {
-            const queue = await collectYoksisAuditQueueAcrossInnerScroll(rootDocument);
+            const queue = await collectYoksisAuditQueueAcrossInnerScroll(rootDocument, targetEntries);
             let entries = queue.entries;
             if (targetEntries) {
                 entries = targetEntries.map((target) => queue.entries.find((entry) => (

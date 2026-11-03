@@ -86,6 +86,32 @@ test('collectYoksisAuditQueueAcrossInnerScroll includes rows revealed near the b
     ]);
 });
 
+test('collectYoksisAuditQueueAcrossInnerScroll stops after finding every requested retry target', async () => {
+    const dom = createDocument();
+    const document = dom.window.document;
+    const container = document.querySelector('.table-scroll');
+    const body = document.querySelector('tbody');
+    let unrelatedEndReached = false;
+    body.innerHTML = '<tr><td>1</td><td>2026-00-0000001</td><td>2600000001</td><td><button>Seç &amp; Yükle</button></td></tr>';
+    container.addEventListener('scroll', () => {
+        if (container.scrollTop > 30 && container.scrollTop <= 90) {
+            body.innerHTML = '<tr><td>2</td><td>2026-00-0000002</td><td>2600000002</td><td><button>Seç &amp; Yükle</button></td></tr>';
+        } else if (container.scrollTop > 90) {
+            unrelatedEndReached = true;
+            body.innerHTML = '<tr><td>3</td><td>2026-00-0000003</td><td>2600000003</td><td><button>Seç &amp; Yükle</button></td></tr>';
+        }
+    });
+
+    const result = await collectYoksisAuditQueueAcrossInnerScroll(document, [
+        { applicationNumber: '2026-00-0000002', studentNumber: '2600000002' }
+    ]);
+
+    assert.equal(result.status, 'complete');
+    assert.deepEqual(result.entries.map((entry) => entry.applicationNumber), ['2026-00-0000001', '2026-00-0000002']);
+    assert.equal(unrelatedEndReached, false);
+    dom.window.close();
+});
+
 test('startYoksisDocumentAudit selects and verifies queue entries serially', async () => {
     const dom = createDocument();
     const events = [];
