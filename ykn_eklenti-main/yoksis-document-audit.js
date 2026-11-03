@@ -193,7 +193,7 @@ function readSelectedYoksisAuditRecord(rootDocument, expectedEntry) {
         lastName: readLabeledValue(rootDocument, 'Soyadı:'),
         phone: readLabeledValue(rootDocument, 'İrtibat Telefonu (*)')
     };
-    const passportNumber = ['Pasaport No', 'Pasaport Numarası', 'Passport No']
+    const passportNumber = ['Pasaport No', 'Pasaport Numarası', 'Passport No', 'Seyahat Belge No']
         .map((label) => readLabeledValue(rootDocument, label))
         .find(Boolean);
     if (passportNumber) identity.passportNumber = passportNumber;
