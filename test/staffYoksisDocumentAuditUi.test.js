@@ -6,6 +6,7 @@ import { initializeYoksisDocumentAuditManager } from '../src/managers/yoksisDocu
 const markup = `<!doctype html><html><body><section id="audit-root">
   <label><input id="audit-confirm" type="checkbox">YÖKSİS form seçimi değişebilir</label>
   <button id="audit-start" type="button">Taramayı başlat</button>
+  <button id="audit-retry-unreadable" type="button" disabled>Okunamayanları yeniden tara</button>
   <button id="audit-stop" type="button" hidden>Taramayı durdur</button>
   <p id="audit-status" role="status"></p><p id="audit-progress"></p>
   <label for="audit-search">Ad, öğrenci no veya pasaport no</label><input id="audit-search" type="search">
@@ -229,6 +230,136 @@ test('staff audit manager loads the shared records and queries by passport, stat
     root.querySelector('#audit-page-next').click();
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     assert.equal(requests.at(-1).body.page, 2);
+    window.close();
+});
+
+test('staff audit manager enables unreadable retry only when needed and targets only those records', async () => {
+    const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
+    const { window } = dom;
+    const root = window.document.getElementById('audit-root');
+    const messages = [];
+    let retrySaved = false;
+    window.fetch = async (url, options) => {
+        const body = JSON.parse(options.body);
+        if (url.endsWith('/records')) {
+            retrySaved = true;
+            return { ok: true, status: 200, json: async () => ({ storedCount: body.records.length }) };
+        }
+        return {
+            ok: true,
+            status: 200,
+            json: async () => body.status === 'unreadable'
+                ? { total: retrySaved ? 0 : 1, page: body.page, pageSize: body.pageSize, records: !retrySaved && body.page === 1 ? [{
+                    application_number: '2026-00-0000002', student_number: '2600000002',
+                    result_status: 'unreadable', status_category: 'unreadable', documents: []
+                }] : [] }
+                : { total: 0, page: body.page, pageSize: body.pageSize, records: [] }
+        };
+    };
+    window.postMessage = (data) => {
+        messages.push(data);
+        queueMicrotask(() => window.dispatchEvent(new window.MessageEvent('message', {
+            source: window,
+            origin: window.location.origin,
+            data: {
+                source: 'EXTENSION', type: 'RESPONSE', action: data.payload.action,
+                requestId: data.payload.requestId,
+                response: { success: true, yoksisTabId: 4 }
+            }
+        })));
+    };
+
+    initializeYoksisDocumentAuditManager(root);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    const retryButton = root.querySelector('#audit-retry-unreadable');
+    assert.equal(retryButton.disabled, false);
+
+    root.querySelector('#audit-confirm').checked = true;
+    retryButton.click();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    const start = messages.find((message) => message.payload.action === 'START_YOKSIS_DOCUMENT_AUDIT');
+    assert.deepEqual(start.payload.entries, [{ applicationNumber: '2026-00-0000002', studentNumber: '2600000002' }]);
+    assert.equal(root.querySelector('#audit-start').disabled, true);
+
+    const scanId = root.dataset.auditScanId;
+    const requestId = root.dataset.auditRequestId;
+    const emit = (action, data) => window.dispatchEvent(new window.MessageEvent('message', {
+        source: window,
+        origin: window.location.origin,
+        data: { source: 'EXTENSION', type: 'EVENT', action, scanId, requestId, data }
+    }));
+    emit('YOKSIS_DOCUMENT_AUDIT_RECORD', {
+        entry: { applicationNumber: '2026-00-0000002', studentNumber: '2600000002' },
+        result: {
+            status: 'verified',
+            identity: {
+                applicationNumber: '2026-00-0000002', studentNumber: '2600000002',
+                firstName: 'TEST', lastName: 'STUDENT', passportNumber: 'TEST-PASSPORT-2', phone: '5000000000'
+            },
+            applicationStatus: 'İşlem Tamamlandı', documents: []
+        }
+    });
+    emit('YOKSIS_DOCUMENT_AUDIT_COMPLETE', { status: 'complete', completed: 1, remaining: 0 });
+    await new Promise((resolve) => window.setTimeout(resolve, 10));
+    assert.equal(retryButton.disabled, true);
+    window.close();
+});
+
+test('staff audit manager keeps unreadable retry disabled when there are no unreadable records', async () => {
+    const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
+    const { window } = dom;
+    const root = window.document.getElementById('audit-root');
+    window.fetch = async (_url, options) => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ total: 0, page: 1, pageSize: 50, records: [] })
+    });
+
+    initializeYoksisDocumentAuditManager(root);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    assert.equal(root.querySelector('#audit-retry-unreadable').disabled, true);
+    window.close();
+});
+
+test('staff audit manager excludes locally saved verified retries from stale unreadable targets', async () => {
+    const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
+    const { window } = dom;
+    const root = window.document.getElementById('audit-root');
+    window.sessionStorage.setItem('staff-yoksis-audit-pending-v1', JSON.stringify([{
+        scanId: 'scan-local-verified',
+        records: [{
+            entry: { applicationNumber: '2026-00-0000002', studentNumber: '2600000002' },
+            result: { status: 'verified', identity: { firstName: 'TEST' }, applicationStatus: 'İşlem Tamamlandı' }
+        }]
+    }]));
+    window.fetch = async (url, options) => {
+        const body = JSON.parse(options.body);
+        if (url.endsWith('/records')) {
+            return {
+                ok: false,
+                status: 500,
+                headers: new window.Headers(),
+                json: async () => ({ error: { message: 'temporary failure' } })
+            };
+        }
+        return {
+            ok: true,
+            status: 200,
+            json: async () => body.status === 'unreadable'
+                ? { total: 1, page: 1, pageSize: body.pageSize, records: [{
+                    application_number: '2026-00-0000002', student_number: '2600000002',
+                    result_status: 'unreadable', status_category: 'unreadable', documents: []
+                }] }
+                : { total: 0, page: 1, pageSize: body.pageSize, records: [] }
+        };
+    };
+
+    initializeYoksisDocumentAuditManager(root);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    assert.equal(root.querySelector('#audit-retry-unreadable').disabled, true);
     window.close();
 });
 
