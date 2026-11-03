@@ -184,6 +184,8 @@ async function writeRecords(request, environment, requestId, staff) {
                 search_text = excluded.search_text,
                 scanned_at = excluded.scanned_at,
                 updated_by_staff_id = excluded.updated_by_staff_id
+            WHERE excluded.result_status = 'verified'
+                OR yoksis_document_audit_records.result_status <> 'verified'
         `).bind(
             record.applicationNumber, record.studentNumber, record.firstName, record.lastName,
             record.passportNumber, record.phone, record.applicationStatus, record.statusCategory,

@@ -8,6 +8,8 @@ const PENDING_STORAGE_KEY = 'staff-yoksis-audit-pending-v1';
 const MAX_BATCH_RECORDS = 25;
 const MAX_BATCH_BYTES = 100 * 1024;
 const PAGE_SIZE = 50;
+const RETRY_PAGE_SIZE = 100;
+const MAX_RETRY_ENTRIES = 1000;
 const CATEGORY_LABELS = Object.freeze({
     successful: 'Başarılı',
     pending: 'Beklemede',
@@ -124,13 +126,14 @@ function readPendingBatches(window) {
 export function initializeYoksisDocumentAuditManager(root) {
     const window = root.ownerDocument.defaultView;
     const startButton = root.querySelector('#audit-start');
+    const retryButton = root.querySelector('#audit-retry-unreadable');
     const stopButton = root.querySelector('#audit-stop');
     const confirmation = root.querySelector('#audit-confirm');
     const results = root.querySelector('#audit-results');
     if (!window || !startButton || !stopButton || !confirmation || !results) return;
 
     const pending = new Map();
-    const state = { scanId: '', requestId: '', targetTabId: null, busy: false };
+    const state = { scanId: '', requestId: '', targetTabId: null, busy: false, retryBusy: false, unreadableCount: null };
     const query = { status: 'all', page: 1, pageSize: PAGE_SIZE, total: 0, sequence: 0 };
     const pendingBatches = readPendingBatches(window);
     let currentBatch = [];
@@ -141,6 +144,12 @@ export function initializeYoksisDocumentAuditManager(root) {
         startButton.disabled = state.busy;
         stopButton.hidden = !state.busy;
         stopButton.disabled = !state.busy || !Number.isInteger(state.targetTabId);
+        if (retryButton) {
+            retryButton.disabled = state.busy || state.retryBusy || state.unreadableCount === null || state.unreadableCount === 0;
+            retryButton.textContent = state.unreadableCount > 0
+                ? `Okunamayanları yeniden tara (${state.unreadableCount})`
+                : 'Okunamayanları yeniden tara';
+        }
     }
 
     async function requestExtension(action, payload = {}, timeoutMs = 10_000) {
@@ -180,6 +189,72 @@ export function initializeYoksisDocumentAuditManager(root) {
             throw new Error(`${message}${detail}`);
         }
         return payload || {};
+    }
+
+    async function fetchUnreadableEntries() {
+        const entries = [];
+        let total = 0;
+        for (let page = 1; entries.length < total || page === 1; page += 1) {
+            const payload = await postShared('query', {
+                q: '', status: 'unreadable', page, pageSize: RETRY_PAGE_SIZE
+            });
+            if (!Number.isSafeInteger(payload.total) || !Array.isArray(payload.records)) {
+                throw new Error('Okunamayan kayıt listesi doğrulanamadı.');
+            }
+            total = payload.total;
+            if (total > MAX_RETRY_ENTRIES) throw new Error('Okunamayan kayıt sayısı güvenli tarama sınırını aşıyor.');
+            for (const record of payload.records) {
+                if (typeof record.application_number !== 'string' || typeof record.student_number !== 'string') {
+                    throw new Error('Okunamayan kayıt kimliği eksik.');
+                }
+                addRetryEntry(entries, record.application_number, record.student_number);
+            }
+            if (entries.length >= total) break;
+            if (!payload.records.length) throw new Error('Okunamayan kayıt listesi eksik döndü.');
+        }
+        if (entries.length !== total) throw new Error('Okunamayan kayıt listesi tam alınamadı.');
+        const localOutcomes = new Map();
+        for (const batch of pendingBatches) {
+            for (const record of batch.records) {
+                const { applicationNumber, studentNumber } = record.entry || {};
+                if (applicationNumber && studentNumber) {
+                    localOutcomes.set(applicationNumber, {
+                        studentNumber,
+                        unreadable: record.result?.status !== 'verified'
+                    });
+                }
+            }
+        }
+        for (const [applicationNumber, outcome] of localOutcomes) {
+            const index = entries.findIndex((entry) => entry.applicationNumber === applicationNumber);
+            if (index >= 0 && entries[index].studentNumber !== outcome.studentNumber) {
+                throw new Error('Aynı başvuru numarası için öğrenci numarası çakışması var; otomatik tarama durduruldu.');
+            }
+            if (outcome.unreadable) {
+                addRetryEntry(entries, applicationNumber, outcome.studentNumber);
+            } else if (index >= 0) {
+                entries.splice(index, 1);
+            }
+        }
+        if (entries.length > MAX_RETRY_ENTRIES) throw new Error('Okunamayan kayıt sayısı güvenli tarama sınırını aşıyor.');
+        return entries;
+    }
+
+    function addRetryEntry(entries, applicationNumber, studentNumber) {
+        const existing = entries.find((entry) => entry.applicationNumber === applicationNumber);
+        if (existing && existing.studentNumber !== studentNumber) {
+            throw new Error('Aynı başvuru numarası için öğrenci numarası çakışması var; otomatik tarama durduruldu.');
+        }
+        if (!existing) entries.push({ applicationNumber, studentNumber });
+    }
+
+    async function refreshUnreadableCount() {
+        try {
+            state.unreadableCount = (await fetchUnreadableEntries()).length;
+        } catch {
+            state.unreadableCount = null;
+        }
+        updateControls();
     }
 
     function savePendingBatches() {
@@ -298,9 +373,10 @@ export function initializeYoksisDocumentAuditManager(root) {
     async function refreshSharedRecords(retryPending = false) {
         await drainPendingBatches(retryPending);
         await loadSharedRecords();
+        await refreshUnreadableCount();
     }
 
-    async function startScan() {
+    async function startScan(entries) {
         if (!confirmation.checked) {
             setText(root, '#audit-status', 'Devam etmeden önce YÖKSİS formunun değişebileceğini onaylayın.');
             return;
@@ -315,12 +391,16 @@ export function initializeYoksisDocumentAuditManager(root) {
         currentBatch = [];
         root.dataset.auditScanId = state.scanId;
         results.replaceChildren();
-        setText(root, '#audit-status', 'YÖKSİS sekmesi ve kayıt listesi tarama başlamadan doğrulanıyor…');
+        setText(root, '#audit-status', entries
+            ? `${entries.length} okunamayan kayıt yeniden okunmak üzere hazırlanıyor…`
+            : 'YÖKSİS sekmesi ve kayıt listesi tarama başlamadan doğrulanıyor…');
         setText(root, '#audit-progress', '');
         updateControls();
 
-        setText(root, '#audit-status', 'YÖKSİS sekmesi ve kayıt listesi tarama başlamadan doğrulanıyor…');
-        const start = await requestExtension('START_YOKSIS_DOCUMENT_AUDIT', { scanId: state.scanId }, 30_000);
+        const start = await requestExtension('START_YOKSIS_DOCUMENT_AUDIT', {
+            scanId: state.scanId,
+            ...(entries ? { entries } : {})
+        }, 30_000);
         if (start.response?.success !== true) {
             state.busy = false;
             state.targetTabId = null;
@@ -332,7 +412,9 @@ export function initializeYoksisDocumentAuditManager(root) {
         state.requestId = start.requestId;
         root.dataset.auditRequestId = state.requestId;
         state.targetTabId = start.response.yoksisTabId || null;
-        setText(root, '#audit-status', 'Tarama sürüyor. Evrak yükleme veya kaydetme yapılmıyor.');
+        setText(root, '#audit-status', entries
+            ? `${entries.length} okunamayan kayıt sırayla yeniden okunuyor. Evrak yükleme veya kaydetme yapılmıyor.`
+            : 'Tarama sürüyor. Evrak yükleme veya kaydetme yapılmıyor.');
         updateControls();
     }
 
@@ -347,6 +429,29 @@ export function initializeYoksisDocumentAuditManager(root) {
         if (result.response?.success !== true) {
             stopButton.disabled = false;
             setText(root, '#audit-status', result.response?.error || 'Durdurma isteği iletilemedi.');
+        }
+    }
+
+    async function retryUnreadable() {
+        if (state.busy || state.retryBusy || !retryButton || retryButton.disabled) return;
+        state.retryBusy = true;
+        updateControls();
+        setText(root, '#audit-status', 'Okunamayan kayıtlar ortak depodan alınıyor…');
+        try {
+            const entries = await fetchUnreadableEntries();
+            state.unreadableCount = entries.length;
+            updateControls();
+            if (!entries.length) {
+                setText(root, '#audit-status', 'Yeniden okunacak kayıt yok.');
+                return;
+            }
+            state.retryBusy = false;
+            await startScan(entries);
+        } catch (error) {
+            setText(root, '#audit-status', error.message || 'Okunamayan kayıtlar alınamadı.');
+        } finally {
+            state.retryBusy = false;
+            updateControls();
         }
     }
 
@@ -407,12 +512,14 @@ export function initializeYoksisDocumentAuditManager(root) {
                 setText(root, '#audit-status', scanLabel);
             }
             if (!pendingBatches.length) await loadSharedRecords();
+            await refreshUnreadableCount();
             state.targetTabId = null;
             updateControls();
         }
     });
 
     startButton.addEventListener('click', () => { void startScan(); });
+    retryButton?.addEventListener('click', () => { void retryUnreadable(); });
     stopButton.addEventListener('click', () => { void stopScan(); });
     root.querySelector('#audit-search-submit')?.addEventListener('click', () => {
         query.page = 1;

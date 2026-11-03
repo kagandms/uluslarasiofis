@@ -87,6 +87,25 @@ test('shared YÖKSİS records upsert by application and support status, passport
     assert.equal((await missingDocuments.json()).total, 1);
 });
 
+test('an unreadable retry cannot downgrade an existing verified passport record', async () => {
+    const { database, environment } = await createFixture();
+    await worker.fetch(request('records', { body: {
+        scanId: 'scan-verified', records: [record('2026-00-0000001', '2600000001', 'verified', {
+            passportNumber: 'TEST-PASSPORT-1'
+        })]
+    } }), environment, {});
+
+    const retry = await worker.fetch(request('records', { body: {
+        scanId: 'scan-unreadable', records: [record('2026-00-0000001', '2600000001', 'unreadable')]
+    } }), environment, {});
+    const stored = database.prepare(`SELECT passport_number, result_status FROM yoksis_document_audit_records
+        WHERE application_number = '2026-00-0000001'`).first();
+
+    assert.equal(retry.status, 200);
+    assert.equal(stored.passport_number, 'TEST-PASSPORT-1');
+    assert.equal(stored.result_status, 'verified');
+});
+
 test('shared YÖKSİS writes reject cross-origin and malformed records', async () => {
     const { database, environment } = await createFixture();
     const crossOrigin = await worker.fetch(request('records', {

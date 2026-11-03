@@ -100,6 +100,32 @@ test('startYoksisDocumentAudit selects and verifies queue entries serially', asy
     assert.deepEqual(result, { status: 'complete', completed: 1, remaining: 0, selectionRestored: true });
 });
 
+test('startYoksisDocumentAudit retries only the requested unreadable identities', async () => {
+    const dom = createDocument({ twoRows: true });
+    const document = dom.window.document;
+    const rows = document.querySelectorAll('.table-scroll tbody tr');
+    const applicationInput = document.getElementById('application-number');
+    const studentInput = document.getElementById('student-number');
+    const events = [];
+    for (const row of rows) {
+        row.querySelector('button').addEventListener('click', () => {
+            const applicationNumber = row.cells[1].textContent;
+            const studentNumber = row.cells[2].textContent;
+            applicationInput.value = applicationNumber;
+            studentInput.value = studentNumber;
+        });
+    }
+
+    const result = await startYoksisDocumentAudit('scan-unreadable-only', document,
+        (event) => events.push(event), [{ applicationNumber: '2026-00-0000002', studentNumber: '2600000002' }]);
+
+    assert.deepEqual(events.filter((event) => event.type === 'record').map((event) => event.entry.applicationNumber),
+        ['2026-00-0000002']);
+    assert.equal(result.completed, 1);
+    assert.equal(events.find((event) => event.type === 'record').entry.applicationNumber, '2026-00-0000002');
+    dom.window.close();
+});
+
 test('startYoksisDocumentAudit reads verifiable entries but keeps an incomplete queue incomplete', async () => {
     const dom = createDocument({ twoRows: true });
     const document = dom.window.document;

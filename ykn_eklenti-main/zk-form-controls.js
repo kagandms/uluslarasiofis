@@ -659,5 +659,5 @@
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.119', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.120', execute });
 })();
