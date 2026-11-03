@@ -43,6 +43,16 @@ function normalizeStatus(status) {
         .trim();
 }
 
+function normalizeSearch(value) {
+    return String(value || '')
+        .toLocaleLowerCase('tr-TR')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/ı/g, 'i')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
 function classifyApplicationStatus(status) {
     const normalized = normalizeStatus(status);
     if (['islem tamamlandi', 'tamamlandi'].includes(normalized)) return 'successful';
@@ -163,7 +173,12 @@ export function initializeYoksisDocumentAuditManager(root) {
         });
         let payload = null;
         try { payload = await response.json(); } catch {}
-        if (!response.ok) throw new Error(payload?.error?.message || 'Ortak kayıt işlemi tamamlanamadı.');
+        if (!response.ok) {
+            const message = payload?.error?.message || 'Ortak kayıt işlemi tamamlanamadı.';
+            const requestId = response.headers?.get('X-Request-Id');
+            const detail = requestId ? ` (HTTP ${response.status}, İstek: ${requestId})` : ` (HTTP ${response.status})`;
+            throw new Error(`${message}${detail}`);
+        }
         return payload || {};
     }
 
@@ -240,9 +255,35 @@ export function initializeYoksisDocumentAuditManager(root) {
             const payload = await postShared('query', body);
             if (requestSequence !== query.sequence) return;
             results.replaceChildren();
-            for (const record of payload.records || []) appendSharedRecord(root, record);
+            const visibleApplications = new Set();
+            for (const record of payload.records || []) {
+                appendSharedRecord(root, record);
+                visibleApplications.add(record.application_number);
+            }
             query.total = Number.isSafeInteger(payload.total) ? payload.total : 0;
-            setText(root, '#audit-shared-count', `${query.total} kayıt`);
+            const pendingApplications = new Set();
+            const search = normalizeSearch(body.q);
+            for (const batch of pendingBatches) {
+                for (const record of batch.records) {
+                    const applicationNumber = record.entry?.applicationNumber;
+                    if (!applicationNumber) continue;
+                    pendingApplications.add(applicationNumber);
+                    const identity = record.result?.status === 'verified' ? record.result.identity : null;
+                    const category = identity ? classifyApplicationStatus(record.result.applicationStatus) : 'unreadable';
+                    if (visibleApplications.has(applicationNumber)
+                        || (body.status !== 'all' && category !== body.status)
+                        || (search && !normalizeSearch([
+                            identity?.firstName, identity?.lastName, record.entry?.studentNumber,
+                            identity?.passportNumber
+                        ].join(' ')).includes(search))) continue;
+                    appendRecord(root, record);
+                    visibleApplications.add(applicationNumber);
+                }
+            }
+            const pendingLabel = pendingApplications.size
+                ? ` · ${pendingApplications.size} yerel sonuç eşitlenmeyi bekliyor`
+                : '';
+            setText(root, '#audit-shared-count', `${query.total} kayıt${pendingLabel}`);
             setText(root, '#audit-page', `${query.page} / ${Math.max(1, Math.ceil(query.total / query.pageSize))}`);
             const previous = root.querySelector('#audit-page-previous');
             const next = root.querySelector('#audit-page-next');

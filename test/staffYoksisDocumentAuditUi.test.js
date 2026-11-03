@@ -144,6 +144,45 @@ test('incomplete scans say that only their read results were saved', async () =>
     window.close();
 });
 
+test('failed shared writes remain visible from the tab-local retry queue', async () => {
+    const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
+    const { window } = dom;
+    const root = window.document.getElementById('audit-root');
+    window.sessionStorage.setItem('staff-yoksis-audit-pending-v1', JSON.stringify([{
+        scanId: 'scan-retry',
+        records: [{
+            entry: { applicationNumber: '2026-00-0000001', studentNumber: '2600000001' },
+            result: {
+                status: 'verified',
+                identity: {
+                    applicationNumber: '2026-00-0000001', studentNumber: '2600000001',
+                    firstName: 'TEST', lastName: 'STUDENT', phone: '5000000000'
+                },
+                applicationStatus: 'İşlem Bekliyor',
+                documents: []
+            }
+        }]
+    }]));
+    window.fetch = async (url) => url.endsWith('/records')
+        ? {
+            ok: false,
+            status: 500,
+            headers: new window.Headers({ 'X-Request-Id': 'req-audit-write-failed' }),
+            json: async () => ({ error: { message: 'İşlem tamamlanamadı.' } })
+        }
+        : { ok: true, status: 200, json: async () => ({ total: 0, records: [] }) };
+
+    initializeYoksisDocumentAuditManager(root);
+    await new Promise((resolve) => window.setTimeout(resolve, 10));
+
+    assert.equal(root.querySelectorAll('#audit-results tr').length, 1);
+    assert.match(root.querySelector('#audit-results').textContent, /2600000001/);
+    assert.match(root.querySelector('#audit-shared-count').textContent, /eşitlenmeyi bekliyor/);
+    assert.match(root.querySelector('#audit-status').textContent, /req-audit-write-failed/);
+    assert.notEqual(window.sessionStorage.getItem('staff-yoksis-audit-pending-v1'), '[]');
+    window.close();
+});
+
 test('staff audit manager loads the shared records and queries by passport, status and page', async () => {
     const dom = new JSDOM(markup, { url: 'https://portal.test/yetkili/' });
     const { window } = dom;
