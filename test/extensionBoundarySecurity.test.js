@@ -73,6 +73,16 @@ test('extension audit events require the originating scan and identity-bound bou
     };
 
     assert.equal(security.isValidYoksisAuditEvent(validRecord), true);
+    assert.equal(security.isValidYoksisAuditEvent({
+        ...validRecord,
+        data: { ...validRecord.data, result: { ...validRecord.data.result,
+            identity: { ...validRecord.data.result.identity, passportNumber: 'U12345678' } } }
+    }), true);
+    assert.equal(security.isValidYoksisAuditEvent({
+        ...validRecord,
+        data: { ...validRecord.data, result: { ...validRecord.data.result,
+            identity: { ...validRecord.data.result.identity, passportNumber: 'P'.repeat(65) } } }
+    }), false);
     assert.equal(security.isValidYoksisAuditEvent({ ...validRecord, portalTabId: -1 }), false);
     assert.equal(security.isValidYoksisAuditEvent({ ...validRecord, data: { ...validRecord.data, entry: { ...validRecord.data.entry, studentNumber: 'wrong' } } }), false);
     assert.equal(security.isValidYoksisAuditEvent({ ...validRecord, data: { ...validRecord.data, result: { ...validRecord.data.result, identity: { ...validRecord.data.result.identity, applicationNumber: '2026-00-0000002' } } } }), false);
