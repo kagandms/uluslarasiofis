@@ -43,14 +43,37 @@ function classifyStatus(applicationStatus, resultStatus) {
 }
 
 function classifyWriteFailure(error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    const causes = [error, error?.cause, error?.cause?.cause];
+    const message = causes.map((cause) => cause?.message).filter((value) => typeof value === 'string').join(' ').toLowerCase();
     if (message.includes('foreign key constraint')) return 'foreign-key-constraint';
     if (message.includes('check constraint')) return 'check-constraint';
     if (message.includes('not null constraint')) return 'not-null-constraint';
     if (message.includes('unique constraint')) return 'unique-constraint';
+    if (message.includes('daily row write limit')) return 'database-write-limit';
+    if (message.includes('maximum db size') || message.includes('maximum account storage limit')) return 'database-storage-limit';
     if (message.includes('overloaded')) return 'database-overloaded';
+    if (message.includes('storage operation exceeded timeout')) return 'database-timeout';
+    if (message.includes('isolate exceeded its memory limit')) return 'database-memory-limit';
+    if (message.includes('exceeded its cpu time limit')) return 'database-cpu-limit';
+    if (message.includes('network connection lost')
+        || message.includes('replica disconnected')
+        || message.includes('reset because its code was updated')
+        || message.includes('internal error') && message.includes('storage')
+        || message.includes('cannot resolve d1 db due to transient issue')) return 'database-transient';
+    if (message.includes('d1_type_error')) return 'database-type-error';
+    if (message.includes('d1_column_notfound') || message.includes('no such column')) return 'database-column-error';
+    if (message.includes('d1_exec_error') || message.includes('syntax error')) return 'database-sql-error';
     if (message.includes('locked') || message.includes('busy')) return 'database-busy';
     return 'database-write-failed';
+}
+
+function readWriteFailureCode(error) {
+    const causes = [error, error?.cause, error?.cause?.cause];
+    const codes = causes.map((cause) => cause?.code).filter((value) => typeof value === 'string');
+    const message = causes.map((cause) => cause?.message).filter((value) => typeof value === 'string').join(' ');
+    const code = [...codes, message.match(/\b(?:D1_[A-Z_]+|SQLITE_[A-Z_]+)\b/i)?.[0]]
+        .find((value) => typeof value === 'string' && /^(?:D1_[A-Z_]+|SQLITE_[A-Z_]+)$/i.test(value));
+    return code ? code.toUpperCase() : 'UNCLASSIFIED';
 }
 
 function validateDocuments(value) {
@@ -164,6 +187,7 @@ async function writeRecords(request, environment, requestId, staff) {
             requestId,
             errorName: error?.name || 'UnknownError',
             failureKind: classifyWriteFailure(error),
+            failureCode: readWriteFailureCode(error),
             recordCount: records.length
         });
         throw error;
