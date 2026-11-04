@@ -98,7 +98,7 @@ export async function handleStaffApplicationSpreadsheet(request, environment, ap
                 applicationId, recordKey: pending.record_key,
                 verifyExisting: current?.state === 'pending_add' ? 'true' : 'false',
                 firstName: application.first_name.trim(), lastName: application.last_name.trim(),
-                passportNumber: application.passport_number
+                passportNumber: application.passport_number, submittedAt: application.updated_at
             }
             : { applicationId, recordKey: pending.record_key,
                 sheetName: typeof pending.sheet_name === 'string' ? pending.sheet_name : '' }, environment);

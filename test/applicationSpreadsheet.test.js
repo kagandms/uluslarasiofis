@@ -31,14 +31,15 @@ async function seedStaff(database) {
     return `staff_session=${TOKEN}`;
 }
 
-async function seedApplication(database, { id, status = 'submitted', passport = '0012345' } = {}) {
+async function seedApplication(database, { id, status = 'submitted', passport = '0012345',
+    submittedAt = new Date().toISOString(), updatedAt = new Date().toISOString() } = {}) {
     const applicationId = id || crypto.randomUUID();
     await database.prepare(`INSERT INTO students (id, student_number, normalized_student_number)
         VALUES (?, ?, ?)`)
         .bind(`student-${applicationId}`, `STU-${applicationId}`, `STU-${applicationId}`).run();
-    await database.prepare(`INSERT INTO applications (id, student_id, application_type, status, first_name, last_name, passport_number, submitted_at)
-        VALUES (?, ?, 'initial', ?, 'Ada', 'Student', ?, ?)`)
-        .bind(applicationId, `student-${applicationId}`, status, passport, status === 'draft' ? null : new Date().toISOString()).run();
+    await database.prepare(`INSERT INTO applications (id, student_id, application_type, status, first_name, last_name, passport_number, submitted_at, updated_at)
+        VALUES (?, ?, 'initial', ?, 'Ada', 'Student', ?, ?, ?)`)
+        .bind(applicationId, `student-${applicationId}`, status, passport, status === 'draft' ? null : submittedAt, updatedAt).run();
     return applicationId;
 }
 
@@ -71,7 +72,9 @@ test('spreadsheet transfer rejects drafts before calling Apps Script', async () 
 
 test('spreadsheet add uses server identity and preserves the passport number as text', async () => {
     const { environment, database } = setup();
-    const applicationId = await seedApplication(database);
+    const submittedAt = '2026-10-26T11:53:00.000Z';
+    const updatedAt = '2026-11-03T08:26:00.000Z';
+    const applicationId = await seedApplication(database, { submittedAt, updatedAt });
     const cookie = await seedStaff(database);
     const calls = [];
     const originalFetch = globalThis.fetch;
@@ -94,9 +97,10 @@ test('spreadsheet add uses server identity and preserves the passport number as 
         assert.deepEqual({ state: result.state, sheetName: result.sheetName }, { state: 'present', sheetName: '03.11.2026' });
         assert.deepEqual({ action: calls[0].action, applicationId: calls[0].applicationId,
             verifyExisting: calls[0].verifyExisting,
-            firstName: calls[0].firstName, lastName: calls[0].lastName, passportNumber: calls[0].passportNumber }, {
+            firstName: calls[0].firstName, lastName: calls[0].lastName, passportNumber: calls[0].passportNumber,
+            submittedAt: calls[0].submittedAt }, {
             action: 'residenceAdd', applicationId, verifyExisting: 'false',
-            firstName: 'Ada', lastName: 'Student', passportNumber: '0012345'
+            firstName: 'Ada', lastName: 'Student', passportNumber: '0012345', submittedAt: updatedAt
         });
         assert.equal(database.prepare('SELECT state FROM application_spreadsheet_records WHERE application_id=?')
             .bind(applicationId).first().state, 'present');

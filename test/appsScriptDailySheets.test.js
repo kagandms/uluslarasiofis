@@ -171,6 +171,18 @@ test('staging standalone script opens its configured existing spreadsheet by ID'
     assert.deepEqual(workbook.getSheetByName('03.11.2026').values[1], ['Ada Lovelace', '0012345', 'Yüklendi', 'app-123']);
 });
 
+test('residence add writes to the Istanbul calendar day of the application last update', async () => {
+    const { context, workbook } = await loadScript({ now: new Date('2026-11-04T10:00:00Z') });
+    const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
+        action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', submittedAt: '2026-11-03T08:26:00.000Z'
+    }) } }).text);
+
+    assert.deepEqual(result, { success: true, state: 'present', sheetName: '03.11.2026', recordKey: 'app-123' });
+    assert.equal(workbook.getSheetByName('04.11.2026'), null);
+    assert.deepEqual(Array.from(workbook.getSheetByName('03.11.2026').values[1]), ['Ada Lovelace', '0012345', 'Yüklendi', 'app-123']);
+});
+
 test('automatic creation skips Istanbul weekends and handles year changes', async () => {
     const saturday = await loadScript({ now: new Date('2026-11-06T21:30:00Z') });
     const weekendResult = saturday.context.otomatikGunlukIkametSayfasiOlustur();

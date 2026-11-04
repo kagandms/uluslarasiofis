@@ -391,7 +391,10 @@ function islemIkametAdd_(e) {
   var firstName = typeof parameters.firstName === "string" ? parameters.firstName.trim() : "";
   var lastName = typeof parameters.lastName === "string" ? parameters.lastName.trim() : "";
   var passportNumber = typeof parameters.passportNumber === "string" ? parameters.passportNumber.trim() : "";
+  var submittedAt = typeof parameters.submittedAt === "string" && parameters.submittedAt
+    ? new Date(parameters.submittedAt) : new Date();
   if (!recordKey || !firstName || !lastName || !passportNumber
+      || isNaN(submittedAt.getTime())
       || firstName.length > 120 || lastName.length > 120 || passportNumber.length > 80) {
     return hataDondur_("Gecersiz ikamet kaydi");
   }
@@ -413,7 +416,7 @@ function islemIkametAdd_(e) {
       }
     }
 
-    var sheet = ensureDailyResidenceSheet_(new Date(), workbook);
+    var sheet = ensureDailyResidenceSheet_(submittedAt, workbook);
     if (!verifyExisting) {
       var todayMatches = findResidenceRecord_(recordKey, workbook, sheet);
       if (todayMatches.length > 1) return hataDondur_("Kayit anahtari birden fazla sekmede bulundu.");
