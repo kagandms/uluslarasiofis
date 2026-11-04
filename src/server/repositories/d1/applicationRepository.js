@@ -269,10 +269,13 @@ export function createApplicationRepository(database) {
                     SELECT applications.id, students.student_number, applications.first_name,
                            applications.last_name, applications.application_type, applications.application_route, applications.status,
                            applications.submitted_at, applications.created_at, applications.updated_at,
-                           application_deletions.state AS deletion_state
+                           application_deletions.state AS deletion_state,
+                           application_spreadsheet_records.state AS spreadsheet_state,
+                           application_spreadsheet_records.sheet_name AS spreadsheet_sheet_name
                     FROM applications
                     JOIN students ON students.id = applications.student_id
                     LEFT JOIN application_deletions ON application_deletions.application_id=applications.id
+                    LEFT JOIN application_spreadsheet_records ON application_spreadsheet_records.application_id=applications.id
                     WHERE ${whereClause}
                     ORDER BY applications.updated_at DESC, applications.created_at DESC, applications.id DESC
                     LIMIT ? OFFSET ?

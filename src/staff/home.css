@@ -611,3 +611,16 @@ body.dark-mode #home-screen .home-action:focus-visible {
 @media (max-width: 899px) {
     #home-screen:has(.work-hours-reminder:not([hidden])) .home-intro { padding-top: 6rem; }
 }
+
+#staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer { min-height: 42px; color: #fff; background: #217346; border-color: #185c37; white-space: nowrap; }
+#staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer:hover:not(:disabled) { color: #fff; background: #185c37; border-color: #104126; }
+#staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+#staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer[data-spreadsheet-state="remove"] { color: #fff; background: #b42318; border-color: #8a1c13; }
+#staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer[data-spreadsheet-state="remove"]:hover:not(:disabled) { color: #fff; background: #8a1c13; border-color: #64140e; }
+.staff-spreadsheet-transfer-error { display: block; margin-top: 0.35rem; color: #b91c1c; font-size: 0.8rem; }
+body.dark-mode #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer { color: #fff; background: #217346; border-color: #6fca96; }
+body.dark-mode #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer:hover:not(:disabled) { color: #fff; background: #185c37; }
+body.dark-mode #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer[data-spreadsheet-state="remove"] { color: #fff; background: #b42318; border-color: #fca5a5; }
+body.dark-mode #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer[data-spreadsheet-state="remove"]:hover:not(:disabled) { color: #fff; background: #8a1c13; }
+body.dark-mode #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer:focus-visible { outline-color: #93c5fd; }
+body.dark-mode .staff-spreadsheet-transfer-error { color: #fca5a5; }

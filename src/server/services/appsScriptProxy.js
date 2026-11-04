@@ -1,12 +1,13 @@
-const ALLOWED_ACTIONS = new Set(['getAll', 'search', 'add', 'update', 'unmark', 'remove']);
+const ALLOWED_ACTIONS = new Set(['getAll', 'search', 'add', 'update', 'unmark', 'remove', 'residenceAdd', 'residenceRemove']);
 const REQUEST_TIMEOUT_MS = 50_000;
 
 export class UpstreamServiceError extends Error {
-    constructor(code, isConfigurationError = false) {
+    constructor(code, isConfigurationError = false, reason = null) {
         super('Tebligat service request failed.');
         this.name = 'UpstreamServiceError';
         this.code = code;
         this.isConfigurationError = isConfigurationError;
+        this.reason = reason;
     }
 }
 
@@ -78,7 +79,7 @@ export async function callAppsScript(action, parameters, environment, fetcher = 
                     payload = null;
                 }
             }
-            if (!payload && action !== 'getAll' && action !== 'search') {
+            if (!payload && !['getAll', 'search', 'residenceAdd', 'residenceRemove'].includes(action)) {
                 payload = { success: true };
             }
         }
@@ -122,7 +123,19 @@ export async function callAppsScript(action, parameters, environment, fetcher = 
 
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || (payload.success === false && !payload.results)) {
         const isTimeout = postError?.name === 'TimeoutError' || postError?.name === 'AbortError';
-        throw new UpstreamServiceError(isTimeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_FAILURE');
+        const reason = payload?.error === 'Yetkisiz erisim' ? 'UNAUTHORIZED'
+            : payload?.error === 'Ikamet kaydi eklenemedi.' ? 'SHEET_WRITE_FAILED'
+                : payload?.success === false ? 'REJECTED' : 'INVALID_RESPONSE';
+        throw new UpstreamServiceError(isTimeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_FAILURE', false, reason);
+    }
+    if (action === 'residenceAdd' && (payload.success !== true || payload.state !== 'present'
+        || payload.recordKey !== parameters.recordKey || typeof payload.sheetName !== 'string'
+        || !/^\d{2}\.\d{2}\.\d{4}$/.test(payload.sheetName))) {
+        throw new UpstreamServiceError('UPSTREAM_FAILURE');
+    }
+    if (action === 'residenceRemove' && (payload.success !== true || payload.state !== 'absent'
+        || payload.recordKey !== parameters.recordKey)) {
+        throw new UpstreamServiceError('UPSTREAM_FAILURE');
     }
     return payload;
 }

@@ -60,6 +60,28 @@ test('ISO date-only sheet names keep their calendar order', () => {
     assert.deepEqual([...sheets], ['2026-10-14']);
 });
 
+test('old local teblig cache is ignored after the daily residence schema cutover', async context => {
+    const dom = new JSDOM('<button id="tebligat-search-toggle"></button><div id="tebligat-search-body"></div><input id="tebligat-search-input"><select id="tebligat-year-select"><option>2026</option></select><div id="tebligat-search-results"></div>', { url: 'https://portal.test' });
+    context.after(() => dom.window.close());
+    installGlobal(context, 'window', dom.window);
+    installGlobal(context, 'document', dom.window.document);
+    installGlobal(context, 'localStorage', dom.window.localStorage);
+    localStorage.setItem('tebligat_excel_cache', JSON.stringify([{ sayfa: '03.11.2026', isim: 'RESIDENCE ONLY', no: '00123' }]));
+    localStorage.setItem('tebligat_last_sync_time', String(Date.now()));
+    const timers = [];
+    context.mock.method(globalThis, 'setTimeout', (callback, delay) => { timers.push({ callback, delay }); return timers.length; });
+    context.mock.method(globalThis, 'clearTimeout', () => {});
+    installGlobal(context, 'fetch', async () => ({ ok: true, json: async () => ({ results: [] }) }));
+    initTebligatSearch();
+    const input = document.querySelector('input');
+    input.value = 'RESIDENCE';
+    input.dispatchEvent(new dom.window.Event('input'));
+
+    await timers.find(timer => timer.delay === 250).callback();
+
+    assert.doesNotMatch(document.querySelector('#tebligat-search-results').textContent, /RESIDENCE ONLY/);
+});
+
 test('queue action prevents duplicate clicks and releases the button after rejection', async context => {
     const dom = new JSDOM();
     context.after(() => dom.window.close());
