@@ -326,7 +326,19 @@ function ensureDailyResidenceSheet_(date, workbook) {
   var ss = workbook || getWorkbook_();
   var existing = ss.getSheetByName(sheetName);
   if (existing) {
-    if (!isDailyResidenceSheet_(existing)) throw new Error("Ayni adli eski sekme korunuyor: " + sheetName);
+    if (!isDailyResidenceSheet_(existing)) {
+      var headers = existing.getRange(1, 1, 1, 3).getValues()[0];
+      var keyHeader = existing.getRange(1, 4).getValue();
+      var hasUnexpectedKeys = keyHeader !== "KAYIT_ANAHTARI" && existing.getLastRow() > 1
+        && existing.getRange(2, 4, existing.getLastRow() - 1, 1).getValues().some(function(row) {
+          return String(row[0] || "").trim() !== "";
+        });
+      if (JSON.stringify(headers) !== JSON.stringify(["AD SOYAD", "PASAPORT", "YÖKSİS DURUMU"])
+          || (keyHeader && keyHeader !== "KAYIT_ANAHTARI") || hasUnexpectedKeys) {
+        throw new Error("Ayni adli eski sekme korunuyor: " + sheetName);
+      }
+      existing.addDeveloperMetadata(IKAMET_SAYFA_SEMA_ANAHTARI, IKAMET_SAYFA_SEMA_V1);
+    }
     return existing;
   }
 

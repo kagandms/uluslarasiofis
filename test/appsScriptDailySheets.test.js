@@ -183,6 +183,37 @@ test('residence add writes to the Istanbul calendar day of the application last 
     assert.deepEqual(Array.from(workbook.getSheetByName('03.11.2026').values[1]), ['Ada Lovelace', '0012345', 'Yüklendi', 'app-123']);
 });
 
+test('residence add adopts an existing daily sheet with exact headers and preserves its rows', async () => {
+    const existing = createSheet('03.11.2026', [
+        ['AD SOYAD', 'PASAPORT', 'YÖKSİS DURUMU'],
+        ['Existing Student', 'P-123', 'Yüklendi']
+    ]);
+    const { context, workbook } = await loadScript({ sheets: [existing], now: new Date('2026-11-04T10:00:00Z') });
+    const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
+        action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', submittedAt: '2026-11-03T08:26:00.000Z'
+    }) } }).text);
+
+    assert.deepEqual(result, { success: true, state: 'present', sheetName: '03.11.2026', recordKey: 'app-123' });
+    assert.equal(workbook.getSheetByName('03.11.2026'), existing);
+    assert.deepEqual(Array.from(existing.values[1]), ['Existing Student', 'P-123', 'Yüklendi']);
+    assert.deepEqual(Array.from(existing.values[2]), ['Ada Lovelace', '0012345', 'Yüklendi', 'app-123']);
+    assert.equal(existing.metadata.get('residence-sheet-schema'), 'daily-residence-v1');
+});
+
+test('residence add keeps an existing dated legacy sheet unchanged when headers differ', async () => {
+    const legacy = createSheet('03.11.2026', [['AD SOYAD', 'NO', 'TEBLIGAT']]);
+    const { context } = await loadScript({ sheets: [legacy], now: new Date('2026-11-04T10:00:00Z') });
+    const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
+        action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', submittedAt: '2026-11-03T08:26:00.000Z'
+    }) } }).text);
+
+    assert.deepEqual(result, { success: false, error: 'Ikamet kaydi eklenemedi.' });
+    assert.deepEqual(Array.from(legacy.values[0]), ['AD SOYAD', 'NO', 'TEBLIGAT']);
+    assert.equal(legacy.metadata.has('residence-sheet-schema'), false);
+});
+
 test('automatic creation skips Istanbul weekends and handles year changes', async () => {
     const saturday = await loadScript({ now: new Date('2026-11-06T21:30:00Z') });
     const weekendResult = saturday.context.otomatikGunlukIkametSayfasiOlustur();
