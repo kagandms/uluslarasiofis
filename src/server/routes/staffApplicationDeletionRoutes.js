@@ -21,13 +21,18 @@ async function verifyApplication(repository, applicationId) {
 async function archiveApplication({ environment, applicationId, staff, requestId }) {
     const repositories = createD1Repositories(environment.DB);
     const application = await verifyApplication(repositories, applicationId);
+    const spreadsheetRecord = await repositories.applicationSpreadsheet.findByApplicationId(applicationId);
+    if (spreadsheetRecord && spreadsheetRecord.state !== 'absent') {
+        throw new ApiError(409, 'APPLICATION_SPREADSHEET_TRANSFER_PRESENT', 'Başvuruyu arşivlemeden önce E-Tablo kaydını kaldırın.');
+    }
     const now = new Date().toISOString();
     const result = await environment.DB.batch([
         environment.DB.prepare(`INSERT INTO application_deletions
             (application_id,previous_status,state,deleted_by_staff_id,deleted_at)
             SELECT ?,?,'soft_deleted',?,? WHERE EXISTS(SELECT 1 FROM applications WHERE id=? AND status=?)
+                AND NOT EXISTS(SELECT 1 FROM application_spreadsheet_records WHERE application_id=? AND state<>'absent')
             ON CONFLICT(application_id) DO NOTHING`)
-            .bind(applicationId, application.status, staff.id, now, applicationId, application.status),
+            .bind(applicationId, application.status, staff.id, now, applicationId, application.status, applicationId),
         environment.DB.prepare(`DELETE FROM application_sessions WHERE application_id=? AND changes()=1`).bind(applicationId),
         environment.DB.prepare(`INSERT OR IGNORE INTO audit_events
             (id,event_type,actor_type,actor_staff_id,application_id,request_id,safe_metadata_json,created_at)
@@ -84,6 +89,11 @@ async function purgeApplication({ environment, applicationId, staff, requestId }
     const deletion = await database.prepare(`SELECT state FROM application_deletions WHERE application_id=?`)
         .bind(applicationId).first();
     if (!deletion) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Silinen başvuru bulunamadı.');
+    const spreadsheetRecord = await database.prepare(`SELECT state FROM application_spreadsheet_records
+        WHERE application_id=?`).bind(applicationId).first();
+    if (spreadsheetRecord && spreadsheetRecord.state !== 'absent') {
+        throw new ApiError(409, 'APPLICATION_SPREADSHEET_TRANSFER_PRESENT', 'Kalıcı silmeden önce E-Tablo kaydını kaldırın.');
+    }
     if (deletion.state === 'soft_deleted') {
         const started = await database.prepare(`UPDATE application_deletions SET state='purge_pending',purge_started_at=?
             WHERE application_id=? AND state='soft_deleted'`).bind(new Date().toISOString(), applicationId).run();
@@ -114,6 +124,7 @@ async function purgeApplication({ environment, applicationId, staff, requestId }
         database.prepare(`DELETE FROM document_revision_files WHERE revision_id IN (SELECT revisions.id FROM document_revisions AS revisions JOIN document_records AS records ON records.id=revisions.document_record_id WHERE records.application_id=?)`).bind(applicationId),
         database.prepare(`DELETE FROM document_revisions WHERE document_record_id IN (SELECT id FROM document_records WHERE application_id=?)`).bind(applicationId),
         database.prepare(`DELETE FROM document_records WHERE application_id=?`).bind(applicationId),
+        database.prepare(`DELETE FROM application_spreadsheet_records WHERE application_id=?`).bind(applicationId),
         database.prepare(`DELETE FROM application_deletions WHERE application_id=?`).bind(applicationId),
         database.prepare(`DELETE FROM applications WHERE id=?`).bind(applicationId),
         database.prepare(`DELETE FROM students WHERE id=? AND NOT EXISTS (SELECT 1 FROM applications WHERE student_id=?)`)

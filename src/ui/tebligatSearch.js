@@ -3,6 +3,8 @@ import { createTebligatResultCard } from './tebligatResultRenderer.js';
 const CLOUD_SYNC_TIMEOUT_MS = 90_000;
 const CLOUD_SYNC_PROGRESS_INTERVAL_MS = 1_000;
 const SEARCH_SHEET_LIMIT = 16;
+const TEBLIGAT_CACHE_KEY = 'tebligat_excel_cache_v2';
+const TEBLIGAT_CACHE_SYNC_KEY = 'tebligat_last_sync_time_v2';
 
 // In-Memory Normalized Cache for 0 ms Instant Search
 let inMemoryCache = [];
@@ -186,7 +188,7 @@ function normalizeRecord(r) {
 
 function loadCacheIntoMemory() {
     try {
-        const cachedStr = localStorage.getItem('tebligat_excel_cache');
+        const cachedStr = localStorage.getItem(TEBLIGAT_CACHE_KEY);
         if (cachedStr) {
             const rawArr = JSON.parse(cachedStr);
             if (Array.isArray(rawArr)) {
@@ -290,8 +292,8 @@ export function initTebligatSearch() {
 
             if (response.ok && Array.isArray(data.results)) {
                 const allCachedRows = data.results;
-                localStorage.setItem('tebligat_excel_cache', JSON.stringify(allCachedRows));
-                localStorage.setItem('tebligat_last_sync_time', String(Date.now()));
+                localStorage.setItem(TEBLIGAT_CACHE_KEY, JSON.stringify(allCachedRows));
+                localStorage.setItem(TEBLIGAT_CACHE_SYNC_KEY, String(Date.now()));
                 const newCount = loadCacheIntoMemory();
                 cachedCount = newCount;
 
@@ -344,7 +346,7 @@ export function initTebligatSearch() {
     }
 
     // Yetkili giriş yaptığında arka planda otomatik senkronizasyon (son eşitlemeden 3 dk geçmişse veya önbellek boşsa)
-    const lastSyncTimestamp = parseInt(localStorage.getItem('tebligat_last_sync_time') || '0', 10);
+    const lastSyncTimestamp = parseInt(localStorage.getItem(TEBLIGAT_CACHE_SYNC_KEY) || '0', 10);
     const isCacheStale = (Date.now() - lastSyncTimestamp > 3 * 60 * 1000) || cachedCount === 0;
     if (isCacheStale) {
         window.setTimeout(() => {
@@ -355,7 +357,7 @@ export function initTebligatSearch() {
     // Tebliğ sekmesine geçildiğinde gerekiyorsa arka planda tazele
     document.addEventListener('workspace:view-changed', (event) => {
         if (event.detail?.viewName === 'teblig') {
-            const lastSync = parseInt(localStorage.getItem('tebligat_last_sync_time') || '0', 10);
+            const lastSync = parseInt(localStorage.getItem(TEBLIGAT_CACHE_SYNC_KEY) || '0', 10);
             if (Date.now() - lastSync > 5 * 60 * 1000) {
                 void syncTebligatDatabase({ isManual: false }).catch(() => {});
             }
