@@ -1,5 +1,9 @@
 # Cloud CI ve production release hazırlığı
 
+> Bu belge 24 Ekim 2026 tarihli hazırlık ve geçmiş erişim kanıtlarını saklar; güncel çalıştırılabilir
+> prosedür [`Manual production release`](../manual-production-release.md) belgesidir. Buradaki eski
+> “sonraki değişiklik” ve durum notlarını güncel workflow davranışı olarak yorumlamayın.
+
 Durum (24 Ekim 2026): **PR #31 ile baseline güncellemesi merge edildi; exact-SHA run #34 (`864556d652d087a17280d35ef8e352682c333150`, `operation=preflight`) başarılı oldu ve publish adımı atlandı.** Bu çalışma ağacındaki uygulama adayları commit edilmedi ve exact production SHA'sı olarak korumalı workflow'a sunulmadı. `publish` gerçek Worker yayını yapar; bu doküman veya yerel doğrulama deploy yetkisi değildir. Uzak migration ayrıca onaylı operasyondur.
 
 ## Çalışan CI tasarımı

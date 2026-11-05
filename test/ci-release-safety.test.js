@@ -203,3 +203,19 @@ test('production release workflow stays manual, serialized, environment-gated an
     assert.match(ci, /candidate-artifact\.mjs verify "\$EXPECTED_SHA" "\$ARTIFACT_ROOT"/);
     assert.match(ci, /sha256sum --check "\$ARTIFACT_ROOT\/candidate-config\.sha256"/);
 });
+
+test('local production deploy is blocked while the explicit production dry-run remains available', () => {
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    assert.equal(pkg.scripts['deploy:production'], 'node scripts/block-local-production-deploy.mjs');
+    assert.equal(pkg.scripts['predeploy:production'], undefined);
+    assert.match(pkg.scripts['deploy:dry-run:production'], /wrangler deploy --env production --dry-run/);
+    assert.equal(pkg.scripts['predeploy:dry-run:production'], 'node scripts/check-production-print-secrets.mjs');
+
+    const result = spawnSync('npm', ['run', 'deploy:production'], {
+        cwd: new URL('..', import.meta.url), encoding: 'utf8', timeout: 30_000,
+        env: { ...process.env, WRANGLER_SEND_METRICS: 'false' }
+    });
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /Production release \(manual\) workflow/);
+    assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /wrangler deploy/);
+});

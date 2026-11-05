@@ -66,9 +66,17 @@ Görüntüler istemcide canvas ile JPEG'e normalize edilir; sunucuda gerçek JPE
 
 Geçici fotoğraflar mevcut private `DOCUMENTS` R2 bucket'ında immutable `quarantine/<UUID>` objeleridir; public URL yoktur. PC receipt/ack sonrası obje hemen silinir; consumed metadata TTL sonuna kadar tekrarları engeller. Pencere kapanması objeleri temizler; expiry cleanup mevcut cron'da 20 oturumluk partilerle çalışır. 15 dakika erişim sınırıdır; fiziksel silme cron/backlog/provider başarısına bağlıdır. Kaydedilen PDF sürümleri bu geçici fotoğraf TTL'sinden ayrıdır; soft delete geçmişi korur.
 
-## UAT ve ilerideki yayın/rollback sırası
+## UAT ve eski yayın planının durumu
 
-Bu bölüm hazırlık planıdır; production mutation komutları çalıştırılmadı.
+Bu bölümün altındaki eski yayın ve migration adımları artık çalıştırılabilir talimat değildir.
+Production Worker yayını yalnız [Manual production release](manual-production-release.md)
+workflow’undan yapılır. Bu dokümandaki eski `wrangler deploy`/remote migration komutlarını
+çalıştırmayın. Workflow migration uygulamaz; herhangi bir uzak migration ayrıca incelenmeli ve
+ayrı açık kullanıcı yetkisi gerektirir. Mevcut baseline 0038’i içermediğinden aday yayın kapısı
+0038 incelemesi tamamlanana kadar kapalıdır.
+
+UAT ve rollback notları da operasyon yetkisi vermez. Canlı veri, gerçek başvuru, fiziksel çıktı,
+remote migration veya rollback ayrı ve kapsamı belirli yetkilendirme gerektirir.
 
 1. Snapshot tabanını ve sadeleştirilmiş farkı incele; ayrı yayın kararı al. Gate OFF kalsın.
 2. Cutover öncesi private dizinde yeni D1 export ve restore point al; mevcut Worker/asset sürümünü ve print/env ayarlarını kaydet. Mevcut özel export'un yerel migration provası geçti; cutover yedeği yerine geçmez. D1 export R2 gövdelerini kapsamaz.
@@ -78,19 +86,9 @@ Bu bölüm hazırlık planıdır; production mutation komutları çalıştırıl
 6. Seçili PC ve gerçek telefonda sentetik belgelerle kamera/galeri → doğrudan PC import → PDF düzenleme/birleştirme/kayıt/indirme/revision kontrolü yap. İkinci PC, claim tekrarları, logout/expiry ve private erişim reddini doğrula. ONLINE pending belge halen erişilemez olmalı; online scanner normal çalışmalı.
 7. UAT sonunda gate OFF; kabul sonrası normal yetkili kullanımını açma ayrı operator kararıdır.
 
-İleride onaylı yayın penceresinde kullanılacak komutlar:
-
-```sh
-npx wrangler d1 export uluslarasiofis-production --remote --env production --output /private/backup/production-pre0018.sql
-node scripts/check-physical-production-migration.mjs uluslarasiofis-production
-npx wrangler d1 migrations apply uluslarasiofis-production --remote --env production
-node scripts/check-physical-production-migration.mjs uluslarasiofis-production
-npm run build:production
-npx wrangler deploy --env production --dry-run --keep-vars
-npx wrangler deploy --env production --keep-vars
-```
-
-İlk rollback: fiziksel gate OFF. Kod rollback: doğrulanmış production snapshot `6123ec3` için temiz checkout/build/dry-run, mevcut print/env/secret ayarları korunarak baseline Worker+asset yayını. Additive 0018 yerinde kalır; DROP/down migration yapılmaz. Eski Worker'a dönüldüğünde geçici fotoğraf cleanup'u bulunmayacağından fiziksel transferleri önce kapat/temizle veya dar kapsamlı temizlik kodunu koru. Tam DB restore yalnız veri hasarı halinde ayrıca değerlendirilir; sonraki online başvuruları kaybettirebilecek bir migration rollback yöntemi olarak kullanılmaz.
+Eski rollback planı uygulama onayı veya desteklenen rollback mekanizması değildir. Güncel manual release
+workflow otomatik rollback yapmaz; bir rollback ancak güncel Worker, şema, secret/binding ve cron
+uyumluluğu için ayrı incelenmiş ve ayrıca yetkilendirilmiş bir plan varsa ele alınabilir.
 
 ## Kanıt
 
