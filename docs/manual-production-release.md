@@ -5,15 +5,17 @@ full reviewed SHA; the workflow rejects a SHA that differs from current `origin/
 `operation=preflight` is the first step and does not publish. `operation=publish` requires a
 separate, explicit user request for that exact SHA and operation, followed by the configured
 Production environment review. Never dispatch automatically. The workflow does not merge branches;
-an unmerged candidate SHA cannot pass its `production` HEAD checks. The reviewed code-only baseline in
-`config/production-publication.json` points to commit `2f583e170fd929a0efc170df86656c0565f6ad58`,
-which includes production schema migrations `0034_yoksis_document_audit.sql`,
-`0035_yoksis_audit_glob_limit.sql`, `0036_application_spreadsheet_records.sql`, and
-`0037_application_gocnet_attempts.sql`. A read-only 5 November 2026 ledger check also recorded
-`0038_final_application_documents.sql`, but its full resulting schema/catalog state has not been
-reconciled with the migration source. The pinned baseline does not include 0038, so the normal
-release scope gate blocks a candidate containing it. Do not infer that this candidate has no pending
-migrations or update the baseline to bypass the gate. Earlier release and rollback evidence remains under
+an unmerged candidate SHA cannot pass its `production` HEAD checks. This candidate sets the reviewed
+code-only baseline in `config/production-publication.json` to
+`b1590deca163e6aeb30038722e02d74fd4933646`, which contains production schema migrations
+`0034_yoksis_document_audit.sql`, `0035_yoksis_audit_glob_limit.sql`,
+`0036_application_spreadsheet_records.sql`, `0037_application_gocnet_attempts.sql`, and
+`0038_final_application_documents.sql`. The 5 November 2026 read-only review confirmed the 0038
+ledger entry, both added column definitions, and all eight expected catalog rows against the exact
+migration source. Aggregate policy/status counts were consistent with the intended submitted-policy
+snapshot and draft upgrade, but do not prove historical migration effects or live code identity. This
+baseline records the reviewed source boundary only; it does not prove live artifact equality or rollback
+safety, and it does not apply a migration. Earlier release and rollback evidence remains under
 `docs/production-only-evidence/`; the R2 recovery copy is in the same Cloudflare account.
 
 ## Release procedure
@@ -88,25 +90,25 @@ responses of fixed public GET routes. They cannot prove a student upload, policy
 workflow, spreadsheet mutation, scanner processing, or physical print. Such state-changing and
 hardware checks require separately authorized UAT with synthetic records and controlled test files.
 
-## Outstanding 0038 baseline review
+## 0038 baseline evidence and history requirement
 
-The current pinned baseline is `2f583e170fd929a0efc170df86656c0565f6ad58`. The only protected-path
-difference from that baseline to the final-document candidate is the new
-`migrations/0038_final_application_documents.sql`; `wrangler.jsonc` and
-`scripts/ci/runtime-secret-metadata.mjs` do not differ. The normal code-only release gate therefore
-blocks this candidate as-is. Do not alter the ledger, migration, or baseline to bypass the gate.
+The previous code-only baseline was `2f583e170fd929a0efc170df86656c0565f6ad58`. Its only
+protected-path difference to the selected anchor `b1590deca163e6aeb30038722e02d74fd4933646` is
+`migrations/0038_final_application_documents.sql`; the migration SHA-256 is
+`626e7d5c9d445d4e81ba22f4a5abc3b7e743f0514ccec5dcc1d5192b3c9b6401`, matching the preserved
+release source copy. From that anchor to this candidate, `migrations/`, `wrangler.jsonc`, and
+`scripts/ci/runtime-secret-metadata.mjs` have no differences. The read-only production checks recorded
+the ledger row, the `final_document_policy` and `host_is_turkish` column definitions, and all eight
+catalog rows matching 0038. Aggregate policy/status counts were consistent with the intended snapshot
+and draft-upgrade behavior; because later application operations can change those counts, they are not
+proof of historical effects. No applicant content was selected. No migration, ledger, schema, or live
+data was changed.
 
-Before proposing a narrowly scoped baseline update, perform read-only production checks: confirm the
-0038 ledger entry; inspect `PRAGMA table_info(applications)` plus `sqlite_master` definitions for the
-two added columns; compare the eight 0038 `document_requirements` rows by ID, code, application type,
-required/order and active state; and compare aggregate policy-version/status counts with the migration's
-intended submitted-snapshot and draft-upgrade effects. Do not select applicant content. Reconcile those
-results against the exact migration bytes and expected policy catalog. If they match, a separate review
-may propose a commit changing only `config/production-publication.json`'s
-`code_only_baseline_sha` to a reviewed commit containing the exact 0038 source, with this evidence
-recorded. Do not change migration/ledger contents, Worker configuration, or the gate logic. No
-migration execution or schema change is part of that baseline review. If schema/catalog evidence does
-not match, stop and investigate separately.
+The baseline anchor commit must remain in production history because the code-only scope check requires
+it to be an ancestor of each candidate. A squash merge removes that exact commit, and a rebase merge
+rewrites its SHA; either can break the baseline ancestry check. Preserve the anchor with a merge method
+that retains its exact commit ancestry. This baseline does not establish live code identity or rollback
+safety.
 
 The active Worker has not been bound to a source SHA/artifact manifest. This candidate preserves the
 final-document feature only; it does not establish that every live behavior or out-of-band change is
