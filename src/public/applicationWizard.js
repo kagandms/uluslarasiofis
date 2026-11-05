@@ -1302,7 +1302,7 @@ function renderWizard(root, state) {
     if (state.step === 2) stage.append(createDocumentsStep(document, state));
     if (state.step === 3) stage.append(createDeclarationStep(document, state.application, state));
     if (state.step === 4) stage.append(createReviewStep(document, state));
-    if (state.step > 0 && state.application?.status !== 'submitted') panel.append(createButton(document, messages, 'previous', 'previous'));
+    if (state.step > 0 && !['submitted', 'under_review'].includes(state.application?.status)) panel.append(createButton(document, messages, 'previous', 'previous'));
     panel.append(stage);
     root.replaceChildren(panel);
     if (state._focusError && errorElement) {

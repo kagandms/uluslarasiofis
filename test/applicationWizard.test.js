@@ -1250,8 +1250,8 @@ test('Review submits once, keeps five steps, and shows student-safe confirmation
     document.defaultView.close();
 });
 
-test('Review confirms under_review responses and does not treat a draft response as submitted', async () => {
-    for (const returnedStatus of ['under_review', 'draft']) {
+test('submitted and under_review responses are terminal while draft remains unconfirmed', async () => {
+    for (const returnedStatus of ['submitted', 'under_review', 'draft']) {
         const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
         let submitCalls = 0;
         api.acceptCurrentApplicationDeclaration = async (version) => {
@@ -1275,9 +1275,15 @@ test('Review confirms under_review responses and does not treat a draft response
         if (returnedStatus === 'under_review') {
             assert.match(root.textContent, /Başvurunuz gönderildi/);
             assert.equal(root.querySelector('[data-action="submit-application"]'), null);
+            assert.equal(root.querySelector('[data-action="previous"]'), null);
+        } else if (returnedStatus === 'submitted') {
+            assert.match(root.textContent, /Başvurunuz gönderildi/);
+            assert.equal(root.querySelector('[data-action="submit-application"]'), null);
+            assert.equal(root.querySelector('[data-action="previous"]'), null);
         } else {
             assert.doesNotMatch(root.textContent, /Başvurunuz gönderildi/);
             assert.ok(root.querySelector('[data-action="submit-application"]'));
+            assert.ok(root.querySelector('[data-action="previous"]'));
         }
         document.defaultView.close();
     }

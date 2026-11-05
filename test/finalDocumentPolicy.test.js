@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { listDocumentPolicies, listPublicDocumentOverview, readDocumentPolicy, mapDocumentRequirementCodeForTypeSwitch } from '../src/server/domain/documentPolicy.js';
-import { listDocumentPolicies as listPreviousPolicies } from '../src/server/domain/document-policy-v2.js';
-import { listDocumentPolicies as listLegacyPolicies } from '../src/server/domain/document-policy-v1.js';
+import { listDocumentPolicies as listPreviousPolicies, readDocumentPolicy as readPreviousPolicy } from '../src/server/domain/document-policy-v2.js';
+import { listDocumentPolicies as listLegacyPolicies, readDocumentPolicy as readLegacyPolicy } from '../src/server/domain/document-policy-v1.js';
 import { readDocumentConditionSql } from '../src/server/repositories/d1/document-condition-sql.js';
 
 const COMMON = ['residence_application_form', 'passport', 'student_certificate', 'health_insurance', 'residence_permit_fee'];
@@ -106,9 +106,41 @@ test('submitted v1 and v2 snapshots retain their previous requirements', () => {
     }
 });
 
+test('v1 and v2 health-insurance SQL guards match each snapshot across application types', () => {
+    const database = new DatabaseSync(':memory:');
+    database.exec('CREATE TABLE applications (application_type TEXT, document_policy_version INTEGER, insurance_basis TEXT)');
+    const insuranceBases = ['bilateral_agreement', 'system_verified', 'gss_pending', null];
+    const versions = [
+        { version: 1, readPolicy: readLegacyPolicy, allows: (type, basis) => ['initial', 'renewal'].includes(type) && basis === 'bilateral_agreement' },
+        { version: 2, readPolicy: readPreviousPolicy, allows: (type, basis) => basis === 'bilateral_agreement' || (['renewal', 'transition'].includes(type) && basis === 'system_verified') }
+    ];
+    try {
+        for (const { version, readPolicy, allows } of versions) {
+            for (const applicationType of ['initial', 'renewal', 'transition']) {
+                for (const insurance_basis of insuranceBases) {
+                    database.exec('DELETE FROM applications');
+                    database.prepare('INSERT INTO applications VALUES (?, ?, ?)').run(applicationType, version, insurance_basis);
+                    const sqlAllows = Boolean(database.prepare(`SELECT 1 FROM applications WHERE 1=1 ${readDocumentConditionSql('health_insurance_document')}`).get());
+                    const context = { document_policy_version: version, final_document_policy: 0, insurance_basis };
+                    const policy = readPolicy('health_insurance', applicationType, false, context);
+                    const expected = allows(applicationType, insurance_basis);
+                    assert.equal(Boolean(policy), expected, `v${version} domain: ${applicationType}/${insurance_basis}`);
+                    assert.equal(sqlAllows, expected, `v${version} SQL: ${applicationType}/${insurance_basis}`);
+                }
+            }
+        }
+    } finally {
+        database.close();
+    }
+});
+
 test('common insurance document never depends on insurance basis and DASK appears only for own home', () => {
     for (const insurance_basis of ['system_verified', 'bilateral_agreement', 'gss_pending', null]) {
-        assert.equal(readDocumentPolicy('health_insurance', 'initial', false, { insurance_basis }).required, true);
+        for (const applicationType of ['initial', 'renewal', 'transition']) {
+            assert.equal(readDocumentPolicy('health_insurance', applicationType, false, {
+                final_document_policy: 1, document_policy_version: 3, insurance_basis
+            }).required, true);
+        }
     }
     assert.equal(readDocumentPolicy('address_dask', 'initial', false, 'own_home').required, false);
     assert.equal(readDocumentPolicy('address_dask', 'initial', false, 'rental_contract'), null);
