@@ -406,8 +406,8 @@ function islemIkametAdd_(e) {
   var targetSheetName = parameters.targetSheetName;
   var todaySheetName = Utilities.formatDate(new Date(), IKAMET_SAAT_DILIMI, "dd.MM.yyyy");
   if (!recordKey || !firstName || !lastName || !passportNumber
-      || typeof targetSheetName !== "string" || !/^\d{2}\.\d{2}\.\d{4}$/.test(targetSheetName)
-      || targetSheetName !== todaySheetName
+      || (targetSheetName !== undefined && (typeof targetSheetName !== "string"
+        || !/^\d{2}\.\d{2}\.\d{4}$/.test(targetSheetName) || targetSheetName !== todaySheetName))
       || firstName.length > 120 || lastName.length > 120 || passportNumber.length > 80) {
     return hataDondur_("Gecersiz ikamet kaydi");
   }
@@ -430,7 +430,9 @@ function islemIkametAdd_(e) {
     }
 
     var sheet = ensureDailyResidenceSheet_(new Date(), workbook);
-    if (sheet.getName() !== targetSheetName) return hataDondur_("Gecersiz gunluk sekme hedefi");
+    if (sheet.getName() !== todaySheetName || (targetSheetName && sheet.getName() !== targetSheetName)) {
+      return hataDondur_("Gecersiz gunluk sekme hedefi");
+    }
     if (!verifyExisting) {
       var todayMatches = findResidenceRecord_(recordKey, workbook, sheet);
       if (todayMatches.length > 1) return hataDondur_("Kayit anahtari birden fazla sekmede bulundu.");

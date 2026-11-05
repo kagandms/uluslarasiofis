@@ -187,6 +187,17 @@ test('residence add writes to today even when the application was last updated o
     assert.deepEqual(Array.from(workbook.getSheetByName('05.11.2026').values[1]), ['Ada Lovelace', '0012345', 'Yüklendi', 'app-123']);
 });
 
+test('legacy residence requests without a target date also write to today', async () => {
+    const { context, workbook } = await loadScript({ now: new Date('2026-11-05T05:00:00Z') });
+    const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
+        action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', submittedAt: '2026-10-27T10:00:00.000Z'
+    }) } }).text);
+
+    assert.equal(result.sheetName, '05.11.2026');
+    assert.equal(workbook.getSheetByName('27.10.2026'), null);
+});
+
 test('residence add rejects a stale target date before creating or writing a sheet', async () => {
     const { context, workbook } = await loadScript({ now: new Date('2026-11-05T05:00:00Z') });
     const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
