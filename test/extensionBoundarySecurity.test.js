@@ -61,6 +61,22 @@ test('extension accepts only correlated YÖKSİS audit commands with a bounded s
     assert.equal(security.isValidPortalMessage({ ...stop, targetTabId: '12' }), false);
 });
 
+test('extension validates GöçNet reads and bounds writes to the selected tab and PDF size', () => {
+    const security = evaluateScript(portalSecuritySource, 'YKN_PORTAL_SECURITY');
+    const read = { action: 'CHECK_GOCNET_TRANSFER', requestId: 'request-1', applicationNumber: '2099-12-99999999' };
+    const common = { requestId: 'request-1', attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', targetTabId: 42 };
+    const save = { ...common, action: 'SAVE_GOCNET_RECORD', applicationNumber: read.applicationNumber,
+        studentNumber: '99000000001', passportNumber: 'P123456', firstName: 'TEST', lastName: 'STUDENT', phoneNational: '5000000000' };
+    const upload = { ...common, action: 'UPLOAD_GOCNET_DOCUMENT', applicationNumber: read.applicationNumber,
+        recordId: '70001', pdfSha256: 'a'.repeat(64), pdfBase64: 'JVBERg==' };
+    assert.equal(security.isValidPortalMessage(read), true);
+    assert.equal(security.isValidPortalMessage({ ...read, applicationNumber: 'bad' }), false);
+    assert.equal(security.isValidPortalMessage(save), true);
+    assert.equal(security.isValidPortalMessage({ ...save, phoneNational: '123' }), false);
+    assert.equal(security.isValidPortalMessage(upload), true);
+    assert.equal(security.isValidPortalMessage({ ...upload, pdfBase64: 'x'.repeat(12_582_913) }), false);
+});
+
 test('extension audit events require the originating scan and identity-bound bounded results', () => {
     const security = evaluateScript(portalSecuritySource, 'YKN_PORTAL_SECURITY');
     const validRecord = {

@@ -411,6 +411,7 @@
     globalThis.YoksisDocumentAuditController = Object.freeze({
         checkYoksisDocumentAuditReadiness,
         collectYoksisAuditQueueAcrossInnerScroll,
+        isActive: () => activeScans.size > 0,
         startYoksisDocumentAudit,
         requestStopYoksisDocumentAudit
     });

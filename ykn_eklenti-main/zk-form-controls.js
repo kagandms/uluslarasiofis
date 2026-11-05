@@ -1,5 +1,5 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.114') return;
+    if (window.YknZkForm?.version === '1.2.121') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
     const COUNTRY_ALIAS_GROUPS = [
@@ -490,6 +490,88 @@
         });
     }
 
+    async function setGocnetPhone(options) {
+        if (!/^5\d{9}$/.test(options.phoneNational || '') || typeof options.requestId !== 'string'
+            || options.requestId.length < 1 || options.requestId.length > 128) throw new Error('GöçNet telefonu doğrulanamadı.');
+        await waitForIdle();
+        const targets = collectDocuments().flatMap((targetDocument) => Array.from(
+            targetDocument.querySelectorAll('input[placeholder="5XXXXXXXXX"][maxlength="10"]'))
+            .filter((input) => isVisible(input) && !input.readOnly)
+            .map((input) => ({ input, targetWindow: targetDocument.defaultView })));
+        if (targets.length !== 1) throw new Error('GöçNet telefon alanı tekil değil.');
+        const target = targets[0];
+        const widget = findZkWidget(target.input, target.targetWindow);
+        if (!widget?.setValue || !widget?.fire) throw new Error('GöçNet telefon alanının ZK bileşeni bulunamadı.');
+        const observer = observeResponse(target.targetWindow);
+        try {
+            widget.setValue(options.phoneNational);
+            widget.fire('onChange', { value: options.phoneNational }, { toServer: true });
+            flushDeferredSelections(target.targetWindow);
+            await waitForResponse(observer);
+            await waitForIdle();
+        } finally { observer.dispose(); }
+        return { success: target.input.value === options.phoneNational && widget.getValue?.() === options.phoneNational,
+            verified: target.input.value === options.phoneNational && widget.getValue?.() === options.phoneNational };
+    }
+
+    async function queryGocnetRecords(options) {
+        if (!/^20\d{2}-\d{2}-\d{5,8}$/.test(options.applicationNumber || '')
+            || typeof options.requestId !== 'string' || options.requestId.length < 1 || options.requestId.length > 128) {
+            throw new Error('GöçNet sorgu isteği doğrulanamadı.');
+        }
+        await waitForIdle();
+        const targets = collectDocuments().map((targetDocument) => {
+            const headings = Array.from(targetDocument.querySelectorAll('h1, h2, h3, h4, h5, legend, .z-caption, .z-groupbox-legend'))
+                .filter((heading) => isVisible(heading)
+                    && normalizeCompact(heading.textContent).startsWith('kayitliikametislemlerilistesi'));
+            if (headings.length !== 1) return null;
+            const hasHistoryHeaders = (list) => Array.from(list.querySelectorAll('.z-listbox-header th'))
+                .map((cell) => normalizeCompact(cell.textContent))
+                .filter((header) => ['eikametbasvuruno', 'ogrencino', 'gocnetkayitno'].includes(header)).length === 3;
+            let section = headings[0];
+            let lists = [];
+            for (let depth = 0; section && depth < 8; section = section.parentElement, depth += 1) {
+                lists = Array.from(section.querySelectorAll('.z-listbox')).filter(hasHistoryHeaders);
+                if (lists.length) break;
+            }
+            if (lists.length !== 1) return null;
+            const numbers = Array.from(section.querySelectorAll('input[placeholder="Tüm veya kısmi no..."]')).filter(isVisible);
+            const students = Array.from(section.querySelectorAll('input[placeholder="Öğrenci no..."]')).filter(isVisible);
+            const processFilters = Array.from(section.querySelectorAll('select')).filter(isVisible);
+            const buttons = Array.from(section.querySelectorAll('button.z-button, button, .z-button'))
+                .filter((button) => isVisible(button) && normalizeCompact(button.textContent.replace(/^\W+/, '')) === 'kayitlarilistele');
+            if (numbers.length !== 1 || students.length !== 1 || students[0].value.trim() || processFilters.length !== 1
+                || normalizeCompact(processFilters[0].selectedOptions?.[0]?.textContent) !== 'tumu'
+                || buttons.length !== 1 || buttons[0].disabled) return null;
+            return { targetDocument, list: lists[0], number: numbers[0], process: processFilters[0], button: buttons[0] };
+        }).filter(Boolean);
+        if (targets.length !== 1) throw new Error('GöçNet kayıt listesi belirsiz veya filtreleri kısıtlı.');
+        const target = targets[0];
+        const targetWindow = target.targetDocument.defaultView;
+        const numberWidget = findZkWidget(target.number, targetWindow);
+        const listButtonWidget = findZkWidget(target.button, targetWindow);
+        if (!numberWidget?.setValue || !numberWidget?.fire || !listButtonWidget?.fire || target.number.readOnly) {
+            throw new Error('GöçNet ZK filtreleri doğrulanamadı.');
+        }
+        const filterObserver = observeResponse(targetWindow);
+        try {
+            numberWidget.setValue(options.applicationNumber);
+            numberWidget.fire('onChange', { value: options.applicationNumber }, { toServer: true });
+            flushDeferredSelections(targetWindow);
+            await waitForResponse(filterObserver);
+            await waitForIdle();
+        } finally { filterObserver.dispose(); }
+        if (target.number.value !== options.applicationNumber || numberWidget.getValue?.() !== options.applicationNumber
+            || target.process.value !== '') throw new Error('GöçNet filtre değeri sunucuda doğrulanamadı.');
+        const queryObserver = observeResponse(targetWindow);
+        try {
+            listButtonWidget.fire('onClick', null, { toServer: true });
+            await waitForResponse(queryObserver);
+            await waitForIdle();
+        } finally { queryObserver.dispose(); }
+        return { success: true, freshResponse: queryObserver.hasResponse() };
+    }
+
     function isSelectionRetained(target) {
         const group = target?.widget?.getRadiogroup?.();
         const hasSelection = target?.radio.checked && target.widget?.isChecked?.() === true
@@ -642,6 +724,8 @@
     /** Executes a bounded MAIN-world ZK operation without returning student values. */
     async function execute(options) {
         try {
+            if (options.action === 'queryGocnetRecords') return await queryGocnetRecords(options);
+            if (options.action === 'setGocnetPhone') return await setGocnetPhone(options);
             if (options.action === 'waitForIdle') return await settleAndSyncSearch(options);
             if (options.action === 'verifyRadio') {
                 await waitForIdle();
@@ -659,5 +743,5 @@
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.120', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.121', execute });
 })();

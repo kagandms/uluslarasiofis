@@ -18,6 +18,7 @@ import { createCurrentResubmissionUploadIntent, finalizeCurrentResubmissionUploa
 import { createStaffDocumentPreview, createStaffApplicationArchiveManifest, downloadStaffApplicationDocument,
     streamStaffApplicationArchiveFile } from './routes/staffDocumentAccessRoutes.js';
 import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
+import { createStaffApplicationGocnetAttempt, recordStaffApplicationGocnetEvent } from './routes/staffApplicationGocnetRoutes.js';
 import { handleStaffApplicationSpreadsheet } from './routes/staffApplicationSpreadsheetRoutes.js';
 import { approveStaffApplicationDocument, unapproveStaffApplicationDocument, requestStaffDocumentResubmission, transitionStaffApplicationStatus } from './routes/staffReviewRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
@@ -195,6 +196,23 @@ async function routeApi(request, environment, requestId, cache) {
     if (pathname === '/api/staff/auth/logout' || pathname === '/api/logout') return logoutStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/bootstrap') return bootstrapStaff(request, environment, requestId);
     if (pathname === '/api/staff/applications/query') return queryStaffApplications(request, environment);
+    const gocnetEventMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/gocnet-attempts\/([^/]+)\/events$/);
+    if (gocnetEventMatch) {
+        let applicationId;
+        let attemptId;
+        try {
+            applicationId = decodeURIComponent(gocnetEventMatch[1]);
+            attemptId = decodeURIComponent(gocnetEventMatch[2]);
+        } catch { throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.'); }
+        return recordStaffApplicationGocnetEvent(request, environment, applicationId, attemptId, requestId);
+    }
+    const gocnetAttemptMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/gocnet-attempts$/);
+    if (gocnetAttemptMatch) {
+        let applicationId;
+        try { applicationId = decodeURIComponent(gocnetAttemptMatch[1]); }
+        catch { throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.'); }
+        return createStaffApplicationGocnetAttempt(request, environment, applicationId, requestId);
+    }
     const spreadsheetMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/spreadsheet$/);
     if (spreadsheetMatch) {
         let applicationId;

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="tr">
+<meta charset="utf-8">
+<title>Sentetik GöçNet DOM sözleşmesi — canlı öğrenci verisi içermez</title>
+<body>
+<section>
+  <h2>İkamet İzni Başvuru Belgelerinin GöçNet'e İletilmesi Ekranı</h2>
+  <table><tbody>
+    <tr><td><div><span class="label z-label">E-İkamet Başvuru No:</span></div></td><td><input class="z-textbox" placeholder="Örn: 2026-07-00123456" maxlength="30"></td><td><button class="z-button">🔍 Başvuru Sorgula</button></td></tr>
+    <tr><td><div><span class="label z-label">İrtibat Telefonu (*):</span></div></td><td><input class="z-textbox" placeholder="5XXXXXXXXX" maxlength="10"></td></tr>
+  </tbody></table>
+  <table><tbody><tr>
+    <td><span class="z-label">Mevcut GöçNet İşlem Kayıt No:</span></td><td class="z-hbox-separator"><img alt=""></td><td><span class="z-label">70001</span></td>
+    <td class="z-hbox-separator"><img alt=""></td><td><span class="z-label">RemoteID (Benzersiz Kayıt No):</span></td><td class="z-hbox-separator"><img alt=""></td><td><span class="z-label">00000000-0000-4000-8000-000000000001</span></td>
+  </tr></tbody></table>
+  <button class="z-button">💾 İşlemi Başlat / Kaydet</button>
+  <div class="z-listbox" data-fixture="documents">
+    <div class="z-listbox-header"><table><thead><tr><th>Kod</th><th>Belge Başlığı</th><th>Zorunluluk</th><th>Not / Açıklama</th><th>Yükleme Durumu</th><th>GöçNet Belge Kayıt No</th><th>İşlemler (Görüntüle / Yükle / Sil)</th></tr></thead></table></div>
+    <div class="z-listbox-body"><table><tbody>
+      <tr class="z-listitem"><td class="z-listcell">999</td><td class="z-listcell">Başvuru Belgeleri</td><td class="z-listcell">EVET (Zorunlu)</td><td class="z-listcell">-</td><td class="z-listcell">Yüklenmedi</td><td class="z-listcell">-</td><td class="z-listcell"><button class="z-button" disabled>👁️ Görüntüle</button><div><button class="z-button">📤 Yükle</button><span class="z-upload"><form enctype="multipart/form-data" method="POST"><input name="file" type="file"></form></span></div><button class="z-button" disabled>🗑️ Sil</button></td></tr>
+    </tbody><tbody class="z-listbox-emptybody"><tr><td style="display:none"><div class="z-listbox-emptybody-content">Belge bulunamadı.</div></td></tr></tbody></table></div>
+  </div>
+  <button class="z-button">🔒 İşlemi Tamamla &amp; Kapat</button>
+</section>
+<section>
+  <h2>📋 Kayıtlı İkamet İşlemleri Listesi (Veritabanı Geçmişi &amp; Takip)</h2>
+  <input class="z-textbox" placeholder="Tüm veya kısmi no..." value="2099-01-0000001">
+  <input class="z-textbox" placeholder="Öğrenci no...">
+  <label>Süreç Durumu: <select data-fixture="process-filter"><option value="">-- Tümü --</option><option value="completed">Tamamlandı</option></select></label>
+  <button class="z-button">🔎 Kayıtları Listele</button>
+  <div class="z-listbox" data-fixture="records">
+    <div class="z-listbox-header"><table><thead><tr><th>ID</th><th>E-İkamet Başvuru No</th><th>Öğrenci No</th><th>Okul Kodu</th><th>Birim / Program</th><th>GöçNet Kayıt No</th><th>Süreç Durumu</th><th>Kayıt Tarihi</th><th>İşlemler</th></tr></thead></table></div>
+    <div class="z-listbox-body"><table><tbody class="fixture-records">
+      <tr class="z-listitem"><td>1</td><td>2099-01-0000001</td><td>99000000001</td><td>TEST</td><td>Sentetik program</td><td>70001</td><td>🟡 İşlem Kaydedildi</td><td>01.01.2099</td><td><button class="z-button">📂 Seç &amp; Yükle</button></td></tr>
+    </tbody><tbody class="z-listbox-emptybody"><tr><td style="display:none" colspan="9"><div class="z-listbox-emptybody-content">Veritabanında kayıtlı ikamet işlemi bulunamadı. Lütfen filtreleyip 'Kayıtları Listele' butonuna tıklayınız.</div></td></tr></tbody></table></div>
+  </div>
+</section>
+<div class="z-window z-window-modal" style="display:none"><div class="z-window-header">GöçNet İkamet İzni Belge İletim İşlem Adımları</div><button>Kapat</button></div>
+<div class="z-messagebox-window z-window z-window-highlighted" data-fixture="message" style="display:none">
+  <div class="z-window-header">Belge Yüklendi</div>
+  <div class="z-messagebox"><span class="z-label">Belge GöçNet'e başarıyla iletildi. Belge Kayıt No: 80001</span></div>
+  <button class="z-messagebox-button z-button">Tamam</button>
+</div>
+</body>
+</html>
