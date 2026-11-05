@@ -4,7 +4,7 @@ import { createImmigrationFileCoverPage } from '../shared/applicationDocumentPdf
 export function createPhysicalReceiptTemplate(document, snapshot, logos) {
     if (!snapshot.portal_origin || !snapshot.tracking_reference) throw new Error('Takip numarası ve doğrulanmış portal adresi gerekli.');
     return createImmigrationFileCoverPage(document, {
-        studentCode: snapshot.student_number || snapshot.tracking_reference,
+        studentCode: snapshot.tracking_reference,
         firstName: snapshot.first_name,
         lastName: snapshot.last_name,
         deliveryMethod: 'physical',

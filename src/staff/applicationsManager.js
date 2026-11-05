@@ -406,9 +406,9 @@ function createApplicationSummary(document, application) {
     section.className = 'staff-application-summary';
     section.append(createText(document, 'h4', '', 'Başvuru ve başvuran bilgileri'));
     section.append(createApplicationPdfDownloadControl(document, application, {
-        downloadApplicationPdf: 'A4 PDF indir / yazdır',
-        applicationPdfPreparing: 'Başvuru PDF’i hazırlanıyor…',
-        applicationPdfReady: 'PDF indirildi. Yazdırabilir veya cihazınızda saklayabilirsiniz.',
+        downloadApplicationPdf: 'A4 kapak PDF’ini indir / yazdır',
+        applicationPdfPreparing: 'Kapak PDF’i hazırlanıyor…',
+        applicationPdfReady: 'Kapak PDF’i indirildi. Yazdırabilir veya cihazınızda saklayabilirsiniz.',
         applicationPdfFailed: 'PDF oluşturulamadı. Lütfen yeniden deneyin.'
     }, 'staff-application-pdf-control'));
     details.className = 'staff-application-details-grid';

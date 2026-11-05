@@ -198,7 +198,7 @@ export function createImmigrationFileCoverPage(document, details, logos, trackin
     fields.className = 'cover-fields';
     const identity = document.createElement('div');
     identity.className = 'cover-field-panel';
-    appendText(document, identity, 'span', 'cover-field-label', 'ÖĞRENCİ KODU');
+    appendText(document, identity, 'span', 'cover-field-label', 'ITU BAŞVURU KODU');
     const code = appendText(document, identity, 'p', 'application-cover-code physical-receipt-code', displayValue(details.studentCode) || '—');
     code.dir = 'ltr';
     const name = document.createElement('div');
