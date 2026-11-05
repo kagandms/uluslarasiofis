@@ -16,10 +16,14 @@ function createSheet(name, values = []) {
         metadata,
         rangeReads: 0,
         autoResizeRange: null,
+        columnWidths: [100, 100, 100],
+        resizedColumns: [],
         getName() { return this.name; },
         setName(value) { this.name = value; return this; },
         getMaxRows() { return 1000; },
         getLastRow() { return this.values.reduce((last, row, index) => row?.some(value => value !== '' && value != null) ? index + 1 : last, 0); },
+        getColumnWidth(column) { return this.columnWidths[column - 1]; },
+        setColumnWidth(column, width) { this.columnWidths[column - 1] = width; this.resizedColumns.push(column); },
         getProtections() { return protections; },
         autoResizeColumns(start, count) { this.autoResizeRange = [start, count]; },
         hideColumns() { this.hidden = true; },
@@ -244,7 +248,7 @@ test('residence add and remove use the stable record key and return confirmed st
     const post = action => JSON.parse(context.doPost({ postData: { contents: JSON.stringify({ key: 'test-api-key', ...action }) } }).text);
     const addPayload = {
         action: 'residenceAdd', applicationId: 'app-123', recordKey: 'app-123',
-        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345'
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: 'P12345678901234567890'
     };
 
     const added = post(addPayload);
@@ -252,8 +256,12 @@ test('residence add and remove use the stable record key and return confirmed st
     const sheet = workbook.getSheetByName('03.11.2026');
     assert.deepEqual(added, { success: true, state: 'present', sheetName: '03.11.2026', recordKey: 'app-123' });
     assert.deepEqual(repeated, added);
-    assert.deepEqual(sheet.values[1], ['Ada Lovelace', '0012345', 'Yüklendi', 'app-123']);
-    assert.deepEqual(sheet.autoResizeRange, [1, 3]);
+    assert.deepEqual(sheet.values[1], ['Ada Lovelace', 'P12345678901234567890', 'Yüklendi', 'app-123']);
+    assert.deepEqual(sheet.resizedColumns, [1, 2, 3]);
+    assert.equal(sheet.columnWidths[0], 108);
+    assert.equal(sheet.columnWidths[1], addPayload.passportNumber.length * 7 + 24);
+    assert.equal(sheet.columnWidths[2], 'YÖKSİS DURUMU'.length * 7 + 24);
+    assert.equal(sheet.autoResizeRange, null);
     assert.equal(sheet.getProtections().length, 1);
     assert.deepEqual(post({ action: 'residenceRemove', applicationId: 'app-123', recordKey: 'app-123' }),
         { success: true, state: 'absent', recordKey: 'app-123' });

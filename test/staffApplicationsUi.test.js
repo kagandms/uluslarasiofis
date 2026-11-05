@@ -1061,6 +1061,7 @@ test('spreadsheet transfer updates from the confirmed response and locks only it
 
     const buttons = root.querySelectorAll('[data-action="spreadsheet-transfer"]');
     buttons[0].click();
+    await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(transferCalls, [['app-001', 'add']]);
     assert.equal(root.querySelectorAll('[data-action="spreadsheet-transfer"]')[0].disabled, true);
     assert.equal(root.querySelectorAll('[data-action="spreadsheet-transfer"]')[1].disabled, false);
@@ -1069,7 +1070,49 @@ test('spreadsheet transfer updates from the confirmed response and locks only it
 
     assert.equal(root.querySelector('[data-action="spreadsheet-transfer"]').textContent, 'Excelden kaldır');
     root.querySelector('[data-action="spreadsheet-transfer"]').click();
+    await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(transferCalls, [['app-001', 'add'], ['app-001', 'remove']]);
+});
+
+test('spreadsheet transfers clicked on multiple rows are sent to Apps Script one at a time', async context => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const transferCalls = [];
+    const resolveTransfers = [];
+    const api = {
+        queryApplications: async () => createQueuePayload([
+            { ...QUEUE_ITEM, spreadsheet: { state: 'absent' } },
+            { ...QUEUE_ITEM, id: 'app-002', student_number: 'STU-002', spreadsheet: { state: 'absent' } }
+        ]),
+        transferApplicationToSpreadsheet: (...args) => {
+            transferCalls.push(args);
+            return new Promise(resolve => resolveTransfers.push(resolve));
+        }
+    };
+    initializeStaffApplicationsManager(root, api);
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    let buttons = root.querySelectorAll('[data-action="spreadsheet-transfer"]');
+    buttons[0].click();
+    buttons[1].click();
+    await new Promise(resolve => setImmediate(resolve));
+    buttons = root.querySelectorAll('[data-action="spreadsheet-transfer"]');
+    assert.deepEqual(transferCalls, [['app-001', 'add']]);
+    assert.equal(buttons[0].textContent, 'İşleniyor…');
+    assert.equal(buttons[1].textContent, 'Sırada…');
+    assert.equal(buttons[1].getAttribute('aria-label'), 'E-Tablo işlemi sırada');
+
+    resolveTransfers[0]({ state: 'present', sheetName: '03.11.2026' });
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(transferCalls, [['app-001', 'add'], ['app-002', 'add']]);
+
+    resolveTransfers[1]({ state: 'present', sheetName: '03.11.2026' });
+    await new Promise(resolve => setImmediate(resolve));
+    buttons = root.querySelectorAll('[data-action="spreadsheet-transfer"]');
+    assert.equal(buttons[0].textContent, 'Excelden kaldır');
+    assert.equal(buttons[1].textContent, 'Excelden kaldır');
 });
 
 test('spreadsheet transfer failure preserves the prior state and exposes no draft control', async context => {

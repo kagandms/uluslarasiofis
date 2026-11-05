@@ -440,7 +440,11 @@ function islemIkametAdd_(e) {
     var row = Math.max(sheet.getLastRow() + 1, 2);
     var values = [safeSheetText_(firstName + " " + lastName), safeSheetText_(passportNumber), "Yüklendi", recordKey];
     sheet.getRange(row, 1, 1, 4).setValues([values]);
-    sheet.autoResizeColumns(1, 3);
+    var headers = ["AD SOYAD", "PASAPORT", "YÖKSİS DURUMU"];
+    for (var column = 0; column < 3; column++) {
+      var width = Math.min(1000, Math.max(headers[column].length, values[column].length) * 7 + 24);
+      if (sheet.getColumnWidth(column + 1) < width) sheet.setColumnWidth(column + 1, width);
+    }
     invalidateGetAllCache_();
     return json_({ success: true, state: "present", sheetName: sheet.getName(), recordKey: recordKey });
   } catch (err) {

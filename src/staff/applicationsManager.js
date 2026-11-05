@@ -141,15 +141,18 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
             const retryAction = item.spreadsheet?.state === 'pending' ? item.spreadsheet.action : null;
             const isRemoveAction = retryAction === 'remove' || (!retryAction && isPresent);
             const isPending = spreadsheetPending.has(item.id);
+            const activeSpreadsheetTransfer = spreadsheetPending.values().next().value;
             spreadsheetButton.type = 'button';
             spreadsheetButton.className = 'btn btn-spreadsheet-transfer';
             spreadsheetButton.dataset.action = 'spreadsheet-transfer';
             spreadsheetButton.dataset.spreadsheetState = isRemoveAction ? 'remove' : 'add';
             spreadsheetButton.disabled = isPending;
-            spreadsheetButton.textContent = isPending ? 'İşleniyor…'
+            spreadsheetButton.textContent = isPending ? (activeSpreadsheetTransfer === item.id ? 'İşleniyor…' : 'Sırada…')
                 : retryAction ? (retryAction === 'add' ? 'Ekleme sonucunu doğrula' : 'Kaldırma sonucunu doğrula')
                     : isPresent ? 'Excelden kaldır' : 'Excel’e aktar';
-            spreadsheetButton.setAttribute('aria-label', isPending ? 'E-Tablo işlemi sürüyor' : spreadsheetButton.textContent);
+            spreadsheetButton.setAttribute('aria-label', isPending
+                ? (activeSpreadsheetTransfer === item.id ? 'E-Tablo işlemi sürüyor' : 'E-Tablo işlemi sırada')
+                : spreadsheetButton.textContent);
             spreadsheetButton.addEventListener('click', () => onSpreadsheetTransfer(item.id, retryAction || (isPresent ? 'remove' : 'add')));
             actionCell.append(spreadsheetButton);
             if (spreadsheetErrors[item.id]) {
@@ -917,6 +920,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queueRequestId = 0;
+    let spreadsheetTransferQueue = Promise.resolve();
     let archiveRequestId = 0;
     let previewTimer = null;
     let scanPollTimer = null;
@@ -1259,19 +1263,24 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         state.spreadsheetPending.add(applicationId);
         delete state.spreadsheetErrors[applicationId];
         render();
-        try {
-            const result = await api.transferApplicationToSpreadsheet(applicationId, action);
-            if (action === 'add' && (result?.state !== 'present' || typeof result.sheetName !== 'string')) throw new Error('Unconfirmed transfer result.');
-            if (action === 'remove' && result?.state !== 'absent') throw new Error('Unconfirmed transfer result.');
-            const item = state.result?.items.find((entry) => entry.id === applicationId);
-            if (item) item.spreadsheet = result;
-        } catch (error) {
-            console.error('Application spreadsheet transfer failed.', { errorName: error?.name || 'Error' });
-            state.spreadsheetErrors[applicationId] = 'E-Tabloya aktarılamadı. Listeyi yenileyip tekrar deneyin.';
-        } finally {
-            state.spreadsheetPending.delete(applicationId);
-            render();
-        }
+        const transfer = async () => {
+            try {
+                const result = await api.transferApplicationToSpreadsheet(applicationId, action);
+                if (action === 'add' && (result?.state !== 'present' || typeof result.sheetName !== 'string')) throw new Error('Unconfirmed transfer result.');
+                if (action === 'remove' && result?.state !== 'absent') throw new Error('Unconfirmed transfer result.');
+                const item = state.result?.items.find((entry) => entry.id === applicationId);
+                if (item) item.spreadsheet = result;
+            } catch (error) {
+                console.error('Application spreadsheet transfer failed.', { errorName: error?.name || 'Error' });
+                state.spreadsheetErrors[applicationId] = 'E-Tabloya aktarılamadı. Listeyi yenileyip tekrar deneyin.';
+            } finally {
+                state.spreadsheetPending.delete(applicationId);
+                render();
+            }
+        };
+        const queuedTransfer = spreadsheetTransferQueue.then(transfer);
+        spreadsheetTransferQueue = queuedTransfer.catch(() => {});
+        await queuedTransfer;
     }
     async function resetDraftAccess(applicationId) {
         if (state.actionPending || typeof api.resetAccessCode !== 'function') return;
