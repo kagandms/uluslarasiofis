@@ -1,12 +1,17 @@
 # Production development and release policy
 
-- The routine development checkout is the `production` branch at
-  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main`. Do not create a branch or worktree for
-  routine work. A user may explicitly authorize a task-specific candidate worktree; that exception
-  does not change the routine branch policy.
-- At every new session, before editing, verify the Git root, branch, HEAD, worktree list, and all
-  existing changes. Fetch `origin/production` and compare its current SHA with the intended base.
-  Preserve user changes; do not assume an earlier session's status is current.
+- The current clean workspace for new sessions is branch `codex/repo-hygiene-clean-workspace-20261105`
+  at `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`. The older
+  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main` checkout is dirty and behind; do not
+  use it as a new development or release source until its changes are individually reconciled. Keep
+  existing worktrees for their current purpose; do not assume they are obsolete or interchangeable.
+- If the current workspace is dirty or stale, use a separate clean worktree based on freshly fetched
+  `origin/production` only when the user authorizes that workspace. At each new session, verify the
+  actual Git root, branch, HEAD, `origin/production` SHA and ahead/behind count, worktree list, and
+  pending tracked and untracked changes before editing. Preserve user changes; do not rely on an
+  earlier session's snapshot.
+- Never edit one working tree concurrently from multiple sessions. Parallel sessions use separate
+  worktrees; review and integrate their changes explicitly before using them together.
 - Run `npm test`, `npm run build:production`, and `npm run deploy:dry-run:production` before delivery.
   The dry-run is not a publication.
 - Production Worker `goc` is published only by the GitHub Actions **Production release (manual)**

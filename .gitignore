@@ -7,5 +7,10 @@ dist
 .wrangler
 /public/downloads/*
 
+# OS and Python cache files
+.DS_Store
+__pycache__/
+*.pyc
+
 /scripts/scanner/__pycache__/
 /test/scanner/__pycache__/

@@ -1,11 +1,18 @@
 ## Production development and release
 
-Routine development uses the `production` checkout at
-`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main`; the directory name is not a branch
-name. A separate branch/worktree is used only when the user explicitly authorizes a task-specific
-candidate. At the start of every session, check the Git root, branch, HEAD, worktrees, and existing
-changes, fetch `origin/production`, and confirm the intended base SHA before editing. Preserve all
-pre-existing changes.
+The current clean workspace for new sessions is branch
+`codex/repo-hygiene-clean-workspace-20261105` at
+`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`. The older
+`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main` checkout is dirty and behind; do not use
+it as a new development or release source until its changes are individually reconciled. Other
+existing worktrees remain preserved for their current purpose; assess each one before reuse.
+
+At the start of each session, verify the actual Git root, branch, HEAD, worktree list, tracked and
+untracked changes, and fetch `origin/production` to compare its current SHA and ahead/behind state
+with the intended base. Never edit the same working tree concurrently: parallel sessions use
+separate worktrees, then review and integrate their changes explicitly. If the current workspace is
+dirty or stale, use a clean worktree from freshly fetched `origin/production` only when the user
+authorizes it. Preserve all pre-existing changes; do not rely on a prior session's status snapshot.
 
 Run `npm ci`, `npm test`, `npm run build:production`, and
 `npm run deploy:dry-run:production` for the normal release checks. Production Worker `goc` is
