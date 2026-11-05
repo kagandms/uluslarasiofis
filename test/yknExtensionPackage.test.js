@@ -45,3 +45,12 @@ test('distributed YKN package supports only staging, production, Apply, and YÖK
         await readFile(resolve(extensionRoot, file));
     }
 });
+
+test('recovery injection loads student identity before the YÖKSİS content script', async () => {
+    const background = await readFile(resolve(extensionRoot, 'background.js'), 'utf8');
+    const injection = background.match(/async function ensureContentScriptInjected[\s\S]*?\n}\n/);
+
+    assert.ok(injection);
+    assert.match(injection[0], /'pdf\.min\.js', 'document-parser\.js', 'yoksis-field-targets\.js', 'yoksis-student-identity\.js', 'content\.js'/);
+    assert.match(injection[0], /'yoksis-field-targets\.js', 'yoksis-student-identity\.js', 'content\.js'/);
+});
