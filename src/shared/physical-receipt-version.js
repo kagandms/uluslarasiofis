@@ -1,0 +1,1 @@
+export const PHYSICAL_RECEIPT_TEMPLATE_VERSION = '2';

@@ -5,6 +5,7 @@ const INTAKE_COLUMNS = `id,student_number,first_name,last_name,passport_number,
     processing_closed_at,processing_closed_by_staff_id,processing_closure_reason,
     (SELECT state FROM physical_intake_receipts WHERE intake_id=physical_intakes.id ORDER BY document_version DESC LIMIT 1) AS receipt_state,
     (SELECT metadata_version FROM physical_intake_receipts WHERE intake_id=physical_intakes.id ORDER BY document_version DESC LIMIT 1) AS receipt_metadata_version,
+    (SELECT template_version FROM physical_intake_receipts WHERE intake_id=physical_intakes.id ORDER BY document_version DESC LIMIT 1) AS receipt_template_version,
     (SELECT status FROM physical_receipt_print_attempts WHERE intake_id=physical_intakes.id ORDER BY created_at DESC,id DESC LIMIT 1) AS receipt_print_status`;
 
 function buildWhere(query) {

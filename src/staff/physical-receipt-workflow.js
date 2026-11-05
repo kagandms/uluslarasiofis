@@ -1,4 +1,6 @@
 
+import { PHYSICAL_RECEIPT_TEMPLATE_VERSION } from '../shared/physical-receipt-version.js';
+
 const PENDING_REGISTRATION_KEY='physical-receipt-pending-registration';
 
 export function buildReceiptSnapshotKey(data) {
@@ -6,6 +8,7 @@ export function buildReceiptSnapshotKey(data) {
     return [
         (data.first_name || '').trim(),
         (data.last_name || '').trim(),
+        (data.student_number || '').trim(),
         (data.passport_number || '').trim().toUpperCase(),
         (data.application_date || '').trim(),
         (data.tracking_reference || '').trim(),
@@ -25,6 +28,7 @@ export function startPreloadingReceiptPdf(context) {
     const draftSnapshot = {
         first_name: draft.first_name.trim(),
         last_name: draft.last_name.trim(),
+        student_number: draft.student_number.trim(),
         passport_number: draft.passport_number.trim().toUpperCase(),
         application_date: draft.application_date.trim(),
         tracking_reference: trackingReference.trim(),
@@ -114,7 +118,8 @@ export async function preparePhysicalReceiptDocument(context, options = {}) {
     const intake=context.state.detail.intake;
     const documents=context.state.detail.receipts || [];
     const readSnapshot = receipt => receipt.snapshot || (receipt.snapshot_json ? JSON.parse(receipt.snapshot_json) : null);
-    const current=documents.find(receipt=>receipt.metadata_version===intake.metadata_version && receipt.state!=='purged' && Boolean(readSnapshot(receipt)?.portal_origin));
+    const current=documents.find(receipt=>receipt.template_version===PHYSICAL_RECEIPT_TEMPLATE_VERSION
+        && receipt.metadata_version===intake.metadata_version && receipt.state!=='purged' && Boolean(readSnapshot(receipt)?.portal_origin));
     let receipt=current ? (current.snapshot ? current : await context.api.document(intake.id,current.id)) : null;
     if (receipt?.is_expired) receipt=null;
     if (!receipt) {

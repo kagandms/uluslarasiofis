@@ -3,6 +3,7 @@ import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { PHYSICAL_RECEIPT_MESSAGES } from './i18n/physical-receipt-messages.js';
 import { initializeResubmissionUpload } from './resubmissionUpload.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
+import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
 
 function readMessages(locale) {
     const fallback = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr, ...PILOT_UX_MESSAGES.tr };
@@ -257,6 +258,8 @@ function renderTracking(root, state, locale, submitLookup) {
         return;
     }
     const summary = createApplicationSummary(document, state.payload.application, messages, locale);
+    const applicationPdf = state.payload.application.status === 'draft' ? null
+        : createApplicationPdfDownloadControl(document, state.payload.application, messages);
     const documentList = createDocumentList(document, state.payload.documents, messages, state.kind === 'ready',
         state.replacementDocuments, state.onReplacementComplete, state.onSessionFailure, state.replacementCompleted,
         state.kind === 'publicReady');
@@ -267,9 +270,9 @@ function renderTracking(root, state, locale, submitLookup) {
         successNotice.setAttribute('aria-live', 'polite');
         const successText = createTextElement(document, 'p', 'tracking-message tracking-message-success', messages.resubmissionUploadComplete);
         successNotice.append(successText);
-        root.replaceChildren(successNotice, summary, documentList);
+        root.replaceChildren(successNotice, summary, ...(applicationPdf ? [applicationPdf] : []), documentList);
     } else {
-        root.replaceChildren(summary, documentList);
+        root.replaceChildren(summary, ...(applicationPdf ? [applicationPdf] : []), documentList);
     }
 }
 
