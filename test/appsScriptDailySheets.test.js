@@ -166,7 +166,7 @@ test('staging standalone script opens its configured existing spreadsheet by ID'
     const { context, workbook, openedSpreadsheetIds } = await loadScript({ spreadsheetId: 'existing-sheet-id' });
     const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
         action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
-        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345'
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', targetSheetName: '03.11.2026'
     }) } }).text);
 
     assert.equal(result.success, true);
@@ -175,42 +175,64 @@ test('staging standalone script opens its configured existing spreadsheet by ID'
     assert.deepEqual(workbook.getSheetByName('03.11.2026').values[1], ['Ada Lovelace', '0012345', 'Yüklendi', 'app-123']);
 });
 
-test('residence add writes to the Istanbul calendar day of the application last update', async () => {
-    const { context, workbook } = await loadScript({ now: new Date('2026-11-04T10:00:00Z') });
+test('residence add writes to today even when the application was last updated on an earlier date', async () => {
+    const { context, workbook } = await loadScript({ now: new Date('2026-11-05T05:00:00Z') });
     const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
         action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
-        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', submittedAt: '2026-11-03T08:26:00.000Z'
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', targetSheetName: '05.11.2026'
     }) } }).text);
 
-    assert.deepEqual(result, { success: true, state: 'present', sheetName: '03.11.2026', recordKey: 'app-123' });
-    assert.equal(workbook.getSheetByName('04.11.2026'), null);
-    assert.deepEqual(Array.from(workbook.getSheetByName('03.11.2026').values[1]), ['Ada Lovelace', '0012345', 'Yüklendi', 'app-123']);
+    assert.deepEqual(result, { success: true, state: 'present', sheetName: '05.11.2026', recordKey: 'app-123' });
+    assert.equal(workbook.getSheetByName('27.10.2026'), null);
+    assert.deepEqual(Array.from(workbook.getSheetByName('05.11.2026').values[1]), ['Ada Lovelace', '0012345', 'Yüklendi', 'app-123']);
+});
+
+test('legacy residence requests without a target date also write to today', async () => {
+    const { context, workbook } = await loadScript({ now: new Date('2026-11-05T05:00:00Z') });
+    const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
+        action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', submittedAt: '2026-10-27T10:00:00.000Z'
+    }) } }).text);
+
+    assert.equal(result.sheetName, '05.11.2026');
+    assert.equal(workbook.getSheetByName('27.10.2026'), null);
+});
+
+test('residence add rejects a stale target date before creating or writing a sheet', async () => {
+    const { context, workbook } = await loadScript({ now: new Date('2026-11-05T05:00:00Z') });
+    const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
+        action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', targetSheetName: '27.10.2026'
+    }) } }).text);
+
+    assert.equal(result.success, false);
+    assert.equal(workbook.sheets.length, 0);
 });
 
 test('residence add adopts an existing daily sheet with exact headers and preserves its rows', async () => {
-    const existing = createSheet('03.11.2026', [
+    const existing = createSheet('04.11.2026', [
         ['AD SOYAD', 'PASAPORT', 'YÖKSİS DURUMU'],
         ['Existing Student', 'P-123', 'Yüklendi']
     ]);
     const { context, workbook } = await loadScript({ sheets: [existing], now: new Date('2026-11-04T10:00:00Z') });
     const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
         action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
-        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', submittedAt: '2026-11-03T08:26:00.000Z'
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', targetSheetName: '04.11.2026'
     }) } }).text);
 
-    assert.deepEqual(result, { success: true, state: 'present', sheetName: '03.11.2026', recordKey: 'app-123' });
-    assert.equal(workbook.getSheetByName('03.11.2026'), existing);
+    assert.deepEqual(result, { success: true, state: 'present', sheetName: '04.11.2026', recordKey: 'app-123' });
+    assert.equal(workbook.getSheetByName('04.11.2026'), existing);
     assert.deepEqual(Array.from(existing.values[1]), ['Existing Student', 'P-123', 'Yüklendi']);
     assert.deepEqual(Array.from(existing.values[2]), ['Ada Lovelace', '0012345', 'Yüklendi', 'app-123']);
     assert.equal(existing.metadata.get('residence-sheet-schema'), 'daily-residence-v1');
 });
 
 test('residence add keeps an existing dated legacy sheet unchanged when headers differ', async () => {
-    const legacy = createSheet('03.11.2026', [['AD SOYAD', 'NO', 'TEBLIGAT']]);
+    const legacy = createSheet('04.11.2026', [['AD SOYAD', 'NO', 'TEBLIGAT']]);
     const { context } = await loadScript({ sheets: [legacy], now: new Date('2026-11-04T10:00:00Z') });
     const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
         action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
-        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', submittedAt: '2026-11-03T08:26:00.000Z'
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', targetSheetName: '04.11.2026'
     }) } }).text);
 
     assert.deepEqual(result, { success: false, error: 'Ikamet kaydi eklenemedi.' });
@@ -248,7 +270,7 @@ test('residence add and remove use the stable record key and return confirmed st
     const post = action => JSON.parse(context.doPost({ postData: { contents: JSON.stringify({ key: 'test-api-key', ...action }) } }).text);
     const addPayload = {
         action: 'residenceAdd', applicationId: 'app-123', recordKey: 'app-123',
-        firstName: 'Ada', lastName: 'Lovelace', passportNumber: 'P12345678901234567890'
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: 'P12345678901234567890', targetSheetName: '03.11.2026'
     };
 
     const added = post(addPayload);
@@ -279,7 +301,7 @@ test('first residence add checks only today while an ambiguous retry searches hi
     const post = action => JSON.parse(context.doPost({ postData: { contents: JSON.stringify({ key: 'test-api-key', ...action }) } }).text);
     const base = {
         action: 'residenceAdd', applicationId: 'app-123', recordKey: 'app-123',
-        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345'
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', targetSheetName: '03.11.2026'
     };
 
     assert.equal(post({ ...base, verifyExisting: 'false' }).success, true);
@@ -298,7 +320,7 @@ test('residence add repairs a missing key-column protection when its header alre
     const { context } = await loadScript({ sheets: [sheet] });
     const result = JSON.parse(context.doPost({ postData: { contents: JSON.stringify({
         action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
-        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345'
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', targetSheetName: '03.11.2026'
     }) } }).text);
 
     assert.equal(result.success, true);
@@ -317,7 +339,7 @@ test('residence actions fail closed without a configured script key and escape f
     const configured = await loadScript();
     const added = JSON.parse(configured.context.doPost({ postData: { contents: JSON.stringify({
         action: 'residenceAdd', key: 'test-api-key', applicationId: 'app-123', recordKey: 'app-123',
-        firstName: '=1+1', lastName: 'Lovelace', passportNumber: '001'
+        firstName: '=1+1', lastName: 'Lovelace', passportNumber: '001', targetSheetName: '03.11.2026'
     }) } }).text);
     assert.equal(added.success, true);
     assert.equal(configured.workbook.getSheetByName(added.sheetName).values[1][0], "'=1+1 Lovelace");
@@ -380,7 +402,7 @@ test('legacy delivery actions cannot mutate daily residence rows or create new t
     const { context, workbook } = await loadScript({ now: new Date('2026-11-03T05:00:00Z') });
     const post = action => JSON.parse(context.doPost({ postData: { contents: JSON.stringify({ key: 'test-api-key', ...action }) } }).text);
     const added = post({ action: 'residenceAdd', applicationId: 'app-123', recordKey: 'app-123',
-        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345' });
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: '0012345', targetSheetName: '03.11.2026' });
     const sheet = workbook.getSheetByName(added.sheetName);
 
     assert.equal(post({ action: 'update', sayfa: added.sheetName, isim: 'Ada Lovelace', no: '0012345' }).success, false);

@@ -7,6 +7,7 @@ import { requireMethod, requireSameOrigin } from './shared.js';
 
 const STAFF_ROLES = Object.freeze(['reviewer', 'admin']);
 const DATE_SHEET_NAME = /^\d{2}\.\d{2}\.\d{4}$/;
+const ISTANBUL_TIME_ZONE = 'Europe/Istanbul';
 
 function transferError(status, code, message) {
     return new ApiError(status, code, message, true);
@@ -25,13 +26,14 @@ function readTransferState(record) {
         : { state: 'absent' };
 }
 
-function requireConfirmedUpstream(payload, action, recordKey) {
+function requireConfirmedUpstream(payload, action, recordKey, expectedSheetName) {
     if (action === 'add'
         && payload?.success === true
         && payload.state === 'present'
         && payload.recordKey === recordKey
         && typeof payload.sheetName === 'string'
-        && DATE_SHEET_NAME.test(payload.sheetName)) {
+        && DATE_SHEET_NAME.test(payload.sheetName)
+        && payload.sheetName === expectedSheetName) {
         return payload.sheetName;
     }
     if (action === 'remove'
@@ -91,14 +93,19 @@ export async function handleStaffApplicationSpreadsheet(request, environment, ap
         throw new ApiError(409, 'SPREADSHEET_OPERATION_PENDING', 'Başka bir E-Tablo işlemi devam ediyor. Listeyi yenileyin.');
     }
 
+    const expectedSheetName = action === 'add'
+        ? new Intl.DateTimeFormat('en-GB', { timeZone: ISTANBUL_TIME_ZONE }).format(new Date()).replaceAll('/', '.')
+        : null;
+
     let upstream;
     try {
         upstream = await callAppsScript(action === 'add' ? 'residenceAdd' : 'residenceRemove', action === 'add'
             ? {
                 applicationId, recordKey: pending.record_key,
+                targetSheetName: expectedSheetName,
                 verifyExisting: current?.state === 'pending_add' ? 'true' : 'false',
                 firstName: application.first_name.trim(), lastName: application.last_name.trim(),
-                passportNumber: application.passport_number, submittedAt: application.updated_at
+                passportNumber: application.passport_number
             }
             : { applicationId, recordKey: pending.record_key,
                 sheetName: typeof pending.sheet_name === 'string' ? pending.sheet_name : '' }, environment);
@@ -111,7 +118,7 @@ export async function handleStaffApplicationSpreadsheet(request, environment, ap
         throw transferError(502, 'SPREADSHEET_UNCONFIRMED', 'E-Tablo işleminin sonucu doğrulanamadı. Listeyi yenileyip tekrar deneyin.');
     }
 
-    const sheetName = requireConfirmedUpstream(upstream, action, pending.record_key);
+    const sheetName = requireConfirmedUpstream(upstream, action, pending.record_key, expectedSheetName);
     const completed = await spreadsheet.complete({
         applicationId, operationId: pending.operation_id, fromState: expectedPendingState,
         state: action === 'add' ? 'present' : 'absent', sheetName,
