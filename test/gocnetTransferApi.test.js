@@ -74,8 +74,10 @@ test('a create response can be recovered with the client-generated attempt ID an
         applicationNumberHash: 'a'.repeat(64), manifestFingerprint: 'b'.repeat(64), pdfSha256: 'c'.repeat(64),
         createdAt: '2026-11-05T10:00:00.000Z' };
     await repository.createAttempt({ ...input, id: attemptId });
-    const recovered = await repository.createAttempt({ ...input, id: 'another-client-generated-id' });
+    const recovered = await repository.createAttempt({ ...input, id: 'another-client-generated-id', pdfSha256: 'd'.repeat(64),
+        createdAt: '2026-11-05T10:00:01.000Z' });
     assert.equal(recovered.id, attemptId);
+    assert.equal(recovered.pdf_sha256, 'd'.repeat(64));
     const result = await repository.appendEvent({ attemptId, applicationId: 'app-1', eventId: 'failed-before-query',
         actorStaffId: 'staff-1', sequence: 1, state: 'failed', createdAt: '2026-11-05T10:00:01.000Z' });
     assert.equal(result.state, 'failed');

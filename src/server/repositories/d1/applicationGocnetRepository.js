@@ -24,9 +24,16 @@ export function createApplicationGocnetRepository(database) {
                     const prepared = await database.prepare(`SELECT * FROM application_gocnet_attempts
                         WHERE application_id = ? AND state = 'prepared' AND last_event_sequence = 0`)
                         .bind(applicationId).first();
-                    if (prepared && prepared.actor_staff_id === staffId
-                        && prepared.application_number_hash === applicationNumberHash
-                        && prepared.manifest_fingerprint === manifestFingerprint && prepared.pdf_sha256 === pdfSha256) {
+                    if (prepared && prepared.application_number_hash === applicationNumberHash
+                        && prepared.manifest_fingerprint === manifestFingerprint) {
+                        if (prepared.pdf_sha256 !== pdfSha256) {
+                            const result = await database.prepare(`UPDATE application_gocnet_attempts
+                                SET pdf_sha256 = ?, updated_at = ? WHERE id = ? AND state = 'prepared'
+                                AND last_event_sequence = 0 AND manifest_fingerprint = ?`)
+                                .bind(pdfSha256, createdAt, prepared.id, manifestFingerprint).run();
+                            if (result?.meta?.changes !== 1) throw conflict('GOCNET_ATTEMPT_CONFLICT', 'Bu başvuru veya kayıt numarası için etkin bir aktarım bulunuyor.');
+                            return database.prepare('SELECT * FROM application_gocnet_attempts WHERE id = ?').bind(prepared.id).first();
+                        }
                         return prepared;
                     }
                     throw conflict('GOCNET_ATTEMPT_CONFLICT', 'Bu başvuru veya kayıt numarası için etkin bir aktarım bulunuyor.');
