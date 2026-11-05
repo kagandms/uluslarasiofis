@@ -301,3 +301,29 @@ test('production five-minute schedule repairs the scanner queue', async () => {
 
     assert.equal(reconciliationQueries.length, 1);
 });
+
+test('replacement scan resumes review only after all current documents are clean and office requests are resolved', async () => {
+    for (const condition of ['ready', 'requested', 'pending', 'unsafe', 'failed']) {
+        const { environment, database } = fixture();
+        database.prepare("UPDATE applications SET status='resubmission_required' WHERE id=?").bind(APPLICATION_ID).run();
+        database.prepare(`INSERT INTO application_notes(id,application_id,document_record_id,visibility,body,author_type)
+            VALUES ('note',?,'d','student','Please replace','system')`).bind(APPLICATION_ID).run();
+        if (condition === 'requested') {
+            database.prepare(`INSERT INTO document_records(id,application_id,requirement_id,application_type,review_status)
+                VALUES ('requested',?,'req-initial-photographs','initial','resubmission_required')`).bind(APPLICATION_ID).run();
+        }
+        if (condition === 'pending') {
+            database.exec(`INSERT INTO document_revision_files(id,revision_id,page_order,storage_key,original_filename,media_type,byte_size,upload_status,scan_status)
+                VALUES ('other','r',1,'quarantine/other','other.pdf','application/pdf',12,'finalized','pending')`);
+        }
+        const job = await lease(environment);
+        const body = await resultBody(environment, job);
+        if (condition === 'unsafe') Object.assign(body, { outcome: 'unsafe', result_code: 'malware' });
+        if (condition === 'failed') Object.assign(body, { outcome: 'failed', result_code: 'engine_unavailable', full_scan: false,
+            object_etag: null, sha256: null, engine_version: null, signature_version: null, signature_updated_at: null });
+        const response = await request(environment, `jobs/${job.id}/result`, { body, token: job.lease_token });
+        assert.equal(response.status, 200, condition);
+        assert.equal(database.prepare('SELECT status FROM applications WHERE id=?').bind(APPLICATION_ID).first().status,
+            condition === 'ready' ? 'under_review' : 'resubmission_required', condition);
+    }
+});

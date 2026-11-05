@@ -248,14 +248,15 @@ export function createApplicationRepository(database) {
             }
             if (searchPattern) {
                 conditions.push(`(
-                    students.student_number LIKE ? ESCAPE '\\'
+                    COALESCE(applications.reference_number, '') LIKE ? ESCAPE '\\'
+                    OR students.student_number LIKE ? ESCAPE '\\'
                     OR COALESCE(applications.first_name, '') LIKE ? ESCAPE '\\'
                     OR COALESCE(applications.last_name, '') LIKE ? ESCAPE '\\'
                     OR (COALESCE(applications.first_name, '') || ' ' || COALESCE(applications.last_name, '')) LIKE ? ESCAPE '\\'
                     OR (COALESCE(applications.last_name, '') || ' ' || COALESCE(applications.first_name, '')) LIKE ? ESCAPE '\\'
                     OR COALESCE(applications.passport_number, '') LIKE ? ESCAPE '\\'
                 )`);
-                queryValues.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+                queryValues.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
             }
             const whereClause = conditions.join(' AND ');
             const [countResult, pageResult] = await Promise.all([
@@ -315,7 +316,7 @@ export function createApplicationRepository(database) {
             const results = await database.batch([
                 database.prepare(`
                     UPDATE applications
-                    SET status = 'submitted', submitted_at = ?, updated_at = ?, last_activity_at = ?,
+                    SET status = 'under_review', submitted_at = ?, updated_at = ?, last_activity_at = ?,
                         terminal_at = NULL, retention_due_at = NULL
                     WHERE id = ? AND status = 'draft'
                       AND (? IS NULL OR lock_version = ?)
@@ -348,7 +349,7 @@ export function createApplicationRepository(database) {
                 database.prepare(`
                     INSERT INTO audit_events (
                         id, event_type, actor_type, application_id, request_id, safe_metadata_json, created_at
-                    ) SELECT ?, 'application.submitted', 'student', ?, ?, '{"applicationStatus":"submitted"}', ?
+                    ) SELECT ?, 'application.submitted', 'student', ?, ?, '{"applicationStatus":"under_review"}', ?
                     WHERE changes() = 1
                 `).bind(auditEventId, applicationId, requestId, submittedAt)
             ]);

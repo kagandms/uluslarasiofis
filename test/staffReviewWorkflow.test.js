@@ -1244,3 +1244,17 @@ test('missing-document audit failure rolls back the new record, reason and appli
     assert.equal(database.prepare('SELECT COUNT(*) AS total FROM document_records').first().total, 0);
     assert.equal(database.prepare('SELECT COUNT(*) AS total FROM application_notes').first().total, 0);
 });
+
+test('staff application search matches partial ITU references and treats wildcards literally', async () => {
+    const { environment, database } = createEnvironment();
+    const applicationId = await seedApplication(database);
+    database.prepare("UPDATE applications SET reference_number='ITU-2345-6789' WHERE id=?").bind(applicationId).run();
+    const cookie = await seedStaff(environment, database);
+    for (const [q, expected] of [['itu-2345', [applicationId]], ['2345-6789', [applicationId]], ['ITU-%', []]]) {
+        const response = await worker.fetch(request('/api/staff/applications/query', {
+            method: 'POST', cookie, body: { q, status: 'all' }
+        }), environment);
+        assert.equal(response.status, 200);
+        assert.deepEqual((await response.json()).items.map((item) => item.id), expected);
+    }
+});

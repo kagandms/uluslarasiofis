@@ -69,7 +69,7 @@ test('CSS rules enforce word wrapping, touch targets, focus-visible, and stepper
     assert.ok(css.includes('min-height: 2.8rem;'), 'public.css must provide at least 2.8rem for text inputs/selects');
 });
 
-test('application tracking lookup omits student-number guidance and preserves its code across language switches', async () => {
+test('application tracking login labels both credentials and preserves values across language switches', async () => {
     const { document, root } = createDom();
     const api = {
         async readCurrentApplicationTracking() {
@@ -81,8 +81,11 @@ test('application tracking lookup omits student-number guidance and preserves it
     };
     await initializeApplicationTracking(root, api);
 
-    assert.equal(root.querySelector('.tracking-owner-access-link')?.getAttribute('href'), '/basvuruya-devam-et/');
-    assert.match(root.querySelector('.tracking-owner-access-note')?.textContent || '', /güvenli giriş sayfası/u);
+    const student = root.querySelector('[name=student_number]');
+    assert.equal(student.required, true);
+    assert.equal(root.querySelector(`label[for="${student.id}"]`).textContent, PUBLIC_MESSAGES.tr.studentNumber);
+    student.value = '12345';
+    student.dispatchEvent(new document.defaultView.Event('input'));
 
     const input = root.querySelector('#tracking-application-reference');
     assert.ok(input, 'Tracking ITU reference input must exist');
@@ -94,6 +97,7 @@ test('application tracking lookup omits student-number guidance and preserves it
     document.dispatchEvent(new document.defaultView.CustomEvent('public:locale-changed'));
 
     const refreshedInput = root.querySelector('#tracking-application-reference');
+    assert.equal(root.querySelector('[name=student_number]').value, '12345');
     assert.equal(refreshedInput.value, 'ITU-7K9M-4X2P', 'Tracking code must be preserved after locale change');
 });
 
@@ -115,6 +119,9 @@ test('application tracking lookup sets aria-busy during lookup and role="alert" 
 
     const input = root.querySelector('#tracking-application-reference');
     const form = root.querySelector('.tracking-lookup-form');
+    const statusOnly = root.querySelector('[name=status_only]');
+    statusOnly.checked = true;
+    statusOnly.dispatchEvent(new document.defaultView.Event('change'));
 
     input.value = 'ITU-7K9M-4X2P';
     input.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));

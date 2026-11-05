@@ -344,7 +344,7 @@ test('application submission transitions and audit are atomic and repeated calls
     const submitted = await repositories.applications.submitDraft(transition);
     const repeated = await repositories.applications.submitDraft({ ...transition, auditEventId: '44444444-4444-4444-8444-444444444444', requestId: 'req_submit_2' });
 
-    assert.equal(submitted.status, 'submitted');
+    assert.equal(submitted.status, 'under_review');
     assert.equal(submitted.submitted_at, transition.submittedAt);
     assert.equal(submitted.retention_due_at, null);
     assert.equal(submitted.terminal_at, null);

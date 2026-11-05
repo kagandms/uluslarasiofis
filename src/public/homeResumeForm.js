@@ -24,7 +24,7 @@ export function initHomeResumeForm({ root = document, api, navigate, getMessage 
                 reference_number: referenceNumber,
                 student_number: studentNumber
             });
-            goTo(application.status === 'draft' ? '/basvuru/' : '/basvurum/');
+            goTo(application.status === 'draft' ? '/basvuru/' : '/basvurum/?view=current');
         } catch (error) {
             submitButton.disabled = false;
             if (error?.status === 429 || error?.code === 'RATE_LIMITED') {
