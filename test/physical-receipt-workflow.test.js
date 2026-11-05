@@ -71,7 +71,7 @@ test('recovery checks only the pending operation UUID and finds the same student
 
 test('a lost print response retries the same attempt UUID without rendering a different receipt',async()=>{
     const context=createContext();const receiptId=crypto.randomUUID();const requests=[];
-    context.state.detail={intake:{id:'student',metadata_version:1},receipts:[{id:receiptId,state:'ready',metadata_version:1,snapshot_json:JSON.stringify({portal_origin:'https://portal.test'})}]};
+    context.state.detail={intake:{id:'student',metadata_version:1},receipts:[{id:receiptId,state:'ready',template_version:'2',metadata_version:1,snapshot_json:JSON.stringify({portal_origin:'https://portal.test'})}]};
     context.api.document=async()=>({id:receiptId,state:'ready'});
     context.api.printDocument=async(_id,_receiptId,body)=>{
         requests.push(body);if(requests.length===1)throw new Error('Synthetic network loss');return {status:'queued',id:'same-attempt'};
@@ -87,7 +87,7 @@ test('creation prepares the stored PDF without entering detail or sending a prin
     const { saveAndPreparePhysicalReceipt } = await import('../src/staff/physical-receipt-workflow.js');
     const context = createContext();
     let registrations = 0;
-    const receipt = { id: 'receipt', state: 'ready' };
+    const receipt = { id: 'receipt', state: 'ready', template_version: '2' };
     context.api.registerMetadata = async () => { registrations++; return { intake: { id: 'saved' } }; };
     context.api.detail = async () => ({ intake: { id: 'saved', metadata_version: 1 }, receipts: [{ ...receipt, metadata_version: 1, snapshot_json: JSON.stringify({ portal_origin: 'https://portal.test' }) }] });
     context.api.document = async () => receipt;
@@ -117,7 +117,7 @@ test('preloads PDF in background and reuses it if snapshot matches', async () =>
     context.state.preloadedReceiptPromise = Promise.resolve(syntheticBytes);
     context.state.detail = {
         intake: { id: 'saved', metadata_version: 1, lock_version: 1 },
-        receipts: [{ id: 'receipt', state: 'awaiting_content', metadata_version: 1, snapshot }]
+        receipts: [{ id: 'receipt', state: 'awaiting_content', template_version: '2', metadata_version: 1, snapshot }]
     };
     let uploadedBytes = null;
     let deliveredBytes = null;

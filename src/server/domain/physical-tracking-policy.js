@@ -1,8 +1,9 @@
 import { ApiError } from './errors.js';
 import { validatePhysicalIntake } from './physical-intake-policy.js';
+import { PHYSICAL_RECEIPT_TEMPLATE_VERSION } from '../../shared/physical-receipt-version.js';
 
 export const TRACKING_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
-export const RECEIPT_TEMPLATE_VERSION = '1';
+export const RECEIPT_TEMPLATE_VERSION = PHYSICAL_RECEIPT_TEMPLATE_VERSION;
 export const RECEIPT_RETENTION_MS = 30 * 86400_000;
 
 /** Returns the calendar day in Istanbul. @param {Date} instant UTC instant. @returns {string} ISO day. */
@@ -75,6 +76,6 @@ export function readPhysicalTrackingStatus(intake) {
 
 /** Builds a versioned, staff-only document snapshot. @param {object} intake Record. @param {string|null} portalOrigin Trusted origin. @param {string} createdAt Receipt UTC time. @returns {object} Snapshot. */
 export function buildReceiptSnapshot(intake, portalOrigin, createdAt) {
-    return { first_name: intake.first_name, last_name: intake.last_name, passport_number: intake.passport_number,
+    return { student_number: intake.student_number, first_name: intake.first_name, last_name: intake.last_name, passport_number: intake.passport_number,
         application_date: intake.application_date, tracking_reference: intake.tracking_reference, portal_origin: portalOrigin, created_at: createdAt };
 }
