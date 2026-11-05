@@ -1372,13 +1372,14 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         let attemptId = null;
         let sequence = 0;
         const eventIds = new Map();
-        const event = async (nextState, remoteRecordId = null) => {
+        const event = async (nextState, remoteRecordId = null, expectedPdfSha256 = null) => {
             const nextSequence = sequence + 1;
             const eventId = eventIds.get(nextSequence) || document.defaultView.crypto.randomUUID();
             eventIds.set(nextSequence, eventId);
             await api.recordGocnetEvent(applicationId, attemptId, {
                 eventId, sequence: nextSequence, state: nextState,
-                ...(remoteRecordId ? { remoteRecordId } : {})
+                ...(remoteRecordId ? { remoteRecordId } : {}),
+                ...(expectedPdfSha256 ? { expectedPdfSha256 } : {})
             });
             sequence = nextSequence;
         };
@@ -1406,7 +1407,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             });
             if (typeof attempt?.attemptId !== 'string') throw new Error('Attempt not created.');
             attemptId = attempt.attemptId;
-            await event('querying');
+            await event('querying', null, prepared.pdfSha256);
             const check = (phase) => requestGocnetAction('CHECK_GOCNET_TRANSFER', {
                 applicationNumber: prepared.applicationNumber, phase, attemptId
             });

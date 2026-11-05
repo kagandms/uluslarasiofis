@@ -24,13 +24,15 @@ export function createApplicationGocnetRepository(database) {
                     const prepared = await database.prepare(`SELECT * FROM application_gocnet_attempts
                         WHERE application_id = ? AND state = 'prepared' AND last_event_sequence = 0`)
                         .bind(applicationId).first();
-                    if (prepared && prepared.application_number_hash === applicationNumberHash
+                    if (prepared && prepared.actor_staff_id === staffId
+                        && prepared.application_number_hash === applicationNumberHash
                         && prepared.manifest_fingerprint === manifestFingerprint) {
                         if (prepared.pdf_sha256 !== pdfSha256) {
                             const result = await database.prepare(`UPDATE application_gocnet_attempts
                                 SET pdf_sha256 = ?, updated_at = ? WHERE id = ? AND state = 'prepared'
-                                AND last_event_sequence = 0 AND manifest_fingerprint = ?`)
-                                .bind(pdfSha256, createdAt, prepared.id, manifestFingerprint).run();
+                                AND last_event_sequence = 0 AND actor_staff_id = ?
+                                AND manifest_fingerprint = ? AND pdf_sha256 = ?`)
+                                .bind(pdfSha256, createdAt, prepared.id, staffId, manifestFingerprint, prepared.pdf_sha256).run();
                             if (result?.meta?.changes !== 1) throw conflict('GOCNET_ATTEMPT_CONFLICT', 'Bu başvuru veya kayıt numarası için etkin bir aktarım bulunuyor.');
                             return database.prepare('SELECT * FROM application_gocnet_attempts WHERE id = ?').bind(prepared.id).first();
                         }
@@ -42,7 +44,7 @@ export function createApplicationGocnetRepository(database) {
             }
             return database.prepare('SELECT * FROM application_gocnet_attempts WHERE id = ?').bind(id).first();
         },
-        async appendEvent({ attemptId, applicationId, eventId, actorStaffId, sequence, state, remoteRecordId = null, createdAt }) {
+        async appendEvent({ attemptId, applicationId, eventId, actorStaffId, sequence, state, remoteRecordId = null, expectedPdfSha256 = null, createdAt }) {
             const duplicate = await database.prepare(`SELECT sequence, state, remote_record_id FROM application_gocnet_attempt_events
                 WHERE attempt_id = ? AND id = ?`).bind(attemptId, eventId).first();
             if (duplicate) {
@@ -53,14 +55,18 @@ export function createApplicationGocnetRepository(database) {
             }
             const attempt = await database.prepare(`SELECT * FROM application_gocnet_attempts
                 WHERE id = ? AND application_id = ?`).bind(attemptId, applicationId).first();
-            if (!attempt || sequence !== attempt.last_event_sequence + 1 || !NEXT_STATES[attempt.state]?.has(state)) {
+            if (!attempt || sequence !== attempt.last_event_sequence + 1 || !NEXT_STATES[attempt.state]?.has(state)
+                || (state === 'querying' && attempt.pdf_sha256 !== expectedPdfSha256)) {
                 throw conflict('GOCNET_EVENT_CONFLICT', 'Aktarım aşaması doğrulanamadı.');
             }
             const statements = [
                 database.prepare(`UPDATE application_gocnet_attempts
                     SET state = ?, last_event_sequence = ?, updated_at = ?, remote_record_id = COALESCE(?, remote_record_id)
-                    WHERE id = ? AND application_id = ? AND state = ? AND last_event_sequence = ?`)
-                    .bind(state, sequence, createdAt, remoteRecordId, attemptId, applicationId, attempt.state, attempt.last_event_sequence),
+                    WHERE id = ? AND application_id = ? AND state = ? AND last_event_sequence = ?
+                    AND (? IS NULL OR pdf_sha256 = ?)`)
+                    .bind(state, sequence, createdAt, remoteRecordId, attemptId, applicationId, attempt.state,
+                        attempt.last_event_sequence, state === 'querying' ? expectedPdfSha256 : null,
+                        state === 'querying' ? expectedPdfSha256 : null),
                 database.prepare(`INSERT INTO application_gocnet_attempt_events (id, attempt_id, actor_staff_id, sequence, state, remote_record_id, created_at)
                     SELECT ?, id, ?, ?, ?, ?, ? FROM application_gocnet_attempts
                     WHERE id = ? AND application_id = ? AND state = ? AND last_event_sequence = ?`)

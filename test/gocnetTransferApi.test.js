@@ -52,7 +52,10 @@ test('gocnet events enforce monotonic transitions and make repeated event IDs id
     await repository.createAttempt({ id: 'attempt-1', applicationId: 'app-1', staffId: 'staff-1',
         applicationNumberHash: 'a'.repeat(64), manifestFingerprint: 'b'.repeat(64), pdfSha256: 'c'.repeat(64),
         createdAt: '2026-11-05T10:00:00.000Z' });
-    const event = { attemptId: 'attempt-1', applicationId: 'app-1', eventId: 'event-1', actorStaffId: 'staff-1', sequence: 1, state: 'querying', createdAt: '2026-11-05T10:00:01.000Z' };
+    const event = { attemptId: 'attempt-1', applicationId: 'app-1', eventId: 'event-1', actorStaffId: 'staff-1', sequence: 1,
+        state: 'querying', expectedPdfSha256: 'c'.repeat(64), createdAt: '2026-11-05T10:00:01.000Z' };
+    await assert.rejects(repository.appendEvent({ ...event, expectedPdfSha256: 'd'.repeat(64) }),
+        (error) => error.code === 'GOCNET_EVENT_CONFLICT');
     assert.equal((await repository.appendEvent(event)).state, 'querying');
     assert.equal((await repository.appendEvent(event)).state, 'querying');
     await assert.rejects(repository.appendEvent({ ...event, remoteRecordId: 'unexpected-record' }),
@@ -78,6 +81,8 @@ test('a create response can be recovered with the client-generated attempt ID an
         createdAt: '2026-11-05T10:00:01.000Z' });
     assert.equal(recovered.id, attemptId);
     assert.equal(recovered.pdf_sha256, 'd'.repeat(64));
+    await assert.rejects(repository.createAttempt({ ...input, id: 'other-staff-attempt', staffId: 'staff-2',
+        pdfSha256: 'd'.repeat(64) }), (error) => error.code === 'GOCNET_ATTEMPT_CONFLICT');
     const result = await repository.appendEvent({ attemptId, applicationId: 'app-1', eventId: 'failed-before-query',
         actorStaffId: 'staff-1', sequence: 1, state: 'failed', createdAt: '2026-11-05T10:00:01.000Z' });
     assert.equal(result.state, 'failed');

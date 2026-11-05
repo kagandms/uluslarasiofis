@@ -26,10 +26,12 @@ function readAttemptBody(body) {
 }
 
 function readEventBody(body) {
-    if (Object.keys(body).some((key) => !['eventId', 'sequence', 'state', 'remoteRecordId'].includes(key))
+    if (Object.keys(body).some((key) => !['eventId', 'sequence', 'state', 'remoteRecordId', 'expectedPdfSha256'].includes(key))
         || typeof body.eventId !== 'string' || !/^[A-Za-z0-9_-]{16,80}$/.test(body.eventId)
         || !Number.isSafeInteger(body.sequence) || body.sequence < 1
         || typeof body.state !== 'string' || !EVENT_STATES.has(body.state)
+        || (body.state === 'querying' ? (typeof body.expectedPdfSha256 !== 'string' || !HASH.test(body.expectedPdfSha256))
+            : body.expectedPdfSha256 !== undefined)
         || (body.remoteRecordId !== undefined && (typeof body.remoteRecordId !== 'string'
             || !/^[A-Za-z0-9._-]{1,80}$/.test(body.remoteRecordId)))) throw invalidRequest();
     return body;
@@ -115,7 +117,8 @@ export async function recordStaffApplicationGocnetEvent(request, environment, ap
         updated = await repository.appendEvent({
             attemptId, applicationId, eventId: body.eventId, actorStaffId: staff.id,
             sequence: body.sequence, state: body.state,
-            remoteRecordId: body.remoteRecordId ?? null, createdAt: new Date().toISOString()
+            remoteRecordId: body.remoteRecordId ?? null, expectedPdfSha256: body.expectedPdfSha256 ?? null,
+            createdAt: new Date().toISOString()
         });
     } catch (error) {
         if (error?.code === 'GOCNET_EVENT_CONFLICT') throw new ApiError(409, error.code, 'Aktarım aşaması doğrulanamadı.');
