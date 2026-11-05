@@ -1051,7 +1051,7 @@ function createReviewStep(document, state) {
             document.createTextNode(` ${formatSubmissionTime(application.declaration.accepted_at, document.documentElement.lang || 'tr')}`));
         review.append(time);
     }
-    if (application.status === 'submitted') {
+    if (['submitted', 'under_review'].includes(application.status)) {
         review.append(createSubmissionConfirmation(document, application, messages));
         return review;
     }

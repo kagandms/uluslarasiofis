@@ -1250,6 +1250,39 @@ test('Review submits once, keeps five steps, and shows student-safe confirmation
     document.defaultView.close();
 });
 
+test('Review confirms under_review responses and does not treat a draft response as submitted', async () => {
+    for (const returnedStatus of ['under_review', 'draft']) {
+        const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+        let submitCalls = 0;
+        api.acceptCurrentApplicationDeclaration = async (version) => {
+            state.application.declaration = {
+                current_version: version, accepted_version: version,
+                accepted_current: true, accepted_at: '2026-09-30T10:00:00.000Z'
+            };
+            return { ...state.application };
+        };
+        api.submitCurrentApplication = async () => {
+            submitCalls += 1;
+            return { ...state.application, status: returnedStatus, submitted_at: '2026-09-30T10:01:00.000Z' };
+        };
+        await advanceWizardToReview(root, state);
+
+        root.querySelector('[data-action="submit-application"]').click();
+        await new Promise((resolve) => setImmediate(resolve));
+
+        assert.equal(submitCalls, 1);
+        assert.equal(state.step, 4);
+        if (returnedStatus === 'under_review') {
+            assert.match(root.textContent, /Başvurunuz gönderildi/);
+            assert.equal(root.querySelector('[data-action="submit-application"]'), null);
+        } else {
+            assert.doesNotMatch(root.textContent, /Başvurunuz gönderildi/);
+            assert.ok(root.querySelector('[data-action="submit-application"]'));
+        }
+        document.defaultView.close();
+    }
+});
+
 test('readiness rejection stays on Review and shows the localized actionable error', async () => {
     const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
     api.acceptCurrentApplicationDeclaration = async (version) => {
