@@ -199,7 +199,7 @@ export function createImmigrationFileCoverPage(document, details, logos, trackin
     const identity = document.createElement('div');
     identity.className = 'cover-field-panel';
     appendText(document, identity, 'span', 'cover-field-label', 'ÖĞRENCİ KODU');
-    const code = appendText(document, identity, 'p', 'application-cover-code', displayValue(details.studentCode) || '—');
+    const code = appendText(document, identity, 'p', 'application-cover-code physical-receipt-code', displayValue(details.studentCode) || '—');
     code.dir = 'ltr';
     const name = document.createElement('div');
     name.className = 'cover-name';
@@ -260,11 +260,11 @@ export function createImmigrationFileCoverPage(document, details, logos, trackin
     appendText(document, footer, 'div', '', 'İstanbul Topkapı Üniversitesi');
     if (trackingQr) {
         const siteQr = document.createElement('div');
-        siteQr.className = 'cover-site-qr';
+        siteQr.className = 'cover-site-qr physical-receipt-portal';
         const qr = document.createElement('img');
         qr.src = trackingQr;
         qr.alt = 'Başvuru sitesinin QR kodu';
-        const link = appendText(document, siteQr, 'a', 'physical-receipt-origin', 'Başvuru sitesi');
+        const link = appendText(document, siteQr, 'a', 'physical-receipt-origin', 'Başvurunu takip et');
         link.href = details.portalOrigin;
         link.dir = 'ltr';
         siteQr.prepend(qr);

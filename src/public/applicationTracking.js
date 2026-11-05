@@ -258,8 +258,8 @@ function renderTracking(root, state, locale, submitLookup) {
         return;
     }
     const summary = createApplicationSummary(document, state.payload.application, messages, locale);
-    const applicationPdf = state.payload.application.status === 'draft' ? null
-        : createApplicationPdfDownloadControl(document, state.payload.application, messages);
+    const applicationPdf = state.kind === 'ready' && state.payload.application.status !== 'draft'
+        ? createApplicationPdfDownloadControl(document, state.payload.application, messages) : null;
     const documentList = createDocumentList(document, state.payload.documents, messages, state.kind === 'ready',
         state.replacementDocuments, state.onReplacementComplete, state.onSessionFailure, state.replacementCompleted,
         state.kind === 'publicReady');
