@@ -369,6 +369,10 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
                     callback(options.formState || { success: true, fingerprint: 'previous-student', domRevision: 7, hasPopulatedStudentForm: false });
                     return;
                 }
+                if (message.action === 'YOKSIS_GOCNET_QUERY') {
+                    callback({ requestId: message.requestId, state: options.gocnetState || 'unknown' });
+                    return;
+                }
                 if (message.action === 'WAIT_YOKSIS_FORM') {
                     const responses = options.formReadyResponses || [];
                     const response = responses[Math.min(readinessCallCount, responses.length - 1)];
@@ -516,6 +520,20 @@ test('background forwards the audit start to one controller preflight without a 
         harness.calls.filter((call) => call.type === 'message').map((call) => call.message.action),
         ['YOKSIS_DOCUMENT_AUDIT_START']
     );
+});
+
+test('background binds the read-only GöçNet query to the verified YÖKSİS tab and portal request', async () => {
+    const harness = createBackgroundHarness({}, {}, { gocnetState: 'no_match' });
+    const response = await harness.send({ source: 'IKAMET_PORTAL', action: 'CHECK_GOCNET_TRANSFER',
+        requestId: 'gocnet-query-1', applicationNumber: '2099-12-99999999' });
+    const query = harness.calls.find((call) => call.type === 'message' && call.message.action === 'YOKSIS_GOCNET_QUERY');
+    assert.equal(response.success, true);
+    assert.equal(response.state, 'no_match');
+    assert.equal(response.yoksisTabId, 42);
+    assert.equal(query.tabId, 42);
+    assert.equal(query.message.portalTabId, 1);
+    assert.equal(query.message.applicationNumber, '2099-12-99999999');
+    assert.equal(query.message.phase, 'history');
 });
 
 test('country commands require the YÖKSİS main frame, a known field and a bounded request', async () => {

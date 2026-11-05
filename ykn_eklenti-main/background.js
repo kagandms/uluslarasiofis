@@ -206,6 +206,22 @@ async function sendYoksisAuditCheck(tabId, scanId) {
     }
 }
 
+async function sendYoksisGocnetQueryCheck(tabId, request) {
+    const message = { action: 'YOKSIS_GOCNET_QUERY', requestId: request.requestId,
+        portalTabId: request.portalTabId, applicationNumber: request.applicationNumber,
+        phase: request.phase || 'form', attemptId: request.attemptId };
+    try { return await sendTabMessage(tabId, message, { frameId: 0 }); }
+    catch (initialError) {
+        if (!chrome.scripting?.executeScript) throw initialError;
+        await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ['gocnet-transfer-controller.js'] });
+        return sendTabMessage(tabId, message, { frameId: 0 });
+    }
+}
+
+function sendYoksisGocnetAction(tabId, action, request) {
+    return sendTabMessage(tabId, { ...request, action: `YOKSIS_GOCNET_${action}` }, { frameId: 0 });
+}
+
 function updateTab(tabId, updateProperties) {
     return new Promise((resolve, reject) => {
         chrome.tabs.update(tabId, updateProperties, (tab) => {
@@ -529,6 +545,16 @@ async function resolveYoksisTab() {
     yoksisTabId = yoksisTab.id;
     await writeSessionYoksisTabId(yoksisTab.id);
     return yoksisTab;
+}
+
+async function resolveGocnetYoksisTab() {
+    const tabs = await queryTabs({ url: '*://yoksis.yok.gov.tr/*' });
+    const savedTabId = yoksisTabId || await readSessionYoksisTabId();
+    const tab = tabs?.find((candidate) => candidate.id === savedTabId) || (tabs?.length === 1 ? tabs[0] : null);
+    if (!tab) throw new Error('Birden fazla YÖKSİS sekmesi açık. Önce kullanılacak sekmeyi mevcut YKN aramasıyla bağlayın.');
+    yoksisTabId = tab.id;
+    await writeSessionYoksisTabId(tab.id);
+    return tab;
 }
 
 function readSessionYoksisTabId() {
@@ -2086,7 +2112,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             && ['nationality', 'birthNationality', 'birthCountry', 'issuerCountry'].includes(command.field)
             && typeof command.value === 'string' && command.value.trim().length > 0 && command.value.length <= 100
             && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 160;
-        const validCommand = isCountryCommand || command.action === 'waitForIdle' || (['selectRadio', 'verifyRadio'].includes(command.action)
+        const isGocnetHistoryQuery = command.action === 'queryGocnetRecords'
+            && typeof command.applicationNumber === 'string' && /^20\d{2}-\d{2}-\d{5,8}$/.test(command.applicationNumber)
+            && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 128;
+        const isGocnetPhoneCommand = command.action === 'setGocnetPhone' && /^5\d{9}$/.test(command.phoneNational || '')
+            && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 128;
+        const validCommand = isGocnetHistoryQuery || isGocnetPhoneCommand || isCountryCommand || command.action === 'waitForIdle' || (['selectRadio', 'verifyRadio'].includes(command.action)
             && allowedValues.includes(command.value) && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 160);
         if (!isYoksisUrl(sender?.tab?.url || '') || sender.frameId !== 0 || !validCommand) {
             sendResponse({ success: false, verified: false, error: 'YÖKSİS komutu doğrulanamadı.' });
@@ -2143,6 +2174,63 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return false;
         }
         ikametTabId = sender.tab ? sender.tab.id : null;
+
+        if (request.action === 'CHECK_GOCNET_TRANSFER') {
+            void (async () => {
+                try {
+                    if (!Number.isInteger(sender.tab?.id)) throw new Error('Portal tab is not verified.');
+                    const target = await getVerifiedYoksisTarget((await resolveGocnetYoksisTab()).id);
+                    const result = await runYoksisOperation(target.yoksisTabId, 'gocnet-query', request.requestId, () =>
+                        sendYoksisGocnetQueryCheck(target.yoksisTabId, {
+                            ...request, phase: request.phase || 'history', portalTabId: sender.tab.id
+                        }));
+                    const state = ['no_match', 'existing_record', 'student_data_filled'].includes(result?.state) ? result.state : 'unknown';
+                    sendResponse({ success: state !== 'unknown', requestId: request.requestId, state,
+                        ...(state === 'unknown' ? {} : { yoksisTabId: target.yoksisTabId }) });
+                } catch { sendResponse({ success: false, requestId: request.requestId, state: 'unknown' }); }
+            })();
+            return true;
+        }
+
+        if (['SAVE_GOCNET_RECORD', 'UPLOAD_GOCNET_DOCUMENT', 'ACK_GOCNET_SAVE', 'ACK_GOCNET_UPLOAD'].includes(request.action)) {
+            void (async () => {
+                try {
+                    if (!Number.isInteger(sender.tab?.id)) throw new Error('Portal tab is not verified.');
+                    const bound = await resolveGocnetYoksisTab();
+                    if (bound.id !== request.targetTabId) throw new Error('GöçNet hedef sekmesi değişti.');
+                    const target = await getVerifiedYoksisTarget(request.targetTabId);
+                    const result = await runYoksisOperation(target.yoksisTabId,
+                        `gocnet-${request.action.toLowerCase()}`, request.attemptId, async () => {
+                            if (request.action === 'SAVE_GOCNET_RECORD') {
+                                const latestCheck = await sendYoksisGocnetQueryCheck(target.yoksisTabId, {
+                                    ...request, phase: 'history', portalTabId: sender.tab.id
+                                });
+                                if (latestCheck?.state !== 'no_match') return { state: latestCheck?.state === 'existing_record' ? 'existing_record' : 'unknown' };
+                                const phone = await runYoksisZkCommand(target.yoksisTabId, {
+                                    action: 'setGocnetPhone', phoneNational: request.phoneNational, requestId: request.requestId
+                                });
+                                if (phone?.verified !== true) return { state: 'unknown' };
+                                return sendYoksisGocnetAction(target.yoksisTabId, 'SAVE', { ...request, portalTabId: sender.tab.id });
+                            }
+                            if (request.action === 'UPLOAD_GOCNET_DOCUMENT') {
+                                return sendYoksisGocnetAction(target.yoksisTabId, 'UPLOAD', { ...request, portalTabId: sender.tab.id });
+                            }
+                            return sendYoksisGocnetAction(target.yoksisTabId,
+                                request.action === 'ACK_GOCNET_SAVE' ? 'ACK_SAVE' : 'ACK_UPLOAD', { ...request, portalTabId: sender.tab.id });
+                        });
+                    const success = request.action === 'SAVE_GOCNET_RECORD' ? result?.state === 'saved'
+                        : request.action === 'UPLOAD_GOCNET_DOCUMENT' ? result?.state === 'uploaded' : result?.success === true;
+                    sendResponse({ success, requestId: request.requestId,
+                        state: ['identity_mismatch', 'existing_record'].includes(result?.state) ? result.state
+                            : result?.state === 'outcome_unknown' ? 'outcome_unknown'
+                                : result?.state === 'not_dispatched' ? 'not_dispatched' : success ? result.state || 'acknowledged' : 'unknown',
+                        ...(request.action === 'SAVE_GOCNET_RECORD' && success ? { recordId: result.recordId } : {}),
+                        ...(request.action === 'UPLOAD_GOCNET_DOCUMENT' && success ? { documentId: result.documentId } : {}),
+                        yoksisTabId: target.yoksisTabId });
+                } catch { sendResponse({ success: false, requestId: request.requestId, state: 'unknown' }); }
+            })();
+            return true;
+        }
 
         if (['CHECK_YOKSIS_DOCUMENT_AUDIT', 'START_YOKSIS_DOCUMENT_AUDIT', 'STOP_YOKSIS_DOCUMENT_AUDIT'].includes(request.action)) {
             void (async () => {

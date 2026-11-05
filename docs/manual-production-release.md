@@ -1,9 +1,10 @@
 # Manual code/assets release from a tablet
 
 Only `.github/workflows/production-release.yml` publishes. The reviewed code-only baseline in
-`config/production-publication.json` points to commit `52b54810b3ad26c0fb0c15e38df8a81bfe745fb4`,
-which includes the source for production migrations `0034_yoksis_document_audit.sql` and
-`0035_yoksis_audit_glob_limit.sql`. The production D1 ledger records both migrations as applied,
+`config/production-publication.json` points to commit `2f583e170fd929a0efc170df86656c0565f6ad58`,
+which includes production schema migrations `0034_yoksis_document_audit.sql`,
+`0035_yoksis_audit_glob_limit.sql`, `0036_application_spreadsheet_records.sql`, and
+`0037_application_gocnet_attempts.sql`. The production D1 ledger records these migrations as applied,
 and Wrangler reports no pending migrations. This baseline update records the existing schema state
 and does not apply a migration. Earlier release and rollback evidence remains under
 `docs/production-only-evidence/`; the R2 recovery copy is in the same Cloudflare account.

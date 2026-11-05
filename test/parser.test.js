@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { extractFields, extractFromCoordinates } from '../src/utils/parser.js';
+import { extractFields, extractFromCoordinates, extractApplicationNumberCandidates } from '../src/utils/parser.js';
 import { formatApplicationNumberInput } from '../src/ui/formManager.js';
 
 test('should extract a registration number from its label line', () => {
@@ -57,6 +57,11 @@ test('should leave the registration number empty when no registration label exis
 
     // Assert
     assert.equal(result.basvuruNo, '');
+});
+
+test('returns distinct labeled registration number candidates without confusing barcode numbers', () => {
+    const text = 'GCGM03-92026040644400\nKayıt Numarası\n2026-04-0644400\nRegistration Number\n2026-04-0644401';
+    assert.deepEqual(extractApplicationNumberCandidates(text), ['2026-04-0644400', '2026-04-0644401']);
 });
 
 test('should prefer the value located right of the registration label over barcode text', () => {

@@ -53,6 +53,16 @@ const QUEUE_ITEM = {
     assigned_staff: { staff_id: 'staff-001', display_name: 'Reviewer One' }
 };
 
+test('eligible submitted applications expose the GöçNet transfer action', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, { queryApplications: async () => createQueuePayload([QUEUE_ITEM]) });
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(root.querySelector('[data-action="gocnet-transfer"]')?.textContent, 'GöçNet’e aktar');
+});
+
 for (const scanStatus of ['unsafe', 'failed', null]) {
     test(`staff can request ${scanStatus} replacement without preview, download or approve actions`, async (context) => {
         const { document, root } = createStaffDom();

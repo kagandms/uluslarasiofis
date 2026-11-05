@@ -32,6 +32,8 @@ test('distributed YKN package supports only staging, production, Apply, and YÖK
     assert.ok(auditScript.js.includes('yoksis-document-audit.js'));
     await readFile(resolve(extensionRoot, 'yoksis-document-audit.js'));
     await readFile(resolve(extensionRoot, 'yoksis-document-audit-controller.js'));
+    assert.ok(auditScript.js.includes('gocnet-transfer-controller.js'));
+    await readFile(resolve(extensionRoot, 'gocnet-transfer-controller.js'));
     assert.ok(targetScript.js.indexOf('yoksis-field-targets.js') < targetScript.js.indexOf('content.js'));
     assert.ok(targetScript.js.includes('yoksis-field-targets.js'));
     assert.ok(targetScript.js.indexOf('yoksis-student-identity.js') < targetScript.js.indexOf('content.js'));

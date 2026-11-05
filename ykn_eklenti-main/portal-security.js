@@ -10,7 +10,12 @@
         'FILL_YOKSIS_FORM',
         'CHECK_YOKSIS_DOCUMENT_AUDIT',
         'START_YOKSIS_DOCUMENT_AUDIT',
-        'STOP_YOKSIS_DOCUMENT_AUDIT'
+        'STOP_YOKSIS_DOCUMENT_AUDIT',
+        'CHECK_GOCNET_TRANSFER',
+        'SAVE_GOCNET_RECORD',
+        'UPLOAD_GOCNET_DOCUMENT',
+        'ACK_GOCNET_SAVE',
+        'ACK_GOCNET_UPLOAD'
     ]);
     const YOKSIS_AUDIT_EVENTS = new Set([
         'YOKSIS_DOCUMENT_AUDIT_PROGRESS',
@@ -134,6 +139,26 @@
         }
         if (request.action === 'STOP_YOKSIS_DOCUMENT_AUDIT') {
             return isScanId(request.scanId) && Number.isInteger(request.targetTabId) && request.targetTabId >= 0;
+        }
+        if (request.action === 'CHECK_GOCNET_TRANSFER') {
+            return typeof request.applicationNumber === 'string' && /^20\d{2}-\d{2}-\d{5,8}$/.test(request.applicationNumber)
+                && (request.phase === undefined || ['history', 'form'].includes(request.phase))
+                && (request.attemptId === undefined || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request.attemptId));
+        }
+        if (['SAVE_GOCNET_RECORD', 'UPLOAD_GOCNET_DOCUMENT', 'ACK_GOCNET_SAVE', 'ACK_GOCNET_UPLOAD'].includes(request.action)) {
+            if (!Number.isInteger(request.targetTabId) || request.targetTabId < 0
+                || typeof request.attemptId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request.attemptId)) return false;
+            if (['ACK_GOCNET_SAVE', 'ACK_GOCNET_UPLOAD'].includes(request.action)) return true;
+            if (typeof request.applicationNumber !== 'string' || !/^20\d{2}-\d{2}-\d{5,8}$/.test(request.applicationNumber)) return false;
+            if (request.action === 'SAVE_GOCNET_RECORD') return typeof request.studentNumber === 'string' && request.studentNumber.length <= 32
+                && typeof request.passportNumber === 'string' && request.passportNumber.length <= 64
+                && typeof request.firstName === 'string' && request.firstName.length <= 120
+                && typeof request.lastName === 'string' && request.lastName.length <= 120
+                && typeof request.phoneNational === 'string' && /^5\d{9}$/.test(request.phoneNational);
+            return typeof request.recordId === 'string' && /^\d{1,12}$/.test(request.recordId)
+                && typeof request.pdfSha256 === 'string' && /^[a-f0-9]{64}$/.test(request.pdfSha256)
+                && typeof request.pdfBase64 === 'string' && request.pdfBase64.length > 0
+                && request.pdfBase64.length <= 12_582_912;
         }
 
         if (request.action === 'FILL_YOKSIS_FORM' || request.action === 'TRANSFER_TO_YOKSIS') {

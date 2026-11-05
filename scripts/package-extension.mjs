@@ -17,6 +17,7 @@ const extensionFiles = [
     'yoksis-student-identity.js',
     'yoksis-document-audit.js',
     'yoksis-document-audit-controller.js',
+    'gocnet-transfer-controller.js',
     'portal-security.js',
     'storage-lifecycle.js',
     'document-parser.js',

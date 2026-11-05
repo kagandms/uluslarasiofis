@@ -6,6 +6,8 @@ import { downloadApplicationArchive, createArchiveFilename } from './application
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
 import { createApplicationQueueFilters } from './application-queue-filters.js';
+import { prepareGocnetTransfer } from './gocnet-transfer.js';
+import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
 
 const STATUS_LABELS = Object.freeze({
     draft: 'Taslak',
@@ -119,7 +121,7 @@ function createSearchForm(document, state, onSubmit, onChange) {
     return form;
 }
 
-function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer) {
+function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer) {
     const table = document.createElement('table');
     table.className = 'staff-applications-table';
     const headers = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
@@ -145,6 +147,25 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
         });
         const actionCell = document.createElement('td');
         actionCell.dataset.label = 'Detay';
+        const canCheckGocnet = Boolean(item.submitted_at) && !item.deletion_state
+            && !['draft', 'completed', 'cancelled', 'rejected'].includes(item.status);
+        if (canCheckGocnet) {
+            const gocnetButton = document.createElement('button');
+            const result = gocnetResults[item.id];
+            gocnetButton.type = 'button';
+            gocnetButton.className = 'btn btn-outline btn-gocnet-transfer';
+            gocnetButton.dataset.action = 'gocnet-transfer';
+            gocnetButton.disabled = gocnetPending.has(item.id);
+            gocnetButton.textContent = gocnetPending.has(item.id) ? 'GöçNet’e aktarılıyor…' : 'GöçNet’e aktar';
+            gocnetButton.setAttribute('aria-label', gocnetButton.textContent);
+            gocnetButton.addEventListener('click', () => onGocnetTransfer(item.id));
+            actionCell.append(gocnetButton);
+            if (result) {
+                const status = createText(document, 'span', 'staff-gocnet-transfer-status', result);
+                status.setAttribute('role', 'status');
+                actionCell.append(status);
+            }
+        }
         const terminalStatus = ['cancelled', 'rejected'].includes(item.status);
         const canManageSpreadsheet = item.status !== 'draft' && !item.deletion_state && item.submitted_at
             && (!terminalStatus || ['present', 'pending'].includes(item.spreadsheet?.state));
@@ -328,7 +349,8 @@ function renderQueue(root, state, handlers) {
     } else if (state.result) {
         panel.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
             handlers.onDownloadArchive, handlers.onArchiveApplication, state.archiveApplicationId, handlers.onSendToMigration,
-            handlers.onResetDraftAccess, state.spreadsheetPending, state.spreadsheetErrors, handlers.onSpreadsheetTransfer));
+            handlers.onResetDraftAccess, state.spreadsheetPending, state.spreadsheetErrors, handlers.onSpreadsheetTransfer,
+            state.gocnetPending, state.gocnetResults, handlers.onGocnetTransfer));
         if (state.archiveMessage) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveMessage));
         if (state.archiveError) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveError));
         if (state.archiveMessage || state.archiveError) {
@@ -858,6 +880,12 @@ function createStaffApplicationsApi() {
         readApplicationDetail(applicationId, signal) {
             return request(`/api/staff/applications/${encodeURIComponent(applicationId)}`, { signal });
         },
+        createGocnetAttempt(applicationId, body) {
+            return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/gocnet-attempts`, body);
+        },
+        recordGocnetEvent(applicationId, attemptId, body) {
+            return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/gocnet-attempts/${encodeURIComponent(attemptId)}/events`, body);
+        },
         transferApplicationToSpreadsheet(applicationId, action) {
             return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/spreadsheet`, { action });
         },
@@ -944,6 +972,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         combinedPdfApplicationId: null, combinedPdfController: null,
         archiveError: null, archiveMessage: null,
         spreadsheetPending: new Set(), spreadsheetErrors: {},
+        gocnetPending: new Set(), gocnetResults: {},
         query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queueRequestId = 0;
@@ -999,7 +1028,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onDownloadArchive: downloadArchive, onArchiveApplication: archiveApplication,
             onResetDraftAccess: resetDraftAccess,
             onSendToMigration: sendToMigration, onDismissToast: dismissToast,
-            onSpreadsheetTransfer: transferApplicationToSpreadsheet
+            onSpreadsheetTransfer: transferApplicationToSpreadsheet, onGocnetTransfer: checkGocnetTransfer
         });
         root.dataset.staffView = state.view;
         try {
@@ -1309,6 +1338,154 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         const queuedTransfer = spreadsheetTransferQueue.then(transfer);
         spreadsheetTransferQueue = queuedTransfer.catch(() => {});
         await queuedTransfer;
+    }
+    async function requestGocnetAction(action, payload, timeoutMs = 45_000) {
+        const view = document.defaultView;
+        const requestId = view.crypto.randomUUID();
+        return new Promise((resolve) => {
+            let settled = false;
+            const finish = (result) => {
+                if (settled) return;
+                settled = true;
+                view.clearTimeout(timer);
+                view.removeEventListener('message', onMessage);
+                resolve(result);
+            };
+            const onMessage = (event) => {
+                if (event.source !== view || event.origin !== view.location.origin || event.data?.source !== 'EXTENSION'
+                    || event.data.requestId !== requestId) return;
+                if (event.data.type === 'RESPONSE' && event.data.action === action) finish(event.data.response || { state: 'unknown' });
+                else if (event.data.action === 'REQUEST_FAILED') finish({ state: 'unknown' });
+            };
+            const timer = view.setTimeout(() => finish({ state: 'unknown' }), timeoutMs);
+            view.addEventListener('message', onMessage);
+            view.postMessage({ source: 'WEB_APP', payload: { ...payload, action, requestId } }, view.location.origin);
+        });
+    }
+    async function checkGocnetTransfer(applicationId) {
+        if (state.gocnetPending.has(applicationId) || typeof api.createGocnetAttempt !== 'function'
+            || typeof api.recordGocnetEvent !== 'function' || typeof api.createArchiveManifest !== 'function'
+            || typeof api.readArchiveFile !== 'function') return;
+        state.gocnetPending.add(applicationId);
+        delete state.gocnetResults[applicationId];
+        render();
+        let attemptId = null;
+        let sequence = 0;
+        const eventIds = new Map();
+        const event = async (nextState, remoteRecordId = null, expectedPdfSha256 = null) => {
+            const nextSequence = sequence + 1;
+            const eventId = eventIds.get(nextSequence) || document.defaultView.crypto.randomUUID();
+            eventIds.set(nextSequence, eventId);
+            await api.recordGocnetEvent(applicationId, attemptId, {
+                eventId, sequence: nextSequence, state: nextState,
+                ...(remoteRecordId ? { remoteRecordId } : {}),
+                ...(expectedPdfSha256 ? { expectedPdfSha256 } : {})
+            });
+            sequence = nextSequence;
+        };
+        try {
+            let corrections = {};
+            let prepared;
+            while (!prepared) {
+                try {
+                    prepared = await prepareGocnetTransfer({ applicationId, api, ...corrections });
+                } catch (error) {
+                    if (!['REGISTRATION_NUMBER_CONFIRMATION_REQUIRED', 'TURKISH_MOBILE_REQUIRED'].includes(error?.code)) throw error;
+                    const corrected = await requestGocnetCorrection(error, corrections);
+                    if (!corrected) {
+                        state.gocnetResults[applicationId] = 'GöçNet aktarımı personel tarafından iptal edildi.';
+                        return;
+                    }
+                    corrections = { ...corrections, ...corrected };
+                }
+            }
+            attemptId = document.defaultView.crypto.randomUUID();
+            const attempt = await api.createGocnetAttempt(applicationId, {
+                attemptId,
+                applicationNumber: prepared.applicationNumber,
+                manifestFingerprint: prepared.manifestFingerprint, pdfSha256: prepared.pdfSha256
+            });
+            if (typeof attempt?.attemptId !== 'string') throw new Error('Attempt not created.');
+            attemptId = attempt.attemptId;
+            await event('querying', null, prepared.pdfSha256);
+            const check = (phase) => requestGocnetAction('CHECK_GOCNET_TRANSFER', {
+                applicationNumber: prepared.applicationNumber, phase, attemptId
+            });
+            const result = await check('history');
+            if (result.state === 'existing_record') {
+                await event('existing_record');
+                state.gocnetResults[applicationId] = 'Mevcut GöçNet kaydı bulundu; otomatik işlem durdu.';
+            } else if (result.state === 'no_match') {
+                const form = await check('form');
+                if (form.state !== 'student_data_filled' || form.yoksisTabId !== result.yoksisTabId) {
+                    await event(form.state === 'existing_record' ? 'existing_record' : 'failed');
+                    state.gocnetResults[applicationId] = form.state === 'existing_record'
+                        ? 'YÖKSİS kayıt sorgusu mevcut kaydı gösterdi; işlem durdu.'
+                        : 'YÖKSİS öğrenci verisi doğrulanamadı; kayıt açılmadı.';
+                } else {
+                    await event('saving');
+                    const saved = await requestGocnetAction('SAVE_GOCNET_RECORD', {
+                        attemptId, targetTabId: form.yoksisTabId, applicationNumber: prepared.applicationNumber,
+                        studentNumber: prepared.studentNumber, passportNumber: prepared.passportNumber,
+                        firstName: prepared.firstName, lastName: prepared.lastName, phoneNational: prepared.phoneNational
+                    });
+                    if (saved.state === 'existing_record') {
+                        await event('existing_record');
+                        state.gocnetResults[applicationId] = 'Kayıt kontrol sırasında oluşmuş; ikinci kayıt açılmadı.';
+                    } else if (saved.state !== 'saved' || !/^\d{1,12}$/.test(saved.recordId || '')) {
+                        const unknown = ['unknown', 'outcome_unknown'].includes(saved.state);
+                        await event(unknown ? 'outcome_unknown' : 'failed');
+                        state.gocnetResults[applicationId] = unknown
+                            ? 'GöçNet kayıt sonucu belirsiz kaldı. YÖKSİS’te kontrol edin; otomatik tekrar yapılmadı.'
+                            : 'GöçNet kaydı doğrulanamadı; belge yükleme durduruldu.';
+                    } else {
+                        await event('uploading', saved.recordId);
+                        const ackSave = await requestGocnetAction('ACK_GOCNET_SAVE', { attemptId, targetTabId: form.yoksisTabId });
+                        if (ackSave.success !== true) {
+                            await event('failed', saved.recordId);
+                            state.gocnetResults[applicationId] = 'Kayıt açıldı ancak onay ekranı kapatılamadı; belge yüklenmedi.';
+                        } else {
+                            const bytes = new Uint8Array(await prepared.pdfFile.arrayBuffer());
+                            let pdfBase64 = '';
+                            for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+                                pdfBase64 += document.defaultView.btoa(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
+                            }
+                            const uploaded = await requestGocnetAction('UPLOAD_GOCNET_DOCUMENT', {
+                                attemptId, targetTabId: form.yoksisTabId, applicationNumber: prepared.applicationNumber,
+                                recordId: saved.recordId, pdfSha256: prepared.pdfSha256, pdfBase64
+                            }, 90_000);
+                            if (uploaded.state === 'uploaded' && /^\d{1,12}$/.test(uploaded.documentId || '')) {
+                                await event('uploaded_for_review', saved.recordId);
+                                const ackUpload = await requestGocnetAction('ACK_GOCNET_UPLOAD', { attemptId, targetTabId: form.yoksisTabId });
+                                state.gocnetResults[applicationId] = ackUpload.success === true
+                                    ? 'Belge GöçNet’e yüklendi; son kontrol ofis görevlisinde.'
+                                    : 'Belge yüklendi ancak sonuç penceresi açık kaldı; son kontrol ofis görevlisinde.';
+                            } else {
+                                const unknown = ['unknown', 'outcome_unknown'].includes(uploaded.state);
+                                await event(unknown ? 'outcome_unknown' : 'failed', saved.recordId);
+                                state.gocnetResults[applicationId] = unknown
+                                    ? 'Belge yükleme sonucu belirsiz; YÖKSİS’i kontrol edin ve otomatik tekrar yapmayın.'
+                                    : 'Belge yüklenemedi; GöçNet kaydı oluşturuldu, yeni kayıt açmayın.';
+                            }
+                        }
+                    }
+                }
+            } else {
+                await event('failed');
+                state.gocnetResults[applicationId] = 'Sonuç doğrulanamadı. YÖKSİS’i kontrol edin; otomatik tekrar yapılmadı.';
+            }
+        } catch (error) {
+            console.error('GöçNet preflight failed.', { errorName: error?.name || 'Error' });
+            if (attemptId && sequence < 5) {
+                try { await event('failed'); } catch { /* Keep the external check fail-closed. */ }
+            }
+            state.gocnetResults[applicationId] = /REGISTRATION_NUMBER_CONFIRMATION_REQUIRED|TURKISH_MOBILE_REQUIRED/.test(error?.code || '')
+                ? error.message : (error?.status === 409 ? (error.message || 'Belgeler veya başka bir deneme değişti; kontrol durdu.')
+                    : 'GöçNet ön kontrolü yapılamadı. Belgeleri ve eklentiyi kontrol edip yeniden deneyin.');
+        } finally {
+            state.gocnetPending.delete(applicationId);
+            render();
+        }
     }
     async function resetDraftAccess(applicationId) {
         if (state.actionPending || typeof api.resetAccessCode !== 'function') return;

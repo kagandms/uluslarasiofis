@@ -19,7 +19,12 @@ function normalizeApplicationNumber(value) {
 }
 
 function extractApplicationNumberFromText(fullText) {
+    return extractApplicationNumberCandidates(fullText)[0] || '';
+}
+
+export function extractApplicationNumberCandidates(fullText) {
     const lines = fullText.split('\n').map(line => line.trim()).filter(Boolean);
+    const candidates = new Set();
 
     for (let index = 0; index < lines.length; index++) {
         const labelContext = lines.slice(index, index + 2).join(' ');
@@ -28,11 +33,11 @@ function extractApplicationNumberFromText(fullText) {
         const candidateContext = lines.slice(index, index + 4).join(' ');
         for (const match of candidateContext.matchAll(APPLICATION_NUMBER_TOKEN)) {
             const normalized = normalizeApplicationNumber(match[0]);
-            if (normalized) return normalized;
+            if (normalized) candidates.add(normalized);
         }
     }
 
-    return '';
+    return [...candidates];
 }
 
 function extractApplicationNumberFromCoordinates(words) {
