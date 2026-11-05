@@ -315,8 +315,8 @@ async function ensureContentScriptInjected(tabId, pageKind) {
             const files = pageKind === 'bridge'
                 ? ['portal-security.js', 'bridge.js']
                 : pageKind === 'apply'
-                    ? ['pdf.min.js', 'document-parser.js', 'yoksis-field-targets.js', 'content.js']
-                    : ['yoksis-field-targets.js', 'content.js'];
+                    ? ['pdf.min.js', 'document-parser.js', 'yoksis-field-targets.js', 'yoksis-student-identity.js', 'content.js']
+                    : ['yoksis-field-targets.js', 'yoksis-student-identity.js', 'content.js'];
             await chrome.scripting.executeScript({
                 target: { tabId },
                 files
