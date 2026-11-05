@@ -1,4 +1,4 @@
-import { APPLICATION_COVER_STYLES, createApplicationDocumentPages, createImmigrationFileCoverPage, fitApplicationCoverCode } from '../shared/applicationDocumentPdf.js';
+import { APPLICATION_COVER_STYLES, createImmigrationFileCoverPage, fitApplicationCoverCode } from '../shared/applicationDocumentPdf.js';
 import { loadDocumentLogos, waitDocumentAssets } from './document-logo-loader.js';
 import QRCode from 'qrcode';
 
@@ -36,14 +36,13 @@ export async function downloadOnlineApplicationPdf(application, document = globa
     const trackingQr = await QRCode.toDataURL(portalOrigin, { width: 300, margin: 1, errorCorrectionLevel: 'M' });
     const pages = [
         createImmigrationFileCoverPage(document, {
-            studentCode: application.student_number,
+            studentCode: application.reference_number,
             firstName: application.first_name,
             lastName: application.last_name,
             deliveryMethod: 'online',
             deliveryDate: application.submitted_at || application.created_at,
             portalOrigin
-        }, logos, trackingQr),
-        ...createApplicationDocumentPages(document, application, logos)
+        }, logos, trackingQr)
     ];
     if (pages.length === 0) throw new Error('Başvuru belgesi için gösterilebilir bilgi bulunamadı.');
     const { default: html2canvas } = await import('html2canvas');
@@ -79,7 +78,7 @@ export async function downloadOnlineApplicationPdf(application, document = globa
         const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
         const link = document.createElement('a');
         link.href = url;
-        link.download = `Basvuru_Formu_${readPdfReference(application)}.pdf`;
+        link.download = `Ikamet_Dosya_Kapagi_${readPdfReference(application)}.pdf`;
         link.hidden = true;
         document.body.append(link);
         link.click();
