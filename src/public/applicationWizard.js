@@ -536,6 +536,7 @@ function createResidenceStep(document, application, formValues) {
 
 const DOCUMENT_QUESTION_KEYS = Object.freeze({
     host_is_married: 'hostIsMarriedQuestion',
+    host_is_turkish: 'hostIsTurkishQuestion',
     minor_parents_identified: 'minorParentsIdentifiedQuestion',
     minor_family_status: 'minorFamilyQuestion',
     insurance_basis: 'insuranceBasisQuestion'
@@ -577,7 +578,8 @@ function createAddressEvidenceChoices(document, fields, messages, isDisabled) {
         ['own_home', 'addressEvidenceOwnHome'],
         ['dormitory', 'addressEvidenceDormitory'],
         ['hotel', 'addressEvidenceHotel'],
-        ['undertaking', 'addressEvidenceUndertaking']
+        ['undertaking', 'addressEvidenceUndertaking'],
+        ['residence_certificate', 'addressEvidenceResidenceCertificate']
     ].forEach(([value, key]) => {
         const label = document.createElement('label');
         const input = document.createElement('input');
@@ -1117,7 +1119,8 @@ export function getReviewReadiness(application, requirements, uploads = {}, dele
         issues.push({ kind: 'field', step: 1, code: null, messageKey: DOCUMENT_QUESTION_KEYS[field] });
     });
     const gssDeadline = calculateGssRegistrationDeadline(CURRENT_ACADEMIC_YEAR_START_DATE);
-    if (application.insurance_basis === 'gss_pending' && gssDeadline && readIstanbulDate() > gssDeadline) {
+    if ((application.final_document_policy === 0 || application.document_policy_version === 1)
+        && application.insurance_basis === 'gss_pending' && gssDeadline && readIstanbulDate() > gssDeadline) {
         issues.push({ kind: 'field', step: 1, code: null, messageKey: 'gssDeadlineExpired' });
     }
     if (!isFingerprintUploadEligible(application)) {

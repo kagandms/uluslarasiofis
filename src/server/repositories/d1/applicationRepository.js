@@ -13,6 +13,7 @@ const PUBLIC_APPLICATION_FIELDS = Object.freeze({
     accommodationType: 'accommodation_type',
     hasResidenceCard: 'has_residence_card',
     hostIsMarried: 'host_is_married',
+    hostIsTurkish: 'host_is_turkish',
     minorFamilyStatus: 'minor_family_status',
     minorParentsIdentified: 'minor_parents_identified',
     insuranceBasis: 'insurance_basis',

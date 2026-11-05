@@ -385,7 +385,7 @@ function readAccommodationLabel(value) {
 }
 
 function readDocumentAnswerDetails(application) {
-    const questions = { host_is_married: 'hostIsMarriedQuestion',
+    const questions = { host_is_married: 'hostIsMarriedQuestion', host_is_turkish: 'hostIsTurkishQuestion',
         minor_family_status: 'minorFamilyQuestion', minor_parents_identified: 'minorParentsIdentifiedQuestion',
         insurance_basis: 'insuranceBasisQuestion' };
     const answers = { yes: 'yes', no: 'no', system_verified: 'insuranceSystemVerified',

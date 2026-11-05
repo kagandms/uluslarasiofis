@@ -47,7 +47,7 @@ export function renderPublicDocumentOverview(root, locale) {
         list.append(item);
     });
 
-    const addressPolicies = policies.filter((policy) => policy.group_key === 'address_evidence' && policy.required);
+    const addressPolicies = policies.filter((policy) => policy.group_key === 'address_evidence');
     if (addressPolicies.length) list.append(createAddressEvidenceCard(document, messages, addressPolicies));
 
     root.replaceChildren(list);

@@ -1489,18 +1489,22 @@ test('online transition applications persist transition data and use renewal doc
     const updated = await worker.fetch(createRequest('/api/public/applications/current', {
         method: 'PATCH', cookie, body: { lock_version: version, transition_foreign_id: '12345678901',
             transition_card_serial: 'AB123', transition_card_number: '456789', transition_change_province: 'no',
-            transition_contact_preference: 'email' }
+            transition_contact_preference: 'email', address_evidence_type: 'undertaking', host_is_married: 'no',
+            host_is_turkish: 'yes', fingerprint_status: 'registered', fingerprint_code: 'TRANSITION-FP-123' }
     }), environment, {});
     const refreshed = await readJson(await worker.fetch(createRequest('/api/public/applications/current', { cookie }), environment, {}));
     const requirements = await readJson(await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {}));
-    const stored = database.prepare('SELECT application_type,application_route,transition_foreign_id,transition_card_serial,transition_card_number,transition_change_province,transition_contact_preference FROM applications').first();
+    const stored = database.prepare('SELECT application_type,application_route,transition_foreign_id,transition_card_serial,transition_card_number,transition_change_province,transition_contact_preference,host_is_turkish FROM applications').first();
 
     assert.equal(created.status, 201);
     assert.equal((await readJson(updated)).application.application_type, 'transition');
     assert.equal(refreshed.application.application_type, 'transition');
+    assert.equal(refreshed.application.host_is_turkish, 'yes');
     assert.equal(requirements.requirements.some(({ code }) => code === 'uets'), true);
+    assert.equal(requirements.requirements.some(({ code }) => code === 'host_population_record'), true);
     assert.deepEqual({ ...stored }, { application_type: 'renewal', application_route: 'transition', transition_foreign_id: '12345678901',
-        transition_card_serial: 'AB123', transition_card_number: '456789', transition_change_province: 'no', transition_contact_preference: 'email' });
+        transition_card_serial: 'AB123', transition_card_number: '456789', transition_change_province: 'no', transition_contact_preference: 'email',
+        host_is_turkish: 'yes' });
 });
 
 test('changing a transition draft to a standard application clears transition-only personal data', async () => {

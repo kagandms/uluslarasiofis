@@ -98,7 +98,7 @@ function createFingerprintRequirements() {
 async function createFingerprintWizard(fingerprintStatus, fingerprintCode = null, addressEvidenceType = 'rental_contract', options = {}) {
     const { document, root } = createRoot();
     const application = {
-        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: addressEvidenceType, student_number: 'S3-FP-1',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', host_is_turkish: 'no', final_document_policy: 1, insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: addressEvidenceType, student_number: 'S3-FP-1',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         first_name: 'Ayşe', last_name: 'Yılmaz', passport_number: 'P123456', nationality: 'Turkish',
         date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01', is_under_18: 0,
@@ -145,7 +145,7 @@ async function advanceWizardToReview(root, state) {
 test('contact step keeps Continue disabled until valid contact fields and the separate acknowledgement are present', async () => {
     const { document, root } = createRoot();
     const application = {
-        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', student_number: 'S3-CONTACT-1',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', host_is_turkish: 'no', final_document_policy: 1, insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', student_number: 'S3-CONTACT-1',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: false }
     };
@@ -450,7 +450,7 @@ test('residence step requires one address evidence branch and persists the selec
     const choices = root.querySelectorAll('[name="address_evidence_type"]');
     const continueButton = root.querySelector('#application-step-form button[type="submit"]');
 
-    assert.equal(choices.length, 5);
+    assert.equal(choices.length, 6);
     assert.equal(continueButton.disabled, true);
     const undertaking = root.querySelector('[name="address_evidence_type"][value="undertaking"]');
     undertaking.checked = true;
@@ -871,16 +871,12 @@ test('age boundary requires the e-İkamet date and calculates minor status from 
     document.defaultView.close();
 });
 
-test('clear-age adults do not see an e-İkamet date field and GSS uses the fixed academic calendar date', async () => {
+test('final policy adults do not see obsolete insurance questions or GSS deadline fields', async () => {
     const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
 
     assert.equal(root.querySelector('[name="residence_application_date"]'), null);
     assert.equal(root.querySelector('[name="academic_year_start_date"]'), null);
-    const insuranceBasis = root.querySelector('[name="insurance_basis"]');
-    insuranceBasis.value = 'gss_pending';
-    insuranceBasis.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
-    assert.equal(root.querySelector('[name="academic_year_start_date"]'), null);
-    assert.match(root.textContent, /21\.12\.2026/);
+    assert.equal(root.querySelector('[name="insurance_basis"]'), null);
     document.defaultView.close();
 });
 
@@ -910,7 +906,7 @@ test('wizard saves under-18 and fingerprint state before loading the server requ
     const { document, root } = createRoot();
     const window = document.defaultView;
     const application = {
-        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: '2026123999',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', host_is_turkish: 'no', final_document_policy: 1, insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: '2026123999',
         student_email: 'student@example.edu', student_phone: '+905551112233',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
         is_under_18: null, fingerprint_status: null, fingerprint_code: null,
@@ -965,7 +961,7 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
     const { document, root } = createRoot();
     const window = document.defaultView;
     const saved = {
-        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-WIZ-1', student_email: 'student@example.edu',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', host_is_turkish: 'no', final_document_policy: 1, insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-WIZ-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', first_name: '', last_name: '', passport_number: '', nationality: '', date_of_birth: '',
         residence_application_date: '', academic_year_start_date: '',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
@@ -1034,7 +1030,7 @@ test('wizard retries an ambiguous finalize on the same intent and exposes progre
     const { document, root } = createRoot();
     const window = document.defaultView;
     const application = {
-        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-UP-1', student_email: 'student@example.edu',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', host_is_turkish: 'no', final_document_policy: 1, insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', address_evidence_type: 'rental_contract', student_number: 'S3-UP-1', student_email: 'student@example.edu',
         student_phone: '+905551112233', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
         date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },
@@ -1182,7 +1178,7 @@ test('closeout translations have parity and the wizard rerenders in Arabic RTL',
     const window = document.defaultView;
     document.documentElement.lang = 'en';
     const application = {
-        status: 'draft', application_type: 'initial', host_is_married: 'no', insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', student_number: 'S3-RTL-1', student_email: 'student@example.edu',
+        status: 'draft', application_type: 'initial', host_is_married: 'no', host_is_turkish: 'no', final_document_policy: 1, insurance_basis: 'system_verified', minor_family_status: 'both_parents', minor_parents_identified: 'no', student_number: 'S3-RTL-1', student_email: 'student@example.edu',
         student_phone: '555', is_under_18: 0, fingerprint_status: 'not_registered', fingerprint_code: null,
         date_of_birth: '2000-01-01', residence_application_date: '2026-10-23', academic_year_start_date: '2026-09-01',
         contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: true },

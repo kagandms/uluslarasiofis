@@ -149,6 +149,8 @@ function createApplicationDetailDto(application) {
         transition_change_province: isTransitionApplication ? application.transition_change_province ?? null : null,
         is_under_18: application.is_under_18 === null ? null : application.is_under_18 === 1,
         address_evidence_type: application.accommodation_type || application.address_evidence_type || null,
+        document_policy_version: application.document_policy_version,
+        final_document_policy: application.final_document_policy,
         ...Object.fromEntries(DOCUMENT_ANSWER_FIELDS.map((field) => [field, application[field] ?? null])),
         fingerprint_status: application.fingerprint_status ?? null,
         fingerprint_code: application.fingerprint_code ?? null,

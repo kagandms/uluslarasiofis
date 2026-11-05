@@ -1,3 +1,4 @@
+import { FINAL_DOCUMENT_MESSAGES } from './final-document-messages.js';
 import { DOCUMENT_CONDITION_MESSAGES } from './document-condition-messages.js';
 import { PHYSICAL_RECEIPT_MESSAGES } from './physical-receipt-messages.js';
 
@@ -226,7 +227,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessDeviceSubmit: 'Başvuruya Giriş Yap',
         accessInvalidCredentials: 'Başvuru numarası veya öğrenci numarası hatalı.',
         submissionCredentialsReminder: 'Başvuru numaranızı saklamayı unutmayınız. Farklı bir cihazdan başvurunuza erişmek için başvuru numaranız ve öğrenci numaranız gerekecektir.',
-        ...DOCUMENT_CONDITION_MESSAGES.tr
+        ...DOCUMENT_CONDITION_MESSAGES.tr,
+        ...FINAL_DOCUMENT_MESSAGES.tr
     }),
     en: Object.freeze({
         languageLabel: 'Language selection',
@@ -450,7 +452,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessDeviceSubmit: 'Access Application',
         accessInvalidCredentials: 'Invalid application number or student number.',
         submissionCredentialsReminder: 'Remember to keep your application number. You will need it together with your student number to access your application from another device.',
-        ...DOCUMENT_CONDITION_MESSAGES.en
+        ...DOCUMENT_CONDITION_MESSAGES.en,
+        ...FINAL_DOCUMENT_MESSAGES.en
     }),
     ru: Object.freeze({
         languageLabel: 'Выбор языка',
@@ -674,7 +677,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessDeviceSubmit: 'Войти в заявку',
         accessInvalidCredentials: 'Неверный номер заявки или номер студента.',
         submissionCredentialsReminder: 'Не забудьте сохранить номер заявки. Он понадобится вместе с номером студента для доступа к заявке с другого устройства.',
-        ...DOCUMENT_CONDITION_MESSAGES.ru
+        ...DOCUMENT_CONDITION_MESSAGES.ru,
+        ...FINAL_DOCUMENT_MESSAGES.ru
     }),
     tk: Object.freeze({
         languageLabel: 'Dil saýlaň',
@@ -898,7 +902,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessDeviceSubmit: 'Arza gir',
         accessInvalidCredentials: 'Arza belgisi ýa-da talyp belgisi nädogry.',
         submissionCredentialsReminder: 'Arza belgiňizi saklamagy ýatdan çykarmaň. Başga enjamdan arzaňyza girmek üçin arza belgiňiz we talyp belgiňiz gerek bolar.',
-        ...DOCUMENT_CONDITION_MESSAGES.tk
+        ...DOCUMENT_CONDITION_MESSAGES.tk,
+        ...FINAL_DOCUMENT_MESSAGES.tk
     }),
     ar: Object.freeze({
         languageLabel: 'اختيار اللغة',
@@ -1122,7 +1127,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessDeviceSubmit: 'الدخول إلى الطلب',
         accessInvalidCredentials: 'رقم الطلب أو رقم الطالب غير صحيح.',
         submissionCredentialsReminder: 'تذكّر الاحتفاظ برقم طلبك. ستحتاجه مع رقم الطالب للوصول إلى طلبك من جهاز آخر.',
-        ...DOCUMENT_CONDITION_MESSAGES.ar
+        ...DOCUMENT_CONDITION_MESSAGES.ar,
+        ...FINAL_DOCUMENT_MESSAGES.ar
     })
 });
 
@@ -1171,7 +1177,8 @@ export const SESSION3_MESSAGES = Object.freeze({
         documentHostIdentityCopyHelp: 'Taahhüt veren kişinin kimlik belgesinin ön ve arka yüzünün kopyası.',
         documentHomeUtilityBillHelp: 'Üçüncü kişinin yanında kalıyorsanız, noter taahhüdünü veren kişi adına güncel elektrik, su, doğal gaz veya sabit telefon faturası ya da yeni abonelik sözleşmesi yükleyin. Uzatma ve geçiş başvurularında kayıtlı adres için de güncel fatura veya yeni abonelik sözleşmesi gerekir.',
         documentBirthCertificateUnder18Help: 'Yalnız 18 yaşından küçük başvurularda zorunludur.',
-        currentFile: 'Mevcut dosya', selectedReplacement: 'Seçilen yeni dosya', deleteInProgress: 'Belge siliniyor.', uploadState_selected: 'Dosya seçildi; yükleme hazırlanıyor.'
+        currentFile: 'Mevcut dosya', selectedReplacement: 'Seçilen yeni dosya', deleteInProgress: 'Belge siliniyor.', uploadState_selected: 'Dosya seçildi; yükleme hazırlanıyor.',
+        ...FINAL_DOCUMENT_MESSAGES.tr
     }),
     en: Object.freeze({
         stepDeclaration: 'Application acknowledgement', autosave_unsaved: 'You have unsaved changes.', autosave_saving: 'Saving…', autosave_saved: 'All changes are saved.',
@@ -1216,7 +1223,8 @@ export const SESSION3_MESSAGES = Object.freeze({
         documentHostIdentityCopyHelp: 'Copies of the front and back of the host identity document.',
         documentHomeUtilityBillHelp: 'If you live with a third person, upload a current electricity, water, gas or landline bill, or new subscription agreement, in the name of the person who gave the notarized undertaking. Extension and transfer applicants also need a current bill or new subscription agreement for their registered address.',
         documentBirthCertificateUnder18Help: 'Required only for applicants under 18.',
-        currentFile: 'Current file', selectedReplacement: 'Selected replacement', deleteInProgress: 'Deleting document.', uploadState_selected: 'File selected; preparing upload.'
+        currentFile: 'Current file', selectedReplacement: 'Selected replacement', deleteInProgress: 'Deleting document.', uploadState_selected: 'File selected; preparing upload.',
+        ...FINAL_DOCUMENT_MESSAGES.en
     }),
     ru: Object.freeze({
         stepDeclaration: 'Подтверждение данных', autosave_unsaved: 'Есть несохранённые изменения.', autosave_saving: 'Сохранение…', autosave_saved: 'Все изменения сохранены.',
@@ -1260,7 +1268,8 @@ export const SESSION3_MESSAGES = Object.freeze({
         documentHostIdentityCopyHelp: 'Копии лицевой и обратной сторон удостоверения личности хозяина жилья.',
         documentHomeUtilityBillHelp: 'Если вы живёте у третьего лица, загрузите актуальный счёт или новый договор на имя человека, оформившего нотариальное обязательство. При продлении и переходе также нужен актуальный счёт или новый договор по зарегистрированному адресу.',
         documentBirthCertificateUnder18Help: 'Обязательно только для заявителей младше 18 лет.',
-        currentFile: 'Текущий файл', selectedReplacement: 'Новый файл', deleteInProgress: 'Удаление документа.', uploadState_selected: 'Файл выбран; подготовка загрузки.'
+        currentFile: 'Текущий файл', selectedReplacement: 'Новый файл', deleteInProgress: 'Удаление документа.', uploadState_selected: 'Файл выбран; подготовка загрузки.',
+        ...FINAL_DOCUMENT_MESSAGES.ru
     }),
     tk: Object.freeze({
         stepDeclaration: 'Arza tassyklamasy', autosave_unsaved: 'Ýazdyrylmadyk üýtgeşmeler bar.', autosave_saving: 'Ýazdyrylýar…', autosave_saved: 'Ähli üýtgeşmeler ýazdyryldy.',
@@ -1304,7 +1313,8 @@ export const SESSION3_MESSAGES = Object.freeze({
         documentHostIdentityCopyHelp: 'Öý eýesiniň şahsyýet resminamasynyň öň we yz taraplarynyň nusgalary.',
         documentHomeUtilityBillHelp: 'Üçünji şahsyň öýünde ýaşaýan bolsaňyz, häzirki töleg hasabyny ýa-da täze abonent şertnamasyny notarial borçnama beren adamyň adyna ýükläň. Uzaltma we geçiş arzalarynda bellige alnan salgy üçin hem häzirki töleg hasaby ýa-da täze abonent şertnamasy gerek.',
         documentBirthCertificateUnder18Help: 'Diňe 18 ýaşdan kiçi dalaşgärler üçin hökmany.',
-        currentFile: 'Häzirki faýl', selectedReplacement: 'Saýlanan täze faýl', deleteInProgress: 'Resminama pozulýar.', uploadState_selected: 'Faýl saýlandy; ýükleme taýýarlanýar.'
+        currentFile: 'Häzirki faýl', selectedReplacement: 'Saýlanan täze faýl', deleteInProgress: 'Resminama pozulýar.', uploadState_selected: 'Faýl saýlandy; ýükleme taýýarlanýar.',
+        ...FINAL_DOCUMENT_MESSAGES.tk
     }),
     ar: Object.freeze({
         stepDeclaration: 'إقرار بيانات الطلب', autosave_unsaved: 'لديك تغييرات غير محفوظة.', autosave_saving: 'جارٍ الحفظ…', autosave_saved: 'تم حفظ جميع التغييرات.',
@@ -1348,6 +1358,7 @@ export const SESSION3_MESSAGES = Object.freeze({
         documentHostIdentityCopyHelp: 'نسختان للوجهين الأمامي والخلفي من هوية صاحب السكن.',
         documentHomeUtilityBillHelp: 'إذا كنت تقيم لدى شخص آخر، فارفع فاتورة حديثة للكهرباء أو الماء أو الغاز أو الهاتف الثابت، أو عقد اشتراك جديد باسم من قدم التعهد الموثق. يحتاج طلب التمديد أو الانتقال أيضاً إلى فاتورة حديثة أو عقد اشتراك جديد للعنوان المسجل.',
         documentBirthCertificateUnder18Help: 'مطلوب فقط للمتقدمين دون 18 عاماً.',
-        currentFile: 'الملف الحالي', selectedReplacement: 'الملف البديل المحدد', deleteInProgress: 'جارٍ حذف المستند.', uploadState_selected: 'تم اختيار الملف؛ جارٍ تجهيز الرفع.'
+        currentFile: 'الملف الحالي', selectedReplacement: 'الملف البديل المحدد', deleteInProgress: 'جارٍ حذف المستند.', uploadState_selected: 'تم اختيار الملف؛ جارٍ تجهيز الرفع.',
+        ...FINAL_DOCUMENT_MESSAGES.ar
     })
 });

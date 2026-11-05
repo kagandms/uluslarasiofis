@@ -76,7 +76,7 @@ function readMissingFields(application, declarationVersion) {
     if (calculatedUnder18 === null || Number(application.is_under_18) !== Number(calculatedUnder18)) {
         missingFields.push('is_under_18');
     }
-    if (application.insurance_basis === 'gss_pending') {
+    if ((application.final_document_policy === 0 || application.document_policy_version === 1) && application.insurance_basis === 'gss_pending') {
         const startDate = application.academic_year_start_date || CURRENT_ACADEMIC_YEAR_START_DATE;
         const deadline = calculateGssRegistrationDeadline(startDate);
         if (!deadline || readIstanbulDate() > deadline) missingFields.push('insurance_basis');

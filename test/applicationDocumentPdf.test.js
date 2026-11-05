@@ -63,7 +63,7 @@ test('application PDF packs all answered sections into one physical-style A4 pag
         reference_number: 'ITU-7K9M-4X2P', student_number: 'STU-1', status: 'submitted', application_type: 'renewal',
         submitted_at: '2026-10-12T09:00:00.000Z', first_name: 'Leyli', last_name: 'Dovladova',
         passport_number: 'A1905164', nationality: 'Türkmenistan', email: 'student@example.edu',
-        insurance_basis: 'bilateral_agreement', host_is_married: 'yes', fingerprint_status: 'registered',
+        insurance_basis: 'bilateral_agreement', host_is_married: 'yes', host_is_turkish: 'yes', fingerprint_status: 'registered',
         owner_session_id: 'private-session', access_credentials: { token: 'private-token' }
     };
 
@@ -75,6 +75,9 @@ test('application PDF packs all answered sections into one physical-style A4 pag
         assert.ok(pages[0].textContent.includes(sectionTitle));
     }
     assert.ok(pages[0].textContent.includes('student@example.edu'));
+    const fields = buildApplicationDocumentSections(application).flatMap(section => section.fields);
+    assert.ok(fields.some(field => field.label === 'Taahhüt veren Türk vatandaşı mı?' && field.value === 'Evet'));
+    assert.ok(pages[0].textContent.includes('Taahhüt veren Türk vatandaşı mı?'));
     assert.doesNotMatch(pages[0].textContent, /private-session|private-token/u);
     dom.window.close();
 });
