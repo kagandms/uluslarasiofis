@@ -9,6 +9,12 @@ function createTrackingRoot() {
     return { document, root: document.querySelector('#application-tracking') };
 }
 
+function selectStatusOnly(document, root) {
+    const input = root.querySelector('[name=status_only]');
+    input.checked = true;
+    input.dispatchEvent(new document.defaultView.Event('change'));
+}
+
 function createTrackingDto(overrides = {}) {
     return {
         application: {
@@ -29,26 +35,12 @@ function createTrackingDto(overrides = {}) {
 }
 
 async function initializeAndLookup(document, root, api) {
-    let lookupPayload = null;
-    const wrappedApi = {
-        ...api,
-        async readCurrentApplicationTracking() {
-            if (lookupPayload) {
-                const cachedPayload = lookupPayload;
-                lookupPayload = null;
-                return cachedPayload;
-            }
-            return api.readCurrentApplicationTracking();
-        },
-        async lookupApplicationTracking(studentNumber) {
-            if (api.lookupApplicationTracking) return api.lookupApplicationTracking(studentNumber);
-            lookupPayload = await api.readCurrentApplicationTracking();
-            return { found: true, ...lookupPayload };
-        }
-    };
+    const wrappedApi = { ...api, async accessApplicationWithReference() { return {}; } };
     const result = await initializeApplicationTracking(root, wrappedApi);
     const input = root.querySelector('input[name="reference_number"]');
     input.value = 'ITU-7K9M-4X2P';
+    root.querySelector('[name=student_number]').value = '12345';
+    if (api.lookupApplicationTracking) selectStatusOnly(document, root);
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
     return result;
@@ -156,6 +148,7 @@ test('public lookup renders statuses without filenames or document controls', as
         async finalizeResubmissionUpload() { privateEndpointCalls += 1; }
     };
     await initializeApplicationTracking(root, api);
+    selectStatusOnly(document, root);
     root.querySelector('input[name="reference_number"]').value = 'ITU-7K9M-4X2P';
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
@@ -186,6 +179,7 @@ test('public ITU tracking renders a rejected application reason as plain text', 
         }
     };
     await initializeApplicationTracking(root, api);
+    selectStatusOnly(document, root);
     root.querySelector('input[name="reference_number"]').value = 'ITU-7K9M-4X2P';
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
@@ -231,6 +225,7 @@ test('shared lookup routes physical ITU codes to physical tracking and displays 
         async lookupApplicationTracking() { throw new Error('Online lookup must not run for physical codes.'); }
     };
     await initializeApplicationTracking(root, api);
+    selectStatusOnly(document, root);
     root.querySelector('[name="reference_number"]').value = 'ITU-26-ABCDEFG';
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setImmediate(resolve));
@@ -329,6 +324,7 @@ test('not-found lookup is neutral and allows a retry', async () => {
         }
     };
     await initializeApplicationTracking(root, api);
+    selectStatusOnly(document, root);
     const submit = async (studentNumber) => {
         root.querySelector('input[name="reference_number"]').value = studentNumber;
         root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
@@ -337,7 +333,8 @@ test('not-found lookup is neutral and allows a retry', async () => {
 
     await submit('ITU-7K9M-4X2P');
     assert.match(root.textContent, /görüntülenebilir bir başvuru bulunamadı/i);
-    assert.equal(root.querySelectorAll('input:not([name=tracking_reference])').length, 1);
+    assert.equal(root.querySelectorAll('input[name=reference_number]').length, 1);
+    assert.equal(root.querySelector('[name=student_number]').required, false);
     assert.doesNotMatch(root.textContent, /draft exists|student exists/i);
     await submit('ITU-7K9M-4X2P');
     assert.equal(lookupCount, 2);
@@ -379,7 +376,8 @@ test('tracking supports all locales and the public main entry keeps Arabic right
         assert.equal(document.documentElement.lang, 'ar');
         assert.equal(document.documentElement.dir, 'rtl');
         assert.doesNotMatch(document.querySelector('#application-tracking').textContent, /البحث برقم الطالب/);
-        assert.equal(document.querySelector('.tracking-owner-access-link')?.getAttribute('href'), '/basvuruya-devam-et/');
+        assert.ok(document.querySelector('[name=student_number]'));
+        assert.ok(document.querySelector('[name=status_only]'));
     } finally {
         if (previousDocument === undefined) delete globalThis.document;
         else globalThis.document = previousDocument;
@@ -394,6 +392,7 @@ test('language changes preserve the shared ITU code without new lookups', async 
     let lookups = 0;
     const api = { lookupApplicationTracking: async () => { lookups += 1; return { found: true, ...createTrackingDto() }; } };
     await initializeApplicationTracking(root, api);
+    selectStatusOnly(document, root);
     const reference = root.querySelector('#tracking-application-reference');
     reference.value = 'ITU-7K9M-4X2P';
     reference.dispatchEvent(new document.defaultView.Event('input'));
@@ -431,5 +430,168 @@ test('public resubmission lookup links students to the secure page where upload 
     assert.ok(link);
     assert.equal(link.getAttribute('href'), '/basvuruya-devam-et/');
     assert.match(root.textContent, /Sigorta dosyanızı yükleyebilirsiniz/);
+    document.defaultView.close();
+});
+
+test('online credentials open eligible replacement upload in one submission', async () => {
+    const { document, root } = createTrackingRoot();
+    const calls = [];
+    await initializeApplicationTracking(root, {
+        async accessApplicationWithReference(credentials) {
+            assert.deepEqual(credentials, { reference_number: 'ITU-7K9M-4X2P', student_number: '12345' });
+            calls.push('access');
+            return { status: 'resubmission_required' };
+        },
+        async readCurrentApplicationTracking() { calls.push('tracking'); return createTrackingDto({ application: { status: 'resubmission_required' } }); },
+        async readCurrentResubmissionEligibility() { calls.push('eligibility'); return { documents: [{ code: 'residence_card', max_byte_size: 1024, accepted_media_types: ['application/pdf'] }] }; },
+        async lookupApplicationTracking() { assert.fail('Owner login must not use anonymous lookup'); }
+    });
+    root.querySelector('[name=reference_number]').value = 'itu-7k9m-4x2p';
+    const student = root.querySelector('[name=student_number]');
+    assert.ok(student);
+    student.value = ' 12345 ';
+    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { cancelable: true }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls, ['access', 'tracking', 'eligibility']);
+    assert.equal(root.querySelectorAll('input[type=file]').length, 1);
+    document.defaultView.close();
+});
+
+test('anonymous status lookup never reads an existing owner session', async () => {
+    const { document, root } = createTrackingRoot();
+    await initializeApplicationTracking(root, {
+        async lookupApplicationTracking() { return { found: true, ...createTrackingDto() }; },
+        async readCurrentApplicationTracking() { assert.fail('Anonymous mode must not read owner data'); }
+    });
+    selectStatusOnly(document, root);
+    root.querySelector('[name=reference_number]').value = 'ITU-7K9M-4X2P';
+    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { cancelable: true }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(root.querySelector('.application-document-filename'), null);
+    assert.match(root.textContent, /Gönderildi/);
+    document.defaultView.close();
+});
+
+test('failed credentials and mismatched sessions never reveal owner data or fall back to public lookup', async (context) => {
+    for (const failure of ['credentials', 'mismatch', 'rate', 'network', 'eligibility']) {
+        await context.test(failure, async () => {
+            const { document, root } = createTrackingRoot();
+            await initializeApplicationTracking(root, {
+                async accessApplicationWithReference() {
+                    if (failure === 'credentials') throw Object.assign(new Error(), { code: 'INVALID_ACCESS_CREDENTIALS' });
+                    if (failure === 'rate') throw Object.assign(new Error(), { status: 429 });
+                    if (failure === 'network') throw Object.assign(new Error(), { code: 'NETWORK_ERROR' });
+                },
+                async readCurrentApplicationTracking() { return createTrackingDto({ application: { reference_number: failure === 'mismatch' ? 'ITU-ABCD-EFGH' : 'ITU-7K9M-4X2P', status: 'resubmission_required' } }); },
+                async readCurrentResubmissionEligibility() { throw new Error('Eligibility unavailable'); },
+                async lookupApplicationTracking() { assert.fail('Failure must not fall back to public lookup'); }
+            });
+            root.querySelector('[name=reference_number]').value = 'ITU-7K9M-4X2P';
+            root.querySelector('[name=student_number]').value = '12345';
+            root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { cancelable: true }));
+            await new Promise(resolve => setImmediate(resolve));
+            assert.ok(root.querySelector('[role=alert]'));
+            assert.equal(root.querySelector('.tracking-summary'), null);
+            assert.equal(root.querySelector('input[type=file]'), null);
+            document.defaultView.close();
+        });
+    }
+});
+
+test('physical reference hides the student field and restores it for an online reference', async () => {
+    const { document, root } = createTrackingRoot();
+    await initializeApplicationTracking(root, {});
+    const reference = root.querySelector('[name=reference_number]');
+    reference.value = 'ITU-26-ABCDEFG';
+    reference.dispatchEvent(new document.defaultView.Event('input'));
+    assert.equal(root.querySelector('[name=student_number]').required, false);
+    assert.equal(root.querySelector('[name=student_number]').hidden, true);
+    reference.value = 'ITU-7K9M-4X2P';
+    reference.dispatchEvent(new document.defaultView.Event('input'));
+    assert.equal(root.querySelector('[name=student_number]').required, true);
+    document.defaultView.close();
+});
+
+test('current view opens owner tracking directly and expired sessions return to credentials', async (context) => {
+    for (const expired of [false, true]) {
+        await context.test(String(expired), async () => {
+            const dom = new JSDOM('<html lang="tr"><div id="application-tracking"></div></html>', { url: 'https://portal.test/basvurum/?view=current' });
+            const root = dom.window.document.querySelector('div');
+            await initializeApplicationTracking(root, {
+                async readCurrentApplicationTracking() {
+                    if (expired) throw Object.assign(new Error(), { status: 401 });
+                    return createTrackingDto();
+                },
+                async lookupApplicationTracking() { assert.fail('Current view must use owner session'); }
+            });
+            assert.equal(Boolean(root.querySelector('.tracking-summary')), !expired);
+            assert.equal(Boolean(root.querySelector('[name=student_number]')), expired);
+            dom.window.close();
+        });
+    }
+});
+
+test('pending login freezes credentials and verifies the originally submitted reference', async () => {
+    const { document, root } = createTrackingRoot();
+    let releaseAccess;
+    const access = new Promise(resolve => { releaseAccess = resolve; });
+    await initializeApplicationTracking(root, {
+        async accessApplicationWithReference() { await access; },
+        async readCurrentApplicationTracking() { return createTrackingDto(); }
+    });
+    root.querySelector('[name=reference_number]').value = 'ITU-7K9M-4X2P';
+    root.querySelector('[name=student_number]').value = '12345';
+    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { cancelable: true }));
+    assert.equal(root.querySelector('[name=reference_number]').disabled, true);
+    assert.equal(root.querySelector('[name=student_number]').disabled, true);
+    assert.equal(root.querySelector('[name=status_only]').disabled, true);
+    const reference = root.querySelector('[name=reference_number]');
+    reference.value = 'ITU-ABCD-EFGH';
+    reference.dispatchEvent(new document.defaultView.Event('input'));
+    releaseAccess();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(root.querySelector('.tracking-summary'));
+    assert.equal(root.querySelector('[role=alert]'), null);
+    document.defaultView.close();
+});
+
+test('upload success is cleared when a session expires and another application signs in', async () => {
+    const { document, root } = createTrackingRoot();
+    let expired = false;
+    let reference = 'ITU-7K9M-4X2P';
+    await initializeApplicationTracking(root, {
+        async accessApplicationWithReference(credentials) { reference = credentials.reference_number; },
+        async readCurrentApplicationTracking() { return createTrackingDto({ application: { reference_number: reference, status: 'resubmission_required' } }); },
+        async readCurrentResubmissionEligibility() { return { documents: [{ code: 'residence_card', accepted_media_types: ['application/pdf'], max_byte_size: 100 }] }; },
+        async createResubmissionUploadIntent() {
+            if (expired) throw Object.assign(new Error(), { status: 401 });
+            return { upload: { intent_id: 'replacement-test' } };
+        },
+        async putStudentDocumentDirect() {},
+        async finalizeResubmissionUpload() { return { scan_status: 'pending' }; }
+    });
+    const login = async (code) => {
+        root.querySelector('[name=reference_number]').value = code;
+        root.querySelector('[name=student_number]').value = '12345';
+        root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { cancelable: true }));
+        await new Promise(resolve => setImmediate(resolve));
+    };
+    const upload = async () => {
+        const input = root.querySelector('input[type=file]');
+        Object.defineProperty(input, 'files', { value: [{ name: 'document.pdf', size: 10, type: 'application/pdf' }] });
+        input.dispatchEvent(new document.defaultView.Event('change'));
+        root.querySelector('.resubmission-upload-control button').click();
+        await new Promise(resolve => setImmediate(resolve));
+    };
+    await login('ITU-7K9M-4X2P');
+    await upload();
+    assert.ok(root.querySelector('.tracking-success-banner'));
+    expired = true;
+    await upload();
+    assert.ok(root.querySelector('[name=student_number]'));
+    await login('ITU-ABCD-EFGH');
+    assert.ok(root.querySelector('.tracking-summary'));
+    assert.equal(root.querySelector('.tracking-success-banner'), null);
+    assert.equal(root.querySelector('.tracking-card-success'), null);
     document.defaultView.close();
 });

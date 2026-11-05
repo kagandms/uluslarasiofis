@@ -104,6 +104,26 @@ async function prioritizePendingDocument(database, input) {
     return result[0]?.meta?.changes === 1;
 }
 
+/** Builds the guarded transition after requested replacements have passed security scans. @returns {D1PreparedStatement} */
+function prepareResubmissionReview(database, revisionId, now, outcome) {
+    return database.prepare(`UPDATE applications SET status='under_review',updated_at=?,last_activity_at=?
+        WHERE id=(SELECT records.application_id FROM document_records AS records
+            JOIN document_revisions AS revisions ON revisions.document_record_id=records.id WHERE revisions.id=?)
+          AND status='resubmission_required' AND changes()=1 AND ?='clean'
+          AND EXISTS (SELECT 1 FROM document_records WHERE application_id=applications.id)
+          AND NOT EXISTS (
+            SELECT 1 FROM document_records AS records
+            LEFT JOIN document_revisions AS revisions ON revisions.document_record_id=records.id AND revisions.is_current=1
+            LEFT JOIN document_revision_files AS files ON files.revision_id=revisions.id
+            WHERE records.application_id=applications.id
+              AND (records.review_status='resubmission_required' OR revisions.status='resubmission_required'
+                OR (EXISTS (SELECT 1 FROM application_notes AS notes
+                      WHERE notes.document_record_id=records.id AND notes.visibility='student')
+                    AND (revisions.id IS NULL OR files.id IS NULL
+                      OR files.upload_status<>'finalized' OR files.scan_status<>'clean')))
+          )`).bind(now,now,revisionId,outcome);
+}
+
 /** @param {D1Database} database Binding. @param {object} input Exact leased job evidence. @returns {Promise<boolean>} Durable result CAS. */
 async function persistResult(database, input) {
     const { job, result, now, tokenHash } = input;
@@ -123,7 +143,13 @@ async function persistResult(database, input) {
         database.prepare(`INSERT INTO audit_events(id,event_type,actor_type,document_record_id,request_id,safe_metadata_json,created_at)
             SELECT ?,'scanner.result_recorded','system',document_record_id,?,?,? FROM document_revisions
             WHERE id=? AND changes()=1`).bind(crypto.randomUUID(), `scanner_${crypto.randomUUID()}`, JSON.stringify({ outcome: result.outcome,
-                resultCode: result.result_code, attempt: job.attempts }), now, job.revision_id)
+                resultCode: result.result_code, attempt: job.attempts }), now, job.revision_id),
+        prepareResubmissionReview(database, job.revision_id, now, result.outcome),
+        database.prepare(`INSERT INTO audit_events(id,event_type,actor_type,application_id,request_id,safe_metadata_json,created_at)
+            SELECT ?,'application.resubmission_review_resumed','system',records.application_id,?,
+              '{"applicationStatus":"under_review"}',? FROM document_records AS records
+            JOIN document_revisions AS revisions ON revisions.document_record_id=records.id
+            WHERE revisions.id=? AND changes()=1`).bind(crypto.randomUUID(), `scanner_${crypto.randomUUID()}`, now, job.revision_id)
     ]);
     return (results[0]?.meta?.changes || 0) >= 1;
 }

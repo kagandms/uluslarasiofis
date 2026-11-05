@@ -42,9 +42,10 @@ function createLookupForm(document, state, messages, submitLookup) {
     form.className = 'tracking-lookup-form';
     form.addEventListener('submit', (event) => {
         event.preventDefault();
-        submitLookup(input.value);
+        submitLookup(input.value, studentInput.value);
     });
     input.type = 'text';
+    input.disabled = isSubmitting;
     input.name = 'reference_number';
     input.maxLength = 64;
     input.required = true;
@@ -55,7 +56,9 @@ function createLookupForm(document, state, messages, submitLookup) {
     input.dir = 'ltr';
     input.setAttribute('aria-label', messages.trackingLookupReferenceLabel);
     input.addEventListener('input', () => {
+        if (isSubmitting) return;
         state.referenceNumber = input.value;
+        updateStudentField();
     });
     const label = createTextElement(document, 'label', '', messages.trackingLookupReferenceLabel);
     label.htmlFor = input.id;
@@ -65,7 +68,39 @@ function createLookupForm(document, state, messages, submitLookup) {
     button.disabled = isSubmitting;
     button.setAttribute('aria-busy', isSubmitting ? 'true' : 'false');
     button.textContent = isSubmitting ? messages.trackingLoading : messages.trackingLookupSubmit;
-    form.append(label, input, button);
+    const studentLabel = createTextElement(document, 'label', '', messages.studentNumber);
+    const studentInput = document.createElement('input');
+    studentInput.type = 'text';
+    studentInput.name = 'student_number';
+    studentInput.id = 'tracking-student-number';
+    studentInput.maxLength = 64;
+    studentInput.autocomplete = 'off';
+    studentInput.dir = 'ltr';
+    studentInput.value = state.studentNumber;
+    studentLabel.htmlFor = studentInput.id;
+    studentInput.addEventListener('input', () => { if (!isSubmitting) state.studentNumber = studentInput.value; });
+    const modeLabel = createTextElement(document, 'label', '', messages.trackingStatusOnly);
+    const modeInput = document.createElement('input');
+    modeLabel.className = 'tracking-status-only';
+    modeInput.type = 'checkbox';
+    modeInput.disabled = isSubmitting;
+    modeInput.name = 'status_only';
+    modeInput.checked = state.statusOnly;
+    modeLabel.prepend(modeInput);
+    modeInput.addEventListener('change', () => {
+        if (isSubmitting) return;
+        state.statusOnly = modeInput.checked;
+        updateStudentField();
+    });
+    function updateStudentField() {
+        const hidden = state.statusOnly || isPhysicalReference(input.value.trim());
+        studentLabel.hidden = hidden;
+        studentInput.hidden = hidden;
+        studentInput.required = !hidden;
+        studentInput.disabled = hidden || isSubmitting;
+    }
+    updateStudentField();
+    form.append(label, input, studentLabel, studentInput, modeLabel, button);
     return form;
 }
 
@@ -75,14 +110,14 @@ function renderLookup(root, state, messages, submitLookup) {
     panel.className = 'tracking-state tracking-lookup';
     panel.append(
         createTextElement(document, 'h2', '', messages.trackingLookupHeading),
-        createTextElement(document, 'p', '', messages.trackingLookupExplanation),
-        createTextElement(document, 'p', 'tracking-owner-access-note', messages.trackingOwnerAccess),
-        createLink(document, '/basvuruya-devam-et/', messages.trackingOwnerAccessLink, 'tracking-owner-access-link'),
+        createTextElement(document, 'p', '', messages.trackingSingleLoginExplanation),
         createLookupForm(document, state, messages, submitLookup)
     );
     const feedbackKey = state.kind === 'notFound' ? 'trackingLookupNotFound'
         : state.kind === 'rateLimited' ? 'trackingLookupRateLimited'
-            : state.kind === 'lookupError' ? 'trackingLookupError' : null;
+            : state.kind === 'invalidCredentials' ? 'accessInvalidCredentials'
+                : state.kind === 'sessionExpired' ? 'resubmissionUploadSessionExpired'
+                    : state.kind === 'lookupError' ? 'trackingLookupError' : null;
     if (feedbackKey) {
         const feedback = createTextElement(document, 'p', 'tracking-message tracking-feedback', messages[feedbackKey]);
         feedback.setAttribute('role', 'alert');
@@ -205,7 +240,7 @@ function renderTracking(root, state, locale, submitLookup) {
         root.replaceChildren(createTextElement(document, 'p', 'tracking-message', messages.trackingLoading));
         return;
     }
-    if (['lookup', 'lookupLoading', 'notFound', 'rateLimited', 'lookupError'].includes(state.kind)) {
+    if (['lookup', 'lookupLoading', 'notFound', 'rateLimited', 'lookupError', 'invalidCredentials', 'sessionExpired'].includes(state.kind)) {
         renderLookup(root, state, messages, submitLookup);
         return;
     }
@@ -241,36 +276,65 @@ function renderTracking(root, state, locale, submitLookup) {
 /**
  * Loads and renders tracking data for the current applicant session.
  * @param {HTMLElement} root Tracking-page mount element.
- * @param {{readCurrentApplicationTracking: () => Promise<object>, lookupApplicationTracking: (studentNumber: string) => Promise<object>}} api Same-origin application API helpers.
+ * @param {object} api Same-origin credential access, owner tracking, and public status API helpers.
  * @returns {Promise<{kind: string}>} Initial tracking view state.
  */
 export async function initializeApplicationTracking(root, api) {
     const document = root.ownerDocument;
-    const state = { kind: 'lookup', payload: null, referenceNumber: '', replacementDocuments: [], replacementSuccess: false, replacementCompleted: {} };
+    const state = { kind: 'lookup', payload: null, referenceNumber: '', studentNumber: '', statusOnly: false, replacementDocuments: [], replacementSuccess: false, replacementCompleted: {} };
     const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup);
-    async function submitLookup(referenceNumber) {
-        state.referenceNumber = referenceNumber.trim().toUpperCase();
+    async function submitLookup(referenceNumber, studentNumber) {
+        if (state.kind === 'lookupLoading') return;
+        state.studentNumber = studentNumber.trim();
+        if (!state.statusOnly && !isPhysicalReference(referenceNumber.trim()) && !state.studentNumber) return;
+        const submittedReference = referenceNumber.trim().toUpperCase();
+        const submittedStudentNumber = state.studentNumber;
+        const statusOnly = state.statusOnly;
+        state.referenceNumber = submittedReference;
+        state.payload = null;
+        state.replacementDocuments = [];
+        state.replacementSuccess = false;
+        state.replacementCompleted = {};
+        state.onReplacementComplete = null;
+        state.onSessionFailure = null;
         state.kind = 'lookupLoading';
         render();
         try {
-            if (isPhysicalReference(state.referenceNumber)) {
-                const result = await api.lookupPhysicalApplicationTracking(state.referenceNumber);
+            if (isPhysicalReference(submittedReference)) {
+                const result = await api.lookupPhysicalApplicationTracking(submittedReference);
                 state.payload = result.found ? result : null;
                 state.kind = result.found ? 'physicalReady' : 'notFound';
                 render();
                 return;
             }
-            state.payload = await api.lookupApplicationTracking(state.referenceNumber);
-            state.kind = state.payload.found ? 'publicReady' : 'notFound';
-            if (state.payload.found && typeof api.readCurrentApplicationTracking === 'function') {
-                await attachMatchingOwnerSession(state, api, state.referenceNumber, render);
+            if (!statusOnly) {
+                await api.accessApplicationWithReference({ reference_number: submittedReference, student_number: submittedStudentNumber });
+                await attachMatchingOwnerSession(state, api, submittedReference, render);
+                state.studentNumber = '';
+                render();
+                return;
             }
+            state.payload = await api.lookupApplicationTracking(submittedReference);
+            state.kind = state.payload.found ? 'publicReady' : 'notFound';
         } catch (error) {
-            state.kind = error?.code === 'RATE_LIMITED' ? 'rateLimited' : 'lookupError';
+            state.payload = null;
+            state.replacementDocuments = [];
+            state.kind = lookupFailureKind(error);
         }
         render();
     }
     document.addEventListener('public:locale-changed', render);
+    if (new URL(document.defaultView.location.href).searchParams.get('view') === 'current') {
+        state.kind = 'loading';
+        render();
+        try {
+            await attachMatchingOwnerSession(state, api, null, render);
+        } catch (error) {
+            state.payload = null;
+            state.replacementDocuments = [];
+            state.kind = lookupFailureKind(error);
+        }
+    }
     render();
     return { get kind() { return state.kind; } };
 }
@@ -298,45 +362,48 @@ function renderPhysicalResult(root, payload, locale) {
 }
 
 async function attachMatchingOwnerSession(state, api, referenceNumber, render) {
-    try {
-        const publicRejectionReason = state.payload?.application?.rejection_reason;
-        const ownerPayload = await api.readCurrentApplicationTracking();
-        if (normalizeReferenceNumber(ownerPayload.application?.reference_number) !== normalizeReferenceNumber(referenceNumber)) return;
-        state.payload = ownerPayload.application.status === 'rejected'
-            && !ownerPayload.application.rejection_reason
-            && typeof publicRejectionReason === 'string'
-            ? { ...ownerPayload, application: { ...ownerPayload.application, rejection_reason: publicRejectionReason } }
-            : ownerPayload;
-        state.kind = ownerPayload.application.status === 'draft' ? 'draft' : 'ready';
-        if (ownerPayload.application.status !== 'resubmission_required'
-            || typeof api.readCurrentResubmissionEligibility !== 'function') return;
-        const eligibility = await api.readCurrentResubmissionEligibility();
-        state.replacementDocuments = (eligibility.documents || []).map((requirement) => ({ ...requirement, api }));
-        state.onReplacementComplete = async (code, meta) => {
-            state.replacementCompleted = state.replacementCompleted || {};
-            const targetCode = code || (state.replacementDocuments?.length === 1 ? state.replacementDocuments[0].code : null);
-            if (targetCode) {
-                state.replacementCompleted[targetCode] = { scan_status: meta?.scan_status || 'pending' };
-            }
-            state.payload = await api.readCurrentApplicationTracking();
-            state.replacementDocuments = [];
-            state.replacementSuccess = true;
-            if (state.payload.application.status === 'resubmission_required') {
-                const refreshed = await api.readCurrentResubmissionEligibility();
-                state.replacementDocuments = (refreshed.documents || []).map((requirement) => ({ ...requirement, api }));
-            }
-            render();
-        };
-        state.onSessionFailure = () => {
-            state.kind = 'lookup';
-            state.payload = null;
-            state.replacementDocuments = [];
-            state.replacementCompleted = {};
-            render();
-        };
-    } catch {
-        return;
+    const ownerPayload = await api.readCurrentApplicationTracking();
+    if (referenceNumber && normalizeReferenceNumber(ownerPayload.application?.reference_number) !== normalizeReferenceNumber(referenceNumber)) {
+        throw Object.assign(new Error('Application session does not match'), { status: 401 });
     }
+    state.payload = ownerPayload;
+    state.kind = ownerPayload.application.status === 'draft' ? 'draft' : 'ready';
+    if (ownerPayload.application.status !== 'resubmission_required'
+        || typeof api.readCurrentResubmissionEligibility !== 'function') return;
+    const eligibility = await api.readCurrentResubmissionEligibility();
+    state.replacementDocuments = (eligibility.documents || []).map((requirement) => ({ ...requirement, api }));
+    state.onReplacementComplete = async (code, meta) => {
+        state.replacementCompleted = state.replacementCompleted || {};
+        const targetCode = code || (state.replacementDocuments?.length === 1 ? state.replacementDocuments[0].code : null);
+        if (targetCode) {
+            state.replacementCompleted[targetCode] = { scan_status: meta?.scan_status || 'pending' };
+        }
+        state.payload = await api.readCurrentApplicationTracking();
+        state.replacementDocuments = [];
+        state.replacementSuccess = true;
+        if (state.payload.application.status === 'resubmission_required') {
+            const refreshed = await api.readCurrentResubmissionEligibility();
+            state.replacementDocuments = (refreshed.documents || []).map((requirement) => ({ ...requirement, api }));
+        }
+        render();
+    };
+    state.onSessionFailure = () => {
+        state.kind = 'sessionExpired';
+        state.payload = null;
+        state.replacementDocuments = [];
+        state.replacementCompleted = {};
+        state.replacementSuccess = false;
+        state.onReplacementComplete = null;
+        state.onSessionFailure = null;
+        render();
+    };
+}
+
+function lookupFailureKind(error) {
+    if (error?.status === 429 || error?.code === 'RATE_LIMITED') return 'rateLimited';
+    if (error?.code === 'INVALID_ACCESS_CREDENTIALS') return 'invalidCredentials';
+    if (error?.status === 401 || error?.code === 'APPLICATION_SESSION_REQUIRED') return 'sessionExpired';
+    return 'lookupError';
 }
 
 function normalizeReferenceNumber(value) {

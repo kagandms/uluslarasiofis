@@ -1318,3 +1318,6 @@ body[data-page="home"] .status-timeline-step.scroll-reveal-item.is-revealed .sta
 }
 
 
+
+.tracking-lookup-form .tracking-status-only { display: flex; align-items: center; gap: 0.5rem; flex-basis: 100%; }
+.tracking-lookup-form .tracking-status-only input { width: auto; min-height: auto; }

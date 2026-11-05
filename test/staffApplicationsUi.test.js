@@ -1109,3 +1109,100 @@ test('queue shortcut marks an approved application sent to migration', async (co
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(calls, [[item.id, 'sent_to_migration', item.updated_at, null, true]]);
 });
+
+
+test('online queue searches while typing and changes status immediately without losing input focus', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const queries = [];
+    const api = {
+        async queryApplications(query) {
+            queries.push(query);
+            return createQueuePayload([QUEUE_ITEM]);
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+    let input = root.querySelector('[name="q"]');
+    input.focus();
+    input.value = 'ITU-';
+    input.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    input.value = 'ITU-ABCD';
+    input.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    await new Promise(resolve => document.defaultView.setTimeout(resolve, 300));
+    assert.equal(queries.length, 2);
+    assert.equal(queries.at(-1).q, 'ITU-ABCD');
+    input = root.querySelector('[name="q"]');
+    assert.equal(document.activeElement, input);
+    assert.equal(input.value, 'ITU-ABCD');
+    const status = root.querySelector('[name="status"]');
+    assert.equal(status.querySelector('[value="completed"]'), null);
+    assert.equal(status.querySelector('[value="terminal"]'), null);
+    assert.equal(status.querySelector('[value="migration"]').textContent, 'Göç İdaresine Gönderildi');
+    status.value = 'resubmission_required';
+    status.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(queries.at(-1).status, 'resubmission_required');
+    assert.equal(queries.at(-1).q, 'ITU-ABCD');
+});
+
+test('queue pagination retains results while loading and restores scroll position', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let finishPage;
+    const api = {
+        async queryApplications(query) {
+            if (query.page === 2) return new Promise(resolve => { finishPage = resolve; });
+            return createQueuePayload([QUEUE_ITEM], 1, 25, 30);
+        }
+    };
+    const scrollPositions = [];
+    Object.defineProperty(document.defaultView, 'scrollY', { value: 900, configurable: true });
+    document.defaultView.scrollTo = options => { scrollPositions.push(options.top); };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(root.querySelector('[data-action="next-page"]').classList.contains('btn-primary'));
+    root.querySelector('[data-action="next-page"]').click();
+    assert.ok(root.querySelector('.staff-applications-table'));
+    finishPage(createQueuePayload([QUEUE_ITEM], 2, 25, 30));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(scrollPositions.at(-1), 900);
+    assert.ok(root.querySelector('[data-action="previous-page"]').classList.contains('btn-primary'));
+});
+
+
+test('typing another query discards an earlier response before the debounce expires', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let finishEarlierSearch;
+    const api = {
+        async queryApplications(query) {
+            if (query.q === 'ITU-A') return new Promise(resolve => { finishEarlierSearch = resolve; });
+            return createQueuePayload([QUEUE_ITEM]);
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+    let input = root.querySelector('[name="q"]');
+    input.value = 'ITU-A';
+    input.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    await new Promise(resolve => document.defaultView.setTimeout(resolve, 300));
+    input = root.querySelector('[name="q"]');
+    input.focus();
+    input.value = 'ITU-AB';
+    input.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    finishEarlierSearch(createQueuePayload([{ ...QUEUE_ITEM, first_name: 'Stale search result' }]));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.doesNotMatch(root.textContent, /Stale search result/);
+    assert.equal(document.activeElement, input);
+    assert.equal(input.value, 'ITU-AB');
+    await new Promise(resolve => document.defaultView.setTimeout(resolve, 300));
+    assert.equal(root.querySelector('[name="q"]').value, 'ITU-AB');
+    assert.match(root.textContent, /Ayşe/);
+});

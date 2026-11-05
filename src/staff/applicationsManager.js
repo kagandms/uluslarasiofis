@@ -22,7 +22,7 @@ const DOCUMENT_STATE_LABELS = Object.freeze({
 const STATUS_FILTERS = Object.freeze([
     ['all', 'Tüm durumlar'], ['draft', 'Taslaklar'], ['new', 'Yeni'], ['under_review', 'İncelemede'],
     ['resubmission_required', 'Yeniden yükleme gerekli'], ['approved', 'Onaylandı'],
-    ['migration', 'Göç İdaresi'], ['completed', 'Tamamlanan'], ['terminal', 'Terminal']
+    ['migration', 'Göç İdaresine Gönderildi']
 ]);
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const STATUS_ACTION_LABELS = Object.freeze({
@@ -96,14 +96,27 @@ function createSelect(document, name, value, options) {
     return select;
 }
 
-function createSearchForm(document, state, onSubmit) {
-    return createApplicationQueueFilters(document, {
+function createSearchForm(document, state, onSubmit, onChange) {
+    const form = createApplicationQueueFilters(document, {
         query: state.query,
         statusOptions: STATUS_FILTERS,
         idPrefix: 'staff-application',
         disabled: state.loading,
         onSubmit
     });
+    const search = form.querySelector('[name="q"]');
+    search.placeholder = 'ITU takip kodu, öğrenci no, ad, soyad veya pasaport no';
+    const readQuery = () => ({
+        q: search.value,
+        status: form.elements.namedItem('status').value,
+        from_date: form.elements.namedItem('from_date').value,
+        to_date: form.elements.namedItem('to_date').value
+    });
+    search.addEventListener('input', () => onChange(readQuery(), true));
+    form.querySelectorAll('select, input[type="date"]').forEach(input => {
+        input.addEventListener('change', () => onChange(readQuery(), false));
+    });
+    return form;
 }
 
 function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess) {
@@ -184,14 +197,14 @@ function createPagination(document, pagination, onPageChange) {
     const next = document.createElement('button');
     controls.className = 'staff-applications-pagination';
     previous.type = 'button';
-    previous.className = 'btn btn-outline';
+    previous.className = 'btn btn-primary';
     previous.dataset.action = 'previous-page';
     previous.textContent = 'Önceki';
     previous.disabled = pagination.page <= 1;
     previous.addEventListener('click', () => onPageChange(pagination.page - 1));
     const pages = createText(document, 'p', '', `Sayfa ${pagination.page} / ${pagination.total_pages} · ${pagination.total_items} başvuru`);
     next.type = 'button';
-    next.className = 'btn btn-outline';
+    next.className = 'btn btn-primary';
     next.dataset.action = 'next-page';
     next.textContent = 'Sonraki';
     next.disabled = pagination.page >= pagination.total_pages;
@@ -263,10 +276,16 @@ function createStaffToast(document, message, onDismiss) {
 
 function renderQueue(root, state, handlers) {
     const document = root.ownerDocument;
+    const scrollY = document.defaultView.scrollY;
+    const focused = root.contains(document.activeElement) ? document.activeElement : null;
+    const focusedName = focused?.name;
+    const selectionStart = focused?.selectionStart;
+    const selectionEnd = focused?.selectionEnd;
     const panel = document.createElement('div');
     panel.className = 'staff-applications-queue';
-    panel.append(createSearchForm(document, state, handlers.onSearch));
-    if (state.loading) {
+    panel.setAttribute('aria-busy', state.loading ? 'true' : 'false');
+    panel.append(createSearchForm(document, state, handlers.onSearch, handlers.onQueryChange));
+    if (state.loading && !state.result) {
         panel.append(createText(document, 'p', 'staff-applications-state', 'Başvurular yükleniyor…'));
     } else if (state.error) {
         panel.append(createQueueError(document, state, handlers.onRetry));
@@ -291,6 +310,14 @@ function renderQueue(root, state, handlers) {
         panel.append(createPagination(document, state.result.pagination, handlers.onPageChange));
     }
     root.replaceChildren(panel);
+    if (focusedName) {
+        const replacement = panel.querySelector(`[name="${focusedName}"]`);
+        replacement?.focus({ preventScroll: true });
+        if (selectionStart !== null && selectionStart !== undefined) {
+            replacement?.setSelectionRange?.(selectionStart, selectionEnd);
+        }
+    }
+    if (scrollY > 0) document.defaultView.scrollTo({ top: scrollY, behavior: 'instant' });
 }
 
 function appendDetail(document, list, label, value) {
@@ -887,6 +914,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queueRequestId = 0;
+    let searchTimer = null;
     let archiveRequestId = 0;
     let previewTimer = null;
     let scanPollTimer = null;
@@ -933,7 +961,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onDismissToast: dismissToast
         });
         else renderQueue(root, state, {
-            onSearch: submitSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,
+            onSearch: submitSearch, onQueryChange: scheduleSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,
             onDownloadArchive: downloadArchive, onArchiveApplication: archiveApplication,
             onResetDraftAccess: resetDraftAccess,
             onSendToMigration: sendToMigration, onDismissToast: dismissToast
@@ -1248,13 +1276,30 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             await loadQueue();
         }
     }
+    function scheduleSearch(query, debounce) {
+        queueRequestId += 1;
+        if (searchTimer !== null) document.defaultView.clearTimeout(searchTimer);
+        state.query = { ...state.query, ...query, page: 1 };
+        if (!debounce) {
+            void submitSearch(query);
+            return;
+        }
+        searchTimer = document.defaultView.setTimeout(() => {
+            searchTimer = null;
+            if (state.view === 'queue') void submitSearch(state.query);
+        }, 250);
+    }
     async function submitSearch({ q, status, from_date, to_date }) {
+        if (searchTimer !== null) document.defaultView.clearTimeout(searchTimer);
+        searchTimer = null;
         if (state.actionPending) return;
         state.query = { ...state.query, q, status, from_date, to_date, page: 1 };
         await loadQueue();
     }
     async function changePage(page) {
         if (state.actionPending) return;
+        if (searchTimer !== null) document.defaultView.clearTimeout(searchTimer);
+        searchTimer = null;
         state.query = { ...state.query, page };
         await loadQueue();
     }
