@@ -6,7 +6,7 @@ const STATUS_LABELS = Object.freeze({
     migration_approved: 'Göç İdaresi onayladı', completed: 'Tamamlandı', cancelled: 'İptal edildi', rejected: 'Reddedildi'
 });
 const ADDRESS_LABELS = Object.freeze({
-    rental_contract: 'Kira sözleşmesi', residence_certificate: 'Yerleşim yeri belgesi',
+    rental_contract: 'Kira sözleşmesi', residence_certificate: 'Adres kaydı',
     undertaking: 'Taahhütname', own_home: 'Kendi konutu', dormitory: 'Yurt', hotel: 'Otel'
 });
 const ANSWER_LABELS = Object.freeze({
@@ -67,6 +67,7 @@ export function buildApplicationDocumentSections(application) {
                 ['Adres belgesi türü', ADDRESS_LABELS[application.address_evidence_type] || application.address_evidence_type],
                 ['Sağlık güvencesi', ANSWER_LABELS[application.insurance_basis] || application.insurance_basis],
                 ['Ev sahibinin medeni durumu', ANSWER_LABELS[application.host_is_married] || application.host_is_married],
+                ['Taahhüt veren Türk vatandaşı mı?', ANSWER_LABELS[application.host_is_turkish] || application.host_is_turkish],
                 ['Aile durumu', ANSWER_LABELS[application.minor_family_status] || application.minor_family_status],
                 ['Ebeveyn bilgisi', ANSWER_LABELS[application.minor_parents_identified] || application.minor_parents_identified],
                 ['Geçiş yabancı kimlik no', application.transition_foreign_id],

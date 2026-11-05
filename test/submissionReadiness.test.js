@@ -185,13 +185,13 @@ test('transition applications require current permit identifiers and retain rene
     assert.ok(listDocumentPolicies('renewal', false, complete).some(({ code, required }) => code === 'uets' && required));
 });
 
-test('under-18 applications require the birth certificate and adults do not', () => {
+test('under-18 applications require the notarized minor consent and adults do not', () => {
     const minor = createApplication({ date_of_birth: '2010-01-01', is_under_18: 1 });
-    const readiness = evaluate(minor, createReadyDocuments(minor).filter(({ code }) => code !== 'birth_certificate_under18'));
-    assert.deepEqual(readiness.missing_documents, ['birth_certificate_under18']);
+    const readiness = evaluate(minor, createReadyDocuments(minor).filter(({ code }) => code !== 'minor_consent'));
+    assert.deepEqual(readiness.missing_documents, ['minor_consent']);
 
     const adult = createApplication();
-    assert.equal(evaluate(adult, createReadyDocuments(adult).filter(({ code }) => code !== 'birth_certificate_under18')).status, 'ready');
+    assert.equal(evaluate(adult, createReadyDocuments(adult).filter(({ code }) => code !== 'minor_consent')).status, 'ready');
 });
 
 test('incomplete, stale, deleted, cleanup-pending or unsafe current document states are not ready', () => {

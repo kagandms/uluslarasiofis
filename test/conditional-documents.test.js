@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
 import { listApplicationDocumentPolicies, listDocumentPolicies, readDocumentPolicy } from '../src/server/domain/documentPolicy.js';
-import { ACCOMMODATION_TYPES, listMissingDocumentAnswers, listRequiredDocumentAnswers, readAccommodationType } from '../src/shared/document-conditions.js';
+import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_OPTIONS, listMissingDocumentAnswers, listRequiredDocumentAnswers, readAccommodationType } from '../src/shared/document-conditions.js';
 import { evaluateSubmissionReadiness } from '../src/server/services/submissionReadiness.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
@@ -27,39 +27,50 @@ test('public document guidance requests four biometric photos in every supported
 test('current applications request the official form documents without a residence-card upload', () => {
     for (const application_type of ['initial', 'renewal']) {
         const codes = readCodes({ ...ADULT, application_type, insurance_basis: 'system_verified' });
-        assert.ok(codes.includes('photographs'));
+        assert.equal(codes.includes('photographs'), false);
         assert.equal(codes.includes('residence_card'), false);
-        assert.equal(codes.includes('health_insurance'), false);
+        assert.ok(codes.includes('health_insurance'));
         assert.ok(codes.includes('student_certificate'));
         assert.equal(codes.includes('uets'), application_type === 'renewal');
     }
     assert.ok(readCodes({ ...ADULT, insurance_basis: 'bilateral_agreement' }).includes('health_insurance'));
-    assert.equal(readCodes({ ...ADULT, insurance_basis: 'system_verified' }).includes('health_insurance'), false);
+    assert.ok(readCodes({ ...ADULT, insurance_basis: 'system_verified' }).includes('health_insurance'));
 });
 
-test('renewal adds residence registration and bill independently to every accommodation branch', () => {
+test('system-verified health insurance proof is required for every application type', () => {
+    for (const application_type of ['initial', 'renewal', 'transition']) {
+        const policy = listDocumentPolicies(application_type, false, {
+            ...ADULT, insurance_basis: 'system_verified'
+        }).find(({ code }) => code === 'health_insurance');
+        assert.equal(policy?.required, true, application_type);
+    }
+});
+
+test('each accommodation branch requires only its selected address documents', () => {
     const expected = { rental_contract: ['address_rental_contract'], own_home: ['address_title_deed', 'address_numbering'],
-        dormitory: ['address_dormitory'], hotel: ['address_hotel', 'address_hotel_receipt'], undertaking: ['address_undertaking', 'host_residence_certificate', 'home_utility_bill'] };
+        dormitory: ['address_dormitory', 'dormitory_tax_certificate', 'dormitory_signature_circular'],
+        hotel: ['address_hotel'], undertaking: ['address_undertaking', 'host_residence_certificate', 'home_utility_bill'],
+        residence_certificate: ['address_residence_certificate'] };
     for (const accommodation_type of ACCOMMODATION_TYPES) {
-        const application = { ...ADULT, accommodation_type, host_is_married: 'no' };
-        const initial = readCodes(application);
-        const renewal = readCodes({ ...application, application_type: 'renewal' });
-        for (const code of expected[accommodation_type]) assert.ok(initial.includes(code), code);
-        assert.equal(initial.includes('address_residence_certificate'), false);
-        assert.equal(initial.includes('home_utility_bill'), accommodation_type === 'undertaking');
-        assert.ok(renewal.includes('address_residence_certificate'));
-        assert.ok(renewal.includes('home_utility_bill'));
+        const application = { ...ADULT, accommodation_type, host_is_married: 'no', host_is_turkish: 'no' };
+        for (const application_type of ['initial', 'renewal']) {
+            const codes = readCodes({ ...application, application_type });
+            for (const code of expected[accommodation_type]) assert.ok(codes.includes(code), code);
+            assert.equal(codes.includes('address_residence_certificate'), accommodation_type === 'residence_certificate');
+            assert.equal(codes.includes('home_utility_bill'), accommodation_type === 'undertaking');
+        }
     }
 });
 
-test('transition route applies extension address and adult UETS policy to its stored renewal type', () => {
-    const codes = listApplicationDocumentPolicies({ ...ADULT, application_type: 'renewal', application_route: 'transition', accommodation_type: 'rental_contract' })
-        .filter(({ required }) => required).map(({ code }) => code);
-    for (const code of ['address_rental_contract', 'address_residence_certificate', 'home_utility_bill', 'uets']) {
-        assert.ok(codes.includes(code), code);
-    }
-    assert.equal(listApplicationDocumentPolicies({ ...ADULT, application_type: 'renewal', application_route: 'transition', is_under_18: 1 })
-        .some(({ code }) => code === 'uets'), false);
+test('transition route UETS requires an existing fingerprint code regardless of age', () => {
+    const application = { ...ADULT, application_type: 'renewal', application_route: 'transition',
+        accommodation_type: 'rental_contract', fingerprint_status: 'registered', fingerprint_code: 'FP-123' };
+    const codes = listApplicationDocumentPolicies(application).filter(({ required }) => required).map(({ code }) => code);
+    for (const code of ['address_rental_contract', 'uets']) assert.ok(codes.includes(code), code);
+    assert.equal(codes.includes('home_utility_bill'), false);
+    assert.equal(codes.includes('address_residence_certificate'), false);
+    assert.equal(listApplicationDocumentPolicies({ ...application, fingerprint_code: '' }).some(({ code }) => code === 'uets'), false);
+    assert.equal(listApplicationDocumentPolicies({ ...application, is_under_18: 1 }).some(({ code }) => code === 'uets'), true);
 });
 
 test('married hosts require spouse undertaking and host identity copy is not requested', () => {
@@ -70,40 +81,32 @@ test('married hosts require spouse undertaking and host identity copy is not req
     assert.equal(readDocumentPolicy('host_identity_copy', 'initial', false, application), null);
 });
 
-test('all minors require consent while family evidence follows the official conditional cases', () => {
+test('all minors require separate consent without unrelated family evidence', () => {
     const minor = { ...ADULT, is_under_18: 1, minor_parents_identified: 'no', minor_family_status: 'divorced' };
     const codes = readCodes(minor);
-    for (const code of ['birth_certificate_under18', 'minor_consent', 'minor_family_evidence']) assert.ok(codes.includes(code));
-    const bothParents = readCodes({ ...minor, minor_parents_identified: 'yes', minor_family_status: 'both_parents' });
-    assert.ok(bothParents.includes('minor_consent'));
-    assert.equal(bothParents.includes('birth_certificate_under18'), false);
-    assert.equal(bothParents.includes('minor_family_evidence'), false);
-    assert.equal(readDocumentPolicy('parent_permit_copy', 'initial', true, { minor_parents_identified: 'yes' }).required, false);
-    for (const minor_family_status of ['divorced', 'deceased', 'single_parent', 'absent']) {
-        assert.ok(readCodes({ ...minor, minor_family_status }).includes('minor_family_evidence'));
+    assert.ok(codes.includes('minor_consent'));
+    for (const code of ['birth_certificate_under18', 'minor_family_evidence', 'parent_permit_copy']) {
+        assert.equal(readDocumentPolicy(code, 'initial', true, minor), null);
     }
-    assert.equal(listDocumentPolicies('initial', true, minor)
-        .find(({ code }) => code === 'parent_permit_copy')?.required, false);
-    const adult = readCodes({ ...minor, is_under_18: 0 });
-    assert.equal(adult.some((code) => code.startsWith('minor_') || code === 'birth_certificate_under18'), false);
+    assert.equal(readCodes({ ...minor, is_under_18: 0 }).includes('minor_consent'), false);
 });
 
-test('renewal omits UETS for applicants under 18', () => {
+test('renewal requires UETS for applicants under 18 as well', () => {
     const minorRenewal = { ...ADULT, application_type: 'renewal', is_under_18: 1 };
-    assert.equal(readCodes(minorRenewal).includes('uets'), false);
+    assert.ok(readCodes(minorRenewal).includes('uets'));
     assert.ok(readCodes({ ...minorRenewal, is_under_18: 0 }).includes('uets'));
 });
 
 test('unanswered and invalid conditional questions block server readiness even with no missing document uploads', () => {
     const application = { ...ADULT, accommodation_type: 'undertaking', is_under_18: 1 };
     const missing = listMissingDocumentAnswers(application);
-    assert.deepEqual(missing, ['host_is_married', 'minor_family_status', 'minor_parents_identified', 'insurance_basis']);
+    assert.deepEqual(missing, ['host_is_married', 'host_is_turkish']);
     const result = evaluateSubmissionReadiness(application, [], [], { declarationVersion: 'test' });
     missing.forEach((field) => assert.ok(result.missing_fields.includes(field)));
     assert.equal(result.status, 'not_ready');
     assert.equal(readAccommodationType({ address_evidence_type: 'rental_contract', accommodation_type: 'hotel' }), 'hotel');
     assert.equal(readAccommodationType({ address_evidence_type: 'rental_contract' }), 'rental_contract');
-    assert.deepEqual(listRequiredDocumentAnswers({ ...ADULT, application_type: 'renewal' }), ['insurance_basis']);
+    assert.deepEqual(listRequiredDocumentAnswers({ ...ADULT, application_type: 'renewal' }), []);
 });
 
 function createRequest(path, options = {}) {
@@ -141,10 +144,11 @@ test('owner PATCH persists new accommodation and answers, survives reload and dr
     assert.equal(persisted.address_evidence_type, null);
     const requirements = await worker.fetch(createRequest('/api/public/applications/current/documents', { cookie }), environment, {});
     const codes = (await requirements.json()).requirements.map(({ code }) => code);
-    assert.ok(codes.includes('address_hotel_receipt'));
+    assert.ok(codes.includes('address_hotel'));
+    assert.equal(codes.includes('address_hotel_receipt'), false);
     assert.ok(codes.includes('health_insurance'));
     assert.equal(codes.includes('residence_card'), false);
-    assert.ok(codes.includes('photographs'));
+    assert.equal(codes.includes('photographs'), false);
     assert.equal(codes.includes('home_utility_bill'), false);
     const invalid = await worker.fetch(createRequest('/api/public/applications/current', { method: 'PATCH', cookie,
         body: { lock_version: saved.lock_version, host_is_married: 'maybe' } }), environment, {});
@@ -152,10 +156,14 @@ test('owner PATCH persists new accommodation and answers, survives reload and dr
     assert.equal(environment.DB.prepare('SELECT host_is_married FROM applications').first().host_is_married, null);
 });
 
-test('insurance proof is requested only for bilateral coverage', () => {
-    assert.equal(readDocumentPolicy('health_insurance', 'initial', false, { insurance_basis: 'system_verified' }), null);
-    assert.equal(readDocumentPolicy('health_insurance', 'renewal', false, { insurance_basis: 'gss_pending' }), null);
+test('system-verified health insurance proof is required for every application type', () => {
+    assert.equal(readDocumentPolicy('health_insurance', 'renewal', false, { insurance_basis: 'gss_pending' }).required, true);
     assert.equal(readDocumentPolicy('health_insurance', 'initial', false, { insurance_basis: 'bilateral_agreement' }).required, true);
+    for (const applicationType of ['initial', 'renewal', 'transition']) {
+        assert.equal(readDocumentPolicy('health_insurance', applicationType, false, {
+            insurance_basis: 'system_verified'
+        }).required, true, applicationType);
+    }
 });
 
 test('forward migration preserves previously submitted policy and leaves data and foreign keys intact', () => {
@@ -172,7 +180,7 @@ test('forward migration preserves previously submitted policy and leaves data an
     assert.equal(old.document_policy_version, 1);
     assert.equal(draft.document_policy_version, 2);
     assert.ok(readCodes(old).includes('photographs'));
-    assert.ok(readCodes(draft).includes('photographs'));
+    assert.ok(readCodes({ ...draft, final_document_policy: 0 }).includes('photographs'));
     assert.equal(DB.prepare('SELECT count(*) AS count FROM applications').first().count, 2);
     assert.ok(DB.prepare('SELECT count(*) AS count FROM document_requirements').first().count > requirementsBefore);
     assert.equal(DB.prepare('PRAGMA foreign_key_check').all().results.length, 0);

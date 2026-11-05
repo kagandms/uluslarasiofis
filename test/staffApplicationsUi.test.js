@@ -305,7 +305,7 @@ test('applications manager submits filters, changes pages, renders detail safely
                 application: {
                     ...QUEUE_ITEM, email: 'ayse@example.edu', phone: '+905551112233',
                     passport_number: 'P123456', nationality: 'Turkish', date_of_birth: '2001-01-01',
-                    is_under_18: false, address_evidence_type: 'undertaking', fingerprint_status: 'registered',
+                    is_under_18: false, address_evidence_type: 'undertaking', host_is_turkish: 'yes', fingerprint_status: 'registered',
                     fingerprint_code: 'FP-123', declaration_version: 'accuracy-v1',
                     declaration_accepted_at: '2026-09-28T10:00:00.000Z',
                     contact_acknowledgement_accepted_current: true,
@@ -343,6 +343,9 @@ test('applications manager submits filters, changes pages, renders detail safely
     await new Promise((resolve) => setImmediate(resolve));
     assert.match(root.textContent, /P123456/);
     assert.match(root.textContent, /FP-123/);
+    const hostCitizenship = [...root.querySelectorAll('.staff-application-details-grid .staff-application-detail-item')]
+        .find(item => item.querySelector('dt')?.textContent.trim() === 'Taahhüt veren kişi Türk vatandaşı mı?');
+    assert.equal(hostCitizenship?.querySelector('dd')?.textContent.trim(), 'Evet');
     assert.match(root.textContent, /passport\.pdf/);
     assert.match(root.textContent, /Onaylandı/);
     assert.match(root.textContent, /Yüklenmemiş/);

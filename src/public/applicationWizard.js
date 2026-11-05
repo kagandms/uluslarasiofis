@@ -536,6 +536,7 @@ function createResidenceStep(document, application, formValues) {
 
 const DOCUMENT_QUESTION_KEYS = Object.freeze({
     host_is_married: 'hostIsMarriedQuestion',
+    host_is_turkish: 'hostIsTurkishQuestion',
     minor_parents_identified: 'minorParentsIdentifiedQuestion',
     minor_family_status: 'minorFamilyQuestion',
     insurance_basis: 'insuranceBasisQuestion'
@@ -577,7 +578,8 @@ function createAddressEvidenceChoices(document, fields, messages, isDisabled) {
         ['own_home', 'addressEvidenceOwnHome'],
         ['dormitory', 'addressEvidenceDormitory'],
         ['hotel', 'addressEvidenceHotel'],
-        ['undertaking', 'addressEvidenceUndertaking']
+        ['undertaking', 'addressEvidenceUndertaking'],
+        ['residence_certificate', 'addressEvidenceResidenceCertificate']
     ].forEach(([value, key]) => {
         const label = document.createElement('label');
         const input = document.createElement('input');
@@ -1049,7 +1051,7 @@ function createReviewStep(document, state) {
             document.createTextNode(` ${formatSubmissionTime(application.declaration.accepted_at, document.documentElement.lang || 'tr')}`));
         review.append(time);
     }
-    if (application.status === 'submitted') {
+    if (['submitted', 'under_review'].includes(application.status)) {
         review.append(createSubmissionConfirmation(document, application, messages));
         return review;
     }
@@ -1117,7 +1119,8 @@ export function getReviewReadiness(application, requirements, uploads = {}, dele
         issues.push({ kind: 'field', step: 1, code: null, messageKey: DOCUMENT_QUESTION_KEYS[field] });
     });
     const gssDeadline = calculateGssRegistrationDeadline(CURRENT_ACADEMIC_YEAR_START_DATE);
-    if (application.insurance_basis === 'gss_pending' && gssDeadline && readIstanbulDate() > gssDeadline) {
+    if ((application.final_document_policy === 0 || application.document_policy_version === 1)
+        && application.insurance_basis === 'gss_pending' && gssDeadline && readIstanbulDate() > gssDeadline) {
         issues.push({ kind: 'field', step: 1, code: null, messageKey: 'gssDeadlineExpired' });
     }
     if (!isFingerprintUploadEligible(application)) {
@@ -1299,7 +1302,7 @@ function renderWizard(root, state) {
     if (state.step === 2) stage.append(createDocumentsStep(document, state));
     if (state.step === 3) stage.append(createDeclarationStep(document, state.application, state));
     if (state.step === 4) stage.append(createReviewStep(document, state));
-    if (state.step > 0 && state.application?.status !== 'submitted') panel.append(createButton(document, messages, 'previous', 'previous'));
+    if (state.step > 0 && !['submitted', 'under_review'].includes(state.application?.status)) panel.append(createButton(document, messages, 'previous', 'previous'));
     panel.append(stage);
     root.replaceChildren(panel);
     if (state._focusError && errorElement) {

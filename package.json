@@ -23,9 +23,8 @@
     "db:migrate:production": "wrangler d1 migrations apply uluslarasiofis-production --remote --env production",
     "deploy:staging": "npm run build:staging && wrangler deploy --env staging --keep-vars",
     "deploy:dry-run:staging": "npm run build:staging && wrangler deploy --env staging --dry-run --keep-vars",
-    "deploy:production": "npm run build:production && wrangler deploy --env production",
+    "deploy:production": "node scripts/block-local-production-deploy.mjs",
     "deploy:dry-run:production": "npm run build:production && wrangler deploy --env production --dry-run",
-    "predeploy:production": "node scripts/check-production-print-secrets.mjs",
     "predeploy:dry-run:production": "node scripts/check-production-print-secrets.mjs",
     "ci:local": "node scripts/ci/local-worker-smoke.mjs",
     "test:receipt-stability": "node scripts/ci/receipt-stability.mjs"

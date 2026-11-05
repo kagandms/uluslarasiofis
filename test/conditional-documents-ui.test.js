@@ -40,7 +40,7 @@ async function submitStep(root) {
     await new Promise((resolve) => setImmediate(resolve));
 }
 
-test('first application no longer asks for a residence card and requests biometric photos', async (context) => {
+test('first application requests common documents without obsolete photo or card uploads', async (context) => {
     const { root, document, state, application } = await createWizard();
     context.after(() => document.defaultView.close());
     assert.equal(state.step, 1);
@@ -48,7 +48,8 @@ test('first application no longer asks for a residence card and requests biometr
     await submitStep(root);
     assert.equal(state.step, 2);
     assert.equal(root.querySelector('[data-document-code="residence_card"]'), null);
-    assert.ok(root.querySelector('[data-document-code="photographs"]'));
+    assert.equal(root.querySelector('[data-document-code="photographs"]'), null);
+    assert.ok(root.querySelector('[data-document-code="health_insurance"]'));
     assert.equal(application.has_residence_card, undefined);
 });
 
@@ -59,28 +60,41 @@ test('host question appears only for host accommodation and other answers surviv
 
     await changeValue(root, 'address_evidence_type', 'undertaking');
     assert.ok(root.querySelector('[name="host_is_married"]'));
+    assert.ok(root.querySelector('[name="host_is_turkish"]'));
     assert.equal(root.querySelector('button[type="submit"]').disabled, true);
     await changeValue(root, 'host_is_married', 'yes');
     assert.equal(application.host_is_married, 'yes');
+    assert.equal(root.querySelector('button[type="submit"]').disabled, true);
+    await changeValue(root, 'host_is_turkish', 'yes');
+    assert.equal(application.host_is_turkish, 'yes');
+    assert.equal(root.querySelector('button[type="submit"]').disabled, false);
     await changeValue(root, 'address_evidence_type', 'dormitory');
     assert.equal(root.querySelector('[name="host_is_married"]'), null);
+    assert.equal(root.querySelector('[name="host_is_turkish"]'), null);
     assert.equal(root.querySelector('[name="has_residence_card"]'), null);
     assert.equal(root.querySelector('button[type="submit"]').disabled, false);
 });
 
-test('minor details are required for every under-18 applicant and age uses residence application date', async (context) => {
-    const { root, document, application } = await createWizard();
+test('minors need a separate notarized consent without obsolete family or insurance questions', async (context) => {
+    const { root, document, application, state } = await createWizard();
     context.after(() => document.defaultView.close());
     await changeValue(root, 'date_of_birth', '2012-01-01');
-    assert.ok(root.querySelector('[name="minor_family_status"]'));
-    assert.ok(root.querySelector('[name="minor_parents_identified"]'));
-    assert.ok(root.querySelector('[name="insurance_basis"]'));
-    assert.equal(application.is_under_18, true);
-    await changeValue(root, 'minor_family_status', 'both_parents');
-    await changeValue(root, 'minor_parents_identified', 'yes');
-    await changeValue(root, 'insurance_basis', 'system_verified');
-    assert.equal(root.querySelector('button[type="submit"]').disabled, false);
-    await changeValue(root, 'date_of_birth', '2000-01-01');
     assert.equal(root.querySelector('[name="minor_family_status"]'), null);
-    assert.equal(application.is_under_18, false);
+    assert.equal(root.querySelector('[name="insurance_basis"]'), null);
+    assert.equal(application.is_under_18, true);
+    await submitStep(root);
+    assert.equal(state.step, 2);
+    assert.ok(root.querySelector('[data-document-code="minor_consent"]'));
+    assert.match(root.textContent, /Noter onaylı muvafakatname/);
+});
+
+test('registered address is a standalone alternative with no lease or dorm documents', async (context) => {
+    const { root, document, state } = await createWizard();
+    context.after(() => document.defaultView.close());
+    await changeValue(root, 'address_evidence_type', 'residence_certificate');
+    await submitStep(root);
+    assert.equal(state.step, 2);
+    assert.ok(root.querySelector('[data-document-code="address_residence_certificate"]'));
+    assert.equal(root.querySelector('[data-document-code="address_rental_contract"]'), null);
+    assert.equal(root.querySelector('[data-document-code="address_dormitory"]'), null);
 });

@@ -363,9 +363,10 @@ test('server-calculated document requirements change with the saved under-18 sta
     await updateAge(adult.cookie, true);
     const minorResponse = await listRequirements(adult.cookie);
     const minorPayload = await minorResponse.json();
-    const birthCertificate = minorPayload.requirements.find(({ code }) => code === 'birth_certificate_under18');
+    const minorConsent = minorPayload.requirements.find(({ code }) => code === 'minor_consent');
     assert.equal(minorResponse.status, 200);
-    assert.equal(birthCertificate.is_required, true);
+    assert.equal(minorConsent?.is_required, true);
+    assert.equal(minorPayload.requirements.some(({ code }) => code === 'birth_certificate_under18'), false);
     assert.equal(minorPayload.requirements.some(({ code }) => code === 'fingerprint'), false);
     assert.equal(minorPayload.requirements.some(({ code }) => code.includes('parental') || code.includes('guardian')), false);
     assert.equal(database.prepare('SELECT is_under_18 FROM applications').first().is_under_18, 1);
@@ -449,7 +450,7 @@ test('inactive compatibility requirements stay hidden and cannot start uploads',
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM upload_intents').first().count, 0);
 });
 
-test('adult sessions cannot create a birth certificate upload intent by supplying its code', async () => {
+test('adult sessions cannot create a minor consent upload intent', async () => {
     const { environment } = createEnvironment();
     const adult = await createDraft(environment, '2026123909');
     await worker.fetch(createRequest('/api/public/applications/current', {
@@ -458,7 +459,7 @@ test('adult sessions cannot create a birth certificate upload intent by supplyin
 
     const response = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: adult.cookie,
-        body: { code: 'birth_certificate_under18', filename: 'birth.pdf', media_type: 'application/pdf', byte_size: 4 }
+        body: { code: 'minor_consent', filename: 'minor-consent.pdf', media_type: 'application/pdf', byte_size: 4 }
     }), environment, {});
 
     assert.equal(response.status, 404);
@@ -503,7 +504,7 @@ test('student document requirements and upload intents are scoped to the current
     const payloadB = await studentBRequirements.json();
     const studentBIntent = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: studentB.cookie,
-        body: { code: 'birth_certificate_under18', filename: 'birth.pdf', media_type: 'application/pdf', byte_size: 4 }
+        body: { code: 'minor_consent', filename: 'minor-consent.pdf', media_type: 'application/pdf', byte_size: 4 }
     }), environment, {});
     const intentPayload = await studentBIntent.json();
     assert.equal(studentBIntent.status, 201);
@@ -511,8 +512,8 @@ test('student document requirements and upload intents are scoped to the current
         method: 'POST', cookie: studentA.cookie, body: { intent_id: intentPayload.upload.intent_id }
     }), environment, {});
 
-    assert.equal(payloadA.requirements.some(({ code }) => code === 'birth_certificate_under18'), false);
-    assert.equal(payloadB.requirements.some(({ code }) => code === 'birth_certificate_under18'), true);
+    assert.equal(payloadA.requirements.some(({ code }) => code === 'minor_consent'), false);
+    assert.equal(payloadB.requirements.some(({ code }) => code === 'minor_consent'), true);
     assert.equal(studentBIntent.status, 201);
     assert.equal(crossStudentFinalize.status, 404);
 });
@@ -687,7 +688,7 @@ test('finalize rejects a wrong-size object and does not mark the document comple
     assert.equal(database.prepare("SELECT upload_status FROM document_revision_files").first().upload_status, 'rejected');
 });
 
-test('birth certificate uploaded by an under-18 student cannot be finalized after age state changes', async () => {
+test('minor consent upload intent cannot be finalized after age state changes', async () => {
     const { environment, database } = createEnvironment();
     const created = await createDraft(environment, '2026123915');
     await worker.fetch(createRequest('/api/public/applications/current', {
@@ -695,7 +696,7 @@ test('birth certificate uploaded by an under-18 student cannot be finalized afte
     }), environment, {});
     const intentResponse = await worker.fetch(createRequest('/api/public/applications/current/documents/upload-intent', {
         method: 'POST', cookie: created.cookie,
-        body: { code: 'birth_certificate_under18', filename: 'birth.pdf', media_type: 'application/pdf', byte_size: 4 }
+        body: { code: 'minor_consent', filename: 'minor-consent.pdf', media_type: 'application/pdf', byte_size: 4 }
     }), environment, {});
     const intent = await intentResponse.json();
     await putSignedFile(environment, intent.upload.url, 'application/pdf');
@@ -710,6 +711,6 @@ test('birth certificate uploaded by an under-18 student cannot be finalized afte
 
     assert.equal(finalizeResponse.status, 404);
     assert.equal((await finalizeResponse.json()).error.code, 'DOCUMENT_REQUIREMENT_NOT_FOUND');
-    assert.equal(requirements.requirements.some(({ code }) => code === 'birth_certificate_under18'), false);
+    assert.equal(requirements.requirements.some(({ code }) => code === 'minor_consent'), false);
     assert.equal(database.prepare('SELECT upload_status FROM document_revision_files').first().upload_status, 'intent');
 });

@@ -114,6 +114,7 @@ function createApplicationDto(application, environment) {
         application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
         address_evidence_type: application.accommodation_type || application.address_evidence_type || null,
         document_policy_version: application.document_policy_version,
+        final_document_policy: application.final_document_policy,
         ...Object.fromEntries(DOCUMENT_ANSWER_FIELDS.map((field) => [field, application[field] ?? null])),
         student_number: application.student_number,
         student_email: application.student_email,
@@ -277,7 +278,7 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Adres belgesi seçimini kontrol edip tekrar deneyin.');
         }
         changes.addressEvidenceType = ADDRESS_EVIDENCE_VALUES.has(body.address_evidence_type) ? body.address_evidence_type : null;
-        changes.accommodationType = ACCOMMODATION_TYPES.includes(body.address_evidence_type) ? body.address_evidence_type : null;
+        changes.accommodationType = ACCOMMODATION_TYPES.includes(body.address_evidence_type) && body.address_evidence_type !== 'residence_certificate' ? body.address_evidence_type : null;
     }
     if (Object.hasOwn(body, 'is_under_18')) {
         if (body.is_under_18 !== null && typeof body.is_under_18 !== 'boolean') {

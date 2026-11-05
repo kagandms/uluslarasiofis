@@ -1,17 +1,30 @@
-## Production development workflow
+## Production development and release
 
-The canonical branch is `production`. Use this checkout for all future development:
-`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main`.
-The directory name is historical; its Git branch is `production`.
+Routine development uses the `production` checkout at
+`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main`; the directory name is not a branch
+name. A separate branch/worktree is used only when the user explicitly authorizes a task-specific
+candidate. At the start of every session, check the Git root, branch, HEAD, worktrees, and existing
+changes, fetch `origin/production`, and confirm the intended base SHA before editing. Preserve all
+pre-existing changes.
 
-Before editing, verify `git branch --show-current` and preserve any existing working changes.
-Run `npm ci`, `npm test`, `npm run build:production`, and `npm run deploy:dry-run:production`.
-Publish to Worker `goc` only when deployment is requested, using `npm run deploy:production`.
-Git pushes do not require a Cloudflare deployment. Remote migrations require explicit scope review.
+Run `npm ci`, `npm test`, `npm run build:production`, and
+`npm run deploy:dry-run:production` for the normal release checks. Production Worker `goc` is
+published only through GitHub Actions **Production release (manual)**, dispatched on `production`
+with the exact full SHA at current `origin/production`. First review `operation=preflight`; publish
+requires a separate explicit user request for that exact SHA and operation, then the Production
+environment review. Before publishing, the candidate must be clean and its exact SHA and current
+active Worker version/source must still match the reviewed preflight. Do not dispatch automatically.
 
-For the cloud checkout, isolated GitHub Actions CI, and the intentionally locked manual
-production release rehearsal, see [Cloud CI and release preparation](docs/deployment/cloud-ci-release.md).
-The cloud workflow uses `/workspace/uluslarasiofis` and does not require the MacBook path above.
+The workflow concurrency setting serializes its own runs only. Dashboard deployments, direct CLI
+commands, other automation, and other sessions are outside that lock and must be paused and checked
+separately. `npm run deploy:production` deliberately stops with this workflow instruction; this does
+not technically prevent a raw `wrangler deploy` command or publication from another tool/session.
+Git pushes do not themselves deploy. Remote migrations remain outside the release workflow and
+require separate scope review.
+
+For artifact, environment, and release-gate details, see [Manual production release](docs/manual-production-release.md)
+and [Cloud CI and release preparation](docs/deployment/cloud-ci-release.md). The cloud checkout uses
+`/workspace/uluslarasiofis` and does not require the MacBook path above.
 
 The staging commands and Wrangler environment below are historical and retained during the
 approved cleanup process. They are not the development or deployment target. Existing Codex
@@ -19,7 +32,7 @@ worktrees and historical integration evidence remain preserved.
 
 # Uluslararası Öğrenci Ofisi Portalı
 
-The repository contains the public student portal, staff workspaces, a YKN Chrome extension, and a student-owned residence application wizard with private document upload lifecycle. Final readiness and submission remain fail-closed for a later phase.
+The repository contains the public student portal, staff workspaces, a YKN Chrome extension, and a student-owned residence application wizard with private document uploads. Server-side readiness checks the final document policy before submission; the source checks do not replace live end-to-end acceptance.
 
 ## Routes
 
@@ -106,7 +119,7 @@ Local `.dev.vars` can contain:
 
 - D1 repositories isolate student, application, document, staff, session, audit, notification, and rate-limit persistence. Application creation batches the student/application/session/audit writes. The database enforces normalized student number uniqueness, one active application per student, and the `initial`/`renewal` application types. The old `assignments` table remains in the existing migration history but is not queried by the runtime; schema cleanup requires a separately authorized migration.
 - Applicant drafts require a student number, email, and phone. Their sessions use hashed opaque tokens. Public application reads, updates, requirements, and document mutations use only the valid owner session. `student_number` is an identifier and grants no authorization.
-- `POST /api/public/applications/current/submit` is an owner-session and same-origin contract. It currently returns `SUBMISSION_NOT_READY` because the required-document readiness provider is not implemented. It cannot move a draft to `submitted`; Phase 7 must supply complete server-side readiness before the atomic transition and audit can run. Session 2 does not claim end-to-end submission readiness.
+- `POST /api/public/applications/current/submit` requires the owner session, same origin, complete persisted fields, accepted declaration, policy-required current finalized documents, and applicable age, accommodation, host, fingerprint, and application-type conditions. An incomplete application remains not ready; a ready draft transitions once with its audit event. Local tests do not certify live end-to-end acceptance.
 - The configured `STAFF_SHARED_USERNAME` is the only account allowed to log in or reuse a staff session. There are no runtime endpoints for individual account creation, password reset, deactivation, or staff assignment; legacy rows outside the configured identity are inaccessible. The shared account uses the existing PBKDF2-HMAC-SHA-256 password hash and opaque D1-backed `staff_session` cookie. Cookies are `HttpOnly`, `Secure`, and `SameSite=Strict`, expire absolutely, and are rejected after 30 minutes idle. `last_seen_at` is touched at most every five minutes during active use. The idle limit and touch interval live in `src/server/config/sessionPolicy.js`.
 - R2 remains private. The storage provider adapter creates opaque UUID keys under `quarantine/`, performs Worker-mediated object operations, and creates method/object-bound S3 presigned PUT and GET capabilities with 30–300 second expiry. Student document upload intents are owner-session-bound; finalization checks the stored object metadata and advances a revision only after verification. New files remain `scan_status = 'pending'` until a scanner marks them clean. The adapter never creates public object URLs. Configure bucket CORS for the exact portal origins before enabling browser uploads. Presigned URLs must be treated as bearer tokens and never stored in D1 or logs.
 - API errors use `{ error: { code, message, retryable }, requestId }` and an `X-Request-Id` header. Provider and database details stay server-side.
@@ -116,7 +129,7 @@ Local `.dev.vars` can contain:
 
 - `/basvuru/` creates a draft and binds it to an opaque owner session. Editable contact and residence fields autosave to D1 after a short debounce; no applicant fields, files, upload intents, or signed capabilities are persisted in browser storage. Returning with the same valid session reloads server state.
 - The five-step wizard includes contact, residence, documents, a versioned product acknowledgement, and a safe review. The acknowledgement confirms the correctness of submitted contact/application information and responsibility for incorrect information; it is not final legal or KVKK text. `PUBLIC_DECLARATION_VERSION` is configured in `wrangler.jsonc`. The Worker stores the acknowledged version and its own timestamp with an audit event.
-- Residence-document display and upload constraints come from `src/server/domain/documentPolicy.js`; D1 requirement rows supply active identities and document state. The student requirements API returns only safe policy labels/help keys, accepted media types, byte limit, and current revision/review/scan state. Its product content follows the registered “Belgeler” residence checklist; address-document alternatives remain explicitly unresolved.
+- Residence-document display and upload constraints come from `src/server/domain/documentPolicy.js`; D1 requirement rows supply active identities and document state. The final policy selects documents by accommodation, host answers, age, fingerprint, and application type. Submitted applications retain their policy snapshot while drafts use the final policy. The student requirements API returns only safe policy labels/help keys, accepted media types, byte limit, and current revision/review/scan state.
 - The browser requests a short-lived method/header-bound upload capability, then sends file bytes directly to private R2 with XHR progress and abort/timeout handling. The Worker verifies stored object metadata before making the new revision current. Ambiguous finalize responses retry the same intent first. Scan remains pending until a real scanner updates it.
 - Students can replace a current draft document by creating a new revision. Delete first removes revisions from current student visibility, then removes R2 objects. Failed R2 cleanup remains recorded in D1 and is retryable from the document card. Only owner sessions can read requirements or mutate a draft.
 - `migrations/0003_session3_document_cleanup.sql` adds retryable private-object cleanup state. Remote migrations, bucket CORS changes, secret provisioning, deployment, and live upload/UAT require owner operations.
