@@ -64,6 +64,23 @@ test('backend migration creates the complete Session 2 data foundation', () => {
     }
 });
 
+test('YÖKSİS audit migration stores one validated latest result per application', () => {
+    const database = createDatabase();
+    const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(({ name }) => name);
+    const columns = database.prepare('PRAGMA table_info(yoksis_document_audit_records)').all().map(({ name }) => name);
+    const tableSql = database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'yoksis_document_audit_records'").get().sql;
+    const globPatterns = [...tableSql.matchAll(/GLOB\s+'([^']*)'/g)].map(([, pattern]) => pattern);
+
+    assert.ok(tables.includes('yoksis_document_audit_records'));
+    assert.deepEqual(columns, [
+        'application_number', 'student_number', 'first_name', 'last_name', 'passport_number', 'phone',
+        'application_status', 'status_category', 'result_status', 'documents_json', 'search_text',
+        'scanned_at', 'updated_by_staff_id'
+    ]);
+    assert.ok(globPatterns.every((pattern) => Buffer.byteLength(pattern, 'utf8') <= 50),
+        'D1 rejects GLOB patterns longer than 50 bytes');
+});
+
 test('application policy migration stores the academic year start independently', () => {
     const database = createDatabase();
     const applicationColumns = database.prepare('PRAGMA table_info(applications)').all().map(({ name }) => name);

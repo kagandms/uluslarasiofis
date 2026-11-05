@@ -48,6 +48,15 @@ test('extension accepts only correlated YÖKSİS audit commands with a bounded s
     assert.equal(security.isValidPortalMessage(stop), true);
     assert.equal(security.isValidPortalMessage({ ...start, scanId: '' }), false);
     assert.equal(security.isValidPortalMessage({ ...start, scanId: 's'.repeat(129) }), false);
+    assert.equal(security.isValidPortalMessage({ ...start, entries: [
+        { applicationNumber: '2026-00-0000001', studentNumber: '2600000001' }
+    ] }), true);
+    assert.equal(security.isValidPortalMessage({ ...start, entries: [
+        { applicationNumber: 'invalid', studentNumber: '2600000001' }
+    ] }), false);
+    assert.equal(security.isValidPortalMessage({ ...start, entries: new Array(1001).fill({
+        applicationNumber: '2026-00-0000001', studentNumber: '2600000001'
+    }) }), false);
     assert.equal(security.isValidPortalMessage({ ...start, requestId: {} }), false);
     assert.equal(security.isValidPortalMessage({ ...stop, targetTabId: '12' }), false);
 });
@@ -73,6 +82,16 @@ test('extension audit events require the originating scan and identity-bound bou
     };
 
     assert.equal(security.isValidYoksisAuditEvent(validRecord), true);
+    assert.equal(security.isValidYoksisAuditEvent({
+        ...validRecord,
+        data: { ...validRecord.data, result: { ...validRecord.data.result,
+            identity: { ...validRecord.data.result.identity, passportNumber: 'U12345678' } } }
+    }), true);
+    assert.equal(security.isValidYoksisAuditEvent({
+        ...validRecord,
+        data: { ...validRecord.data, result: { ...validRecord.data.result,
+            identity: { ...validRecord.data.result.identity, passportNumber: 'P'.repeat(65) } } }
+    }), false);
     assert.equal(security.isValidYoksisAuditEvent({ ...validRecord, portalTabId: -1 }), false);
     assert.equal(security.isValidYoksisAuditEvent({ ...validRecord, data: { ...validRecord.data, entry: { ...validRecord.data.entry, studentNumber: 'wrong' } } }), false);
     assert.equal(security.isValidYoksisAuditEvent({ ...validRecord, data: { ...validRecord.data, result: { ...validRecord.data.result, identity: { ...validRecord.data.result.identity, applicationNumber: '2026-00-0000002' } } } }), false);

@@ -1545,36 +1545,6 @@ select.glass-input {
     font-size: 0.9rem;
 }
 
-.btn-add-to-sheet {
-    white-space: normal;
-}
-
-.sheet-button-icon {
-    display: inline-flex;
-    flex: 0 0 auto;
-}
-
-.sheet-button-content {
-    display: inline-flex;
-    align-items: baseline;
-    justify-content: center;
-    gap: 0.25rem 0.55rem;
-    min-width: 0;
-    flex-wrap: wrap;
-    text-align: center;
-}
-
-.sheet-button-status {
-    font-weight: 600;
-}
-
-.sheet-button-details,
-.sheet-button-hint {
-    font-size: 0.78rem;
-    line-height: 1.25;
-    overflow-wrap: anywhere;
-}
-
 /* Footer */
 .app-footer {
     text-align: center;
@@ -1713,20 +1683,7 @@ body.dark-mode .version-badge {
         flex: 1 1 auto;
     }
 
-    .btn-add-to-sheet {
-        gap: 0.35rem;
-        line-height: 1.2;
-    }
 
-    .sheet-button-content {
-        flex-direction: column;
-        align-items: center;
-        gap: 0.15rem;
-    }
-
-    .sheet-button-hint {
-        font-size: 0.72rem;
-    }
 }
 
 /* Print Styles */

@@ -10,6 +10,19 @@
         return typeof value === 'string' && value.trim().length > 0 && value.length <= 128;
     }
 
+    function isValidTargetEntries(entries) {
+        if (!Array.isArray(entries) || entries.length < 1 || entries.length > 1000) return false;
+        const applications = new Set();
+        return entries.every((entry) => {
+            if (!entry || typeof entry !== 'object'
+                || !/^\d{4}-\d{2}-\d{7}$/.test(entry.applicationNumber)
+                || !/^\d{8,14}$/.test(entry.studentNumber)
+                || applications.has(entry.applicationNumber)) return false;
+            applications.add(entry.applicationNumber);
+            return true;
+        });
+    }
+
     function checkYoksisDocumentAuditReadiness(rootDocument) {
         return collectYoksisAuditQueueAcrossInnerScroll(rootDocument).then((queue) => ({
             ready: queue.status === 'complete' && queue.entries.length > 0,
@@ -52,7 +65,7 @@
         }
     }
 
-    async function collectYoksisAuditQueueAcrossInnerScroll(rootDocument) {
+    async function collectYoksisAuditQueueAcrossInnerScroll(rootDocument, targetEntries) {
         const container = findScrollableListContainer(rootDocument);
         if (!container) return { status: 'incomplete', entries: [], reason: 'record-list-scroll-container-not-found' };
 
@@ -65,10 +78,19 @@
         const maxSteps = 1000;
 
         try {
+            if (targetEntries) {
+                container.scrollTop = 0;
+                container.dispatchEvent(new rootDocument.defaultView.Event('scroll', { bubbles: true }));
+                await waitForNextPaint(rootDocument);
+            }
             for (let step = 0; step < maxSteps; step += 1) {
                 const snapshot = reader.collectYoksisAuditQueue(rootDocument);
                 mergeQueueEntries(entries, snapshot);
                 if (snapshot.reason && snapshot.reason !== 'no-verifiable-records') incompleteReason ||= snapshot.reason;
+                if (targetEntries?.every((target) => entries.some((entry) => (
+                    entry.applicationNumber === target.applicationNumber
+                    && entry.studentNumber === target.studentNumber
+                )))) break;
                 const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
                 if (maxScrollTop === 0) {
                     reachedBottom = true;
@@ -101,6 +123,13 @@
             container.dispatchEvent(new rootDocument.defaultView.Event('scroll', { bubbles: true }));
         }
 
+        if (targetEntries?.every((target) => entries.some((entry) => (
+            entry.applicationNumber === target.applicationNumber
+            && entry.studentNumber === target.studentNumber
+        )))) {
+            if (incompleteReason) return { status: 'incomplete', entries, reason: incompleteReason };
+            return { status: 'complete', entries };
+        }
         if (!reachedBottom) return { status: 'incomplete', entries, reason: 'record-list-bottom-not-confirmed' };
         if (incompleteReason) return { status: 'incomplete', entries, reason: incompleteReason };
         return entries.length ? { status: 'complete', entries } : { status: 'incomplete', entries, reason: 'no-verifiable-records' };
@@ -216,9 +245,12 @@
         });
     }
 
-    async function startYoksisDocumentAudit(scanId, rootDocument, emitEvent) {
+    async function startYoksisDocumentAudit(scanId, rootDocument, emitEvent, targetEntries) {
         if (!isValidScanId(scanId) || typeof emitEvent !== 'function') {
             return { status: 'rejected', completed: 0, remaining: 0, reason: 'invalid-scan-request' };
+        }
+        if (targetEntries !== undefined && !isValidTargetEntries(targetEntries)) {
+            return { status: 'rejected', completed: 0, remaining: 0, reason: 'invalid-target-list' };
         }
         if (activeScans.has(scanId)) {
             return { status: 'rejected', completed: 0, remaining: 0, reason: 'scan-already-active' };
@@ -236,11 +268,26 @@
         const initialListScrollTop = initialListContainer?.scrollTop ?? null;
 
         try {
-            const queue = await collectYoksisAuditQueueAcrossInnerScroll(rootDocument);
-            total = queue.entries.length;
-            if (queue.status !== 'complete' || queue.entries.length === 0) {
-                emitEvent({ type: 'progress', completed, total: queue.entries.length, remaining: queue.entries.length, status: 'queue-incomplete' });
-                return { status: 'incomplete', completed, remaining: queue.entries.length, reason: queue.reason || 'empty-queue' };
+            const queue = await collectYoksisAuditQueueAcrossInnerScroll(rootDocument, targetEntries);
+            let entries = queue.entries;
+            if (targetEntries) {
+                entries = targetEntries.map((target) => queue.entries.find((entry) => (
+                    entry.applicationNumber === target.applicationNumber
+                    && entry.studentNumber === target.studentNumber
+                )));
+                if (entries.some((entry) => !entry) || queue.reason === 'duplicate-identity-conflict') {
+                    return {
+                        status: 'incomplete', completed: 0, remaining: targetEntries.length,
+                        reason: queue.reason === 'duplicate-identity-conflict' ? queue.reason : 'retry-target-not-found'
+                    };
+                }
+            } else if (queue.status !== 'complete') {
+                completionStatus = 'incomplete';
+            }
+            total = entries.length;
+            if (total === 0) {
+                emitEvent({ type: 'progress', completed, total, remaining, status: 'queue-incomplete' });
+                return { status: 'incomplete', completed, remaining, reason: queue.reason || 'empty-queue' };
             }
 
             if (initialListContainer?.isConnected) {
@@ -249,15 +296,15 @@
                 await waitForNextPaint(rootDocument);
             }
 
-            emitEvent({ type: 'progress', completed, total: queue.entries.length, remaining: queue.entries.length, status: 'running' });
-            for (let index = 0; index < queue.entries.length; index += 1) {
+            emitEvent({ type: 'progress', completed, total, remaining: total, status: 'running' });
+            for (let index = 0; index < entries.length; index += 1) {
                 if (scan.stopRequested) {
-                    completionStatus = 'stopped';
-                    remaining = queue.entries.length - index;
+                    if (completionStatus !== 'incomplete') completionStatus = 'stopped';
+                    remaining = entries.length - index;
                     break;
                 }
 
-                const entry = queue.entries[index];
+                const entry = entries[index];
                 const button = await findRecordButtonThroughScroll(rootDocument, entry);
                 let result;
                 if (!button?.isConnected) {
@@ -271,12 +318,12 @@
                 }
 
                 completed += 1;
-                emitEvent({ type: 'record', index: index + 1, total: queue.entries.length, entry, result });
+                emitEvent({ type: 'record', index: index + 1, total, entry, result });
                 emitEvent({
                     type: 'progress',
                     completed,
-                    total: queue.entries.length,
-                    remaining: queue.entries.length - completed,
+                    total,
+                    remaining: total - completed,
                     status: 'running'
                 });
             }
@@ -351,10 +398,11 @@
             }
             if (request.action !== 'YOKSIS_DOCUMENT_AUDIT_START'
                 || !Number.isInteger(request.portalTabId)
-                || typeof request.requestId !== 'string') return false;
+                || typeof request.requestId !== 'string'
+                || (request.entries !== undefined && !isValidTargetEntries(request.entries))) return false;
 
             sendResponse({ success: true, scanId: request.scanId });
-            void startYoksisDocumentAudit(request.scanId, document, (event) => sendAuditEvent(request, event))
+            void startYoksisDocumentAudit(request.scanId, document, (event) => sendAuditEvent(request, event), request.entries)
                 .then((result) => sendAuditEvent(request, { type: 'complete', ...result }));
             return false;
         });

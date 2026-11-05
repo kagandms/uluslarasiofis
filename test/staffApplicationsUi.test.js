@@ -1009,6 +1009,158 @@ test('queue preserves row DOM while archiving and releases controls after an API
     assert.match(root.textContent, /arşive taşınamadı/);
 });
 
+test('online submitted applications expose the spreadsheet transfer control in the queue', async context => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const api = { queryApplications: async () => createQueuePayload([{ ...QUEUE_ITEM, spreadsheet: { state: 'absent' } }]) };
+    initializeStaffApplicationsManager(root, api);
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    const button = root.querySelector('[data-action="spreadsheet-transfer"]');
+    assert.ok(button);
+    assert.equal(button.textContent, 'Excel’e aktar');
+    assert.equal(button.getAttribute('aria-label'), 'Excel’e aktar');
+    assert.equal(root.querySelectorAll('[data-action="open-detail"]').length, 1);
+});
+
+test('rejected applications keep a removal control for an existing spreadsheet row', async context => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const api = { queryApplications: async () => createQueuePayload([{
+        ...QUEUE_ITEM, status: 'rejected', spreadsheet: { state: 'present', sheetName: '03.11.2026' }
+    }]) };
+    initializeStaffApplicationsManager(root, api);
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    const button = root.querySelector('[data-action="spreadsheet-transfer"]');
+    assert.ok(button);
+    assert.equal(button.textContent, 'Excelden kaldır');
+    assert.equal(button.dataset.spreadsheetState, 'remove');
+});
+
+test('spreadsheet transfer updates from the confirmed response and locks only its row while pending', async context => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let resolveTransfer;
+    const transferCalls = [];
+    const api = {
+        queryApplications: async () => createQueuePayload([
+            { ...QUEUE_ITEM, spreadsheet: { state: 'absent' } },
+            { ...QUEUE_ITEM, id: 'app-002', student_number: 'STU-002', spreadsheet: { state: 'absent' } }
+        ]),
+        transferApplicationToSpreadsheet: async (...args) => {
+            transferCalls.push(args);
+            return new Promise(resolve => { resolveTransfer = resolve; });
+        }
+    };
+    initializeStaffApplicationsManager(root, api);
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    const buttons = root.querySelectorAll('[data-action="spreadsheet-transfer"]');
+    buttons[0].click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(transferCalls, [['app-001', 'add']]);
+    assert.equal(root.querySelectorAll('[data-action="spreadsheet-transfer"]')[0].disabled, true);
+    assert.equal(root.querySelectorAll('[data-action="spreadsheet-transfer"]')[1].disabled, false);
+    resolveTransfer({ state: 'present', sheetName: '03.11.2026' });
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(root.querySelector('[data-action="spreadsheet-transfer"]').textContent, 'Excelden kaldır');
+    root.querySelector('[data-action="spreadsheet-transfer"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(transferCalls, [['app-001', 'add'], ['app-001', 'remove']]);
+});
+
+test('spreadsheet transfers clicked on multiple rows are sent to Apps Script one at a time', async context => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const transferCalls = [];
+    const resolveTransfers = [];
+    const api = {
+        queryApplications: async () => createQueuePayload([
+            { ...QUEUE_ITEM, spreadsheet: { state: 'absent' } },
+            { ...QUEUE_ITEM, id: 'app-002', student_number: 'STU-002', spreadsheet: { state: 'absent' } }
+        ]),
+        transferApplicationToSpreadsheet: (...args) => {
+            transferCalls.push(args);
+            return new Promise(resolve => resolveTransfers.push(resolve));
+        }
+    };
+    initializeStaffApplicationsManager(root, api);
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    let buttons = root.querySelectorAll('[data-action="spreadsheet-transfer"]');
+    buttons[0].click();
+    buttons[1].click();
+    await new Promise(resolve => setImmediate(resolve));
+    buttons = root.querySelectorAll('[data-action="spreadsheet-transfer"]');
+    assert.deepEqual(transferCalls, [['app-001', 'add']]);
+    assert.equal(buttons[0].textContent, 'İşleniyor…');
+    assert.equal(buttons[1].textContent, 'Sırada…');
+    assert.equal(buttons[1].getAttribute('aria-label'), 'E-Tablo işlemi sırada');
+
+    resolveTransfers[0]({ state: 'present', sheetName: '03.11.2026' });
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(transferCalls, [['app-001', 'add'], ['app-002', 'add']]);
+
+    resolveTransfers[1]({ state: 'present', sheetName: '03.11.2026' });
+    await new Promise(resolve => setImmediate(resolve));
+    buttons = root.querySelectorAll('[data-action="spreadsheet-transfer"]');
+    assert.equal(buttons[0].textContent, 'Excelden kaldır');
+    assert.equal(buttons[1].textContent, 'Excelden kaldır');
+});
+
+test('spreadsheet transfer failure preserves the prior state and exposes no draft control', async context => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const draft = { ...QUEUE_ITEM, id: 'draft-001', status: 'draft', submitted_at: null };
+    const api = {
+        queryApplications: async query => createQueuePayload(query.status === 'draft'
+            ? [{ ...draft, spreadsheet: { state: 'absent' } }]
+            : [{ ...QUEUE_ITEM, spreadsheet: { state: 'present', sheetName: '02.11.2026' } }]),
+        transferApplicationToSpreadsheet: async () => { throw new Error('upstream failed'); }
+    };
+    initializeStaffApplicationsManager(root, api);
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise(resolve => setImmediate(resolve));
+    root.querySelector('[data-action="spreadsheet-transfer"]').click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(root.querySelector('[data-action="spreadsheet-transfer"]').textContent, 'Excelden kaldır');
+    assert.match(root.textContent, /E-Tabloya aktarılamadı/i);
+    root.querySelector('#staff-application-status').value = 'draft';
+    root.querySelector('.staff-applications-filters').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(root.querySelector('[data-action="spreadsheet-transfer"]'), null);
+});
+
+test('a refreshed queue exposes an explicit retry for an unresolved spreadsheet add', async context => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const calls = [];
+    const api = {
+        queryApplications: async () => createQueuePayload([{ ...QUEUE_ITEM, spreadsheet: { state: 'pending', action: 'add' } }]),
+        transferApplicationToSpreadsheet: async (id, action) => {
+            calls.push([id, action]);
+            return { state: 'present', sheetName: '03.11.2026' };
+        }
+    };
+    initializeStaffApplicationsManager(root, api);
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    const button = root.querySelector('[data-action="spreadsheet-transfer"]');
+    assert.equal(button.textContent, 'Ekleme sonucunu doğrula');
+    button.click();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls, [['app-001', 'add']]);
+    assert.equal(root.querySelector('[data-action="spreadsheet-transfer"]').textContent, 'Excelden kaldır');
+});
+
 test('queue ZIP download reports pending scans and allows another attempt', async context => {
     const { document, root } = createStaffDom();
     installDocument(context, document);

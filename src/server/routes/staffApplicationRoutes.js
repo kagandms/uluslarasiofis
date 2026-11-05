@@ -111,7 +111,14 @@ function createQueueItemDto(application) {
         submitted_at: application.submitted_at,
         created_at: application.created_at,
         updated_at: application.updated_at,
-        deletion_state: application.deletion_state ?? null
+        deletion_state: application.deletion_state ?? null,
+        spreadsheet: application.spreadsheet_state === 'pending_add'
+            ? { state: 'pending', action: 'add' }
+            : application.spreadsheet_state === 'pending_remove'
+                ? { state: 'pending', action: 'remove' }
+                : application.spreadsheet_state === 'present'
+                    ? { state: 'present', sheetName: application.spreadsheet_sheet_name }
+                    : { state: 'absent' }
     };
 }
 

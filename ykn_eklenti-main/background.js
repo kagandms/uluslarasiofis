@@ -2173,7 +2173,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         action: 'YOKSIS_DOCUMENT_AUDIT_START',
                         requestId: request.requestId,
                         scanId: request.scanId,
-                        portalTabId: sender.tab.id
+                        portalTabId: sender.tab.id,
+                        ...(request.entries ? { entries: request.entries } : {})
                     }, { frameId: 0 });
                     sendResponse({ ...startResult, yoksisTabId: targetTab.yoksisTabId });
                 } catch {

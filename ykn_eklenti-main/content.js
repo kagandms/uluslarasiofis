@@ -1,7 +1,7 @@
 // content.js
 (() => {
 if (location.hostname === 'apply.topkapi.edu.tr' && window !== window.top) return;
-const CONTENT_SCRIPT_VERSION = '1.2.117';
+const CONTENT_SCRIPT_VERSION = '1.2.120';
 if (window.__YKN_CONTENT_LOADED__ && window.__YKN_CONTENT_VERSION__ === CONTENT_SCRIPT_VERSION) return;
 window.__YKN_CONTENT_LOADED__ = true;
 window.__YKN_CONTENT_VERSION__ = CONTENT_SCRIPT_VERSION;
@@ -1600,11 +1600,22 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
                 cleanup();
                 const error = new Error('YÖKSİS öğrenci bilgi formu açılmadı.');
                 error.manualOverrideAvailable = lastReadinessSignals?.manualOverrideAvailable === true;
-                console.warn('[YKN_FORM_READINESS] Öğrenci formu doğrulanamadı.', {
+                const signals = {
                     ...lastReadinessSignals,
                     accessibleDocumentCount: getAllDocs(document).length,
                     isZkBusy: isZkProcessing()
-                });
+                };
+                const failureReasons = [];
+                if (!signals.hasEditableStudentFields) failureReasons.push('student_fields_missing');
+                if (signals.formSignals < 2 && !(signals.formSignals >= 1 && signals.hasPhotoControl)) failureReasons.push('form_controls_insufficient');
+                if (!formChangedAfterSearch && !domChangedAfterSearch) failureReasons.push('no_fresh_search_result');
+                if (signals.semanticMatch === false) failureReasons.push('student_identity_mismatch');
+                if (signals.stableChecks < 2) failureReasons.push('form_not_stable');
+                if (signals.isZkBusy) failureReasons.push('yoksis_still_processing');
+                console.warn('[YKN_FORM_READINESS] Öğrenci formu doğrulanamadı.', JSON.stringify({
+                    ...signals,
+                    failureReasons
+                }));
                 reject(error);
             }
         };

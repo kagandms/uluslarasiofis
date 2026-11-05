@@ -34,6 +34,20 @@
         return typeof value === 'string' && value.trim().length > 0 && value.length <= 128;
     }
 
+    function isAuditTargetEntries(entries) {
+        if (!Array.isArray(entries) || entries.length < 1 || entries.length > 1000) return false;
+        const applications = new Set();
+        return entries.every((entry) => {
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)
+                || Object.keys(entry).length !== 2
+                || !/^\d{4}-\d{2}-\d{7}$/.test(entry.applicationNumber)
+                || !/^\d{8,14}$/.test(entry.studentNumber)
+                || applications.has(entry.applicationNumber)) return false;
+            applications.add(entry.applicationNumber);
+            return true;
+        });
+    }
+
     function isBoundedText(value, maxLength = 300) {
         return typeof value === 'string' && value.length <= maxLength;
     }
@@ -114,7 +128,9 @@
         }
 
         if (['CHECK_YOKSIS_DOCUMENT_AUDIT', 'START_YOKSIS_DOCUMENT_AUDIT'].includes(request.action)) {
-            return isScanId(request.scanId);
+            return isScanId(request.scanId)
+                && (request.action !== 'START_YOKSIS_DOCUMENT_AUDIT'
+                    || request.entries === undefined || isAuditTargetEntries(request.entries));
         }
         if (request.action === 'STOP_YOKSIS_DOCUMENT_AUDIT') {
             return isScanId(request.scanId) && Number.isInteger(request.targetTabId) && request.targetTabId >= 0;
@@ -171,6 +187,7 @@
             && isBoundedText(identity?.firstName)
             && isBoundedText(identity?.lastName)
             && isBoundedText(identity?.phone, 40)
+            && (identity?.passportNumber === undefined || isBoundedText(identity.passportNumber, 64))
             && isBoundedText(applicationStatus)
             && Array.isArray(documents) && documents.length <= 100
             && documents.every((document) => document && typeof document === 'object'

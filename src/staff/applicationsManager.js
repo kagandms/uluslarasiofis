@@ -119,7 +119,7 @@ function createSearchForm(document, state, onSubmit, onChange) {
     return form;
 }
 
-function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess) {
+function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer) {
     const table = document.createElement('table');
     table.className = 'staff-applications-table';
     const headers = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
@@ -145,6 +145,35 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
         });
         const actionCell = document.createElement('td');
         actionCell.dataset.label = 'Detay';
+        const terminalStatus = ['cancelled', 'rejected'].includes(item.status);
+        const canManageSpreadsheet = item.status !== 'draft' && !item.deletion_state && item.submitted_at
+            && (!terminalStatus || ['present', 'pending'].includes(item.spreadsheet?.state));
+        if (canManageSpreadsheet) {
+            const spreadsheetButton = document.createElement('button');
+            const isPresent = item.spreadsheet?.state === 'present';
+            const retryAction = item.spreadsheet?.state === 'pending' ? item.spreadsheet.action : null;
+            const isRemoveAction = retryAction === 'remove' || (!retryAction && isPresent);
+            const isPending = spreadsheetPending.has(item.id);
+            const activeSpreadsheetTransfer = spreadsheetPending.values().next().value;
+            spreadsheetButton.type = 'button';
+            spreadsheetButton.className = 'btn btn-spreadsheet-transfer';
+            spreadsheetButton.dataset.action = 'spreadsheet-transfer';
+            spreadsheetButton.dataset.spreadsheetState = isRemoveAction ? 'remove' : 'add';
+            spreadsheetButton.disabled = isPending;
+            spreadsheetButton.textContent = isPending ? (activeSpreadsheetTransfer === item.id ? 'İşleniyor…' : 'Sırada…')
+                : retryAction ? (retryAction === 'add' ? 'Ekleme sonucunu doğrula' : 'Kaldırma sonucunu doğrula')
+                    : isPresent ? 'Excelden kaldır' : 'Excel’e aktar';
+            spreadsheetButton.setAttribute('aria-label', isPending
+                ? (activeSpreadsheetTransfer === item.id ? 'E-Tablo işlemi sürüyor' : 'E-Tablo işlemi sırada')
+                : spreadsheetButton.textContent);
+            spreadsheetButton.addEventListener('click', () => onSpreadsheetTransfer(item.id, retryAction || (isPresent ? 'remove' : 'add')));
+            actionCell.append(spreadsheetButton);
+            if (spreadsheetErrors[item.id]) {
+                const error = createText(document, 'span', 'staff-spreadsheet-transfer-error', spreadsheetErrors[item.id]);
+                error.setAttribute('role', 'alert');
+                actionCell.append(error);
+            }
+        }
         if (item.status === 'draft') {
             const reset = document.createElement('button');
             reset.type = 'button';
@@ -299,7 +328,7 @@ function renderQueue(root, state, handlers) {
     } else if (state.result) {
         panel.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
             handlers.onDownloadArchive, handlers.onArchiveApplication, state.archiveApplicationId, handlers.onSendToMigration,
-            handlers.onResetDraftAccess));
+            handlers.onResetDraftAccess, state.spreadsheetPending, state.spreadsheetErrors, handlers.onSpreadsheetTransfer));
         if (state.archiveMessage) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveMessage));
         if (state.archiveError) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveError));
         if (state.archiveMessage || state.archiveError) {
@@ -829,6 +858,9 @@ function createStaffApplicationsApi() {
         readApplicationDetail(applicationId, signal) {
             return request(`/api/staff/applications/${encodeURIComponent(applicationId)}`, { signal });
         },
+        transferApplicationToSpreadsheet(applicationId, action) {
+            return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/spreadsheet`, { action });
+        },
         createPreviewCapability(applicationId, code) {
             return fetch(APPLICATION_DOCUMENT_ROUTE(applicationId, code, 'preview'), {
                 method: 'POST', credentials: 'same-origin'
@@ -911,10 +943,12 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
         combinedPdfApplicationId: null, combinedPdfController: null,
         archiveError: null, archiveMessage: null,
+        spreadsheetPending: new Set(), spreadsheetErrors: {},
         query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queueRequestId = 0;
     let searchTimer = null;
+    let spreadsheetTransferQueue = Promise.resolve();
     let archiveRequestId = 0;
     let previewTimer = null;
     let scanPollTimer = null;
@@ -964,7 +998,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onSearch: submitSearch, onQueryChange: scheduleSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,
             onDownloadArchive: downloadArchive, onArchiveApplication: archiveApplication,
             onResetDraftAccess: resetDraftAccess,
-            onSendToMigration: sendToMigration, onDismissToast: dismissToast
+            onSendToMigration: sendToMigration, onDismissToast: dismissToast,
+            onSpreadsheetTransfer: transferApplicationToSpreadsheet
         });
         root.dataset.staffView = state.view;
         try {
@@ -1250,6 +1285,30 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             state.actionPending = null;
             await loadQueue();
         }
+    }
+    async function transferApplicationToSpreadsheet(applicationId, action) {
+        if (state.spreadsheetPending.has(applicationId) || typeof api.transferApplicationToSpreadsheet !== 'function') return;
+        state.spreadsheetPending.add(applicationId);
+        delete state.spreadsheetErrors[applicationId];
+        render();
+        const transfer = async () => {
+            try {
+                const result = await api.transferApplicationToSpreadsheet(applicationId, action);
+                if (action === 'add' && (result?.state !== 'present' || typeof result.sheetName !== 'string')) throw new Error('Unconfirmed transfer result.');
+                if (action === 'remove' && result?.state !== 'absent') throw new Error('Unconfirmed transfer result.');
+                const item = state.result?.items.find((entry) => entry.id === applicationId);
+                if (item) item.spreadsheet = result;
+            } catch (error) {
+                console.error('Application spreadsheet transfer failed.', { errorName: error?.name || 'Error' });
+                state.spreadsheetErrors[applicationId] = 'E-Tabloya aktarılamadı. Listeyi yenileyip tekrar deneyin.';
+            } finally {
+                state.spreadsheetPending.delete(applicationId);
+                render();
+            }
+        };
+        const queuedTransfer = spreadsheetTransferQueue.then(transfer);
+        spreadsheetTransferQueue = queuedTransfer.catch(() => {});
+        await queuedTransfer;
     }
     async function resetDraftAccess(applicationId) {
         if (state.actionPending || typeof api.resetAccessCode !== 'function') return;

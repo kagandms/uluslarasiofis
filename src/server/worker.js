@@ -18,6 +18,7 @@ import { createCurrentResubmissionUploadIntent, finalizeCurrentResubmissionUploa
 import { createStaffDocumentPreview, createStaffApplicationArchiveManifest, downloadStaffApplicationDocument,
     streamStaffApplicationArchiveFile } from './routes/staffDocumentAccessRoutes.js';
 import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
+import { handleStaffApplicationSpreadsheet } from './routes/staffApplicationSpreadsheetRoutes.js';
 import { approveStaffApplicationDocument, unapproveStaffApplicationDocument, requestStaffDocumentResubmission, transitionStaffApplicationStatus } from './routes/staffReviewRoutes.js';
 import { recognizeDocument } from './routes/ocrRoute.js';
 import { bootstrapStaff, loginStaff, logoutStaff, readStaffSession } from './routes/staffRoutes.js';
@@ -40,6 +41,7 @@ import { runPrintCleanup } from './services/printCleanupService.js';
 import { getScheduledWork } from './services/scheduled-work.js';
 import { readD1UsageMetrics } from './services/d1-usage-metrics.js';
 import { handleStaffWorkHours } from './routes/staffWorkHoursRoutes.js';
+import { handleStaffYoksisDocumentAudit } from './routes/staffYoksisDocumentAuditRoutes.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -105,6 +107,9 @@ async function routeApi(request, environment, requestId, cache) {
         return readD1UsageMetrics({ environment, cache });
     }
     if (pathname === '/api/staff/work-hours') return handleStaffWorkHours(request, environment, requestId);
+    if (pathname.startsWith('/api/staff/yoksis-document-audit/')) {
+        return handleStaffYoksisDocumentAudit(request, environment, requestId);
+    }
     if (['/api/staff/physical-access', '/api/staff/physical-access/session'].includes(pathname)) return readPhysicalAccess(request, environment);
     if (pathname === '/api/public/physical-intakes/tracking-lookup') return lookupPhysicalTracking(request, environment);
     if (pathname.startsWith('/api/staff/physical-intakes')) return handlePhysicalIntakes(request, environment, requestId);
@@ -190,6 +195,13 @@ async function routeApi(request, environment, requestId, cache) {
     if (pathname === '/api/staff/auth/logout' || pathname === '/api/logout') return logoutStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/bootstrap') return bootstrapStaff(request, environment, requestId);
     if (pathname === '/api/staff/applications/query') return queryStaffApplications(request, environment);
+    const spreadsheetMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/spreadsheet$/);
+    if (spreadsheetMatch) {
+        let applicationId;
+        try { applicationId = decodeURIComponent(spreadsheetMatch[1]); }
+        catch { throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.'); }
+        return handleStaffApplicationSpreadsheet(request, environment, applicationId);
+    }
     const staffStatusMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/status$/);
     if (staffStatusMatch) {
         let applicationId;

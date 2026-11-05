@@ -2,6 +2,18 @@ function getApiKey_() {
   return PropertiesService.getScriptProperties().getProperty("API_KEY") || "GIZLI_SIFRE_123";
 }
 
+function getConfiguredApiKey_() {
+  return PropertiesService.getScriptProperties().getProperty("API_KEY");
+}
+
+function getWorkbook_() {
+  var spreadsheetId = PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID");
+  if (spreadsheetId) return SpreadsheetApp.openById(spreadsheetId);
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (!spreadsheet) throw new Error("SPREADSHEET_ID ayarlanmamis");
+  return spreadsheet;
+}
+
 // Sadece icinde "dd.mm" (gun.ay) gecen sayfalari tarar (Yil zorunlulugu kaldirildi).
 // Boylece sayfa adi "17.08" de olsa, "17.08.2026" da olsa tum tebligat sayfalari taranir.
 var TARIH_DESENI = new RegExp("\\d{2}\\.\\d{2}");
@@ -10,9 +22,12 @@ var YIL_DESENI = new RegExp("(?:^|\\.)(\\d{4})(?:$|\\.)");
 // Arama, en yeniden eskiye doğru en fazla 16 tarih sayfasında yapılır.
 // İlk eşleşmede durulmaz; bu pencere içindeki tüm eşleşmeler toplanır.
 var ARAMA_SAYFA_LIMITI = 16;
-var GET_ALL_CACHE_PREFIX = "tebligat_get_all_v1_";
+var GET_ALL_CACHE_PREFIX = "tebligat_get_all_v2_";
 var GET_ALL_CACHE_TTL_SECONDS = 300;
 var GET_ALL_CACHE_CHUNK_SIZE = 45000;
+var IKAMET_SAYFA_SEMA_ANAHTARI = "residence-sheet-schema";
+var IKAMET_SAYFA_SEMA_V1 = "daily-residence-v1";
+var IKAMET_SAAT_DILIMI = "Europe/Istanbul";
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
@@ -137,7 +152,8 @@ function doPost(e) {
       return hataDondur_("Gecersiz istek");
     }
 
-    var apiKey = getApiKey_();
+    var residenceAction = payload.action === "residenceAdd" || payload.action === "residenceRemove";
+    var apiKey = residenceAction ? getConfiguredApiKey_() : getApiKey_();
     if (!apiKey || payload.key !== apiKey) {
       return hataDondur_("Yetkisiz erisim");
     }
@@ -145,13 +161,13 @@ function doPost(e) {
     var action = payload.action;
     var requestEvent = { parameter: payload };
 
+    if (action === "residenceAdd") return islemIkametAdd_(requestEvent);
+    if (action === "residenceRemove") return islemIkametRemove_(requestEvent);
+    if (action === "add") return hataDondur_("Yeni tebligat kaydi olusturma kapatildi.");
+
     if (action === "unmark") {
       invalidateGetAllCache_();
       return islemUnmark_(requestEvent);
-    }
-    if (action === "add") {
-      invalidateGetAllCache_();
-      return islemAdd_(requestEvent);
     }
     if (action === "update") {
       invalidateGetAllCache_();
@@ -191,8 +207,9 @@ function islemUnmark_(e) {
     var isim = (e.parameter.isim || "").trim();
     var no = e.parameter.no !== undefined && e.parameter.no !== null ? String(e.parameter.no).trim() : "";
 
-    var sheet = findSheetByNameOrDate_(SpreadsheetApp.getActiveSpreadsheet(), sayfa);
+    var sheet = findSheetByNameOrDate_(getWorkbook_(), sayfa);
     if (!sheet) return hataDondur_("Sayfa bulunamadi: " + sayfa);
+    if (isDailyResidenceSheet_(sheet)) return hataDondur_("Ikamet sekmesinde tebligat isaretlenemez.");
 
     var lastRow = sheet.getLastRow();
     if (lastRow > 1) {
@@ -263,7 +280,7 @@ function findSheetByNameOrDate_(ss, sayfaAdi) {
 // YARDIMCI: YENI TARIHLI SAYFA OLUSTURMA (SABLONDAN KOPYALAYIP TEMIZLEME)
 // ------------------------------------------------------------
 function yeniSayfaOlustur_(sayfaAdi) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = getWorkbook_();
   var mevcut = ss.getSheetByName(sayfaAdi);
   if (mevcut) return mevcut;
 
@@ -296,6 +313,224 @@ function yeniSayfaOlustur_(sayfaAdi) {
   return yeniSheet;
 }
 
+function isDailyResidenceSheet_(sheet) {
+  return sheet.getDeveloperMetadata().some(function(metadata) {
+    return metadata.getKey() === IKAMET_SAYFA_SEMA_ANAHTARI && metadata.getValue() === IKAMET_SAYFA_SEMA_V1;
+  });
+}
+
+// Caller must hold the script lock when creation can race with an add operation.
+function ensureDailyResidenceSheet_(date, workbook) {
+  if (!date || Object.prototype.toString.call(date) !== "[object Date]" || isNaN(date.getTime())) throw new Error("Gecersiz tarih");
+  var sheetName = Utilities.formatDate(date, IKAMET_SAAT_DILIMI, "dd.MM.yyyy");
+  var ss = workbook || getWorkbook_();
+  var existing = ss.getSheetByName(sheetName);
+  if (existing) {
+    if (!isDailyResidenceSheet_(existing)) {
+      var headers = existing.getRange(1, 1, 1, 3).getValues()[0];
+      var keyHeader = existing.getRange(1, 4).getValue();
+      var hasUnexpectedKeys = keyHeader !== "KAYIT_ANAHTARI" && existing.getLastRow() > 1
+        && existing.getRange(2, 4, existing.getLastRow() - 1, 1).getValues().some(function(row) {
+          return String(row[0] || "").trim() !== "";
+        });
+      if (JSON.stringify(headers) !== JSON.stringify(["AD SOYAD", "PASAPORT", "YÖKSİS DURUMU"])
+          || (keyHeader && keyHeader !== "KAYIT_ANAHTARI") || hasUnexpectedKeys) {
+        throw new Error("Ayni adli eski sekme korunuyor: " + sheetName);
+      }
+      existing.addDeveloperMetadata(IKAMET_SAYFA_SEMA_ANAHTARI, IKAMET_SAYFA_SEMA_V1);
+    }
+    return existing;
+  }
+
+  var sheet = ss.insertSheet(sheetName);
+  var header = sheet.getRange(1, 1, 1, 3);
+  header.setValues([["AD SOYAD", "PASAPORT", "YÖKSİS DURUMU"]]);
+  header.setFontWeight("bold");
+  header.setBackground("#d9eaf7");
+  sheet.getRange(2, 1, sheet.getMaxRows() - 1, 2).setNumberFormat("@");
+  sheet.addDeveloperMetadata(IKAMET_SAYFA_SEMA_ANAHTARI, IKAMET_SAYFA_SEMA_V1);
+  ss.setActiveSheet(sheet);
+  ss.moveActiveSheet(ss.getSheets().length);
+  return sheet;
+}
+
+function findResidenceRecord_(recordKey, workbook, targetSheet) {
+  var matches = [];
+  var sheets = targetSheet ? [targetSheet] : (workbook || getWorkbook_()).getSheets();
+  for (var s = 0; s < sheets.length; s++) {
+    var sheet = sheets[s];
+    if (!isDailyResidenceSheet_(sheet)) continue;
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) continue;
+    var keys = sheet.getRange(2, 4, lastRow - 1, 1).getValues();
+    for (var r = 0; r < keys.length; r++) {
+      if (String(keys[r][0] || "") === recordKey) matches.push({ sheet: sheet, row: r + 2 });
+    }
+  }
+  return matches;
+}
+
+function readResidenceRecordKey_(parameters) {
+  var applicationId = parameters.applicationId;
+  var recordKey = parameters.recordKey;
+  if (typeof applicationId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(applicationId)
+      || recordKey !== applicationId) return null;
+  return recordKey;
+}
+
+function protectResidenceKeyColumn_(sheet) {
+  var header = sheet.getRange(1, 4).getValue();
+  if (header !== "KAYIT_ANAHTARI") sheet.getRange(1, 4).setValue("KAYIT_ANAHTARI");
+  sheet.hideColumns(4);
+  var protections = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE);
+  var keyColumnProtected = protections.some(function(protection) {
+    return protection.getRange().getColumn() === 4 && protection.getRange().getLastColumn() === 4;
+  });
+  if (!keyColumnProtected) {
+    var protection = sheet.getRange(1, 4, sheet.getMaxRows(), 1).protect();
+    protection.setWarningOnly(false);
+  }
+}
+
+function safeSheetText_(value) {
+  var text = String(value).trim();
+  return /^[=+\-@]/.test(text) ? "'" + text : text;
+}
+
+function islemIkametAdd_(e) {
+  var parameters = e.parameter;
+  var recordKey = readResidenceRecordKey_(parameters);
+  var firstName = typeof parameters.firstName === "string" ? parameters.firstName.trim() : "";
+  var lastName = typeof parameters.lastName === "string" ? parameters.lastName.trim() : "";
+  var passportNumber = typeof parameters.passportNumber === "string" ? parameters.passportNumber.trim() : "";
+  var submittedAt = typeof parameters.submittedAt === "string" && parameters.submittedAt
+    ? new Date(parameters.submittedAt) : new Date();
+  if (!recordKey || !firstName || !lastName || !passportNumber
+      || isNaN(submittedAt.getTime())
+      || firstName.length > 120 || lastName.length > 120 || passportNumber.length > 80) {
+    return hataDondur_("Gecersiz ikamet kaydi");
+  }
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (err) {
+    return hataDondur_("Sistem mesgul, lutfen tekrar deneyin.");
+  }
+  try {
+    var workbook = getWorkbook_();
+    var verifyExisting = parameters.verifyExisting === "true";
+    if (verifyExisting) {
+      var historicalMatches = findResidenceRecord_(recordKey, workbook);
+      if (historicalMatches.length > 1) return hataDondur_("Kayit anahtari birden fazla sekmede bulundu.");
+      if (historicalMatches.length === 1) {
+        return json_({ success: true, state: "present", sheetName: historicalMatches[0].sheet.getName(), recordKey: recordKey });
+      }
+    }
+
+    var sheet = ensureDailyResidenceSheet_(submittedAt, workbook);
+    if (!verifyExisting) {
+      var todayMatches = findResidenceRecord_(recordKey, workbook, sheet);
+      if (todayMatches.length > 1) return hataDondur_("Kayit anahtari birden fazla sekmede bulundu.");
+      if (todayMatches.length === 1) {
+        return json_({ success: true, state: "present", sheetName: sheet.getName(), recordKey: recordKey });
+      }
+    }
+    protectResidenceKeyColumn_(sheet);
+    var row = Math.max(sheet.getLastRow() + 1, 2);
+    var values = [safeSheetText_(firstName + " " + lastName), safeSheetText_(passportNumber), "Yüklendi", recordKey];
+    sheet.getRange(row, 1, 1, 4).setValues([values]);
+    var headers = ["AD SOYAD", "PASAPORT", "YÖKSİS DURUMU"];
+    for (var column = 0; column < 3; column++) {
+      var width = Math.min(1000, Math.max(headers[column].length, values[column].length) * 7 + 24);
+      if (sheet.getColumnWidth(column + 1) < width) sheet.setColumnWidth(column + 1, width);
+    }
+    invalidateGetAllCache_();
+    return json_({ success: true, state: "present", sheetName: sheet.getName(), recordKey: recordKey });
+  } catch (err) {
+    return hataDondur_("Ikamet kaydi eklenemedi.");
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function islemIkametRemove_(e) {
+  var recordKey = readResidenceRecordKey_(e.parameter);
+  if (!recordKey) return hataDondur_("Gecersiz ikamet kaydi");
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (err) {
+    return hataDondur_("Sistem mesgul, lutfen tekrar deneyin.");
+  }
+  try {
+    var workbook = getWorkbook_();
+    var sheetName = e.parameter.sheetName;
+    var targetSheet = null;
+    if (typeof sheetName === "string" && /^\d{2}\.\d{2}\.\d{4}$/.test(sheetName)) {
+      var candidate = workbook.getSheetByName(sheetName);
+      if (candidate && isDailyResidenceSheet_(candidate)) targetSheet = candidate;
+    }
+    var matches = findResidenceRecord_(recordKey, workbook, targetSheet);
+    if (matches.length > 1) return hataDondur_("Kayit anahtari birden fazla sekmede bulundu.");
+    if (matches.length === 1) {
+      matches[0].sheet.deleteRow(matches[0].row);
+      invalidateGetAllCache_();
+    }
+    return json_({ success: true, state: "absent", recordKey: recordKey });
+  } catch (err) {
+    return hataDondur_("Ikamet kaydi kaldirilamadi.");
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function otomatikGunlukIkametSayfasiOlustur() {
+  var bugun = new Date();
+  var gun = Number(Utilities.formatDate(bugun, IKAMET_SAAT_DILIMI, "u"));
+  if (gun === 6 || gun === 7) return { success: false, error: "Hafta sonu ikamet sekmesi olusturulmaz." };
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (err) {
+    return { success: false, error: "Kilit alinamadi." };
+  }
+
+  try {
+    var sheet = ensureDailyResidenceSheet_(bugun);
+    invalidateGetAllCache_();
+    return { success: true, sayfa: sheet.getName() };
+  } catch (err) {
+    return { success: false, error: err.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function kurGunlukIkametSayfasiTetikleyicisi() {
+  var relatedHandlers = ["otomatikHaftalikSayfaOlustur", "otomatikGunlukIkametSayfasiOlustur"];
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (relatedHandlers.indexOf(trigger.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(trigger);
+  });
+
+  var weekdays = [ScriptApp.WeekDay.MONDAY, ScriptApp.WeekDay.TUESDAY, ScriptApp.WeekDay.WEDNESDAY,
+    ScriptApp.WeekDay.THURSDAY, ScriptApp.WeekDay.FRIDAY];
+  weekdays.forEach(function(weekday) {
+    ScriptApp.newTrigger("otomatikGunlukIkametSayfasiOlustur")
+      .timeBased()
+      .everyWeeks(1)
+      .onWeekDay(weekday)
+      .atHour(8)
+      // Apps Script trigger timing is approximate; 08:00 is a target window, not an exact-minute guarantee.
+      .nearMinute(0)
+      .inTimezone(IKAMET_SAAT_DILIMI)
+      .create();
+  });
+  return { success: true, triggerCount: weekdays.length };
+}
+
 // ------------------------------------------------------------
 // OTOMATIK HAFTALIK SAYFA OLUSTURMA (PAZAR AKŞAMI TETIKLEYICISI ICIN)
 // ------------------------------------------------------------
@@ -309,7 +544,7 @@ function otomatikHaftalikSayfaOlustur() {
   }
 
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = getWorkbook_();
     var sonSayfa = sonTarihliSayfayiBul_(ss);
     var yeniSayfaAdi = "";
 
@@ -383,7 +618,7 @@ function islemAdd_(e) {
     var sayfa = e.parameter.sayfa;
     var isim = e.parameter.isim;
 
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = getWorkbook_();
     var sheet = findSheetByNameOrDate_(ss, sayfa);
     
     // Eger sayfa henuz acilmamissa otomatik olustur (hata vermesini onler)
@@ -473,8 +708,9 @@ function islemRemove_(e) {
     var isim = (e.parameter.isim || "").trim();
     var no = e.parameter.no !== undefined && e.parameter.no !== null ? String(e.parameter.no).trim() : "";
 
-    var sheet = findSheetByNameOrDate_(SpreadsheetApp.getActiveSpreadsheet(), sayfa);
+    var sheet = findSheetByNameOrDate_(getWorkbook_(), sayfa);
     if (!sheet) return hataDondur_("Sayfa bulunamadi: " + sayfa);
+    if (isDailyResidenceSheet_(sheet)) return hataDondur_("Ikamet sekmesinde tebligat kaldirilamaz.");
 
     var lastRow = sheet.getLastRow();
     if (lastRow > 1) {
@@ -519,8 +755,9 @@ function islemUpdate_(e) {
     var isim = (e.parameter.isim || "").trim();
     var no = e.parameter.no !== undefined && e.parameter.no !== null ? String(e.parameter.no).trim() : "";
 
-    var sheet = findSheetByNameOrDate_(SpreadsheetApp.getActiveSpreadsheet(), sayfa);
+    var sheet = findSheetByNameOrDate_(getWorkbook_(), sayfa);
     if (!sheet) return hataDondur_("Sayfa bulunamadi: " + sayfa);
+    if (isDailyResidenceSheet_(sheet)) return hataDondur_("Ikamet sekmesinde teslim isareti degistirilemez.");
 
     var lastRow = sheet.getLastRow();
     if (lastRow > 1) {
@@ -563,13 +800,13 @@ function islemArama_(q, year) {
     var sonuclar = [];
     var benzersizKontrol = {};
 
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = getWorkbook_();
     // Yil filtresi kaynakta uygulanir; yili yazili 2025/2024 sekmeleri okunmaz.
     // Yilsiz "dd.mm" sekmeler mevcut yil olarak kabul edilir.
     var tarihliSayfalar = ss.getSheets().filter(function(sheet) {
       var sheetName = sheet.getName();
       var yearMatch = sheetName.match(YIL_DESENI);
-      return TARIH_DESENI.test(sheetName) && (!yearMatch || yearMatch[1] === year);
+      return !isDailyResidenceSheet_(sheet) && TARIH_DESENI.test(sheetName) && (!yearMatch || yearMatch[1] === year);
     }).reverse();
 
     // Tum dosyadaki TextFinder taramasi buyuk tablolarda web uygulamasini zaman asimina sokuyordu.
@@ -625,7 +862,7 @@ function islemGetAll_(e) {
       return json_({ success: true, results: cachedData, cached: true });
     }
 
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = getWorkbook_();
     var sheets = ss.getSheets();
     var allData = [];
     
@@ -635,7 +872,7 @@ function islemGetAll_(e) {
       var sheetName = sheet.getName();
       
       // Sadece tarihli sayfalari al
-      if (!TARIH_DESENI.test(sheetName)) continue;
+      if (isDailyResidenceSheet_(sheet) || !TARIH_DESENI.test(sheetName)) continue;
       
       var lastRow = sheet.getLastRow();
       if (lastRow <= 1) continue;

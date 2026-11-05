@@ -873,6 +873,84 @@ test('permanent purge is administrator-only and keeps only a non-identifying aud
     assert.equal(audit.safe_metadata_json.includes(applicationId), false);
 });
 
+test('archive blocks active spreadsheet rows and permanent purge deletes the absent transfer state', async () => {
+    const { database, environment } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'completed' });
+    await database.prepare(`UPDATE applications SET submitted_at=?, first_name='Ada', last_name='Lovelace', passport_number='001'
+        WHERE id=?`).bind(new Date().toISOString(), applicationId).run();
+    const adminCookie = await seedStaff(environment, database, 'admin-1', 'admin-session-token-00000000000000000000', 'admin');
+    await database.prepare(`INSERT INTO application_spreadsheet_records
+        (application_id,record_key,state,sheet_name,operation_id,last_actor_staff,updated_at)
+        VALUES(?,?,'present','03.11.2026','operation-1','admin-1',?)`)
+        .bind(applicationId, applicationId, new Date().toISOString()).run();
+    const blockedArchive = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
+        method: 'POST', cookie: adminCookie, body: {}
+    }), environment);
+    assert.equal(blockedArchive.status, 409);
+
+    await database.prepare(`UPDATE application_spreadsheet_records SET state='absent',sheet_name=NULL WHERE application_id=?`)
+        .bind(applicationId).run();
+    const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
+        method: 'POST', cookie: adminCookie, body: {}
+    }), environment);
+    assert.equal(archived.status, 200);
+    const purged = await worker.fetch(request(`/api/staff/applications/${applicationId}/purge`, {
+        method: 'POST', cookie: adminCookie, body: {}
+    }), environment);
+    assert.equal(purged.status, 200);
+    assert.equal(database.prepare('SELECT application_id FROM application_spreadsheet_records WHERE application_id=?')
+        .bind(applicationId).first(), null);
+    assert.equal(database.prepare('SELECT id FROM applications WHERE id=?').bind(applicationId).first(), null);
+});
+
+test('archive waits for an in-flight add and succeeds after the row is confirmed removed', async () => {
+    const { database, environment } = createEnvironment();
+    const applicationId = await seedApplication(database, { status: 'completed' });
+    await database.prepare(`UPDATE applications SET submitted_at=?, first_name='Ada', last_name='Lovelace', passport_number='001'
+        WHERE id=?`).bind(new Date().toISOString(), applicationId).run();
+    const adminCookie = await seedStaff(environment, database, 'admin-1', 'admin-session-token-00000000000000000000', 'admin');
+    environment.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/test/exec';
+    environment.APPS_SCRIPT_API_KEY = 'test-key';
+    const originalFetch = globalThis.fetch;
+    let releaseAdd;
+    let notifyAddStarted;
+    const addStarted = new Promise(resolve => { notifyAddStarted = resolve; });
+    globalThis.fetch = async (_url, options) => {
+        const payload = JSON.parse(options.body);
+        if (payload.action === 'residenceAdd') {
+            notifyAddStarted();
+            return new Promise(resolve => { releaseAdd = () => resolve(new Response(JSON.stringify({
+                success: true, state: 'present', sheetName: '03.11.2026', recordKey: payload.recordKey
+            }))); });
+        }
+        return new Response(JSON.stringify({ success: true, state: 'absent', recordKey: payload.recordKey }));
+    };
+
+    try {
+        const spreadsheetPath = `/api/staff/applications/${applicationId}/spreadsheet`;
+        const addPromise = worker.fetch(request(spreadsheetPath, {
+            method: 'POST', cookie: adminCookie, body: { action: 'add' }
+        }), environment);
+        await addStarted;
+        const blockedArchive = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
+            method: 'POST', cookie: adminCookie, body: {}
+        }), environment);
+        assert.equal(blockedArchive.status, 409);
+        releaseAdd();
+        assert.equal((await addPromise).status, 200);
+        const removed = await worker.fetch(request(spreadsheetPath, {
+            method: 'POST', cookie: adminCookie, body: { action: 'remove' }
+        }), environment);
+        assert.equal(removed.status, 200);
+        const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
+            method: 'POST', cookie: adminCookie, body: {}
+        }), environment);
+        assert.equal(archived.status, 200);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
 test('failed object removal leaves purge pending, blocks restore, and retries safely', async () => {
     const { database, environment } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'rejected' });

@@ -148,6 +148,30 @@ test('readSelectedYoksisAuditRecord reads ZK sibling-cell labels and GöçNet sp
     });
 });
 
+test('readSelectedYoksisAuditRecord captures an optional passport number from the selected YÖKSİS form', () => {
+    const document = new JSDOM(readFixture('zk-split-listboxes.html')).window.document;
+    document.body.insertAdjacentHTML('beforeend', '<label for="passport-number">Pasaport No:</label><input id="passport-number" value="U12345678">');
+
+    const result = readSelectedYoksisAuditRecord(document, {
+        applicationNumber: '2026-00-0000001', studentNumber: '2600000001'
+    });
+
+    assert.equal(result.status, 'verified');
+    assert.equal(result.identity.passportNumber, 'U12345678');
+});
+
+test('readSelectedYoksisAuditRecord reads passport numbers labeled as Seyahat Belge No', () => {
+    const document = new JSDOM(readFixture('zk-split-listboxes.html')).window.document;
+    document.body.insertAdjacentHTML('beforeend', '<table><tr><td><span class="z-label">Seyahat Belge No:</span></td><td><input value="TEST98765" readonly></td></tr></table>');
+
+    const result = readSelectedYoksisAuditRecord(document, {
+        applicationNumber: '2026-00-0000001', studentNumber: '2600000001'
+    });
+
+    assert.equal(result.status, 'verified');
+    assert.equal(result.identity.passportNumber, 'TEST98765');
+});
+
 test('readSelectedYoksisAuditRecord accepts an explicit ZK empty document placeholder for a completed application', () => {
     const document = new JSDOM(readFixture('zk-split-listboxes.html')).window.document;
     document.getElementById('application-status').value = 'Tamamlandı';

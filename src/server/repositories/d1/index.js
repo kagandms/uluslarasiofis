@@ -1,4 +1,5 @@
 import { createApplicationRepository } from './applicationRepository.js';
+import { createApplicationSpreadsheetRepository } from './applicationSpreadsheetRepository.js';
 import { createApplicationNoteRepository } from './applicationNoteRepository.js';
 import { createApplicationReviewRepository } from './applicationReviewRepository.js';
 import { createAuditRepository } from './auditRepository.js';
@@ -20,6 +21,7 @@ export function createD1Repositories(database) {
     const applicationNotes = createApplicationNoteRepository(database);
     return Object.freeze({
         applications: createApplicationRepository(database),
+        applicationSpreadsheet: createApplicationSpreadsheetRepository(database),
         applicationNotes,
         applicationReviews: createApplicationReviewRepository(database, applicationNotes),
         audit: createAuditRepository(database),
