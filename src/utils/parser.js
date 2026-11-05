@@ -37,6 +37,13 @@ export function extractApplicationNumberCandidates(fullText) {
         }
     }
 
+    if (!candidates.size && APPLICATION_NUMBER_LABEL.test(fullText)) {
+        for (const match of fullText.matchAll(APPLICATION_NUMBER_TOKEN)) {
+            const normalized = normalizeApplicationNumber(match[0]);
+            if (normalized) candidates.add(normalized);
+        }
+    }
+
     return [...candidates];
 }
 

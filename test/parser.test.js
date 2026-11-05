@@ -64,6 +64,16 @@ test('returns distinct labeled registration number candidates without confusing 
     assert.deepEqual(extractApplicationNumberCandidates(text), ['2026-04-0644400', '2026-04-0644401']);
 });
 
+test('uses the sole document-wide registration-shaped value when OCR separates it from its label', () => {
+    const text = 'Kayıt Numarası\n(Date of Registration)\nGCGM03-92026331015530\nİkamet İzni Öğrenci Kayıt Formu\nCEVİZLİBAĞ GRUP BAŞKANLIĞI\n2026-33-1015530';
+    assert.deepEqual(extractApplicationNumberCandidates(text), ['2026-33-1015530']);
+});
+
+test('keeps document-wide registration candidates ambiguous when OCR finds more than one', () => {
+    const text = 'Kayıt Numarası\nİkamet İzni Öğrenci Kayıt Formu\n2026-33-1015530\n2026-33-1015531';
+    assert.deepEqual(extractApplicationNumberCandidates(text), ['2026-33-1015530', '2026-33-1015531']);
+});
+
 test('should prefer the value located right of the registration label over barcode text', () => {
     // Arrange
     const words = [
