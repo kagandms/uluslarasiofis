@@ -1,6 +1,7 @@
 import html2canvas from 'html2canvas';
 import { PDFDocument, PDFString } from 'pdf-lib';
 import QRCode from 'qrcode';
+import { APPLICATION_COVER_STYLES, fitApplicationCoverCode } from '../shared/applicationDocumentPdf.js';
 import { MAX_PHYSICAL_RECEIPT_PDF_BYTES } from '../config/physical-document-limits.js';
 import { createPhysicalReceiptTemplate } from './physical-receipt-template.js';
 import { loadDocumentLogos,waitDocumentAssets,buildDocumentAssetUrl } from './document-logo-loader.js';
@@ -83,10 +84,11 @@ export async function renderPhysicalReceiptPdf(snapshot) {
     const trackingQr=await QRCode.toDataURL(snapshot.portal_origin,{width:300,margin:2,errorCorrectionLevel:'M'});
     const root=createPhysicalReceiptTemplate(document,snapshot,{...logos,trackingQr});
     const embeddedFonts=document.createElement('style');
-    embeddedFonts.textContent=fontStyles; root.prepend(embeddedFonts);
+    embeddedFonts.textContent=`${fontStyles}\n${APPLICATION_COVER_STYLES}`; root.prepend(embeddedFonts);
     const mount=document.createElement('div'); mount.className='physical-receipt-render-mount'; mount.append(root); document.body.append(mount);
     try {
         await waitDocumentAssets(root);
+        fitApplicationCoverCode(root);
         if (root.scrollHeight>root.clientHeight+1 || root.scrollWidth>root.clientWidth+1) throw new Error('Bilgiler tek A4’e sığmıyor; içerik kesilmedi. Ofisle kontrol edin.');
         // Foreign-object coordinates must not inherit the staff workspace scroll offset.
         const canvas=await html2canvas(root,{scale:1.25,backgroundColor:'#ffffff',logging:false,scrollX:0,scrollY:0,

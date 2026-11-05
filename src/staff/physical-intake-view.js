@@ -5,6 +5,7 @@ import { createApplicationQueueTable, formatQueueDate } from './application-queu
 import { buildPhysicalPdfUrl } from './physical-intake-client.js';
 import { bindPhysicalUppercaseInput } from './physical-uppercase-input.js';
 import { createApplicationQueueFilters } from './application-queue-filters.js';
+import { PHYSICAL_RECEIPT_TEMPLATE_VERSION } from '../shared/physical-receipt-version.js';
 
 const STATUS_LABELS = PHYSICAL_STATUS_LABELS;
 const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['sent_to_migration', 'Göçe Gönderildi'], ['migration_approved', 'Göç Onayladı'], ['completed', 'Tamamlandı'], ['rejected', 'Reddedildi'], ['deleted', 'Silinen']];
@@ -90,7 +91,7 @@ function renderQueue(document, panel, options) {
         rowNumber: (_item, index) => String((state.result.pagination.page - 1) * (state.result.pagination.page_size || state.query.page_size || 25) + index + 1),
         values: item => [item.tracking_reference || '—', `${item.first_name} ${item.last_name}`, formatDeliveryDate(document, item),
             item.processing_closed_at ? 'Ofis işlemi kapalı' : STATUS_LABELS[item.status], item.current_pdf_id ? 'PDF var' : 'PDF yok',
-            item.receipt_metadata_version && item.receipt_metadata_version !== item.metadata_version ? 'A4 güncel değil' : `${item.receipt_state === 'ready' ? 'Hazır' : item.receipt_state || 'Hazırlanmadı'}${item.receipt_print_status ? ` · ${item.receipt_print_status}` : ''}`],
+            item.receipt_state && (item.receipt_metadata_version !== item.metadata_version || item.receipt_template_version !== PHYSICAL_RECEIPT_TEMPLATE_VERSION) ? 'A4 güncel değil' : `${item.receipt_state === 'ready' ? 'Hazır' : item.receipt_state || 'Hazırlanmadı'}${item.receipt_print_status ? ` · ${item.receipt_print_status}` : ''}`],
         actions: item => [{ label: 'Detay', action: 'open-detail', run: () => handlers.open(item.id) },
             { label: 'İndir', action: 'download-physical-pdf', isDisabled: !item.current_pdf_id || Boolean(item.deleted_at),
                 ariaLabel: 'Güncel PDF’i indir',

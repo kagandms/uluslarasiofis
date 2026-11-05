@@ -5,25 +5,20 @@ import { createPhysicalReceiptTemplate } from '../src/services/physical-receipt-
 import { renderPhysicalIntakes } from '../src/staff/physical-intake-view.js';
 import { initializeApplicationTracking } from '../src/public/applicationTracking.js';
 import { createPhysicalTrackingPanel } from '../src/public/physical-application-tracking.js';
-import { PHYSICAL_RECEIPT_MESSAGES } from '../src/public/i18n/physical-receipt-messages.js';
-import { PUBLIC_MESSAGES } from '../src/public/i18n/messages.js';
 import { buildDocumentAssetUrl,waitDocumentAssets } from '../src/services/document-logo-loader.js';
 
 const SNAPSHOT={first_name:'<script>Synthetic</script>',last_name:'Русский العربية',passport_number:'TEST',application_date:'2026-10-12',tracking_reference:'ITU-26-ABCDEFG',portal_origin:'https://portal.test'};
 
-test('receipt HTML escapes student content and shares exactly five localized home labels',()=>{
+test('receipt HTML escapes student content and shares five localized cover notices',()=>{
     const dom=new JSDOM('<main></main>');
 
     const root=createPhysicalReceiptTemplate(dom.window.document,SNAPSHOT,{university:'data:image/png;base64,test',migration:'data:image/png;base64,test'});
 
     assert.equal(root.querySelector('script'),null);assert.match(root.textContent,/<script>Synthetic<\/script>/);
-    assert.equal(root.querySelectorAll('section').length,5);assert.equal(root.querySelector('[lang=ar]').dir,'rtl');
+    assert.equal(root.querySelectorAll('.cover-language-card').length,5);assert.equal(root.querySelector('.cover-language-copy[lang=ar]').dir,'rtl');
     assert.equal(root.querySelector('.physical-receipt-code').dir,'ltr');assert.equal(root.querySelectorAll('img').length,2);
-    for(const [locale,messages] of Object.entries(PHYSICAL_RECEIPT_MESSAGES)) {
-        assert.equal(PUBLIC_MESSAGES[locale].homeTrackAction,messages.action);
-        assert.ok(messages.heading);assert.ok(messages.explanation);assert.ok(messages.rejectionReasonLabel);
-        assert.ok(root.querySelector(`[lang=${locale}]`).textContent.includes(messages.action));
-    }
+    assert.equal(root.querySelectorAll('.cover-language-copy strong').length,5);
+    assert.match(root.querySelector('.cover-language-copy[lang=tr] strong').textContent,/onaylandığını göstermez/);
     dom.window.close();
 });
 
@@ -221,7 +216,7 @@ test('tracking panel prominently links the configured site and includes its QR i
 test('queue translates ready A4 state and preserves stale document warning', () => {
     const dom = new JSDOM('<main></main>');
     const root = dom.window.document.querySelector('main');
-    const items = [1, 2].map(version => ({ id: String(version), first_name: 'TEST', last_name: 'TEST', status: 'under_review', receipt_state: 'ready', receipt_metadata_version: 1, metadata_version: version }));
+    const items = [1, 2].map(version => ({ id: String(version), first_name: 'TEST', last_name: 'TEST', status: 'under_review', receipt_state: 'ready', receipt_template_version: '2', receipt_metadata_version: 1, metadata_version: version }));
     let appliedFilters;
 
     renderPhysicalIntakes(root, { view: 'queue', query: { q: '', status: 'all', page: 1, page_size: 25 }, result: { items, pagination: { page: 1, page_size: 25, total_pages: 1, total: 2 } } }, {
