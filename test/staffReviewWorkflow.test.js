@@ -920,7 +920,7 @@ test('archive waits for an in-flight add and succeeds after the row is confirmed
         if (payload.action === 'residenceAdd') {
             notifyAddStarted();
             return new Promise(resolve => { releaseAdd = () => resolve(new Response(JSON.stringify({
-                success: true, state: 'present', sheetName: '03.11.2026', recordKey: payload.recordKey
+                success: true, state: 'present', sheetName: payload.targetSheetName, recordKey: payload.recordKey
             }))); });
         }
         return new Response(JSON.stringify({ success: true, state: 'absent', recordKey: payload.recordKey }));

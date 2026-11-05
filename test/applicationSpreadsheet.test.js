@@ -6,6 +6,7 @@ import { TestD1Database } from './helpers/d1-test-binding.js';
 import worker from '../src/server/worker.js';
 
 const TOKEN = 'spreadsheet-session-token-0000000000000000';
+const todaySheetName = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul' }).format(new Date()).replaceAll('/', '.');
 
 function setup() {
     const database = new TestD1Database();
@@ -70,10 +71,10 @@ test('spreadsheet transfer rejects drafts before calling Apps Script', async () 
     assert.equal(environment.appsScriptCalls, undefined);
 });
 
-test('spreadsheet add uses server identity and preserves the passport number as text', async () => {
+test('spreadsheet add targets today even when the application was last updated on an earlier date', async () => {
     const { environment, database } = setup();
     const submittedAt = '2026-10-26T11:53:00.000Z';
-    const updatedAt = '2026-11-03T08:26:00.000Z';
+    const updatedAt = '2026-10-27T08:26:00.000Z';
     const applicationId = await seedApplication(database, { submittedAt, updatedAt });
     const cookie = await seedStaff(database);
     const calls = [];
@@ -82,7 +83,7 @@ test('spreadsheet add uses server identity and preserves the passport number as 
         const payload = JSON.parse(options.body);
         calls.push(payload);
         return new Response(JSON.stringify({
-            success: true, state: 'present', sheetName: '03.11.2026', recordKey: applicationId
+            success: true, state: 'present', sheetName: payload.targetSheetName, recordKey: applicationId
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     };
     environment.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/test/exec';
@@ -94,20 +95,44 @@ test('spreadsheet add uses server identity and preserves the passport number as 
         }), environment);
         assert.equal(response.status, 200);
         const result = await response.json();
-        assert.deepEqual({ state: result.state, sheetName: result.sheetName }, { state: 'present', sheetName: '03.11.2026' });
+        assert.deepEqual({ state: result.state, sheetName: result.sheetName }, { state: 'present', sheetName: todaySheetName });
         assert.deepEqual({ action: calls[0].action, applicationId: calls[0].applicationId,
             verifyExisting: calls[0].verifyExisting,
             firstName: calls[0].firstName, lastName: calls[0].lastName, passportNumber: calls[0].passportNumber,
-            submittedAt: calls[0].submittedAt }, {
+            targetSheetName: calls[0].targetSheetName, submittedAt: calls[0].submittedAt }, {
             action: 'residenceAdd', applicationId, verifyExisting: 'false',
-            firstName: 'Ada', lastName: 'Student', passportNumber: '0012345', submittedAt: updatedAt
+            firstName: 'Ada', lastName: 'Student', passportNumber: '0012345', targetSheetName: todaySheetName,
+            submittedAt: undefined
         });
         assert.equal(database.prepare('SELECT state FROM application_spreadsheet_records WHERE application_id=?')
             .bind(applicationId).first().state, 'present');
         const queue = await worker.fetch(request('/api/staff/applications/query', {
             method: 'POST', cookie, body: { q: `STU-${applicationId}` }
         }), environment);
-        assert.deepEqual((await queue.json()).items[0].spreadsheet, { state: 'present', sheetName: '03.11.2026' });
+        assert.deepEqual((await queue.json()).items[0].spreadsheet, { state: 'present', sheetName: todaySheetName });
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test('spreadsheet add does not confirm an Apps Script response for a different date', async () => {
+    const { environment, database } = setup();
+    const applicationId = await seedApplication(database);
+    const cookie = await seedStaff(database);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({
+        success: true, state: 'present', sheetName: '27.10.2026', recordKey: applicationId
+    }));
+    environment.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/test/exec';
+    environment.APPS_SCRIPT_API_KEY = 'test-key';
+
+    try {
+        const response = await worker.fetch(request(`/api/staff/applications/${applicationId}/spreadsheet`, {
+            method: 'POST', cookie, body: { action: 'add' }
+        }), environment);
+        assert.equal(response.status, 502);
+        assert.equal(database.prepare('SELECT state FROM application_spreadsheet_records WHERE application_id=?')
+            .bind(applicationId).first().state, 'pending_add');
     } finally {
         globalThis.fetch = originalFetch;
     }
@@ -123,7 +148,7 @@ test('an ambiguous spreadsheet response remains pending and a retry reconciles i
         const payload = JSON.parse(options.body);
         calls.push(payload);
         if (calls.length === 1) throw new Error('upstream response lost');
-        return new Response(JSON.stringify({ success: true, state: 'present', sheetName: '03.11.2026', recordKey: applicationId }), { status: 200 });
+        return new Response(JSON.stringify({ success: true, state: 'present', sheetName: payload.targetSheetName, recordKey: applicationId }), { status: 200 });
     };
     environment.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/test/exec';
     environment.APPS_SCRIPT_API_KEY = 'test-key';
@@ -189,7 +214,7 @@ test('an ambiguous remove remains pending and a retry confirms the row is absent
         const payload = JSON.parse(options.body);
         calls.push(payload);
         if (calls.length === 1) return new Response(JSON.stringify({
-            success: true, state: 'present', sheetName: '03.11.2026', recordKey: payload.recordKey
+            success: true, state: 'present', sheetName: payload.targetSheetName, recordKey: payload.recordKey
         }));
         if (calls.length === 2) throw new Error('upstream response lost');
         return new Response(JSON.stringify({ success: true, state: 'absent', recordKey: payload.recordKey }));
@@ -214,7 +239,7 @@ test('an ambiguous remove remains pending and a retry confirms the row is absent
         assert.deepEqual(calls.slice(1).map(call => [call.action, call.recordKey]), [
             ['residenceRemove', applicationId], ['residenceRemove', pending.record_key]
         ]);
-        assert.deepEqual(calls.slice(1).map(call => call.sheetName), ['03.11.2026', '03.11.2026']);
+        assert.deepEqual(calls.slice(1).map(call => call.sheetName), [todaySheetName, todaySheetName]);
         assert.equal(database.prepare('SELECT state FROM application_spreadsheet_records WHERE application_id=?')
             .bind(applicationId).first().state, 'absent');
     } finally {
@@ -236,7 +261,7 @@ test('same-name applications use separate transfer keys and remove the stored ro
         calls.push(payload);
         return new Response(JSON.stringify(payload.action === 'residenceRemove'
             ? { success: true, state: 'absent', recordKey: payload.recordKey }
-            : { success: true, state: 'present', sheetName: '03.11.2026', recordKey: payload.recordKey }));
+            : { success: true, state: 'present', sheetName: payload.targetSheetName, recordKey: payload.recordKey }));
     };
     environment.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/test/exec';
     environment.APPS_SCRIPT_API_KEY = 'test-key';
@@ -274,7 +299,7 @@ test('concurrent add requests share one idempotency key and both return the conf
         const payload = JSON.parse(options.body);
         keys.push(payload.recordKey);
         await new Promise(resolve => setTimeout(resolve, 10));
-        return new Response(JSON.stringify({ success: true, state: 'present', sheetName: '03.11.2026', recordKey: payload.recordKey }));
+        return new Response(JSON.stringify({ success: true, state: 'present', sheetName: payload.targetSheetName, recordKey: payload.recordKey }));
     };
     environment.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/test/exec';
     environment.APPS_SCRIPT_API_KEY = 'test-key';
