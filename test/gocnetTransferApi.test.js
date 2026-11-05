@@ -23,7 +23,8 @@ test('gocnet attempts atomically lock one application and one registration finge
     const input = { id: 'attempt-1', applicationId: 'app-1', staffId: 'staff-1', applicationNumberHash: 'a'.repeat(64),
         manifestFingerprint: 'b'.repeat(64), pdfSha256: 'c'.repeat(64), createdAt: '2026-11-05T10:00:00.000Z' };
     await repository.createAttempt(input);
-    await assert.rejects(repository.createAttempt({ ...input, id: 'attempt-2' }), (error) => error.code === 'GOCNET_ATTEMPT_CONFLICT');
+    await assert.rejects(repository.createAttempt({ ...input, id: 'attempt-2', applicationNumberHash: 'd'.repeat(64) }),
+        (error) => error.code === 'GOCNET_ATTEMPT_CONFLICT');
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_gocnet_attempts').first().count, 1);
     const stored = database.prepare('SELECT * FROM application_gocnet_attempts').first();
     assert.equal(Object.hasOwn(stored, 'application_number'), false);
@@ -64,6 +65,24 @@ test('gocnet events enforce monotonic transitions and make repeated event IDs id
     await assert.rejects(repository.createAttempt({ id: 'attempt-2', applicationId: 'app-1', staffId: 'staff-1',
         applicationNumberHash: 'd'.repeat(64), manifestFingerprint: 'e'.repeat(64), pdfSha256: 'f'.repeat(64),
         createdAt: '2026-11-05T10:00:02.000Z' }), (error) => error.code === 'GOCNET_ATTEMPT_CONFLICT');
+});
+
+test('a create response can be recovered with the client-generated attempt ID and a failed preparation releases its lock', async () => {
+    const { database, repository } = createRepository();
+    const attemptId = '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa';
+    const input = { applicationId: 'app-1', staffId: 'staff-1',
+        applicationNumberHash: 'a'.repeat(64), manifestFingerprint: 'b'.repeat(64), pdfSha256: 'c'.repeat(64),
+        createdAt: '2026-11-05T10:00:00.000Z' };
+    await repository.createAttempt({ ...input, id: attemptId });
+    const recovered = await repository.createAttempt({ ...input, id: 'another-client-generated-id' });
+    assert.equal(recovered.id, attemptId);
+    const result = await repository.appendEvent({ attemptId, applicationId: 'app-1', eventId: 'failed-before-query',
+        actorStaffId: 'staff-1', sequence: 1, state: 'failed', createdAt: '2026-11-05T10:00:01.000Z' });
+    assert.equal(result.state, 'failed');
+    await repository.createAttempt({ id: 'next-attempt', applicationId: 'app-1', staffId: 'staff-1',
+        applicationNumberHash: 'a'.repeat(64), manifestFingerprint: 'd'.repeat(64), pdfSha256: 'e'.repeat(64),
+        createdAt: '2026-11-05T10:00:02.000Z' });
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_gocnet_attempts').first().count, 2);
 });
 
 test('gocnet attempt routes reject unauthenticated and cross-origin requests before reading documents', async () => {

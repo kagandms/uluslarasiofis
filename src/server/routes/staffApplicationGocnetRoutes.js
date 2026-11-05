@@ -16,7 +16,9 @@ function invalidRequest() {
 }
 
 function readAttemptBody(body) {
-    if (Object.keys(body).some((key) => !['applicationNumber', 'manifestFingerprint', 'pdfSha256'].includes(key))
+    if (Object.keys(body).some((key) => !['attemptId', 'applicationNumber', 'manifestFingerprint', 'pdfSha256'].includes(key))
+        || typeof body.attemptId !== 'string'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.attemptId)
         || typeof body.applicationNumber !== 'string' || !APPLICATION_NUMBER.test(body.applicationNumber)
         || typeof body.manifestFingerprint !== 'string' || !HASH.test(body.manifestFingerprint)
         || typeof body.pdfSha256 !== 'string' || !HASH.test(body.pdfSha256)) throw invalidRequest();
@@ -77,7 +79,7 @@ export async function createStaffApplicationGocnetAttempt(request, environment, 
     let attempt;
     try {
         attempt = await repositories.applicationGocnet.createAttempt({
-            id: crypto.randomUUID(), applicationId, staffId: staff.id,
+            id: body.attemptId, applicationId, staffId: staff.id,
             applicationNumberHash: await hashText(body.applicationNumber),
             manifestFingerprint: fingerprint, pdfSha256: body.pdfSha256, createdAt: new Date().toISOString()
         });

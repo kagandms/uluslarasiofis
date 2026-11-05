@@ -7,6 +7,7 @@ import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
 import { createApplicationQueueFilters } from './application-queue-filters.js';
 import { prepareGocnetTransfer } from './gocnet-transfer.js';
+import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
 
 const STATUS_LABELS = Object.freeze({
     draft: 'Taslak',
@@ -1382,8 +1383,24 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             sequence = nextSequence;
         };
         try {
-            const prepared = await prepareGocnetTransfer({ applicationId, api });
+            let corrections = {};
+            let prepared;
+            while (!prepared) {
+                try {
+                    prepared = await prepareGocnetTransfer({ applicationId, api, ...corrections });
+                } catch (error) {
+                    if (!['REGISTRATION_NUMBER_CONFIRMATION_REQUIRED', 'TURKISH_MOBILE_REQUIRED'].includes(error?.code)) throw error;
+                    const corrected = await requestGocnetCorrection(error, corrections);
+                    if (!corrected) {
+                        state.gocnetResults[applicationId] = 'GöçNet aktarımı personel tarafından iptal edildi.';
+                        return;
+                    }
+                    corrections = { ...corrections, ...corrected };
+                }
+            }
+            attemptId = document.defaultView.crypto.randomUUID();
             const attempt = await api.createGocnetAttempt(applicationId, {
+                attemptId,
                 applicationNumber: prepared.applicationNumber,
                 manifestFingerprint: prepared.manifestFingerprint, pdfSha256: prepared.pdfSha256
             });

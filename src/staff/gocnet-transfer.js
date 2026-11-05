@@ -111,6 +111,7 @@ export async function prepareGocnetTransfer({ applicationId, api, signal, regist
         const error = new Error(candidates.length ? 'Birden fazla kayıt numarası bulundu; önizlemeden doğru adayı seçin.' : 'Başvuru kayıt numarası güvenilir biçimde okunamadı.');
         error.code = 'REGISTRATION_NUMBER_CONFIRMATION_REQUIRED';
         error.candidates = candidates;
+        error.formFile = files[formIndex];
         throw error;
     }
     const phoneNational = resolveTurkishMobilePhone(application.phone, phoneCorrection);
