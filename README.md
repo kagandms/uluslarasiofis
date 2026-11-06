@@ -1,43 +1,24 @@
 ## Production development and release
 
-For this user's MacBook, the selected clean workspace for new sessions is branch
-`codex/repo-hygiene-clean-workspace-20261105` at
-`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`. The older
-`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main` checkout is dirty and behind; do not use
-that checkout as a new development or release source until its changes are individually reconciled.
-This path is a local preference, not a requirement for other machines; use the actual authorized
-repository root there. Cloud checkouts can use `/workspace/uluslarasiofis`. Other worktrees remain
-preserved for their current purpose; assess each one before reuse.
+Use one active project folder on the `production` branch. On this Mac it is
+`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`; other machines use
+their actual authorized repository root (cloud checkout: `/workspace/uluslarasiofis`). Develop on
+`production`; create another branch or worktree only when the user explicitly requests it. Sessions
+sharing the active folder work sequentially and never write to it concurrently.
 
-At the start of each session, verify the actual Git root, branch, HEAD, worktree list, tracked and
-untracked changes, and fetch `origin/production` to compare its current SHA and ahead/behind state
-with the intended base. Never edit the same working tree concurrently: parallel sessions use
-separate worktrees, then review and integrate their changes explicitly. If the current workspace is
-dirty or stale, use a clean worktree from freshly fetched `origin/production` only when the user
-authorizes it. Preserve all pre-existing changes; do not rely on a prior session's status snapshot.
+At each session start, fetch `origin/production` and verify the actual Git root, branch, HEAD,
+ahead/behind state, worktree list, and tracked, staged, and untracked changes. Stop on unexpected
+divergence or dirty state and preserve existing user changes. The old Mac checkout
+`uluslarasiofis-main` remains detached at its previous HEAD with unreconciled local changes; do not
+use it for development or release.
 
-Run `npm ci`, `npm test`, `npm run build:production`, and
-`npm run deploy:dry-run:production` for the normal release checks. Production Worker `goc` is
-published only through GitHub Actions **Production release (manual)**, dispatched on `production`
-with the exact full SHA at current `origin/production`. First review `operation=preflight`; publish
-requires a separate explicit user request for that exact SHA and operation, then the Production
-environment review. Before publishing, the candidate must be clean and its exact SHA and current
-active Worker version/source must still match the reviewed preflight. Do not dispatch automatically.
+After scoped local tests, build, and production dry-run, make a reviewed commit and push to
+`production` only if repository protection permits; do not change protection or bypass it. CI is a
+separate check. Push and CI do not deploy the live Worker. Production publication is separate and
+requires an explicit request through the manual exact-SHA workflow, including the tested artifact,
+active Worker version, and release record checks in [the manual release guide](docs/manual-production-release.md).
 
-The workflow concurrency setting serializes its own runs only. Dashboard deployments, direct CLI
-commands, other automation, and other sessions are outside that lock and must be paused and checked
-separately. `npm run deploy:production` deliberately stops with this workflow instruction; this does
-not technically prevent a raw `wrangler deploy` command or publication from another tool/session.
-Git pushes do not themselves deploy. Remote migrations remain outside the release workflow and
-require separate scope review.
-
-For artifact, environment, and release-gate details, see [Manual production release](docs/manual-production-release.md)
-and [Cloud CI and release preparation](docs/deployment/cloud-ci-release.md). The cloud checkout uses
-`/workspace/uluslarasiofis` and does not require the MacBook path above.
-
-The staging commands and Wrangler environment below are historical and retained during the
-approved cleanup process. They are not the development or deployment target. Existing Codex
-worktrees and historical integration evidence remain preserved.
+[Browse development, component, and release documentation](docs/README.md).
 
 # Uluslararası Öğrenci Ofisi Portalı
 

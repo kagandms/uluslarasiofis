@@ -1,26 +1,24 @@
 # Production development and release policy
 
-- For this user's MacBook, the selected clean workspace for new sessions is branch
-  `codex/repo-hygiene-clean-workspace-20261105` at
-  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`. This is a
-  machine-specific preference, not a required path; cloud and other machines use their own actual,
-  authorized repository root. The older MacBook checkout at
-  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main` is dirty and behind; don't use that
-  checkout as a new development or release source until its changes are individually reconciled.
-  Keep other worktrees for their current purpose; don't assume they are obsolete or interchangeable.
-- If the current workspace is dirty or stale, use a separate clean worktree based on freshly fetched
-  `origin/production` only when the user authorizes that workspace. At each new session, verify the
-  actual Git root, branch, HEAD, `origin/production` SHA and ahead/behind count, worktree list, and
-  pending tracked and untracked changes before editing. Preserve user changes; do not rely on an
-  earlier session's snapshot.
-- Never edit one working tree concurrently from multiple sessions. Parallel sessions use separate
-  worktrees; review and integrate their changes explicitly before using them together.
+- Use one active project folder on `production`. On this Mac, it is
+  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`; other machines use
+  their actual authorized repository folder. The old `uluslarasiofis-main` folder is preserved at
+  its previous HEAD with unreconciled local changes; do not use it for development or release.
+- Develop directly on `production`. Create another branch or worktree only when the user explicitly
+  requests it. Sessions sharing this folder work sequentially; never write to the same worktree at
+  once.
+- At each session start, fetch `origin/production` and verify the actual Git root, branch, HEAD,
+  ahead/behind state, worktree list, and tracked, staged, and untracked changes. Stop on unexpected
+  divergence or dirty state; preserve user changes and do not rely on an earlier snapshot.
 - Keep application sources and tests in the existing component directories. Link new operating guides from [the documentation index](docs/README.md).
 - Dated plans and evidence must state their date, scope/source and validation status; treat them as historical by default.
 - Do not add temporary logs, screenshots, or build outputs to Git by default. Retained fixtures, evidence, and delivery outputs must state why they are kept and how they were produced.
 - A distribution package must identify its version and exact source SHA or source manifest/checksum.
 - Run `npm test`, `npm run build:production`, and `npm run deploy:dry-run:production` before delivery.
   The dry-run is not a publication.
+- After scoped local validation, create a reviewed commit and push it to `production` only if
+  repository protection permits; never change protection or bypass it. Push and CI are separate
+  from publication and do not deploy the Worker.
 - Production Worker `goc` is published only by the GitHub Actions **Production release (manual)**
   workflow, from `production`, for the exact full SHA that equals current `origin/production`.
   Publishing also requires a separate, explicit user request for that SHA and operation, plus the
