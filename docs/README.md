@@ -6,6 +6,7 @@
 | --- | --- |
 | Development and workspace rules | [AGENTS.md](../AGENTS.md), [README.md](../README.md) |
 | Current production release procedure | [Manual production release](manual-production-release.md) |
+| Repository workspace closeout and remaining follow-ups | [Repository hygiene closeout (2026-11-06)](repo-hygiene-closeout-2026-11-06.md) |
 | Release preparation history, not a runnable procedure | [Cloud CI/release preparation](deployment/cloud-ci-release.md), [cloud CI validation](deployment/cloud-ci-validation.md) |
 
 ## Components
