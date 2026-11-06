@@ -12,6 +12,10 @@
   earlier session's snapshot.
 - Never edit one working tree concurrently from multiple sessions. Parallel sessions use separate
   worktrees; review and integrate their changes explicitly before using them together.
+- Keep application sources and tests in the existing component directories. Link new operating guides from [the documentation index](docs/README.md).
+- Dated plans and evidence must state their date, scope/source and validation status; treat them as historical by default.
+- Do not add temporary logs, screenshots, or build outputs to Git by default. Retained fixtures, evidence, and delivery outputs must state why they are kept and how they were produced.
+- A distribution package must identify its version and exact source SHA or source manifest/checksum.
 - Run `npm test`, `npm run build:production`, and `npm run deploy:dry-run:production` before delivery.
   The dry-run is not a publication.
 - Production Worker `goc` is published only by the GitHub Actions **Production release (manual)**

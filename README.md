@@ -41,6 +41,8 @@ worktrees and historical integration evidence remain preserved.
 
 The repository contains the public student portal, staff workspaces, a YKN Chrome extension, and a student-owned residence application wizard with private document uploads. Server-side readiness checks the final document policy before submission; the source checks do not replace live end-to-end acceptance.
 
+For the component map, document status, and generated-output handling, see the [documentation index](docs/README.md).
+
 ## Routes
 
 - `/`, `/basvuru/`, and `/basvurum/` are public.
