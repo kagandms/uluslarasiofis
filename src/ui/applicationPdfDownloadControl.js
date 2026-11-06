@@ -1,5 +1,5 @@
 /** Creates the same owner-safe application PDF control for student and staff views. */
-export function createApplicationPdfDownloadControl(document, application, messages, className = '') {
+export function createApplicationPdfDownloadControl(document, application, messages, className = '', options = {}) {
     const wrapper = document.createElement('div');
     const button = document.createElement('button');
     const status = document.createElement('p');
@@ -19,8 +19,10 @@ export function createApplicationPdfDownloadControl(document, application, messa
         status.hidden = false;
         status.textContent = messages.applicationPdfPreparing;
         try {
+            const pdfApplication = typeof options.resolveApplication === 'function'
+                ? await options.resolveApplication() : application;
             const { downloadOnlineApplicationPdf } = await import('../services/onlineApplicationPdf.js');
-            await downloadOnlineApplicationPdf(application, document);
+            await downloadOnlineApplicationPdf(pdfApplication, document);
             status.textContent = messages.applicationPdfReady;
         } catch {
             status.textContent = messages.applicationPdfFailed;

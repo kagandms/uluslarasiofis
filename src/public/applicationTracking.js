@@ -259,7 +259,10 @@ function renderTracking(root, state, locale, submitLookup) {
     }
     const summary = createApplicationSummary(document, state.payload.application, messages, locale);
     const applicationPdf = state.kind === 'ready' && state.payload.application.status !== 'draft'
-        ? createApplicationPdfDownloadControl(document, state.payload.application, messages) : null;
+        && typeof state.readPdfApplication === 'function'
+        ? createApplicationPdfDownloadControl(document, state.payload.application, messages, '', {
+            resolveApplication: state.readPdfApplication
+        }) : null;
     const documentList = createDocumentList(document, state.payload.documents, messages, state.kind === 'ready',
         state.replacementDocuments, state.onReplacementComplete, state.onSessionFailure, state.replacementCompleted,
         state.kind === 'publicReady');
@@ -371,6 +374,9 @@ async function attachMatchingOwnerSession(state, api, referenceNumber, render) {
     }
     state.payload = ownerPayload;
     state.kind = ownerPayload.application.status === 'draft' ? 'draft' : 'ready';
+    state.readPdfApplication = typeof api.readCurrentApplication === 'function'
+        ? () => readOwnerApplicationPdfData(api, ownerPayload.application.reference_number)
+        : null;
     if (ownerPayload.application.status !== 'resubmission_required'
         || typeof api.readCurrentResubmissionEligibility !== 'function') return;
     const eligibility = await api.readCurrentResubmissionEligibility();
@@ -411,4 +417,23 @@ function lookupFailureKind(error) {
 
 function normalizeReferenceNumber(value) {
     return typeof value === 'string' ? value.trim().toLocaleUpperCase('en-US') : '';
+}
+
+/** Reads only the fields required for an owner-authenticated application cover PDF. */
+export async function readOwnerApplicationPdfData(api, expectedReference) {
+    if (typeof api?.readCurrentApplication !== 'function') {
+        throw Object.assign(new Error('Application owner session is unavailable.'), { code: 'APPLICATION_SESSION_REQUIRED' });
+    }
+    const application = await api.readCurrentApplication();
+    if (!application || normalizeReferenceNumber(application.reference_number)
+        !== normalizeReferenceNumber(expectedReference)) {
+        throw Object.assign(new Error('Application session does not match.'), { code: 'APPLICATION_SESSION_MISMATCH', status: 401 });
+    }
+    return {
+        reference_number: application.reference_number,
+        first_name: typeof application.first_name === 'string' ? application.first_name : '',
+        last_name: typeof application.last_name === 'string' ? application.last_name : '',
+        submitted_at: application.submitted_at ?? null,
+        created_at: application.created_at ?? null
+    };
 }

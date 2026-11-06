@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { test } from 'node:test';
-import { initializeApplicationTracking } from '../src/public/applicationTracking.js';
+import { initializeApplicationTracking, readOwnerApplicationPdfData } from '../src/public/applicationTracking.js';
 import { PUBLIC_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
 
 function createTrackingRoot() {
@@ -33,6 +33,41 @@ function createTrackingDto(overrides = {}) {
         ]
     };
 }
+
+test('owner PDF data comes from the current owner application and stays field-allowlisted', async () => {
+    let currentApplicationReads = 0;
+    const pdfApplication = await readOwnerApplicationPdfData({
+        async readCurrentApplication() {
+            currentApplicationReads += 1;
+            return {
+                reference_number: 'ITU-7K9M-4X2P',
+                first_name: 'Ada',
+                last_name: 'Synthetic',
+                submitted_at: '2026-09-29T10:00:00.000Z',
+                created_at: '2026-09-28T10:00:00.000Z',
+                passport_number: 'must-not-reach-pdf',
+                student_email: 'must-not-reach-pdf@example.test'
+            };
+        }
+    }, 'ITU-7K9M-4X2P');
+
+    assert.deepEqual(pdfApplication, {
+        reference_number: 'ITU-7K9M-4X2P',
+        first_name: 'Ada',
+        last_name: 'Synthetic',
+        submitted_at: '2026-09-29T10:00:00.000Z',
+        created_at: '2026-09-28T10:00:00.000Z'
+    });
+    assert.equal(currentApplicationReads, 1);
+});
+
+test('owner PDF data rejects an application that does not match the tracking reference', async () => {
+    await assert.rejects(readOwnerApplicationPdfData({
+        async readCurrentApplication() {
+            return { reference_number: 'ITU-DIFFERENT-1', first_name: 'Ada', last_name: 'Synthetic' };
+        }
+    }, 'ITU-7K9M-4X2P'), { code: 'APPLICATION_SESSION_MISMATCH' });
+});
 
 async function initializeAndLookup(document, root, api) {
     const wrappedApi = { ...api, async accessApplicationWithReference() { return {}; } };
