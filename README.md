@@ -1,11 +1,20 @@
 ## Production development and release
 
-Routine development uses the `production` checkout at
-`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main`; the directory name is not a branch
-name. A separate branch/worktree is used only when the user explicitly authorizes a task-specific
-candidate. At the start of every session, check the Git root, branch, HEAD, worktrees, and existing
-changes, fetch `origin/production`, and confirm the intended base SHA before editing. Preserve all
-pre-existing changes.
+For this user's MacBook, the selected clean workspace for new sessions is branch
+`codex/repo-hygiene-clean-workspace-20261105` at
+`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`. The older
+`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main` checkout is dirty and behind; do not use
+that checkout as a new development or release source until its changes are individually reconciled.
+This path is a local preference, not a requirement for other machines; use the actual authorized
+repository root there. Cloud checkouts can use `/workspace/uluslarasiofis`. Other worktrees remain
+preserved for their current purpose; assess each one before reuse.
+
+At the start of each session, verify the actual Git root, branch, HEAD, worktree list, tracked and
+untracked changes, and fetch `origin/production` to compare its current SHA and ahead/behind state
+with the intended base. Never edit the same working tree concurrently: parallel sessions use
+separate worktrees, then review and integrate their changes explicitly. If the current workspace is
+dirty or stale, use a clean worktree from freshly fetched `origin/production` only when the user
+authorizes it. Preserve all pre-existing changes; do not rely on a prior session's status snapshot.
 
 Run `npm ci`, `npm test`, `npm run build:production`, and
 `npm run deploy:dry-run:production` for the normal release checks. Production Worker `goc` is
@@ -33,6 +42,8 @@ worktrees and historical integration evidence remain preserved.
 # Uluslararası Öğrenci Ofisi Portalı
 
 The repository contains the public student portal, staff workspaces, a YKN Chrome extension, and a student-owned residence application wizard with private document uploads. Server-side readiness checks the final document policy before submission; the source checks do not replace live end-to-end acceptance.
+
+For the component map, document status, and generated-output handling, see the [documentation index](docs/README.md).
 
 ## Routes
 
