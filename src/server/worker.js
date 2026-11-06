@@ -10,7 +10,7 @@ import { createScannerRepository } from './repositories/d1/scanner-repository.js
 import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
 import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
 import { isRouteResult } from './http/routeResult.js';
-import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument, finalizeCurrentStudentDocument, readCurrentStudentDocumentRequirements } from './routes/applicationDocumentRoutes.js';
+import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument, finalizeCurrentStudentDocument, readCurrentStudentDocumentRequirements, uploadLocalStudentDocument } from './routes/applicationDocumentRoutes.js';
 import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, accessApplicationWithReference, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readApplicationPrivacyNotice, readCurrentApplication, readCurrentApplicationStatus, regenerateCurrentAccessCode, resetStaffApplicationAccessCode, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
 import { lookupApplicationTracking, readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
@@ -302,6 +302,8 @@ async function routeApi(request, environment, requestId, cache) {
     }
     if (pathname === '/api/public/applications/current/documents/upload-intent') return createCurrentStudentDocumentUploadIntent(request, environment);
     if (pathname === '/api/public/applications/current/documents/finalize') return finalizeCurrentStudentDocument(request, environment);
+    const localStudentUploadMatch = pathname.match(/^\/api\/public\/applications\/current\/documents\/local-upload\/([^/]+)$/);
+    if (localStudentUploadMatch) return uploadLocalStudentDocument(request, environment, decodeURIComponent(localStudentUploadMatch[1]));
     const studentDocumentMatch = pathname.match(/^\/api\/public\/applications\/current\/documents\/([^/]+)$/);
     if (studentDocumentMatch) return deleteCurrentStudentDocument(request, environment, decodeURIComponent(studentDocumentMatch[1]));
     if (pathname === '/api/public/applications/current/autosave') return autosaveCurrentApplication(request, environment, requestId);

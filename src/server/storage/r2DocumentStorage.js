@@ -109,6 +109,13 @@ function createObjectOperations(bucket) {
             assertStorageKey(key);
             return bucket.put(key, body, { httpMetadata: { contentType } });
         },
+        async putIfAbsent(key, body, contentType) {
+            assertStorageKey(key);
+            return bucket.put(key, body, {
+                httpMetadata: { contentType },
+                onlyIf: { etagDoesNotMatch: '*' }
+            });
+        },
         async get(key, options = {}) {
             assertStorageKey(key);
             return options.etagMatches

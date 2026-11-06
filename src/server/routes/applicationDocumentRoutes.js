@@ -7,6 +7,7 @@ import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
 import { readStudentUploadMetadata } from '../domain/studentUploadMetadata.js';
+import { isLocalDocumentUploadEnabled } from '../config/localDocumentUpload.js';
 
 const UPLOAD_INTENT_SECONDS = 10 * 60;
 
@@ -79,6 +80,56 @@ function createUploadResponse(intentId, capability, expiresAt) {
     };
 }
 
+async function readBoundedUploadBody(request, expectedSize, maximumSize) {
+    const contentLengthHeader = request.headers.get('Content-Length');
+    if (contentLengthHeader !== null) {
+        if (!/^\d+$/u.test(contentLengthHeader)) {
+            throw new ApiError(400, 'UPLOAD_SIZE_MISMATCH', 'Yüklenen belge bilgileri doğrulanamadı.');
+        }
+        const contentLength = Number(contentLengthHeader);
+        if (!Number.isSafeInteger(contentLength) || contentLength > maximumSize) {
+            throw new ApiError(413, 'FILE_TOO_LARGE', 'Belge boyutu izin verilen sınırı aşıyor.');
+        }
+        if (contentLength !== expectedSize) {
+            throw new ApiError(400, 'UPLOAD_SIZE_MISMATCH', 'Yüklenen belge bilgileri doğrulanamadı.');
+        }
+    }
+    if (!request.body) throw new ApiError(400, 'UPLOAD_BODY_REQUIRED', 'Belge içeriği bulunamadı.');
+
+    const reader = request.body.getReader();
+    const chunks = [];
+    let totalSize = 0;
+    try {
+        while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            totalSize += chunk.value.byteLength;
+            if (totalSize > maximumSize) {
+                await reader.cancel();
+                throw new ApiError(413, 'FILE_TOO_LARGE', 'Belge boyutu izin verilen sınırı aşıyor.');
+            }
+            if (totalSize > expectedSize) {
+                await reader.cancel();
+                throw new ApiError(400, 'UPLOAD_SIZE_MISMATCH', 'Yüklenen belge bilgileri doğrulanamadı.');
+            }
+            chunks.push(chunk.value);
+        }
+    } finally {
+        reader.releaseLock();
+    }
+    if (totalSize !== expectedSize) {
+        throw new ApiError(400, 'UPLOAD_SIZE_MISMATCH', 'Yüklenen belge bilgileri doğrulanamadı.');
+    }
+
+    const body = new Uint8Array(totalSize);
+    let offset = 0;
+    for (const chunk of chunks) {
+        body.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    return body;
+}
+
 /**
  * Reads the server-calculated residence-document set for the current application owner.
  * @param {Request} request Worker request.
@@ -128,26 +179,35 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
     const storageKey = storage.createQuarantineKey();
     const intentId = crypto.randomUUID();
     let capability;
-    try {
-        capability = await storage.createWriteOnceUploadCapability(storageKey, {
-            contentType: metadata.mediaType,
-            expiresInSeconds: 300
-        });
-    } catch (error) {
-        const diagnostics = error?.storageSigningDiagnostics;
-        const logFields = {
-            storageSigningStage: diagnostics?.storageSigningStage || 'unknown',
-            errorName: diagnostics?.errorName || error?.name || 'UnknownError',
-            errorCode: diagnostics?.errorCode || error?.code || 'STORAGE_SIGNING_ERROR'
+    if (isLocalDocumentUploadEnabled(environment)) {
+        capability = {
+            method: 'PUT',
+            url: new URL(`/api/public/applications/current/documents/local-upload/${intentId}`, request.url).href,
+            requiredHeaders: { 'content-type': metadata.mediaType, 'if-none-match': '*' },
+            expiresAt: expiresAt
         };
-        if (environment.APP_ENV === 'staging' && diagnostics) {
-            logFields.errorMessage = diagnostics.errorMessage;
-            logFields.errorStack = diagnostics.errorStack;
+    } else {
+        try {
+            capability = await storage.createWriteOnceUploadCapability(storageKey, {
+                contentType: metadata.mediaType,
+                expiresInSeconds: 300
+            });
+        } catch (error) {
+            const diagnostics = error?.storageSigningDiagnostics;
+            const logFields = {
+                storageSigningStage: diagnostics?.storageSigningStage || 'unknown',
+                errorName: diagnostics?.errorName || error?.name || 'UnknownError',
+                errorCode: diagnostics?.errorCode || error?.code || 'STORAGE_SIGNING_ERROR'
+            };
+            if (environment.APP_ENV === 'staging' && diagnostics) {
+                logFields.errorMessage = diagnostics.errorMessage;
+                logFields.errorStack = diagnostics.errorStack;
+            }
+            console.error('Student document upload capability failed.', {
+                ...logFields
+            });
+            throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Belge yükleme hizmeti şu anda kullanılamıyor.', true);
         }
-        console.error('Student document upload capability failed.', {
-            ...logFields
-        });
-        throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Belge yükleme hizmeti şu anda kullanılamıyor.', true);
     }
 
     const created = await repositories.documents.createStudentUploadIntent({
@@ -168,6 +228,52 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
     });
     if (!created) throw new ApiError(409, 'DOCUMENT_REQUIREMENT_CHANGED', 'Belge gereksinimi değişti. Listeyi yenileyip tekrar deneyin.');
     return routeResult(createUploadResponse(intentId, capability, expiresAt), { status: 201 });
+}
+
+/** Writes one owner-bound upload to the local R2 binding without using external signing credentials. */
+export async function uploadLocalStudentDocument(request, environment, intentId) {
+    requireMethod(request, 'PUT');
+    if (!isLocalDocumentUploadEnabled(environment)) {
+        throw new ApiError(404, 'NOT_FOUND', 'İstenen kaynak bulunamadı.');
+    }
+    requireSameOrigin(request);
+    if (!/^[0-9a-f-]{36}$/i.test(intentId)) {
+        throw new ApiError(404, 'DOCUMENT_REQUIREMENT_NOT_FOUND', 'Belge yüklemesi bu başvuru için bulunamadı.');
+    }
+    const session = await requireApplicationSession(request, environment);
+    const { application, repositories, requirements } = await readCurrentStudentRequirements(session, environment);
+    requireDraftApplication(application);
+    const intent = await repositories.documents.findStudentUploadIntent(application.id, intentId);
+    if (!intent || !isEligibleRequirement(requirements, intent.code)) {
+        throw new ApiError(404, 'DOCUMENT_REQUIREMENT_NOT_FOUND', 'Belge yüklemesi bu başvuru için bulunamadı.');
+    }
+    if (intent.intent_status !== 'pending') {
+        throw new ApiError(409, 'UPLOAD_INTENT_UNAVAILABLE', 'Belge yükleme bağlantısı artık kullanılamıyor.');
+    }
+    if (new Date(intent.expires_at).valueOf() <= Date.now()) {
+        await repositories.documents.expireStudentUploadIntent(application.id, intent.id);
+        throw new ApiError(409, 'UPLOAD_INTENT_EXPIRED', 'Belge yükleme süresi doldu. Yeni bir yükleme başlatın.');
+    }
+
+    const policy = readApplicationDocumentPolicy(intent.code, application);
+    const contentType = request.headers.get('Content-Type')?.trim().toLowerCase() || '';
+    if (!policy || !policy.accepted_media_types.includes(contentType) || contentType !== intent.media_type) {
+        throw new ApiError(415, 'INVALID_FILE', 'Belge biçimini kontrol edip tekrar deneyin.');
+    }
+    const body = await readBoundedUploadBody(request, intent.byte_size, policy.max_byte_size);
+    const storage = createDocumentStorage(environment);
+    try {
+        const stored = await storage.putIfAbsent(intent.storage_key, body, contentType);
+        if (!stored) throw new ApiError(409, 'UPLOAD_ALREADY_RECEIVED', 'Bu belge yüklemesi daha önce alındı.');
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        console.error('Local student document upload write failed.', {
+            errorName: error?.name || 'UnknownError',
+            errorCode: error?.code || 'R2_PUT_FAILED'
+        });
+        throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Belge yükleme hizmeti şu anda kullanılamıyor.', true);
+    }
+    return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
 }
 
 function isEligibleRequirement(requirements, code) {
