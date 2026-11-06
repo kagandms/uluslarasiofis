@@ -1,10 +1,13 @@
 # Production development and release policy
 
-- The current clean workspace for new sessions is branch `codex/repo-hygiene-clean-workspace-20261105`
-  at `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`. The older
-  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main` checkout is dirty and behind; do not
-  use it as a new development or release source until its changes are individually reconciled. Keep
-  existing worktrees for their current purpose; do not assume they are obsolete or interchangeable.
+- For this user's MacBook, the selected clean workspace for new sessions is branch
+  `codex/repo-hygiene-clean-workspace-20261105` at
+  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`. This is a
+  machine-specific preference, not a required path; cloud and other machines use their own actual,
+  authorized repository root. The older MacBook checkout at
+  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-main` is dirty and behind; don't use that
+  checkout as a new development or release source until its changes are individually reconciled.
+  Keep other worktrees for their current purpose; don't assume they are obsolete or interchangeable.
 - If the current workspace is dirty or stale, use a separate clean worktree based on freshly fetched
   `origin/production` only when the user authorizes that workspace. At each new session, verify the
   actual Git root, branch, HEAD, `origin/production` SHA and ahead/behind count, worktree list, and
