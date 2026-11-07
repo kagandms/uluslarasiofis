@@ -104,6 +104,9 @@ export function initializeScannerManager(root, api = createScannerApi()) {
         const hostSummary = readHostSummary(status.runners || []);
         const isOfflineOrStale = hostSummary.includes('çevrimdışı') || hostSummary.includes('bayat');
         const failedJobs = status.failed_jobs || [];
+        // failed_jobs is a capped sample (latest 20); the full count comes from the status counter.
+        const failedTotal = (status.jobs || []).find((item) => item.status === 'failed')?.count ?? failedJobs.length;
+        const sampleNotice = failedTotal > failedJobs.length ? ` (ilk ${failedJobs.length} kayıt gösteriliyor)` : '';
 
         if (isOfflineOrStale) {
             badge.className = 'staff-scanner-badge badge-danger';
@@ -111,9 +114,9 @@ export function initializeScannerManager(root, api = createScannerApi()) {
         } else if (backlog > 0) {
             badge.className = 'staff-scanner-badge badge-warning';
             badge.textContent = `⏳ ${backlog} Belge Kuyrukta`;
-        } else if (failedJobs.length > 0) {
+        } else if (failedTotal > 0) {
             badge.className = 'staff-scanner-badge badge-amber';
-            badge.textContent = `⚠️ ${failedJobs.length} Doğrulanamayan Dosya`;
+            badge.textContent = `⚠️ ${failedTotal} Doğrulanamayan Dosya`;
         } else {
             badge.className = 'staff-scanner-badge badge-success';
             badge.textContent = '🟢 Tarama Servisi Aktif (0 bekleyen)';
@@ -123,7 +126,7 @@ export function initializeScannerManager(root, api = createScannerApi()) {
 
         const summary = document.createElement('p');
         summary.className = 'staff-scanner-summary-text';
-        summary.textContent = `Kuyrukta veya işlemde: ${backlog}. Doğrulanamayan dosya: ${failedJobs.length}. ${hostSummary} Son başarılı tarama: ${formatScanTime(status.last_successful_scan)}`;
+        summary.textContent = `Kuyrukta veya işlemde: ${backlog}. Doğrulanamayan dosya: ${failedTotal}${sampleNotice}. ${hostSummary} Son başarılı tarama: ${formatScanTime(status.last_successful_scan)}`;
         summary.setAttribute('aria-live', 'polite');
         detailsRoot.append(summary);
 

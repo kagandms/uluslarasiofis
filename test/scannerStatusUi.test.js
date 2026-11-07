@@ -57,3 +57,24 @@ test('staff scanner panel does not offer replay for deterministic unsupported co
     assert.deepEqual(retries, []);
     document.defaultView.close();
 });
+
+test('staff scanner panel reports the full failed count, not the listed sample', async () => {
+    const module = await import('../src/staff/scanner-manager.js');
+    const document = new JSDOM('<section></section>').window.document;
+    const root = document.querySelector('section');
+    document.defaultView.setTimeout = () => 0;
+    const api = {
+        readStatus: async () => ({ jobs: [{ status: 'failed', count: 66 }], runners: [], last_successful_scan: null,
+            failed_jobs: [{ id: 'job-unsupported', result_code: 'unsupported_content', attempts: 1 }] }),
+        retry: async () => {}
+    };
+    module.initializeScannerManager(root, api);
+
+    root.querySelector('[data-action="refresh-scanner"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.match(root.querySelector('.staff-scanner-badge').textContent, /66 Doğrulanamayan Dosya/);
+    assert.match(root.textContent, /Doğrulanamayan dosya: 66/);
+    assert.match(root.textContent, /ilk 1 kayıt gösteriliyor/);
+    document.defaultView.close();
+});

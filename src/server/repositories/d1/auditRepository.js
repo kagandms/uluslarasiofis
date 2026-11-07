@@ -25,6 +25,18 @@ export function createAuditRepository(database) {
                     document_record_id, request_id, safe_metadata_json
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `).bind(id, eventType, actorType, actorStaffId, applicationId, documentRecordId, requestId, safeMetadata).run();
+        },
+        /**
+         * Reports whether the same application already has an event of this type inside a recent window.
+         * Read-only; used to coalesce high-frequency draft autosave audit rows.
+         */
+        async hasRecentEvent({ applicationId, eventType, withinSeconds }) {
+            const row = await database.prepare(`
+                SELECT 1 AS found FROM audit_events
+                WHERE application_id = ? AND event_type = ? AND created_at >= datetime('now', ?)
+                LIMIT 1
+            `).bind(applicationId, eventType, `-${Number(withinSeconds)} seconds`).first();
+            return Boolean(row);
         }
     });
 }

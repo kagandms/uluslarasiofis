@@ -413,9 +413,8 @@ async function updateCurrentApplicationFields(request, environment, requestId, {
             }
             if (!renumberedApplication) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
             expectedLockVersion = renumberedApplication.lock_version;
-            await createAuditEvent(repositories, {
-                eventType: 'application.draft_updated', actorType: 'student', applicationId: session.application_id,
-                requestId, metadata: { changedFields: 'studentNumber' }
+            await recordDraftUpdateAudit(repositories, {
+                applicationId: session.application_id, requestId, changedFields: 'studentNumber'
             });
         }
     }
@@ -450,11 +449,32 @@ async function updateCurrentApplicationFields(request, environment, requestId, {
         throw error;
     }
     if (!application) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemez.');
-    await createAuditEvent(repositories, {
-        eventType: 'application.draft_updated', actorType: 'student', applicationId: session.application_id,
-        requestId, metadata: { changedFields: Object.keys(changes).sort().join(',') }
+    await recordDraftUpdateAudit(repositories, {
+        applicationId: session.application_id, requestId, changedFields: Object.keys(changes).sort().join(',')
     });
     return { application: createApplicationDto(application, environment) };
+}
+
+/** Draft autosave window: one draft_updated audit row per application per window. */
+export const DRAFT_AUDIT_WINDOW_SECONDS = 15;
+
+/**
+ * Writes a draft_updated audit row unless one already exists for this application inside the window.
+ * Coalescing bounds write volume from frequent autosaves; the first save in each window is always recorded.
+ * @param {object} repositories D1 repository collection.
+ * @param {{applicationId: string, requestId: string, changedFields: string}} input Save context.
+ * @returns {Promise<boolean>} True when a new audit row was written.
+ */
+export async function recordDraftUpdateAudit(repositories, { applicationId, requestId, changedFields }) {
+    const recent = await repositories.audit.hasRecentEvent({
+        applicationId, eventType: 'application.draft_updated', withinSeconds: DRAFT_AUDIT_WINDOW_SECONDS
+    });
+    if (recent) return false;
+    await createAuditEvent(repositories, {
+        eventType: 'application.draft_updated', actorType: 'student', applicationId,
+        requestId, metadata: { changedFields }
+    });
+    return true;
 }
 
 /**

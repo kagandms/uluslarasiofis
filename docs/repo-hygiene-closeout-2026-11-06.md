@@ -1,12 +1,12 @@
 # Repository hygiene closeout
 
-This is a workspace handoff, not a release procedure. The current source of truth is the freshly fetched `origin/production` commit. On this Mac, the selected clean development worktree is branch `codex/repo-hygiene-clean-workspace-20261105`; other machines must use their actual authorized checkout and must not depend on this machine's path.
+This is a workspace handoff, not a release procedure. The current source of truth is the freshly fetched `origin/production` commit. Since commit `c2e1c1d` (2026-11-06), development happens directly on `production` in the single active folder described in [AGENTS.md](../AGENTS.md); the earlier `codex/repo-hygiene-clean-workspace-20261105` branch is no longer the working branch. Other machines must use their actual authorized checkout and must not depend on this machine's path.
 
 ## Start each session
 
 - Check the actual Git root, branch, HEAD, `origin/production` SHA and ahead/behind count.
 - Check the worktree list and tracked, staged, and untracked changes before editing.
-- Use a separate worktree for each parallel session; do not edit one worktree concurrently.
+- Sessions sharing the active folder work sequentially and never write to it at the same time; create another worktree only when the user explicitly requests it.
 - Review and integrate changes into production explicitly. Do not use old dirty workspaces as a development or release source until their files are individually reconciled.
 - These instructions guide new sessions; they do not technically lock sessions already using an older checkout.
 
