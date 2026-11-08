@@ -40,7 +40,7 @@ import { handleStaffPrintRequest } from './routes/staffPrintRoutes.js';
 import { handlePrinterRequest, readStaffPrintStatus } from './routes/printerRoutes.js';
 import { runPrintCleanup } from './services/printCleanupService.js';
 import { getScheduledWork } from './services/scheduled-work.js';
-import { readD1UsageMetrics } from './services/d1-usage-metrics.js';
+import { readCloudflareUsage } from './services/cloudflare-usage-metrics.js';
 import { handleStaffWorkHours } from './routes/staffWorkHoursRoutes.js';
 import { handleStaffYoksisDocumentAudit } from './routes/staffYoksisDocumentAuditRoutes.js';
 
@@ -102,10 +102,10 @@ function withMetaWhatsAppProvider(environment) {
 
 async function routeApi(request, environment, requestId, cache) {
     const { pathname } = new URL(request.url);
-    if (pathname === '/api/staff/admin/d1-usage') {
+    if (pathname === '/api/staff/admin/usage') {
         requireMethod(request, 'GET');
         await requireStaff(request, environment);
-        return readD1UsageMetrics({ environment, cache });
+        return readCloudflareUsage({ environment, cache });
     }
     if (pathname === '/api/staff/work-hours') return handleStaffWorkHours(request, environment, requestId);
     if (pathname.startsWith('/api/staff/yoksis-document-audit/')) {

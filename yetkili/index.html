@@ -96,9 +96,6 @@
                             <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
                             <span class="hide-mobile">Güncelle</span>
                         </button>
-                        <button type="button" id="d1-usage-toggle" class="btn-header icon-only d1-usage-toggle" aria-label="Sayacı gizle" aria-controls="d1-usage-counter" aria-expanded="true">
-                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 15 12 8 19 15"></path></svg>
-                        </button>
                         <button id="btn-dark-mode" class="btn-header icon-only" title="Gece/Gündüz Modu">
                             <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
                         </button>
@@ -120,6 +117,21 @@
 
         <main class="container">
             <section id="home-screen" class="home-screen" aria-labelledby="home-screen-title">
+                <aside id="cloudflare-usage-card" class="cf-usage-card" aria-label="Cloudflare kullanımı">
+                    <button type="button" id="cloudflare-usage-toggle" class="cf-usage-toggle" aria-expanded="false" aria-controls="cloudflare-usage-panel">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"></path></svg>
+                        <span class="cf-usage-title">Cloudflare</span>
+                        <span id="cloudflare-usage-summary" class="cf-usage-summary">kullanım</span>
+                    </button>
+                    <div id="cloudflare-usage-panel" class="cf-usage-panel" hidden>
+                        <ul id="cloudflare-usage-list" class="cf-usage-list" aria-live="polite"></ul>
+                        <div class="cf-usage-footer">
+                            <span>Günlük limitler 00:00 UTC (03:00 TR) sıfırlanır; R2 aylıktır.</span>
+                            <span id="cloudflare-usage-retrieved"></span>
+                            <button type="button" id="cloudflare-usage-refresh" class="cf-usage-refresh">Yenile</button>
+                        </div>
+                    </div>
+                </aside>
                 <div class="home-intro">
                     <p class="home-eyebrow">Uluslararası Öğrenci Ofisi</p>
                     <h2 id="home-screen-title" tabindex="-1">İşlem seçin</h2>
@@ -162,17 +174,6 @@
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 4 4M8 10h6M8 13h4"></path></svg></span>
                         <span class="home-action-content"><strong>YÖKSİS Eksik Evrak (Beta)</strong><small>Kayıt listesini doğrulayarak kontrol et</small></span>
                     </button>
-                </div>
-                <div class="d1-usage-counter-shell">
-                    <aside id="d1-usage-counter" class="d1-usage-counter" role="group" aria-label="D1 günlük okuma">
-                        <span class="d1-usage-counter-title"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><ellipse cx="12" cy="5" rx="8" ry="3"></ellipse><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"></path></svg>D1 günlük okuma</span>
-                        <span class="d1-usage-counter-value" aria-live="polite"><span id="d1-usage-value">— / 5.000.000</span><span id="d1-usage-percent" class="d1-usage-counter-percent">—</span></span>
-                        <span id="d1-usage-progress" class="d1-usage-counter-track" role="progressbar" aria-label="D1 günlük okuma" aria-valuemin="0" aria-valuemax="5000000">
-                            <span class="d1-usage-counter-fill"></span>
-                        </span>
-                        <span id="d1-usage-status" class="d1-usage-counter-note">Cloudflare analitiği · günlük kullanım, UTC</span>
-                        <span id="d1-usage-breakdown" class="d1-usage-counter-breakdown" hidden></span>
-                    </aside>
                 </div>
             </section>
 

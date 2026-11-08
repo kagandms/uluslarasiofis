@@ -72,6 +72,7 @@ body.dark-mode::after { opacity: 1; }
 }
 
 #home-screen.home-screen {
+    position: relative;
     max-width: 1180px;
     padding: clamp(0.8rem, 2.5vh, 1.6rem) 0 1.25rem;
 }
@@ -101,120 +102,6 @@ body.dark-mode::after { opacity: 1; }
 #home-screen .home-intro > p:last-child {
     font-size: 1.02rem;
     line-height: 1.55;
-}
-
-.d1-usage-counter-shell {
-    display: block;
-    width: min(100%, 44.5rem);
-    margin: 0.8rem auto 0;
-}
-
-#home-screen .d1-usage-counter {
-    position: relative;
-    z-index: 1;
-    inset: auto;
-    display: grid;
-    grid-template-columns: auto minmax(5rem, 1fr) auto auto;
-    align-items: center;
-    gap: 0.65rem 0.9rem;
-    width: 100%;
-    margin: 0;
-    padding: 0.6rem 0.85rem;
-    border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--card-border));
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--card-bg) 95%, var(--staff-home-rose));
-    box-shadow: 0 6px 18px rgb(42 24 30 / 7%);
-}
-
-#home-screen .d1-usage-counter[hidden] {
-    display: none;
-}
-
-.header-actions .d1-usage-toggle svg {
-    width: 18px;
-    height: 18px;
-    fill: none;
-    stroke: currentColor;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 2;
-}
-
-.header-actions .d1-usage-toggle:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-}
-
-#home-screen .d1-usage-counter-title {
-    grid-column: 1;
-    grid-row: 1;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.48rem;
-    color: var(--text-secondary);
-    font-size: 0.76rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-}
-
-#home-screen .d1-usage-counter-title svg {
-    width: 19px;
-    height: 19px;
-    fill: none;
-    stroke: var(--accent);
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-width: 1.7;
-}
-
-#home-screen .d1-usage-counter-value {
-    grid-column: 3;
-    grid-row: 1;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    color: var(--text-primary);
-    font-size: 0.88rem;
-    white-space: nowrap;
-}
-
-#home-screen .d1-usage-counter-percent {
-    padding: 0.22rem 0.48rem;
-    border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--accent) 8%, var(--card-bg));
-    color: var(--accent);
-    font-size: 0.72rem;
-    font-weight: 750;
-    font-variant-numeric: tabular-nums;
-}
-
-#home-screen .d1-usage-counter-track {
-    grid-column: 2;
-    grid-row: 1;
-    min-width: 5rem;
-    height: 0.32rem;
-    background: color-mix(in srgb, var(--card-border) 82%, var(--staff-home-rose));
-}
-
-#home-screen .d1-usage-counter-fill {
-    background: linear-gradient(90deg, var(--accent), var(--staff-home-glow));
-}
-
-#home-screen .d1-usage-counter-note {
-    grid-column: 4;
-    grid-row: 1;
-    justify-self: end;
-    font-size: 0.66rem;
-    white-space: nowrap;
-}
-
-#home-screen .d1-usage-counter-breakdown {
-    grid-column: 1 / -1;
-    color: var(--text-secondary);
-    font-size: 0.66rem;
-    line-height: 1.4;
 }
 
 #home-screen .home-actions {
@@ -478,23 +365,6 @@ body.dark-mode #home-screen .home-action:focus-visible {
     #home-screen.home-screen { display: flex; flex-direction: column; padding: 1rem 0.25rem 1.5rem; }
     #home-screen .home-intro { order: 0; }
     #home-screen .home-actions { order: 1; }
-    #home-screen .d1-usage-counter-shell {
-        position: relative;
-        order: 2;
-        width: 100%;
-        margin: 1rem 0 0;
-    }
-    #home-screen .d1-usage-counter {
-        grid-template-columns: minmax(0, 1fr) auto;
-        grid-template-rows: auto auto;
-        gap: 0.55rem 0.8rem;
-        padding: 0.7rem 0.8rem;
-        box-shadow: 0 8px 22px rgb(42 24 30 / 7%);
-    }
-    #home-screen .d1-usage-counter-title { grid-area: 1 / 1; }
-    #home-screen .d1-usage-counter-value { grid-area: 1 / 2; }
-    #home-screen .d1-usage-counter-track { grid-area: 2 / 1; }
-    #home-screen .d1-usage-counter-note { grid-area: 2 / 2; }
     #home-screen .home-intro { margin-bottom: 1.2rem; }
     #home-screen .home-intro h2 { font-size: 2rem; }
     #home-screen .home-actions { grid-template-columns: minmax(0, 1fr); gap: 0.8rem; }
@@ -505,14 +375,6 @@ body.dark-mode #home-screen .home-action:focus-visible {
 }
 
 @media (max-width: 380px) {
-    #home-screen .d1-usage-counter {
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-rows: auto auto auto auto;
-    }
-    #home-screen .d1-usage-counter-title { grid-area: 1 / 1; }
-    #home-screen .d1-usage-counter-value { grid-area: 2 / 1; }
-    #home-screen .d1-usage-counter-track { grid-area: 3 / 1; }
-    #home-screen .d1-usage-counter-note { grid-area: 4 / 1; justify-self: end; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -630,3 +492,62 @@ body.dark-mode #staff-applications-manager .staff-applications-table td[data-lab
 body.dark-mode #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer[data-spreadsheet-state="remove"]:hover:not(:disabled) { color: #fff; background: #8a1c13; }
 body.dark-mode #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer:focus-visible { outline-color: #93c5fd; }
 body.dark-mode .staff-spreadsheet-transfer-error { color: #fca5a5; }
+
+/* Cloudflare usage card: small, top-left of the staff home; expands on click. */
+#home-screen .cf-usage-card {
+    position: absolute;
+    inset-block-start: 0.4rem;
+    inset-inline-start: 0.4rem;
+    z-index: 20;
+    width: min(21rem, calc(100% - 0.8rem));
+    border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--card-border));
+    border-radius: 14px;
+    background: var(--card-bg);
+    box-shadow: 0 6px 18px rgb(42 24 30 / 7%);
+}
+
+#home-screen .cf-usage-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.45rem 0.7rem;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.74rem;
+    cursor: pointer;
+}
+
+#home-screen .cf-usage-toggle:focus-visible,
+#home-screen .cf-usage-refresh:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#home-screen .cf-usage-toggle svg { flex: none; width: 17px; height: 17px; fill: none; stroke: var(--accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+#home-screen .cf-usage-title { font-weight: 700; letter-spacing: 0.02em; }
+#home-screen .cf-usage-summary { margin-inline-start: auto; color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+#home-screen .cf-usage-panel {
+    max-height: min(70vh, 30rem);
+    overflow-y: auto;
+    padding: 0.2rem 0.8rem 0.7rem;
+    border-top: 1px solid var(--card-border);
+}
+
+#home-screen .cf-usage-panel[hidden] { display: none; }
+#home-screen .cf-usage-list { display: grid; gap: 0.6rem; margin: 0.6rem 0; padding: 0; list-style: none; }
+#home-screen .cf-usage-row-head { display: flex; justify-content: space-between; gap: 0.5rem; color: var(--text-primary); font-size: 0.72rem; }
+#home-screen .cf-usage-figures { color: var(--text-secondary); font-variant-numeric: tabular-nums; text-align: end; }
+#home-screen .cf-usage-track { display: block; height: 0.35rem; margin-top: 0.25rem; overflow: hidden; border-radius: 99px; background: var(--card-border); }
+#home-screen .cf-usage-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 0.35s ease; }
+#home-screen .cf-usage-row.is-warning .cf-usage-fill { background: #d99a1f; }
+#home-screen .cf-usage-row.is-danger .cf-usage-fill { background: #c0392b; }
+#home-screen .cf-usage-row.is-danger .cf-usage-figures { color: #c0392b; font-weight: 700; }
+#home-screen .cf-usage-row.is-unavailable .cf-usage-figures { font-style: italic; }
+#home-screen .cf-usage-detail { display: block; margin-top: 0.2rem; color: var(--text-secondary); font-size: 0.64rem; }
+#home-screen .cf-usage-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; color: var(--text-secondary); font-size: 0.64rem; line-height: 1.3; }
+#home-screen .cf-usage-refresh { margin-inline-start: auto; padding: 0.2rem 0.6rem; border: 1px solid var(--card-border); border-radius: 99px; background: transparent; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
+
+@media (max-width: 560px) {
+    #home-screen .cf-usage-card { inset-inline-end: 0.4rem; width: auto; }
+    #home-screen .home-intro { padding-top: 2.6rem; }
+}

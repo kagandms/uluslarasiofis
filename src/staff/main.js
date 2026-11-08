@@ -20,7 +20,7 @@ import { initDocumentsManager } from '../ui/documents-manager.js';
 import { initLiveClock } from '../ui/liveClock.js';
 import { initializeStaffPrintStatus } from './print-status.js';
 import { initializeConnectivityStatus } from './connectivity-status.js';
-import { initD1UsageCounter } from '../ui/d1-usage-counter.js';
+import { initCloudflareUsageCard } from '../ui/cloudflare-usage-card.js';
 import { initWorkHours } from './work-hours.js';
 import { initializeYoksisDocumentAuditManager } from '../managers/yoksisDocumentAuditManager.js';
 
@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { initializeStaffPrintStatus(); } catch (error) {
         console.error('Print status failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
-    initD1UsageCounter();
+    initCloudflareUsageCard();
     initWorkHours();
     const yoksisAuditRoot = document.getElementById('staff-yoksis-audit');
     if (yoksisAuditRoot) initializeYoksisDocumentAuditManager(yoksisAuditRoot);

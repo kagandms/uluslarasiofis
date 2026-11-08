@@ -21,6 +21,7 @@
 
 ## Plans, evidence, and drafts
 
+- [Cloudflare usage card](cloudflare-usage-card.md) documents the staff home usage card, its limits and credentials.
 - [`superpowers/plans/`](superpowers/plans/) and [`superpowers/specs/`](superpowers/specs/) contain scoped plans/specifications; their presence does not mean implementation or external activation occurred.
 - Dated root documents, [`notes/`](notes/), and [`audits/`](audits/) are historical or point-in-time analysis. Check their stated date, source SHA and validation status against current code before treating a claim as current. [`notes/2026-11-05-application-document-requirements-draft.md`](notes/2026-11-05-application-document-requirements-draft.md) is explicitly a draft.
 - [`evidence/`](evidence/), [`validation/`](validation/), and the dated `*-evidence/` directories retain test, release, and operational records. They prove only the checks and versions recorded in each artifact; they do not establish current live state.
