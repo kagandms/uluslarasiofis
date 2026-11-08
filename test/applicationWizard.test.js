@@ -1596,3 +1596,50 @@ test('step 0 contact inputs display autosave_saving and autosave_saved status in
 
     document.defaultView.close();
 });
+
+test('duplicate-application autosave shows only the guidance, with no generic save failure or retry button', async () => {
+    for (const [code, key] of [['APPLICATION_ALREADY_ACTIVE', 'applicationAlreadyActive'], ['PASSPORT_IDENTITY_ALREADY_ACTIVE', 'passportIdentityAlreadyActive']]) {
+        const { document, root, state, api } = await createFingerprintWizard('registered', 'FP-A/42');
+        api.updateCurrentApplication = async () => {
+            throw Object.assign(new Error('Duplicate.'), { code, requestId: 'req_33333333-3333-4333-8333-333333333333' });
+        };
+        const firstName = root.querySelector('[name="first_name"]');
+        firstName.value = 'ChangedName';
+        firstName.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 700));
+
+        // Before pressing Continue: the specific guidance is visible and the generic banner is not.
+        assert.equal(root.querySelector('[data-save-status]').hidden, true, `${code} status banner`);
+        assert.equal(root.querySelector('[data-action="autosave-retry"]'), null, `${code} retry`);
+        assert.equal(root.querySelector('[data-duplicate-guidance]').dataset.i18n, key);
+        assert.equal(root.querySelector('[data-duplicate-guidance]').getAttribute('role'), 'alert');
+
+        await submitWizard(root);
+
+        // After Continue: still one guidance message, no support code, no generic failure text.
+        assert.equal(state.errorKey, key);
+        const alerts = [...root.querySelectorAll('[role="alert"]')].map((node) => node.textContent);
+        assert.equal(alerts.filter((text) => /req_/u.test(text)).length, 0, `${code} support code`);
+        assert.equal(root.querySelector('[data-save-status]').hidden, true, `${code} generic failure still hidden after Continue`);
+        const visibleText = [...root.querySelectorAll('p, small')].filter((node) => !node.hidden && !node.closest('[hidden]')).map((node) => node.textContent).join(' ');
+        assert.doesNotMatch(visibleText, /Kaydedilemedi/u);
+        assert.equal(root.querySelector('[data-action="autosave-retry"]'), null);
+        document.defaultView.close();
+    }
+});
+
+test('fingerprint missing-code warning disappears as soon as a code is typed', () => {
+    const { document, root } = createRoot();
+    renderFingerprintSection(root, { fingerprint_status: 'registered', fingerprint_code: null });
+    const warning = [...root.querySelectorAll('p')].find((node) => node.dataset.i18n === 'fingerprintCodeMissing');
+    const input = root.querySelector('input[name="fingerprint_code"]');
+
+    assert.equal(warning.hidden, false);
+    input.value = 'FP-123456';
+    input.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(warning.hidden, true);
+    input.value = '  ';
+    input.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    assert.equal(warning.hidden, false);
+    document.defaultView.close();
+});

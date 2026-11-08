@@ -481,7 +481,10 @@ function appendFingerprintCode(document, fieldset, application, messages) {
     label.append(createTranslatedElement(document, 'span', 'fingerprintCodeLabel', messages.fingerprintCodeLabel), input);
     fieldset.append(label);
     fieldset.append(createTranslatedElement(document, 'small', 'fingerprintCodeHelp', messages.fingerprintCodeHelp));
-    if (!input.value.trim()) fieldset.append(createTranslatedElement(document, 'p', 'fingerprintCodeMissing', messages.fingerprintCodeMissing));
+    const missing = createTranslatedElement(document, 'p', 'fingerprintCodeMissing', messages.fingerprintCodeMissing);
+    missing.hidden = Boolean(input.value.trim());
+    input.addEventListener('input', () => { missing.hidden = Boolean(input.value.trim()); });
+    fieldset.append(missing);
 }
 
 function createResidenceStep(document, application, formValues) {
@@ -1199,8 +1202,8 @@ function createSaveStatus(document, state) {
     status.dataset.saveStatus = 'true';
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
-    status.hidden = state.saveStatus === 'idle';
-    if (state.saveStatus === 'failed' && state.application) {
+    status.hidden = state.saveStatus === 'idle' || (state.saveStatus === 'failed' && state.autosaveDuplicate === true);
+    if (state.saveStatus === 'failed' && state.application && !state.autosaveDuplicate) {
         status.append(createButton(document, messages, 'retrySave', 'autosave-retry'));
     }
     return status;
@@ -1214,8 +1217,8 @@ function updateSaveStatus(root, state) {
         : `autosave_${state.saveStatus}`;
     status.dataset.i18n = key;
     status.textContent = messages[key] || '';
-    status.hidden = state.saveStatus === 'idle';
-    if (state.saveStatus === 'failed' && state.application && !status.querySelector('[data-action="autosave-retry"]')) {
+    status.hidden = state.saveStatus === 'idle' || (state.saveStatus === 'failed' && state.autosaveDuplicate === true);
+    if (state.saveStatus === 'failed' && state.application && !state.autosaveDuplicate && !status.querySelector('[data-action="autosave-retry"]')) {
         status.append(createButton(root.ownerDocument, messages, 'retrySave', 'autosave-retry'));
     }
     if (state.saveStatus !== 'failed' || !state.application) status.querySelector('[data-action="autosave-retry"]')?.remove();
@@ -1547,8 +1550,12 @@ function createAutosave(state, api, root) {
         },
         onStatus: (status) => {
             state.saveStatus = state.sessionExpired ? 'session_expired' : status;
+            if (status === 'saving' || status === 'saved') clearDuplicateGuidance(root, state);
             const node = root.querySelector('[data-save-status]');
-            if (node) {
+            if (status === 'failed' && state.autosaveDuplicate) {
+                if (node) node.hidden = true;
+            } else if (node) {
+                node.hidden = state.saveStatus === 'idle';
                 const messages = readMessages(root.ownerDocument);
                 const key = status === 'failed' ? 'autosaveFailed' : `autosave_${status}`;
                 node.dataset.i18n = key;
@@ -1561,6 +1568,8 @@ function createAutosave(state, api, root) {
         },
         onError: (error) => {
             state.autosaveError = error;
+            const duplicateKey = readDuplicateGuidanceKey(error);
+            if (duplicateKey) showDuplicateGuidance(root, state, duplicateKey);
             if (error.code === 'APPLICATION_SESSION_REQUIRED') state.sessionExpired = true;
             if (error.code === 'APPLICATION_UPDATE_CONFLICT') {
                 state.errorKey = 'applicationUpdateConflict';
@@ -1585,6 +1594,42 @@ function scheduleCurrentFields(root, state) {
     if (!state.autosave) return;
     state.formValues = readVisibleFields(root, state.application);
     state.autosave.schedule(buildAutosaveValues(state.formValues));
+}
+
+const DUPLICATE_GUIDANCE_KEYS = Object.freeze(['applicationAlreadyActive', 'passportIdentityAlreadyActive']);
+
+function readDuplicateGuidanceKey(error) {
+    const key = UPLOAD_ERROR_KEYS[error?.code];
+    return DUPLICATE_GUIDANCE_KEYS.includes(key) ? key : null;
+}
+
+/** Shows duplicate-application guidance instead of a generic save failure, without re-rendering the form. */
+function showDuplicateGuidance(root, state, key) {
+    state.errorKey = key;
+    state.autosaveDuplicate = true;
+    const status = root.querySelector('[data-save-status]');
+    if (status) status.hidden = true;
+    const panel = root.querySelector('.application-wizard');
+    if (!panel) return;
+    let guidance = panel.querySelector('[data-duplicate-guidance]');
+    // The rendered error block already shows this message after Continue; never add a second copy.
+    if (!guidance && panel.querySelector(`[role="alert"][data-i18n="${key}"]`)) return;
+    if (!guidance) {
+        guidance = root.ownerDocument.createElement('p');
+        guidance.dataset.duplicateGuidance = 'true';
+        guidance.setAttribute('role', 'alert');
+        (status || panel.firstElementChild)?.after(guidance);
+    }
+    const messages = readMessages(root.ownerDocument);
+    guidance.dataset.i18n = key;
+    guidance.textContent = messages[key] || '';
+}
+
+function clearDuplicateGuidance(root, state) {
+    if (!state.autosaveDuplicate) return;
+    state.autosaveDuplicate = false;
+    if (DUPLICATE_GUIDANCE_KEYS.includes(state.errorKey)) state.errorKey = null;
+    root.querySelector('[data-duplicate-guidance]')?.remove();
 }
 
 function createErrorKey(error, fallback) {
@@ -1812,7 +1857,7 @@ async function saveStep(root, state, api) {
             : error.code === 'DECLARATION_ACCEPTANCE_REQUIRED' ? 'declarationAcceptanceFailed' : 'applicationSaveFailed';
         state.errorKey = createErrorKey(error, fallbackKey);
         state.errorRequestId = readSafeRequestId(error.requestId);
-        if (!state.application && state.step === 0) state.saveStatus = 'failed';
+        if (!state.application && state.step === 0 && !readDuplicateGuidanceKey(error)) state.saveStatus = 'failed';
         state._focusError = true;
         if (error.code === 'DECLARATION_VERSION_CONFLICT') {
             try {
