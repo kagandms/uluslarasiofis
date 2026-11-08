@@ -1,6 +1,7 @@
 import { formatApplicationTimestamp } from '../shared/application-timestamps.js';
 import { PDFJS_VERSION } from '../config/pdfjs-version.js';
 import { listRequiredDocumentAnswers } from '../shared/document-conditions.js';
+import { isPlausibleBirthDate } from '../shared/age.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
@@ -395,19 +396,26 @@ function readDocumentAnswerDetails(application) {
         .map(([field, key]) => [PUBLIC_MESSAGES.tr[key], PUBLIC_MESSAGES.tr[answers[application[field]]]]);
 }
 
+function shouldShowResidenceDates(application) {
+    const isMinor = application.is_under_18 === 1 || application.is_under_18 === true;
+    return isMinor && isPlausibleBirthDate(application.date_of_birth);
+}
+
 function createApplicationSummary(document, application) {
     const section = document.createElement('section');
     const details = document.createElement('dl');
     const fields = [
         ['Başvuru Referansı', application.reference_number || '-'],
-        ['Başvuru No', application.id], ['Öğrenci No', application.student_number],
+        ['Öğrenci No', application.student_number],
         ['Durum', readStatusLabel(application.status)],
         ['Başvuru türü', application.application_type === 'transition' ? 'Geçiş başvurusu' : application.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'],
         ['Ad', application.first_name], ['Soyad', application.last_name], ['E-posta', application.email],
         ['Telefon', application.phone], ['Pasaport No', application.passport_number], ['Uyruk', application.nationality],
         ['Doğum tarihi', application.date_of_birth],
-        ['e-İkamet başvuru tarihi', application.residence_application_date],
-        ['Akademik yıl başlangıç tarihi', application.academic_year_start_date],
+        ...(shouldShowResidenceDates(application) ? [
+            ['e-İkamet başvuru tarihi', application.residence_application_date],
+            ['Akademik yıl başlangıç tarihi', application.academic_year_start_date]
+        ] : []),
         ...(application.application_type === 'transition' ? [
             ['Yabancı kimlik no', application.transition_foreign_id],
             ['Mevcut kart seri no', application.transition_card_serial],
@@ -417,13 +425,10 @@ function createApplicationSummary(document, application) {
         ] : []),
         ['18 yaş altı (başvuru tarihine göre)', application.is_under_18],
         ['Adres belgesi türü', readAccommodationLabel(application.address_evidence_type)],
-        ...readDocumentAnswerDetails(application), ['Parmak izi durumu', application.fingerprint_status],
-        ['Parmak izi kodu', application.fingerprint_code], ['Beyan sürümü', application.declaration_version],
-        ['Beyan tarihi', formatDate(application.declaration_accepted_at)],
+        ...readDocumentAnswerDetails(application),
+        ['Parmak izi kodu', application.fingerprint_code],
         ['İletişim teyidi', application.contact_acknowledgement_accepted_current ? 'Onaylandı' : 'Onaylanmadı'],
-        ['İletişim teyit tarihi', formatDate(application.contact_acknowledgement_accepted_at)],
-        ['Oluşturulma', formatDate(application.created_at)], ['Gönderim', formatDate(application.submitted_at)],
-        ['Son güncelleme', formatDate(application.updated_at)]
+        ['Gönderim', formatDate(application.submitted_at)]
     ];
     section.className = 'staff-application-summary';
     section.append(createText(document, 'h4', '', 'Başvuru ve başvuran bilgileri'));

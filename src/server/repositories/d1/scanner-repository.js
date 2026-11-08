@@ -179,7 +179,7 @@ async function readStatus(database) {
             WHERE job_count > 0 ORDER BY status`).all(),
         database.prepare('SELECT * FROM scanner_heartbeats ORDER BY seen_at DESC LIMIT 10').all(),
         database.prepare("SELECT max(scanned_at) AS last_successful_scan FROM document_scan_jobs WHERE outcome='clean'").first(),
-        database.prepare("SELECT id,attempts,result_code,updated_at FROM document_scan_jobs WHERE status='failed' ORDER BY updated_at DESC LIMIT 20").all()
+        database.prepare("SELECT id,attempts,result_code,updated_at FROM document_scan_jobs WHERE status='failed' ORDER BY updated_at DESC LIMIT 5").all()
     ]);
     return { jobs: counts.results, runners: runners.results, ...latest, failed_jobs: failures.results };
 }

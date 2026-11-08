@@ -104,7 +104,7 @@ export function initializeScannerManager(root, api = createScannerApi()) {
         const hostSummary = readHostSummary(status.runners || []);
         const isOfflineOrStale = hostSummary.includes('çevrimdışı') || hostSummary.includes('bayat');
         const failedJobs = status.failed_jobs || [];
-        // failed_jobs is a capped sample (latest 20); the full count comes from the status counter.
+        // failed_jobs is a capped sample (latest 5); the full count comes from the status counter.
         const failedTotal = (status.jobs || []).find((item) => item.status === 'failed')?.count ?? failedJobs.length;
         const sampleNotice = failedTotal > failedJobs.length ? ` (ilk ${failedJobs.length} kayıt gösteriliyor)` : '';
 

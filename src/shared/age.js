@@ -56,6 +56,25 @@ export function calculateCurrentUnder18(dateOfBirth) {
     return calculateUnder18(dateOfBirth, readIstanbulDate());
 }
 
+const MAX_PLAUSIBLE_AGE_YEARS = 100;
+
+/**
+ * Reports whether a birth date is a real calendar date that is not in the future and not implausibly old.
+ * @param {string|null} dateOfBirth ISO date-only birth date.
+ * @param {string} currentDate ISO date-only date on which plausibility is measured.
+ * @returns {boolean} True when the birth date can belong to a real applicant.
+ */
+export function isPlausibleBirthDate(dateOfBirth, currentDate = readIstanbulDate()) {
+    const birthDate = readCalendarDate(dateOfBirth);
+    const asOfDate = readCalendarDate(currentDate);
+    if (!birthDate || !asOfDate) return false;
+    if (calculateUnder18(dateOfBirth, currentDate) === null) return false;
+    const pad = (value, length = 2) => String(value).padStart(length, '0');
+    const birthKey = `${pad(birthDate.year, 4)}-${pad(birthDate.month)}-${pad(birthDate.day)}`;
+    const earliestKey = `${pad(asOfDate.year - MAX_PLAUSIBLE_AGE_YEARS, 4)}-${pad(asOfDate.month)}-${pad(asOfDate.day)}`;
+    return birthKey >= earliestKey;
+}
+
 /**
  * Reports whether the applicant crossed age 18 within the last month (the application validity period), making the filing date relevant.
  * @param {string|null} dateOfBirth ISO date-only birth date.

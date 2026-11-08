@@ -1336,7 +1336,9 @@ function renderWizard(root, state) {
         errorElement.setAttribute('role', 'alert');
         errorElement.tabIndex = -1;
         const requestId = readSafeRequestId(state.errorRequestId);
-        if (requestId) {
+        // Duplicate-application conflicts are user guidance, not support incidents: no support code.
+        const isDuplicateGuidance = ['applicationAlreadyActive', 'passportIdentityAlreadyActive'].includes(state.errorKey);
+        if (requestId && !isDuplicateGuidance) {
             const supportCode = document.createElement('small');
             supportCode.textContent = `${messages.supportRequestId}: ${requestId}`;
             errorElement.append(document.createElement('br'), supportCode);
