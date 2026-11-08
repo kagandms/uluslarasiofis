@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
-// Reviewed names only. D1_ANALYTICS_API_TOKEN powers the staff Cloudflare usage card;
-// see docs/cloudflare-usage-card.md and its original introduction in commit 9acc1d8.
+// Reviewed names only. D1_ANALYTICS_API_TOKEN powers the staff D1 usage counter;
+// see docs/d1-usage-counter.md and its introduction in commit 9acc1d8.
 const expectedSecretNames = [
     'APPS_SCRIPT_API_KEY', 'APPS_SCRIPT_URL', 'AZURE_VISION_ENDPOINT', 'AZURE_VISION_KEY',
     'D1_ANALYTICS_API_TOKEN',
