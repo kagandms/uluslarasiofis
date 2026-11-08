@@ -1,7 +1,7 @@
 import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_FIELDS, DOCUMENT_ANSWER_OPTIONS } from '../../shared/document-conditions.js';
 import { ApiError, ApplicationConflictError } from '../domain/errors.js';
 import { APPLICATION_OWNER_SESSION_DAYS, CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../../config/constants.js';
-import { createOpaqueSessionToken, createSessionCookie, createExpiredSessionCookie, getSessionCookieName, hashSessionToken, readCookie } from '../auth/sessionToken.js';
+import { allowInsecureLocalCookie, createOpaqueSessionToken, createSessionCookie, createExpiredSessionCookie, getSessionCookieName, hashSessionToken, readCookie } from '../auth/sessionToken.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { constantTimeCompare, generateAccessCode, hashAccessCode, isValidAccessCodeFormat, isValidApplicationReference, normalizeApplicationReference, verifyAccessCode } from '../auth/applicationAccessCode.js';
 import { requireStaff } from '../auth/staffAuth.js';
@@ -349,7 +349,7 @@ export async function createApplicationDraft(request, environment, requestId) {
         reference_number: application.reference_number,
         access_code: accessCode
     }, {
-        status: 201, cookie: createSessionCookie('application', token, APPLICATION_SESSION_SECONDS)
+        status: 201, cookie: createSessionCookie('application', token, APPLICATION_SESSION_SECONDS, { secure: !allowInsecureLocalCookie(environment, request) })
     });
 }
 
@@ -763,7 +763,7 @@ export async function accessApplicationWithReference(request, environment, reque
         application: createApplicationDto(application, environment)
     }, {
         status: 200,
-        cookie: createSessionCookie('application', token, APPLICATION_SESSION_SECONDS)
+        cookie: createSessionCookie('application', token, APPLICATION_SESSION_SECONDS, { secure: !allowInsecureLocalCookie(environment, request) })
     });
 }
 

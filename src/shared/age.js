@@ -57,24 +57,25 @@ export function calculateCurrentUnder18(dateOfBirth) {
 }
 
 /**
- * Reports whether the applicant crossed age 18 within the last year, making the filing date relevant.
+ * Reports whether the applicant crossed age 18 within the last month (the application validity period), making the filing date relevant.
  * @param {string|null} dateOfBirth ISO date-only birth date.
  * @param {string} currentDate ISO date-only current date.
- * @returns {boolean} True while the applicant is between their 18th and 19th birthdays.
+ * @returns {boolean} True when the applicant is 18 or older today but was still under 18 one month ago.
  */
 export function requiresResidenceApplicationDate(dateOfBirth, currentDate = readIstanbulDate()) {
     const isUnder18 = calculateUnder18(dateOfBirth, currentDate);
     if (isUnder18 === null) return true;
-    const isUnder19 = calculateUnder18(dateOfBirth, subtractOneYear(currentDate));
-    return !isUnder18 && isUnder19;
+    const wasUnder18OneMonthAgo = calculateUnder18(dateOfBirth, subtractOneMonth(currentDate));
+    return !isUnder18 && wasUnder18OneMonthAgo;
 }
 
-function subtractOneYear(value) {
+function subtractOneMonth(value) {
     const [year, month, day] = value.split('-').map(Number);
-    const targetYear = year - 1;
-    const isLeapYear = (targetYear % 4 === 0 && targetYear % 100 !== 0) || targetYear % 400 === 0;
-    const targetDay = month === 2 && day === 29 && !isLeapYear ? 28 : day;
-    return `${String(targetYear).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+    const targetYear = month === 1 ? year - 1 : year;
+    const targetMonth = month === 1 ? 12 : month - 1;
+    const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
+    const targetDay = Math.min(day, daysInTargetMonth);
+    return `${String(targetYear).padStart(4, '0')}-${String(targetMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
 }
 
 /**

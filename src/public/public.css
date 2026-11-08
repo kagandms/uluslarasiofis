@@ -194,8 +194,23 @@ a { color: inherit; }
 .application-wizard { display: grid; gap: 1.25rem; margin-block-start: 2rem; }
 .application-privacy-notice-gate { display: grid; gap: 1rem; max-width: 58rem; margin: 2rem auto; }
 .application-privacy-notice-gate h2 { margin: 0; color: var(--public-burgundy); font-size: 1.35rem; }
-.application-privacy-notice { display: grid; gap: 0.75rem; }
-.application-privacy-notice h2 { margin: 0; color: var(--public-burgundy); font-size: 1.2rem; }
+.application-privacy-notice { border: 1px solid #d9b8c1; border-radius: 0.75rem; background: #fdf8f9; }
+.application-privacy-notice[open] { padding-bottom: 1rem; }
+.application-privacy-notice-summary { min-height: 3rem; padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; cursor: pointer; list-style: none; color: var(--public-burgundy); font-size: 1.1rem; font-weight: 700; }
+.application-privacy-notice-summary::-webkit-details-marker { display: none; }
+.application-privacy-notice-summary::after { content: "▾"; flex-shrink: 0; font-size: 1.2rem; line-height: 1; transition: transform 160ms ease; }
+.application-privacy-notice[open] > .application-privacy-notice-summary::after { transform: rotate(180deg); }
+.application-privacy-notice-summary:hover { background: #f8eef1; border-radius: 0.75rem; }
+.application-privacy-notice[open] > .application-privacy-notice-summary { border-bottom: 1px solid #e8d4da; border-radius: 0.75rem 0.75rem 0 0; }
+.application-privacy-notice[open] > .application-privacy-notice-content { margin: 0.75rem 1rem 0; }
+.application-privacy-notice-summary:focus-visible { outline: 2px solid var(--public-burgundy); outline-offset: 2px; border-radius: 0.35rem; }
+.application-step-grid { display: grid; gap: 0.85rem; align-items: start; }
+@media (min-width: 40rem) {
+    .application-step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1.25rem; }
+    .application-step-grid > :not(.application-form-field) { grid-column: 1 / -1; }
+    .application-step-grid > .phone-field { grid-column: 1 / -1; }
+    .application-step-grid > button { justify-self: start; }
+}
 .application-privacy-notice-content { max-height: min(60vh, 42rem); overflow: auto; padding: 1rem; border: 1px solid #d8dce2; border-radius: 0.75rem; background: #fff; color: #343943; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .application-progress { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
 .application-progress li { padding: 0.7rem 0.45rem; border-bottom: 3px solid #e5e7eb; color: #68707c; font-size: 0.82rem; transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease; }
@@ -204,8 +219,16 @@ a { color: inherit; }
 .application-progress li.is-complete::before { content: "✓ "; font-weight: 700; color: #166534; }
 .application-wizard h2 { margin: 0; color: var(--public-burgundy); font-size: 1.35rem; }
 .application-step-form, #application-step-form { display: grid; gap: 1rem; }
-.application-form-field { display: grid; gap: 0.45rem; color: #343943; font-weight: 650; }
-.application-form-field input, .application-form-field select { width: 100%; min-height: 2.8rem; padding: 0.6rem 0.75rem; border: 1px solid #cbd0d8; border-radius: 0.55rem; background: #fff; color: inherit; font: inherit; transition: border-color 140ms ease, box-shadow 140ms ease; }
+.application-form-field { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.35rem; color: #343943; font-weight: 650; }
+.application-form-field > input, .application-form-field > select, .application-form-field > small, .application-form-field > .phone-field { flex: 0 0 100%; }
+.credentials-banner-important { margin: 0.5rem 0; padding: 0.6rem 0.8rem; border-left: 4px solid var(--public-burgundy); background: #fdf2f4; color: #5c0e26; font-weight: 700; line-height: 1.5; }
+.application-privacy-notice[open] > .application-privacy-notice-content { animation: notice-open 280ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes notice-open { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.application-wizard[data-animate="true"] > #application-step-form,
+.application-wizard[data-animate="true"] > section { animation: wizard-slide-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.application-wizard[data-animate="true"] > h2 { animation: wizard-slide-in 360ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes wizard-slide-in { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: translateX(0); } }
+.application-form-field input, .application-form-field select { width: 100%; min-height: 2.6rem; padding: 0.6rem 0.75rem; border: 1px solid #cbd0d8; border-radius: 0.55rem; background: #fff; color: inherit; font: inherit; transition: border-color 140ms ease, box-shadow 140ms ease; }
 .application-form-field input:focus-visible, .application-form-field select:focus-visible, .application-upload-control input:focus-visible, .application-button:focus-visible { outline: 2px solid var(--public-burgundy); outline-offset: 2px; }
 .field-required-mark { color: var(--public-burgundy); font-weight: 700; }
 .contact-acknowledgement { display: flex; align-items: flex-start; gap: 0.75rem; min-height: 2.75rem; padding: 0.5rem 0; cursor: pointer; color: #343943; font-weight: 550; font-size: 0.92rem; line-height: 1.5; }
@@ -234,8 +257,11 @@ a { color: inherit; }
 .document-upload-status, .application-document-filename { margin: 0; color: #586170; font-size: 0.9rem; overflow-wrap: anywhere; word-break: break-word; }
 .document-upload-status.is-success { color: #166534; font-weight: 700; }
 .document-upload-status.is-error { color: #b42318; font-weight: 700; }
-.application-upload-control { display: grid; gap: 0.45rem; width: fit-content; max-width: 100%; color: var(--public-burgundy); font-weight: 700; }
-.application-upload-control input { max-width: 100%; color: #303640; font-weight: 400; }
+.application-upload-control { position: relative; display: grid; gap: 0.45rem; width: 100%; max-width: 100%; color: var(--public-burgundy); font-weight: 700; }
+.application-upload-control > .application-button { width: 100%; }
+.application-upload-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.application-upload-control input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+.application-pdf-required-note { margin: 0; color: #5c0e26; font-weight: 600; line-height: 1.5; }
 .application-upload-control small { color: #68707c; font-size: 0.78rem; font-weight: 400; overflow-wrap: anywhere; word-break: break-word; }
 .application-document-card progress { width: 100%; min-height: 1.2rem; accent-color: var(--public-burgundy); }
 .application-document-card [role="status"] { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
@@ -1321,3 +1347,71 @@ body[data-page="home"] .status-timeline-step.scroll-reveal-item.is-revealed .sta
 
 .tracking-lookup-form .tracking-status-only { display: flex; align-items: center; gap: 0.5rem; flex-basis: 100%; }
 .tracking-lookup-form .tracking-status-only input { width: auto; min-height: auto; }
+
+/* Document cards: two columns on wide screens, three on very wide ones */
+.application-document-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); align-items: stretch; }
+.application-document-card { display: flex; flex-direction: column; gap: 0.55rem; border: 1px solid var(--public-burgundy); }
+.application-document-card > .application-upload-control { margin-top: auto; }
+.application-policy-date-fields { grid-template-columns: minmax(0, 14rem) minmax(0, 1fr); align-items: center; gap: 0.75rem 1.25rem; border: 1px solid var(--public-burgundy); }
+.application-policy-date-fields .application-policy-date-field { display: contents; }
+.application-policy-date-fields .application-policy-date-field > span { grid-column: 1 / -1; }
+.application-policy-date-fields .application-policy-date-field > input { grid-column: 1; }
+.application-policy-date-fields .application-policy-date-field > small { grid-column: 2; }
+
+/* Submission confirmation: capitalize each word of its buttons and links (respects the page language) */
+.application-submission-confirmation button, .application-submission-confirmation a { text-transform: capitalize; }
+
+/* Visible burgundy outline with a soft glow on every wizard text box so fields stand out on any device */
+.application-wizard input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+.application-wizard select,
+.application-wizard textarea {
+    border: 1.5px solid var(--public-burgundy);
+    box-shadow: 0 0 0 1px rgba(126, 24, 48, 0.12), 0 0 8px rgba(126, 24, 48, 0.28);
+}
+.application-wizard input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):focus-visible,
+.application-wizard select:focus-visible,
+.application-wizard textarea:focus-visible {
+    box-shadow: 0 0 0 2px rgba(126, 24, 48, 0.25), 0 0 14px rgba(126, 24, 48, 0.5);
+}
+.application-wizard input:disabled, .application-wizard select:disabled { box-shadow: none; border-color: #cbd0d8; }
+/* Fingerprint code box only: larger and clearly outlined so it is not missed on any device */
+#field-fingerprint-code { width: min(100%, 22rem); min-height: 3rem; padding: 0.6rem 0.8rem; font-size: 1.05rem; border: 2px solid var(--public-burgundy); border-radius: 0.55rem; background: #fff; box-shadow: 0 0 0 3px rgba(126, 24, 48, 0.15), 0 0 16px rgba(126, 24, 48, 0.45); }
+
+/* Completed (filled, valid, left) fields turn green */
+.application-wizard input.is-complete:not(:disabled),
+.application-wizard select.is-complete:not(:disabled),
+.application-wizard textarea.is-complete:not(:disabled),
+#field-fingerprint-code.is-complete {
+    border-color: #2e7d32 !important;
+    box-shadow: 0 0 0 1px rgba(46, 125, 50, 0.15), 0 0 10px rgba(46, 125, 50, 0.4) !important;
+}
+
+/* Phones: smaller gap above the wizard */
+@media (max-width: 640px) {
+    .application-wizard { margin-block-start: 0.75rem; gap: 0.9rem; }
+}
+
+/* Home: documents and statuses stack at full width so the columns stay proportionate on desktop */
+.public-information-grid { grid-template-columns: minmax(0, 1fr); }
+.public-document-list { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
+.address-evidence-options { align-items: start; }
+@media (max-width: 64rem) { .public-document-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 40rem) { .public-document-list { grid-template-columns: 1fr; } }
+@media (min-width: 52rem) {
+    .status-overview { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; }
+    .status-timeline-step { grid-template-columns: 1fr; gap: 0.5rem; padding: 0.9rem; border: 1px solid #e5e8ee; border-radius: 0.75rem; background: #fff; }
+    .status-timeline-step:not(:last-child)::after { content: none; }
+}
+/* Address evidence options have very different heights: flow them into balanced columns without row gaps */
+.address-evidence-options { display: block; column-count: 3; column-gap: 0.65rem; }
+.address-evidence-options > .address-evidence-option { break-inside: avoid; margin-block-end: 0.65rem; }
+@media (max-width: 64rem) { .address-evidence-options { column-count: 2; } }
+@media (max-width: 40rem) { .address-evidence-options { column-count: 1; } }
+
+/* Resume page: clear vertical rhythm between label, input and button */
+.application-resume-form { display: grid; gap: 1.1rem; }
+.application-resume-form .application-form-field { display: grid; gap: 0.5rem; }
+.application-resume-form .application-button { justify-self: start; margin-block-start: 0.4rem; }
+
+/* Buttons styled as CTAs must use the same typography as the link CTAs (buttons do not inherit fonts by default) */
+button.home-cta { font-family: inherit; font-size: 1.02rem; font-weight: 700; line-height: 1.2; }

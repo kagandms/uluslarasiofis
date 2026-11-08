@@ -8,6 +8,7 @@ import { isValidPhoneNumber } from '../shared/phoneNumber.js';
 import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate, requiresResidenceApplicationDate } from '../shared/age.js';
 import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../shared/academic-calendar.js';
 import { createMultiPageDocumentPdf } from './multiFileDocument.js';
+import { readPdfMergerMessages } from './i18n/pdf-merger-messages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
@@ -222,12 +223,10 @@ function createDateOfBirthField(document, value, rawValue, messages) {
     input.inputMode = 'numeric';
     input.autocomplete = 'bday';
     input.placeholder = messages.dateOfBirthFormat;
-    input.setAttribute('aria-describedby', 'date-of-birth-format-help');
     input.value = typeof rawValue === 'string' ? rawValue : formatDateOfBirthInput(value);
     help.id = 'date-of-birth-format-help';
     const existingInput = label.querySelector('input');
     existingInput.replaceWith(input);
-    label.append(help);
     updateDateOfBirthValidity(input, messages);
     return label;
 }
@@ -349,6 +348,7 @@ function createSelectField(document, { key, name, value, options, required = fal
 function createWizardForm(document) {
     const form = document.createElement('form');
     form.id = 'application-step-form';
+    form.className = 'application-step-grid';
     return form;
 }
 
@@ -503,22 +503,23 @@ function createResidenceStep(document, application, formValues) {
         form.append(createTextField(document, { key, name: field, value: fields[field], type: field === 'date_of_birth' ? 'date' : 'text', required: true }));
     });
     if (fields.application_type === 'transition') form.append(createTransitionFields(document, fields, messages));
-    const policyDateFields = document.createElement('div');
-    policyDateFields.className = 'application-policy-date-fields';
-    if (requiresResidenceApplicationDate(fields.date_of_birth)) {
+    // Only shown when the birth date is near the 18 boundary; otherwise no empty box is rendered.
+    if (fields.date_of_birth && requiresResidenceApplicationDate(fields.date_of_birth)) {
+        const policyDateFields = document.createElement('div');
+        policyDateFields.className = 'application-policy-date-fields';
         policyDateFields.append(createPolicyDateField(document, {
             name: 'residence_application_date', key: 'residenceApplicationDate',
             helpKey: 'residenceApplicationDateHelp', value: fields.residence_application_date, messages
         }));
+        form.append(policyDateFields);
     }
-    form.append(policyDateFields);
     const ageDateIsRequired = requiresResidenceApplicationDate(fields.date_of_birth);
     const under18 = ageDateIsRequired && !fields.residence_application_date
         ? null : calculateUnder18(fields.date_of_birth, fields.residence_application_date || readIstanbulDate());
     const under18Field = createSelectField(document, {
         key: 'under18Question', name: 'is_under_18', value: under18 === null ? '' : String(under18), required: false,
         options: [
-            { value: '', key: 'under18SelectPlaceholder', disabled: true },
+            { value: '', key: 'under18AutoPlaceholder', disabled: true },
             { value: 'true', key: 'yes' },
             { value: 'false', key: 'no' }
         ]
@@ -662,9 +663,11 @@ function updateResidenceContinueButton(root, fields) {
 }
 
 function createFileInput(document, requirement, task, messages) {
-    const label = document.createElement('label');
+    const label = document.createElement('div');
     const textKey = requirement.filename ? 'replaceDocument' : 'uploadDocument';
-    const text = createTranslatedElement(document, 'span', textKey, messages[textKey]);
+    // One primary action: opens the photo/file composer, which builds a single PDF from photos, images or PDFs.
+    const text = createButton(document, messages, textKey, 'document-compose', 'application-button application-button-primary');
+    text.disabled = ['preparing', 'uploading', 'verifying'].includes(task?.state);
     const input = document.createElement('input');
     const help = document.createElement('small');
     input.type = 'file';
@@ -680,9 +683,18 @@ function createFileInput(document, requirement, task, messages) {
     help.id = `upload-help-${requirement.code}`;
     help.textContent = `${createFilePolicyText(document, requirement, messages)} ${messages.multiFileUploadWarning.replace('{document}', messages[requirement.label_key] || messages.documentNotUploaded)}`;
     input.setAttribute('aria-describedby', help.id);
-    label.htmlFor = input.id;
+    input.tabIndex = -1;
+    const inputLabel = document.createElement('label');
+    inputLabel.htmlFor = input.id;
+    inputLabel.className = 'application-upload-sr';
+    inputLabel.textContent = messages[textKey];
+    if (!requirement.accepted_media_types.includes('application/pdf')) {
+        // Composer builds PDFs only; other policies fall back to the plain file chooser.
+        text.dataset.action = 'document-pick';
+        text.addEventListener('click', () => input.click());
+    }
     label.className = 'application-upload-control';
-    label.append(text, input, help);
+    label.append(text, inputLabel, input, help);
     return label;
 }
 
@@ -702,6 +714,19 @@ function createUploadProgress(document, task, messages) {
     wrapper.setAttribute('aria-live', 'polite');
     wrapper.append(progress, label);
     return wrapper;
+}
+
+/** Opens the owner's own uploaded file in a new tab; the owner cookie authorizes the request. */
+export function createDocumentPreviewLink(document, code, messages) {
+    const link = document.createElement('a');
+    link.className = 'application-button application-button-secondary document-preview-link';
+    link.href = `/api/public/applications/current/documents/${encodeURIComponent(code)}/preview`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.dataset.action = 'document-preview';
+    link.dataset.i18n = 'previewDocument';
+    link.textContent = messages.previewDocument;
+    return link;
 }
 
 function createDocumentCard(document, requirement, state, { allowUpload }) {
@@ -727,15 +752,14 @@ function createDocumentCard(document, requirement, state, { allowUpload }) {
     }
     card.append(title, description, createRequirementBadge(document, requirement.required ?? requirement.is_required, messages), status);
     if (requirement.filename) appendFilename(document, card, `${messages.currentFile}: ${requirement.filename}`);
+    if (requirement.filename && requirement.upload_status === 'finalized') {
+        card.append(createDocumentPreviewLink(document, requirement.code, messages));
+    }
     if (task?.file && task.state !== 'complete') appendFilename(document, card, `${messages.selectedReplacement}: ${task.file.name}`);
     const progress = createUploadProgress(document, task, messages);
     if (progress) card.append(progress);
     if (!allowUpload) return card;
     card.append(createFileInput(document, requirement, task, messages));
-    const compose = createButton(document, messages, 'addDocumentPages', 'document-compose');
-    compose.disabled = ['preparing', 'uploading', 'verifying'].includes(task?.state)
-        || !requirement.accepted_media_types.includes('application/pdf');
-    card.append(compose);
     if (task && ['failed_upload', 'failed_finalize', 'unknown_finalize_result', 'cancelled'].includes(task.state)) {
         card.append(createButton(document, messages, 'retryUpload', 'document-retry'));
     }
@@ -1012,8 +1036,9 @@ function createReferenceBanner(document, state, messages) {
     copyButton.addEventListener('click', async () => {
         await copyCredentialValue(document, refValue, copyButton, reference, messages);
     });
-    const purpose = createTranslatedElement(document, 'p', 'applicationReferencePurpose', messages.applicationReferencePurpose);
-    banner.append(refText, copyButton, createCredentialCopyStatus(document), purpose);
+    const important = createTranslatedElement(document, 'p', 'applicationReferenceImportant', messages.applicationReferenceImportant);
+    important.className = 'credentials-banner-important';
+    banner.append(refText, copyButton, createCredentialCopyStatus(document), important);
     return banner;
 }
 
@@ -1225,9 +1250,13 @@ function renderPrivacyNoticeUnavailable(root) {
 
 function createPrivacyNoticeDisclosure(document, state) {
     const messages = readMessages(document);
-    const section = document.createElement('section');
+    // Collapsed by default so the form is the first thing the applicant sees; the full notice stays one click away.
+    const section = document.createElement('details');
     section.className = 'application-privacy-notice';
-    section.append(createTranslatedElement(document, 'h2', 'applicationPrivacyNoticeHeading', messages.applicationPrivacyNoticeHeading));
+    const summary = document.createElement('summary');
+    summary.className = 'application-privacy-notice-summary';
+    summary.append(createTranslatedElement(document, 'span', 'applicationPrivacyNoticeHeading', messages.applicationPrivacyNoticeHeading));
+    section.append(summary);
     const locale = PRIVACY_NOTICE_LOCALES.includes(document.documentElement.lang)
         ? document.documentElement.lang : 'tr';
     const noticeText = state.privacyNotice.content_by_locale[locale];
@@ -1239,6 +1268,26 @@ function createPrivacyNoticeDisclosure(document, state) {
     article.textContent = noticeText;
     section.append(article);
     return section;
+}
+
+/** Marks filled, valid, unfocused fields so CSS can show them in green once the applicant moves on. */
+function markCompleteFields(root) {
+    const active = root.ownerDocument.activeElement;
+    root.querySelectorAll('input, select, textarea').forEach((field) => {
+        if (['checkbox', 'radio', 'file', 'hidden', 'submit'].includes(field.type) || field.disabled) {
+            field.classList.remove('is-complete');
+            return;
+        }
+        const isComplete = field !== active && String(field.value || '').trim() !== '' && field.checkValidity();
+        field.classList.toggle('is-complete', isComplete);
+    });
+}
+
+function bindCompleteFieldMarking(root) {
+    if (root.dataset.completeMarking === 'true') return;
+    root.dataset.completeMarking = 'true';
+    // Deferred so field validity set by the step's own input handlers (for example the phone number) is already updated.
+    ['focusout', 'focusin', 'input', 'change'].forEach((type) => root.addEventListener(type, () => setTimeout(() => markCompleteFields(root), 0)));
 }
 
 function renderWizard(root, state) {
@@ -1302,9 +1351,12 @@ function renderWizard(root, state) {
     if (state.step === 2) stage.append(createDocumentsStep(document, state));
     if (state.step === 3) stage.append(createDeclarationStep(document, state.application, state));
     if (state.step === 4) stage.append(createReviewStep(document, state));
-    if (state.step > 0 && !['submitted', 'under_review'].includes(state.application?.status)) panel.append(createButton(document, messages, 'previous', 'previous'));
     panel.append(stage);
+    // Back sits below the Continue button inside the step.
+    if (state.step > 0 && !['submitted', 'under_review'].includes(state.application?.status)) panel.append(createButton(document, messages, 'previous', 'previous'));
     root.replaceChildren(panel);
+    bindCompleteFieldMarking(root);
+    markCompleteFields(root);
     if (state._focusError && errorElement) {
         errorElement.focus();
         state._focusError = false;
@@ -1317,8 +1369,9 @@ function renderWizard(root, state) {
         state._focusSubmissionConfirmation = false;
     } else if (state._focusStepHeading) {
         heading.focus({ preventScroll: true });
-        document.documentElement.scrollTop = 0;
-        document.body.scrollTop = 0;
+        // Bring the step itself to the top of the screen instead of the page top (long header on phones).
+        if (typeof panel.scrollIntoView === 'function') panel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        else { document.documentElement.scrollTop = 0; document.body.scrollTop = 0; }
         state._focusStepHeading = false;
     }
 }
@@ -1829,6 +1882,8 @@ async function openDocumentComposer(root, state, api, code) {
     const openPdfMergerModal = state.openPdfMergerModal
         || (await import('../ui/pdfMergerModal.js')).openPdfMergerModal;
     openPdfMergerModal({
+        text: readPdfMergerMessages(root.ownerDocument.documentElement.lang),
+        hideStopCapture: true,
         contextLabel: messages.documentPagesHelp,
         confirmLabel: messages.documentPagesConfirm,
         successMessage: messages.documentPagesUploaded,

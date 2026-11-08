@@ -26,9 +26,13 @@ test('GSS deadline is three calendar months after academic year start and clamps
     assert.equal(calculateGssRegistrationDeadline('invalid'), null);
 });
 
-test('residence application date is needed only within the 18-to-19 age window', () => {
+test('residence application date is needed only within one month after turning 18', () => {
     assert.equal(requiresResidenceApplicationDate('2008-10-24', '2026-10-24'), true);
     assert.equal(requiresResidenceApplicationDate('2007-10-24', '2026-10-24'), false);
+    assert.equal(requiresResidenceApplicationDate('2008-03-18', '2026-11-07'), false, 'turned 18 months ago');
+    assert.equal(requiresResidenceApplicationDate('2008-10-20', '2026-11-07'), true, 'turned 18 within the last month');
+    assert.equal(requiresResidenceApplicationDate('2008-10-08', '2026-11-07'), true);
+    assert.equal(requiresResidenceApplicationDate('2008-10-07', '2026-11-07'), false);
     assert.equal(requiresResidenceApplicationDate('2010-10-24', '2026-10-24'), false);
     assert.equal(requiresResidenceApplicationDate('invalid', '2026-10-24'), true);
 });

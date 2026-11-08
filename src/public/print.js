@@ -343,13 +343,13 @@ function updateJob(job, status) {
 }
 
 async function monitorJob(job) {
-    for (let poll = 0; poll < 90; poll += 1) {
+    for (let poll = 0; poll < 48; poll += 1) {
         try {
             const status = await readJobStatus(job.trackingToken);
             updateJob(job, status);
             if (['submitted', 'unknown', 'failed', 'expired', 'cancelled'].includes(status)) return;
         } catch { /* Keep tracking the existing job; never create a replacement automatically. */ }
-        await new Promise((resolve) => window.setTimeout(resolve, 8000));
+        await new Promise((resolve) => window.setTimeout(resolve, 15000));
     }
     updateJob(job, 'unknown');
 }

@@ -80,28 +80,16 @@ function createLookupForm(document, state, messages, submitLookup) {
     studentInput.value = state.studentNumber;
     studentLabel.htmlFor = studentInput.id;
     studentInput.addEventListener('input', () => { if (!isSubmitting) state.studentNumber = studentInput.value; });
-    const modeLabel = createTextElement(document, 'label', '', messages.trackingStatusOnly);
-    const modeInput = document.createElement('input');
-    modeLabel.className = 'tracking-status-only';
-    modeInput.type = 'checkbox';
-    modeInput.disabled = isSubmitting;
-    modeInput.name = 'status_only';
-    modeInput.checked = state.statusOnly;
-    modeLabel.prepend(modeInput);
-    modeInput.addEventListener('change', () => {
-        if (isSubmitting) return;
-        state.statusOnly = modeInput.checked;
-        updateStudentField();
-    });
     function updateStudentField() {
-        const hidden = state.statusOnly || isPhysicalReference(input.value.trim());
+        // Every lookup needs the student number, including physical receipts.
+        const hidden = false;
         studentLabel.hidden = hidden;
         studentInput.hidden = hidden;
         studentInput.required = !hidden;
         studentInput.disabled = hidden || isSubmitting;
     }
     updateStudentField();
-    form.append(label, input, studentLabel, studentInput, modeLabel, button);
+    form.append(label, input, studentLabel, studentInput, button);
     return form;
 }
 
@@ -185,6 +173,12 @@ function createDocumentList(document, documents, messages, allowFilename, replac
         card.append(title, status);
         if (item.required) card.append(createTextElement(document, 'span', 'public-document-badge', messages.trackingRequiredBadge));
         if (allowFilename && item.filename) card.append(createTextElement(document, 'p', 'application-document-filename', item.filename));
+        if (allowFilename && item.filename && item.code) {
+            const preview = createLink(document, `/api/public/applications/current/documents/${encodeURIComponent(item.code)}/preview`, messages.previewDocument || 'Önizle', 'application-button application-button-secondary document-preview-link');
+            preview.target = '_blank';
+            preview.rel = 'noopener';
+            card.append(preview);
+        }
         if (item.student_message) {
             card.append(
                 createTextElement(document, 'strong', 'tracking-document-message-label', messages.trackingDocumentMessageLabel),
@@ -287,15 +281,14 @@ function renderTracking(root, state, locale, submitLookup) {
  */
 export async function initializeApplicationTracking(root, api) {
     const document = root.ownerDocument;
-    const state = { kind: 'lookup', payload: null, referenceNumber: '', studentNumber: '', statusOnly: false, replacementDocuments: [], replacementSuccess: false, replacementCompleted: {} };
+    const state = { kind: 'lookup', payload: null, referenceNumber: '', studentNumber: '', replacementDocuments: [], replacementSuccess: false, replacementCompleted: {} };
     const render = () => renderTracking(root, state, document.documentElement.lang || 'tr', submitLookup);
     async function submitLookup(referenceNumber, studentNumber) {
         if (state.kind === 'lookupLoading') return;
         state.studentNumber = studentNumber.trim();
-        if (!state.statusOnly && !isPhysicalReference(referenceNumber.trim()) && !state.studentNumber) return;
+        if (!state.studentNumber) return;
         const submittedReference = referenceNumber.trim().toUpperCase();
         const submittedStudentNumber = state.studentNumber;
-        const statusOnly = state.statusOnly;
         state.referenceNumber = submittedReference;
         state.payload = null;
         state.replacementDocuments = [];
@@ -313,14 +306,11 @@ export async function initializeApplicationTracking(root, api) {
                 render();
                 return;
             }
-            if (!statusOnly) {
-                await api.accessApplicationWithReference({ reference_number: submittedReference, student_number: submittedStudentNumber });
-                await attachMatchingOwnerSession(state, api, submittedReference, render);
-                state.studentNumber = '';
-                render();
-                return;
-            }
-            state.payload = await api.lookupApplicationTracking(submittedReference);
+            await api.accessApplicationWithReference({ reference_number: submittedReference, student_number: submittedStudentNumber });
+            await attachMatchingOwnerSession(state, api, submittedReference, render);
+            state.studentNumber = '';
+            render();
+            return;
             state.kind = state.payload.found ? 'publicReady' : 'notFound';
         } catch (error) {
             state.payload = null;

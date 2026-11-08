@@ -6,6 +6,7 @@ import { createPdfMergerGallery } from './pdf-merger-gallery.js';
 import { mergeDocumentsToPdf, downloadPdfFile } from '../services/pdfMergerService.js';
 import { showToast } from './toastManager.js';
 import { mountMobileTransferPanel } from './mobile-transfer-panel.js';
+import { resolvePdfMergerText, formatPdfMergerText as fmt } from './pdf-merger-text.js';
 
 const DEFAULT_MAX_FILES = 30;
 const YOKSIS_SAFE_LIMIT_BYTES = 9 * 1024 * 1024;
@@ -48,8 +49,9 @@ function playCaptureFeedback() {
  * @returns {void} Mounts the dialog.
  */
 export function openPdfMergerModal(options = {}) {
+    const t = resolvePdfMergerText(options.text);
     let existingModal = document.getElementById('pdf-merger-modal-overlay');
-    if (existingModal?.dataset.isProcessing === 'true') { showToast('PDF işlemi devam ediyor. Tamamlanmasını bekleyin.', 'warning'); return; }
+    if (existingModal?.dataset.isProcessing === 'true') { showToast(t.busy, 'warning'); return; }
     if (existingModal) existingModal.remove();
 
     const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
@@ -68,7 +70,7 @@ export function openPdfMergerModal(options = {}) {
     overlay.className = 'staff-modal-overlay';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
-    overlay.setAttribute('aria-label', 'Belge sayfaları ekle');
+    overlay.setAttribute('aria-label', t.title);
 
     const modal = document.createElement('div');
     modal.className = 'staff-modal-card pdf-merger-modal-card';
@@ -91,13 +93,13 @@ export function openPdfMergerModal(options = {}) {
 
     const titleGroup = document.createElement('div');
     const title = document.createElement('h3');
-    title.textContent = 'Belge sayfaları ekle';
+    title.textContent = t.title;
     title.style.margin = '0 0 4px 0';
     title.style.fontSize = '1.2rem';
     title.style.color = 'var(--text-primary, #1e293b)';
 
     const subtitle = document.createElement('p');
-    subtitle.textContent = options.contextLabel || `Fotoğraf çekin ya da galeriden dosya seçin. Sayfalar tek PDF dosyasında birleştirilir (en fazla ${maxFiles}).`;
+    subtitle.textContent = options.contextLabel || fmt(t.subtitle, { max: maxFiles });
     subtitle.style.margin = '0';
     subtitle.style.fontSize = '0.85rem';
     subtitle.style.color = 'var(--text-secondary, #64748b)';
@@ -153,7 +155,7 @@ export function openPdfMergerModal(options = {}) {
     btnCameraMode.style.padding = '12px 14px';
     btnCameraMode.style.fontSize = '0.95rem';
     btnCameraMode.style.fontWeight = '600';
-    btnCameraMode.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Fotoğraf çek`;
+    btnCameraMode.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> ${escapeHtml(t.camera)}`;
 
     const btnFileSelect = document.createElement('button');
     btnFileSelect.type = 'button';
@@ -165,7 +167,7 @@ export function openPdfMergerModal(options = {}) {
     btnFileSelect.style.padding = '12px 14px';
     btnFileSelect.style.fontSize = '0.95rem';
     btnFileSelect.style.fontWeight = '600';
-    btnFileSelect.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg> Galeri veya dosya seç`;
+    btnFileSelect.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg> ${escapeHtml(t.fileSelect)}`;
 
     actionGrid.append(btnCameraMode, btnFileSelect);
     let transferPanel = null;
@@ -192,7 +194,7 @@ export function openPdfMergerModal(options = {}) {
     bannerInfo.style.fontSize = '0.88rem';
     bannerInfo.style.color = '#2ecc71';
     bannerInfo.style.fontWeight = '500';
-    bannerInfo.innerHTML = `<strong>Seri Çekim Modu:</strong> Fotoğraf kaydedildi. Bir sonraki fotoğraf için aşağıdaki Kamera butonuna tıklayın.`;
+    bannerInfo.innerHTML = `<strong>${escapeHtml(t.seriesModeLabel)}</strong> ${escapeHtml(t.seriesMode)}`;
 
     const bannerActions = document.createElement('div');
     bannerActions.style.display = 'flex';
@@ -204,10 +206,10 @@ export function openPdfMergerModal(options = {}) {
     btnNextShot.className = 'btn btn-primary';
     btnNextShot.style.padding = '5px 10px';
     btnNextShot.style.fontSize = '0.82rem';
-    btnNextShot.textContent = '📸 Sonraki Fotoğrafı Çek';
+    btnNextShot.textContent = t.nextShot;
     btnNextShot.addEventListener('click', () => {
         if (selectedFiles.length >= maxFiles) {
-            showToast(`Maksimum ${maxFiles} belge sınırına ulaşıldı.`, 'warning');
+            showToast(fmt(t.maxReached, { max: maxFiles }), 'warning');
             return;
         }
         isContinuousCameraMode = true;
@@ -220,14 +222,15 @@ export function openPdfMergerModal(options = {}) {
     btnStopCapture.className = 'btn btn-outline';
     btnStopCapture.style.padding = '5px 10px';
     btnStopCapture.style.fontSize = '0.82rem';
-    btnStopCapture.textContent = '✅ Çekimi Tamamla';
+    btnStopCapture.textContent = t.stopCapture;
     btnStopCapture.addEventListener('click', () => {
         isContinuousCameraMode = false;
         cameraBanner.style.display = 'none';
-        showToast('Seri çekim tamamlandı. Belgelerinizi inceleyip PDF oluşturabilirsiniz.', 'info');
+        showToast(t.captureDone, 'info');
     });
 
-    bannerActions.append(btnNextShot, btnStopCapture);
+    if (options.hideStopCapture === true) bannerActions.append(btnNextShot);
+    else bannerActions.append(btnNextShot, btnStopCapture);
     cameraBanner.append(bannerInfo, bannerActions);
 
     actionGrid.append(fileInput, cameraInput);
@@ -246,7 +249,7 @@ export function openPdfMergerModal(options = {}) {
     const clearBtn = document.createElement('button');
     clearBtn.type = 'button';
     clearBtn.className = 'btn btn-outline';
-    clearBtn.textContent = 'Tümünü Temizle';
+    clearBtn.textContent = t.clearAll;
     clearBtn.style.padding = '3px 8px';
     clearBtn.style.fontSize = '0.8rem';
     clearBtn.addEventListener('click', () => {
@@ -270,7 +273,7 @@ export function openPdfMergerModal(options = {}) {
     if (transferPanel) documentsPanel.classList.add('has-phone-transfer');
     const listHint = document.createElement('p');
     listHint.className = 'pdf-merger-list-hint';
-    listHint.textContent = 'Eklenen sayfaları önizleyip sıralayabilirsiniz.';
+    listHint.textContent = t.listHint;
     documentsPanel.append(actionGrid, ...(transferPanel ? [transferPanel] : []), cameraBanner, listHeader, listHint, fileListEl);
     if (transferPanel) mountMobileTransferPanel(transferPanel, files => addFiles(files), undefined, { sidebar: true });
     body.append(documentsPanel);
@@ -294,19 +297,19 @@ export function openPdfMergerModal(options = {}) {
     const btnMerge = document.createElement('button');
     btnMerge.type = 'button';
     btnMerge.className = 'btn btn-primary';
-    btnMerge.textContent = options.mergeLabel || 'PDF oluştur ve boyutu göster';
+    btnMerge.textContent = options.mergeLabel || t.merge;
     btnMerge.disabled = true;
 
     const previewLink = document.createElement('a');
-    previewLink.textContent = 'PDF’i aç ve yakınlaştırarak kontrol et';
+    previewLink.textContent = t.previewLink;
     previewLink.target = '_blank';
     previewLink.rel = 'noopener';
     previewLink.hidden = true;
     footer.append(progressMsg, previewLink, btnMerge);
     const previews = createDocumentPreviewStore();
-    const previewDialog = createDocumentPreviewDialog({ modal, previews, canInteract: () => !isSaving && !isBuilding });
+    const previewDialog = createDocumentPreviewDialog({ modal, previews, text: t, canInteract: () => !isSaving && !isBuilding });
     const gallery = createPdfMergerGallery({
-        container: fileListEl, previews, previewDialog, canInteract: () => !isSaving && !isBuilding,
+        container: fileListEl, previews, previewDialog, text: t, canInteract: () => !isSaving && !isBuilding,
         onMove: moveItem, onRemove: index => {
             if (isSaving || isBuilding) return;
             selectedFiles.splice(index, 1);
@@ -355,15 +358,15 @@ export function openPdfMergerModal(options = {}) {
 
             if (isCameraSource) {
                 const currentCount = selectedFiles.length;
-                showToast(`📸 ${currentCount}. fotoğraf kaydedildi! (${currentCount} / ${maxFiles})`, 'success');
+                showToast(fmt(t.photoSaved, { n: currentCount, max: maxFiles }), 'success');
 
                 if (currentCount < maxFiles && isContinuousCameraMode) {
                     cameraBanner.style.display = 'flex';
-                    bannerInfo.textContent = `${currentCount}/${maxFiles} fotoğraf kaydedildi. Sıradaki çekim için Kamera tuşuna basın.`;
+                    bannerInfo.textContent = fmt(t.photoProgress, { n: currentCount, max: maxFiles });
                 } else if (currentCount >= maxFiles) {
                     isContinuousCameraMode = false;
                     cameraBanner.style.display = 'none';
-                    showToast(`${maxFiles} fotoğraf sınırına ulaşıldı. PDF birleştirmeye hazırsınız.`, 'info');
+                    showToast(fmt(t.photoLimit, { max: maxFiles }), 'info');
                 }
             }
         }
@@ -372,12 +375,12 @@ export function openPdfMergerModal(options = {}) {
     // Camera mode trigger
     btnCameraMode.addEventListener('click', () => {
         if (selectedFiles.length >= maxFiles) {
-            showToast(`Maksimum ${maxFiles} belge sınırına ulaşıldı.`, 'warning');
+            showToast(fmt(t.maxReached, { max: maxFiles }), 'warning');
             return;
         }
         isContinuousCameraMode = true;
         cameraBanner.style.display = 'flex';
-        bannerInfo.innerHTML = `<strong>Seri Çekim Aktif:</strong> Fotoğrafı çekin; sıradaki çekim için Kamera butonuna tekrar basın.`;
+        bannerInfo.innerHTML = `<strong>${escapeHtml(t.seriesActiveLabel)}</strong> ${escapeHtml(t.seriesActive)}`;
         cameraInput.value = '';
         cameraInput.click();
     });
@@ -407,7 +410,7 @@ export function openPdfMergerModal(options = {}) {
     cameraInput.addEventListener('cancel', () => {
         // User exited camera view without snapping
         if (isContinuousCameraMode) {
-            bannerInfo.innerHTML = `<strong>Seri Çekim Duraklatıldı:</strong> ${selectedFiles.length} fotoğraf eklendi. Devam etmek için butona basın.`;
+            bannerInfo.innerHTML = `<strong>${escapeHtml(t.seriesPausedLabel)}</strong> ${escapeHtml(fmt(t.seriesPaused, { n: selectedFiles.length }))}`;
         }
     });
 
@@ -435,14 +438,14 @@ export function openPdfMergerModal(options = {}) {
         if (previewUrl) URL.revokeObjectURL(previewUrl);
         previewUrl = null;
         previewLink.hidden = true;
-        btnMerge.textContent = options.mergeLabel || 'PDF oluştur ve boyutu göster';
+        btnMerge.textContent = options.mergeLabel || t.merge;
         updateCount();
         gallery.sync(selectedFiles);
     }
 
     async function saveReadyPdf() {
         if (!readyPdfCanBeUsed || !readyPdf || readyPdf.byteLength > YOKSIS_SAFE_LIMIT_BYTES) {
-            progressMsg.textContent = 'PDF 9 MiB güvenli sınırının altında değil. Sayfa sayısını azaltıp yeniden oluşturun.';
+            progressMsg.textContent = t.tooLarge;
             return;
         }
         const controls = [...overlay.querySelectorAll('button,input,select')].map(node => ({ node, wasDisabled: node.disabled }));
@@ -450,9 +453,9 @@ export function openPdfMergerModal(options = {}) {
         overlay.dataset.isProcessing = 'true';
         controls.forEach(({ node }) => { node.disabled = true; });
         try {
-            progressMsg.textContent = 'PDF öğrenci kaydına kaydediliyor…';
+            progressMsg.textContent = t.saving;
             await options.onSave(readyPdf, preparedFields);
-            showToast(options.successMessage || 'PDF öğrenci kaydına kaydedildi.', 'success');
+            showToast(options.successMessage || t.saved, 'success');
             overlay.remove();
         } catch (error) {
             console.error('Physical PDF confirmation failed.', { errorName: error.name, code: error.code });
@@ -485,7 +488,7 @@ export function openPdfMergerModal(options = {}) {
         buildControls.forEach(({ node }) => { node.disabled = true; });
 
         try {
-            progressMsg.textContent = 'Belgeler sırayla birleştiriliyor ve 9 MiB sınırı kontrol ediliyor…';
+            progressMsg.textContent = t.merging;
             if (options.onPrepare) {
                 progressMsg.textContent = 'Başvuru formundan öğrenci bilgileri okunuyor…';
                 preparedFields = await options.onPrepare([...selectedFiles]);
@@ -501,23 +504,23 @@ export function openPdfMergerModal(options = {}) {
             previewLink.href = previewUrl;
             previewLink.hidden = false;
             const targetMessage = result.metrics.targetReached
-                ? 'YÖKSİS’in 10 MB sınırının altında.'
+                ? t.targetReached
                 : result.metrics.warning;
             const compressionMessage = Number.isInteger(result.metrics.compressionPercent)
-                ? ` Kullanılan sıkıştırma kademesi: %${result.metrics.compressionPercent}.`
-                : ' PDF sayfaları yeniden sıkıştırılmadan korundu.';
+                ? fmt(t.compressionUsed, { p: result.metrics.compressionPercent })
+                : t.compressionNone;
             const rasterNotice = result.metrics.rasterizedPdfs
-                ? ' PDF sayfaları görüntüye çevrildi; seçilebilir metin ve form alanları korunmaz.'
+                ? t.rasterNotice
                 : '';
-            progressMsg.textContent = `PDF ${formatBytes(result.metrics.inputBytes)} → ${formatBytes(result.metrics.outputBytes)}. ${targetMessage}${compressionMessage}${rasterNotice} Açıp okunabilirliği kontrol edin.`;
-            btnMerge.textContent = options.onSave ? (options.confirmLabel || 'Kontrol ettim, öğrenci kaydına ekle') : 'Kontrol ettim, PDF’i indir';
+            progressMsg.textContent = `PDF ${formatBytes(result.metrics.inputBytes)} → ${formatBytes(result.metrics.outputBytes)}. ${targetMessage}${compressionMessage}${rasterNotice} ${t.checkReadable}`;
+            btnMerge.textContent = options.onSave ? (options.confirmLabel || t.confirmSave) : t.confirmDownload;
             btnMerge.disabled = !readyPdfCanBeUsed;
-            if (!readyPdfCanBeUsed) btnMerge.title = 'PDF 9 MiB altında olmalı.';
+            if (!readyPdfCanBeUsed) btnMerge.title = t.mustBeSmall;
             closeBtn.disabled = false;
         } catch (err) {
             console.error('[PDF Merger Modal] Hata:', err);
-            showToast(`PDF birleştirme başarısız: ${err.message}`, 'error');
-            progressMsg.textContent = 'Hata oluştu.';
+            showToast(fmt(t.mergeFailed, { error: err.message }), 'error');
+            progressMsg.textContent = t.error;
             btnMerge.disabled = Boolean(readyPdf && !readyPdfCanBeUsed);
             closeBtn.disabled = false;
         } finally {
@@ -540,4 +543,8 @@ export function openPdfMergerModal(options = {}) {
         }
     };
     document.addEventListener('keydown', handleKeydown);
+}
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }

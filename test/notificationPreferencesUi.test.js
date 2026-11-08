@@ -354,17 +354,14 @@ test('opt-out PUT does not lock the phone field', async () => {
     assert.equal(phoneInput.disabled, false);
 });
 
-test('status-only tracking lookup does not request WhatsApp preferences or owner data', async () => {
+test('tracking login does not request WhatsApp preferences', async () => {
     const { document, root } = createDom();
     let preferenceReads = 0;
     const api = {
+        async accessApplicationWithReference() { return {}; },
         async readCurrentApplicationTracking() {
-            assert.fail('Status-only tracking must not read owner data.');
-        },
-        async lookupApplicationTracking(reference) {
             return {
-                found: true,
-                application: { reference_number: reference, student_number: 'STU-1', status: 'submitted', application_type: 'initial' },
+                application: { reference_number: 'ITU-7K9M-4X2P', student_number: 'STU-1', status: 'submitted', application_type: 'initial' },
                 documents: []
             };
         },
@@ -376,9 +373,7 @@ test('status-only tracking lookup does not request WhatsApp preferences or owner
 
     await initializeApplicationTracking(root, api);
     assert.equal(root.querySelector('[name="student_number"]').required, true);
-    const statusOnly = root.querySelector('[name="status_only"]');
-    statusOnly.checked = true;
-    statusOnly.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    root.querySelector('[name="student_number"]').value = '12345';
     const input = root.querySelector('#tracking-application-reference');
     input.value = 'ITU-7K9M-4X2P';
     root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', {

@@ -1,4 +1,5 @@
 import { isPdfDocument } from './document-preview-store.js';
+import { resolvePdfMergerText, formatPdfMergerText as fmt } from './pdf-merger-text.js';
 
 function closePreview(state) {
     if (!state.activePreview) return;
@@ -16,7 +17,7 @@ function createHeader(state, label) {
     title.textContent = label;
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
-    closeButton.textContent = 'Önizlemeyi kapat';
+    closeButton.textContent = state.text.closePreview;
     closeButton.addEventListener('click', () => closePreview(state));
     header.append(title, closeButton);
     return header;
@@ -36,7 +37,7 @@ function openPreview(state, { file, label, trigger }) {
     overlay.className = 'pdf-merger-preview';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
-    overlay.setAttribute('aria-label', `${label} önizlemesi`);
+    overlay.setAttribute('aria-label', fmt(state.text.previewOf, { label }));
     const content = document.createElement(isPdfDocument(file) ? 'iframe' : 'img');
     content.src = state.previews.getOriginal(file);
     content.setAttribute(isPdfDocument(file) ? 'title' : 'alt', label);
@@ -55,7 +56,7 @@ function openPreview(state, { file, label, trigger }) {
  * @param {object} options Parent modal, local preview store and processing guard.
  * @returns {object} Open, close and disposal operations. */
 export function createDocumentPreviewDialog(options) {
-    const state = { ...options, activePreview: null };
+    const state = { ...options, text: resolvePdfMergerText(options.text), activePreview: null };
     return {
         open: (file, label, trigger) => openPreview(state, { file, label, trigger }),
         close: () => closePreview(state), dispose: () => closePreview(state)

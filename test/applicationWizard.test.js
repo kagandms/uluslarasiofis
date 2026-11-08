@@ -836,7 +836,7 @@ test('under-18 answer is derived from the birth date and cannot be manually chan
     const options = [...select.options];
     const continueButton = root.querySelector('#application-step-form button[type="submit"]');
     assert.equal(question.textContent, '18 yaşından küçük müsünüz?');
-    assert.equal(options[0].textContent, 'Seçmek için tıklayınız');
+    assert.equal(options[0].textContent, 'Doğum tarihinizi girince otomatik belirlenir');
     assert.equal(options[0].value, '');
     assert.equal(options[0].disabled, true);
     assert.equal(select.value, 'false');
@@ -892,7 +892,7 @@ test('under-18 question and answer placeholder have complete translations in eve
         const select = root.querySelector('select[name="is_under_18"]');
         const options = [...select.options];
         assert.equal(select.closest('label').querySelector('span').textContent, PUBLIC_MESSAGES[locale].under18Question);
-        assert.equal(options[0].textContent, PUBLIC_MESSAGES[locale].under18SelectPlaceholder);
+        assert.equal(options[0].textContent, PUBLIC_MESSAGES[locale].under18AutoPlaceholder);
         assert.deepEqual(options.slice(1).map(({ textContent }) => textContent), [
             PUBLIC_MESSAGES[locale].yes, PUBLIC_MESSAGES[locale].no
         ]);
@@ -1244,7 +1244,7 @@ test('Review submits once, keeps five steps, and shows student-safe confirmation
     assert.doesNotMatch(root.textContent, /2026-09-30T10:00:00\.000Z/);
     assert.match(root.querySelector('[data-i18n="submissionNewStudentApplicationAction"]')?.textContent || '', /Farklı öğrenci için/);
     assert.equal(root.querySelector('a[data-i18n="trackingViewAction"]')?.getAttribute('href'), '/basvurum/');
-    assert.match(root.textContent, /ITU kodunuzla \/basvurum\//i);
+    assert.match(root.textContent, /ITU kodunuzla “Başvurumu sorgula” bölümünden/i);
     assert.equal(root.querySelector('[data-action="submit-application"]'), null);
     assert.equal(root.querySelector('.application-progress li').parentElement.children.length, 5);
     document.defaultView.close();

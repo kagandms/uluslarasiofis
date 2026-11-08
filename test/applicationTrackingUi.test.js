@@ -9,10 +9,10 @@ function createTrackingRoot() {
     return { document, root: document.querySelector('#application-tracking') };
 }
 
+// The student number is required for every ITU lookup now; fill it so the owner-login path can run.
 function selectStatusOnly(document, root) {
-    const input = root.querySelector('[name=status_only]');
-    input.checked = true;
-    input.dispatchEvent(new document.defaultView.Event('change'));
+    const studentNumber = root.querySelector('[name=student_number]');
+    if (studentNumber && !studentNumber.value) studentNumber.value = '12345';
 }
 
 function createTrackingDto(overrides = {}) {
@@ -163,61 +163,15 @@ test('missing owner session shows one shared ITU reference lookup form', async (
     document.defaultView.close();
 });
 
-test('public lookup renders statuses without filenames or document controls', async () => {
-    const { document, root } = createTrackingRoot();
-    let privateEndpointCalls = 0;
-    const api = {
-        async readCurrentApplicationTracking() {
-            throw Object.assign(new Error('session required'), { code: 'APPLICATION_SESSION_REQUIRED', status: 401 });
-        },
-        async lookupApplicationTracking() {
-            return {
-                found: true,
-                ...createTrackingDto({ documents: [
-                    { code: 'passport', label_key: 'documentPassport', required: true, status: 'waiting_review', filename: 'PRIVATE-FILENAME.pdf' }
-                ] })
-            };
-        },
-        async readCurrentResubmissionEligibility() { privateEndpointCalls += 1; return { documents: [] }; },
-        async createResubmissionUploadIntent() { privateEndpointCalls += 1; },
-        async finalizeResubmissionUpload() { privateEndpointCalls += 1; }
-    };
-    await initializeApplicationTracking(root, api);
-    selectStatusOnly(document, root);
-    root.querySelector('input[name="reference_number"]').value = 'ITU-7K9M-4X2P';
-    root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setImmediate(resolve));
-
-    assert.match(root.textContent, /Gönderildi/);
-    assert.match(root.textContent, /İnceleme bekliyor/);
-    assert.doesNotMatch(root.textContent, /PRIVATE-FILENAME\.pdf/);
-    assert.equal(root.querySelectorAll('input:not([name=tracking_reference])').length, 0);
-    assert.equal(root.querySelector('input[type="file"]'), null);
-    assert.equal(root.querySelector('a'), null);
-    assert.equal(root.querySelector('input[type="file"]'), null);
-    assert.equal(privateEndpointCalls, 0);
-    assert.doesNotMatch(root.innerHTML, /download|preview|upload|ocr/i);
-    document.defaultView.close();
-});
-
-test('public ITU tracking renders a rejected application reason as plain text', async () => {
+test('student login renders a rejected application reason as plain text', async () => {
     const { document, root } = createTrackingRoot();
     const rejectionReason = '</dd><script>do not execute</script>';
     const api = {
         async readCurrentApplicationTracking() {
-            throw Object.assign(new Error('session required'), { code: 'APPLICATION_SESSION_REQUIRED', status: 401 });
-        },
-        async lookupApplicationTracking() {
-            return { found: true, ...createTrackingDto({
-                application: { status: 'rejected', rejection_reason: rejectionReason }, documents: []
-            }) };
+            return createTrackingDto({ application: { status: 'rejected', rejection_reason: rejectionReason }, documents: [] });
         }
     };
-    await initializeApplicationTracking(root, api);
-    selectStatusOnly(document, root);
-    root.querySelector('input[name="reference_number"]').value = 'ITU-7K9M-4X2P';
-    root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setImmediate(resolve));
+    await initializeAndLookup(document, root, api);
 
     assert.match(root.textContent, /Resmî ret gerekçesi/);
     assert.ok(root.textContent.includes(rejectionReason));
@@ -226,17 +180,12 @@ test('public ITU tracking renders a rejected application reason as plain text', 
     document.defaultView.close();
 });
 
-test('matching owner session does not hide the public rejection reason', async () => {
+test('matching owner session shows the rejection reason to the student', async () => {
     const { document, root } = createTrackingRoot();
     const rejectionReason = 'Sentetik UAT: eksik belge';
     const api = {
-        async lookupApplicationTracking() {
-            return { found: true, ...createTrackingDto({
-                application: { status: 'rejected', rejection_reason: rejectionReason }, documents: []
-            }) };
-        },
         async readCurrentApplicationTracking() {
-            return createTrackingDto({ application: { status: 'rejected' }, documents: [] });
+            return createTrackingDto({ application: { status: 'rejected', rejection_reason: rejectionReason }, documents: [] });
         }
     };
 
@@ -346,34 +295,32 @@ test('finalize refreshes owner tracking to waiting review while application stay
     document.defaultView.close();
 });
 
-test('not-found lookup is neutral and allows a retry', async () => {
+test('wrong credentials are neutral and allow a retry', async () => {
     const { document, root } = createTrackingRoot();
-    let lookupCount = 0;
+    let attempts = 0;
     const api = {
         async readCurrentApplicationTracking() {
             throw Object.assign(new Error('session required'), { code: 'APPLICATION_SESSION_REQUIRED', status: 401 });
         },
-        async lookupApplicationTracking() {
-            lookupCount += 1;
-            return lookupCount === 1 ? { found: false, application: null, documents: [] } : { found: true, ...createTrackingDto() };
+        async accessApplicationWithReference() {
+            attempts += 1;
+            if (attempts === 1) throw Object.assign(new Error('bad'), { code: 'INVALID_ACCESS_CREDENTIALS', status: 401 });
+            return {};
         }
     };
     await initializeApplicationTracking(root, api);
-    selectStatusOnly(document, root);
     const submit = async (studentNumber) => {
-        root.querySelector('input[name="reference_number"]').value = studentNumber;
+        root.querySelector('input[name="reference_number"]').value = 'ITU-7K9M-4X2P';
+        root.querySelector('[name=student_number]').value = studentNumber;
         root.querySelector('.tracking-lookup-form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
         await new Promise((resolve) => setImmediate(resolve));
     };
 
-    await submit('ITU-7K9M-4X2P');
-    assert.match(root.textContent, /görüntülenebilir bir başvuru bulunamadı/i);
+    await submit('0000');
+    assert.match(root.textContent, /hatalı/i);
     assert.equal(root.querySelectorAll('input[name=reference_number]').length, 1);
-    assert.equal(root.querySelector('[name=student_number]').required, false);
+    assert.equal(root.querySelector('[name=student_number]').required, true);
     assert.doesNotMatch(root.textContent, /draft exists|student exists/i);
-    await submit('ITU-7K9M-4X2P');
-    assert.equal(lookupCount, 2);
-    assert.match(root.textContent, /Gönderildi/);
     document.defaultView.close();
 });
 
@@ -412,7 +359,7 @@ test('tracking supports all locales and the public main entry keeps Arabic right
         assert.equal(document.documentElement.dir, 'rtl');
         assert.doesNotMatch(document.querySelector('#application-tracking').textContent, /البحث برقم الطالب/);
         assert.ok(document.querySelector('[name=student_number]'));
-        assert.ok(document.querySelector('[name=status_only]'));
+        assert.equal(document.querySelector('[name=status_only]'), null);
     } finally {
         if (previousDocument === undefined) delete globalThis.document;
         else globalThis.document = previousDocument;
@@ -425,9 +372,14 @@ test('tracking supports all locales and the public main entry keeps Arabic right
 test('language changes preserve the shared ITU code without new lookups', async () => {
     const { document, root } = createTrackingRoot();
     let lookups = 0;
-    const api = { lookupApplicationTracking: async () => { lookups += 1; return { found: true, ...createTrackingDto() }; } };
+    const api = {
+        async accessApplicationWithReference() { lookups += 1; return {}; },
+        async readCurrentApplicationTracking() { return createTrackingDto(); }
+    };
     await initializeApplicationTracking(root, api);
-    selectStatusOnly(document, root);
+    const studentNumber = root.querySelector('[name=student_number]');
+    studentNumber.value = '12345';
+    studentNumber.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
     const reference = root.querySelector('#tracking-application-reference');
     reference.value = 'ITU-7K9M-4X2P';
     reference.dispatchEvent(new document.defaultView.Event('input'));
@@ -449,21 +401,17 @@ test('language changes preserve the shared ITU code without new lookups', async 
     document.defaultView.close();
 });
 
-test('public resubmission lookup links students to the secure page where upload is available', async () => {
+test('student login shows the resubmission request message for a document', async () => {
     const { document, root } = createTrackingRoot();
     const api = {
-        async lookupApplicationTracking() {
-            return { found: true, ...createTrackingDto({ application: { status: 'resubmission_required' }, documents: [
+        async readCurrentApplicationTracking() {
+            return createTrackingDto({ application: { status: 'resubmission_required' }, documents: [
                 { code: 'health_insurance', label_key: 'documentHealthInsurance', required: true,
                     status: 'resubmission_required', student_message: 'Sigorta dosyanızı yükleyebilirsiniz.' }
-            ] }) };
-        },
-        async readCurrentApplicationTracking() { throw new Error('No owner session on this device'); }
+            ] });
+        }
     };
     await initializeAndLookup(document, root, api);
-    const link = root.querySelector('.tracking-owner-access-link');
-    assert.ok(link);
-    assert.equal(link.getAttribute('href'), '/basvuruya-devam-et/');
     assert.match(root.textContent, /Sigorta dosyanızı yükleyebilirsiniz/);
     document.defaultView.close();
 });
@@ -489,21 +437,6 @@ test('online credentials open eligible replacement upload in one submission', as
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(calls, ['access', 'tracking', 'eligibility']);
     assert.equal(root.querySelectorAll('input[type=file]').length, 1);
-    document.defaultView.close();
-});
-
-test('anonymous status lookup never reads an existing owner session', async () => {
-    const { document, root } = createTrackingRoot();
-    await initializeApplicationTracking(root, {
-        async lookupApplicationTracking() { return { found: true, ...createTrackingDto() }; },
-        async readCurrentApplicationTracking() { assert.fail('Anonymous mode must not read owner data'); }
-    });
-    selectStatusOnly(document, root);
-    root.querySelector('[name=reference_number]').value = 'ITU-7K9M-4X2P';
-    root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { cancelable: true }));
-    await new Promise(resolve => setImmediate(resolve));
-    assert.equal(root.querySelector('.application-document-filename'), null);
-    assert.match(root.textContent, /Gönderildi/);
     document.defaultView.close();
 });
 
@@ -533,14 +466,14 @@ test('failed credentials and mismatched sessions never reveal owner data or fall
     }
 });
 
-test('physical reference hides the student field and restores it for an online reference', async () => {
+test('the student number is required for physical and online references alike', async () => {
     const { document, root } = createTrackingRoot();
     await initializeApplicationTracking(root, {});
     const reference = root.querySelector('[name=reference_number]');
     reference.value = 'ITU-26-ABCDEFG';
     reference.dispatchEvent(new document.defaultView.Event('input'));
-    assert.equal(root.querySelector('[name=student_number]').required, false);
-    assert.equal(root.querySelector('[name=student_number]').hidden, true);
+    assert.equal(root.querySelector('[name=student_number]').required, true);
+    assert.equal(root.querySelector('[name=student_number]').hidden, false);
     reference.value = 'ITU-7K9M-4X2P';
     reference.dispatchEvent(new document.defaultView.Event('input'));
     assert.equal(root.querySelector('[name=student_number]').required, true);
@@ -579,7 +512,6 @@ test('pending login freezes credentials and verifies the originally submitted re
     root.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { cancelable: true }));
     assert.equal(root.querySelector('[name=reference_number]').disabled, true);
     assert.equal(root.querySelector('[name=student_number]').disabled, true);
-    assert.equal(root.querySelector('[name=status_only]').disabled, true);
     const reference = root.querySelector('[name=reference_number]');
     reference.value = 'ITU-ABCD-EFGH';
     reference.dispatchEvent(new document.defaultView.Event('input'));

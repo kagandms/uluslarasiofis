@@ -1,4 +1,5 @@
 import { isPdfDocument } from './document-preview-store.js';
+import { resolvePdfMergerText, formatPdfMergerText as fmt } from './pdf-merger-text.js';
 
 function createAction(label, text, onClick) {
     const button = document.createElement('button');
@@ -19,12 +20,12 @@ async function showThumbnail(state, entry) {
         if (!url || !entry.card.isConnected) return;
         const image = document.createElement('img');
         image.src = url;
-        image.alt = `${entry.label} küçük önizlemesi`;
+        image.alt = fmt(state.text.thumbAlt, { label: entry.label });
         image.draggable = false;
         entry.previewButton.replaceChildren(image);
     } catch {
-        entry.previewButton.textContent = isPdfDocument(entry.file) ? 'PDF' : 'Fotoğraf';
-        entry.previewButton.title = 'Küçük önizleme hazırlanamadı; belgeyi açmak için tıklayın.';
+        entry.previewButton.textContent = isPdfDocument(entry.file) ? 'PDF' : state.text.photo;
+        entry.previewButton.title = state.text.thumbFailed;
     }
 }
 
@@ -38,13 +39,13 @@ function handleVisibility(state, observations) {
 }
 
 function createEntry(state, file) {
-    const label = isPdfDocument(file) ? `PDF ${++state.nextPdfNumber}` : `Fotoğraf ${++state.nextPhotoNumber}`;
+    const label = isPdfDocument(file) ? `PDF ${++state.nextPdfNumber}` : `${state.text.photo} ${++state.nextPhotoNumber}`;
     const card = document.createElement('article');
     card.className = 'pdf-merger-file-card';
     card.draggable = true;
     const number = document.createElement('span');
     number.className = 'pdf-merger-file-position';
-    const previewButton = createAction(`${label} önizlemesini aç`, isPdfDocument(file) ? 'PDF' : 'Fotoğraf',
+    const previewButton = createAction(fmt(state.text.openPreview, { label }), isPdfDocument(file) ? 'PDF' : state.text.photo,
         () => state.previewDialog.open(file, label, previewButton));
     previewButton.className = 'pdf-merger-thumbnail';
     const entry = { file, label, card, number, previewButton, position: 0, hasRequestedPreview: false };
@@ -61,7 +62,7 @@ function createDetails(state, entry) {
     label.textContent = entry.label;
     const source = document.createElement('small');
     source.className = 'pdf-merger-file-source';
-    source.textContent = /^Telefondan_/i.test(entry.file.name) ? 'Telefondan' : entry.file.name;
+    source.textContent = /^Telefondan_/i.test(entry.file.name) ? state.text.fromPhone : entry.file.name;
     source.title = entry.file.name;
     const actions = createActions(state, entry);
     details.append(label, source, actions);
@@ -71,10 +72,10 @@ function createDetails(state, entry) {
 function createActions(state, entry) {
     const actions = document.createElement('div');
     actions.className = 'pdf-merger-file-actions';
-    entry.up = createAction(`${entry.label} yukarı taşı`, '↑', () => state.onMove(entry.position, entry.position - 1));
-    entry.down = createAction(`${entry.label} aşağı taşı`, '↓', () => state.onMove(entry.position, entry.position + 1));
-    const remove = createAction(`${entry.label} sil`, '✕', () => state.onRemove(entry.position));
-    const dragHandle = createAction(`${entry.label} sürükleyerek sırala`, '⠿', () => {});
+    entry.up = createAction(fmt(state.text.moveUp, { label: entry.label }), '↑', () => state.onMove(entry.position, entry.position - 1));
+    entry.down = createAction(fmt(state.text.moveDown, { label: entry.label }), '↓', () => state.onMove(entry.position, entry.position + 1));
+    const remove = createAction(fmt(state.text.remove, { label: entry.label }), '✕', () => state.onRemove(entry.position));
+    const dragHandle = createAction(fmt(state.text.drag, { label: entry.label }), '⠿', () => {});
     dragHandle.className = 'btn btn-outline pdf-merger-drag-handle';
     dragHandle.draggable = true;
     actions.append(dragHandle, entry.up, entry.down, remove);
@@ -134,7 +135,7 @@ function collectAvailableEntries(state) {
 function showEmptyList(state) {
     const empty = document.createElement('p');
     empty.className = 'pdf-merger-empty-list';
-    empty.textContent = 'Henüz hiçbir belge eklenmedi. Fotoğraf çekebilir veya dosya seçebilirsiniz.';
+    empty.textContent = state.text.empty;
     state.container.replaceChildren(empty);
 }
 
@@ -151,7 +152,7 @@ function syncGallery(state, files) {
     for (const [position, entry] of state.entries.entries()) {
         entry.position = position;
         entry.number.textContent = String(position + 1);
-        entry.card.setAttribute('aria-label', `${position + 1}. sırada ${entry.label}`);
+        entry.card.setAttribute('aria-label', fmt(state.text.position, { n: position + 1, label: entry.label }));
         entry.up.disabled = position === 0;
         entry.down.disabled = position === state.entries.length - 1;
         state.container.append(entry.card);
@@ -175,7 +176,7 @@ function disposeGallery(state) {
  * @param {object} options Container, preview services and guarded move/remove callbacks.
  * @returns {object} List synchronization and disposal operations. */
 export function createPdfMergerGallery(options) {
-    const state = { ...options, entries: [], draggedEntry: null, nextPhotoNumber: 0, nextPdfNumber: 0, observer: null };
+    const state = { ...options, text: resolvePdfMergerText(options.text), entries: [], draggedEntry: null, nextPhotoNumber: 0, nextPdfNumber: 0, observer: null };
     if (typeof IntersectionObserver === 'function') {
         state.observer = new IntersectionObserver(observations => handleVisibility(state, observations), { rootMargin: '160px' });
     }

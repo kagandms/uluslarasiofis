@@ -336,6 +336,27 @@ export function createDocumentRepository(database) {
                 LIMIT 1
             `).bind(fileId).first();
         },
+        /** Current finalized file for the owner's own preview; allows scan_status pending or clean, never unsafe/failed. */
+        async findStudentPreviewFile(applicationId, code) {
+            return database.prepare(`
+                SELECT files.id, files.storage_key, files.original_filename, files.media_type, files.byte_size
+                FROM applications
+                JOIN document_records AS records ON records.application_id = applications.id
+                JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
+                JOIN document_revisions AS revisions ON revisions.document_record_id = records.id
+                JOIN document_revision_files AS files ON files.revision_id = revisions.id AND files.page_order = 0
+                JOIN upload_intents AS intents ON intents.revision_file_id = files.id
+                WHERE applications.id = ?
+                  AND records.application_type = applications.application_type
+                  AND requirements.application_type = applications.application_type
+                  AND requirements.code = ? AND requirements.is_active = 1
+                  AND revisions.is_current = 1
+                  AND revisions.status IN ('submitted', 'approved', 'resubmission_required')
+                  AND files.upload_status = 'finalized' AND files.scan_status IN ('pending', 'clean')
+                  AND files.cleanup_status = 'none' AND intents.status = 'completed'
+                LIMIT 1
+            `).bind(applicationId, code).first();
+        },
         async findCurrentPrivateFileByApplicationAndCode(applicationId, code) {
             return database.prepare(`
                 SELECT files.id, files.storage_key, files.original_filename, files.media_type, files.byte_size,

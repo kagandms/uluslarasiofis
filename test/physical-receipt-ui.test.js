@@ -59,6 +59,7 @@ test('the shared lookup accepts a physical ITU code and renders its status',asyn
     await initializeApplicationTracking(root,api);
     assert.equal(root.querySelectorAll('input[name=reference_number]').length,1);
     root.querySelector('input[name=reference_number]').value='ITU-26-ABCDEFG';
+    root.querySelector('[name=student_number]').value='12345';
     root.querySelector('.tracking-lookup-form').dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));
     await new Promise(resolve=>setImmediate(resolve));
 

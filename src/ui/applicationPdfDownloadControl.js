@@ -5,10 +5,19 @@ export function createApplicationPdfDownloadControl(document, application, messa
     const status = document.createElement('p');
     wrapper.className = `application-pdf-download-control ${className}`.trim();
     button.type = 'button';
-    button.className = className.includes('staff-') ? 'btn btn-primary' : 'application-button application-button-secondary';
+    const isStaff = className.includes('staff-');
+    button.className = isStaff ? 'btn btn-primary' : 'application-button application-button-primary';
     button.dataset.action = 'download-application-pdf';
-    button.dataset.i18n = 'downloadApplicationPdf';
-    button.textContent = messages.downloadApplicationPdf;
+    const labelKey = !isStaff && messages.downloadApplicationPdfRequired ? 'downloadApplicationPdfRequired' : 'downloadApplicationPdf';
+    button.dataset.i18n = labelKey;
+    button.textContent = messages[labelKey];
+    if (!isStaff && messages.applicationPdfRequiredNote) {
+        const note = document.createElement('p');
+        note.className = 'application-pdf-required-note';
+        note.dataset.i18n = 'applicationPdfRequiredNote';
+        note.textContent = messages.applicationPdfRequiredNote;
+        wrapper.append(note);
+    }
     status.className = 'application-pdf-download-status';
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');

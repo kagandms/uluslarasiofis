@@ -54,9 +54,19 @@ export function readCookie(request, cookieName) {
  * @param {number} maxAgeSeconds Cookie lifetime in seconds.
  * @returns {string} Set-Cookie header value.
  */
-export function createSessionCookie(sessionType, token, maxAgeSeconds) {
+export function createSessionCookie(sessionType, token, maxAgeSeconds, { secure = true } = {}) {
     const cookieName = sessionType === 'staff' ? STAFF_COOKIE_NAME : APPLICATION_COOKIE_NAME;
-    return `${cookieName}=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}`;
+    return `${cookieName}=${encodeURIComponent(token)}; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Strict; Path=/; Max-Age=${maxAgeSeconds}`;
+}
+
+/**
+ * Local development only: plain-HTTP requests (for example a phone on the LAN) cannot store Secure cookies.
+ * Returns true only for APP_ENV=local over http; staging and production always keep Secure.
+ * @param {object} environment Worker bindings. @param {Request} request Current request.
+ * @returns {boolean} Whether the Secure attribute may be omitted.
+ */
+export function allowInsecureLocalCookie(environment, request) {
+    return environment?.APP_ENV === 'local' && new URL(request.url).protocol === 'http:';
 }
 
 /**

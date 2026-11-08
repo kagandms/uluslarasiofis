@@ -389,3 +389,34 @@ export async function deleteCurrentStudentDocument(request, environment, code) {
     const remaining = await repositories.documents.listStudentDocumentCleanupFiles(application.id, code);
     return { cleanup_status: remaining.length ? 'pending' : 'complete' };
 }
+
+/**
+ * Streams the owner's own current file inline so the applicant can preview what was uploaded.
+ * Read-only; SameSite=Strict owner cookie authorizes it. Unsafe or failed scans are never served.
+ * @param {Request} request Owner-session GET request.
+ * @param {object} environment Worker D1 and private R2 bindings.
+ * @param {string} code Document requirement code.
+ * @returns {Promise<Response>} Sandboxed inline response.
+ */
+export async function previewCurrentStudentDocument(request, environment, code) {
+    requireMethod(request, 'GET');
+    const session = await requireApplicationSession(request, environment);
+    const { application, repositories, requirements } = await readCurrentStudentRequirements(session, environment);
+    requireOwnedRequirement(requirements, code);
+    const file = await repositories.documents.findStudentPreviewFile(application.id, code);
+    if (!file || !['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.media_type)) {
+        throw new ApiError(404, 'DOCUMENT_NOT_FOUND', 'Belge bulunamadı.');
+    }
+    const object = await createDocumentStorage(environment).get(file.storage_key);
+    if (!object?.body) throw new ApiError(404, 'DOCUMENT_NOT_FOUND', 'Belge bulunamadı.');
+    const extension = file.media_type === 'application/pdf' ? 'pdf' : file.media_type.split('/')[1];
+    const headers = new Headers({
+        'Content-Type': file.media_type,
+        'Content-Disposition': `inline; filename="${code.replace(/[^A-Za-z0-9_-]/g, '_')}.${extension}"`,
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; sandbox"
+    });
+    if (Number.isSafeInteger(file.byte_size) && file.byte_size >= 0) headers.set('Content-Length', String(file.byte_size));
+    return new Response(object.body, { status: 200, headers });
+}
