@@ -23,7 +23,9 @@ test('public guide focuses its controls, traps Tab, and restores the trigger and
         trigger.focus();
         openPublicGuideModal();
         const overlay = document.getElementById('public-guide-modal-overlay');
-        const [first, last] = overlay.querySelectorAll('button');
+        const buttons = [...overlay.querySelectorAll('button')];
+        const first = buttons[0];
+        const last = buttons.at(-1);
         assert.equal(document.activeElement, first);
         assert.equal(trigger.inert, true);
         first.dispatchEvent(new view.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
@@ -81,4 +83,32 @@ test('resume reference label stays translated in all five public locales', async
         }
         dom.window.close();
     }
+});
+
+test('public guide walks through the screenshot steps and localizes its labels', () => {
+    withDocument((view) => {
+        openPublicGuideModal();
+        const overlay = document.getElementById('public-guide-modal-overlay');
+        const counter = overlay.querySelector('.public-guide-counter');
+        const prev = overlay.querySelector('.public-guide-prev');
+        const next = overlay.querySelector('.public-guide-next');
+        const image = overlay.querySelector('.public-guide-figure img');
+        assert.match(counter.textContent, /^Adım 1 \/ 9$/);
+        assert.equal(prev.disabled, true);
+        assert.equal(image.getAttribute('src'), '/guide/tr/iletisim.jpg');
+        next.click();
+        assert.match(counter.textContent, /^Adım 2 \/ 9$/);
+        assert.equal(image.getAttribute('src'), '/guide/tr/kisisel.jpg');
+        for (let step = 0; step < 10; step += 1) next.click();
+        assert.equal(next.disabled, true);
+        assert.equal(image.getAttribute('src'), '/guide/tr/devam-et.jpg');
+        prev.click();
+        assert.match(counter.textContent, /^Adım 8 \/ 9$/);
+        overlay.querySelector('.public-modal-close').click();
+        document.documentElement.lang = 'en';
+        openPublicGuideModal();
+        assert.match(document.querySelector('.public-guide-counter').textContent, /^Step 1 of 9$/);
+        assert.equal(document.querySelector('.public-guide-figure img').getAttribute('src'), '/guide/en/iletisim.jpg');
+        document.querySelector('.public-modal-close').click();
+    });
 });

@@ -1,115 +1,96 @@
-const GUIDE_TRANSLATIONS = {
-    tr: {
-        modalTitle: 'Uluslararası Öğrenci Portalı Rehberi',
-        closeAria: 'Kapat',
-        understoodBtn: 'Anladım',
-        section1Title: '📝 İkamet Başvurusu Nasıl Yapılır?',
-        section1Steps: [
-            '<strong>1. İletişim Bilgileri:</strong> Size ulaşabileceğimiz güncel e-posta adresinizi ve telefon numaranızı girin.',
-            '<strong>2. Başvuru ve Kimlik Bilgileri:</strong> İlk başvuru, uzatma veya geçiş başvurusunu seçip kişisel bilgilerinizi doldurun. Geçişte mevcut ikamet kartı bilgileri istenir. Bu portal ofis sürecini ve belgeleri takip eder; e-İkamet başvurusunu ayrıca Göç İdaresinin sisteminde tamamlayın.',
-            '<strong>3. Bilgilerinizi Kontrol Edin:</strong> İlerlemeden önce girdiğiniz bilgilerin doğruluğunu teyit edin.',
-            '<strong>4. Gerekli Belgeleri Yükleyin:</strong> Başvurunuza ve verdiğiniz yanıtlara göre ekranda gösterilen belgeleri yükleyin. Sigorta ve diğer koşullu belgeler yalnızca durumunuza göre istenebilir; emin olmadığınız bir durumda ofise danışın.',
-            '<strong>5. Başvuru Numaranızı Kaydedin:</strong> Online başvuruda verilen ITU ile başlayan başvuru kodunuzu güvenli bir yere kaydedin. Sorgulama ekranında fiziksel ve online başvurular için bu kodu kullanabilirsiniz; ayrıntılı online girişte öğrenci numaranız da gerekir.'
-        ],
-        section2Title: '🔍 Başvuru Sorgulama Özelliği Nasıl Kullanılır?',
-        section2Steps: [
-            '<strong>Sorgulama Ekranı:</strong> Ana sayfadaki "Başvurumu Sorgula" butonuna tıklayın.',
-            '<strong>Durum sorgulama:</strong> Fiziksel veya online başvuruda size verilen ITU ile başlayan kodu girin. Ayrıntılı online giriş ve belge işlemleri için başvuru kodunuz ve öğrenci numaranızla oturum açın.',
-            '<strong>Aşamaları Takip Edin:</strong> Portal başvurunuzun ofis incelemesi ve işlem aşamasını gösterir. Portalda tamamlanması, tek başına Göç İdaresinin ikamet izni kararı anlamına gelmez.',
-            '<strong>Eksik Belge Güncellemesi:</strong> Eğer Uluslararası Öğrenci Ofisi evraklarınızda bir eksiklik veya yenileme talep ederse, sorgulama sayfasından doğrudan yeni belge yükleyebilirsiniz.'
-        ]
-    },
-    en: {
-        modalTitle: 'International Student Portal Guide',
-        closeAria: 'Close',
-        understoodBtn: 'Got it',
-        section1Title: '📝 How to Submit a Residence Permit Application?',
-        section1Steps: [
-            '<strong>1. Contact Information:</strong> Enter your active email address and phone number so the office can reach you.',
-            '<strong>2. Identity & Application Details:</strong> Select First Application, Extension, or Transition and enter your details. Transition applications require current residence card details. This portal tracks the university office process and documents; complete the official e-İkamet application separately in the Migration Authority system.',
-            '<strong>3. Review Information:</strong> Carefully verify all entered information before proceeding.',
-            '<strong>4. Upload Required Documents:</strong> Upload the documents shown for your application and answers. Insurance and other conditional documents may only be required for some cases; contact the office if you are unsure.',
-            '<strong>5. Save Your Application Reference:</strong> Keep the ITU application code issued after online submission. Use it to track either in-person or online applications; detailed online access also requires your student number.'
-        ],
-        section2Title: '🔍 How to Use the Application Tracking Feature?',
-        section2Steps: [
-            '<strong>Tracking Screen:</strong> Click "Track My Application" on the homepage.',
-            '<strong>Status lookup:</strong> Enter the ITU code issued for an in-person or online application. Detailed online access and document actions require signing in with the application code and student number.',
-            '<strong>Track Status:</strong> The portal shows the office review and processing stage. Completion in this portal does not by itself mean that the Migration Authority has granted a residence permit.',
-            '<strong>Resubmission / Missing Documents:</strong> If the International Office requests missing or updated documents, upload them directly from the tracking page.'
-        ]
-    },
-    ru: {
-        modalTitle: 'Руководство по порталу иностранных студентов',
-        closeAria: 'Закрыть',
-        understoodBtn: 'Понятно',
-        section1Title: '📝 Как подать заявку на ВНЖ?',
-        section1Steps: [
-            '<strong>1. Контактные данные:</strong> Введите актуальный адрес электронной почты и номер телефона для связи.',
-            '<strong>2. Личные данные и вид заявки:</strong> Выберите первичную подачу, продление или переход. Для перехода нужны данные текущей карты ВНЖ. Портал отслеживает университетский процесс и документы; официальную заявку e-İkamet подайте отдельно в системе миграционной службы.',
-            '<strong>3. Проверка данных:</strong> Внимательно проверьте правильность введенной информации перед отправкой.',
-            '<strong>4. Загрузка документов:</strong> Загрузите документы, показанные для вашего заявления и ответов. Страховка и другие условные документы требуются только в некоторых случаях; при сомнениях обратитесь в офис.',
-            '<strong>5. Сохранение номера заявки:</strong> Сохраните номер заявки; он понадобится вместе с номером студента для входа и просмотра подробностей.'
-        ],
-        section2Title: '🔍 Как отслеживать статус заявки?',
-        section2Steps: [
-            '<strong>Экран отслеживания:</strong> Нажмите «Проверить статус» на главной странице.',
-            '<strong>Проверка статуса:</strong> Введите код ITU, выданный для личной или онлайн-подачи. Для подробного онлайн-доступа и работы с документами войдите по коду заявки и номеру студента.',
-            '<strong>Этапы:</strong> Портал показывает этап проверки и обработки в офисе. Завершение в портале само по себе не означает выдачу ВНЖ Миграционной службой.',
-            '<strong>Обновление недостающих документов:</strong> Если офис запросит исправление или дополнительный документ, загрузите его прямо на странице отслеживания.'
-        ]
-    },
-    tk: {
-        modalTitle: 'Halkara Talyp Portaly Gollanmasy',
-        closeAria: 'Ýap',
-        understoodBtn: 'Düşnükli',
-        section1Title: '📝 Ýaşamak rugsady üçin arza nähili tabşyrylýar?',
-        section1Steps: [
-            '<strong>1. Habarlaşmak Maglumatlary:</strong> Size elýeterli boljak häzirki elektron poçtaňyzy we telefon belgiňizi giriziň.',
-            '<strong>2. Arza we Şahsy Maglumatlar:</strong> Ilkinji ýüz tutma, möhlet uzaltma ýa-da geçiş görnüşini saýlaň. Geçiş üçin häzirki ýaşaýyş rugsat kartynyň maglumatlary gerek. Bu portal uniwersitetiň işini we resminamalary yzarlaýar; resmi e-İkamet arzasyny Göç edarasynyň ulgamynda aýratyn tabşyryň.',
-            '<strong>3. Maglumatlary Barlamak:</strong> Indiki ädime geçmezden ozal ähli maglumatlaryň dogrulygyny barlaň.',
-            '<strong>4. Gerekli Resminamalary Ýüklemek:</strong> Arzaňyza we jogaplaryňyza görä ekranda görkezilen resminamalary ýükläň. Ätiýaçlandyryş we beýleki şertli resminamalar diňe käbir ýagdaýlarda talap edilýär; şübhe bolsa Ofise ýüz tutuň.',
-            '<strong>5. Arza Belgiňizi Saklaň:</strong> Arza salgylanma belgiňizi saklaň; jikme-jiklikleri görmek üçin talyp belgiňiz bilen bilelikde gerek bolar.'
-        ],
-        section2Title: '🔍 Arza Ýagdaýy Nähili Barlanýar?',
-        section2Steps: [
-            '<strong>Barlamak Bölümi:</strong> Baş sahypadaky "Arzamy Barla" düwmesine basyň.',
-            '<strong>Ýagdaýy barlamak:</strong> Şahsy ýa-da onlaýn arzaňyz üçin berlen ITU kody giriziň. Onlaýn jikme-jiklikler we resminamalar üçin arza kody hem-de talyp belgisi bilen giriň.',
-            '<strong>Ýagdaýy yzarlamak:</strong> Portal Ofisiň barlag we iş alyp barýan tapgyryny görkezýär. Portalyň tamamlanmagy özbaşdak Göç edarasynyň ýaşamak rugsadyny berendigini aňlatmaýar.',
-            '<strong>Kemçilik Resminamalary Täzelemek:</strong> Eger Ofis goşmaça ýa-da täze resminama talap etse, göni şu sahypadan ýükläp bilersiňiz.'
-        ]
-    },
-    ar: {
-        modalTitle: 'دليل بوابة الطلاب الدوليين',
-        closeAria: 'إغلاق',
-        understoodBtn: 'فهمت',
-        section1Title: '📝 كيفية تقديم طلب تصريح الإقامة؟',
-        section1Steps: [
-            '<strong>1. معلومات الاتصال:</strong> أدخل بريدك الإلكتروني الفعال ورقم هاتفك حتى يتمكن المكتب من التواصل معك.',
-            '<strong>2. بيانات الهوية والطلب:</strong> اختر طلباً أولياً أو تمديداً أو انتقالاً، وأدخل بيانات بطاقة الإقامة الحالية للانتقال. تتابع هذه البوابة إجراءات الجامعة والوثائق؛ قدّم طلب e-İkamet الرسمي بشكل منفصل في نظام إدارة الهجرة.',
-            '<strong>3. مراجعة البيانات:</strong> راجع جميع المعلومات التي أدخلتها بعناية قبل المتابعة.',
-            '<strong>4. رفع المستندات المطلوبة:</strong> ارفع المستندات المعروضة وفقاً لطلبك وإجاباتك. قد يُطلب التأمين الصحي ومستندات أخرى مشروطة في بعض الحالات فقط؛ تواصل مع المكتب إذا لم تكن متأكداً.',
-            '<strong>5. الاحتفاظ برقم الطلب:</strong> احتفظ برقم مرجع الطلب؛ ستحتاج إليه مع رقم الطالب لتسجيل الدخول وعرض التفاصيل.'
-        ],
-        section2Title: '🔍 كيفية استخدام ميزة الاستعلام عن الطلب؟',
-        section2Steps: [
-            '<strong>شاشة الاستعلام:</strong> انقر على زر "الاستعلام عن طلبي" في الصفحة الرئيسية.',
-            '<strong>الاستعلام عن الحالة:</strong> أدخل رمز ITU الصادر للطلب الشخصي أو الإلكتروني. يتطلب الوصول التفصيلي للطلب الإلكتروني وتعديل المستندات تسجيل الدخول برمز الطلب ورقم الطالب.',
-            '<strong>متابعة المراحل:</strong> تعرض البوابة مراحل المراجعة والمعالجة لدى المكتب. اكتمال الطلب في البوابة لا يعني بحد ذاته أن إدارة الهجرة منحت تصريح الإقامة.',
-            '<strong>تحديث المستندات الناقصة:</strong> في حال طلب مكتب الطلاب الدوليين أي مستند إضافي أو بديل، يمكنك رفعه مباشرة من صفحة المتابعة.'
-        ]
-    }
+/** Step-by-step "How to use" guide. Screenshots in /guide were produced from the local app with synthetic data (see public/guide/README.md). */
+const UI = {
+    tr: { modalTitle: 'Uluslararası Öğrenci Portalı Rehberi', closeAria: 'Kapat', understoodBtn: 'Anladım', prev: 'Önceki', next: 'Sonraki', step: (n, total) => `Adım ${n} / ${total}`, imageNote: 'Büyütmek için görsele dokunun. Numaralar alanların yerini gösterir.' },
+    en: { modalTitle: 'International Student Portal Guide', closeAria: 'Close', understoodBtn: 'Got it', prev: 'Previous', next: 'Next', step: (n, total) => `Step ${n} of ${total}`, imageNote: 'Tap the picture to enlarge it. The numbers show where each field is.' },
+    ru: { modalTitle: 'Руководство по порталу иностранных студентов', closeAria: 'Закрыть', understoodBtn: 'Понятно', prev: 'Назад', next: 'Далее', step: (n, total) => `Шаг ${n} из ${total}`, imageNote: 'Нажмите на изображение, чтобы увеличить. Номера показывают расположение полей.' },
+    tk: { modalTitle: 'Halkara Talyp Portaly Gollanmasy', closeAria: 'Ýap', understoodBtn: 'Düşnükli', prev: 'Öňki', next: 'Indiki', step: (n, total) => `${n} / ${total} ädim`, imageNote: 'Uly görmek üçin surata basyň. Sanlar meýdanlaryň ýerini görkezýär.' },
+    ar: { modalTitle: 'دليل بوابة الطلاب الدوليين', closeAria: 'إغلاق', understoodBtn: 'فهمت', prev: 'السابق', next: 'التالي', step: (n, total) => `الخطوة ${n} من ${total}`, imageNote: 'اضغط على الصورة لتكبيرها. تشير الأرقام إلى مكان كل حقل.' }
 };
+
+const SLIDES = [
+    { image: 'iletisim', title: {
+        tr: '1. İletişim bilgileri', en: '1. Contact details', ru: '1. Контактные данные', tk: '1. Habarlaşmak maglumatlary', ar: '1. بيانات الاتصال' },
+      text: {
+        tr: 'Öğrenci numaranızı, e-postanızı ve telefonunuzu yazın; başvuru türünü seçip onay kutusunu işaretleyin. Kaydedilince ITU ile başlayan başvuru numaranız görünür; bunu not alın.',
+        en: 'Enter your student number, email and phone, choose the application type and tick the box. After saving you get an application number starting with ITU; write it down.',
+        ru: 'Введите номер студента, почту и телефон, выберите вид заявки и отметьте флажок. После сохранения появится номер заявки, начинающийся с ITU; запишите его.',
+        tk: 'Talyp belgiňizi, e-poçtaňyzy we telefonyňyzy ýazyň, arza görnüşini saýlap bellik guutusyny belläň. Ýazdyrylandan soň ITU bilen başlaýan arza belgiňiz görünýär; ýazyp alyň.',
+        ar: 'اكتب رقم الطالب والبريد والهاتف، واختر نوع الطلب وضع علامة في المربع. بعد الحفظ يظهر رقم طلب يبدأ بـ ITU؛ دوّنه.' } },
+    { image: 'kisisel', title: {
+        tr: '2. Kişisel ve ikamet bilgileri', en: '2. Personal and residence details', ru: '2. Личные данные и проживание', tk: '2. Şahsy we ýaşaýyş maglumatlary', ar: '2. البيانات الشخصية والسكن' },
+      text: {
+        tr: 'Ad, soyad ve pasaport numarasını pasaportunuzdaki gibi yazın. Doğum tarihini gün.ay.yıl biçiminde girin, kaldığınız yeri ve parmak izi durumunu seçin. Parmak izi kaydınız varsa e-İkamet formundaki kodu yazın.',
+        en: 'Write your name and passport number exactly as in your passport. Enter the date of birth as day.month.year, pick where you live and your fingerprint status. If you have a fingerprint record, type the code from the e-İkamet form.',
+        ru: 'Имя, фамилию и номер паспорта пишите как в паспорте. Дату рождения вводите как день.месяц.год, выберите место проживания и статус отпечатков. Если отпечатки сданы, введите код из формы e-İkamet.',
+        tk: 'Ady, familiýany we pasport belgisini pasportdaky ýaly ýazyň. Doglan senäňizi gün.aý.ýyl görnüşinde giriziň, ýaşaýan ýeriňizi we barmak yzy ýagdaýyny saýlaň. Barmak yzy bar bolsa e-İkamet formundaky kody ýazyň.',
+        ar: 'اكتب الاسم ورقم الجواز كما في الجواز. أدخل تاريخ الميلاد بصيغة يوم.شهر.سنة، واختر مكان الإقامة وحالة البصمة. إذا كانت لديك بصمة مسجلة فاكتب الرمز من نموذج e-İkamet.' } },
+    { image: 'belgeler-bos', title: {
+        tr: '3. Belgeleri yükleyin', en: '3. Upload documents', ru: '3. Загрузите документы', tk: '3. Resminamalary ýükläň', ar: '3. ارفع المستندات' },
+      text: {
+        tr: 'Her belge kendi kutusuna yüklenir. PDF veya fotoğraf kabul edilir (en fazla 10 MB); birden çok sayfa tek PDF olur. Altı zorunlu belgenin hepsi yüklenmeden devam edilemez.',
+        en: 'Each document goes into its own box. PDF or photos are accepted (up to 10 MB); several pages become one PDF. You cannot continue until all six required documents are uploaded.',
+        ru: 'Каждый документ загружается в свою ячейку. Принимаются PDF и фото (до 10 МБ); несколько страниц объединяются в один PDF. Пока не загружены все шесть документов, продолжить нельзя.',
+        tk: 'Her resminama öz gutusyna ýüklenýär. PDF ýa-da surat kabul edilýär (iň köp 10 MB); birnäçe sahypa bir PDF bolýar. Alty hökmany resminamanyň hemmesi ýüklenmänkä dowam etmek bolmaýar.',
+        ar: 'يُرفع كل مستند في خانته. يُقبل PDF أو الصور (حتى 10 ميغابايت) وتُدمج الصفحات في PDF واحد. لا يمكن المتابعة قبل رفع المستندات الستة المطلوبة.' } },
+    { image: 'belgeler-yuklendi', title: {
+        tr: 'Yüklenen belgeleri kontrol edin', en: 'Check the uploaded documents', ru: 'Проверьте загруженные документы', tk: 'Ýüklenen resminamalary barlaň', ar: 'تحقق من المستندات المرفوعة' },
+      text: {
+        tr: 'Yüklediğiniz dosyanın adı görünür. "Önizle" ile açıp kontrol edin; yanlış belgeyse "Belgeyi değiştir" ile yenisini yükleyin.',
+        en: 'The name of the uploaded file appears. Open it with "Preview" to check; if it is wrong, use "Replace document".',
+        ru: 'Отображается имя загруженного файла. Откройте его через «Просмотр»; если файл неверный, нажмите «Заменить документ».',
+        tk: 'Ýüklän faýlyň ady görünýär. "Öňünden gör" bilen açyp barlaň; ýalňyş bolsa "Resminamany çalyş" bilen täzesini ýükläň.',
+        ar: 'يظهر اسم الملف المرفوع. افتحه بزر «معاينة» للتحقق؛ وإذا كان خاطئاً فاستبدله بزر «استبدال المستند».' } },
+    { image: 'bilgilendirme', title: {
+        tr: '4. Başvuru bilgilendirmesi', en: '4. Application notice', ru: '4. Уведомление о заявке', tk: '4. Arza barada habar', ar: '4. إشعار الطلب' },
+      text: {
+        tr: 'Bilgilerin doğru olduğunu onaylayıp devam edin. Başvuru numaranızı bu ekranda da kopyalayabilirsiniz; sonuç sorgulamada gerekecek.',
+        en: 'Confirm that the information is correct and continue. You can copy your application number here too; you need it to check the result.',
+        ru: 'Подтвердите правильность данных и продолжайте. Номер заявки можно скопировать и здесь; он нужен для проверки статуса.',
+        tk: 'Maglumatlaryň dogrudygyny tassyklap dowam ediň. Arza belgiňizi şu ýerde hem göçürip bilersiňiz; netijäni barlamak üçin gerek.',
+        ar: 'أكّد صحة المعلومات وتابع. يمكنك نسخ رقم الطلب هنا أيضاً؛ فهو لازم لمتابعة النتيجة.' } },
+    { image: 'son-kontrol', title: {
+        tr: '5. Son kontrol ve gönderme', en: '5. Final check and submit', ru: '5. Проверка и отправка', tk: '5. Soňky barlag we ugratmak', ar: '5. المراجعة والإرسال' },
+      text: {
+        tr: 'Yazdığınız bilgileri ve belgeleri son kez gözden geçirin. Hata varsa "Geri" ile düzeltin; her şey doğruysa "Başvuruyu gönder"e basın.',
+        en: 'Review your details and documents one last time. Fix mistakes with "Back"; if everything is right, press "Submit application".',
+        ru: 'Ещё раз проверьте данные и документы. Ошибки исправьте кнопкой «Назад»; если всё верно, нажмите «Отправить заявку».',
+        tk: 'Maglumatlary we resminamalary soňky gezek gözden geçiriň. Ýalňyşlyk bar bolsa "Yza" bilen düzediň; ählisi dogry bolsa "Arzany iber" düwmesine basyň.',
+        ar: 'راجع بياناتك ومستنداتك للمرة الأخيرة. صحّح الأخطاء بزر «رجوع»، وإذا كان كل شيء صحيحاً فاضغط «إرسال الطلب».' } },
+    { image: 'gonderildi', title: {
+        tr: 'Başvurunuz gönderildi', en: 'Your application was submitted', ru: 'Заявка отправлена', tk: 'Arzaňyz iberildi', ar: 'تم إرسال طلبك' },
+      text: {
+        tr: 'Başvuru belgesini mutlaka indirin ve yanınızda bulundurun. Başvuru numaranızı ve öğrenci numaranızı saklayın. Bu ekran başvurunun ofise ulaştığını gösterir; Göç İdaresinin kararı değildir.',
+        en: 'Be sure to download the application document and keep it with you. Keep your application number and student number. This screen shows the application reached the office; it is not a Migration Authority decision.',
+        ru: 'Обязательно скачайте документ заявки и держите его при себе. Сохраните номер заявки и номер студента. Экран показывает, что заявка дошла до офиса; это не решение миграционной службы.',
+        tk: 'Arza resminamasyny hökman ýükläp alyň we ýanyňyzda saklaň. Arza belgiňizi we talyp belgiňizi saklaň. Bu ekran arzanyň ofise ýetendigini görkezýär; Göç edarasynyň karary däl.',
+        ar: 'حمّل وثيقة الطلب واحتفظ بها معك. احتفظ برقم الطلب ورقم الطالب. تُظهر هذه الشاشة وصول الطلب إلى المكتب وليست قرار إدارة الهجرة.' } },
+    { image: 'sorgula', title: {
+        tr: 'Başvurumu sorgula', en: 'Track my application', ru: 'Проверить заявку', tk: 'Arzamy barla', ar: 'الاستعلام عن طلبي' },
+      text: {
+        tr: 'Ana sayfadaki "Başvurumu Sorgula" ile ITU takip kodunuz ve öğrenci numaranızla giriş yapın. Başvurunuzun aşamasını görür, ofis belge isterse aynı ekrandan yüklersiniz.',
+        en: 'Use "Track My Application" on the home page and sign in with your ITU code and student number. You see the stage of your application and can upload any document the office requests.',
+        ru: 'На главной странице нажмите «Проверить заявку» и войдите по коду ITU и номеру студента. Вы увидите этап заявки и сможете загрузить документы, запрошенные офисом.',
+        tk: 'Baş sahypadaky "Arzamy Barla" bilen ITU kodyňyz we talyp belgiňiz arkaly giriň. Arzaňyzyň tapgyryny görýärsiňiz, ofis resminama sorasa şu ekrandan ýükleýärsiňiz.',
+        ar: 'استخدم «الاستعلام عن طلبي» في الصفحة الرئيسية وسجّل الدخول برمز ITU ورقم الطالب. ترى مرحلة طلبك ويمكنك رفع أي مستند يطلبه المكتب.' } },
+    { image: 'devam-et', title: {
+        tr: 'Başvurunuza başka cihazdan devam edin', en: 'Continue on another device', ru: 'Продолжить на другом устройстве', tk: 'Başga enjamdan dowam ediň', ar: 'المتابعة من جهاز آخر' },
+      text: {
+        tr: 'Taslağınıza "Başvuruma Devam Et" ile ITU kodunuz ve öğrenci numaranızla devam edebilirsiniz. Başvuru numaranızı bilmiyorsanız veya kaybettiyseniz Uluslararası Öğrenci Ofisi ile iletişime geçin.',
+        en: 'Use "Resume My Application" with your ITU code and student number to continue your draft. If you do not know or have lost your application number, contact the International Student Office.',
+        ru: 'Продолжите черновик через «Продолжить заявку» по коду ITU и номеру студента. Если вы не знаете или потеряли номер заявки, свяжитесь с Международным студенческим офисом.',
+        tk: 'Garalamaňyzy "Arzama dowam et" bilen ITU kodyňyz we talyp belgiňiz arkaly dowam edip bilersiňiz. Arza belgiňizi bilmeseňiz ýa-da ýitiren bolsaňyz, Halkara talyplar ofisi bilen habarlaşyň.',
+        ar: 'تابع مسودتك عبر «متابعة طلبي» برمز ITU ورقم الطالب. إذا كنت لا تعرف رقم طلبك أو فقدته فتواصل مع مكتب الطلبة الدوليين.' } }
+];
 
 let closeActiveGuide = null;
 
 export function openPublicGuideModal() {
     closeActiveGuide?.();
     const trigger = document.activeElement;
-
-    const currentLocale = document.documentElement.lang || 'tr';
-    const t = GUIDE_TRANSLATIONS[currentLocale] || GUIDE_TRANSLATIONS.tr;
-    const isRtl = currentLocale === 'ar';
+    const locale = UI[document.documentElement.lang] ? document.documentElement.lang : 'tr';
+    const t = UI[locale];
+    const isRtl = locale === 'ar';
+    let index = 0;
 
     const overlay = document.createElement('div');
     const background = new Map([...document.body.children].map(element => [element, element.inert]));
@@ -128,86 +109,63 @@ export function openPublicGuideModal() {
     if (isRtl) overlay.setAttribute('dir', 'rtl');
 
     const modal = document.createElement('div');
-    modal.className = 'public-modal-card';
+    modal.className = 'public-modal-card public-guide-card';
 
-    // Header
     const header = document.createElement('div');
     header.className = 'public-modal-header';
-
     const title = document.createElement('h3');
-    title.innerHTML = `<span aria-hidden="true">📖</span> <span>${t.modalTitle}</span>`;
-
+    const icon = document.createElement('span');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '📖';
+    const titleText = document.createElement('span');
+    titleText.textContent = t.modalTitle;
+    title.append(icon, titleText);
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'public-modal-close';
     closeBtn.textContent = '✕';
     closeBtn.setAttribute('aria-label', t.closeAria);
     closeBtn.addEventListener('click', close);
-
     header.append(title, closeBtn);
 
-    // Body
     const body = document.createElement('div');
-    body.className = 'public-modal-body';
+    body.className = 'public-modal-body public-guide-body';
 
-    // Section 1: How to Apply
-    const sec1 = document.createElement('div');
-    sec1.style.marginBottom = '24px';
+    const nav = document.createElement('div');
+    nav.className = 'public-guide-nav';
+    const prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'home-cta home-cta-secondary public-guide-prev';
+    prevBtn.textContent = t.prev;
+    const counter = document.createElement('span');
+    counter.className = 'public-guide-counter';
+    counter.setAttribute('aria-live', 'polite');
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'home-cta home-cta-primary public-guide-next';
+    nextBtn.textContent = t.next;
+    nav.append(prevBtn, counter, nextBtn);
 
-    const sec1Title = document.createElement('h4');
-    sec1Title.textContent = t.section1Title;
-    sec1Title.style.fontSize = '1.05rem';
-    sec1Title.style.color = 'var(--public-burgundy, #7e1830)';
-    sec1Title.style.marginBottom = '10px';
+    const stepTitle = document.createElement('h4');
+    stepTitle.className = 'public-guide-step-title';
+    const stepText = document.createElement('p');
+    stepText.className = 'public-guide-step-text';
+    const figure = document.createElement('figure');
+    figure.className = 'public-guide-figure';
+    const image = document.createElement('img');
+    image.loading = 'lazy';
+    image.decoding = 'async';
+    const note = document.createElement('figcaption');
+    note.textContent = t.imageNote;
+    const zoom = document.createElement('a');
+    zoom.target = '_blank';
+    zoom.rel = 'noopener';
+    zoom.append(image);
+    figure.append(zoom, note);
+    body.append(nav, stepTitle, stepText, figure);
 
-    const sec1List = document.createElement('ol');
-    sec1List.style.paddingLeft = isRtl ? '0' : '20px';
-    sec1List.style.paddingRight = isRtl ? '20px' : '0';
-    sec1List.style.margin = '0';
-    sec1List.style.display = 'flex';
-    sec1List.style.flexDirection = 'column';
-    sec1List.style.gap = '8px';
-
-    t.section1Steps.forEach(stepHtml => {
-        const li = document.createElement('li');
-        li.innerHTML = stepHtml;
-        sec1List.append(li);
-    });
-
-    sec1.append(sec1Title, sec1List);
-
-    // Section 2: How to Track
-    const sec2 = document.createElement('div');
-    sec2.style.marginBottom = '12px';
-
-    const sec2Title = document.createElement('h4');
-    sec2Title.textContent = t.section2Title;
-    sec2Title.style.fontSize = '1.05rem';
-    sec2Title.style.color = 'var(--public-burgundy, #7e1830)';
-    sec2Title.style.marginBottom = '10px';
-
-    const sec2List = document.createElement('ul');
-    sec2List.style.paddingLeft = isRtl ? '0' : '20px';
-    sec2List.style.paddingRight = isRtl ? '20px' : '0';
-    sec2List.style.margin = '0';
-    sec2List.style.display = 'flex';
-    sec2List.style.flexDirection = 'column';
-    sec2List.style.gap = '8px';
-
-    t.section2Steps.forEach(stepHtml => {
-        const li = document.createElement('li');
-        li.innerHTML = stepHtml;
-        sec2List.append(li);
-    });
-
-    sec2.append(sec2Title, sec2List);
-
-    body.append(sec1, sec2);
-
-    // Footer
     const footer = document.createElement('div');
     footer.className = 'public-modal-footer';
-
     const closeBottomBtn = document.createElement('button');
     closeBottomBtn.type = 'button';
     closeBottomBtn.className = 'home-cta home-cta-primary';
@@ -216,25 +174,54 @@ export function openPublicGuideModal() {
     closeBottomBtn.style.fontSize = '0.9rem';
     closeBottomBtn.textContent = t.understoodBtn;
     closeBottomBtn.addEventListener('click', close);
-
     footer.append(closeBottomBtn);
+
+    const render = () => {
+        const slide = SLIDES[index];
+        stepTitle.textContent = slide.title[locale];
+        stepText.textContent = slide.text[locale];
+        image.src = `/guide/${locale}/${slide.image}.jpg`;
+        zoom.href = image.src;
+        image.alt = `${slide.title[locale]}: ${slide.text[locale]}`;
+        counter.textContent = t.step(index + 1, SLIDES.length);
+        prevBtn.disabled = index === 0;
+        nextBtn.disabled = index === SLIDES.length - 1;
+        body.scrollTop = 0;
+    };
+    const go = (delta) => {
+        const target = Math.min(SLIDES.length - 1, Math.max(0, index + delta));
+        if (target === index) return;
+        index = target;
+        render();
+    };
+    prevBtn.addEventListener('click', () => go(-1));
+    nextBtn.addEventListener('click', () => go(1));
 
     modal.append(header, body, footer);
     overlay.append(modal);
     document.body.append(overlay);
     for (const element of background.keys()) element.inert = true;
+    render();
 
     const handleKeydown = (e) => {
         if (e.key === 'Escape') {
             e.preventDefault();
             close();
+        } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+            if (overlay.contains(document.activeElement) && document.activeElement?.tagName !== 'INPUT') {
+                e.preventDefault();
+                go((e.key === 'ArrowRight') === !isRtl ? 1 : -1);
+            }
         } else if (e.key === 'Tab') {
-            if (!overlay.contains(document.activeElement) || (e.shiftKey && document.activeElement === closeBtn)) {
+            const focusable = [...overlay.querySelectorAll('button')].filter(button => !button.disabled);
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (!overlay.contains(document.activeElement) || (e.shiftKey && document.activeElement === first)) {
                 e.preventDefault();
-                (e.shiftKey ? closeBottomBtn : closeBtn).focus();
-            } else if (!e.shiftKey && document.activeElement === closeBottomBtn) {
+                (e.shiftKey ? last : first).focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
                 e.preventDefault();
-                closeBtn.focus();
+                first.focus();
             }
         }
     };

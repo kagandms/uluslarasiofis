@@ -43,7 +43,8 @@ function getInputSize(file) {
 async function ensureJpegBytes(bytesOrBlob, mediaType = 'image/jpeg', profile) {
     const blob = bytesOrBlob instanceof Blob ? bytesOrBlob : new Blob([bytesOrBlob], { type: mediaType });
     const longEdge = profile ? Math.round(DOCUMENT_IMAGE_LONG_EDGE * profile.dpi / 300) : DOCUMENT_IMAGE_LONG_EDGE;
-    const optimized = await optimizeDocumentImage(blob, { longEdge, quality: profile?.quality, forceCompression: Boolean(profile) });
+    // The first fast pass keeps small in-bounds JPEGs untouched; only later size-driven passes force re-encoding.
+    const optimized = await optimizeDocumentImage(blob, { longEdge, quality: profile?.quality, forceCompression: Boolean(profile) && !profile.initial });
     return new Uint8Array(await optimized.arrayBuffer());
 }
 
@@ -57,23 +58,24 @@ function getPageSize(width, height) {
     return { pageWidth, pageHeight, drawWidth: width * scale, drawHeight: height * scale };
 }
 
-async function appendImageToPdf(pdfDoc, bytes, mediaType, profile) {
-    const jpegBytes = await ensureJpegBytes(bytes, mediaType, profile);
+async function appendJpegToPdf(pdfDoc, jpegBytes) {
     const image = await pdfDoc.embedJpg(jpegBytes);
     const { pageWidth, pageHeight, drawWidth, drawHeight } = getPageSize(image.width, image.height);
     const page = pdfDoc.addPage([pageWidth, pageHeight]);
     page.drawImage(image, { x: (pageWidth - drawWidth) / 2, y: (pageHeight - drawHeight) / 2, width: drawWidth, height: drawHeight });
 }
 
-async function appendRasterizedPdf(pdfDoc, bytes, fileName, profile, onProgress) {
+async function rasterizePdfPages(bytes, fileName, profile, onProgress) {
     const pdfjs = await loadPdfJs();
     const loadingTask = pdfjs.getDocument({ data: bytes });
+    const pages = [];
     try {
         const sourcePdf = await loadingTask.promise;
         for (let pageNumber = 1; pageNumber <= sourcePdf.numPages; pageNumber += 1) {
             onProgress?.({ message: `${fileName}: sayfa ${pageNumber}/${sourcePdf.numPages} sıkıştırılıyor…` });
-            await appendRasterPage(pdfDoc, sourcePdf, pageNumber, profile);
+            pages.push(await rasterizePage(sourcePdf, pageNumber, profile));
         }
+        return pages;
     } catch (error) {
         console.error('PDF input could not be rendered.', { errorName: error.name });
         throw new Error(`${fileName} okunamadı; hiçbir belge atlanarak PDF oluşturulmadı.`, { cause: error });
@@ -82,7 +84,7 @@ async function appendRasterizedPdf(pdfDoc, bytes, fileName, profile, onProgress)
     }
 }
 
-async function appendRasterPage(pdfDoc, sourcePdf, pageNumber, profile) {
+async function rasterizePage(sourcePdf, pageNumber, profile) {
     const page = await sourcePdf.getPage(pageNumber);
     const viewport = page.getViewport({ scale: profile.dpi / 72 });
     const canvas = document.createElement('canvas');
@@ -91,14 +93,20 @@ async function appendRasterPage(pdfDoc, sourcePdf, pageNumber, profile) {
     try {
         await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
         const blob = await canvasToJpeg(canvas, profile.quality);
-        const image = await pdfDoc.embedJpg(new Uint8Array(await blob.arrayBuffer()));
         const size = page.getViewport({ scale: 1 });
-        const outputPage = pdfDoc.addPage([size.width, size.height]);
-        outputPage.drawImage(image, { x: 0, y: 0, width: size.width, height: size.height });
+        return { jpeg: new Uint8Array(await blob.arrayBuffer()), width: size.width, height: size.height };
     } finally {
         page.cleanup?.();
         canvas.width = 0;
         canvas.height = 0;
+    }
+}
+
+async function appendRasterizedPages(pdfDoc, pages) {
+    for (const { jpeg, width, height } of pages) {
+        const image = await pdfDoc.embedJpg(jpeg);
+        const outputPage = pdfDoc.addPage([width, height]);
+        outputPage.drawImage(image, { x: 0, y: 0, width, height });
     }
 }
 
@@ -123,18 +131,63 @@ function isPdfFile(file) {
     return (file.mediaType || file.type || '').toLowerCase().includes('pdf') || (file.name || '').toLowerCase().endsWith('.pdf');
 }
 
+const IMAGE_PREPARATION_CONCURRENCY = 3;
+
+/** Runs async jobs with a small concurrency cap so decoding overlaps without exhausting phone memory. */
+function createLimiter(limit) {
+    let active = 0;
+    const queue = [];
+    const next = () => {
+        if (active >= limit || queue.length === 0) return;
+        active += 1;
+        const { job, resolve, reject } = queue.shift();
+        job().then(resolve, reject).finally(() => { active -= 1; next(); });
+    };
+    return (job) => new Promise((resolve, reject) => { queue.push({ job, resolve, reject }); next(); });
+}
+
 async function buildPdf(files, profile, onProgress, options) {
     const mergedPdf = await PDFDocument.create();
-    for (let index = 0; index < files.length; index += 1) {
-        const file = files[index];
-        const bytes = await readBytes(getFilePayload(file));
+    // Browsers decode and encode images off the main thread, so preparing photos concurrently shortens the wait;
+    // pages are still embedded strictly in the selected order.
+    const limit = createLimiter(IMAGE_PREPARATION_CONCURRENCY);
+    let aborted = false;
+    const preparedImages = new Map();
+    files.forEach((file, index) => {
+        if (isPdfFile(file)) {
+            if (!(profile && options.rasterizePdfs !== false)) return;
+            const rasterJob = limit(async () => {
+                if (aborted) return null;
+                return rasterizePdfPages(await readBytes(getFilePayload(file)), file.name || 'Belge', profile, onProgress);
+            });
+            rasterJob.catch(() => {});
+            preparedImages.set(index, rasterJob);
+            return;
+        }
         const mediaType = (file.mediaType || file.type || '').toLowerCase();
-        const fileName = file.name || 'Belge';
-        const isPdf = isPdfFile(file);
-        onProgress?.({ current: index + 1, total: files.length, message: `İşleniyor (${index + 1}/${files.length}): ${fileName}` });
-        if (isPdf && profile && options.rasterizePdfs !== false) await appendRasterizedPdf(mergedPdf, bytes, fileName, profile, onProgress);
-        else if (isPdf) await appendVectorPdf(mergedPdf, bytes, fileName);
-        else await appendImageToPdf(mergedPdf, bytes, mediaType, profile);
+        const job = limit(async () => {
+            if (aborted) return null;
+            return ensureJpegBytes(await readBytes(getFilePayload(file)), mediaType, profile);
+        });
+        job.catch(() => {});
+        preparedImages.set(index, job);
+    });
+    try {
+        for (let index = 0; index < files.length; index += 1) {
+            const file = files[index];
+            const fileName = file.name || 'Belge';
+            const isPdf = isPdfFile(file);
+            onProgress?.({ current: index + 1, total: files.length, message: `İşleniyor (${index + 1}/${files.length}): ${fileName}` });
+            if (isPdf) {
+                if (profile && options.rasterizePdfs !== false) await appendRasterizedPages(mergedPdf, await preparedImages.get(index));
+                else await appendVectorPdf(mergedPdf, await readBytes(getFilePayload(file)), fileName);
+            } else {
+                await appendJpegToPdf(mergedPdf, await preparedImages.get(index));
+            }
+        }
+    } catch (error) {
+        aborted = true;
+        throw error;
     }
     if (mergedPdf.getPageCount() === 0) throw new Error('Hiçbir geçerli sayfa birleştirilemedi.');
     return mergedPdf.save({ useObjectStreams: true });
@@ -152,7 +205,7 @@ export async function mergeDocumentsToPdf(files, onProgress, options = {}) {
     const inputBytes = files.reduce((total, file) => total + getInputSize(file), 0);
     const containsPdf = files.some(isPdfFile);
     const containsImages = files.some(file => !isPdfFile(file));
-    const initialProfile = containsImages ? readCompressionProfile(INITIAL_COMPRESSION_PERCENT) : null;
+    const initialProfile = containsImages ? { ...readCompressionProfile(INITIAL_COMPRESSION_PERCENT), initial: true } : null;
     const initialOptions = { ...options, rasterizePdfs: false };
     let bytes = null;
     let compressionPercent = containsImages ? INITIAL_COMPRESSION_PERCENT : null;

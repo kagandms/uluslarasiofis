@@ -1131,15 +1131,23 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             }
             if (manifest.files.length > 30) throw new Error('PDF için en fazla 30 evrak birleştirilebilir.');
             const FileClass = document.defaultView.File;
-            const orderedFiles = [];
-            for (const file of manifest.files) {
-                if (controller.signal.aborted) throw new DOMException('Canceled', 'AbortError');
-                const response = await api.readArchiveFile(applicationId, file, controller.signal);
-                if (!response.ok || !response.body) throw new Error(`“${file.entry_name}” güvenli biçimde alınamadı; PDF oluşturulmadı.`);
-                const blob = await response.blob();
-                if (blob.size !== file.byte_size) throw new Error(`“${file.entry_name}” boyutu doğrulanamadı; PDF oluşturulmadı.`);
-                orderedFiles.push(new FileClass([blob], file.entry_name, { type: file.media_type }));
-            }
+            // Download a few documents at a time; results keep the manifest order.
+            const orderedFiles = new Array(manifest.files.length);
+            let nextIndex = 0;
+            const downloadNext = async () => {
+                while (nextIndex < manifest.files.length) {
+                    const index = nextIndex;
+                    nextIndex += 1;
+                    const file = manifest.files[index];
+                    if (controller.signal.aborted) throw new DOMException('Canceled', 'AbortError');
+                    const response = await api.readArchiveFile(applicationId, file, controller.signal);
+                    if (!response.ok || !response.body) throw new Error(`“${file.entry_name}” güvenli biçimde alınamadı; PDF oluşturulmadı.`);
+                    const blob = await response.blob();
+                    if (blob.size !== file.byte_size) throw new Error(`“${file.entry_name}” boyutu doğrulanamadı; PDF oluşturulmadı.`);
+                    orderedFiles[index] = new FileClass([blob], file.entry_name, { type: file.media_type });
+                }
+            };
+            await Promise.all(Array.from({ length: Math.min(4, manifest.files.length) }, downloadNext));
             if (requestId !== archiveRequestId || controller.signal.aborted) return;
             const { openPdfMergerModal } = await import('../ui/pdfMergerModal.js');
             render();

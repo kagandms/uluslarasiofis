@@ -1415,3 +1415,15 @@ body[data-page="home"] .status-timeline-step.scroll-reveal-item.is-revealed .sta
 
 /* Buttons styled as CTAs must use the same typography as the link CTAs (buttons do not inherit fonts by default) */
 button.home-cta { font-family: inherit; font-size: 1.02rem; font-weight: 700; line-height: 1.2; }
+
+.public-guide-card { max-width: 920px; }
+.public-guide-body { display: flex; flex-direction: column; gap: 0.75rem; }
+.public-guide-nav { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.public-guide-nav .home-cta { min-height: 2.4rem; padding: 0.4rem 1.2rem; font-size: 0.9rem; }
+.public-guide-nav .home-cta:disabled { opacity: 0.45; cursor: not-allowed; }
+.public-guide-counter { font-weight: 700; color: var(--public-burgundy, #7e1830); }
+.public-guide-step-title { margin: 0; font-size: 1.1rem; color: var(--public-burgundy, #7e1830); }
+.public-guide-step-text { margin: 0; }
+.public-guide-figure { margin: 0; }
+.public-guide-figure img { display: block; width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+.public-guide-figure figcaption { margin-top: 0.4rem; font-size: 0.8rem; color: #64748b; }
