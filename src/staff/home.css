@@ -495,9 +495,9 @@ body.dark-mode .staff-spreadsheet-transfer-error { color: #fca5a5; }
 
 /* Cloudflare usage card: small, top-left of the staff home; expands on click. */
 #home-screen .cf-usage-card {
-    position: absolute;
-    inset-block-start: 0.4rem;
-    inset-inline-start: 0.4rem;
+    position: fixed;
+    inset-block-start: 6rem;
+    inset-inline-start: 0.75rem;
     z-index: 20;
     width: min(21rem, calc(100% - 0.8rem));
     border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--card-border));
@@ -548,6 +548,6 @@ body.dark-mode .staff-spreadsheet-transfer-error { color: #fca5a5; }
 #home-screen .cf-usage-refresh { margin-inline-start: auto; padding: 0.2rem 0.6rem; border: 1px solid var(--card-border); border-radius: 99px; background: transparent; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
 
 @media (max-width: 560px) {
-    #home-screen .cf-usage-card { inset-inline-end: 0.4rem; width: auto; }
+    #home-screen .cf-usage-card { position: absolute; inset-block-start: 0.4rem; inset-inline: 0.4rem; width: auto; }
     #home-screen .home-intro { padding-top: 2.6rem; }
 }

@@ -26,7 +26,9 @@ test('usage card lives only on the staff home, top-left, and the old counter is 
     assert.equal(publicDocument.querySelector('#cloudflare-usage-card'), null);
     assert.equal(document.querySelector('#home-screen').firstElementChild.id, 'cloudflare-usage-card');
     const css = await readFile(resolve(repositoryRoot, 'src/staff/home.css'), 'utf8');
-    assert.match(css, /\.cf-usage-card \{[^}]*position: absolute;[^}]*inset-inline-start/);
+    // Desktop: pinned to the far top-left below the header; phones: anchored inside the home screen.
+    assert.match(css, /\.cf-usage-card \{[^}]*position: fixed;[^}]*inset-inline-start: 0\.75rem/);
+    assert.match(css, /max-width: 560px\) \{[^}]*\.cf-usage-card \{ position: absolute;/);
 });
 
 test('card stays collapsed and does not request data until opened', async () => {
