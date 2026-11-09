@@ -26,15 +26,15 @@ export async function readApplicationDocumentFiles({ applicationId, api, signal 
     if (missingRequired) throw new Error(`Zorunlu belge “${missingRequired.filename || missingRequired.code}” güncel ve güvenli değil.`);
     if (manifest.files.length > 30) throw new Error('PDF için en fazla 30 evrak birleştirilebilir.');
 
-    const files = [];
-    for (const file of manifest.files) {
+    // Downloads run in parallel (order is preserved by Promise.all); each file is still size-checked against the manifest.
+    const files = await Promise.all(manifest.files.map(async (file) => {
         if (signal?.aborted) throw new DOMException('Canceled', 'AbortError');
         const response = await api.readArchiveFile(applicationId, file, signal);
         if (!response.ok || !response.body) throw new Error(`“${file.entry_name}” güvenli biçimde alınamadı; PDF oluşturulmadı.`);
         const blob = await response.blob();
         if (blob.size !== file.byte_size) throw new Error(`“${file.entry_name}” boyutu doğrulanamadı; PDF oluşturulmadı.`);
-        files.push(new File([blob], file.entry_name, { type: file.media_type }));
-    }
+        return new File([blob], file.entry_name, { type: file.media_type });
+    }));
     const manifestFingerprint = await sha256(manifest.files.map((file) => [file.code, file.expected_revision_number,
         file.object_identity, file.media_type, file.byte_size].join('|')).join('\n'));
     return { application: detail.application, manifest, manifestFingerprint, files };

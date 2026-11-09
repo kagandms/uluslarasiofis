@@ -8,9 +8,20 @@ import { readApplicationDocumentFiles } from './application-document-files.js';
 const MAX_PDF_BYTES = 9 * 1024 * 1024;
 const REGISTRATION_NUMBER_PATTERN = /^20\d{2}-\d{2}-\d{5,8}$/;
 
-export function resolveRegistrationNumber(candidates, correction = '') {
+const BARCODE_CAPTION = /GCGM\s*\d{2}\s*-\s*\d?\s*(20\d{2})\s*(\d{2})\s*(\d{5,8})/gi;
+
+/** Numbers printed under the form's barcode; an independent copy of the registration number. */
+function readBarcodeCaptionNumbers(formText) {
+    return new Set([...String(formText || '').matchAll(BARCODE_CAPTION)].map((match) => `${match[1]}-${match[2]}-${match[3]}`));
+}
+
+/** Picks the number without asking only when one candidate is unique or confirmed by the barcode caption. */
+export function resolveRegistrationNumber(candidates, correction = '', formText = '') {
     if (correction) return REGISTRATION_NUMBER_PATTERN.test(correction) ? correction : null;
-    return candidates.length === 1 ? candidates[0] : null;
+    if (candidates.length === 1) return candidates[0];
+    const barcodeNumbers = readBarcodeCaptionNumbers(formText);
+    const confirmed = candidates.filter((candidate) => barcodeNumbers.has(candidate));
+    return confirmed.length === 1 ? confirmed[0] : null;
 }
 
 export function normalizeTurkishMobilePhone(value) {
@@ -51,7 +62,7 @@ async function recognizeRegistrationNumber(image, signal) {
     const fullText = readOcrText(payload);
     const candidates = extractApplicationNumberCandidates(fullText);
     if (extracted.basvuruNo && !candidates.includes(extracted.basvuruNo)) candidates.unshift(extracted.basvuruNo);
-    return candidates;
+    return { candidates, text: fullText };
 }
 
 async function renderFirstPage(file) {
@@ -88,7 +99,7 @@ async function recognizeFormNumber(file, signal) {
     if (textCandidates.length) {
         canvas.width = 0;
         canvas.height = 0;
-        return textCandidates;
+        return { candidates: textCandidates, text };
     }
     try {
         const image = await new Promise((resolve, reject) => canvas.toBlob((blob) => blob
@@ -105,8 +116,11 @@ export async function prepareGocnetTransfer({ applicationId, api, signal, regist
     const { application, manifest, manifestFingerprint, files } = await readApplicationDocumentFiles({ applicationId, api, signal });
     const formIndex = manifest.files.findIndex((file) => file.code === 'residence_application_form');
     if (formIndex < 0) throw new Error('Güncel ikamet başvuru formu bulunamadı.');
-    const candidates = await recognizeFormNumber(files[formIndex], signal);
-    const applicationNumber = resolveRegistrationNumber(candidates, registrationNumberCorrection);
+    // The merge is the slowest local step and does not depend on the number, so it starts alongside number recognition.
+    const mergePromise = mergeDocumentsToPdf(files);
+    mergePromise.catch(() => {});
+    const { candidates, text: formText } = await recognizeFormNumber(files[formIndex], signal);
+    const applicationNumber = resolveRegistrationNumber(candidates, registrationNumberCorrection, formText);
     if (!applicationNumber) {
         const error = new Error(candidates.length ? 'Birden fazla kayıt numarası bulundu; önizlemeden doğru adayı seçin.' : 'Başvuru kayıt numarası güvenilir biçimde okunamadı.');
         error.code = 'REGISTRATION_NUMBER_CONFIRMATION_REQUIRED';
@@ -120,7 +134,7 @@ export async function prepareGocnetTransfer({ applicationId, api, signal, regist
         error.code = 'TURKISH_MOBILE_REQUIRED';
         throw error;
     }
-    const { bytes, metrics } = await mergeDocumentsToPdf(files);
+    const { bytes, metrics } = await mergePromise;
     if (bytes.byteLength > MAX_PDF_BYTES || !metrics.yoksisLimitReached) throw new Error('Birleştirilmiş PDF 9 MiB sınırını aşıyor.');
     const document = await PDFDocument.load(bytes);
     if (!document.getPageCount()) throw new Error('Birleştirilmiş PDF okunabilir bir sayfa içermiyor.');

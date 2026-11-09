@@ -1485,7 +1485,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 }
             } else {
                 await event('failed');
-                state.gocnetResults[applicationId] = 'Sonuç doğrulanamadı. YÖKSİS’i kontrol edin; otomatik tekrar yapılmadı.';
+                const reason = typeof result.reason === 'string' && result.reason ? ` Neden: ${result.reason.slice(0, 160)}` : '';
+                state.gocnetResults[applicationId] = `Sonuç doğrulanamadı. YÖKSİS’i kontrol edin; otomatik tekrar yapılmadı.${reason}`;
             }
         } catch (error) {
             console.error('GöçNet preflight failed.', { errorName: error?.name || 'Error' });

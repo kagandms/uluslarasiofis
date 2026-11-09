@@ -314,13 +314,16 @@ function readGocnetUploadResult(rootDocument) {
         ? { documentId, dialog, button: buttons[0] } : null;
 }
 
+let lastReason = '';
+function noteReason(code) { lastReason = code; return 'unknown'; }
+
 /** Returns no_match only after a fresh, exact, unfiltered history query shows its explicit empty state. */
 function readGocnetRecordListResult(rootDocument, { applicationNumber, freshResponse, busy = false } = {}) {
-    if (!rootDocument || freshResponse !== true || busy || !/^20\d{2}-\d{2}-\d{5,8}$/.test(applicationNumber || '')) return 'unknown';
+    if (!rootDocument || freshResponse !== true || busy || !/^20\d{2}-\d{2}-\d{5,8}$/.test(applicationNumber || '')) return noteReason('bad_input');
     const headings = [...rootDocument.querySelectorAll('h1, h2, h3, h4, h5, legend, .z-caption, .z-groupbox-legend')]
         .filter((heading) => isVisible(heading)
             && normalizeText(heading.textContent).replace(/^[^\p{L}\p{N}]+/u, '').startsWith('kayıtlı ikamet işlemleri listesi'));
-    if (headings.length !== 1) return 'unknown';
+    if (headings.length !== 1) return noteReason(`heading_count_${headings.length}`);
     const hasHistoryHeaders = (list) => {
         const headers = [...list.querySelectorAll('.z-listbox-header th')].map((cell) => normalizeText(cell.textContent));
         return ['e-ikamet başvuru no', 'öğrenci no', 'göçnet kayıt no'].every((header) => headers.includes(header));
@@ -331,28 +334,28 @@ function readGocnetRecordListResult(rootDocument, { applicationNumber, freshResp
         lists = [...section.querySelectorAll('.z-listbox')].filter(hasHistoryHeaders);
         if (lists.length) break;
     }
-    if (lists.length !== 1) return 'unknown';
+    if (lists.length !== 1) return noteReason(`list_count_${lists.length}`);
     const list = lists[0];
     const numberFilters = [...section.querySelectorAll('input[placeholder="Tüm veya kısmi no..."]')].filter(isVisible);
     const studentFilters = [...section.querySelectorAll('input[placeholder="Öğrenci no..."]')].filter(isVisible);
     const processFilters = [...section.querySelectorAll('select')].filter(isVisible);
     if (numberFilters.length !== 1 || numberFilters[0].value !== applicationNumber || studentFilters.length !== 1
         || studentFilters[0].value.trim() !== '' || processFilters.length !== 1
-        || normalizeText(processFilters[0].selectedOptions?.[0]?.textContent) !== '-- tümü --') return 'unknown';
-    if ([...section.querySelectorAll('.z-paging')].some(isVisible)) return 'unknown';
+        || normalizeText(processFilters[0].selectedOptions?.[0]?.textContent) !== '-- tümü --') return noteReason(`filter_state_n${numberFilters.length}_s${studentFilters.length}_p${processFilters.length}`);
+    if ([...section.querySelectorAll('.z-paging')].some(isVisible)) return noteReason('paging_visible');
     const rows = [...list.querySelectorAll('.z-listbox-body tr.z-listitem')].filter(isVisible);
     const numberIndex = [...list.querySelectorAll('.z-listbox-header th')]
         .findIndex((cell) => normalizeText(cell.textContent) === 'e-ikamet başvuru no');
-    if (numberIndex < 0) return 'unknown';
+    if (numberIndex < 0) return noteReason('no_number_column');
     if (rows.length) {
         return rows.length === 1
             && normalizeText(rows[0].querySelectorAll('td')[numberIndex]?.textContent) === normalizeText(applicationNumber)
-            ? 'existing_record' : 'unknown';
+            ? 'existing_record' : noteReason('row_mismatch');
     }
     const emptyMessages = [...list.querySelectorAll('.z-listbox-emptybody-content')].filter(isVisible);
     return emptyMessages.length === 1
         && normalizeText(emptyMessages[0].textContent).startsWith('veritabanında kayıtlı ikamet işlemi bulunamadı.')
-        ? 'no_match' : 'unknown';
+        ? 'no_match' : noteReason('empty_state_missing');
 }
 
 /** Performs one read-only exact-number lookup; every unrecognized result fails closed. */
@@ -383,7 +386,7 @@ async function queryGocnetRecordList(rootDocument, applicationNumber, requestId)
         const response = await chrome.runtime.sendMessage({ action: 'YOKSIS_ZK_COMMAND', command: {
             action: 'queryGocnetRecords', applicationNumber, requestId
         } });
-        if (response?.success !== true || response.freshResponse !== true) return 'unknown';
+        if (response?.success !== true || response.freshResponse !== true) return noteReason(response?.success === true ? 'zk_command_stale' : `zk_command_failed: ${String(response?.error || '').slice(0, 110)}`);
         return readGocnetRecordListResult(rootDocument, { applicationNumber, freshResponse: true });
     } catch {
         return 'unknown';
@@ -468,8 +471,9 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
                     if (state === 'student_data_filled' && acknowledgeGocnetQuery(document, request.applicationNumber)) transferContexts.set(request.attemptId, {
                         applicationNumber: request.applicationNumber, state
                     });
-                    sendResponse({ requestId: request.requestId, state: state === 'student_data_filled'
-                        && !transferContexts.has(request.attemptId) ? 'unknown' : state });
+                    const out = state === 'student_data_filled' && !transferContexts.has(request.attemptId) ? 'unknown' : state;
+                    sendResponse({ requestId: request.requestId, state: out, ...(out === 'unknown' && lastReason ? { reason: lastReason } : {}) });
+                    lastReason = '';
                 })
                 .catch(() => sendResponse({ requestId: request.requestId, state: 'unknown' }))
                 .finally(() => { queryInProgress = false; });

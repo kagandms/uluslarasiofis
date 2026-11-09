@@ -2186,8 +2186,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         }));
                     const state = ['no_match', 'existing_record', 'student_data_filled'].includes(result?.state) ? result.state : 'unknown';
                     sendResponse({ success: state !== 'unknown', requestId: request.requestId, state,
-                        ...(state === 'unknown' ? {} : { yoksisTabId: target.yoksisTabId }) });
-                } catch { sendResponse({ success: false, requestId: request.requestId, state: 'unknown' }); }
+                        ...(state === 'unknown' ? { reason: typeof result?.reason === 'string' && result.reason ? result.reason.slice(0, 160) : 'controller_unknown' } : { yoksisTabId: target.yoksisTabId }) });
+                } catch (error) {
+                    // Only our own short, fixed messages are surfaced so staff can tell setup problems from YÖKSİS answers.
+                    const reason = typeof error?.message === 'string' ? error.message.slice(0, 160) : 'unknown_error';
+                    sendResponse({ success: false, requestId: request.requestId, state: 'unknown', reason });
+                }
             })();
             return true;
         }

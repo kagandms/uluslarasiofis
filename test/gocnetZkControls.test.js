@@ -63,3 +63,14 @@ test('GöçNet history query refuses restricted filters and malformed identifier
     assert.equal(malformed.success, false);
     harness.dom.window.close();
 });
+
+test('GöçNet history query accepts the real YÖKSİS "Tümü" option whose value is its label', async () => {
+    const harness = createHarness();
+    const select = harness.dom.window.document.querySelector('select');
+    select.innerHTML = '<option selected>-- Tümü --</option><option>Tamamlandı</option>';
+    assert.equal(select.value, '-- Tümü --');
+    const result = await harness.dom.window.YknZkForm.execute({ action: 'queryGocnetRecords', applicationNumber, requestId: 'history-test' });
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), { success: true, freshResponse: true });
+    assert.equal(harness.listQueries(), 1);
+    harness.dom.window.close();
+});

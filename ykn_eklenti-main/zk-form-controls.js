@@ -520,11 +520,12 @@
             throw new Error('GöçNet sorgu isteği doğrulanamadı.');
         }
         await waitForIdle();
+        const diagnostics = [];
         const targets = collectDocuments().map((targetDocument) => {
             const headings = Array.from(targetDocument.querySelectorAll('h1, h2, h3, h4, h5, legend, .z-caption, .z-groupbox-legend'))
                 .filter((heading) => isVisible(heading)
                     && normalizeCompact(heading.textContent).startsWith('kayitliikametislemlerilistesi'));
-            if (headings.length !== 1) return null;
+            if (headings.length !== 1) { diagnostics.push(`h${headings.length}`); return null; }
             const hasHistoryHeaders = (list) => Array.from(list.querySelectorAll('.z-listbox-header th'))
                 .map((cell) => normalizeCompact(cell.textContent))
                 .filter((header) => ['eikametbasvuruno', 'ogrencino', 'gocnetkayitno'].includes(header)).length === 3;
@@ -534,7 +535,7 @@
                 lists = Array.from(section.querySelectorAll('.z-listbox')).filter(hasHistoryHeaders);
                 if (lists.length) break;
             }
-            if (lists.length !== 1) return null;
+            if (lists.length !== 1) { diagnostics.push(`l${lists.length}`); return null; }
             const numbers = Array.from(section.querySelectorAll('input[placeholder="Tüm veya kısmi no..."]')).filter(isVisible);
             const students = Array.from(section.querySelectorAll('input[placeholder="Öğrenci no..."]')).filter(isVisible);
             const processFilters = Array.from(section.querySelectorAll('select')).filter(isVisible);
@@ -542,10 +543,13 @@
                 .filter((button) => isVisible(button) && normalizeCompact(button.textContent.replace(/^\W+/, '')) === 'kayitlarilistele');
             if (numbers.length !== 1 || students.length !== 1 || students[0].value.trim() || processFilters.length !== 1
                 || normalizeCompact(processFilters[0].selectedOptions?.[0]?.textContent) !== 'tumu'
-                || buttons.length !== 1 || buttons[0].disabled) return null;
+                || buttons.length !== 1 || buttons[0].disabled) {
+                diagnostics.push(`n${numbers.length}s${students.length}p${processFilters.length}b${buttons.length}`);
+                return null;
+            }
             return { targetDocument, list: lists[0], number: numbers[0], process: processFilters[0], button: buttons[0] };
         }).filter(Boolean);
-        if (targets.length !== 1) throw new Error('GöçNet kayıt listesi belirsiz veya filtreleri kısıtlı.');
+        if (targets.length !== 1) throw new Error(`GöçNet kayıt listesi belirsiz veya filtreleri kısıtlı. [docs=${diagnostics.length}/${targets.length} ${diagnostics.join(',')}]`);
         const target = targets[0];
         const targetWindow = target.targetDocument.defaultView;
         const numberWidget = findZkWidget(target.number, targetWindow);
@@ -562,7 +566,9 @@
             await waitForIdle();
         } finally { filterObserver.dispose(); }
         if (target.number.value !== options.applicationNumber || numberWidget.getValue?.() !== options.applicationNumber
-            || target.process.value !== '') throw new Error('GöçNet filtre değeri sunucuda doğrulanamadı.');
+            || normalizeCompact(target.process.selectedOptions?.[0]?.textContent) !== 'tumu') {
+            throw new Error(`GöçNet filtre değeri sunucuda doğrulanamadı. [input=${target.number.value === options.applicationNumber} widget=${numberWidget.getValue?.() === options.applicationNumber} process=${JSON.stringify(String(target.process.selectedOptions?.[0]?.textContent || '').slice(0, 20))}]`);
+        }
         const queryObserver = observeResponse(targetWindow);
         try {
             listButtonWidget.fire('onClick', null, { toServer: true });
@@ -739,7 +745,8 @@
             return { success: false, verified: false };
         } catch (error) {
             console.warn('[YKN] ZK operation could not be verified.', { action: options.action, errorName: error?.name || 'Error' });
-            return { success: false, verified: false, error: 'YÖKSİS seçimi veya sunucu güncellemesi doğrulanamadı.' };
+            return { success: false, verified: false, error: options.action === 'queryGocnetRecords' && typeof error?.message === 'string'
+                ? error.message.slice(0, 200) : 'YÖKSİS seçimi veya sunucu güncellemesi doğrulanamadı.' };
         }
     }
 

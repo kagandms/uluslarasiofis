@@ -64,3 +64,12 @@ test('rejects documents with blocked scans and files whose downloaded size diffe
     api.readArchiveFile = async () => ({ ok: true, body: {}, async blob() { return new Blob([new Uint8Array(4)]); } });
     await assert.rejects(readApplicationDocumentFiles({ applicationId: 'app-1', api }), /boyutu doğrulanamadı/i);
 });
+
+test('auto-picks the registration number only when the barcode caption confirms exactly one candidate', () => {
+    const text = 'GCGM03-92026331015530\nİKAMET İZNİ ÖĞRENCİ KAYIT FORMU';
+    assert.equal(resolveRegistrationNumber(['2026-33-1015530', '2026-10-12313909'], '', text), '2026-33-1015530');
+    assert.equal(resolveRegistrationNumber(['2026-10-12313909', '2026-33-1015530'], '', text), '2026-33-1015530');
+    assert.equal(resolveRegistrationNumber(['2026-33-1015530', '2026-10-12313909'], '', ''), null);
+    assert.equal(resolveRegistrationNumber(['2026-04-0644400', '2026-04-0644401'], '', text), null);
+    assert.equal(resolveRegistrationNumber(['2026-33-1015530', '2026-10-12313909'], '', 'GCGM03-92026331015530 GCGM03-92026101231390'), '2026-33-1015530');
+});
