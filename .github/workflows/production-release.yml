@@ -71,7 +71,16 @@ jobs:
           npm install --global npm@11.9.0
           npm ci --ignore-scripts
       - name: Confirm production HEAD still matches the reviewed SHA
+        # The checkout keeps no credentials, so this read-only fetch authenticates with the job's read-only
+        # token (permissions: contents: read) for this step only; it also works for a private repository.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
+          auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
           git fetch --no-tags origin production
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           test "$(git rev-parse refs/remotes/origin/production)" = "$RELEASE_SHA"

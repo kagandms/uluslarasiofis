@@ -219,3 +219,19 @@ test('local production deploy is blocked while the explicit production dry-run r
     assert.match(result.stderr, /Production release \(manual\) workflow/);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /wrangler deploy/);
 });
+
+test('release HEAD confirmation fetches with the job token yet keeps the exact-SHA equality checks and no persisted credentials', () => {
+    const workflow = readFileSync(new URL('../.github/workflows/production-release.yml', import.meta.url), 'utf8');
+    const start = workflow.indexOf('- name: Confirm production HEAD still matches the reviewed SHA');
+    const step = workflow.slice(start, workflow.indexOf('- name: Download artifact produced by exact-SHA CI'));
+    assert.ok(start > 0 && step.length > 0);
+    assert.match(step, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+    assert.match(step, /http\.https:\/\/github\.com\/\.extraheader/);
+    assert.match(step, /::add-mask::/);
+    assert.match(step, /git fetch --no-tags origin production/);
+    assert.match(step, /test "\$\(git rev-parse HEAD\)" = "\$RELEASE_SHA"/);
+    assert.match(step, /test "\$\(git rev-parse refs\/remotes\/origin\/production\)" = "\$RELEASE_SHA"/);
+    assert.doesNotMatch(step, /git config|\bset-url\b/);
+    assert.equal(/persist-credentials: true/.test(workflow), false);
+    assert.equal((workflow.match(/GITHUB_TOKEN:/g) || []).length, 1);
+});
