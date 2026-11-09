@@ -492,6 +492,7 @@ function islemIkametRemove_(e) {
 
 function otomatikGunlukIkametSayfasiOlustur() {
   var bugun = new Date();
+  // Weekend sheets are not pre-created; the first online add of the day still creates the sheet on demand.
   var gun = Number(Utilities.formatDate(bugun, IKAMET_SAAT_DILIMI, "u"));
   if (gun === 6 || gun === 7) return { success: false, error: "Hafta sonu ikamet sekmesi olusturulmaz." };
 
@@ -519,89 +520,16 @@ function kurGunlukIkametSayfasiTetikleyicisi() {
     if (relatedHandlers.indexOf(trigger.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(trigger);
   });
 
-  var weekdays = [ScriptApp.WeekDay.MONDAY, ScriptApp.WeekDay.TUESDAY, ScriptApp.WeekDay.WEDNESDAY,
-    ScriptApp.WeekDay.THURSDAY, ScriptApp.WeekDay.FRIDAY];
-  weekdays.forEach(function(weekday) {
-    ScriptApp.newTrigger("otomatikGunlukIkametSayfasiOlustur")
-      .timeBased()
-      .everyWeeks(1)
-      .onWeekDay(weekday)
-      .atHour(8)
-      // Apps Script trigger timing is approximate; 08:00 is a target window, not an exact-minute guarantee.
-      .nearMinute(0)
-      .inTimezone(IKAMET_SAAT_DILIMI)
-      .create();
-  });
-  return { success: true, triggerCount: weekdays.length };
-}
-
-// ------------------------------------------------------------
-// OTOMATIK HAFTALIK SAYFA OLUSTURMA (PAZAR AKŞAMI TETIKLEYICISI ICIN)
-// ------------------------------------------------------------
-function otomatikHaftalikSayfaOlustur() {
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(15000);
-  } catch (err) {
-    Logger.log("Kilit alinamadi: " + err.message);
-    return { success: false, error: "Kilit alinamadi: " + err.message };
-  }
-
-  try {
-    var ss = getWorkbook_();
-    var sonSayfa = sonTarihliSayfayiBul_(ss);
-    var yeniSayfaAdi = "";
-
-    if (sonSayfa) {
-      var sonAd = sonSayfa.getName().trim();
-      var match = sonAd.match(/^(\d{2})\.(\d{2})(?:\.(\d{4}))?$/);
-      if (match) {
-        var gun = parseInt(match[1], 10);
-        var ay = parseInt(match[2], 10) - 1;
-        var yil = match[3] ? parseInt(match[3], 10) : new Date().getFullYear();
-
-        var sonTarih = new Date(yil, ay, gun);
-        // Son sayfadaki tarihe tam 7 gun (1 hafta) ekle
-        sonTarih.setDate(sonTarih.getDate() + 7);
-
-        var yeniGun = ("0" + sonTarih.getDate()).slice(-2);
-        var yeniAy = ("0" + (sonTarih.getMonth() + 1)).slice(-2);
-        var yeniYil = sonTarih.getFullYear();
-
-        yeniSayfaAdi = match[3] ? (yeniGun + "." + yeniAy + "." + yeniYil) : (yeniGun + "." + yeniAy);
-      }
-    }
-
-    // Eger son sayfa adindan tarih cikarilamazsa, sistem saatine gore sonraki Pazartesi'yi hesapla
-    if (!yeniSayfaAdi) {
-      var bugun = new Date();
-      var gunIndex = bugun.getDay(); // 0: Pazar, 1: Pazartesi
-      var eklenecekGun = (gunIndex === 0) ? 1 : (8 - gunIndex);
-      var sonrakiPzt = new Date(bugun.getFullYear(), bugun.getMonth(), bugun.getDate() + eklenecekGun);
-
-      var g = ("0" + sonrakiPzt.getDate()).slice(-2);
-      var a = ("0" + (sonrakiPzt.getMonth() + 1)).slice(-2);
-      var y = sonrakiPzt.getFullYear();
-      yeniSayfaAdi = g + "." + a + "." + y;
-    }
-
-    // Eger sayfa zaten varsa tekrar olusturma
-    if (ss.getSheetByName(yeniSayfaAdi)) {
-      Logger.log("Sayfa zaten mevcut: " + yeniSayfaAdi);
-      return { success: true, message: "Sayfa zaten mevcut", sayfa: yeniSayfaAdi };
-    }
-
-    yeniSayfaOlustur_(yeniSayfaAdi);
-    invalidateGetAllCache_();
-    Logger.log("Yeni haftalik sayfa basariyla olusturuldu: " + yeniSayfaAdi);
-    return { success: true, message: "Sayfa olusturuldu", sayfa: yeniSayfaAdi };
-
-  } catch (err) {
-    Logger.log("Haftalik sayfa olusturma hatasi: " + err.message);
-    return { success: false, error: err.message };
-  } finally {
-    lock.releaseLock();
-  }
+  // Apps Script runs an hour-based trigger at a random moment inside the chosen hour (00:00-01:00 here), not at an exact minute.
+  // The first online add of the day still creates the sheet itself if the trigger has not run yet.
+  ScriptApp.newTrigger("otomatikGunlukIkametSayfasiOlustur")
+    .timeBased()
+    .everyDays(1)
+    .atHour(0)
+    .nearMinute(0)
+    .inTimezone(IKAMET_SAAT_DILIMI)
+    .create();
+  return { success: true, triggerCount: 1 };
 }
 
 // ------------------------------------------------------------

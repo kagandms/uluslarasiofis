@@ -125,6 +125,7 @@ function loadScript({ sheets = [], now = new Date('2026-11-03T05:00:00Z'), trigg
                         nearMinute(minute) { trigger.minute = minute; return builder; },
                         inTimezone(timezone) { trigger.timezone = timezone; return builder; },
                         everyWeeks(count) { trigger.weeks = count; return builder; },
+                        everyDays(count) { trigger.days = count; return builder; },
                         onWeekDay(day) { trigger.weekdays.push(day); return builder; },
                         create() { createdTriggers.push(trigger); return trigger; }
                     };
@@ -240,29 +241,45 @@ test('residence add keeps an existing dated legacy sheet unchanged when headers 
     assert.equal(legacy.metadata.has('residence-sheet-schema'), false);
 });
 
-test('automatic creation skips Istanbul weekends and handles year changes', async () => {
+test('automatic creation skips Istanbul weekends, still creates sheets on demand, and handles year changes', async () => {
     const saturday = await loadScript({ now: new Date('2026-11-06T21:30:00Z') });
     const weekendResult = saturday.context.otomatikGunlukIkametSayfasiOlustur();
     assert.equal(weekendResult.success, false);
     assert.equal(saturday.workbook.sheets.length, 0);
+
+    const sundayAdd = await loadScript({ now: new Date('2026-11-07T21:30:00Z') });
+    const added = JSON.parse(sundayAdd.context.doPost({ postData: { contents: JSON.stringify({
+        key: 'test-api-key', action: 'residenceAdd', applicationId: 'app-sun', recordKey: 'app-sun',
+        firstName: 'Ada', lastName: 'Lovelace', passportNumber: 'P1', targetSheetName: '08.11.2026'
+    }) } }).text);
+    assert.equal(added.success, true);
+    assert.equal(added.sheetName, '08.11.2026');
 
     const yearEnd = await loadScript({ now: new Date('2026-12-31T21:30:00Z') });
     const result = yearEnd.context.otomatikGunlukIkametSayfasiOlustur();
     assert.equal(result.sayfa, '01.01.2027');
 });
 
-test('trigger installer replaces only the weekly sheet trigger with five weekday 08:00 triggers', async () => {
+test('trigger installer removes the legacy weekly trigger and installs one daily trigger around 00:00 Istanbul time', async () => {
     const weekly = { handlerFunction: 'otomatikHaftalikSayfaOlustur', getHandlerFunction() { return this.handlerFunction; } };
+    const oldDaily = { handlerFunction: 'otomatikGunlukIkametSayfasiOlustur', getHandlerFunction() { return this.handlerFunction; } };
     const unrelated = { handlerFunction: 'otherScheduledTask', getHandlerFunction() { return this.handlerFunction; } };
-    const { context, createdTriggers } = await loadScript({ triggers: [weekly, unrelated] });
+    const { context, createdTriggers } = await loadScript({ triggers: [weekly, oldDaily, unrelated] });
 
     context.kurGunlukIkametSayfasiTetikleyicisi();
 
     assert.equal(weekly.deleted, true);
+    assert.equal(oldDaily.deleted, true);
     assert.equal(unrelated.deleted, undefined);
-    assert.equal(createdTriggers.length, 5);
-    assert.ok(createdTriggers.every(trigger => trigger.hour === 8 && trigger.timezone === 'Europe/Istanbul'));
-    assert.deepEqual(createdTriggers.map(trigger => trigger.weekdays[0]), ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']);
+    assert.equal(createdTriggers.length, 1);
+    assert.equal(createdTriggers[0].days, 1);
+    assert.equal(createdTriggers[0].hour, 0);
+    assert.equal(createdTriggers[0].timezone, 'Europe/Istanbul');
+});
+
+test('the apps script no longer defines the weekly sheet creator', async () => {
+    const { context } = await loadScript({});
+    assert.equal(typeof context.otomatikHaftalikSayfaOlustur, 'undefined');
 });
 
 test('residence add and remove use the stable record key and return confirmed state', async () => {
