@@ -43,7 +43,7 @@ for (const scenario of SCENARIOS) {
     });
 }
 
-test('current upload intents reject obsolete residence-card and photo requirements', async () => {
+test('current upload intents reject obsolete residence-card requirements and accept biometric photographs', async () => {
     const context = await createRealScannerFixture();
     const app = await createSyntheticDraft(context);
     const card = await portalRequest(context, '/api/public/applications/current/documents/upload-intent', {
@@ -53,7 +53,7 @@ test('current upload intents reject obsolete residence-card and photo requiremen
     const photograph = await portalRequest(context, '/api/public/applications/current/documents/upload-intent', {
         cookie: app.cookie, method: 'POST', body: { code: 'photographs', filename: 'photos.pdf', media_type: 'application/pdf', byte_size: 4 }
     });
-    assert.equal(photograph.status, 404);
+    assert.notEqual(photograph.status, 404);
 });
 
 test('minors upload separate consent without unrelated family or parent documents', async () => {
@@ -101,7 +101,7 @@ test('registered address is a complete alternative without rental, undertaking o
     const response = await portalRequest(context, '/api/public/applications/current/documents', { cookie: app.cookie });
     const { requirements } = await response.json();
     assert.deepEqual(requirements.map(({ code }) => code).sort(), [
-        'residence_application_form', 'passport', 'student_certificate', 'health_insurance',
+        'residence_application_form', 'passport', 'photographs', 'student_certificate', 'health_insurance',
         'residence_permit_fee', 'uets', 'address_residence_certificate'
     ].sort());
 });

@@ -3,13 +3,13 @@ import { test } from 'node:test';
 import * as documentPolicy from '../src/server/domain/documentPolicy.js';
 import { listApplicationDocumentPolicies, listDocumentPolicies, listPublicDocumentOverview, readDocumentPolicy } from '../src/server/domain/documentPolicy.js';
 
-test('document policies expose common required documents without separate visa, photo, card or fingerprint uploads', () => {
+test('document policies expose common required documents with biometric photographs but without separate visa, card or fingerprint uploads', () => {
     const policies = listDocumentPolicies('initial', false, { has_residence_card: 'yes', insurance_basis: 'bilateral_agreement' });
     const codes = policies.map(({ code }) => code);
 
     assert.ok(codes.includes('passport'));
     assert.equal(codes.includes('visa'), false);
-    assert.equal(codes.includes('photographs'), false);
+    assert.equal(codes.includes('photographs'), true);
     assert.ok(!codes.includes('residence_card'));
     assert.ok(!codes.includes('passport_identity'));
     assert.ok(!codes.includes('fingerprint'));
@@ -17,7 +17,7 @@ test('document policies expose common required documents without separate visa, 
     assert.equal(listDocumentPolicies('initial', false, { insurance_basis: 'system_verified' })
         .find(({ code }) => code === 'health_insurance')?.required, true);
     assert.equal(readDocumentPolicy('passport', 'initial', false).label_key, 'documentPassport');
-    assert.equal(readDocumentPolicy('photographs', 'initial', false), null);
+    assert.equal(readDocumentPolicy('photographs', 'initial', false).label_key, 'documentPhotographs');
     assert.equal(readDocumentPolicy('residence_card', 'renewal', false), null);
 });
 
@@ -81,7 +81,7 @@ test('student uploads follow the requested order and keep the permit fee last', 
     }).map(({ code }) => code);
 
     assert.deepEqual(codes, [
-        'residence_application_form', 'passport', 'student_certificate', 'health_insurance',
+        'residence_application_form', 'passport', 'photographs', 'student_certificate', 'health_insurance',
         'address_dormitory', 'dormitory_tax_certificate', 'dormitory_signature_circular', 'uets', 'residence_permit_fee'
     ]);
 });
@@ -92,7 +92,7 @@ test('public overview derives the new concise policy and address alternatives wi
 
     assert.equal(new Set(overview.map(({ code }) => code)).size, overview.length);
     assert.ok(byCode.has('passport'));
-    assert.equal(byCode.has('photographs'), false);
+    assert.equal(byCode.get('photographs').scope_key, 'homeDocumentAllApplications');
     assert.ok(!byCode.has('residence_card'));
     assert.ok(!byCode.has('passport_identity'));
     assert.ok(!byCode.has('fingerprint'));

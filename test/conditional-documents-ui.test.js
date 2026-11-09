@@ -40,7 +40,7 @@ async function submitStep(root) {
     await new Promise((resolve) => setImmediate(resolve));
 }
 
-test('first application requests common documents without obsolete photo or card uploads', async (context) => {
+test('first application requests common documents including photographs without obsolete card uploads', async (context) => {
     const { root, document, state, application } = await createWizard();
     context.after(() => document.defaultView.close());
     assert.equal(state.step, 1);
@@ -48,7 +48,7 @@ test('first application requests common documents without obsolete photo or card
     await submitStep(root);
     assert.equal(state.step, 2);
     assert.equal(root.querySelector('[data-document-code="residence_card"]'), null);
-    assert.equal(root.querySelector('[data-document-code="photographs"]'), null);
+    assert.ok(root.querySelector('[data-document-code="photographs"]'));
     assert.ok(root.querySelector('[data-document-code="health_insurance"]'));
     assert.equal(application.has_residence_card, undefined);
 });

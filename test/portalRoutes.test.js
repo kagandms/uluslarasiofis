@@ -103,7 +103,7 @@ test('landing document guidance renders policy-derived titles and highlights the
     assert.match(root.textContent, /E-Devlet’ten son bir ay içinde alınmış/i);
     assert.match(root.textContent, /Yurttan alacağınız, yurtta kaldığınızı gösteren belgeyi yükleyin/i);
     assert.doesNotMatch(root.textContent, /İkamet kartı/);
-    assert.doesNotMatch(root.textContent, /Biyometrik fotoğraflar/);
+    assert.match(root.textContent, /Biyometrik fotoğraflar \(2 adet\)/);
     assert.match(root.textContent, /Taahhüt veren kişi adına elektrik, su veya doğal gaz faturasını yükleyin/);
     assert.match(root.textContent, /noter onaylı muvafakatnameyi ayrıca yükleyin/i);
     assert.match(root.textContent, /Yurdun vergi levhası/);

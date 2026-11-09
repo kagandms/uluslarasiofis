@@ -17,17 +17,17 @@ function readCodes(application) {
 
 const ADULT = Object.freeze({ application_type: 'initial', is_under_18: 0 });
 
-test('public document guidance requests four biometric photos in every supported locale', () => {
+test('public document guidance requests two biometric photos in every supported locale', () => {
     for (const locale of SUPPORTED_LOCALES) {
-        assert.match(PUBLIC_MESSAGES[locale].documentPhotographs, /4/);
-        assert.match(SESSION3_MESSAGES[locale].documentPhotographsHelp, /4/);
+        assert.match(PUBLIC_MESSAGES[locale].documentPhotographs, /2/);
+        assert.match(SESSION3_MESSAGES[locale].documentPhotographsHelp, /2/);
     }
 });
 
 test('current applications request the official form documents without a residence-card upload', () => {
     for (const application_type of ['initial', 'renewal']) {
         const codes = readCodes({ ...ADULT, application_type, insurance_basis: 'system_verified' });
-        assert.equal(codes.includes('photographs'), false);
+        assert.equal(codes.includes('photographs'), true);
         assert.equal(codes.includes('residence_card'), false);
         assert.ok(codes.includes('health_insurance'));
         assert.ok(codes.includes('student_certificate'));
@@ -148,7 +148,7 @@ test('owner PATCH persists new accommodation and answers, survives reload and dr
     assert.equal(codes.includes('address_hotel_receipt'), false);
     assert.ok(codes.includes('health_insurance'));
     assert.equal(codes.includes('residence_card'), false);
-    assert.equal(codes.includes('photographs'), false);
+    assert.equal(codes.includes('photographs'), true);
     assert.equal(codes.includes('home_utility_bill'), false);
     const invalid = await worker.fetch(createRequest('/api/public/applications/current', { method: 'PATCH', cookie,
         body: { lock_version: saved.lock_version, host_is_married: 'maybe' } }), environment, {});

@@ -42,6 +42,7 @@ const TYPE_SWITCH_CODE_MAP = Object.freeze({
 const POLICIES = Object.freeze([
     { code: 'residence_application_form', order: 1, label: 'documentResidenceApplicationForm', help: 'documentResidenceApplicationFormHelp' },
     { code: 'passport', order: 2, label: 'documentPassport', help: 'documentPassportHelp' },
+    { code: 'photographs', order: 4, label: 'documentPhotographs', help: 'documentPhotographsHelp' },
     { code: 'student_certificate', order: 5, label: 'documentStudentCertificate', help: 'documentStudentCertificateHelp' },
     { code: 'health_insurance', order: 6, label: 'documentHealthInsurance', help: 'documentHealthInsuranceHelp' },
     { code: 'residence_permit_fee', order: 23, label: 'documentResidencePermitFee', help: 'documentResidencePermitFeeHelp' },

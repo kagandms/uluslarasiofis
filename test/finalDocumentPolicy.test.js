@@ -6,7 +6,7 @@ import { listDocumentPolicies as listPreviousPolicies, readDocumentPolicy as rea
 import { listDocumentPolicies as listLegacyPolicies, readDocumentPolicy as readLegacyPolicy } from '../src/server/domain/document-policy-v1.js';
 import { readDocumentConditionSql } from '../src/server/repositories/d1/document-condition-sql.js';
 
-const COMMON = ['residence_application_form', 'passport', 'student_certificate', 'health_insurance', 'residence_permit_fee'];
+const COMMON = ['residence_application_form', 'passport', 'photographs', 'student_certificate', 'health_insurance', 'residence_permit_fee'];
 const BRANCHES = {
     rental_contract: ['address_rental_contract'],
     own_home: ['address_title_deed', 'address_numbering', 'address_dask'],
@@ -147,7 +147,7 @@ test('common insurance document never depends on insurance basis and DASK appear
     const overview = listPublicDocumentOverview();
     assert.equal(overview.find(({ code }) => code === 'address_residence_certificate').group_key, 'address_evidence');
     assert.equal(overview.find(({ code }) => code === 'uets').scope_key, 'homeDocumentConditional');
-    for (const code of ['visa', 'photographs', 'birth_certificate_under18', 'parent_permit_copy', 'minor_family_evidence', 'address_hotel_receipt']) {
+    for (const code of ['visa', 'birth_certificate_under18', 'parent_permit_copy', 'minor_family_evidence', 'address_hotel_receipt']) {
         assert.equal(overview.some((policy) => policy.code === code), false, code);
     }
 });
