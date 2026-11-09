@@ -52,6 +52,10 @@ function isReferenceConflict(error) {
  * @param {D1Database} database Cloudflare D1 binding.
  * @returns {object} Repository operations for application records.
  */
+const STAFF_COUNT_CACHE_MS = 15_000;
+// Per-isolate, per-binding cache of staff list totals; only the pagination label may lag by this TTL.
+const staffCountCache = new WeakMap();
+
 export function createApplicationRepository(database) {
     return Object.freeze({
         async createDraft({ applicationId, studentId, studentNumber, applicationType, applicationRoute = 'standard', studentEmail, studentPhone }) {
@@ -260,29 +264,40 @@ export function createApplicationRepository(database) {
                 queryValues.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
             }
             const whereClause = conditions.join(' AND ');
-            const [countResult, pageResult] = await Promise.all([
-                database.prepare(`
-                    SELECT COUNT(*) AS total_items
-                    FROM applications
-                    JOIN students ON students.id = applications.student_id
-                    WHERE ${whereClause}
-                `).bind(...queryValues).first(),
-                database.prepare(`
-                    SELECT applications.id, students.student_number, applications.first_name,
-                           applications.last_name, applications.application_type, applications.application_route, applications.status,
-                           applications.submitted_at, applications.created_at, applications.updated_at,
-                           application_deletions.state AS deletion_state,
-                           application_spreadsheet_records.state AS spreadsheet_state,
-                           application_spreadsheet_records.sheet_name AS spreadsheet_sheet_name
-                    FROM applications
-                    JOIN students ON students.id = applications.student_id
-                    LEFT JOIN application_deletions ON application_deletions.application_id=applications.id
-                    LEFT JOIN application_spreadsheet_records ON application_spreadsheet_records.application_id=applications.id
-                    WHERE ${whereClause}
-                    ORDER BY applications.updated_at DESC, applications.created_at DESC, applications.id DESC
-                    LIMIT ? OFFSET ?
-                `).bind(...queryValues, pageSize, offset).all()
-            ]);
+            const pageResult = await database.prepare(`
+                SELECT applications.id, students.student_number, applications.first_name,
+                       applications.last_name, applications.application_type, applications.application_route, applications.status,
+                       applications.submitted_at, applications.created_at, applications.updated_at,
+                       application_deletions.state AS deletion_state,
+                       application_spreadsheet_records.state AS spreadsheet_state,
+                       application_spreadsheet_records.sheet_name AS spreadsheet_sheet_name
+                FROM applications
+                JOIN students ON students.id = applications.student_id
+                LEFT JOIN application_deletions ON application_deletions.application_id=applications.id
+                LEFT JOIN application_spreadsheet_records ON application_spreadsheet_records.application_id=applications.id
+                WHERE ${whereClause}
+                ORDER BY applications.updated_at DESC, applications.created_at DESC, applications.id DESC
+                LIMIT ? OFFSET ?
+            `).bind(...queryValues, pageSize, offset).all();
+            // A short first page already is the whole result set; skip the full-table COUNT scan.
+            if (offset === 0 && pageResult.results.length < pageSize) {
+                return { totalItems: pageResult.results.length, items: pageResult.results };
+            }
+            const countKey = `${whereClause}\u0000${JSON.stringify(queryValues)}`;
+            let countCache = staffCountCache.get(database);
+            if (!countCache) staffCountCache.set(database, countCache = new Map());
+            const cached = countCache.get(countKey);
+            if (cached && Date.now() - cached.at < STAFF_COUNT_CACHE_MS) {
+                return { totalItems: cached.total, items: pageResult.results };
+            }
+            const countResult = await database.prepare(`
+                SELECT COUNT(*) AS total_items
+                FROM applications
+                JOIN students ON students.id = applications.student_id
+                WHERE ${whereClause}
+            `).bind(...queryValues).first();
+            if (countCache.size >= 50) countCache.clear();
+            countCache.set(countKey, { total: countResult.total_items, at: Date.now() });
             return { totalItems: countResult.total_items, items: pageResult.results };
         },
         async acceptContactResponsibilityAcknowledgement({ applicationId, version, acceptedAt, requestId }) {
