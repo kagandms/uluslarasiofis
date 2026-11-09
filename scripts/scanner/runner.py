@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import signal
+import re
 import subprocess
 import sys
 import tempfile
@@ -53,15 +54,19 @@ def make_result(job: ScanJob, evidence: JobEvidence) -> dict[str, object]:
         'policy_version': POLICY_VERSION}
 
 
-def validate_document(document_path: Path, media_type: str) -> bool:
-    """Run the document parser in a child process with a hard 20-second timeout."""
+def validate_document(document_path: Path, media_type: str) -> str | None:
+    """Run the parser in a child process with a 20-second timeout; returns None when valid, else a result code."""
     try:
         completed = subprocess.run([sys.executable, str(Path(__file__).with_name('validate_content.py')),
-            str(document_path), media_type], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20, check=False)
-        return completed.returncode == 0
+            str(document_path), media_type], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=20, check=False)
+        if completed.returncode == 0:
+            return None
+        reason = re.fullmatch(r'reason=[A-Za-z_]{1,60}(?::[a-z_]{1,30})?', (completed.stderr or '').strip())
+        LOGGER.warning('validation_detail %s', reason.group(0) if reason else 'reason=unknown')
+        return 'policy_blocked' if completed.returncode == 3 else 'unsupported_content'
     except (OSError, subprocess.TimeoutExpired):
         LOGGER.warning('validation_failed code=unsupported_content')
-        return False
+        return 'unsupported_content'
 
 
 def clean_crash_residue(temporary_root: Path) -> None:
@@ -94,8 +99,10 @@ def execute_job(config: ScannerConfig, transport: ScannerTransport, job: ScanJob
         with os.fdopen(descriptor, 'wb') as document_file:
             document_file.write(download.content)
         verdict = scan_document(config, document_path)
-        if verdict.outcome == 'clean' and not validate_document(document_path, job.media_type):
-            verdict = ScanVerdict('failed', 'unsupported_content')
+        invalid_code = validate_document(document_path, job.media_type) if verdict.outcome == 'clean' else None
+        if invalid_code:
+            LOGGER.warning('validation_failed code=%s', invalid_code)
+            verdict = ScanVerdict('failed', invalid_code)
         after_health = read_engine_health(config)
         if after_health != health:
             verdict = ScanVerdict('failed', 'signature_stale')

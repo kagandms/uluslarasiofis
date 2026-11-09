@@ -240,5 +240,60 @@ class SignatureCompletenessTests(unittest.TestCase):
 
             self.assertEqual(health.health,'engine_unavailable')
 
+class ContentValidationTests(unittest.TestCase):
+    """validate_document maps parser outcomes to distinct, non-retryable result codes."""
+
+    def _validate(self, content: bytes, media_type: str):
+        from runner import validate_document
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'document'
+            path.write_bytes(content)
+            return validate_document(path, media_type)
+
+    def _pdf_bytes(self, password: str | None = None, owner: str | None = None, algorithm: str = 'RC4-128') -> bytes:
+        import io
+        from pypdf import PdfWriter
+        writer = PdfWriter()
+        writer.add_blank_page(width=200, height=200)
+        if password is not None or owner is not None:
+            writer.encrypt(password or '', owner_password=owner, algorithm=algorithm)
+        buffer = io.BytesIO()
+        writer.write(buffer)
+        return buffer.getvalue()
+
+    def test_valid_pdf_and_image_pass(self) -> None:
+        import io
+        from PIL import Image
+        self.assertIsNone(self._validate(self._pdf_bytes(), 'application/pdf'))
+        buffer = io.BytesIO()
+        Image.new('RGB', (16, 16), 'white').save(buffer, 'JPEG')
+        self.assertIsNone(self._validate(buffer.getvalue(), 'image/jpeg'))
+
+    def test_pdf_with_trailing_garbage_and_bad_startxref_is_tolerated(self) -> None:
+        damaged = self._pdf_bytes() + b'\r\n\x00\x00garbage after EOF'
+        self.assertIsNone(self._validate(damaged, 'application/pdf'))
+
+    def test_encrypted_pdf_is_policy_blocked(self) -> None:
+        self.assertEqual(self._validate(self._pdf_bytes('synthetic-only'), 'application/pdf'), 'policy_blocked')
+
+    def test_pdf_encrypted_with_empty_user_password_is_allowed(self) -> None:
+        for algorithm in ('RC4-128', 'AES-128', 'AES-256'):
+            self.assertIsNone(self._validate(self._pdf_bytes('', 'owner-only', algorithm), 'application/pdf'), algorithm)
+
+    def test_pdf_needing_a_real_password_stays_blocked_for_every_algorithm(self) -> None:
+        for algorithm in ('RC4-128', 'AES-128', 'AES-256'):
+            self.assertEqual(self._validate(self._pdf_bytes('real-secret', 'owner', algorithm), 'application/pdf'), 'policy_blocked', algorithm)
+
+    def test_unreadable_pdf_logs_only_the_exception_class(self) -> None:
+        with self.assertLogs('runner', level='WARNING') as captured:
+            self._validate(b'%PDF-1.4 secret-name.pdf broken', 'application/pdf')
+        text = '\n'.join(captured.output)
+        self.assertIn('validation_detail reason=', text)
+        self.assertNotIn('secret-name', text)
+
+    def test_unreadable_content_is_unsupported(self) -> None:
+        self.assertEqual(self._validate(b'%PDF-1.4 not really a pdf', 'application/pdf'), 'unsupported_content')
+        self.assertEqual(self._validate(b'\x89PNG\r\n\x1a\ninvalid', 'image/png'), 'unsupported_content')
+
 if __name__ == '__main__':
     unittest.main()
