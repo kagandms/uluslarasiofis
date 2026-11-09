@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readApplicationDocumentFiles } from '../src/staff/application-document-files.js';
-import { normalizeTurkishMobilePhone, resolveRegistrationNumber, resolveTurkishMobilePhone } from '../src/staff/gocnet-transfer.js';
+import { describeGocnetPreparationError, normalizeTurkishMobilePhone, resolveRegistrationNumber, resolveTurkishMobilePhone } from '../src/staff/gocnet-transfer.js';
 
 function createApi({ documents = [], files = [] } = {}) {
     return {
@@ -81,4 +81,14 @@ test('drops candidates that are not 2026-XX-XXXXXXX so look-alike dates never ne
     assert.equal(resolveRegistrationNumber(['2026-10-12313909']), null);
     assert.equal(resolveRegistrationNumber(['2025-33-1015530']), null);
     assert.equal(resolveRegistrationNumber(['2026-33-101553']), null);
+});
+
+test('shows our own preparation error text but keeps API and abort failures generic', () => {
+    const generic = 'GöçNet ön kontrolü yapılamadı. Belgeleri ve eklentiyi kontrol edip yeniden deneyin.';
+    assert.equal(describeGocnetPreparationError(new Error('Zorunlu belge “photographs” güncel ve güvenli değil.')),
+        'GöçNet ön kontrolü yapılamadı: Zorunlu belge “photographs” güncel ve güvenli değil.');
+    assert.equal(describeGocnetPreparationError(Object.assign(new Error('Staff request failed.'), { status: 0 })), generic);
+    assert.equal(describeGocnetPreparationError(new DOMException('Canceled', 'AbortError')), generic);
+    assert.equal(describeGocnetPreparationError(new Error('x'.repeat(300))), generic);
+    assert.equal(describeGocnetPreparationError('boom'), generic);
 });

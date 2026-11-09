@@ -17,6 +17,14 @@ function readBarcodeCaptionNumbers(formText) {
 }
 
 /** Picks the number without asking only when one candidate is unique or confirmed by the barcode caption. */
+/** Preparation errors are our own staff-facing messages (no HTTP status); API failures keep the generic text. */
+export function describeGocnetPreparationError(error) {
+    const generic = 'GöçNet ön kontrolü yapılamadı. Belgeleri ve eklentiyi kontrol edip yeniden deneyin.';
+    if (!(error instanceof Error) || error.name === 'AbortError' || error.status !== undefined) return generic;
+    const message = typeof error.message === 'string' ? error.message.trim() : '';
+    return message && message.length <= 200 ? `GöçNet ön kontrolü yapılamadı: ${message}` : generic;
+}
+
 export function filterRegistrationCandidates(candidates) {
     return [...new Set(candidates)].filter((candidate) => REGISTRATION_NUMBER_PATTERN.test(candidate));
 }

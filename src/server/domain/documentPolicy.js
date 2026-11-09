@@ -83,10 +83,20 @@ function readPolicyContext(addressContext) {
         : { address_evidence_type: addressContext };
 }
 
+// Biometric photographs became mandatory when this rule went live; applications submitted earlier are not asked for them.
+const PHOTOGRAPHS_REQUIRED_FROM_MS = Date.parse('2026-11-09T10:00:00.000Z');
+
+function predatesPhotographRule(context) {
+    if (typeof context.submitted_at !== 'string' || !context.submitted_at) return false;
+    const submittedMs = Date.parse(context.submitted_at);
+    return Number.isFinite(submittedMs) && submittedMs < PHOTOGRAPHS_REQUIRED_FROM_MS;
+}
+
 function isPolicyApplicable(policy, applicationType, isUnder18, addressContext) {
     const context = readPolicyContext(addressContext);
     const accommodation = readAccommodationType(context);
     if (!policy.active || !policy.application_types.includes(applicationType)) return false;
+    if (policy.code === 'photographs' && predatesPhotographRule(context)) return false;
     if (policy.address_evidence_type && policy.address_evidence_type !== accommodation) return false;
     switch (policy.conditional_rule) {
     case 'final_uets': return applicationType === 'renewal'

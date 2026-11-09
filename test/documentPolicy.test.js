@@ -118,3 +118,16 @@ test('application type remapping explicitly recognizes every legacy and current 
     assert.deepEqual(codes.map((code) => documentPolicy.mapDocumentRequirementCodeForTypeSwitch(code)), codes);
     assert.equal(documentPolicy.mapDocumentRequirementCodeForTypeSwitch('legacy_unknown'), null);
 });
+
+test('biometric photographs are not required for applications submitted before the rule, but stay required for drafts and newer submissions', () => {
+    const codesFor = (submittedAt) => listApplicationDocumentPolicies({
+        application_type: 'initial', is_under_18: 0, submitted_at: submittedAt
+    }).map(({ code }) => code);
+    assert.equal(codesFor('2026-11-08T19:18:00.000Z').includes('photographs'), false);
+    assert.equal(codesFor('2026-11-09T09:33:00.000Z').includes('photographs'), false);
+    assert.equal(codesFor('2026-11-09T10:05:00.000Z').includes('photographs'), true);
+    assert.equal(codesFor(null).includes('photographs'), true);
+    assert.equal(codesFor(undefined).includes('photographs'), true);
+    assert.equal(codesFor('not-a-date').includes('photographs'), true);
+    assert.equal(codesFor('2026-11-08T19:18:00.000Z').includes('passport'), true);
+});

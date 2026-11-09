@@ -7,7 +7,7 @@ import { downloadApplicationArchive, createArchiveFilename } from './application
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
 import { createApplicationQueueFilters } from './application-queue-filters.js';
-import { prepareGocnetTransfer } from './gocnet-transfer.js';
+import { describeGocnetPreparationError, prepareGocnetTransfer } from './gocnet-transfer.js';
 import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
 
 const STATUS_LABELS = Object.freeze({
@@ -1495,7 +1495,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             }
             state.gocnetResults[applicationId] = /REGISTRATION_NUMBER_CONFIRMATION_REQUIRED|TURKISH_MOBILE_REQUIRED/.test(error?.code || '')
                 ? error.message : (error?.status === 409 ? (error.message || 'Belgeler veya başka bir deneme değişti; kontrol durdu.')
-                    : 'GöçNet ön kontrolü yapılamadı. Belgeleri ve eklentiyi kontrol edip yeniden deneyin.');
+                    : describeGocnetPreparationError(error));
         } finally {
             state.gocnetPending.delete(applicationId);
             render();
