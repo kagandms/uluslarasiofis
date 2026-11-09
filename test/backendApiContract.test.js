@@ -1507,6 +1507,32 @@ test('online transition applications persist transition data and use renewal doc
         host_is_turkish: 'yes' });
 });
 
+test('transition draft autosave accepts an unset contact preference and rejects invalid ones', async () => {
+    const { environment, database } = createEnvironment();
+    const created = await worker.fetch(createRequest('/api/public/applications', {
+        method: 'POST', body: { student_number: '2026123471', application_type: 'transition', email: 'transition@example.edu', phone: '555' }
+    }), environment, {});
+    const cookie = created.headers.get('Set-Cookie').split(';')[0];
+    const autosave = async (fields) => worker.fetch(createRequest('/api/public/applications/current/autosave', {
+        method: 'PATCH', cookie, body: { lock_version: await readApplicationVersion(environment, cookie), ...fields }
+    }), environment, {});
+
+    const unset = await autosave({
+        transition_foreign_id: '', transition_card_serial: '', transition_card_number: '',
+        transition_contact_preference: null, transition_change_province: null
+    });
+    assert.equal(unset.status, 200);
+    assert.equal(database.prepare('SELECT transition_contact_preference FROM applications').first().transition_contact_preference, null);
+
+    const chosen = await autosave({ transition_contact_preference: 'phone' });
+    assert.equal(chosen.status, 200);
+    assert.equal(database.prepare('SELECT transition_contact_preference FROM applications').first().transition_contact_preference, 'phone');
+
+    assert.equal((await autosave({ transition_contact_preference: 'fax' })).status, 400);
+    assert.equal((await autosave({ transition_contact_preference: '' })).status, 400);
+    assert.equal(database.prepare('SELECT transition_contact_preference FROM applications').first().transition_contact_preference, 'phone');
+});
+
 test('changing a transition draft to a standard application clears transition-only personal data', async () => {
     const { environment, database } = createEnvironment();
     const created = await worker.fetch(createRequest('/api/public/applications', {

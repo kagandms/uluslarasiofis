@@ -32,8 +32,7 @@ const DRAFT_FIELDS = Object.freeze({
     student_phone: 'studentPhone',
     transition_foreign_id: 'transitionForeignId',
     transition_card_serial: 'transitionCardSerial',
-    transition_card_number: 'transitionCardNumber',
-    transition_contact_preference: 'transitionContactPreference'
+    transition_card_number: 'transitionCardNumber'
 });
 
 function readApplicationType(applicationType) {
