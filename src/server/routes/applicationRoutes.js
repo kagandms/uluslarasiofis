@@ -243,17 +243,21 @@ function readDraftChanges(body, application, { allowIncomplete = false } = {}) {
         }
         changes[repositoryField] = value;
     }
+    // The wizard's select placeholders submit '' for "not chosen yet"; that is the same as unset (null).
+    const readUnsetAsNull = (value) => (value === '' ? null : value);
     if (Object.hasOwn(body, 'transition_change_province')) {
-        if (body.transition_change_province !== null && !['yes', 'no'].includes(body.transition_change_province)) {
+        const province = readUnsetAsNull(body.transition_change_province);
+        if (province !== null && !['yes', 'no'].includes(province)) {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Geçiş başvuru bilgilerini kontrol edip tekrar deneyin.');
         }
-        changes.transitionChangeProvince = body.transition_change_province;
+        changes.transitionChangeProvince = province;
     }
     if (Object.hasOwn(body, 'transition_contact_preference')) {
-        if (body.transition_contact_preference !== null && !['email', 'phone'].includes(body.transition_contact_preference)) {
+        const preference = readUnsetAsNull(body.transition_contact_preference);
+        if (preference !== null && !['email', 'phone'].includes(preference)) {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Geçiş iletişim tercihini kontrol edip tekrar deneyin.');
         }
-        changes.transitionContactPreference = body.transition_contact_preference;
+        changes.transitionContactPreference = preference;
     }
     if (Object.hasOwn(body, 'residence_application_date')) {
         changes.residenceApplicationDate = readOptionalApplicationDate(body.residence_application_date);
