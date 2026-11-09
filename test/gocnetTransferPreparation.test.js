@@ -35,8 +35,9 @@ test('reads the manifest-pinned current documents in order and rejects a missing
 test('requires one labeled registration candidate unless a staff correction is supplied', () => {
     assert.equal(resolveRegistrationNumber(['2026-04-0644400']), '2026-04-0644400');
     assert.equal(resolveRegistrationNumber(['2026-04-0644400', '2026-04-0644401']), null);
-    assert.equal(resolveRegistrationNumber(['2026-04-0644400', '2026-04-0644401'], '2027-04-0000001'), '2027-04-0000001');
-    assert.equal(resolveRegistrationNumber(['2026-04-0644400'], '2027/04/0000001'), null);
+    assert.equal(resolveRegistrationNumber(['2026-04-0644400', '2026-04-0644401'], '2026-04-0000001'), '2026-04-0000001');
+    assert.equal(resolveRegistrationNumber(['2026-04-0644400', '2026-04-0644401'], '2027-04-0000001'), null);
+    assert.equal(resolveRegistrationNumber(['2026-04-0644400'], '2026/04/0000001'), null);
 });
 
 test('accepts valid Turkish mobile input and returns the ten-digit national number', () => {
@@ -69,7 +70,15 @@ test('auto-picks the registration number only when the barcode caption confirms 
     const text = 'GCGM03-92026331015530\nİKAMET İZNİ ÖĞRENCİ KAYIT FORMU';
     assert.equal(resolveRegistrationNumber(['2026-33-1015530', '2026-10-12313909'], '', text), '2026-33-1015530');
     assert.equal(resolveRegistrationNumber(['2026-10-12313909', '2026-33-1015530'], '', text), '2026-33-1015530');
-    assert.equal(resolveRegistrationNumber(['2026-33-1015530', '2026-10-12313909'], '', ''), null);
+    assert.equal(resolveRegistrationNumber(['2026-33-1015530', '2026-10-12313909'], '', ''), '2026-33-1015530');
+    assert.equal(resolveRegistrationNumber(['2026-33-1015530', '2026-34-1015531'], '', ''), null);
     assert.equal(resolveRegistrationNumber(['2026-04-0644400', '2026-04-0644401'], '', text), null);
     assert.equal(resolveRegistrationNumber(['2026-33-1015530', '2026-10-12313909'], '', 'GCGM03-92026331015530 GCGM03-92026101231390'), '2026-33-1015530');
+});
+
+test('drops candidates that are not 2026-XX-XXXXXXX so look-alike dates never need a choice', () => {
+    assert.equal(resolveRegistrationNumber(['2026-33-1015530', '2026-10-12313909']), '2026-33-1015530');
+    assert.equal(resolveRegistrationNumber(['2026-10-12313909']), null);
+    assert.equal(resolveRegistrationNumber(['2025-33-1015530']), null);
+    assert.equal(resolveRegistrationNumber(['2026-33-101553']), null);
 });

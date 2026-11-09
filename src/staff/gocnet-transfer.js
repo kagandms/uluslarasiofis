@@ -6,7 +6,8 @@ import { mergeDocumentsToPdf } from '../services/pdfMergerService.js';
 import { readApplicationDocumentFiles } from './application-document-files.js';
 
 const MAX_PDF_BYTES = 9 * 1024 * 1024;
-const REGISTRATION_NUMBER_PATTERN = /^20\d{2}-\d{2}-\d{5,8}$/;
+// Every office registration number is 2026-XX-XXXXXXX (fixed year, two-digit code, seven-digit serial).
+const REGISTRATION_NUMBER_PATTERN = /^2026-\d{2}-\d{7}$/;
 
 const BARCODE_CAPTION = /GCGM\s*\d{2}\s*-\s*\d?\s*(20\d{2})\s*(\d{2})\s*(\d{5,8})/gi;
 
@@ -16,8 +17,13 @@ function readBarcodeCaptionNumbers(formText) {
 }
 
 /** Picks the number without asking only when one candidate is unique or confirmed by the barcode caption. */
-export function resolveRegistrationNumber(candidates, correction = '', formText = '') {
+export function filterRegistrationCandidates(candidates) {
+    return [...new Set(candidates)].filter((candidate) => REGISTRATION_NUMBER_PATTERN.test(candidate));
+}
+
+export function resolveRegistrationNumber(rawCandidates, correction = '', formText = '') {
     if (correction) return REGISTRATION_NUMBER_PATTERN.test(correction) ? correction : null;
+    const candidates = filterRegistrationCandidates(rawCandidates);
     if (candidates.length === 1) return candidates[0];
     const barcodeNumbers = readBarcodeCaptionNumbers(formText);
     const confirmed = candidates.filter((candidate) => barcodeNumbers.has(candidate));
@@ -119,7 +125,8 @@ export async function prepareGocnetTransfer({ applicationId, api, signal, regist
     // The merge is the slowest local step and does not depend on the number, so it starts alongside number recognition.
     const mergePromise = mergeDocumentsToPdf(files);
     mergePromise.catch(() => {});
-    const { candidates, text: formText } = await recognizeFormNumber(files[formIndex], signal);
+    const { candidates: rawCandidates, text: formText } = await recognizeFormNumber(files[formIndex], signal);
+    const candidates = filterRegistrationCandidates(rawCandidates);
     const applicationNumber = resolveRegistrationNumber(candidates, registrationNumberCorrection, formText);
     if (!applicationNumber) {
         const error = new Error(candidates.length ? 'Birden fazla kayıt numarası bulundu; önizlemeden doğru adayı seçin.' : 'Başvuru kayıt numarası güvenilir biçimde okunamadı.');
