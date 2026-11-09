@@ -11,6 +11,7 @@ import { cloudflareClient, readPreparedBundle, assetPlan, publishPrepared } from
 import { settingsSnapshot, assertStagedVersion } from './worker-settings.mjs';
 import { checkReadOnlyHealth } from './post-deploy-healthcheck.mjs';
 import { updateProductionCronSchedules } from './update-production-crons.mjs';
+import { gitAuthEnv } from './git-auth-env.mjs';
 
 // One approved code/assets activation. Recovery maintenance is independent of this flow.
 export async function releaseWithPorts(policy, context, io) {
@@ -75,7 +76,7 @@ async function main() {
         const evidence = JSON.parse(readFileSync(new URL('../../docs/production-only-evidence/cron-transition-baseline.json', import.meta.url), 'utf8'));
         await releaseWithPorts(policy, { sha, approvedCurrentVersion: process.env.CURRENT_WORKER_VERSION, updateCrons }, {
             verifySource() {
-                const fetched = spawnSync('git', ['fetch', '--no-tags', 'origin', 'production'], { stdio: 'pipe', timeout: 30_000 });
+                const fetched = spawnSync('git', ['fetch', '--no-tags', 'origin', 'production'], { stdio: 'pipe', timeout: 30_000, env: { ...process.env, ...gitAuthEnv() } });
                 assert.equal(fetched.status, 0, 'Production HEAD refresh failed.');
                 node('./check-release-sha.mjs');
             },
@@ -128,7 +129,7 @@ async function main() {
                             const version = await api(`/workers/scripts/goc/versions/${id}`);
                             assertStagedVersion(version, previous, beforeSettings, sha);
                             node('./cloudflare-preflight.mjs', [], { EXPECTED_STAGED_WORKER_VERSION: id }); node('./check-migration-ledger.mjs');
-                            const fetched = spawnSync('git', ['fetch', '--no-tags', 'origin', 'production'], { stdio: 'pipe', timeout: 30_000 });
+                            const fetched = spawnSync('git', ['fetch', '--no-tags', 'origin', 'production'], { stdio: 'pipe', timeout: 30_000, env: { ...process.env, ...gitAuthEnv() } });
                             assert.equal(fetched.status, 0); node('./check-release-sha.mjs');
                         }
                     });

@@ -129,6 +129,8 @@ jobs:
           ARTIFACT_ROOT: ${{ runner.temp }}/candidate-release
           CURRENT_WORKER_VERSION: ${{ steps.cloudflare.outputs.current_version }}
           RELEASE_OPERATION: ${{ inputs.operation }}
+          # Read-only token (permissions: contents: read) for the script's private-repository HEAD refresh fetches.
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/ci/exact-artifact-release.mjs
       - name: Update only reviewed production cron triggers
         if: ${{ inputs.operation == 'cron-update' }}

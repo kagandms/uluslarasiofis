@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkReadOnlyHealth, PRODUCTION_ORIGIN } from '../scripts/ci/post-deploy-healthcheck.mjs';
+import { gitAuthEnv } from '../scripts/ci/git-auth-env.mjs';
 
 const guard = fileURLToPath(new URL('../scripts/ci/check-release-sha.mjs', import.meta.url));
 const artifactGuard = fileURLToPath(new URL('../scripts/ci/candidate-artifact.mjs', import.meta.url));
@@ -233,5 +234,19 @@ test('release HEAD confirmation fetches with the job token yet keeps the exact-S
     assert.match(step, /test "\$\(git rev-parse refs\/remotes\/origin\/production\)" = "\$RELEASE_SHA"/);
     assert.doesNotMatch(step, /git config|\bset-url\b/);
     assert.equal(/persist-credentials: true/.test(workflow), false);
-    assert.equal((workflow.match(/GITHUB_TOKEN:/g) || []).length, 1);
+    assert.equal((workflow.match(/GITHUB_TOKEN:/g) || []).length, 2);
+});
+
+test('release script authenticates both production HEAD refresh fetches with the job token only through the child environment', () => {
+    assert.deepEqual(gitAuthEnv({}), {});
+    assert.deepEqual(gitAuthEnv({ GITHUB_TOKEN: '' }), {});
+    const env = gitAuthEnv({ GITHUB_TOKEN: 'synthetic-token' });
+    assert.equal(env.GIT_CONFIG_COUNT, '1');
+    assert.equal(env.GIT_CONFIG_KEY_0, 'http.https://github.com/.extraheader');
+    assert.equal(env.GIT_CONFIG_VALUE_0, 'AUTHORIZATION: basic ' + Buffer.from('x-access-token:synthetic-token').toString('base64'));
+    assert.equal(JSON.stringify(env).includes('synthetic-token'), false);
+    const source = readFileSync(new URL('../scripts/ci/exact-artifact-release.mjs', import.meta.url), 'utf8');
+    const fetches = source.match(/spawnSync\('git', \['fetch', '--no-tags', 'origin', 'production'\][^)]*\)/g) || [];
+    assert.equal(fetches.length, 2);
+    assert.ok(fetches.every(call => call.includes('...gitAuthEnv()')));
 });
