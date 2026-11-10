@@ -139,3 +139,28 @@ test('online reconnect retries the pending patch and disposal removes its listen
     eventTarget.dispatchEvent(new Event('online'));
     assert.equal(attempts, 2);
 });
+
+test('pending edits are saved when the page is hidden or closed before the debounce ends', async () => {
+    const eventTarget = new EventTarget();
+    eventTarget.document = new EventTarget();
+    eventTarget.document.visibilityState = 'visible';
+    const patches = [];
+    const autosave = createDraftAutosave({ eventTarget, delayMs: 60_000, save: async (patch) => { patches.push(patch); return {}; } });
+
+    autosave.schedule({ first_name: 'A' });
+    eventTarget.document.visibilityState = 'hidden';
+    eventTarget.document.dispatchEvent(new Event('visibilitychange'));
+    await wait(10);
+    assert.deepEqual(patches, [{ first_name: 'A' }]);
+
+    autosave.schedule({ first_name: 'B' });
+    eventTarget.dispatchEvent(new Event('pagehide'));
+    await wait(10);
+    assert.deepEqual(patches, [{ first_name: 'A' }, { first_name: 'B' }]);
+
+    autosave.dispose();
+    autosave.schedule({ first_name: 'C' });
+    eventTarget.dispatchEvent(new Event('pagehide'));
+    await wait(10);
+    assert.equal(patches.length, 2);
+});

@@ -1546,6 +1546,7 @@ function createAutosave(state, api, root) {
     };
     return createDraftAutosave({
         initialValues: createAutosaveValuesFromApplication(state.application),
+        delayMs: 2000,
         save,
         onSaved: (application) => {
             state.application = application;

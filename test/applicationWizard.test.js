@@ -992,7 +992,7 @@ test('wizard autosaves editable fields, requires the current acknowledgement, an
     firstName.dispatchEvent(new window.Event('input', { bubbles: true }));
     assert.equal(state.saveStatus, 'unsaved');
     assert.match(root.querySelector('[data-save-status]').textContent, /Kaydedilmemiş/);
-    await new Promise((resolve) => setTimeout(resolve, 550));
+    await new Promise((resolve) => setTimeout(resolve, 2100));
     assert.equal(autosaved.length, 1);
     assert.equal(saved.first_name, 'Ayşe');
     assert.equal(state.saveStatus, 'saved');
@@ -1606,7 +1606,7 @@ test('duplicate-application autosave shows only the guidance, with no generic sa
         const firstName = root.querySelector('[name="first_name"]');
         firstName.value = 'ChangedName';
         firstName.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
-        await new Promise((resolve) => setTimeout(resolve, 700));
+        await new Promise((resolve) => setTimeout(resolve, 2100));
 
         // Before pressing Continue: the specific guidance is visible and the generic banner is not.
         assert.equal(root.querySelector('[data-save-status]').hidden, true, `${code} status banner`);

@@ -220,7 +220,7 @@ async function preparePdf(context) {
     const capture = captureReceipt(context);
     const initialFiles = await fetchCurrentPdf(context.state.detail.intake);
     openPdfMergerModal({ contextLabel: `${capture.label} · Sayfaları sıralayın veya silin; QR ve dosya seçimiyle yeni belgeler ekleyin.`,
-        initialFiles, maxFiles: 300, allowPhoneTransfer: true,
+        initialFiles, maxFiles: 300,
         mergeLabel: 'PDF Oluştur', confirmLabel: 'Değişiklikleri Kaydet',
         onSave: bytes => persistPdf(context, capture, bytes) });
     context.root.ownerDocument.getElementById('pdf-merger-modal-overlay').dataset.physicalIntakeId=capture.id;

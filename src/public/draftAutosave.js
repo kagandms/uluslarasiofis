@@ -96,11 +96,21 @@ export function createDraftAutosave({
     }
 
     const handleOnline = () => { void flush(); };
+    // Save pending edits as soon as the page is hidden or closed, so a longer debounce never strands the last change.
+    const doc = eventTarget?.document;
+    const handleVisibilityChange = () => {
+        if (doc?.visibilityState === 'hidden') void flush();
+    };
+    const handlePageHide = () => { void flush(); };
     eventTarget?.addEventListener('online', handleOnline);
+    eventTarget?.addEventListener('pagehide', handlePageHide);
+    doc?.addEventListener('visibilitychange', handleVisibilityChange);
 
     function dispose() {
         disposed = true;
         eventTarget?.removeEventListener('online', handleOnline);
+        eventTarget?.removeEventListener('pagehide', handlePageHide);
+        doc?.removeEventListener('visibilitychange', handleVisibilityChange);
         clearTimeout(timer);
     }
 

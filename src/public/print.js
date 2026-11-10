@@ -463,4 +463,4 @@ for (const job of jobs) {
 void requestAvailability();
 window.setInterval(() => {
     if (!document.hidden) void requestAvailability();
-}, 30_000);
+}, 60_000);

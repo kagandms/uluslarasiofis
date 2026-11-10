@@ -1,4 +1,4 @@
-const REFRESH_INTERVAL_MS = 15_000;
+const REFRESH_INTERVAL_MS = 30_000;
 const TERMINAL_STATUS_LABELS = Object.freeze({
     uploading: 'Dosya yükleniyor', queued: 'Sırada bekliyor', leased: 'Dosya kontrol ediliyor', ready: 'Yazdırmaya hazır',
     submission_started: 'Yazıcıya gönderiliyor', submitted: 'Yazıcıya gönderildi; kağıt çıktısını kontrol edin',
