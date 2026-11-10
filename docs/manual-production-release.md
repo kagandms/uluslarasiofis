@@ -140,6 +140,15 @@ Validation status: `wrangler d1 migrations list --remote --env production` repor
 apply. The baseline advance records the reviewed source boundary that includes this schema change; it does not prove
 live artifact equality, rollback safety, or that the Worker has been published.
 
+## 0041 baseline evidence
+
+Dated 10 November 2026. The owner applied `migrations/0041_drop_duplicate_revision_file_scan_index.sql`
+(SHA-256 `23126acbf102ca5cf587197a20706cbd3344a29129675cd6ae90de97feb28106`) to production D1 with `wrangler d1 migrations apply`; this workflow never applies migrations.
+It drops only `idx_document_files_scan_status`, a redundant index with the same leading column as
+`idx_revision_files_scan_pending`, which the scanner claim and reconcile queries keep using. Read-only checks
+after the apply confirmed the ledger row, that the redundant index is gone and the pending index remains.
+No content rows were read or changed. The baseline advance records the reviewed source boundary only.
+
 ## Permissions and remaining recovery risk
 
 Existing account-scoped **Workers Scripts Edit** must permit Worker assets upload, version creation and
