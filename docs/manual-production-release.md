@@ -128,6 +128,18 @@ definitions, a query plan that seeks the new index, and that the lookup for the 
 audit events (252) now reads 4 rows instead of about 496. The baseline advance only records the reviewed
 source boundary; it does not prove live artifact equality or rollback safety.
 
+## 0040 baseline evidence
+
+Dated 10 November 2026. Source: the owner applied `migrations/0040_application_ratings.sql`
+(SHA-256 `3963242e0f8fb0378a1b7aa5316f64c4053a524e8f0ea3773875d1362a0ce9e1`) to production D1 with
+`npm run db:migrate:production` (`wrangler d1 migrations apply --remote --env production`) after an explicit
+owner request; this release workflow never applies migrations. The migration only creates the new table
+`application_ratings` (one student rating and optional feedback per application, with CHECK constraints and
+the `idx_application_ratings_updated` index). No existing table or row was changed.
+Validation status: `wrangler d1 migrations list --remote --env production` reports no pending migrations after the
+apply. The baseline advance records the reviewed source boundary that includes this schema change; it does not prove
+live artifact equality, rollback safety, or that the Worker has been published.
+
 ## Permissions and remaining recovery risk
 
 Existing account-scoped **Workers Scripts Edit** must permit Worker assets upload, version creation and
