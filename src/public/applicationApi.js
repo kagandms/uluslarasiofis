@@ -36,6 +36,23 @@ export async function readCurrentApplication() {
 }
 
 /**
+ * Reads the satisfaction rating saved for the current owner's application.
+ * @returns {Promise<{rating: {rating: number, feedback: string, updated_at: string}|null}>} Saved rating or null.
+ */
+export async function readCurrentApplicationRating() {
+    return requestJson('/api/public/applications/current/rating');
+}
+
+/**
+ * Saves or updates the owner's application-system rating after submission.
+ * @param {{rating: number, feedback: string}} input Star value in half-star steps and optional feedback.
+ * @returns {Promise<{rating: {rating: number, feedback: string, updated_at: string}}>} Saved rating.
+ */
+export async function saveCurrentApplicationRating({ rating, feedback }) {
+    return requestJson('/api/public/applications/current/rating', { method: 'POST', body: { rating, feedback } });
+}
+
+/**
  * Reads the institution-approved privacy notice required before starting a new application.
  * @returns {Promise<object>} Current five-language notice or an unavailable marker.
  */

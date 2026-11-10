@@ -1,0 +1,56 @@
+/* Shared star glyphs for the application-system rating. The fill is a percentage (0%, 50%, 100%) set per star
+   through the --fill custom property, so half stars render without extra images. */
+.rating-star-glyph {
+    --rating-star-on: #e0a100;
+    --rating-star-off: #cfc5ca;
+    --fill: 0%;
+    display: inline-block;
+    font-size: var(--rating-star-size, 1.6rem);
+    line-height: 1;
+    background: linear-gradient(90deg, var(--rating-star-on) var(--fill), var(--rating-star-off) var(--fill));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    user-select: none;
+}
+
+.rating-stars-display {
+    display: inline-flex;
+    gap: 0.1rem;
+    vertical-align: middle;
+}
+
+.rating-stars-control {
+    position: relative;
+    display: inline-flex;
+    gap: 0.15rem;
+    padding: 0.2rem 0;
+    border-radius: 0.5rem;
+}
+
+.rating-star-cell {
+    position: relative;
+    display: inline-block;
+}
+
+.rating-half {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 50%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    z-index: 1;
+}
+
+.rating-half-start { left: 0; }
+.rating-half-end { right: 0; }
+
+.rating-half:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+    border-radius: 0.3rem;
+}

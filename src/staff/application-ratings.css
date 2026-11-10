@@ -1,0 +1,112 @@
+/* Staff panel for student ratings, shown above the application queue. */
+.staff-ratings-panel {
+    margin: 0 0 1rem;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+}
+
+.staff-ratings-panel > summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem 1rem;
+    min-height: 3rem;
+    padding: 0.8rem 1.1rem;
+    cursor: pointer;
+    list-style: none;
+}
+
+.staff-ratings-panel > summary::-webkit-details-marker { display: none; }
+
+.staff-ratings-panel > summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: 14px;
+}
+
+.staff-ratings-title { font-weight: 700; }
+
+.staff-ratings-count {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.staff-ratings-body {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0 1.1rem 1rem;
+}
+
+.staff-ratings-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+}
+
+.staff-ratings-status {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.staff-ratings-list {
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+    max-height: 22rem;
+    overflow-y: auto;
+}
+
+.staff-ratings-empty {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+.staff-rating-item {
+    display: grid;
+    gap: 0.35rem;
+    align-content: start;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    background: var(--card-bg);
+}
+
+.staff-rating-item-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.staff-rating-score {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+}
+
+.staff-rating-meta {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
+}
+
+.staff-rating-feedback {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.staff-rating-feedback.is-empty {
+    color: var(--text-secondary);
+    font-style: italic;
+}

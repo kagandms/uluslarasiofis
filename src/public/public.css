@@ -621,6 +621,24 @@ html[dir="rtl"] .public-home-link:hover {
 .application-submission-confirmation h3,
 .application-submission-confirmation p { margin: 0; color: inherit; }
 .application-submission-confirmation h3 { font-size: 1.2rem; }
+.application-rating { display: grid; gap: 0.55rem; margin-block: 0.35rem; padding: 0.95rem 1rem; border: 1px solid var(--public-burgundy-border); border-radius: 0.75rem; background: #fff; color: var(--public-burgundy); }
+.application-rating h4 { margin: 0; font-size: 1.05rem; color: var(--public-burgundy); }
+.application-rating .application-rating-intro,
+.application-rating .rating-value,
+.application-rating .rating-counter,
+.application-rating .rating-saved-at { margin: 0; color: #4a3b41; font-size: 0.92rem; }
+.application-rating .rating-value { font-weight: 700; color: var(--public-burgundy); }
+.application-rating .rating-stars-control { --rating-star-size: 2.1rem; }
+.application-rating .rating-star-glyph { --rating-star-on: #e0a100; }
+.application-rating .rating-half:focus-visible { outline-color: var(--public-burgundy); }
+.application-rating .rating-feedback { display: grid; gap: 0.3rem; font-weight: 600; }
+.application-rating .rating-feedback textarea { width: 100%; min-height: 6rem; padding: 0.65rem 0.75rem; border: 1px solid var(--public-burgundy-border); border-radius: 0.6rem; font: inherit; font-weight: 400; color: #2d1f25; background: #fff; resize: vertical; }
+.application-rating .rating-feedback textarea:focus-visible { outline: 2px solid var(--public-burgundy); outline-offset: 1px; }
+.application-rating .rating-counter { justify-self: end; font-size: 0.8rem; }
+.application-rating .rating-submit { justify-self: start; }
+.application-rating .rating-status { min-height: 1.2em; font-weight: 600; }
+.application-rating .rating-status[data-tone="success"] { color: var(--public-success); }
+.application-rating .rating-status[data-tone="error"] { color: #a4262c; }
 .application-pdf-download-control { display: grid; gap: 0.35rem; justify-items: start; }
 .application-pdf-download-status { font-size: 0.9rem; }
 .tracking-owner-access-note { padding-block-start: 0.4rem; }

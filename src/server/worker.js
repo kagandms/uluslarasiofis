@@ -25,6 +25,7 @@ import { recognizeDocument } from './routes/ocrRoute.js';
 import { bootstrapStaff, loginStaff, logoutStaff, readStaffSession } from './routes/staffRoutes.js';
 import { handleTebligatRequest } from './routes/tebligatRoutes.js';
 import { readCurrentNotificationPreferences, updateCurrentNotificationPreferences } from './routes/applicantNotificationPreferenceRoutes.js';
+import { readCurrentApplicationRating, readStaffApplicationRatings, saveCurrentApplicationRating } from './routes/applicationRatingRoutes.js';
 import { enqueueStaffNotification, previewStaffNotification, readStaffNotificationHistory,
     retryStaffNotification } from './routes/staffNotificationRoutes.js';
 import { handleMetaWhatsAppWebhook } from './services/metaWhatsAppWebhook.js';
@@ -196,6 +197,7 @@ async function routeApi(request, environment, requestId, cache) {
     if (pathname === '/api/staff/auth/logout' || pathname === '/api/logout') return logoutStaff(request, environment, requestId);
     if (pathname === '/api/staff/auth/bootstrap') return bootstrapStaff(request, environment, requestId);
     if (pathname === '/api/staff/applications/query') return queryStaffApplications(request, environment);
+    if (pathname === '/api/staff/application-ratings') return readStaffApplicationRatings(request, environment);
     const gocnetEventMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/gocnet-attempts\/([^/]+)\/events$/);
     if (gocnetEventMatch) {
         let applicationId;
@@ -279,6 +281,10 @@ async function routeApi(request, environment, requestId, cache) {
     if (pathname === '/api/public/applications/current/regenerate-access-code') return regenerateCurrentAccessCode(request, environment, requestId);
     if (pathname === '/api/public/applications') return createApplicationDraft(request, environment, requestId);
     if (pathname === '/api/public/applications/current/status') return readCurrentApplicationStatus(request, environment);
+    if (pathname === '/api/public/applications/current/rating') {
+        if (request.method === 'POST') return saveCurrentApplicationRating(request, environment);
+        return readCurrentApplicationRating(request, environment);
+    }
     if (pathname === '/api/public/applications/current/tracking') return readCurrentApplicationTracking(request, environment);
     if (pathname === '/api/public/applications/current/notification-preferences') {
         if (request.method === 'PUT') return updateCurrentNotificationPreferences(request, environment, requestId);

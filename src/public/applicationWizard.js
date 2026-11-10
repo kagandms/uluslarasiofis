@@ -10,6 +10,7 @@ import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../shared/academic-calendar.js
 import { createMultiPageDocumentPdf } from './multiFileDocument.js';
 import { readPdfMergerMessages } from './i18n/pdf-merger-messages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
+import { createApplicationRatingSection } from './applicationRating.js';
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
@@ -948,7 +949,7 @@ function createApplicantReview(document, application) {
     return section;
 }
 
-export function createSubmissionConfirmation(document, application, messages) {
+export function createSubmissionConfirmation(document, application, messages, options = {}) {
     const confirmation = document.createElement('section');
     confirmation.className = 'application-submission-confirmation';
     confirmation.tabIndex = -1;
@@ -978,6 +979,7 @@ export function createSubmissionConfirmation(document, application, messages) {
     confirmation.append(reminder);
     confirmation.append(createTranslatedElement(document, 'p', 'submissionTracking', messages.submissionTracking));
     confirmation.append(createTranslatedElement(document, 'p', 'submissionNextSteps', messages.submissionNextSteps));
+    if (options.ratingSection) confirmation.append(options.ratingSection);
     const newApplicationLink = document.createElement('a');
     newApplicationLink.href = '/basvuru/?new=1';
     newApplicationLink.className = 'application-button application-button-secondary';
@@ -1080,7 +1082,9 @@ function createReviewStep(document, state) {
         review.append(time);
     }
     if (['submitted', 'under_review'].includes(application.status)) {
-        review.append(createSubmissionConfirmation(document, application, messages));
+        review.append(createSubmissionConfirmation(document, application, messages, {
+            ratingSection: createApplicationRatingSection(document, state.api)
+        }));
         return review;
     }
     const readiness = renderReviewReadiness(document, state);

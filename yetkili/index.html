@@ -24,6 +24,8 @@
     <link rel="stylesheet" href="/src/staff/archive.css">
     <link rel="stylesheet" href="/src/staff/print-management.css">
     <link rel="stylesheet" href="/src/staff/home.css">
+    <link rel="stylesheet" href="/src/shared/rating-stars.css">
+    <link rel="stylesheet" href="/src/staff/application-ratings.css">
 
     <!-- CDNs -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
@@ -209,6 +211,19 @@
 
                 <section id="view-applications" class="view-panel" hidden aria-labelledby="applications-title">
                     <h3 id="applications-title" class="sr-only" tabindex="-1">İkamet Başvuruları</h3>
+                    <details id="staff-application-ratings" class="staff-ratings-panel">
+                        <summary>
+                            <span class="staff-ratings-title">Başvuru sistemi değerlendirmeleri</span>
+                            <span class="staff-ratings-count" data-ratings-count>Yükleniyor…</span>
+                        </summary>
+                        <div class="staff-ratings-body">
+                            <div class="staff-ratings-toolbar">
+                                <p class="staff-ratings-status" data-ratings-status role="status" aria-live="polite"></p>
+                                <button type="button" class="btn btn-outline" data-ratings-refresh>Yenile</button>
+                            </div>
+                            <div class="staff-ratings-list" data-ratings-list></div>
+                        </div>
+                    </details>
                     <div id="staff-applications-manager"></div>
                 </section>
 

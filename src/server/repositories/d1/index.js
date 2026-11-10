@@ -2,6 +2,7 @@ import { createApplicationRepository } from './applicationRepository.js';
 import { createApplicationGocnetRepository } from './applicationGocnetRepository.js';
 import { createApplicationSpreadsheetRepository } from './applicationSpreadsheetRepository.js';
 import { createApplicationNoteRepository } from './applicationNoteRepository.js';
+import { createApplicationRatingRepository } from './applicationRatingRepository.js';
 import { createApplicationReviewRepository } from './applicationReviewRepository.js';
 import { createAuditRepository } from './auditRepository.js';
 import { createDocumentRepository } from './documentRepository.js';
@@ -26,6 +27,7 @@ export function createD1Repositories(database) {
         applicationSpreadsheet: createApplicationSpreadsheetRepository(database),
         applicationNotes,
         applicationReviews: createApplicationReviewRepository(database, applicationNotes),
+        applicationRatings: createApplicationRatingRepository(database),
         audit: createAuditRepository(database),
         documents: createDocumentRepository(database),
         resubmissionUploads: createResubmissionUploadRepository(database),

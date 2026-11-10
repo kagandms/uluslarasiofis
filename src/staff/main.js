@@ -15,6 +15,7 @@ import { initWorkspaceNavigation } from '../ui/workspaceNavigation.js';
 import { initYknManager } from '../managers/yknManager.js';
 import { initStaffAuth } from './auth.js';
 import { initializeStaffApplicationsManager } from './applicationsManager.js';
+import { initializeStaffApplicationRatings } from './application-ratings.js';
 import { initializeStaffArchiveManager } from './archiveManager.js';
 import { initDocumentsManager } from '../ui/documents-manager.js';
 import { initLiveClock } from '../ui/liveClock.js';
@@ -95,6 +96,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             applicationsRoot.before(scannerPanel);
             initializeScannerManager(scannerPanel);
             initializeStaffApplicationsManager(applicationsRoot);
+            const ratingsRoot = document.getElementById('staff-application-ratings');
+            if (ratingsRoot) initializeStaffApplicationRatings(ratingsRoot);
             document.addEventListener('staff-applications:view-changed', (event) => {
                 scannerPanel.hidden = event.detail?.view === 'detail';
             });
