@@ -77,8 +77,9 @@ function saveBlob(window, blob, filename = 'basvuru-belgeleri.zip') {
 }
 
 /** Creates a current-documents ZIP after validating every streamed byte. */
-export async function downloadApplicationArchive({ applicationId, window, manifest, getManifest, fetchFile, signal, suggestedName = 'basvuru-belgeleri.zip' }) {
-    const supportsStreaming = typeof window?.showSaveFilePicker === 'function' && window.isSecureContext !== false;
+export async function downloadApplicationArchive({ applicationId, window, manifest, getManifest, fetchFile, signal, suggestedName = 'basvuru-belgeleri.zip', targetDirectory = null }) {
+    // A chosen folder is used only by the bulk export, which checks for name collisions before calling this.
+    const supportsStreaming = (targetDirectory ? true : typeof window?.showSaveFilePicker === 'function') && window.isSecureContext !== false;
     const maxBytes = supportsStreaming ? ARCHIVE_LIMITS.streamedBytes : ARCHIVE_LIMITS.blobBytes;
     const abortController = new AbortController();
     const relayAbort = () => abortController.abort(signal?.reason);
@@ -92,10 +93,12 @@ export async function downloadApplicationArchive({ applicationId, window, manife
         const currentManifest = manifest ?? await getManifest(abortController.signal);
         if (abortController.signal.aborted) throw new DOMException('Canceled', 'AbortError');
         validateManifest(currentManifest, maxBytes);
-        const selectedHandle = supportsStreaming ? await window.showSaveFilePicker({
-            suggestedName,
-            types: [{ description: 'ZIP arşivi', accept: { 'application/zip': ['.zip'] } }]
-        }) : null;
+        const selectedHandle = supportsStreaming ? await (targetDirectory
+            ? targetDirectory.getFileHandle(suggestedName, { create: true })
+            : window.showSaveFilePicker({
+                suggestedName,
+                types: [{ description: 'ZIP arşivi', accept: { 'application/zip': ['.zip'] } }]
+            })) : null;
         if (supportsStreaming) {
             writable = await selectedHandle.createWritable();
             zipWriter = new ZipWriter(writable, { level: 0, signal: abortController.signal });

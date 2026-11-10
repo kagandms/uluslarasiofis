@@ -318,9 +318,11 @@ export function initializeYoksisDocumentAuditManager(root) {
         const requestSequence = ++query.sequence;
         const searchInput = root.querySelector('#audit-search');
         const statusSelect = root.querySelector('#audit-filter');
+        const matchSelect = root.querySelector('#audit-match');
         const body = {
             q: searchInput?.value || '',
             status: statusSelect?.value || query.status,
+            match: matchSelect?.value || 'all',
             page: query.page,
             pageSize: query.pageSize
         };
@@ -532,6 +534,10 @@ export function initializeYoksisDocumentAuditManager(root) {
         void loadSharedRecords();
     });
     root.querySelector('#audit-filter')?.addEventListener('change', () => {
+        query.page = 1;
+        void loadSharedRecords();
+    });
+    root.querySelector('#audit-match')?.addEventListener('change', () => {
         query.page = 1;
         void loadSharedRecords();
     });

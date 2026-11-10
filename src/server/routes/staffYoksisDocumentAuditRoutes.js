@@ -11,6 +11,8 @@ const MAX_PAGE_SIZE = 100;
 const STATUS_CATEGORIES = new Set([
     'all', 'successful', 'pending', 'rejected', 'missing_documents', 'unreadable', 'other'
 ]);
+// Online application match: 'matched' = student number or full name exists in our applications; 'unmatched' = neither.
+const MATCH_FILTERS = new Set(['all', 'matched', 'unmatched']);
 
 function normalizeSearch(value) {
     return String(value || '')
@@ -209,25 +211,53 @@ async function writeRecords(request, environment, requestId, staff) {
 }
 
 function readQuery(body) {
-    if (!body || Object.keys(body).some((key) => !['q', 'status', 'page', 'pageSize'].includes(key))) {
+    if (!body || Object.keys(body).some((key) => !['q', 'status', 'match', 'page', 'pageSize'].includes(key))) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Arama ve filtre bilgilerini kontrol edin.');
     }
     const query = body.q === undefined ? '' : readText(body.q, 'Arama metni', MAX_SEARCH_LENGTH, { optional: true });
     const status = body.status === undefined ? 'all' : body.status;
+    const match = body.match === undefined ? 'all' : body.match;
     const page = body.page === undefined ? 1 : body.page;
     const pageSize = body.pageSize === undefined ? 50 : body.pageSize;
     if (typeof status !== 'string' || !STATUS_CATEGORIES.has(status)
+        || typeof match !== 'string' || !MATCH_FILTERS.has(match)
         || !Number.isSafeInteger(page) || page < 1 || page > 1_000_000
         || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Arama ve filtre bilgilerini kontrol edin.');
     }
-    return { normalizedQuery: normalizeSearch(query), status, page, pageSize };
+    return { normalizedQuery: normalizeSearch(query), status, match, page, pageSize };
+}
+
+/**
+ * Loads the student numbers and normalized full names of every online application.
+ * Drafts and archived applications count too: the filter answers "does this student have an online application here".
+ */
+async function loadOnlineApplicationKeys(environment) {
+    const result = await environment.DB.prepare(`
+        SELECT students.student_number AS student_number, applications.first_name, applications.last_name
+        FROM applications
+        JOIN students ON students.id = applications.student_id
+    `).all();
+    const studentNumbers = new Set();
+    const fullNames = new Set();
+    for (const row of result.results || []) {
+        const studentNumber = String(row.student_number || '').trim();
+        if (studentNumber) studentNumbers.add(studentNumber);
+        const fullName = normalizeSearch(`${row.first_name || ''} ${row.last_name || ''}`);
+        if (fullName) fullNames.add(fullName);
+    }
+    return { studentNumbers, fullNames };
+}
+
+function matchesOnlineApplication(record, keys) {
+    if (keys.studentNumbers.has(String(record.student_number || '').trim())) return true;
+    return keys.fullNames.has(normalizeSearch(`${record.first_name || ''} ${record.last_name || ''}`));
 }
 
 async function readRecords(request, environment, requestId) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
-    const { normalizedQuery, status, page, pageSize } = readQuery(await readJsonBody(request));
+    const { normalizedQuery, status, match, page, pageSize } = readQuery(await readJsonBody(request));
     const escapedQuery = normalizedQuery.replace(/[!%_]/g, '!$&');
     const pattern = `%${escapedQuery}%`;
     const statusClause = status === 'all' ? '' : 'AND status_category = ?';
@@ -236,6 +266,26 @@ async function readRecords(request, environment, requestId) {
         ...(status === 'all' ? [] : [status]),
         ...(normalizedQuery ? [pattern] : [])
     ];
+    if (match !== 'all') {
+        // Name and student-number matching is computed here, so filtered pages are counted after matching.
+        const candidates = (await environment.DB.prepare(`
+            SELECT application_number, student_number, first_name, last_name, passport_number,
+                   phone, application_status, status_category, result_status, documents_json, scanned_at
+            FROM yoksis_document_audit_records
+            WHERE 1 = 1 ${statusClause} ${searchClause}
+            ORDER BY scanned_at DESC, application_number
+        `).bind(...bindings).all()).results || [];
+        const keys = await loadOnlineApplicationKeys(environment);
+        const matched = candidates.filter((record) => {
+            const isMatched = matchesOnlineApplication(record, keys);
+            return match === 'matched' ? isMatched : !isMatched;
+        });
+        const records = matched.slice((page - 1) * pageSize, page * pageSize).map(({ documents_json: documentsJson, ...record }) => ({
+            ...record,
+            documents: JSON.parse(documentsJson)
+        }));
+        return jsonResponse({ records, total: matched.length, page, pageSize }, 200, requestId);
+    }
     const count = await environment.DB.prepare(`
         SELECT COUNT(*) AS total FROM yoksis_document_audit_records
         WHERE 1 = 1 ${statusClause} ${searchClause}

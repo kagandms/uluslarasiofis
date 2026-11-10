@@ -4,6 +4,7 @@ import { listRequiredDocumentAnswers } from '../shared/document-conditions.js';
 import { isPlausibleBirthDate } from '../shared/age.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
+import { MIGRATION_BULK_EXPORT_AVAILABLE_UNTIL, isMigrationBulkExportAvailable, listSentToMigrationApplications, runMigrationBulkExport } from './migrationBulkArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
 import { createApplicationQueueFilters } from './application-queue-filters.js';
@@ -120,6 +121,43 @@ function createSearchForm(document, state, onSubmit, onChange) {
         input.addEventListener('change', () => onChange(readQuery(), false));
     });
     return form;
+}
+
+function createMigrationBulkExportReport(document, report) {
+    const wrapper = document.createElement('section');
+    wrapper.className = 'staff-bulk-export-report';
+    wrapper.setAttribute('aria-label', 'Toplu indirme sonucu');
+    const notAttempted = report.not_attempted ? `, ${report.not_attempted} başvuru denenmedi` : '';
+    wrapper.append(createText(document, 'p', 'staff-applications-state',
+        `${report.saved} / ${report.requested} başvuru indi (%${report.success_percent}). ${report.failed} başvuru inmedi${notAttempted}. Özet dosyası: ${report.summary_file}`));
+    if (report.failed_entries.length > 0) {
+        const list = document.createElement('ul');
+        list.className = 'staff-bulk-export-failures';
+        for (const entry of report.failed_entries) {
+            const item = document.createElement('li');
+            item.textContent = `${entry.name || 'İsimsiz'} (${entry.student_number || '—'}): ${entry.reason || 'Neden kaydedilmedi.'}`;
+            list.append(item);
+        }
+        wrapper.append(list);
+    }
+    return wrapper;
+}
+
+function createMigrationBulkExportAction(document, state, onExport) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'staff-bulk-export';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-outline';
+    button.dataset.action = 'bulk-migration-export';
+    const running = Boolean(state.bulkExportController);
+    button.textContent = running ? 'Toplu indirme sürüyor…' : 'Göç İdaresine gönderilenlerin belgelerini klasöre indir';
+    button.disabled = Boolean(running || state.archiveController || state.combinedPdfController);
+    button.addEventListener('click', () => onExport());
+    const until = MIGRATION_BULK_EXPORT_AVAILABLE_UNTIL.slice(0, 10).split('-').reverse().join('.');
+    wrapper.append(button, createText(document, 'p', 'staff-applications-state',
+        `Bu geçici indirme ${until} tarihine kadar açık kalır. Her başvuru için ZIP ve bir özet dosyası seçilen klasöre yazılır.`));
+    return wrapper;
 }
 
 function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer) {
@@ -336,6 +374,10 @@ function renderQueue(root, state, handlers) {
     panel.className = 'staff-applications-queue';
     panel.setAttribute('aria-busy', state.loading ? 'true' : 'false');
     panel.append(createSearchForm(document, state, handlers.onSearch, handlers.onQueryChange));
+    if (state.query.status === 'migration' && isMigrationBulkExportAvailable() && handlers.onBulkMigrationExport) {
+        panel.append(createMigrationBulkExportAction(document, state, handlers.onBulkMigrationExport));
+        if (state.bulkExportReport) panel.append(createMigrationBulkExportReport(document, state.bulkExportReport));
+    }
     if (state.loading && !state.result) {
         panel.append(createText(document, 'p', 'staff-applications-state', 'Başvurular yükleniyor…'));
     } else if (state.error) {
@@ -974,7 +1016,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         actionPending: null, actionError: null, actionNotice: null, scanQueuedCode: null, resubmissionDocument: null,
         rejectionTarget: null, rejectionReason: '',
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
-        combinedPdfApplicationId: null, combinedPdfController: null,
+        combinedPdfApplicationId: null, combinedPdfController: null, bulkExportController: null, bulkExportReport: null,
         archiveError: null, archiveMessage: null,
         spreadsheetPending: new Set(), spreadsheetErrors: {},
         gocnetPending: new Set(), gocnetResults: {},
@@ -1033,7 +1075,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onDownloadArchive: downloadArchive, onArchiveApplication: archiveApplication,
             onResetDraftAccess: resetDraftAccess,
             onSendToMigration: sendToMigration, onDismissToast: dismissToast,
-            onSpreadsheetTransfer: transferApplicationToSpreadsheet, onGocnetTransfer: checkGocnetTransfer
+            onSpreadsheetTransfer: transferApplicationToSpreadsheet, onGocnetTransfer: checkGocnetTransfer,
+            onBulkMigrationExport: exportMigrationApplications
         });
         root.dataset.staffView = state.view;
         try {
@@ -1067,6 +1110,54 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             lastName: applicationObj?.last_name,
             studentNumber: applicationObj?.student_number
         });
+    }
+    async function exportMigrationApplications() {
+        const view = document.defaultView;
+        if (state.bulkExportController || state.archiveController || state.combinedPdfController) return;
+        if (!isMigrationBulkExportAvailable()) {
+            state.archiveError = 'Bu toplu indirme süresi doldu.';
+            render();
+            return;
+        }
+        if (typeof view?.showDirectoryPicker !== 'function' || view.isSecureContext === false) {
+            state.archiveError = 'Bu tarayıcı klasör seçmeyi desteklemiyor. Ofis bilgisayarında Chrome veya Edge ile deneyin.';
+            render();
+            return;
+        }
+        const controller = new AbortController();
+        state.bulkExportController = controller;
+        state.archiveError = null;
+        state.bulkExportReport = null;
+        state.archiveMessage = 'Göç İdaresine gönderilen başvurular listeleniyor…';
+        render();
+        try {
+            const directory = await view.showDirectoryPicker({ mode: 'readwrite' });
+            const applications = await listSentToMigrationApplications(api, controller.signal);
+            if (applications.length === 0) {
+                state.archiveMessage = 'Göç İdaresine gönderilmiş başvuru bulunamadı.';
+                return;
+            }
+            const result = await runMigrationBulkExport({
+                api, directory, window: view, applications, signal: controller.signal,
+                onProgress: ({ index, total }) => {
+                    state.archiveMessage = `${index + 1}/${total} başvuru işleniyor…`;
+                    render();
+                }
+            });
+            state.bulkExportReport = { ...result.report, failed_entries: result.failed_entries, summary_file: result.summary_file };
+            state.archiveMessage = `Toplu indirme bitti: ${result.report.saved} / ${result.report.requested} başvuru indi (%${result.report.success_percent}).`;
+            if (result.failed > 0) {
+                state.archiveError = 'Aşağıdaki başvurular indirilemedi. Bu başvuruların belgelerini silmeden önce kontrol edin.';
+            }
+        } catch (error) {
+            state.archiveMessage = null;
+            state.archiveError = error?.name === 'AbortError'
+                ? 'Toplu indirme iptal edildi.'
+                : (typeof error?.message === 'string' ? error.message : 'Toplu indirme tamamlanamadı.');
+        } finally {
+            state.bulkExportController = null;
+            render();
+        }
     }
     function cancelArchive() {
         archiveRequestId += 1;
