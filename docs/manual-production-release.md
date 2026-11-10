@@ -7,10 +7,10 @@ separate, explicit user request for that exact SHA and operation, followed by th
 Production environment review. Never dispatch automatically. The workflow does not merge branches;
 an unmerged candidate SHA cannot pass its `production` HEAD checks. This candidate sets the reviewed
 code-only baseline in `config/production-publication.json` to
-`b1590deca163e6aeb30038722e02d74fd4933646`, which contains production schema migrations
+`b98ecc7021b9343231ac8f3c337e34e93dda8eae`, which contains production schema migrations
 `0034_yoksis_document_audit.sql`, `0035_yoksis_audit_glob_limit.sql`,
-`0036_application_spreadsheet_records.sql`, `0037_application_gocnet_attempts.sql`, and
-`0038_final_application_documents.sql`. The 5 November 2026 read-only review confirmed the 0038
+`0036_application_spreadsheet_records.sql`, `0037_application_gocnet_attempts.sql`,
+`0038_final_application_documents.sql`, and `0039_staff_order_and_acknowledgement_indexes.sql`. The 5 November 2026 read-only review confirmed the 0038
 ledger entry, both added column definitions, and all eight expected catalog rows against the exact
 migration source. Aggregate policy/status counts were consistent with the intended submitted-policy
 snapshot and draft upgrade, but do not prove historical migration effects or live code identity. This
@@ -115,6 +115,18 @@ final-document feature only; it does not establish that every live behavior or o
 represented in this branch. Before any future release, inventory and reconcile the active version's
 available source/config metadata and all known live-only changes against production source and
 release evidence.
+
+## 0039 baseline evidence
+
+Dated 10 November 2026. Source: the owner applied `migrations/0039_staff_order_and_acknowledgement_indexes.sql`
+(SHA-256 `0df6385981c1fd700cb35ce8cdb1e9441c1c1cc63d0e2f0c004f8f9d68edfdba`) to production D1 with `wrangler d1 migrations apply`; this release workflow never
+applies migrations. It only creates indexes: `idx_applications_staff_order` (already present in production,
+created by hand, so a no-op there) and the partial `idx_audit_events_contact_acknowledgement`
+(`WHERE event_type = 'application.contact_responsibility_accepted'`). No rows were read or changed by content.
+Validation status: read-only production checks after the apply confirmed the ledger row, both index
+definitions, a query plan that seeks the new index, and that the lookup for the application with the most
+audit events (252) now reads 4 rows instead of about 496. The baseline advance only records the reviewed
+source boundary; it does not prove live artifact equality or rollback safety.
 
 ## Permissions and remaining recovery risk
 
