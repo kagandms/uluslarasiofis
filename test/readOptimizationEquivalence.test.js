@@ -134,3 +134,16 @@ test('physical intake list keeps order, paging, filters and per-row receipt colu
     assert.deepEqual((await list({ q: 'S-i2' })).items.map((row) => row.id), ['i2']);
     assert.deepEqual((await list({ statuses: ['approved_for_processing'] })).items, []);
 });
+
+test('the acknowledgement lookup seeks the partial index instead of scanning all audit events of the application', () => {
+    const { database } = setup();
+    const plan = database.prepare(`EXPLAIN QUERY PLAN SELECT audit_events.created_at FROM audit_events
+        WHERE audit_events.application_id = ? AND audit_events.event_type = 'application.contact_responsibility_accepted'
+          AND json_extract(audit_events.safe_metadata_json, '$.version') = ? ORDER BY audit_events.created_at DESC LIMIT 1`)
+        .bind('x', 'v').all().results.map((row) => row.detail).join('\n');
+    assert.match(plan, /idx_audit_events_contact_acknowledgement/);
+    const indexes = database.prepare("SELECT name FROM pragma_index_list('applications')").all().results.map((row) => row.name);
+    assert.ok(indexes.includes('idx_applications_staff_order'));
+    const partial = database.prepare("SELECT sql FROM sqlite_master WHERE name = 'idx_audit_events_contact_acknowledgement'").first().sql;
+    assert.match(partial, /WHERE event_type = 'application\.contact_responsibility_accepted'/);
+});
