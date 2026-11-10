@@ -1880,6 +1880,38 @@ async function runVerifiedMainWorldSearch(tabId, kabulId, requestId, expectedStu
 }
 
 
+function readTabById(tabId) {
+    return new Promise((resolve) => {
+        chrome.tabs.get(tabId, (tab) => resolve(chrome.runtime.lastError ? null : (tab || null)));
+    });
+}
+
+/**
+ * Activates the portal tab (and its window) after the acceptance code search is confirmed on YÖKSİS.
+ * The tab that sent the request is preferred when it is an allowed portal page; otherwise the known portal tab is used.
+ * Failures are ignored because the transfer result has already been decided.
+ * @param {chrome.tabs.Tab|null} senderTab Sender tab of the portal request, as provided by runtime.onMessage.
+ * @returns {Promise<boolean>} Whether the portal tab was activated.
+ */
+async function returnToPortalTab(senderTab = null) {
+    try {
+        let portalTab = senderTab && typeof senderTab.id === 'number' && isAllowedPortalUrl(senderTab.url || '')
+            ? senderTab
+            : null;
+        if (!portalTab) {
+            const portalTabId = await getPortalTabId();
+            if (!portalTabId) return false;
+            portalTab = await readTabById(portalTabId);
+        }
+        if (!portalTab) return false;
+        await updateTab(portalTab.id, { active: true });
+        if (portalTab.windowId) await chrome.windows.update(portalTab.windowId, { focused: true }).catch(() => {});
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
 async function transferToYoksis(request) {
     const totalStartedAt = startYknTiming();
     try {
@@ -2081,6 +2113,11 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 yoksisManualOverrideAvailable: response.manualOverrideAvailable === true,
                 yoksisSearchRequestId: response.yoksisSearchRequestId || request.requestId,
                 yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
+        }
+        // Portal'dan başlatılan aramada kabul kodu YÖKSİS'te doğrulanınca kullanıcıyı tekrar portal sekmesine al.
+        // Manuel onay gereken durumda YÖKSİS sekmesi açık kalır ki kayıt kontrol edilebilsin.
+        if (response.success && response.formReady === true && request.portalSenderTab) {
+            await returnToPortalTab(request.portalSenderTab);
         }
         return response;
     });
@@ -2316,7 +2353,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             return true;
         }
         else if (request.action === 'TRANSFER_TO_YOKSIS') {
-            transferToYoksis(request)
+            transferToYoksis({ ...request, portalSenderTab: sender?.tab ?? null })
                 .then((response) => sendResponse({ ...response, requestId: request.requestId }))
                 .catch((error) => sendResponse({ success: false, requestId: request.requestId, error: error.message }));
             return true;
