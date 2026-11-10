@@ -147,3 +147,13 @@ test('the acknowledgement lookup seeks the partial index instead of scanning all
     const partial = database.prepare("SELECT sql FROM sqlite_master WHERE name = 'idx_audit_events_contact_acknowledgement'").first().sql;
     assert.match(partial, /WHERE event_type = 'application\.contact_responsibility_accepted'/);
 });
+
+test('migration 0041 leaves the scanner claim plan on the pending index and no duplicate scan_status index remains', () => {
+    const { database } = setup();
+    const indexes = database.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='document_revision_files'").all().results.map((r) => r.name);
+    assert.equal(indexes.includes('idx_document_files_scan_status'), false);
+    assert.ok(indexes.includes('idx_revision_files_scan_pending'));
+    const plan = database.prepare("EXPLAIN QUERY PLAN SELECT id FROM document_revision_files WHERE scan_status='pending' AND upload_status='finalized' AND cleanup_status='none' AND revision_id=?")
+        .bind('r').all().results.map((row) => row.detail).join('\n');
+    assert.match(plan, /idx_revision_files_scan_pending/);
+});
