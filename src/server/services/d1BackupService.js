@@ -105,3 +105,24 @@ export async function getLatestBackupMetadata(storage, environmentName = 'produc
         sizeBytes: object.size
     };
 }
+
+/** A manual backup reads every row of every table, so repeated manual snapshots are skipped inside this window. */
+export const MANUAL_BACKUP_MIN_INTERVAL_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Runs a manual backup only when the latest snapshot is older than the minimum interval (or when forced).
+ * The scheduled nightly backup calls backupD1ToR2 directly and is not affected.
+ * @param {object} options Same as backupD1ToR2 plus minIntervalMs, force and now.
+ * @returns {Promise<object>} The new backup result, or { success: true, skipped: true, latest } for a recent snapshot.
+ */
+export async function backupD1ToR2IfStale({ database, storage, environmentName = 'production',
+    minIntervalMs = MANUAL_BACKUP_MIN_INTERVAL_MS, force = false, now = Date.now() }) {
+    if (!force) {
+        const latest = await getLatestBackupMetadata(storage, environmentName);
+        const createdAt = Date.parse(latest?.createdAt || '');
+        if (Number.isFinite(createdAt) && now - createdAt >= 0 && now - createdAt < minIntervalMs) {
+            return { success: true, skipped: true, reason: 'RECENT_BACKUP', latest };
+        }
+    }
+    return backupD1ToR2({ database, storage, environmentName });
+}

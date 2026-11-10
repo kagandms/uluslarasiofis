@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { backupD1ToR2, getLatestBackupMetadata } from '../src/server/services/d1BackupService.js';
+import { backupD1ToR2, backupD1ToR2IfStale, getLatestBackupMetadata } from '../src/server/services/d1BackupService.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 
@@ -94,4 +94,28 @@ test('backupD1ToR2 rejects invalid database or storage bindings', async () => {
         async () => backupD1ToR2({ database: new TestD1Database(), storage: null }),
         /R2 storage binding is required/
     );
+});
+
+test('a manual backup is skipped inside the minimum interval, runs when stale or forced, and never blocks the direct nightly call', async () => {
+    const database = new TestD1Database();
+    await applyAllMigrations(database);
+    const storage = new MockR2Bucket();
+    const first = await backupD1ToR2IfStale({ database, storage, environmentName: 'production', now: Date.parse('2026-11-10T00:00:00Z') });
+    assert.equal(first.success, true);
+    assert.equal(first.skipped, undefined);
+    const createdAt = Date.parse((await getLatestBackupMetadata(storage, 'production')).createdAt);
+
+    const recent = await backupD1ToR2IfStale({ database, storage, environmentName: 'production', now: createdAt + 60 * 60 * 1000 });
+    assert.equal(recent.skipped, true);
+    assert.equal(recent.reason, 'RECENT_BACKUP');
+    const keysAfterSkip = [...storage.storage.keys()].length;
+
+    const forced = await backupD1ToR2IfStale({ database, storage, environmentName: 'production', force: true, now: createdAt + 60 * 60 * 1000 });
+    assert.equal(forced.skipped, undefined);
+    const stale = await backupD1ToR2IfStale({ database, storage, environmentName: 'production', now: createdAt + 4 * 60 * 60 * 1000 });
+    assert.equal(stale.skipped, undefined);
+    assert.ok([...storage.storage.keys()].length >= keysAfterSkip);
+
+    const nightly = await backupD1ToR2({ database, storage, environmentName: 'production' });
+    assert.equal(nightly.success, true);
 });

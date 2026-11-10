@@ -31,7 +31,7 @@ import { handleMetaWhatsAppWebhook } from './services/metaWhatsAppWebhook.js';
 import { createMetaWhatsAppProvider } from './services/metaWhatsAppProvider.js';
 import { runNotificationDispatchBatch } from './services/notificationDispatcher.js';
 import { handleStaffApplicationDeletion } from './routes/staffApplicationDeletionRoutes.js';
-import { backupD1ToR2, getLatestBackupMetadata } from './services/d1BackupService.js';
+import { backupD1ToR2, backupD1ToR2IfStale, getLatestBackupMetadata } from './services/d1BackupService.js';
 import { requireStaff } from './auth/staffAuth.js';
 import { requireMethod } from './routes/shared.js';
 import { createPublicPrintUploadIntent, finalizePublicPrintUpload, readPublicPrintJobStatus,
@@ -324,10 +324,12 @@ async function routeApi(request, environment, requestId, cache) {
     if (pathname === '/api/staff/admin/backup') {
         await requireStaff(request, environment);
         requireMethod(request, 'POST');
-        return backupD1ToR2({
+        // A backup reads every table row by row; skip it when a snapshot is recent unless ?force=true is passed.
+        return backupD1ToR2IfStale({
             database: environment.DB,
             storage: environment.DOCUMENTS,
-            environmentName: environment.APP_ENV || 'production'
+            environmentName: environment.APP_ENV || 'production',
+            force: new URL(request.url).searchParams.get('force') === 'true'
         });
     }
     if (pathname === '/api/staff/admin/backup/latest') {

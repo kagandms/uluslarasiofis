@@ -36,8 +36,11 @@ function buildWhere(query) {
 async function listIntakes(database, query) {
     const where = buildWhere(query);
     const results = await database.batch([
-        database.prepare(`SELECT ${INTAKE_COLUMNS} FROM physical_intakes WHERE ${where.sql}
-            ORDER BY updated_at DESC,submitted_at DESC,id DESC LIMIT ? OFFSET ?`)
+        // The inner query ranks only the narrow rows; INTAKE_COLUMNS' correlated lookups then run for the page rows alone.
+        database.prepare(`SELECT ${INTAKE_COLUMNS} FROM physical_intakes WHERE id IN (
+                SELECT id FROM physical_intakes WHERE ${where.sql}
+                ORDER BY updated_at DESC,submitted_at DESC,id DESC LIMIT ? OFFSET ?)
+            ORDER BY updated_at DESC,submitted_at DESC,id DESC`)
             .bind(...where.bindings, query.pageSize, (query.page - 1) * query.pageSize),
         database.prepare(`SELECT count(*) AS total FROM physical_intakes WHERE ${where.sql}`).bind(...where.bindings)
     ]);

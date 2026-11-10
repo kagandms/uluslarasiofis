@@ -32,7 +32,7 @@ async function reconcile(database, now) {
             result_code='lease_expired',available_at=?,updated_at=?,lease_token_hash=NULL
             WHERE status='leased' AND lease_until<=?`).bind(now, now, now),
         database.prepare(`UPDATE document_revision_files SET scan_status='failed'
-            WHERE scan_status='pending' AND id IN (SELECT file_id FROM document_scan_jobs WHERE status='failed')`)
+            WHERE id IN (SELECT file_id FROM document_scan_jobs WHERE status='failed') AND +scan_status='pending'`)
     ]);
 }
 

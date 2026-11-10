@@ -52,7 +52,7 @@ function isReferenceConflict(error) {
  * @param {D1Database} database Cloudflare D1 binding.
  * @returns {object} Repository operations for application records.
  */
-const STAFF_COUNT_CACHE_MS = 15_000;
+const STAFF_COUNT_CACHE_MS = 60_000;
 // Per-isolate, per-binding cache of staff list totals; only the pagination label may lag by this TTL.
 const staffCountCache = new WeakMap();
 
@@ -139,25 +139,21 @@ export function createApplicationRepository(database) {
             if (!referenceNumber) return null;
             const normalizedRef = referenceNumber.trim().toUpperCase();
             return database.prepare(`
-                SELECT applications.*, students.student_number,
-                    EXISTS (
-                        SELECT 1 FROM audit_events
-                        WHERE audit_events.application_id = applications.id
-                          AND audit_events.event_type = 'application.contact_responsibility_accepted'
-                          AND json_extract(audit_events.safe_metadata_json, '$.version') = ?
-                    ) AS contact_acknowledgement_accepted_current,
-                    (
-                        SELECT audit_events.created_at FROM audit_events
-                        WHERE audit_events.application_id = applications.id
-                          AND audit_events.event_type = 'application.contact_responsibility_accepted'
-                          AND json_extract(audit_events.safe_metadata_json, '$.version') = ?
-                        ORDER BY audit_events.created_at DESC LIMIT 1
-                    ) AS contact_acknowledgement_accepted_at
-                FROM applications
-                JOIN students ON students.id = applications.student_id
-                WHERE UPPER(applications.reference_number) = ?
-            `).bind(CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION,
-                CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION, normalizedRef).first();
+                SELECT base.*, base.contact_acknowledgement_accepted_at IS NOT NULL AS contact_acknowledgement_accepted_current
+                FROM (
+                    SELECT applications.*, students.student_number,
+                        (
+                            SELECT audit_events.created_at FROM audit_events
+                            WHERE audit_events.application_id = applications.id
+                              AND audit_events.event_type = 'application.contact_responsibility_accepted'
+                              AND json_extract(audit_events.safe_metadata_json, '$.version') = ?
+                            ORDER BY audit_events.created_at DESC LIMIT 1
+                        ) AS contact_acknowledgement_accepted_at
+                    FROM applications
+                    JOIN students ON students.id = applications.student_id
+                    WHERE UPPER(applications.reference_number) = ?
+                ) AS base
+            `).bind(CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION, normalizedRef).first();
         },
         async updateAccessCode(input) {
             const results = await database.batch(createAccessCodeRotationStatements(database, input));
@@ -166,25 +162,21 @@ export function createApplicationRepository(database) {
         },
         async findById(applicationId) {
             return database.prepare(`
-                SELECT applications.*, students.student_number,
-                    EXISTS (
-                        SELECT 1 FROM audit_events
-                        WHERE audit_events.application_id = applications.id
-                          AND audit_events.event_type = 'application.contact_responsibility_accepted'
-                          AND json_extract(audit_events.safe_metadata_json, '$.version') = ?
-                    ) AS contact_acknowledgement_accepted_current,
-                    (
-                        SELECT audit_events.created_at FROM audit_events
-                        WHERE audit_events.application_id = applications.id
-                          AND audit_events.event_type = 'application.contact_responsibility_accepted'
-                          AND json_extract(audit_events.safe_metadata_json, '$.version') = ?
-                        ORDER BY audit_events.created_at DESC LIMIT 1
-                    ) AS contact_acknowledgement_accepted_at
-                FROM applications
-                JOIN students ON students.id = applications.student_id
-                WHERE applications.id = ?
-            `).bind(CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION,
-                CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION, applicationId).first();
+                SELECT base.*, base.contact_acknowledgement_accepted_at IS NOT NULL AS contact_acknowledgement_accepted_current
+                FROM (
+                    SELECT applications.*, students.student_number,
+                        (
+                            SELECT audit_events.created_at FROM audit_events
+                            WHERE audit_events.application_id = applications.id
+                              AND audit_events.event_type = 'application.contact_responsibility_accepted'
+                              AND json_extract(audit_events.safe_metadata_json, '$.version') = ?
+                            ORDER BY audit_events.created_at DESC LIMIT 1
+                        ) AS contact_acknowledgement_accepted_at
+                    FROM applications
+                    JOIN students ON students.id = applications.student_id
+                    WHERE applications.id = ?
+                ) AS base
+            `).bind(CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION, applicationId).first();
         },
         async findTrackableByStudentNumber(studentNumber) {
             const normalizedStudentNumber = normalizeStudentNumber(studentNumber);
@@ -290,10 +282,11 @@ export function createApplicationRepository(database) {
             if (cached && Date.now() - cached.at < STAFF_COUNT_CACHE_MS) {
                 return { totalItems: cached.total, items: pageResult.results };
             }
+            // Only the search filter reads students.student_number; every other COUNT needs no join.
+            const countSource = searchPattern ? 'applications JOIN students ON students.id = applications.student_id' : 'applications';
             const countResult = await database.prepare(`
                 SELECT COUNT(*) AS total_items
-                FROM applications
-                JOIN students ON students.id = applications.student_id
+                FROM ${countSource}
                 WHERE ${whereClause}
             `).bind(...queryValues).first();
             if (countCache.size >= 50) countCache.clear();
