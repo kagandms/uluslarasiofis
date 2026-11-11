@@ -4,7 +4,7 @@ import { listRequiredDocumentAnswers } from '../shared/document-conditions.js';
 import { isPlausibleBirthDate } from '../shared/age.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
-import { MIGRATION_BULK_EXPORT_AVAILABLE_UNTIL, isMigrationBulkExportAvailable, listSentToMigrationApplications, runMigrationBulkExport } from './migrationBulkArchive.js';
+import { listSentToMigrationApplications, runMigrationBulkExport } from './migrationBulkArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
 import { createApplicationQueueFilters } from './application-queue-filters.js';
@@ -143,20 +143,57 @@ function createMigrationBulkExportReport(document, report) {
     return wrapper;
 }
 
+/** Fills the progress box in place. Only this box is touched during an export, so the counters do not flicker. */
+function fillBulkExportProgress(document, box, progress) {
+    box.replaceChildren();
+    if (!progress) return;
+    if (progress.phase === 'list') {
+        box.append(createText(document, 'p', 'staff-applications-state', 'Göç İdaresine gönderilen başvurular listeleniyor…'));
+        return;
+    }
+    const bar = document.createElement('progress');
+    bar.max = Math.max(progress.total, 1);
+    bar.value = progress.done;
+    bar.setAttribute('aria-label', 'Toplam ilerleme');
+    // One percentage only: students finished out of all students in the export.
+    const percent = progress.total === 0 ? 0 : Math.round((progress.done / progress.total) * 100);
+    box.append(bar, createText(document, 'p', 'staff-applications-state',
+        `%${percent} · ${progress.done} / ${progress.total} öğrenci işlendi`));
+    box.append(createText(document, 'p', 'staff-applications-state',
+        `Başarılı: ${progress.saved} · Başarısız: ${progress.failed}`));
+    let current = '';
+    if (progress.phase === 'retry') {
+        current = `${progress.index + 1}. öğrenci (${progress.name || 'İsimsiz'}) yeniden deneniyor: deneme ${progress.attempt}, ${Math.round(progress.retry_in_ms / 1000)} sn sonra.`;
+    } else if (progress.phase === 'files' || progress.phase === 'start') {
+        current = `Şu an: ${progress.index + 1}. öğrenci (${progress.name || 'İsimsiz'}).`;
+    }
+    if (current) box.append(createText(document, 'p', 'staff-applications-state', current));
+}
+
+function createBulkExportProgressBox(document, progress) {
+    const box = document.createElement('div');
+    box.className = 'staff-bulk-export-progress';
+    box.dataset.bulkProgress = '';
+    box.setAttribute('role', 'status');
+    box.setAttribute('aria-live', 'polite');
+    fillBulkExportProgress(document, box, progress);
+    return box;
+}
+
 function createMigrationBulkExportAction(document, state, onExport) {
     const wrapper = document.createElement('div');
     wrapper.className = 'staff-bulk-export';
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'btn btn-outline';
+    button.className = 'btn staff-bulk-export-button';
     button.dataset.action = 'bulk-migration-export';
     const running = Boolean(state.bulkExportController);
     button.textContent = running ? 'Toplu indirme sürüyor…' : 'Göç İdaresine gönderilenlerin belgelerini klasöre indir';
     button.disabled = Boolean(running || state.archiveController || state.combinedPdfController);
     button.addEventListener('click', () => onExport());
-    const until = MIGRATION_BULK_EXPORT_AVAILABLE_UNTIL.slice(0, 10).split('-').reverse().join('.');
     wrapper.append(button, createText(document, 'p', 'staff-applications-state',
-        `Bu geçici indirme ${until} tarihine kadar açık kalır. Her başvuru için ZIP ve bir özet dosyası seçilen klasöre yazılır.`));
+        'Her başvuru için ZIP ve bir özet dosyası seçilen klasöre yazılır.'));
+    if (running || state.bulkExportProgress) wrapper.append(createBulkExportProgressBox(document, state.bulkExportProgress));
     return wrapper;
 }
 
@@ -374,7 +411,7 @@ function renderQueue(root, state, handlers) {
     panel.className = 'staff-applications-queue';
     panel.setAttribute('aria-busy', state.loading ? 'true' : 'false');
     panel.append(createSearchForm(document, state, handlers.onSearch, handlers.onQueryChange));
-    if (state.query.status === 'migration' && isMigrationBulkExportAvailable() && handlers.onBulkMigrationExport) {
+    if (state.query.status === 'migration' && handlers.onBulkMigrationExport) {
         panel.append(createMigrationBulkExportAction(document, state, handlers.onBulkMigrationExport));
         if (state.bulkExportReport) panel.append(createMigrationBulkExportReport(document, state.bulkExportReport));
     }
@@ -1017,6 +1054,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         rejectionTarget: null, rejectionReason: '',
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
         combinedPdfApplicationId: null, combinedPdfController: null, bulkExportController: null, bulkExportReport: null,
+        bulkExportProgress: null,
         archiveError: null, archiveMessage: null,
         spreadsheetPending: new Set(), spreadsheetErrors: {},
         gocnetPending: new Set(), gocnetResults: {},
@@ -1114,11 +1152,6 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     async function exportMigrationApplications() {
         const view = document.defaultView;
         if (state.bulkExportController || state.archiveController || state.combinedPdfController) return;
-        if (!isMigrationBulkExportAvailable()) {
-            state.archiveError = 'Bu toplu indirme süresi doldu.';
-            render();
-            return;
-        }
         if (typeof view?.showDirectoryPicker !== 'function' || view.isSecureContext === false) {
             state.archiveError = 'Bu tarayıcı klasör seçmeyi desteklemiyor. Ofis bilgisayarında Chrome veya Edge ile deneyin.';
             render();
@@ -1128,7 +1161,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         state.bulkExportController = controller;
         state.archiveError = null;
         state.bulkExportReport = null;
-        state.archiveMessage = 'Göç İdaresine gönderilen başvurular listeleniyor…';
+        state.archiveMessage = null;
+        state.bulkExportProgress = { phase: 'list' };
         render();
         try {
             const directory = await view.showDirectoryPicker({ mode: 'readwrite' });
@@ -1139,9 +1173,11 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             }
             const result = await runMigrationBulkExport({
                 api, directory, window: view, applications, signal: controller.signal,
-                onProgress: ({ index, total }) => {
-                    state.archiveMessage = `${index + 1}/${total} başvuru işleniyor…`;
-                    render();
+                onProgress: (progress) => {
+                    // In-place update only: a full re-render per tick made the counters flicker.
+                    state.bulkExportProgress = progress;
+                    const box = root.querySelector('[data-bulk-progress]');
+                    if (box) fillBulkExportProgress(root.ownerDocument, box, progress);
                 }
             });
             state.bulkExportReport = { ...result.report, failed_entries: result.failed_entries, summary_file: result.summary_file };
@@ -1156,6 +1192,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 : (typeof error?.message === 'string' ? error.message : 'Toplu indirme tamamlanamadı.');
         } finally {
             state.bulkExportController = null;
+            state.bulkExportProgress = null;
             render();
         }
     }

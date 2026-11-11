@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { BlobReader, ZipReader, Uint8ArrayWriter } from '@zip.js/zip.js';
 import { test } from 'node:test';
 import {
-    MIGRATION_BULK_EXPORT_AVAILABLE_UNTIL, createBulkArchiveFilename, isMigrationBulkExportAvailable,
-    listSentToMigrationApplications, runMigrationBulkExport
+    createBulkArchiveFilename, listSentToMigrationApplications, runMigrationBulkExport
 } from '../src/staff/migrationBulkArchive.js';
 
 function concat(chunks) {
@@ -44,11 +43,10 @@ function queryPage(items, page, totalPages) {
     return { items, pagination: { page, page_size: 100, total_items: items.length, total_pages: totalPages } };
 }
 
-test('temporary bulk export button is available until the configured instant and no later', () => {
-    const until = Date.parse(MIGRATION_BULK_EXPORT_AVAILABLE_UNTIL);
-    assert.equal(isMigrationBulkExportAvailable(new Date(until)), true);
-    assert.equal(isMigrationBulkExportAvailable(new Date(until + 1)), false);
-});
+function createOneDocumentManifest() {
+    return { total_source_bytes: 3, files: [{ code: 'passport', expected_revision_number: 1,
+        object_identity: 'a'.repeat(64), media_type: 'application/pdf', byte_size: 3, entry_name: '01-passport.pdf' }] };
+}
 
 test('listing collects only sent_to_migration rows across all pages of the migration filter', async () => {
     const calls = [];
@@ -97,7 +95,8 @@ test('export saves one ZIP per application, reports gate failures, and writes a 
         { id: 'blocked', student_number: 'S-2', first_name: 'C', last_name: 'D' }
     ];
     const result = await runMigrationBulkExport({
-        api, directory, window: { isSecureContext: true }, applications, now: new Date('2026-11-10T10:00:00.000Z')
+        api, directory, window: { isSecureContext: true }, applications, retryDelaysMs: [],
+        now: new Date('2026-11-10T10:00:00.000Z')
     });
 
     assert.equal(result.saved, 1);
@@ -159,4 +158,70 @@ test('abort stops before the next application and records the cancellation', asy
     assert.equal(result.report.entries[0].reason, 'İndirme iptal edildi.');
     assert.equal(result.report.not_attempted, 1, 'the second application is reported as not attempted');
     assert.equal(result.saved, 0);
+});
+
+test('a transient network failure is retried and the application is saved on a later attempt', async () => {
+    const directory = createFakeDirectory();
+    let manifestCalls = 0;
+    const api = {
+        async createArchiveManifest() {
+            manifestCalls += 1;
+            if (manifestCalls === 1) throw Object.assign(new Error('Staff request failed.'), { status: 0 });
+            return createOneDocumentManifest();
+        },
+        async readArchiveFile() { return new Response(new Uint8Array([1, 2, 3])); }
+    };
+    const result = await runMigrationBulkExport({
+        api, directory, window: { isSecureContext: true }, retryDelaysMs: [0, 0],
+        applications: [{ id: 'retry', student_number: 'S-9', first_name: 'R', last_name: 'T' }]
+    });
+    assert.equal(manifestCalls, 2);
+    assert.equal(result.saved, 1);
+    assert.equal(result.report.entries[0].attempts, 2);
+    assert.equal(result.report.entries[0].reason, null);
+    assert.ok(directory.files.has('S-9-r_t.zip'));
+});
+
+test('a 404 answer is not retried and its reason keeps the HTTP status', async () => {
+    const directory = createFakeDirectory();
+    let manifestCalls = 0;
+    const api = {
+        async createArchiveManifest() {
+            manifestCalls += 1;
+            throw Object.assign(new Error('Belge mevcut değil veya erişilemiyor.'), { status: 404 });
+        },
+        async readArchiveFile() { return new Response(); }
+    };
+    const result = await runMigrationBulkExport({
+        api, directory, window: { isSecureContext: true }, retryDelaysMs: [0, 0],
+        applications: [{ id: 'gone', student_number: 'S-8', first_name: 'G', last_name: 'O' }]
+    });
+    assert.equal(manifestCalls, 1);
+    assert.equal(result.report.entries[0].attempts, 1);
+    assert.equal(result.report.entries[0].reason, 'Belge mevcut değil veya erişilemiyor. (HTTP 404)');
+});
+
+test('progress reports document counts and finishes with done equal to the total', async () => {
+    const directory = createFakeDirectory();
+    const api = {
+        async createArchiveManifest() { return createOneDocumentManifest(); },
+        async readArchiveFile() { return new Response(new Uint8Array([1, 2, 3])); }
+    };
+    const events = [];
+    await runMigrationBulkExport({
+        api, directory, window: { isSecureContext: true }, retryDelaysMs: [],
+        applications: [
+            { id: 'a', student_number: '1', first_name: 'A', last_name: 'B' },
+            { id: 'b', student_number: '2', first_name: 'C', last_name: 'D' }
+        ],
+        onProgress: (progress) => events.push(progress)
+    });
+    const filesEvents = events.filter((event) => event.phase === 'files');
+    assert.deepEqual(filesEvents.map((event) => event.file_done), [0, 1, 0, 1]);
+    assert.equal(events[0].done, 0, 'the application being started is not counted as done');
+    const last = events.at(-1);
+    assert.equal(last.phase, 'done');
+    assert.equal(last.done, 2);
+    assert.equal(last.saved, 2);
+    assert.equal(last.documents_saved, 2);
 });

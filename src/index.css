@@ -2186,6 +2186,38 @@ body.dark-mode .history-badge {
     text-align: center;
 }
 
+/* Bulk Göç export: solid burgundy action, fixed progress box that updates in place. */
+.staff-bulk-export-button,
+.staff-bulk-export-button:disabled {
+    color: #fff;
+    background: #7e1830;
+    border: 1px solid #7e1830;
+}
+
+.staff-bulk-export-button:hover:not(:disabled) {
+    color: #fff;
+    background: #5a0e27;
+    border-color: #5a0e27;
+}
+
+.staff-bulk-export-button:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+.staff-bulk-export-progress {
+    display: grid;
+    gap: 6px;
+    margin: 10px auto 0;
+    max-width: 640px;
+}
+
+.staff-bulk-export-progress progress {
+    width: 100%;
+    height: 10px;
+    accent-color: #7e1830;
+}
+
 .staff-application-summary,
 .staff-application-documents,
 .staff-application-workflow {
