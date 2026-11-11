@@ -42,7 +42,11 @@ function applyLocale(locale) {
     document.documentElement.dir = selectedLocale === 'ar' ? 'rtl' : 'ltr';
     const titleKey = isApplicationPage ? 'applicationPageTitle'
         : (isTrackingPage ? 'trackingPageTitle' : (isResumePage ? 'homeResumeAction' : 'portalTitle'));
-    document.title = getMessage(selectedLocale, titleKey);
+    const pageTitle = getMessage(selectedLocale, titleKey);
+    // Home page tab/search title carries the university name so searches for it match the portal.
+    document.title = page === 'home'
+        ? `${getMessage(selectedLocale, 'homeUniversityName')} · ${pageTitle}`
+        : pageTitle;
 
     document.querySelectorAll('[data-i18n]').forEach((element) => {
         const messageKey = element.dataset.i18n;
