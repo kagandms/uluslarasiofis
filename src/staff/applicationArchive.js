@@ -88,17 +88,23 @@ export async function downloadApplicationArchive({ applicationId, window, manife
     let zipWriter;
     let writable;
     let completed = false;
+    // True only when this call created the file in the chosen folder; a failed attempt then removes that placeholder.
+    let createdInFolder = false;
     const limits = { maxBytes, totalBytes: 0 };
     try {
         const currentManifest = manifest ?? await getManifest(abortController.signal);
         if (abortController.signal.aborted) throw new DOMException('Canceled', 'AbortError');
         validateManifest(currentManifest, maxBytes);
-        const selectedHandle = supportsStreaming ? await (targetDirectory
-            ? targetDirectory.getFileHandle(suggestedName, { create: true })
-            : window.showSaveFilePicker({
+        let selectedHandle = null;
+        if (supportsStreaming && targetDirectory) {
+            selectedHandle = await targetDirectory.getFileHandle(suggestedName, { create: true });
+            createdInFolder = true;
+        } else if (supportsStreaming) {
+            selectedHandle = await window.showSaveFilePicker({
                 suggestedName,
                 types: [{ description: 'ZIP arşivi', accept: { 'application/zip': ['.zip'] } }]
-            })) : null;
+            });
+        }
         if (supportsStreaming) {
             writable = await selectedHandle.createWritable();
             zipWriter = new ZipWriter(writable, { level: 0, signal: abortController.signal });
@@ -123,6 +129,10 @@ export async function downloadApplicationArchive({ applicationId, window, manife
         if (!completed) {
             try { await zipWriter?.terminate(); } catch { /* Writer may already be closed. */ }
             try { await writable?.abort(error); } catch { /* Preserve the original archive error. */ }
+            // Without this, the empty placeholder from getFileHandle(create) stays in the folder as an unreadable ZIP.
+            if (createdInFolder) {
+                try { await targetDirectory.removeEntry(suggestedName); } catch { /* Nothing left to remove. */ }
+            }
         }
         throw error;
     } finally {

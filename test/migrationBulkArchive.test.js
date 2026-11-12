@@ -24,6 +24,8 @@ function createFakeDirectory(initial = {}) {
             if (!files.has(name) && !options.create) {
                 throw Object.assign(new Error('missing'), { name: 'NotFoundError' });
             }
+            // Like the browser, create:true makes an empty file at once, before any bytes are written.
+            if (!files.has(name)) files.set(name, new Uint8Array(0));
             return {
                 name,
                 async createWritable() {
@@ -34,6 +36,9 @@ function createFakeDirectory(initial = {}) {
                     });
                 }
             };
+        },
+        async removeEntry(name) {
+            if (!files.delete(name)) throw Object.assign(new Error('missing'), { name: 'NotFoundError' });
         }
     };
     return directory;
@@ -180,6 +185,21 @@ test('a transient network failure is retried and the application is saved on a l
     assert.equal(result.report.entries[0].attempts, 2);
     assert.equal(result.report.entries[0].reason, null);
     assert.ok(directory.files.has('S-9-r_t.zip'));
+});
+
+test('a failed download leaves no empty ZIP placeholder in the folder', async () => {
+    const directory = createFakeDirectory();
+    const api = {
+        async createArchiveManifest() { return createOneDocumentManifest(); },
+        async readArchiveFile() { return new Response('unavailable', { status: 503 }); }
+    };
+    const result = await runMigrationBulkExport({
+        api, directory, window: { isSecureContext: true }, retryDelaysMs: [0, 0],
+        applications: [{ id: 'gone', student_number: 'S-11', first_name: 'G', last_name: 'X' }]
+    });
+    assert.equal(result.failed, 1);
+    assert.equal(result.report.entries[0].attempts, 3);
+    assert.equal(directory.files.has('S-11-g_x.zip'), false);
 });
 
 test('a 404 answer is not retried and its reason keeps the HTTP status', async () => {
