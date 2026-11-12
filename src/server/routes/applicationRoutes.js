@@ -15,6 +15,7 @@ import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../../shared/academic-calendar
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { readSubmissionReadiness } from '../services/submissionReadiness.js';
+import { sendDraftReferenceMail } from '../services/referenceMailService.js';
 import { listApplicationDocumentPolicies } from '../domain/documentPolicy.js';
 import { createAuditEvent, createRepositories, enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
 import { DEFAULT_APPLICATION_PRIVACY_NOTICE } from '../domain/applicationPrivacyNotice.js';
@@ -580,6 +581,10 @@ export async function acceptCurrentContactAcknowledgement(request, environment, 
         requestId
     });
     if (!application) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemiyor.');
+    await sendDraftReferenceMail(environment, {
+        applicationId: session.application_id,
+        portalUrl: new URL('/basvurum/', request.url).href
+    });
     return { application: createApplicationDto(application, environment) };
 }
 
