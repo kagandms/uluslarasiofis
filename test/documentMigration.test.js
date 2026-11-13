@@ -142,14 +142,15 @@ test('dual storage reads migrated and legacy objects, writes new ones to the rem
     assert.equal((await dual.head(key(1))).size, 10);
     assert.equal(await new TextDecoder().decode(await (await dual.get(key(1))).arrayBuffer()), 'legacy-doc');
     assert.ok(await dual.putIfAbsent(key(2), bytes('new-doc'), 'application/pdf'));
-    assert.equal(bucket.objects.has(key(2)), false);
+    assert.equal(bucket.objects.has(key(2)), true, 'new objects are mirrored to R2 until a backup exists');
     assert.equal(host.objects.has(key(2)), true);
     assert.equal(await dual.putIfAbsent(key(1), bytes('overwrite'), 'application/pdf'), null);
     assert.equal(await dual.head(key(404)), null);
 
     host.setDown(true);
     assert.equal(await new TextDecoder().decode(await (await dual.get(key(1))).arrayBuffer()), 'legacy-doc');
-    await assert.rejects(dual.get(key(2)), { code: 'STORAGE_UNAVAILABLE' });
+    assert.equal(new TextDecoder().decode(await (await dual.get(key(2))).arrayBuffer()), 'new-doc', 'mirrored objects stay readable during a remote outage');
+    await assert.rejects(dual.get(key(404)), { code: 'STORAGE_UNAVAILABLE' });
     host.setDown(false);
     await dual.deleteMany([key(1), key(2)]);
     assert.equal(await dual.head(key(1)), null);
@@ -167,4 +168,19 @@ test('the migration route is administrator-only, same-origin and closed unless d
     assert.equal((await call(environment)).status, 401);
     assert.equal((await call(environment, { body: { surprise: true } })).status, 400);
     assert.equal((await call(environment, { body: { limit: 500 } })).status, 400);
+});
+
+test('dual storage removes the remote copy again when the R2 mirror write fails, and the retry succeeds', async () => {
+    const host = createFakeHost();
+    const remote = createRemote(host);
+    const bucket = createFakeBucket([]);
+    const realPut = bucket.put;
+    let failOnce = true;
+    bucket.put = async (...args) => { if (failOnce) { failOnce = false; throw new Error('r2 down'); } return realPut(...args); };
+    const dual = createDualDocumentStorage({ remote, legacy: createDocumentStorage({ DOCUMENTS: bucket }) });
+    await assert.rejects(dual.putIfAbsent(key(7), bytes('doc'), 'application/pdf'));
+    assert.equal(host.objects.size, 0);
+    assert.ok(await dual.putIfAbsent(key(7), bytes('doc'), 'application/pdf'));
+    assert.equal(host.objects.size, 1);
+    assert.equal(bucket.objects.has(key(7)), true);
 });

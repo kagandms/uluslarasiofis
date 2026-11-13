@@ -45,7 +45,7 @@ Değişkenleri ve bağlamayı panelde `Workers & Pages > goc > Settings` altınd
 
 ## Geçiş (R2'den şifreli depoya)
 
-`DOCUMENT_STORAGE_BACKEND=dual` olduktan sonra: yeni yüklemeler şifreli depoya gider, eski belgeler R2'den okunmaya devam eder. Taşıma yalnızca **yönetici** oturumuyla yapılır; R2'ye hiçbir şey yazılmaz ya da silinmez.
+`DOCUMENT_STORAGE_BACKEND=dual` olduktan sonra: yeni yüklemeler **hem şifreli depoya hem R2'ye** yazılır (yedek hazır olana kadar tek kopya kalmasın diye), okumalar önce şifreli depodan yapılır, taşınmamış eski belgeler R2'den okunur. İkinci yazma başarısız olursa ilki geri alınır ve yükleme yeniden denenir. `remote` modunda R2'ye yazılmaz; ancak yedek kurulup geri yükleme denendikten sonra geçin. Taşıma yalnızca **yönetici** oturumuyla yapılır; R2'ye hiçbir şey yazılmaz ya da silinmez.
 
 Yönetici olarak personel portalında oturum açıkken tarayıcı konsolunda önce kuru çalıştırma:
 
@@ -71,7 +71,7 @@ Her kopya şifreli depodan geri okunup SHA-256 ile karşılaştırılır; uyuşm
 
 ## Geri dönüş
 
-`DOCUMENT_STORAGE_BACKEND` değerini `r2` yapmak yeni yüklemeleri R2'ye döndürür. Şifreli depoya yazılmış belgeler (taşınan ve yeni yüklenen) `r2` modunda **okunmaz**; geri dönmeden önce `dual` modda iken yeni yüklenenleri R2'ye geri kopyalamak gerekir. Bu yüzden `remote`'a geçmeden ve R2'yi boşaltmadan önce UAT yapılmalıdır. R2'yi boşaltma ayrı, açık onay gerektirir.
+`DOCUMENT_STORAGE_BACKEND` değerini `r2` yapmak yeni yüklemeleri R2'ye döndürür. Şifreli depoya yazılmış belgeler (taşınan ve yeni yüklenen) `r2` modunda okunmaz. `dual` modunda yeni yüklemeler R2'ye de yazıldığı için `dual`'dan `r2`'ye dönüş güvenlidir; yalnızca `remote`'tan dönüşte yeni yüklenenleri R2'ye kopyalamak gerekir. Bu yüzden `remote`'a geçmeden ve R2'yi boşaltmadan önce UAT yapılmalıdır. R2'yi boşaltma ayrı, açık onay gerektirir.
 
 ## Güvenlik notları ve açık riskler
 
