@@ -3,6 +3,7 @@ import { ApiError } from '../domain/errors.js';
 import { MAX_PHYSICAL_PDF_BYTES, requirePhysicalVersion } from '../domain/physical-intake-policy.js';
 import { hashScannerValue } from '../domain/scanner-policy.js';
 import { createSafeFilename } from './documentRoutes.js';
+import { createDocumentStorage } from '../storage/documentStorage.js';
 
 function conflict() {
     return new ApiError(409, 'PHYSICAL_UPDATE_CONFLICT', 'Kayıt değişti. Güncel kaydı açıp tekrar deneyin.');
@@ -96,7 +97,7 @@ async function reservePdf(context, payload) {
 async function discardIncompletePdf(context, file) {
     const changed = await context.repository.failFile(file.id);
     if (changed.meta.changes !== 1) return;
-    try { await context.environment.DOCUMENTS.delete(file.storage_key); }
+    try { await createDocumentStorage(context.environment).delete(file.storage_key); }
     catch (error) { console.error('Incomplete physical PDF cleanup failed.', { errorName: error.name, fileId: file.id }); }
 }
 
@@ -104,9 +105,8 @@ async function storeReservedPdf(context, payload) {
     const reserved = await reservePdf(context, payload);
     if (reserved.isReplay) return reserved.file;
     try {
-        const storedObject = await context.environment.DOCUMENTS.put(reserved.file.storage_key, payload.bytes, {
-            httpMetadata: { contentType: 'application/pdf' }
-        });
+        const storedObject = await createDocumentStorage(context.environment)
+            .put(reserved.file.storage_key, payload.bytes, 'application/pdf');
         if (!storedObject || storedObject.size !== payload.bytes.length) {
             throw new ApiError(502, 'PDF_STORAGE_FAILED', 'PDF saklanamadı. Tekrar deneyin.');
         }
@@ -155,9 +155,10 @@ export async function openPhysicalPdf(context, options) {
     }
     const file = await context.repository.file(options.fileId);
     if (!file || file.intake_id !== context.intake.id || file.upload_status !== 'finalized') throw new ApiError(404, 'PDF_NOT_FOUND', 'PDF bulunamadı.');
-    const head = await context.environment.DOCUMENTS.head(file.storage_key);
+    const storage = createDocumentStorage(context.environment);
+    const head = await storage.head(file.storage_key);
     if (!head || head.size !== file.byte_size || !head.etag) throw new ApiError(404, 'PDF_NOT_FOUND', 'PDF dosyası bulunamadı.');
-    const object = await context.environment.DOCUMENTS.get(file.storage_key, { onlyIf: { etagMatches: head.etag } });
+    const object = await storage.get(file.storage_key, { etagMatches: head.etag });
     if (!object || typeof object.arrayBuffer !== 'function' || object.etag !== head.etag || object.size !== file.byte_size) throw new ApiError(409, 'PDF_CHANGED', 'PDF şu anda açılamıyor. Tekrar deneyin.');
     const bytes = new Uint8Array(await object.arrayBuffer());
     if (bytes.length !== file.byte_size || await hashScannerValue(bytes) !== file.sha256) {

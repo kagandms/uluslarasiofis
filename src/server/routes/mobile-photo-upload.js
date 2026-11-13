@@ -3,6 +3,7 @@ import { PDFDocument } from 'pdf-lib';
 import { ApiError } from '../domain/errors.js';
 import { hashScannerValue } from '../domain/scanner-policy.js';
 import { requireSameOrigin } from './shared.js';
+import { createDocumentStorage } from '../storage/documentStorage.js';
 import { requireTransferOwner, ACTIVE_TRANSFER_STAFF, enforceTransferRate } from './mobile-transfer-security.js';
 import { readSharedStaffUsername } from '../config/sharedStaffAccount.js';
 import { MAX_TRANSFER_FILE_BYTES, MAX_TRANSFER_FILES, MAX_TRANSFER_TOTAL_BYTES, MAX_TRANSFER_UPLOAD_REQUESTS_PER_MINUTE, MAX_TRANSFER_IMAGE_PIXELS } from '../../config/mobile-transfer-policy.js';
@@ -95,7 +96,7 @@ async function storePhoto(context, payload) {
     const { environment, transferId } = context;
     const { file } = reservation;
     try {
-        await environment.DOCUMENTS.put(file.storage_key, payload.bytes, { httpMetadata: { contentType: 'image/jpeg' } });
+        await createDocumentStorage(environment).put(file.storage_key, payload.bytes, 'image/jpeg');
         await requireTransferOwner(environment, transferId);
         const saved = await environment.DB.prepare(`UPDATE mobile_document_transfer_files SET upload_status='finalized'
             WHERE id=? AND upload_status='uploading' AND batch_id=? AND EXISTS (
@@ -109,7 +110,7 @@ async function storePhoto(context, payload) {
         }
     } catch (error) {
         console.error('Mobile photo storage failed.', { errorName: error.name });
-        await environment.DOCUMENTS.delete(file.storage_key);
+        await createDocumentStorage(environment).delete(file.storage_key);
         await environment.DB.prepare("UPDATE mobile_document_transfer_files SET upload_status='failed' WHERE id=?").bind(file.id).run();
         throw error;
     }

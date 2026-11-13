@@ -1,6 +1,7 @@
 import { ApiError } from '../domain/errors.js';
 import { ACTIVE_TRANSFER_STAFF } from './mobile-transfer-security.js';
 import { readSharedStaffUsername } from '../config/sharedStaffAccount.js';
+import { createDocumentStorage } from '../storage/documentStorage.js';
 
 const PENDING_UPLOAD_STATUSES = ['uploading', 'finalized'];
 
@@ -27,7 +28,7 @@ async function removeTemporaryFiles(environment, transferId) {
         SELECT id FROM mobile_document_transfer_batches WHERE transfer_id=? AND status='closed'))`;
     const files = await environment.DB.prepare(`SELECT storage_key FROM mobile_document_transfer_files WHERE ${retiredFiles}`)
         .bind(transferId, transferId).all();
-    if (files.results.length) await environment.DOCUMENTS.delete(files.results.map(file => file.storage_key));
+    if (files.results.length) await createDocumentStorage(environment).deleteMany(files.results.map(file => file.storage_key));
     await environment.DB.prepare(`DELETE FROM mobile_document_transfer_files WHERE ${retiredFiles}`).bind(transferId, transferId).run();
     await environment.DB.prepare("DELETE FROM mobile_document_transfer_batches WHERE transfer_id=? AND status='closed'").bind(transferId).run();
 }

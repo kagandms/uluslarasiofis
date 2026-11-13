@@ -3,6 +3,7 @@ import { requireStaff } from '../auth/staffAuth.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
+import { createDocumentStorage } from '../storage/documentStorage.js';
 
 const RESTORABLE_STATES = new Set(['soft_deleted']);
 
@@ -101,9 +102,12 @@ async function purgeApplication({ environment, applicationId, staff, requestId }
     }
     await database.prepare('DELETE FROM application_sessions WHERE application_id=?').bind(applicationId).run();
     const storageKeys = await listApplicationStorageKeys(database, applicationId);
+    // Storage is only needed when the application has stored files; resolve it inside the retry guard.
+    let storage = null;
     for (const storageKey of storageKeys) {
         try {
-            await environment.DOCUMENTS.delete(storageKey);
+            storage ??= createDocumentStorage(environment);
+            await storage.delete(storageKey);
         } catch {
             throw new ApiError(503, 'APPLICATION_PURGE_RETRY_REQUIRED', 'Dosyaların tamamı silinemedi. Kalıcı silme beklemede; tekrar deneyin.', true);
         }

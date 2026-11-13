@@ -7,7 +7,7 @@ import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
 import { readStudentUploadMetadata } from '../domain/studentUploadMetadata.js';
-import { isLocalDocumentUploadEnabled } from '../config/localDocumentUpload.js';
+import { isWorkerProxiedUploadEnabled } from '../config/localDocumentUpload.js';
 
 const UPLOAD_INTENT_SECONDS = 10 * 60;
 
@@ -80,7 +80,7 @@ function createUploadResponse(intentId, capability, expiresAt) {
     };
 }
 
-async function readBoundedUploadBody(request, expectedSize, maximumSize) {
+export async function readBoundedUploadBody(request, expectedSize, maximumSize) {
     const contentLengthHeader = request.headers.get('Content-Length');
     if (contentLengthHeader !== null) {
         if (!/^\d+$/u.test(contentLengthHeader)) {
@@ -179,7 +179,7 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
     const storageKey = storage.createQuarantineKey();
     const intentId = crypto.randomUUID();
     let capability;
-    if (isLocalDocumentUploadEnabled(environment)) {
+    if (isWorkerProxiedUploadEnabled(environment)) {
         capability = {
             method: 'PUT',
             url: new URL(`/api/public/applications/current/documents/local-upload/${intentId}`, request.url).href,
@@ -233,7 +233,7 @@ export async function createCurrentStudentDocumentUploadIntent(request, environm
 /** Writes one owner-bound upload to the local R2 binding without using external signing credentials. */
 export async function uploadLocalStudentDocument(request, environment, intentId) {
     requireMethod(request, 'PUT');
-    if (!isLocalDocumentUploadEnabled(environment)) {
+    if (!isWorkerProxiedUploadEnabled(environment)) {
         throw new ApiError(404, 'NOT_FOUND', 'İstenen kaynak bulunamadı.');
     }
     requireSameOrigin(request);

@@ -8,6 +8,8 @@ import { createDocumentStorage } from '../storage/documentStorage.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
+import { isWorkerProxiedUploadEnabled } from '../config/localDocumentUpload.js';
+import { readBoundedUploadBody } from './applicationDocumentRoutes.js';
 
 const INTENT_LIFETIME_SECONDS = 600;
 const SIGNED_PUT_LIFETIME_SECONDS = 300;
@@ -155,12 +157,21 @@ export async function createCurrentResubmissionUploadIntent(request, environment
     const revisionId = crypto.randomUUID();
     const fileId = crypto.randomUUID();
     let capability;
-    try {
-        capability = await storage.createWriteOnceUploadCapability(storageKey, {
-            contentType: metadata.mediaType, expiresInSeconds: SIGNED_PUT_LIFETIME_SECONDS
-        });
-    } catch {
-        throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Belge yükleme hizmeti şu anda kullanılamıyor.', true);
+    if (isWorkerProxiedUploadEnabled(environment)) {
+        capability = {
+            method: 'PUT',
+            url: new URL(`/api/public/applications/current/documents/resubmission-upload/${intentId}`, request.url).href,
+            requiredHeaders: { 'content-type': metadata.mediaType, 'if-none-match': '*' },
+            expiresAt
+        };
+    } else {
+        try {
+            capability = await storage.createWriteOnceUploadCapability(storageKey, {
+                contentType: metadata.mediaType, expiresInSeconds: SIGNED_PUT_LIFETIME_SECONDS
+            });
+        } catch {
+            throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Belge yükleme hizmeti şu anda kullanılamıyor.', true);
+        }
     }
     const created = await repositories.resubmissionUploads.createIntent({
         applicationId: application.id, applicationType: application.application_type,
@@ -175,6 +186,53 @@ export async function createCurrentResubmissionUploadIntent(request, environment
     });
     if (!created) throw new ApiError(409, 'RESUBMISSION_UPLOAD_CONFLICT', 'Belge durumu değişti. Listeyi yenileyip tekrar deneyin.');
     return routeResult(createIntentResponse(intentId, capability, expiresAt), { status: 201 });
+}
+
+/**
+ * Receives one replacement upload through the Worker when browser-signed storage URLs are unavailable.
+ * The intent, owner session, eligibility and media type are re-checked before the bytes are written once.
+ * @param {Request} request Same-origin PUT carrying the document bytes.
+ * @param {object} environment Worker bindings.
+ * @param {string} intentId Opaque upload intent from the path.
+ * @returns {Promise<Response>} 204 when stored.
+ * @throws {ApiError} When the intent, owner, eligibility, body, or storage write is invalid.
+ */
+export async function uploadResubmissionDocument(request, environment, intentId) {
+    requireMethod(request, 'PUT');
+    if (!isWorkerProxiedUploadEnabled(environment)) throw new ApiError(404, 'NOT_FOUND', 'İstenen kaynak bulunamadı.');
+    requireSameOrigin(request);
+    if (!/^[0-9a-f-]{36}$/i.test(intentId)) throw new ApiError(404, 'UPLOAD_INTENT_NOT_FOUND', 'Belge yüklemesi bu başvuru için bulunamadı.');
+    const { application, repositories, rows } = await readOwnerContext(request, environment);
+    const intent = await repositories.resubmissionUploads.findIntent(application.id, intentId);
+    if (!intent) throw new ApiError(404, 'UPLOAD_INTENT_NOT_FOUND', 'Belge yüklemesi bu başvuru için bulunamadı.');
+    if (intent.intent_status !== 'pending') {
+        throw new ApiError(409, 'UPLOAD_INTENT_UNAVAILABLE', 'Belge yükleme bağlantısı artık kullanılamıyor.');
+    }
+    if (Date.parse(intent.expires_at) <= Date.now()) {
+        await invalidateIntentAndQueueCleanup(repositories, intent, 'expired');
+        throw new ApiError(409, 'UPLOAD_INTENT_EXPIRED', 'Belge yükleme süresi doldu. Yeni bir yükleme başlatın.');
+    }
+    const eligible = readEligibleRow(rows, intent.code, application);
+    if (!eligible || eligible.row.document_record_id !== intent.document_record_id
+        || eligible.row.current_revision_id !== intent.expected_current_revision_id
+        || eligible.mode !== intent.mode) {
+        await invalidateIntentAndQueueCleanup(repositories, intent);
+        throw new ApiError(409, 'RESUBMISSION_UPLOAD_CONFLICT', 'Belge durumu değişti. Listeyi yenileyip tekrar deneyin.');
+    }
+    const contentType = request.headers.get('Content-Type')?.trim().toLowerCase() || '';
+    if (!eligible.policy.accepted_media_types.includes(contentType) || contentType !== intent.media_type) {
+        throw new ApiError(415, 'INVALID_FILE', 'Belge biçimini kontrol edip tekrar deneyin.');
+    }
+    const body = await readBoundedUploadBody(request, intent.byte_size, eligible.policy.max_byte_size);
+    try {
+        const stored = await createDocumentStorage(environment).putIfAbsent(intent.storage_key, body, contentType);
+        if (!stored) throw new ApiError(409, 'UPLOAD_ALREADY_RECEIVED', 'Bu belge yüklemesi daha önce alındı.');
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        console.error('Resubmission document upload write failed.', { errorName: error?.name || 'UnknownError', errorCode: error?.code || 'STORAGE_PUT_FAILED' });
+        throw new ApiError(503, 'STORAGE_UNAVAILABLE', 'Belge yükleme hizmeti şu anda kullanılamıyor.', true);
+    }
+    return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
 }
 
 function requireIntentId(body) {
