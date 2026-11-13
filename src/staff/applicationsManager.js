@@ -1560,9 +1560,10 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 const form = await check('form');
                 if (form.state !== 'student_data_filled' || form.yoksisTabId !== result.yoksisTabId) {
                     await event(form.state === 'existing_record' ? 'existing_record' : 'failed');
+                    const formReason = typeof form.reason === 'string' && form.reason ? ` Neden: ${form.reason.slice(0, 160)}` : '';
                     state.gocnetResults[applicationId] = form.state === 'existing_record'
                         ? 'YÖKSİS kayıt sorgusu mevcut kaydı gösterdi; işlem durdu.'
-                        : 'YÖKSİS öğrenci verisi doğrulanamadı; kayıt açılmadı.';
+                        : `YÖKSİS öğrenci verisi doğrulanamadı; kayıt açılmadı.${formReason}`;
                 } else {
                     await event('saving');
                     const saved = await requestGocnetAction('SAVE_GOCNET_RECORD', {
