@@ -14,7 +14,7 @@ import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument,
 import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, accessApplicationWithReference, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readApplicationPrivacyNotice, readCurrentApplication, readCurrentApplicationStatus, regenerateCurrentAccessCode, resetStaffApplicationAccessCode, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
 import { lookupApplicationTracking, readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
-import { createCurrentResubmissionUploadIntent, finalizeCurrentResubmissionUpload, readCurrentResubmissionEligibility, uploadResubmissionDocument } from './routes/resubmissionUploadRoutes.js';
+import { createCurrentResubmissionUploadIntent, finalizeCurrentResubmissionUpload, readCurrentResubmissionEligibility } from './routes/resubmissionUploadRoutes.js';
 import { createStaffDocumentPreview, createStaffApplicationArchiveManifest, downloadStaffApplicationDocument,
     streamStaffApplicationArchiveFile } from './routes/staffDocumentAccessRoutes.js';
 import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
@@ -32,7 +32,6 @@ import { handleMetaWhatsAppWebhook } from './services/metaWhatsAppWebhook.js';
 import { createMetaWhatsAppProvider } from './services/metaWhatsAppProvider.js';
 import { runNotificationDispatchBatch } from './services/notificationDispatcher.js';
 import { handleStaffApplicationDeletion } from './routes/staffApplicationDeletionRoutes.js';
-import { handleStaffStorageMigration } from './routes/staffStorageMigrationRoutes.js';
 import { backupD1ToR2, backupD1ToR2IfStale, getLatestBackupMetadata } from './services/d1BackupService.js';
 import { requireStaff } from './auth/staffAuth.js';
 import { requireMethod } from './routes/shared.js';
@@ -145,7 +144,6 @@ async function routeApi(request, environment, requestId, cache) {
         return prioritizeStaffDocumentScan(request, environment, applicationId, documentCode, requestId);
     }
     if (['/api/staff/scanner/status', '/api/staff/scanner/retry'].includes(pathname)) return handleStaffScannerRequest(request, environment, requestId);
-    if (pathname === '/api/staff/storage-migration/batch') return handleStaffStorageMigration(request, environment);
     const deletionMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/(archive|restore|purge)$/);
     if (deletionMatch) {
         let applicationId;
@@ -310,8 +308,6 @@ async function routeApi(request, environment, requestId, cache) {
     }
     if (pathname === '/api/public/applications/current/documents/upload-intent') return createCurrentStudentDocumentUploadIntent(request, environment);
     if (pathname === '/api/public/applications/current/documents/finalize') return finalizeCurrentStudentDocument(request, environment);
-    const resubmissionUploadMatch = pathname.match(/^\/api\/public\/applications\/current\/documents\/resubmission-upload\/([^/]+)$/);
-    if (resubmissionUploadMatch) return uploadResubmissionDocument(request, environment, decodeURIComponent(resubmissionUploadMatch[1]));
     const localStudentUploadMatch = pathname.match(/^\/api\/public\/applications\/current\/documents\/local-upload\/([^/]+)$/);
     if (localStudentUploadMatch) return uploadLocalStudentDocument(request, environment, decodeURIComponent(localStudentUploadMatch[1]));
     const studentPreviewMatch = pathname.match(/^\/api\/public\/applications\/current\/documents\/([^/]+)\/preview$/);

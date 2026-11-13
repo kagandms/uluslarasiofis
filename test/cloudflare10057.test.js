@@ -14,7 +14,7 @@ const versions=id=>({items:[{id,number:2},{id:other,number:1}]});
 const config=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
 // Reviewed names only, synthetic type metadata. No runtime values are loaded.
 const names=['APPS_SCRIPT_API_KEY','APPS_SCRIPT_URL','AZURE_VISION_ENDPOINT','AZURE_VISION_KEY','D1_ANALYTICS_API_TOKEN',
-    'DOCUMENT_ENCRYPTION_KEYS','DOCUMENT_STORE_ACCESS_KEY_ID','DOCUMENT_STORE_SECRET_ACCESS_KEY','PRINTER_SECRET','PRINT_R2_ACCESS_KEY_ID','PRINT_R2_SECRET_ACCESS_KEY','R2_ACCESS_KEY_ID','R2_ACCOUNT_ID',
+    'PRINTER_SECRET','PRINT_R2_ACCESS_KEY_ID','PRINT_R2_SECRET_ACCESS_KEY','R2_ACCESS_KEY_ID','R2_ACCOUNT_ID',
     'R2_SECRET_ACCESS_KEY','REFERENCE_MAIL_ENDPOINT','REFERENCE_MAIL_TOKEN','SCANNER_SECRET','STAFF_BOOTSTRAP_TOKEN'];
 const settings={compatibility_date:config.compatibility_date,compatibility_flags:[],bindings:[
     {name:'ASSETS',type:'assets'},{name:'DB',type:'d1',database_id:'synthetic'},
@@ -77,7 +77,7 @@ test('read-only diagnostic reports actual active/latest IDs and deployment time,
     const bad=deployments(active);delete bad.deployments[0].created_on;
     assert.throws(()=>readOnlyVersionReport(bad,versions(active)));
 });
-test('all 18 runtime secret names plus D1/R2 and ASSETS must survive staged metadata verification',()=>{
+test('all 15 runtime secret names plus D1/R2 and ASSETS must survive staged metadata verification',()=>{
     assertProductionRuntimeSecretMetadata(names.map(name=>({name,type:'secret_text'})),config.env.production.secrets.required);
     const inherited=inheritWorkerMetadata(metadata,settings,sha,'synthetic',active);
     assert.ok(inherited.bindings.filter(b=>b.type==='inherit').every(b=>b.version_id==='latest' && !('text' in b)));

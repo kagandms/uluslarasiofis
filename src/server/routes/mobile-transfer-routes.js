@@ -10,7 +10,6 @@ import { createOpaqueSessionToken, hashSessionToken, readCookie } from '../auth/
 import { requireMethod, requireSameOrigin } from './shared.js';
 import { MAX_TRANSFER_CLAIM_REQUESTS_PER_MINUTE, TRANSFER_TTL_SECONDS } from '../../config/mobile-transfer-policy.js';
 import { closeMobileTransferBatch, createMobileTransferBatch } from './mobile-transfer-batches.js';
-import { createDocumentStorage } from '../storage/documentStorage.js';
 
 const PHONE_COOKIE = 'mobile_transfer_session';
 const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -83,13 +82,13 @@ async function accessPhoto(request, environment, transfer, photoId) {
     if (file.upload_status !== 'finalized') throw new ApiError(409, 'PHOTO_NOT_READY', 'Fotoğraf yüklemesi tamamlanmadı.');
     if (request.method === 'DELETE') {
         requireSameOrigin(request);
-        await createDocumentStorage(environment).delete(file.storage_key);
+        await environment.DOCUMENTS.delete(file.storage_key);
         await environment.DB.prepare("UPDATE mobile_document_transfer_files SET upload_status='consumed' WHERE id=? AND transfer_id=? AND batch_id=?")
             .bind(photoId, transfer.id, transfer.active_batch_id).run();
         return { received: true };
     }
     requireMethod(request, 'GET');
-    const object = await createDocumentStorage(environment).get(file.storage_key);
+    const object = await environment.DOCUMENTS.get(file.storage_key);
     if (!object || object.size !== file.byte_size) throw new ApiError(404, 'PHOTO_NOT_FOUND', 'Fotoğraf bulunamadı.');
     const bytes = new Uint8Array(await object.arrayBuffer());
     if (bytes.length !== file.byte_size || await hashScannerValue(bytes) !== file.sha256) throw new ApiError(409, 'PHOTO_CHANGED', 'Fotoğraf değişti.');
@@ -99,7 +98,7 @@ async function accessPhoto(request, environment, transfer, photoId) {
 async function removeTransfer(environment, transferId) {
     await environment.DB.prepare('UPDATE mobile_document_transfers SET expires_at=0 WHERE id=?').bind(transferId).run();
     const files = await environment.DB.prepare('SELECT storage_key FROM mobile_document_transfer_files WHERE transfer_id=?').bind(transferId).all();
-    if (files.results.length) await createDocumentStorage(environment).deleteMany(files.results.map(file => file.storage_key));
+    if (files.results.length) await environment.DOCUMENTS.delete(files.results.map(file => file.storage_key));
     await environment.DB.batch([
         environment.DB.prepare('DELETE FROM mobile_document_transfer_files WHERE transfer_id=?').bind(transferId),
         environment.DB.prepare('DELETE FROM mobile_document_transfers WHERE id=?').bind(transferId)

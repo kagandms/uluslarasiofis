@@ -3,7 +3,6 @@ import { validatePhysicalIntake, MAX_PHYSICAL_PDF_BYTES } from '../domain/physic
 import { hashScannerValue } from '../domain/scanner-policy.js';
 import { requireMethod } from './shared.js';
 import { validatePhysicalPdf } from './physical-pdf-routes.js';
-import { createDocumentStorage } from '../storage/documentStorage.js';
 import { registerPhysicalIntake } from '../repositories/d1/physical-registration-repository.js';
 
 async function readMultipart(request) {
@@ -55,10 +54,9 @@ async function checkReplay(context, payload) {
 async function writeRegistration(context, payload) {
     const storageDigest = await hashScannerValue(`${payload.id}:${payload.sha256}`);
     const storageKey = `quarantine/${storageDigest.slice(0,8)}-${storageDigest.slice(8,12)}-${storageDigest.slice(12,16)}-${storageDigest.slice(16,20)}-${storageDigest.slice(20,32)}`;
-    const storage = createDocumentStorage(context.environment);
     try {
-        await storage.put(storageKey, payload.bytes, 'application/pdf');
-        const head = await storage.head(storageKey);
+        await context.environment.DOCUMENTS.put(storageKey, payload.bytes, { httpMetadata: { contentType: 'application/pdf' } });
+        const head = await context.environment.DOCUMENTS.head(storageKey);
         if (!head || head.size !== payload.bytes.length) throw new ApiError(502, 'PDF_STORAGE_FAILED', 'PDF saklanamadı. Tekrar deneyin.');
         await registerPhysicalIntake(context.environment.DB, { ...payload, storageKey, byteSize: payload.bytes.length,
             staffId: context.staff.id, requestId: context.requestId, now: context.now });
@@ -66,7 +64,7 @@ async function writeRegistration(context, payload) {
         console.error('Physical registration failed.', { errorName: error.name });
         const existingFile = await context.repository.file(payload.id);
         if (existingFile?.storage_key !== storageKey) {
-            try { await storage.delete(storageKey); }
+            try { await context.environment.DOCUMENTS.delete(storageKey); }
             catch (cleanupError) { console.error('Unregistered PDF cleanup failed.', { errorName: cleanupError.name }); }
         }
         if (await checkReplay(context, payload)) return payload.id;

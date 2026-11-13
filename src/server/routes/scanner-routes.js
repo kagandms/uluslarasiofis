@@ -4,7 +4,6 @@ import { hashScannerValue, MAX_SCAN_BYTES, requireScannerIdentifier, validateSca
 import { createScannerRepository } from '../repositories/d1/scanner-repository.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
-import { createDocumentStorage } from '../storage/documentStorage.js';
 
 /** @returns {ApiError} A safe lease conflict. */
 function createLeaseConflict() {
@@ -74,10 +73,9 @@ async function readContent({ request, environment, repository, jobId, now }) {
     requireMethod(request,'GET');
     const { job,tokenHash } = await readLease({ request,repository,jobId,now });
     if (Date.parse(now)>Date.parse(job.updated_at)+120_000 || job.byte_size>MAX_SCAN_BYTES) throw createLeaseConflict();
-    const storage = createDocumentStorage(environment);
-    const object = await storage.head(job.storage_key);
+    const object = await environment.DOCUMENTS.head(job.storage_key);
     if (!isExpectedObject(object,job)) throw createLeaseConflict();
-    const content = await storage.get(job.storage_key,{ etagMatches:object.etag });
+    const content = await environment.DOCUMENTS.get(job.storage_key,{ onlyIf:{ etagMatches:object.etag } });
     if (!isExpectedObject(content,job) || content.etag!==object.etag || typeof content.arrayBuffer!=='function') throw createLeaseConflict();
     const bytes = new Uint8Array(await content.arrayBuffer());
     if (bytes.length!==job.byte_size) throw createLeaseConflict();
@@ -93,7 +91,7 @@ async function recordResult({ request, environment, repository, jobId, now }) {
     const { job,tokenHash } = await readLease({ request,repository,jobId,now });
     const result = validateScannerResult({ result:await readJsonBody(request,4096),job,now });
     if (result.outcome!=='failed') {
-        const object = await createDocumentStorage(environment).head(job.storage_key);
+        const object = await environment.DOCUMENTS.head(job.storage_key);
         if (!isExpectedObject(object,job) || object.etag!==job.object_etag) throw createLeaseConflict();
     }
     if (!await repository.persistResult({ job,result,tokenHash,now:new Date().toISOString() })) throw createLeaseConflict();

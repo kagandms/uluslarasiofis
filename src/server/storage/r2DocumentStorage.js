@@ -1,7 +1,6 @@
 import { AwsClient } from 'aws4fetch';
 
-// Random keys are UUID v4, but physical registration derives its keys from a digest, so any UUID-shaped key is accepted.
-const STORAGE_KEY_PATTERN = /^quarantine\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const STORAGE_KEY_PATTERN = /^quarantine\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const MIN_SIGNED_ACCESS_SECONDS = 30;
 export const MAX_SIGNED_ACCESS_SECONDS = 300;
 export const DEFAULT_SIGNED_ACCESS_SECONDS = MAX_SIGNED_ACCESS_SECONDS;
@@ -51,7 +50,7 @@ export function createStorageSigningFailure(cause, stage, sensitiveValues = []) 
     return failure;
 }
 
-export function assertStorageKey(key) {
+function assertStorageKey(key) {
     if (typeof key === 'string' && STORAGE_KEY_PATTERN.test(key)) return;
     throw createStorageError('Storage key is outside the private quarantine namespace.', 'INVALID_STORAGE_KEY');
 }
@@ -96,7 +95,7 @@ function createObjectUrl(accountId, bucketName, key) {
     return url;
 }
 
-export function createQuarantineKey(createId) {
+function createQuarantineKey(createId) {
     const id = createId();
     if (typeof id !== 'string' || !/^([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.test(id)) {
         throw new TypeError('Storage key generator must return a UUID.');
@@ -130,10 +129,6 @@ function createObjectOperations(bucket) {
         async delete(key) {
             assertStorageKey(key);
             return bucket.delete(key);
-        },
-        async deleteMany(keys) {
-            keys.forEach(assertStorageKey);
-            return bucket.delete(keys);
         }
     };
 }

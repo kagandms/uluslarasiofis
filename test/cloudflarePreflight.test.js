@@ -5,7 +5,7 @@ import { assertProductionRuntimeSecretMetadata } from '../scripts/ci/runtime-sec
 // Independent fixture of the reviewed production names, including the staff analytics token.
 const names = [
     'APPS_SCRIPT_API_KEY', 'APPS_SCRIPT_URL', 'AZURE_VISION_ENDPOINT', 'AZURE_VISION_KEY',
-    'D1_ANALYTICS_API_TOKEN', 'DOCUMENT_ENCRYPTION_KEYS', 'DOCUMENT_STORE_ACCESS_KEY_ID', 'DOCUMENT_STORE_SECRET_ACCESS_KEY', 'PRINTER_SECRET', 'PRINT_R2_ACCESS_KEY_ID', 'PRINT_R2_SECRET_ACCESS_KEY',
+    'D1_ANALYTICS_API_TOKEN', 'PRINTER_SECRET', 'PRINT_R2_ACCESS_KEY_ID', 'PRINT_R2_SECRET_ACCESS_KEY',
     'R2_ACCESS_KEY_ID', 'R2_ACCOUNT_ID', 'R2_SECRET_ACCESS_KEY', 'REFERENCE_MAIL_ENDPOINT', 'REFERENCE_MAIL_TOKEN',
     'SCANNER_SECRET', 'STAFF_BOOTSTRAP_TOKEN'
 ];
@@ -20,9 +20,9 @@ test('production runtime secret metadata accepts the same names in any order, in
     for (const order of [names, [...names].sort(), [...names].reverse(), localePrintOrder]) {
         const input = metadata(order);
         const original = structuredClone(input);
-        assert.equal(assertProductionRuntimeSecretMetadata(input, requiredNames).length, 18);
+        assert.equal(assertProductionRuntimeSecretMetadata(input, requiredNames).length, 15);
         assert.deepEqual(input, original, 'Validation must not mutate metadata supplied by the caller.');
-        assert.equal(assertProductionRuntimeSecretMetadata({ secrets: input }, requiredNames).length, 18);
+        assert.equal(assertProductionRuntimeSecretMetadata({ secrets: input }, requiredNames).length, 15);
     }
 });
 
