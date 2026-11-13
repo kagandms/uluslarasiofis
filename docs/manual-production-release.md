@@ -149,6 +149,12 @@ It drops only `idx_document_files_scan_status`, a redundant index with the same 
 after the apply confirmed the ledger row, that the redundant index is gone and the pending index remains.
 No content rows were read or changed. The baseline advance records the reviewed source boundary only.
 
+## Document store baseline evidence
+
+Dated 13 November 2026. The owner added the live Worker settings declared by commit `0f3d28fc40abf861011250d378d916dc106e49d0`: three runtime secrets (`DOCUMENT_ENCRYPTION_KEYS`, `DOCUMENT_STORE_ACCESS_KEY_ID`, `DOCUMENT_STORE_SECRET_ACCESS_KEY`), four plain variables (`DOCUMENT_STORAGE_BACKEND` = `r2`, `DOCUMENT_ENCRYPTION_KEY_ID` = `1`, `DOCUMENT_STORE_ENDPOINT`, `DOCUMENT_STORE_BUCKET`) and the `DOCUMENT_STORE` VPC service binding (service `goc-document-store`), using `wrangler secret put` and the Cloudflare dashboard. This workflow never sets them.
+Read-only checks afterwards (`wrangler secret list`, `wrangler versions view`, version `6b4642b7-a01d-4d0d-8872-55bff4ffcfc7`): 18 secret names equal to the reviewed allowlist, and the 26 live binding names equal the declared production bindings with none missing or unexpected. `DOCUMENT_STORAGE_BACKEND` is `r2`, so storage behavior is unchanged. A Worker-to-VPC-to-tunnel probe reached the office store and returned its unauthenticated 403.
+No secret values were read or recorded. The baseline advance records the reviewed source boundary only; it does not prove live artifact equality, and it does not enable the remote store.
+
 ## Permissions and remaining recovery risk
 
 Existing account-scoped **Workers Scripts Edit** must permit Worker assets upload, version creation and
