@@ -143,7 +143,7 @@ export async function decryptObject({ keyring, storageKey, data }) {
         return new Uint8Array(await crypto.subtle.decrypt(
             { name: 'AES-GCM', iv, additionalData: buildAdditionalData(header, storageKey), tagLength: TAG_BYTES * 8 },
             key,
-            data.slice(HEADER_BYTES)
+            data.subarray(HEADER_BYTES)
         ));
     } catch {
         throw createCryptoError('Stored document failed authentication.', 'DOCUMENT_DECRYPTION_FAILED');

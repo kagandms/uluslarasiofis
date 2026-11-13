@@ -69,6 +69,8 @@ console.log(total);
 
 Her kopya şifreli depodan geri okunup SHA-256 ile karşılaştırılır; uyuşmayan kopya silinir ve `failed` listesinde görünür. `failed` boş değilse nedenini inceleyin, R2'yi **silmeyin**.
 
+**Boyut sınırı (8 MB):** Worker şifrelemeyi tek parçada ve bellekte yapar; fiziksel teslim PDF'leri 50 MB'a, öğrenci belgeleri 10 MB'a çıkabildiği için bellek sınırına takılır (Cloudflare `503`). Bu yüzden 8 MB'tan büyük nesneler şifreli depoya **yazılmaz**: taşıma bunları `skipped_large` olarak sayar (hata değildir), `dual` modda yeni büyük yüklemeler yalnızca R2'ye yazılır ve R2'den okunur. Sonuç: `dual` mod kalıcı moddur; `remote` moda geçilmemelidir (büyük nesneleri saklayamaz) ve R2 büyük nesneler için tamamen boşaltılamaz. Parçalı (akışlı) şifreleme eklenirse bu sınır kalkar.
+
 ## Geri dönüş
 
 `DOCUMENT_STORAGE_BACKEND` değerini `r2` yapmak yeni yüklemeleri R2'ye döndürür. Şifreli depoya yazılmış belgeler (taşınan ve yeni yüklenen) `r2` modunda okunmaz. `dual` modunda yeni yüklemeler R2'ye de yazıldığı için `dual`'dan `r2`'ye dönüş güvenlidir; yalnızca `remote`'tan dönüşte yeni yüklenenleri R2'ye kopyalamak gerekir. Bu yüzden `remote`'a geçmeden ve R2'yi boşaltmadan önce UAT yapılmalıdır. R2'yi boşaltma ayrı, açık onay gerektirir.

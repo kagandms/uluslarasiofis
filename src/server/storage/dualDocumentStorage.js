@@ -1,3 +1,5 @@
+import { REMOTE_MAX_OBJECT_BYTES } from './storageLimits.js';
+
 /**
  * Migration-period storage. New objects are written to BOTH stores: the encrypted remote store and the
  * legacy R2 store, so a document is never held only on the office PC before a separate backup exists.
@@ -5,6 +7,7 @@
  * Deletes remove both copies. A read never reports a remote outage as "not found": if the remote fails and
  * R2 has no copy, the remote error is raised so callers retry instead of treating the document as missing.
  * If the second write fails, the first is removed again so a retry starts from a clean state.
+ * Objects larger than REMOTE_MAX_OBJECT_BYTES are written to R2 only (too big to encrypt in Worker memory).
  * @param {{remote: object, legacy: object}} stores Adapters with the shared document storage shape.
  * @returns {object} Provider-neutral document storage operations.
  */
@@ -31,6 +34,7 @@ export function createDualDocumentStorage({ remote, legacy }) {
         createQuarantineKey: () => remote.createQuarantineKey(),
         async put(key, body, contentType) {
             const bytes = await toBytes(body);
+            if (bytes.byteLength > REMOTE_MAX_OBJECT_BYTES) return legacy.put(key, bytes, contentType);
             const stored = await remote.put(key, bytes, contentType);
             try {
                 await legacy.put(key, bytes, contentType);
@@ -43,6 +47,7 @@ export function createDualDocumentStorage({ remote, legacy }) {
         async putIfAbsent(key, body, contentType) {
             if (await legacy.head(key)) return null;
             const bytes = await toBytes(body);
+            if (bytes.byteLength > REMOTE_MAX_OBJECT_BYTES) return legacy.putIfAbsent(key, bytes, contentType);
             const stored = await remote.putIfAbsent(key, bytes, contentType);
             if (!stored) return null;
             try {

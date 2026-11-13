@@ -143,8 +143,9 @@ export function createRemoteDocumentStorage(configuration = {}) {
             return {
                 ...description,
                 size: plaintext.byteLength,
-                body: new Response(plaintext).body,
-                arrayBuffer: async () => plaintext.slice().buffer,
+                get body() { return new Response(plaintext).body; },
+                // plaintext owns its buffer exactly, so it can be handed out without another copy
+                arrayBuffer: async () => plaintext.buffer,
                 text: async () => new TextDecoder().decode(plaintext)
             };
         },

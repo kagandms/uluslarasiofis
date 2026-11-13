@@ -1,6 +1,7 @@
+import { REMOTE_MAX_OBJECT_BYTES } from '../storage/storageLimits.js';
+
 const DEFAULT_BATCH_SIZE = 8;
 const MAX_BATCH_SIZE = 20;
-const DEFAULT_MAX_OBJECT_BYTES = 25 * 1024 * 1024;
 const KEY_PREFIX = 'quarantine/';
 
 async function sha256Hex(bytes) {
@@ -17,7 +18,7 @@ function failureCode(error) {
 }
 
 async function migrateObject({ bucket, remote, object, dryRun, maxObjectBytes }) {
-    if (object.size > maxObjectBytes) return { status: 'failed', reason: 'OBJECT_TOO_LARGE' };
+    if (object.size > maxObjectBytes) return { status: 'skipped_large' };
     const existing = await remote.head(object.key);
     if (existing) {
         return existing.size === object.size
@@ -27,14 +28,17 @@ async function migrateObject({ bucket, remote, object, dryRun, maxObjectBytes })
     if (dryRun) return { status: 'would_copy' };
     const source = await bucket.get(object.key);
     if (!source) return { status: 'failed', reason: 'SOURCE_MISSING' };
-    const bytes = new Uint8Array(await source.arrayBuffer());
+    let bytes = new Uint8Array(await source.arrayBuffer());
     const expectedHash = await sha256Hex(bytes);
     const contentType = source.httpMetadata?.contentType || 'application/octet-stream';
+    const expectedLength = bytes.length;
     const stored = await remote.putIfAbsent(object.key, bytes, contentType);
+    // Drop the plaintext before the read-back so the Worker never holds more copies than needed.
+    bytes = null;
     if (!stored) return { status: 'already_present' };
     const copy = await remote.get(object.key);
     const copied = copy ? new Uint8Array(await copy.arrayBuffer()) : null;
-    if (!copied || copied.length !== bytes.length || await sha256Hex(copied) !== expectedHash) {
+    if (!copied || copied.length !== expectedLength || await sha256Hex(copied) !== expectedHash) {
         await remote.delete(object.key);
         return { status: 'failed', reason: 'VERIFY_FAILED' };
     }
@@ -52,15 +56,15 @@ async function migrateObject({ bucket, remote, object, dryRun, maxObjectBytes })
  * @param {number} [input.limit] Objects per call (1 to 20), kept small for Worker subrequest limits.
  * @param {string|null} [input.cursor] Cursor from the previous call.
  * @param {boolean} [input.dryRun] Count what would be copied without writing.
- * @param {number} [input.maxObjectBytes] Per-object safety limit.
+ * @param {number} [input.maxObjectBytes] Objects above this size are counted as skipped_large and stay in R2 only.
  * @returns {Promise<object>} Counts, failures (key and code only), next cursor and completion flag.
  */
 export async function migrateDocumentBatch({
-    bucket, remote, limit = DEFAULT_BATCH_SIZE, cursor = null, dryRun = false, maxObjectBytes = DEFAULT_MAX_OBJECT_BYTES
+    bucket, remote, limit = DEFAULT_BATCH_SIZE, cursor = null, dryRun = false, maxObjectBytes = REMOTE_MAX_OBJECT_BYTES
 }) {
     const batchSize = Math.min(Math.max(Number.isInteger(limit) ? limit : DEFAULT_BATCH_SIZE, 1), MAX_BATCH_SIZE);
     const listing = await bucket.list({ prefix: KEY_PREFIX, limit: batchSize, ...(cursor ? { cursor } : {}) });
-    const result = { scanned: 0, copied: 0, already_present: 0, would_copy: 0, failed: [], next_cursor: null, done: true };
+    const result = { scanned: 0, copied: 0, already_present: 0, would_copy: 0, skipped_large: 0, failed: [], next_cursor: null, done: true };
     for (const object of listing.objects) {
         result.scanned += 1;
         let outcome;

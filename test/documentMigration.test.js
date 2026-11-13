@@ -125,7 +125,8 @@ test('oversized objects and an unreachable host are reported per object without 
     const remote = createRemote(host);
     const bucket = createFakeBucket([[key(1), bytes('0123456789'), 'application/pdf'], [key(2), bytes('ok'), 'application/pdf']]);
     const large = await migrateDocumentBatch({ bucket, remote, maxObjectBytes: 5 });
-    assert.deepEqual(large.failed, [{ key: key(1), reason: 'OBJECT_TOO_LARGE' }]);
+    assert.deepEqual(large.failed, []);
+    assert.equal(large.skipped_large, 1);
     assert.equal(large.copied, 1);
     host.setDown(true);
     const down = await migrateDocumentBatch({ bucket: createFakeBucket([[key(9), bytes('x'), 'application/pdf']]), remote });
@@ -192,4 +193,19 @@ test('migration reports the S3 error code as a failure detail without secrets', 
     const bucket = createFakeBucket([[key(1), bytes('one'), 'application/pdf']]);
     const result = await migrateDocumentBatch({ bucket, remote: refusing, dryRun: true });
     assert.deepEqual(result.failed, [{ key: key(1), reason: 'STORAGE_CONFIGURATION_ERROR', detail: 'SignatureDoesNotMatch' }]);
+});
+
+test('dual storage keeps objects above the remote size limit in R2 only and still reads them', async () => {
+    const host = createFakeHost();
+    const remote = createRemote(host);
+    const bucket = createFakeBucket([]);
+    const dual = createDualDocumentStorage({ remote, legacy: createDocumentStorage({ DOCUMENTS: bucket }) });
+    const big = new Uint8Array(8 * 1024 * 1024 + 1);
+    assert.ok(await dual.putIfAbsent(key(5), big, 'application/pdf'));
+    assert.equal(host.objects.has(key(5)), false);
+    assert.equal(bucket.objects.has(key(5)), true);
+    assert.equal((await dual.head(key(5))).size, big.length);
+    assert.ok(await dual.putIfAbsent(key(6), bytes('small'), 'application/pdf'));
+    assert.equal(host.objects.has(key(6)), true);
+    assert.equal(bucket.objects.has(key(6)), true);
 });
