@@ -108,8 +108,15 @@
         "PRINT_MAX_COPIES_PER_JOB": "50",
         "PRINT_MAX_PAGE_COPIES": "200",
         "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1",
-        "STAFF_SHARED_USERNAME": "international.office.topkapi@topkapi.edu.tr"
+        "STAFF_SHARED_USERNAME": "international.office.topkapi@topkapi.edu.tr",
+        "DOCUMENT_STORAGE_BACKEND": "r2",
+        "DOCUMENT_ENCRYPTION_KEY_ID": "1",
+        "DOCUMENT_STORE_ENDPOINT": "http://127.0.0.1:9000",
+        "DOCUMENT_STORE_BUCKET": "documents"
       },
+      "vpc_services": [
+        { "binding": "DOCUMENT_STORE", "service_id": "01a1d3d2-0a83-7e63-b398-3098de65be20", "remote": true }
+      ],
       "d1_databases": [
         {
           "binding": "DB",

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 export function assertWorkerSettings(settings, production, compatibilityDate) {
-    const expected = new Set(['ASSETS', 'DB', ...production.r2_buckets.map(b => b.binding), ...Object.keys(production.vars)]);
+    const expected = new Set(['ASSETS', 'DB', ...production.r2_buckets.map(b => b.binding), ...(production.vpc_services || []).map(b => b.binding), ...Object.keys(production.vars)]);
     for (const b of settings.bindings || []) {
         if (b.type === 'secret_text') continue; // Exact secret-name/type check is performed separately.
         assert.ok(expected.delete(b.name), 'Unexpected or duplicate live binding; normal publication stopped.');
