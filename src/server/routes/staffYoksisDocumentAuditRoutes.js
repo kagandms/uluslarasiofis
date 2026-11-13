@@ -11,7 +11,8 @@ const MAX_PAGE_SIZE = 100;
 const STATUS_CATEGORIES = new Set([
     'all', 'successful', 'pending', 'rejected', 'missing_documents', 'unreadable', 'other'
 ]);
-// Online application match: 'matched' = student number or full name exists in our applications; 'unmatched' = neither.
+// Online application match: 'matched' = student number or full name belongs to an application already forwarded to the Migration
+// Administration; 'unmatched' = neither. Drafts and applications still in review do not count.
 const MATCH_FILTERS = new Set(['all', 'matched', 'unmatched']);
 
 function normalizeSearch(value) {
@@ -230,13 +231,15 @@ function readQuery(body) {
 
 /**
  * Loads the student numbers and normalized full names of every online application.
- * Drafts and archived applications count too: the filter answers "does this student have an online application here".
+ * Only applications forwarded to the Migration Administration (sent, approved or completed) count.
  */
 async function loadOnlineApplicationKeys(environment) {
     const result = await environment.DB.prepare(`
         SELECT students.student_number AS student_number, applications.first_name, applications.last_name
         FROM applications
         JOIN students ON students.id = applications.student_id
+        WHERE applications.status IN ('sent_to_migration', 'migration_approved', 'completed')
+          AND NOT EXISTS (SELECT 1 FROM application_deletions WHERE application_id = applications.id)
     `).all();
     const studentNumbers = new Set();
     const fullNames = new Set();

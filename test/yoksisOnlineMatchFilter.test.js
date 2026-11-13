@@ -18,12 +18,14 @@ async function createFixture() {
         VALUES ('session-1', 'staff-1', ?, '2099-01-01T00:00:00.000Z', ?)`).bind(
         await hashSessionToken(SESSION_TOKEN), new Date().toISOString()
     ).run();
-    // Online applications: one matches by full name only, one by student number only.
+    // Forwarded applications: one matches by full name only, one by student number only; a draft must never match.
     await database.prepare(`INSERT INTO students (id, student_number, normalized_student_number) VALUES
-        ('student-name', '99999999', '99999999'), ('student-number', '20260002', '20260002')`).run();
+        ('student-name', '99999999', '99999999'), ('student-number', '20260002', '20260002'),
+        ('student-draft', '20260003', '20260003')`).run();
     await database.prepare(`INSERT INTO applications (id, student_id, application_type, status, first_name, last_name)
-        VALUES ('app-name', 'student-name', 'initial', 'submitted', 'Ayşe', 'Yılmaz'),
-               ('app-number', 'student-number', 'initial', 'submitted', 'Farklı', 'İsim')`).run();
+        VALUES ('app-name', 'student-name', 'initial', 'sent_to_migration', 'Ayşe', 'Yılmaz'),
+               ('app-number', 'student-number', 'initial', 'migration_approved', 'Farklı', 'İsim'),
+               ('app-draft', 'student-draft', 'initial', 'draft', 'Zeynep', 'Kaya')`).run();
     return { database, environment: { DB: database, STAFF_SHARED_USERNAME: 'test.staff' } };
 }
 
@@ -53,7 +55,7 @@ async function seedAuditRecords(environment) {
         records: [
             verifiedRecord('2026-01-0000001', '20260001', 'AYŞE', 'YILMAZ'),   // name matches an online application
             verifiedRecord('2026-01-0000002', '20260002', 'MEHMET', 'DEMİR'),  // student number matches
-            verifiedRecord('2026-01-0000003', '20260003', 'ZEYNEP', 'KAYA')    // no online application
+            verifiedRecord('2026-01-0000003', '20260003', 'ZEYNEP', 'KAYA')    // only a draft exists, so it is not matched
         ]
     } }), environment, {});
     assert.equal(response.status, 200);
