@@ -23,6 +23,7 @@
 ## Plans, evidence, and drafts
 
 - [Cloudflare usage card](cloudflare-usage-card.md) documents the staff home usage card, its limits and credentials.
+- [Office PC setup and move-to-a-new-PC guide (draft)](office-pc-setup-and-migration.md) covers the storage service, tunnel, scanner and Print Agent; it has not been tried on a second machine. [`scripts/office-pc/verify-office-pc.ps1`](../scripts/office-pc/verify-office-pc.ps1) is its read-only health and security check; `install-storage.ps1` and `install-tunnel.ps1` in the same folder are untested drafts that set up the store and the tunnel service (run with `-DryRun` first).
 - [Encrypted document storage: setup and migration guide](document-storage-setup.md) lists the Worker settings, the order of operations and the migration routine; nothing in it is live yet.
 - [Office PC document storage plan (2026-11-12)](plans/2026-11-12-office-pc-document-storage-plan.md) is an unvalidated plan; nothing in it is implemented.
 - [`superpowers/plans/`](superpowers/plans/) and [`superpowers/specs/`](superpowers/specs/) contain scoped plans/specifications; their presence does not mean implementation or external activation occurred.
