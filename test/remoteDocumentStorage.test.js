@@ -195,3 +195,17 @@ test('digest-derived physical registration keys and batch deletes work on both b
     assert.deepEqual(deleted, [[digestKey, KEY_A]]);
     await assert.rejects(r2.deleteMany([digestKey, 'print/not-a-document']), { code: 'INVALID_STORAGE_KEY' });
 });
+
+test('a refused request carries the S3 error code, including for HEAD which has no body', async () => {
+    const objects = new Map();
+    const fetcher = async (request) => {
+        if (request.method === 'GET') {
+            return new Response('<?xml version="1.0"?><Error><Code>SignatureDoesNotMatch</Code><Message>x</Message></Error>', { status: 403 });
+        }
+        return new Response(null, { status: 403 });
+    };
+    const storage = createStorage({ objects, requests: [], fetcher });
+    await assert.rejects(storage.head(KEY_A), (error) => error.code === 'STORAGE_CONFIGURATION_ERROR' && error.s3Code === 'SignatureDoesNotMatch');
+    await assert.rejects(storage.get(KEY_A), (error) => error.s3Code === 'SignatureDoesNotMatch');
+    await assert.rejects(storage.put(KEY_A, PLAINTEXT, 'application/pdf'), (error) => error.s3Code === undefined || typeof error.s3Code === 'string');
+});

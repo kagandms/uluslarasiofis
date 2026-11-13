@@ -21,11 +21,19 @@ async function readBytes(body) {
     return new Uint8Array(await new Response(body).arrayBuffer());
 }
 
-function failFromStatus(status) {
+function failFromStatus(status, s3Code) {
     if (status === 401 || status === 403) {
-        throw createStorageError('Document store rejected the credentials.', 'STORAGE_CONFIGURATION_ERROR');
+        const error = createStorageError('Document store rejected the credentials.', 'STORAGE_CONFIGURATION_ERROR');
+        // The S3 error code (for example SignatureDoesNotMatch) is not secret and tells operators why the request was refused.
+        if (s3Code) error.s3Code = s3Code;
+        throw error;
     }
     throw createStorageError('Document store is unavailable.', 'STORAGE_UNAVAILABLE');
+}
+
+async function readS3Code(response) {
+    const text = await response.text().catch(() => '');
+    return /<Code>([A-Za-z]{3,64})<\/Code>/.exec(text)?.[1];
 }
 
 /**
@@ -57,6 +65,20 @@ export function createRemoteDocumentStorage(configuration = {}) {
         }
     }
 
+    async function failFrom(response, key, method) {
+        let s3Code;
+        if (response.status === 401 || response.status === 403) {
+            try {
+                // A HEAD response has no body, so the reason is read from a one-byte GET issued only on failure.
+                const source = method === 'HEAD' ? await send('GET', key, { headers: { range: 'bytes=0-0' } }) : response;
+                s3Code = await readS3Code(source);
+            } catch {
+                s3Code = undefined;
+            }
+        }
+        failFromStatus(response.status, s3Code);
+    }
+
     async function write(key, body, contentType, conditional) {
         const plaintext = await readBytes(body);
         const sealed = await encryptObject({ keyring, storageKey: key, plaintext });
@@ -69,7 +91,7 @@ export function createRemoteDocumentStorage(configuration = {}) {
             body: sealed
         });
         if (response.status === 412 && conditional) return null;
-        if (!response.ok) failFromStatus(response.status);
+        if (!response.ok) await failFrom(response, key, 'PUT');
         return { key, size: plaintext.byteLength, etag: normalizeEtag(response.headers.get('etag')) };
     }
 
@@ -95,13 +117,13 @@ export function createRemoteDocumentStorage(configuration = {}) {
             // The host may ignore If-None-Match, so an existing object is also checked first.
             const existing = await send('HEAD', key);
             if (existing.ok) return null;
-            if (existing.status !== 404) failFromStatus(existing.status);
+            if (existing.status !== 404) await failFrom(existing, key, 'HEAD');
             return write(key, body, contentType, true);
         },
         async head(key) {
             const response = await send('HEAD', key);
             if (response.status === 404) return null;
-            if (!response.ok) failFromStatus(response.status);
+            if (!response.ok) await failFrom(response, key, 'HEAD');
             return describe(key, response);
         },
         async get(key, options = {}) {
@@ -109,7 +131,7 @@ export function createRemoteDocumentStorage(configuration = {}) {
                 headers: options.etagMatches ? { 'if-match': `"${normalizeEtag(options.etagMatches)}"` } : {}
             });
             if (response.status === 404 || response.status === 412) return null;
-            if (!response.ok) failFromStatus(response.status);
+            if (!response.ok) await failFrom(response, key, 'GET');
             const description = describe(key, { headers: new Headers({
                 'content-length': String(Number(response.headers.get('content-length')) || 0),
                 etag: response.headers.get('etag') || '',
@@ -128,12 +150,12 @@ export function createRemoteDocumentStorage(configuration = {}) {
         },
         async delete(key) {
             const response = await send('DELETE', key);
-            if (!response.ok && response.status !== 404) failFromStatus(response.status);
+            if (!response.ok && response.status !== 404) await failFrom(response, key, 'DELETE');
         },
         async deleteMany(keys) {
             for (const key of keys) {
                 const response = await send('DELETE', key);
-                if (!response.ok && response.status !== 404) failFromStatus(response.status);
+                if (!response.ok && response.status !== 404) await failFrom(response, key, 'DELETE');
             }
         },
         async createUploadCapability() {

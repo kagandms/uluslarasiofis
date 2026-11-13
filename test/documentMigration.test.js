@@ -184,3 +184,12 @@ test('dual storage removes the remote copy again when the R2 mirror write fails,
     assert.equal(host.objects.size, 1);
     assert.equal(bucket.objects.has(key(7)), true);
 });
+
+test('migration reports the S3 error code as a failure detail without secrets', async () => {
+    const refusing = {
+        async head() { const error = new Error('refused'); error.code = 'STORAGE_CONFIGURATION_ERROR'; error.s3Code = 'SignatureDoesNotMatch'; throw error; }
+    };
+    const bucket = createFakeBucket([[key(1), bytes('one'), 'application/pdf']]);
+    const result = await migrateDocumentBatch({ bucket, remote: refusing, dryRun: true });
+    assert.deepEqual(result.failed, [{ key: key(1), reason: 'STORAGE_CONFIGURATION_ERROR', detail: 'SignatureDoesNotMatch' }]);
+});

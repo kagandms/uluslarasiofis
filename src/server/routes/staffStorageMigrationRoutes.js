@@ -22,7 +22,8 @@ function readOptions(body) {
 
 /**
  * Administrator-only: copies one batch of R2 student documents into the encrypted remote store and verifies each copy.
- * R2 is only read. Repeat with the returned next_cursor until done is true.
+ * R2 is only read. It works whatever DOCUMENT_STORAGE_BACKEND is, so documents can be copied before dual mode is enabled.
+ * Repeat with the returned next_cursor until done is true.
  * @param {Request} request Same-origin POST with optional cursor, limit and dry_run.
  * @param {object} environment Worker bindings (R2 DOCUMENTS, remote store settings, encryption keys).
  * @returns {Promise<object>} Batch counts, failed keys with reason codes, next cursor and completion flag.
@@ -33,8 +34,9 @@ export async function handleStaffStorageMigration(request, environment) {
     requireSameOrigin(request);
     const options = readOptions(await readJsonBody(request, 2048));
     await requireStaff(request, environment, ['admin']);
-    if (!['dual', 'remote'].includes(environment.DOCUMENT_STORAGE_BACKEND) || !environment.DOCUMENTS?.list) {
-        throw new ApiError(409, 'MIGRATION_NOT_CONFIGURED', 'Taşıma için uzak depo ayarları ve R2 bağlaması gerekli.');
+    // The migration only needs the R2 binding and a configured remote store; it can run while the backend is still "r2".
+    if (!environment.DOCUMENTS?.list) {
+        throw new ApiError(409, 'MIGRATION_NOT_CONFIGURED', 'Taşıma için R2 bağlaması gerekli.');
     }
     const result = await migrateDocumentBatch({
         bucket: environment.DOCUMENTS, remote: createRemoteStorageFromEnvironment(environment), ...options

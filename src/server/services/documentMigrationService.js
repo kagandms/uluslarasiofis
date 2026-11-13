@@ -8,6 +8,10 @@ async function sha256Hex(bytes) {
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+function failureDetail(error) {
+    return typeof error?.s3Code === 'string' && /^[A-Za-z]{3,64}$/.test(error.s3Code) ? error.s3Code : undefined;
+}
+
 function failureCode(error) {
     return typeof error?.code === 'string' && /^[A-Z_]{3,64}$/.test(error.code) ? error.code : 'MIGRATION_ERROR';
 }
@@ -63,9 +67,11 @@ export async function migrateDocumentBatch({
         try {
             outcome = await migrateObject({ bucket, remote, object, dryRun, maxObjectBytes });
         } catch (error) {
-            outcome = { status: 'failed', reason: failureCode(error) };
+            outcome = { status: 'failed', reason: failureCode(error), detail: failureDetail(error) };
         }
-        if (outcome.status === 'failed') result.failed.push({ key: object.key, reason: outcome.reason });
+        if (outcome.status === 'failed') {
+            result.failed.push({ key: object.key, reason: outcome.reason, ...(outcome.detail ? { detail: outcome.detail } : {}) });
+        }
         else result[outcome.status] += 1;
     }
     if (listing.truncated) {
