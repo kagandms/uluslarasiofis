@@ -1,0 +1,13 @@
+' ORNEK: Kurulum klasorunu ve kullanici adini kendi PC'nize gore duzenleyip
+' %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\TopkapiPrintAgent.vbs olarak kaydedin.
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.CurrentDirectory = "C:\Users\<KULLANICI>\.topkapi-print-agent"
+cmd = Chr(34) & "C:\Users\<KULLANICI>\.topkapi-print-agent\.venv\Scripts\pythonw.exe" & Chr(34) & " " & Chr(34) & "C:\Users\<KULLANICI>\.topkapi-print-agent\scripts\print_agent\run_production_agent.py" & Chr(34)
+
+Do
+    exitCode = WshShell.Run(cmd, 0, True)
+    If exitCode = 0 Then
+        Exit Do
+    End If
+    WScript.Sleep 5000
+Loop

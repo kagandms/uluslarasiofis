@@ -43,3 +43,20 @@ python -m unittest discover -s scripts\print_agent -p "test*.py"
 ```
 
 This command runs tests and does not print or start the production Agent. Physical Test B must be repeated separately under office authorization.
+
+## Production runner on the office Windows PC
+
+Added 2026-11-14 from the working office PC (source: files read back from the PC; the PC copy of
+`print_agent.py` is older, with a 10 MB limit, and should be replaced by this repository's version).
+
+- `run_production_agent.py` — supervisor: single-instance mutex, DPAPI secret, heartbeat log, restart loop.
+  `PROD_BASE_URL` is hardcoded to `https://goc.topkapiuni.workers.dev`; change it when the domain changes.
+- `secure_credentials.py` — stores `PRINTER_SECRET` with Windows DPAPI (`prod_secret.dpapi`, bound to the
+  Windows user and machine; never commit it).
+- `windows/setup_production_secret.ps1` — validates the secret with a heartbeat, then stores it. Run from the
+  install folder that holds `.venv` and `scripts\print_agent`.
+- `windows/TopkapiPrintAgent.vbs.example` — Startup-folder launcher that restarts the agent after a failure.
+  Edit the user name and install path before use.
+- `verify_reboot_status.py` — checks agent state after a reboot.
+
+The agent starts only after a user logs in to Windows.
