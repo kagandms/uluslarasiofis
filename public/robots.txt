@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://goc.topkapiuni.workers.dev/sitemap.xml
+Sitemap: https://topkapiunigoc.com/sitemap.xml
