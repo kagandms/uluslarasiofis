@@ -1,3 +1,4 @@
+import { redirectLegacyHome } from './legacyHostRedirect.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
 import { initializeApplicationWizard } from './applicationWizard.js';
 import { initializeApplicationTracking } from './applicationTracking.js';
@@ -8,6 +9,8 @@ import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 import { initLiveClock } from '../ui/liveClock.js';
 import { openPublicGuideModal } from './publicGuideModal.js';
 import { initializePrivacyNoticeModal, OFFICIAL_NOTICE_URL } from './privacyNoticeModal.js';
+
+redirectLegacyHome();
 
 const LOCALE_STORAGE_KEY = 'portal_ui_locale';
 const FALLBACK_LOCALE = 'tr';
