@@ -151,6 +151,11 @@ It drops only `idx_document_files_scan_status`, a redundant index with the same 
 after the apply confirmed the ledger row, that the redundant index is gone and the pending index remains.
 No content rows were read or changed. The baseline advance records the reviewed source boundary only.
 
+## Canonical portal domain baseline evidence
+
+Dated 14 November 2026. The owner approved four `wrangler.jsonc` production variable changes introduced by commit `e1c4be0810be0c85b8527390b388b50bec10e271` for the new canonical domain `topkapiunigoc.com`: `PUBLIC_PORTAL_ORIGIN_ALLOWLIST` now lists `https://goc.topkapiuni.workers.dev,https://topkapiunigoc.com` (`PUBLIC_PORTAL_ORIGIN` is unchanged), and `PORTAL_CANONICAL_ORIGIN` = `https://topkapiunigoc.com`, `PORTAL_REDIRECT_ENABLED` = `false`, `PORTAL_REDIRECT_SCOPE` = `home` were added. The owner set the live variables in the Cloudflare dashboard (plain text); this workflow never sets them.
+Read-only check afterwards (`wrangler versions view`, version `b2befc3e-77de-43a5-b901-54c2285412ec`): the four values equal the declared configuration and the live Worker has 15 secret bindings. The legacy-host redirect is disabled (`PORTAL_REDIRECT_ENABLED` = `false`); only the `www` host redirect is active once the code is published. The custom domains `topkapiunigoc.com` and `www.topkapiunigoc.com` were attached to Worker `goc` in the dashboard; no routes are declared in `wrangler.jsonc`. No secret values were read or recorded. The baseline advance records the reviewed source boundary only; it does not prove live artifact equality.
+
 ## Permissions and remaining recovery risk
 
 Existing account-scoped **Workers Scripts Edit** must permit Worker assets upload, version creation and
