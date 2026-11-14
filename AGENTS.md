@@ -1,15 +1,31 @@
 # Production development and release policy
 
 - Use one active project folder on `production`. On this Mac, it is
-  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`; other machines use
-  their actual authorized repository folder. The old `uluslarasiofis-main` folder is preserved at
+  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105` (task worktrees
+  live beside it); other machines use their actual authorized repository folder. The old `uluslarasiofis-main` folder is preserved at
   its previous HEAD with unreconciled local changes; do not use it for development or release.
-- Develop directly on `production`. Create another branch or worktree only when the user explicitly
-  requests it. Sessions sharing this folder work sequentially; never write to the same worktree at
-  once.
+- Small, scoped fixes may be committed directly to `production`. A new feature, or any change that
+  will take more than one session, uses a short-lived branch named for the task, created in its own
+  git worktree next to the main folder. Merge it into `production` once its tests and
+  `deploy:dry-run:production` pass. Merging is not publishing: a merged commit reaches production
+  only through the release workflow below. `production` therefore means "approved to ship"; the live
+  SHA is the one in the active Worker version's release annotation.
+- Merge task branches into `production` with a merge commit. Do not squash or rebase-merge: the
+  reviewed baseline anchor commit must stay an ancestor of `production` (see
+  `docs/manual-production-release.md`) and either method can break that check.
+- Several sessions or AIs may work at the same time only when each has its own worktree and branch.
+  Never run two writers in the same worktree. At task start, state which files or directories the task
+  owns and do not edit another task's files. Shared files have a single owner at a time:
+  `migrations/` (new migration numbers collide), `package.json`, `package-lock.json`,
+  `wrangler.jsonc`, `config/production-publication.json`, and `docs/README.md`. Git resolves any
+  remaining conflicts at merge time; re-run the tests after resolving them.
+- Other AI agents (for example Gemini) follow this same file. They may not commit, push, publish,
+  dispatch workflows, or delete anything unless the user explicitly asks; the orchestrating session
+  reviews their diff before it is committed.
 - At each session start, fetch `origin/production` and verify the actual Git root, branch, HEAD,
   ahead/behind state, worktree list, and tracked, staged, and untracked changes. Stop on unexpected
-  divergence or dirty state; preserve user changes and do not rely on an earlier snapshot.
+  divergence or dirty state (a task branch that is simply behind `production` is expected);
+  preserve user changes and do not rely on an earlier snapshot.
 - Keep application sources and tests in the existing component directories. Link new operating guides from [the documentation index](docs/README.md).
 - Dated plans and evidence must state their date, scope/source and validation status; treat them as historical by default.
 - Do not add temporary logs, screenshots, or build outputs to Git by default. Retained fixtures, evidence, and delivery outputs must state why they are kept and how they were produced.
