@@ -5,7 +5,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, write
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkReadOnlyHealth, PRODUCTION_ORIGIN } from '../scripts/ci/post-deploy-healthcheck.mjs';
+import { CANONICAL_ORIGIN, checkReadOnlyHealth, PRODUCTION_ORIGIN } from '../scripts/ci/post-deploy-healthcheck.mjs';
 import { gitAuthEnv } from '../scripts/ci/git-auth-env.mjs';
 
 const guard = fileURLToPath(new URL('../scripts/ci/check-release-sha.mjs', import.meta.url));
@@ -176,6 +176,62 @@ test('post-deploy health check uses only fixed public GET routes and rejects any
         && options.method === 'GET' && options.redirect === 'manual'));
     await assert.rejects(checkReadOnlyHealth(fakeFetch, 'https://attacker.example'));
     await assert.rejects(checkReadOnlyHealth(async () => ({ status: 503, redirected: false })));
+    await assert.rejects(checkReadOnlyHealth(async () => ({ status: 500, redirected: false })));
+});
+
+test('post-deploy health check accepts canonical redirects only when Location and canonical GET 200 match', async () => {
+    for (const status of [301, 302, 307, 308]) {
+        const requests = [];
+        const fakeFetch = async (url, options) => {
+            const parsed = new URL(url);
+            requests.push({ url: parsed.href, options });
+            if (parsed.origin === PRODUCTION_ORIGIN && parsed.pathname === '/') {
+                return { status, redirected: false, headers: new Headers({ location: `${CANONICAL_ORIGIN}/` }) };
+            }
+            return { status: 200, redirected: false };
+        };
+        await checkReadOnlyHealth(fakeFetch);
+        assert.equal(requests.length, 7);
+        assert.ok(requests.every(({ options }) => options.method === 'GET' && options.redirect === 'manual'));
+        assert.equal(requests.filter(({ url }) => new URL(url).origin === CANONICAL_ORIGIN).length, 1);
+        assert.equal(requests[1].url, `${CANONICAL_ORIGIN}/`);
+    }
+
+    await assert.rejects(checkReadOnlyHealth(async url => {
+        if (new URL(url).pathname === '/') {
+            return { status: 302, redirected: false, headers: new Headers({ location: 'https://attacker.example/' }) };
+        }
+        return { status: 200, redirected: false };
+    }));
+
+    await assert.rejects(checkReadOnlyHealth(async url => {
+        if (new URL(url).pathname === '/') {
+            return { status: 308, redirected: false, headers: new Headers({ location: `${CANONICAL_ORIGIN}/basvuru/` }) };
+        }
+        return { status: 200, redirected: false };
+    }));
+
+    await assert.rejects(checkReadOnlyHealth(async url => {
+        const parsed = new URL(url);
+        if (parsed.origin === PRODUCTION_ORIGIN && parsed.pathname === '/') {
+            return { status: 308, redirected: false, headers: new Headers({ location: `${CANONICAL_ORIGIN}/` }) };
+        }
+        if (parsed.origin === CANONICAL_ORIGIN) {
+            return { status: 503, redirected: false };
+        }
+        return { status: 200, redirected: false };
+    }));
+
+    await assert.rejects(checkReadOnlyHealth(async url => {
+        const parsed = new URL(url);
+        if (parsed.origin === PRODUCTION_ORIGIN && parsed.pathname === '/') {
+            return { status: 301, redirected: false, headers: new Headers({ location: `${CANONICAL_ORIGIN}/` }) };
+        }
+        if (parsed.origin === CANONICAL_ORIGIN) {
+            return { status: 301, redirected: false, headers: new Headers({ location: `${PRODUCTION_ORIGIN}/` }) };
+        }
+        return { status: 200, redirected: false };
+    }));
 });
 
 test('production release workflow stays manual, serialized, environment-gated and explicitly opted into', () => {
