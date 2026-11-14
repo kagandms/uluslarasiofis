@@ -15,7 +15,10 @@ export function normalizePhoneNumber(phoneNumber) {
  */
 export function isValidPhoneNumber(phoneNumber) {
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
-    if (!/^\+?[\d\s().-]+$/.test(normalizedPhone)) return false;
+    // Same 40-character ceiling the submission readiness check and the wizard already apply.
+    if (normalizedPhone.length > 40) return false;
+    // Plain and no-break spaces are allowed; newlines, tabs and other control whitespace are not.
+    if (!/^\+?[\d  ().-]+$/u.test(normalizedPhone)) return false;
     if (normalizedPhone.startsWith('+')) {
         return Boolean(parsePhoneNumberFromString(normalizedPhone, { extract: false })?.isValid());
     }

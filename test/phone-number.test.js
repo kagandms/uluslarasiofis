@@ -16,3 +16,18 @@ test('international validation rejects impossible country codes and invalid nati
     assert.equal(isValidPhoneNumber('call +905551112233'), false);
     assert.equal(isValidPhoneNumber(null), false);
 });
+
+test('phone validation allows plain spaces, rejects control whitespace, and enforces length limit', () => {
+    assert.equal(isValidPhoneNumber('+90 555 111 22 33'), true);
+    assert.equal(isValidPhoneNumber('0555 111 22 33'), true);
+    assert.equal(isValidPhoneNumber('+90 555 111 22 33'), true);
+    assert.equal(isValidPhoneNumber('0555 111 22 33'), true);
+
+    assert.equal(isValidPhoneNumber('+90\n5551112233'), false);
+    assert.equal(isValidPhoneNumber('+90\t5551112233'), false);
+    assert.equal(isValidPhoneNumber('0555\n1112233'), false);
+    assert.equal(isValidPhoneNumber('0555\t1112233'), false);
+
+    assert.equal(isValidPhoneNumber(`+905551112233${'-'.repeat(100000)}`), false);
+    assert.equal(isValidPhoneNumber(`05551112233${'-'.repeat(100000)}`), false);
+});
