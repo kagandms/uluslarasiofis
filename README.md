@@ -8,9 +8,7 @@ sharing the active folder work sequentially and never write to it concurrently.
 
 At each session start, fetch `origin/production` and verify the actual Git root, branch, HEAD,
 ahead/behind state, worktree list, and tracked, staged, and untracked changes. Stop on unexpected
-divergence or dirty state and preserve existing user changes. The old Mac checkout
-`uluslarasiofis-main` remains detached at its previous HEAD with unreconciled local changes; do not
-use it for development or release.
+divergence or dirty state and preserve existing user changes.
 
 After scoped local tests, build, and production dry-run, make a reviewed commit and push to
 `production` only if repository protection permits; do not change protection or bypass it. CI is a
