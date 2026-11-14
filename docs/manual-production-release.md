@@ -2,7 +2,9 @@
 
 Only `.github/workflows/production-release.yml` publishes. Dispatch it on `production` with the
 full reviewed SHA; the workflow rejects a SHA that differs from current `origin/production`.
-`operation=preflight` is the first step and does not publish. `operation=publish` requires a
+`operation=preflight` does not publish; it is the first step of the full path. Small, code-only fixes may
+use the fast path in `AGENTS.md` and request `operation=publish` directly, because that run repeats the
+same validation and protected checks before it deploys and stops on any failure. `operation=publish` requires a
 separate, explicit user request for that exact SHA and operation, followed by the configured
 Production environment review. Never dispatch automatically. The workflow does not merge branches;
 an unmerged candidate SHA cannot pass its `production` HEAD checks. This candidate sets the reviewed

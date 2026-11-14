@@ -6,10 +6,13 @@
   its previous HEAD with unreconciled local changes; do not use it for development or release.
 - Small, scoped fixes may be committed directly to `production`. A new feature, or any change that
   will take more than one session, uses a short-lived branch named for the task, created in its own
-  git worktree next to the main folder. Merge it into `production` once its tests and
-  `deploy:dry-run:production` pass. Merging is not publishing: a merged commit reaches production
-  only through the release workflow below. `production` therefore means "approved to ship"; the live
-  SHA is the one in the active Worker version's release annotation.
+  git worktree next to the main folder. A task branch stays unmerged while it is developed and tested
+  locally (`npm test`, `npm run build:production`, `npm run deploy:dry-run:production`). Only when the
+  user decides it should go live is it merged into `production`, and the release workflow is then
+  requested for that merge SHA. Only `production` is ever released: no feature branch is published,
+  and two branches are never live at once. Merging is not publishing; publishing still needs the
+  separate explicit request below. The live SHA is the one in the active Worker version's release
+  annotation.
 - Merge task branches into `production` with a merge commit. Do not squash or rebase-merge: the
   reviewed baseline anchor commit must stay an ancestor of `production` (see
   `docs/manual-production-release.md`) and either method can break that check.
@@ -39,8 +42,16 @@
   workflow, from `production`, for the exact full SHA that equals current `origin/production`.
   Publishing also requires a separate, explicit user request for that SHA and operation, plus the
   configured Production environment review. Do not dispatch the workflow automatically.
+- Fast path for small, code-only fixes: when the user requests `operation=publish` directly for an
+  exact SHA, the separate `preflight` run may be skipped. The `publish` run executes the same CI
+  validation and the same protected checks (SHA binding, artifact, Cloudflare metadata, migration
+  ledger, dry-run, active-version comparison) before its single deployment step and stops without
+  publishing if any of them fails. The Production environment review and the explicit request are
+  unchanged. Anything touching `migrations/`, `wrangler.jsonc`, D1/R2, cron, secrets, scanner, or
+  Print Agent uses the full path: `preflight`, review of its evidence, then `publish`.
 - Before publication, verify the candidate checkout is clean, re-fetch and confirm the exact SHA,
-  and reconcile the current active Worker version/source with the approved preflight. Stop if any
+  and reconcile the current active Worker version/source with the approved preflight (on the fast
+  path, with the same run's preflight steps). Stop if any
   identity or live-version check is uncertain. The workflow concurrency lock serializes only runs of
   that workflow; Dashboard, direct CLI, other automation, and other sessions are outside that lock
   and must be paused and checked separately.
