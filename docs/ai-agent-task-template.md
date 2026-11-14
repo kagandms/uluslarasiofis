@@ -35,6 +35,27 @@ agy --mode plan --print-timeout 120s -p "<prompt from the template>"
 - Docs-only edits by the orchestrator are not product code, but should still be delegated when
   practical.
 
+## Parallel sub-agents (owner decision, 2026-11-14)
+
+- The orchestrator may run more than one delegated agent at the same time. A single agent is the
+  default for a small task; use several when the work is long or hard and splits into independent
+  parts.
+- The prompts must not overlap or block each other: give every agent its own exclusive `YOU OWN`
+  file set, its own worktree and task branch for write tasks, and no dependency on another agent's
+  unfinished output. Shared files (`migrations/`, `package.json`, `package-lock.json`,
+  `wrangler.jsonc`, `config/production-publication.json`, `docs/README.md`) have one owner at a
+  time. If two parts touch the same file or one needs the other's result, run them in sequence
+  instead.
+- Read-only reviews may run in parallel in the same folder with `--mode plan`.
+- Before starting, the orchestrator tells the owner how many agents, which files each owns, and
+  which worktree each uses.
+- Cost: every agent draws on the same Gemini quota group and its diff must be reviewed by the
+  orchestrator, so add agents only when the time saved is worth it; check `agy -p "/usage"` first.
+- Do not use `/swarm`; the orchestrator controls the number of agents.
+- After all agents finish, the orchestrator reviews each diff separately, merges the task branches
+  into the integration branch one at a time, re-runs `npm test`, build, and dry-run on the merged
+  result, and resolves conflicts by sending a concrete directive back to the responsible agent.
+
 ## Model policy (owner decision, 2026-11-14)
 
 - Delegated sub-agents default to Gemini 4 Hydrogen (`--model gemini-4-hydrogen-high`, or `-medium`
