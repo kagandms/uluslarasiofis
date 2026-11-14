@@ -2,8 +2,7 @@
 
 - Use one active project folder on `production`. On this Mac, it is
   `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105` (task worktrees
-  live beside it); other machines use their actual authorized repository folder. The old `uluslarasiofis-main` folder is preserved at
-  its previous HEAD with unreconciled local changes; do not use it for development or release.
+  live beside it); other machines use their actual authorized repository folder.
 - Small, scoped fixes may be committed directly to `production`. A new feature, or any change that
   will take more than one session, uses a short-lived branch named for the task, created in its own
   git worktree next to the main folder. A task branch stays unmerged while it is developed and tested
