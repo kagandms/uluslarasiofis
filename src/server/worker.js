@@ -8,6 +8,7 @@ import { readStaffPrintUatStatus, uploadPrintUatDocument } from './routes/print-
 import { handleScannerRequest, handleStaffScannerRequest, prioritizeStaffDocumentScan } from './routes/scanner-routes.js';
 import { createScannerRepository } from './repositories/d1/scanner-repository.js';
 import { ApiError, RepositoryConfigurationError } from './domain/errors.js';
+import { resolvePortalRedirect } from './domain/portal-redirect.js';
 import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse.js';
 import { isRouteResult } from './http/routeResult.js';
 import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument, previewCurrentStudentDocument, finalizeCurrentStudentDocument, readCurrentStudentDocumentRequirements, uploadLocalStudentDocument } from './routes/applicationDocumentRoutes.js';
@@ -349,6 +350,8 @@ async function routeApi(request, environment, requestId, cache) {
 
 const worker = {
     async fetch(request, environment) {
+        const redirectResponse = resolvePortalRedirect(request, environment);
+        if (redirectResponse) return withSecurityHeaders(redirectResponse);
         const requestId = createRequestId();
         if (environment.RECOVERY_MODE === 'maintenance') return withSecurityHeaders(recoveryModeResponse(request, requestId));
         const { pathname } = new URL(request.url);
