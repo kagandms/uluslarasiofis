@@ -11,8 +11,9 @@ const require = createRequire(import.meta.url);
 const { hash } = createRequire(require.resolve('wrangler/package.json'))('blake3-wasm');
 const types = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
     '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml',
-    '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown', '.zip': 'application/zip', '.ttf': 'font/ttf',
+    '.xml': 'application/xml', '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown', '.zip': 'application/zip', '.ttf': 'font/ttf',
     '.woff': 'font/woff', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.wasm': 'application/wasm' };
+export const assetContentTypes = types;
 export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
 export function cloudflareClient(account, token, fetchImpl = fetch) {
