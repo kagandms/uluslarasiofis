@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  buildReferenceMail, readReferenceMailConfig, sendDraftReferenceMail
+  buildReferenceMail, readReferenceMailConfig, resolveMailPortalUrl, sendDraftReferenceMail
 } from '../src/server/services/referenceMailService.js';
 import { createNotificationFixture } from './helpers/notification-fixtures.js';
 
@@ -38,6 +38,7 @@ test('draft mail contains reference, student number, type and portal link in fiv
   const mail = buildReferenceMail({
     referenceNumber: 'ITU-7K9M-4X2P', studentNumber: 'NOTIF-001', applicationType: 'renewal', portalUrl: PORTAL_URL
   });
+  assert.equal(mail.subject, 'Başvuru taslağınız kaydedildi · Application draft saved');
   assert.match(mail.text, /ITU-7K9M-4X2P/);
   assert.match(mail.text, /NOTIF-001/);
   assert.match(mail.text, /Yenileme/);
@@ -76,6 +77,7 @@ test('successful draft mail is sent with reference and student number, and not r
   assert.equal(calls[0].url, ENDPOINT);
   assert.equal(calls[0].body.token, TOKEN);
   assert.equal(calls[0].body.to, 'student@example.invalid');
+  assert.equal(calls[0].body.subject, 'Başvuru taslağınız kaydedildi · Application draft saved');
   assert.match(calls[0].body.text, new RegExp(await referenceOf(database, applicationId)));
   assert.match(calls[0].body.text, /NOTIF-001/);
   const row = await mailRow(database, applicationId);
@@ -120,4 +122,46 @@ test('unconfigured mailer or missing recipient queues nothing and calls nothing'
   await sendDraftReferenceMail(configuredEnvironment(database), { applicationId, portalUrl: PORTAL_URL, fetchImplementation });
   assert.equal(calls.length, 0);
   assert.equal(await mailRow(database, applicationId), null);
+});
+
+test('resolveMailPortalUrl uses a valid canonical origin and falls back to the request origin', () => {
+  const requestUrl = 'https://worker.example.workers.dev/api/applications/current/contact-acknowledgement';
+  assert.equal(
+    resolveMailPortalUrl({ PORTAL_CANONICAL_ORIGIN: 'https://ikamet.example.edu.tr' }, requestUrl),
+    'https://ikamet.example.edu.tr/basvurum/'
+  );
+  assert.equal(
+    resolveMailPortalUrl({ PORTAL_CANONICAL_ORIGIN: 'https://ikamet.example.edu.tr:8443' }, requestUrl),
+    'https://ikamet.example.edu.tr:8443/basvurum/'
+  );
+  assert.equal(
+    resolveMailPortalUrl({}, requestUrl),
+    'https://worker.example.workers.dev/basvurum/'
+  );
+  assert.equal(
+    resolveMailPortalUrl(undefined, requestUrl),
+    'https://worker.example.workers.dev/basvurum/'
+  );
+  for (const invalidOrigin of [
+    '',
+    '   ',
+    null,
+    123,
+    'not-a-url',
+    'http://ikamet.example.edu.tr',
+    'https://ikamet.example.edu.tr/',
+    'https://ikamet.example.edu.tr/basvurum',
+    'https://ikamet.example.edu.tr/basvurum/',
+    'https://ikamet.example.edu.tr?foo=bar',
+    'https://ikamet.example.edu.tr?',
+    'https://ikamet.example.edu.tr#hash',
+    'https://ikamet.example.edu.tr#',
+    'https://user:pass@ikamet.example.edu.tr',
+    'https://user@ikamet.example.edu.tr'
+  ]) {
+    assert.equal(
+      resolveMailPortalUrl({ PORTAL_CANONICAL_ORIGIN: invalidOrigin }, requestUrl),
+      'https://worker.example.workers.dev/basvurum/'
+    );
+  }
 });

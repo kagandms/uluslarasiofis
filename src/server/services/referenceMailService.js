@@ -30,6 +30,36 @@ export function readReferenceMailConfig(environment) {
 }
 
 /**
+ * Resolves the portal URL embedded in reference e-mails. Uses PORTAL_CANONICAL_ORIGIN when it is a
+ * bare https origin without credentials, path, query or hash; otherwise falls back to the request origin.
+ * @param {object} environment Worker bindings.
+ * @param {string} requestUrl Incoming request URL.
+ * @returns {string} Absolute portal entry URL.
+ */
+export function resolveMailPortalUrl(environment, requestUrl) {
+  const rawOrigin = environment?.PORTAL_CANONICAL_ORIGIN;
+  if (typeof rawOrigin === 'string' && rawOrigin.length > 0) {
+    try {
+      const parsed = new URL(rawOrigin);
+      if (
+        parsed.protocol === 'https:'
+        && !parsed.username
+        && !parsed.password
+        && parsed.pathname === '/'
+        && !parsed.search
+        && !parsed.hash
+        && rawOrigin.toLowerCase() === parsed.origin
+      ) {
+        return `${parsed.origin}/basvurum/`;
+      }
+    } catch {
+      // Invalid canonical origin falls back to the request URL.
+    }
+  }
+  return new URL('/basvurum/', requestUrl).href;
+}
+
+/**
  * Builds the draft-saved message in all five portal languages. It contains the application number,
  * the student number, the application type and the portal link. It never contains the access code
  * or passport data.
@@ -53,7 +83,7 @@ export function buildReferenceMail({ referenceNumber, studentNumber, application
     labels.login
   ].join('\n'));
   return {
-    subject: 'Başvuru taslağınız kaydedildi · Application draft saved · Черновик сохранён · Arzaňyzyň taslamasy saklandy · تم حفظ المسودة',
+    subject: 'Başvuru taslağınız kaydedildi · Application draft saved',
     text: sections.join('\n\n---\n\n')
   };
 }
