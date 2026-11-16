@@ -5,6 +5,7 @@ import { initializeApplicationTracking } from './applicationTracking.js';
 import * as applicationApi from './applicationApi.js';
 import { renderPublicDocumentOverview } from './home.js';
 import { initHomeResumeForm } from './homeResumeForm.js';
+import { initHomeRecoveryForm } from './homeRecoveryForm.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
 import { initLiveClock } from '../ui/liveClock.js';
 import { openPublicGuideModal } from './publicGuideModal.js';
@@ -117,6 +118,11 @@ function initPublicPortal() {
     if (document.body.dataset.page === 'home') {
         initScrollReveal();
         initializePrivacyNoticeModal();
+        initHomeRecoveryForm({
+            root: document,
+            api: applicationApi,
+            getMessage: (key) => getMessage(document.documentElement.lang, key)
+        });
     }
 
     const btnHeroGuide = document.getElementById('btn-hero-guide');

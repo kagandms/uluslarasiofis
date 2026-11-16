@@ -1,4 +1,5 @@
 import { synchronizeClock } from '../shared/clock.js';
+import { SUPPORTED_LOCALES } from './i18n/messages.js';
 
 async function requestJson(path, { method = 'GET', body } = {}) {
     let response;
@@ -72,6 +73,26 @@ export async function createApplicationDraft(fields) {
 }
 
 /**
+ * Erişim kodu kurtarma kanallarının (e-posta ve Telegram) durumunu sunucudan okur.
+ * @returns {Promise<{email: boolean, telegram: {enabled: boolean, url: string|null}}>} Kurtarma seçenekleri.
+ */
+export async function readApplicationRecoveryOptions() {
+    return requestJson('/api/application-recovery/options');
+}
+
+/**
+ * Öğrenci numarası ve etkin arayüz diliyle e-posta üzerinden yeni erişim kodu ister.
+ * @param {{student_number: string, language?: string}} payload Kurtarma isteği bilgileri.
+ * @returns {Promise<{ok: boolean}>} Sunucu yanıtı.
+ */
+export async function requestApplicationAccessCodeRecoveryByEmail(payload) {
+    return requestJson('/api/application-recovery/email', {
+        method: 'POST',
+        body: payload
+    });
+}
+
+/**
  * Accesses an existing application from another device using reference and student number.
  * @param {{reference_number: string, student_number: string}} credentials Access credentials.
  * @returns {Promise<object>} Student-safe application object.
@@ -130,12 +151,22 @@ export async function submitCurrentApplication() {
 /**
  * Records the student's explicit contact responsibility acknowledgement for the current version.
  * @param {string} version Current acknowledgement version returned by the application API.
+ * @param {string} [language] Optional active UI locale; falls back to document.documentElement.lang if supported.
  * @returns {Promise<object>} Updated student-safe application.
  * @throws {Error} When the session, contact fields, or acknowledgement version is invalid.
  */
-export async function acceptCurrentContactAcknowledgement(version) {
+export async function acceptCurrentContactAcknowledgement(version, language) {
+    // İstek gövdesine yalnızca geçerli bir arayüz dili varsa isteğe bağlı language alanı eklenir.
+    const candidateLanguage = typeof language === 'string' && SUPPORTED_LOCALES.includes(language)
+        ? language
+        : (language === undefined && typeof document !== 'undefined' && SUPPORTED_LOCALES.includes(document?.documentElement?.lang)
+            ? document.documentElement.lang
+            : null);
+    const body = candidateLanguage
+        ? { accepted: true, version, language: candidateLanguage }
+        : { accepted: true, version };
     const payload = await requestJson('/api/public/applications/current/contact-acknowledgement', {
-        method: 'POST', body: { accepted: true, version }
+        method: 'POST', body
     });
     return payload.application;
 }
