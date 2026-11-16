@@ -15,6 +15,13 @@ const FAKE_STATE_SECRET = 'synthetic-telegram-webhook-secret-for-tests';
 const GENERIC_MISMATCH_TR = 'Bilgiler eşleşmedi; e-posta yolunu deneyin veya ofisle iletişime geçin.';
 const RESUME_PORTAL_URL = 'https://portal.test/basvuruya-devam-et/';
 const ACCESS_CODE_PATTERN = /[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{6}/;
+const EXPECTED_SUCCESS_BUTTONS = Object.freeze({
+    tr: Object.freeze({ copy: 'Numarayı Kopyala', openSite: 'Siteye Git' }),
+    en: Object.freeze({ copy: 'Copy Number', openSite: 'Open Website' }),
+    ru: Object.freeze({ copy: 'Скопировать номер', openSite: 'Перейти на сайт' }),
+    tk: Object.freeze({ copy: 'Belgini göçür', openSite: 'Sahypa git' }),
+    ar: Object.freeze({ copy: 'نسخ الرقم', openSite: 'فتح الموقع' })
+});
 
 function createMemoryRateLimiter() {
     const counters = new Map();
@@ -121,6 +128,16 @@ function contactUpdate(updateId, options = {}) {
     };
 }
 
+function botPromptMessage(sentPayload, overrides = {}) {
+    return {
+        message_id: 1,
+        from: { is_bot: true },
+        text: sentPayload.text,
+        ...(sentPayload.entities ? { entities: sentPayload.entities } : {}),
+        ...overrides
+    };
+}
+
 function replyUpdate(updateId, text, replyToMessage, { userId = 1001, chatId = 1001, languageCode = 'tr' } = {}) {
     return {
         update_id: updateId,
@@ -187,24 +204,53 @@ test('full flow replies with existing reference number and resume URL without ac
         const askStudentMsg = harness.sentMessages[harness.sentMessages.length - 1];
         assert.equal(askStudentMsg.reply_markup.force_reply, true);
         assert.equal(Object.hasOwn(askStudentMsg.reply_markup, 'selective'), false);
-        assert.ok(askStudentMsg.text.startsWith(TELEGRAM_RECOVERY_MESSAGES[locale].askStudentNumber));
-        assert.match(askStudentMsg.text, /\nref:[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+        assert.equal(Object.hasOwn(askStudentMsg, 'parse_mode'), false);
+        assert.equal(askStudentMsg.text, TELEGRAM_RECOVERY_MESSAGES[locale].askStudentNumber);
+        assert.ok(askStudentMsg.text.startsWith('🔐 '));
+        assert.doesNotMatch(askStudentMsg.text, /ref:/);
+        assert.doesNotMatch(askStudentMsg.text, /[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}/);
+        assert.deepEqual(askStudentMsg.link_preview_options, { is_disabled: true });
+        assert.equal(Array.isArray(askStudentMsg.entities), true);
+        assert.equal(askStudentMsg.entities.length, 1);
+        const [promptEntity] = askStudentMsg.entities;
+        assert.equal(promptEntity.type, 'text_link');
+        assert.equal(promptEntity.offset, 0);
+        assert.equal(promptEntity.length, '🔐'.length);
+        assert.equal(askStudentMsg.text.slice(promptEntity.offset, promptEntity.offset + promptEntity.length), '🔐');
+        const promptUrl = new URL(promptEntity.url);
+        assert.equal(promptUrl.origin, 'https://portal.test');
+        assert.equal(promptUrl.pathname, '/');
+        assert.match(promptUrl.searchParams.get('tg') || '', /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
         assert.equal(askStudentMsg.text.includes(FAKE_STATE_SECRET), false);
 
         const verifyResult = await harness.bot.handleUpdate(
             null,
-            replyUpdate(updateId++, 'test-2026-0001', { message_id: 2, from: { is_bot: true }, text: askStudentMsg.text }, { userId, chatId: userId }),
+            replyUpdate(updateId++, 'test-2026-0001', botPromptMessage(askStudentMsg, { message_id: 2 }), { userId, chatId: userId }),
             { requestId: `req-v-${locale}` }
         );
 
         assert.equal(verifyResult.outcome, 'recovered');
         assert.equal(verifyResult.language, locale);
-        const successText = harness.sentMessages[harness.sentMessages.length - 1].text;
-        assert.equal(successText, TELEGRAM_RECOVERY_MESSAGES[locale].success('ITU-7K9M-4X2P', RESUME_PORTAL_URL));
-        assert.match(successText, /ITU-7K9M-4X2P/);
-        assert.ok(successText.includes(RESUME_PORTAL_URL));
-        assert.doesNotMatch(successText, ACCESS_CODE_PATTERN);
-        assert.equal(successText.includes(FAKE_STATE_SECRET), false);
+        const successMsg = harness.sentMessages[harness.sentMessages.length - 1];
+        assert.equal(successMsg.text, TELEGRAM_RECOVERY_MESSAGES[locale].success('ITU-7K9M-4X2P'));
+        assert.match(successMsg.text, /ITU-7K9M-4X2P/);
+        assert.equal(successMsg.text.includes(RESUME_PORTAL_URL), false);
+        assert.doesNotMatch(successMsg.text, /https?:\/\//i);
+        assert.doesNotMatch(successMsg.text, ACCESS_CODE_PATTERN);
+        assert.doesNotMatch(JSON.stringify(successMsg), ACCESS_CODE_PATTERN);
+        assert.equal(successMsg.text.includes(FAKE_STATE_SECRET), false);
+        assert.deepEqual(successMsg.link_preview_options, { is_disabled: true });
+        assert.deepEqual(Object.keys(successMsg.reply_markup), ['inline_keyboard']);
+        assert.deepEqual(successMsg.reply_markup.inline_keyboard, [[
+            {
+                text: EXPECTED_SUCCESS_BUTTONS[locale].copy,
+                copy_text: { text: 'ITU-7K9M-4X2P' }
+            },
+            {
+                text: EXPECTED_SUCCESS_BUTTONS[locale].openSite,
+                url: RESUME_PORTAL_URL
+            }
+        ]]);
         assert.equal(harness.lookupCalls.length, 1);
     }
 });
@@ -222,16 +268,16 @@ test('wrong phone match and missing record return the exact same generic mismatc
     const harness = createBotHarness({ applicationsByStudentNumber: applications });
 
     await harness.bot.handleUpdate(null, contactUpdate(20, { phoneNumber: '+905550000101' }), { requestId: 'req-20' });
-    const promptText = harness.sentMessages[0].text;
+    const promptMsg = botPromptMessage(harness.sentMessages[0]);
 
     const wrongPhoneResult = await harness.bot.handleUpdate(
         null,
-        replyUpdate(21, 'TEST-2026-0002', { message_id: 1, from: { is_bot: true }, text: promptText }),
+        replyUpdate(21, 'TEST-2026-0002', promptMsg),
         { requestId: 'req-21' }
     );
     const missingRecordResult = await harness.bot.handleUpdate(
         null,
-        replyUpdate(22, 'UNKNOWN-9999', { message_id: 1, from: { is_bot: true }, text: promptText }),
+        replyUpdate(22, 'UNKNOWN-9999', promptMsg),
         { requestId: 'req-22' }
     );
 
@@ -275,32 +321,33 @@ test('tampered, non-bot, cross-user, and expired state tokens fail closed with g
     const harness = createBotHarness({ applicationsByStudentNumber: applications });
 
     await harness.bot.handleUpdate(null, contactUpdate(40, { phoneNumber: '+905550000303', userId: 1001 }), { requestId: 'req-40' });
-    const validPromptText = harness.sentMessages[0].text;
-    const tamperedPromptText = validPromptText.slice(0, -1) + (validPromptText.endsWith('A') ? 'B' : 'A');
+    const validPrompt = botPromptMessage(harness.sentMessages[0]);
+    const validEntityUrl = validPrompt.entities[0].url;
+    const tamperedEntityUrl = validEntityUrl.slice(0, -1) + (validEntityUrl.endsWith('A') ? 'B' : 'A');
 
     // Kurcalanmış imza
     await harness.bot.handleUpdate(
         null,
-        replyUpdate(41, 'TEST-2026-0003', { message_id: 1, from: { is_bot: true }, text: tamperedPromptText }, { userId: 1001 }),
+        replyUpdate(41, 'TEST-2026-0003', { ...validPrompt, entities: [{ ...validPrompt.entities[0], url: tamperedEntityUrl }] }, { userId: 1001 }),
         { requestId: 'req-41' }
     );
     // Bot olmayan mesaj yanıtı
     await harness.bot.handleUpdate(
         null,
-        replyUpdate(42, 'TEST-2026-0003', { message_id: 1, from: { is_bot: false }, text: validPromptText }, { userId: 1001 }),
+        replyUpdate(42, 'TEST-2026-0003', { ...validPrompt, from: { is_bot: false } }, { userId: 1001 }),
         { requestId: 'req-42' }
     );
     // Başka kullanıcıya ait durum belirteci
     await harness.bot.handleUpdate(
         null,
-        replyUpdate(43, 'TEST-2026-0003', { message_id: 1, from: { is_bot: true }, text: validPromptText }, { userId: 2002 }),
+        replyUpdate(43, 'TEST-2026-0003', validPrompt, { userId: 2002 }),
         { requestId: 'req-43' }
     );
     // Süresi dolmuş durum belirteci (10 dakika + 1 saniye)
     harness.advanceSeconds(601);
     await harness.bot.handleUpdate(
         null,
-        replyUpdate(44, 'TEST-2026-0003', { message_id: 1, from: { is_bot: true }, text: validPromptText }, { userId: 1001 }),
+        replyUpdate(44, 'TEST-2026-0003', validPrompt, { userId: 1001 }),
         { requestId: 'req-44' }
     );
 
@@ -329,8 +376,7 @@ test('repeated update_id is ignored idempotently, including against D1 public_ra
     });
 
     await harness.bot.handleUpdate(database, contactUpdate(50, { phoneNumber: '+905550000404' }), { requestId: 'req-50' });
-    const promptText = harness.sentMessages[0].text;
-    const duplicateReply = replyUpdate(51, 'TEST-2026-0004', { message_id: 1, from: { is_bot: true }, text: promptText });
+    const duplicateReply = replyUpdate(51, 'TEST-2026-0004', botPromptMessage(harness.sentMessages[0]));
 
     const first = await harness.bot.handleUpdate(database, duplicateReply, { requestId: 'req-51a' });
     const second = await harness.bot.handleUpdate(database, duplicateReply, { requestId: 'req-51b' });
@@ -362,11 +408,11 @@ test('daily rate limits enforce 3 attempts per Telegram user and 3 attempts per 
             { requestId: `req-${contactUpdateId}` }
         );
         assert.equal(contactStep.outcome, 'awaiting_student_number');
-        const promptText = harness.sentMessages[harness.sentMessages.length - 1].text;
+        const promptMsg = botPromptMessage(harness.sentMessages[harness.sentMessages.length - 1]);
         const replyUpdateId = nextUpdateId++;
         return harness.bot.handleUpdate(
             null,
-            replyUpdate(replyUpdateId, studentNumber, { message_id: 1, from: { is_bot: true }, text: promptText }, { userId, chatId }),
+            replyUpdate(replyUpdateId, studentNumber, promptMsg, { userId, chatId }),
             { requestId: `req-${replyUpdateId}` }
         );
     }
@@ -447,7 +493,7 @@ test('real accessRecoveryService and D1 rate limits share the 3/day per-applicat
     await bot.handleUpdate(database, contactUpdate(100, { phoneNumber: '905550000777', userId: 5001 }), { requestId: 'req-tg-real-1' });
     const thirdRecovery = await bot.handleUpdate(
         database,
-        replyUpdate(101, 'syn-tg-real-01', { message_id: 1, from: { is_bot: true }, text: sentMessages[0].text }, { userId: 5001 }),
+        replyUpdate(101, 'syn-tg-real-01', botPromptMessage(sentMessages[0]), { userId: 5001 }),
         { requestId: 'req-tg-real-2' }
     );
     assert.equal(thirdRecovery.outcome, 'recovered');
@@ -459,14 +505,16 @@ test('real accessRecoveryService and D1 rate limits share the 3/day per-applicat
     assert.equal(unchangedRow.access_code_hash, initialHash);
     assert.equal(await verifyAccessCode(initialCode, unchangedRow.access_code_hash), true);
     assert.ok(sentMessages[1].text.includes(application.reference_number));
-    assert.ok(sentMessages[1].text.includes(RESUME_PORTAL_URL));
+    assert.equal(sentMessages[1].text.includes(RESUME_PORTAL_URL), false);
+    assert.equal(sentMessages[1].reply_markup.inline_keyboard[0][0].copy_text.text, application.reference_number);
+    assert.equal(sentMessages[1].reply_markup.inline_keyboard[0][1].url, RESUME_PORTAL_URL);
     assert.doesNotMatch(sentMessages[1].text, ACCESS_CODE_PATTERN);
 
     // Aynı gün 4. deneme (farklı Telegram kullanıcısı veya e-posta) ortak başvuru sınırına takılır.
     await bot.handleUpdate(database, contactUpdate(102, { phoneNumber: '905550000777', userId: 5002 }), { requestId: 'req-tg-real-3' });
     const fourthRecovery = await bot.handleUpdate(
         database,
-        replyUpdate(103, 'SYN-TG-REAL-01', { message_id: 2, from: { is_bot: true }, text: sentMessages[2].text }, { userId: 5002 }),
+        replyUpdate(103, 'SYN-TG-REAL-01', botPromptMessage(sentMessages[2], { message_id: 2 }), { userId: 5002 }),
         { requestId: 'req-tg-real-4' }
     );
     assert.equal(fourthRecovery.outcome, 'rate_limited_application');
@@ -499,7 +547,7 @@ test('step 2 and step 3 keep /start payload language when from.language_code dif
 
     const memoryReply = await memoryHarness.bot.handleUpdate(
         null,
-        replyUpdate(202, 'SYN-LANG-2026', { message_id: 2, from: { is_bot: true }, text: memoryAskStudent.text }, { userId: 7001, chatId: 8001, languageCode: 'ru' })
+        replyUpdate(202, 'SYN-LANG-2026', botPromptMessage(memoryAskStudent, { message_id: 2 }), { userId: 7001, chatId: 8001, languageCode: 'ru' })
     );
     assert.equal(memoryReply.language, 'tr');
     assert.match(memoryHarness.sentMessages[2].text, /Başvuru numaranız: ITU-9R8T-7Y6U/);
@@ -528,7 +576,7 @@ test('step 2 and step 3 keep /start payload language when from.language_code dif
 
     const d1Reply = await d1Harness.bot.handleUpdate(
         database,
-        replyUpdate(212, 'SYN-LANG-2026', { message_id: 2, from: { is_bot: true }, text: d1AskStudent.text }, { userId: 7002, chatId: 9002, languageCode: 'ru' })
+        replyUpdate(212, 'SYN-LANG-2026', botPromptMessage(d1AskStudent, { message_id: 2 }), { userId: 7002, chatId: 9002, languageCode: 'ru' })
     );
     assert.equal(d1Reply.outcome, 'recovered');
     assert.equal(d1Reply.language, 'tr');
@@ -599,4 +647,84 @@ test('plain text without reply_to_message gives localized reply instruction afte
     assert.equal(expiredHint.outcome, undefined);
     assert.equal(expiredHint.language, 'ru');
     assert.equal(harness.sentMessages[harness.sentMessages.length - 1].text, TELEGRAM_RECOVERY_MESSAGES.ru.usageHint);
+});
+
+test('reply token extraction supports entities-only replies, legacy ref: text fallback, and rejects tampered legacy tokens', async () => {
+    const applications = new Map([
+        ['SYN-ENT-2026', {
+            applicationId: 'app-ent-1',
+            referenceNumber: 'ITU-6A7B-8C9D',
+            studentEmail: 'ent@example.invalid',
+            studentPhone: '+905550000606',
+            language: 'tr'
+        }]
+    ]);
+    const harness = createBotHarness({ applicationsByStudentNumber: applications });
+
+    await harness.bot.handleUpdate(null, contactUpdate(400, { phoneNumber: '+905550000606', userId: 6001 }), { requestId: 'req-400' });
+    const promptMsg = harness.sentMessages[0];
+    const token = new URL(promptMsg.entities[0].url).searchParams.get('tg');
+    assert.ok(token);
+
+    // 1. Yalnızca entities taşıyan yanıt (reply_to_message.text olmasa bile) başarılı olmalı
+    const entitiesOnlyResult = await harness.bot.handleUpdate(
+        null,
+        replyUpdate(401, 'SYN-ENT-2026', { message_id: 1, from: { is_bot: true }, entities: promptMsg.entities }, { userId: 6001 }),
+        { requestId: 'req-401' }
+    );
+    assert.equal(entitiesOnlyResult.outcome, 'recovered');
+
+    // 2. Sürüm öncesi eski ref:<token> satırı (entities olmadan) hâlâ çalışmalı
+    const legacyTextResult = await harness.bot.handleUpdate(
+        null,
+        replyUpdate(402, 'SYN-ENT-2026', { message_id: 1, from: { is_bot: true }, text: `Eski istem\n\nref:${token}` }, { userId: 6001 }),
+        { requestId: 'req-402' }
+    );
+    assert.equal(legacyTextResult.outcome, 'recovered');
+
+    // 3. Kurcalanmış eski ref:<token> satırı reddedilmeli
+    const tamperedLegacyToken = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
+    const tamperedLegacyResult = await harness.bot.handleUpdate(
+        null,
+        replyUpdate(403, 'SYN-ENT-2026', { message_id: 1, from: { is_bot: true }, text: `Eski istem\n\nref:${tamperedLegacyToken}` }, { userId: 6001 }),
+        { requestId: 'req-403' }
+    );
+    assert.equal(tamperedLegacyResult.outcome, 'invalid_state');
+    assert.equal(harness.sentMessages[harness.sentMessages.length - 1].text, GENERIC_MISMATCH_TR);
+});
+
+test('default canonical origin falls back to https://topkapiunigoc.com for text_link entity and open-site button', async () => {
+    const applications = new Map([
+        ['SYN-DEF-2026', {
+            applicationId: 'app-def-1',
+            referenceNumber: 'ITU-2K3M-4P5R',
+            studentEmail: 'def@example.invalid',
+            studentPhone: '+905550000607',
+            language: 'en'
+        }]
+    ]);
+    const sentMessages = [];
+    const bot = createTelegramRecoveryBot({
+        findRecoverableApplication: async (_db, { studentNumber }) => applications.get(studentNumber) ?? null,
+        sendTelegramMessage: async (payload) => {
+            sentMessages.push(payload);
+            return { message_id: sentMessages.length };
+        },
+        rateLimiter: createMemoryRateLimiter(),
+        stateSecret: FAKE_STATE_SECRET,
+        now: () => Date.UTC(2026, 10, 16, 10, 0, 0)
+    });
+
+    await bot.handleUpdate(null, contactUpdate(500, { phoneNumber: '+905550000607', userId: 6100, languageCode: 'en' }));
+    const promptUrl = new URL(sentMessages[0].entities[0].url);
+    assert.equal(promptUrl.origin, 'https://topkapiunigoc.com');
+    assert.equal(promptUrl.pathname, '/');
+    assert.ok(promptUrl.searchParams.get('tg'));
+
+    const res = await bot.handleUpdate(
+        null,
+        replyUpdate(501, 'SYN-DEF-2026', botPromptMessage(sentMessages[0]), { userId: 6100, languageCode: 'en' })
+    );
+    assert.equal(res.outcome, 'recovered');
+    assert.equal(sentMessages[1].reply_markup.inline_keyboard[0][1].url, 'https://topkapiunigoc.com/basvuruya-devam-et/');
 });
