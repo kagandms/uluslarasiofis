@@ -48,6 +48,22 @@ test('all five languages define every recovery key including spam warning and re
             );
         }
     }
+
+    assert.equal(
+        RECOVERY_MESSAGES.tr.recoveryFormIntro,
+        'Öğrenci numaranızı girin. Aktif bir başvurunuz varsa, başvuru numaranız başvuru yaparken girdiğiniz e-posta adresine gönderilecektir.'
+    );
+    assert.equal(
+        RECOVERY_MESSAGES.tr.recoveryConfirmation,
+        'Aktif bir başvurunuz varsa, başvuru numaranız başvuru yaparken girdiğiniz e-posta adresine gönderildi.'
+    );
+    for (const locale of SUPPORTED_LOCALES) {
+        assert.doesNotMatch(
+            `${RECOVERY_MESSAGES[locale].recoveryFormIntro}\n${RECOVERY_MESSAGES[locale].recoveryConfirmation}`,
+            /kayıtlı e-posta|registered email|зарегистрированный адрес|hasaba alnan|بريدك الإلكتروني المسجل/iu,
+            `${locale} recoveryFormIntro/recoveryConfirmation must reference the email entered while applying`
+        );
+    }
 });
 
 test('recovery action buttons share identical primary class list and localized labels in all five languages', async () => {

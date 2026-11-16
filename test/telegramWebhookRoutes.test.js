@@ -171,8 +171,16 @@ test('handleTelegramWebhook drives full 3-step reference reminder over fake fetc
         }
     }), env, 'req-flow-2', deps);
     assert.equal(res2.status, 200);
-    const askStudentText = fetchCalls[1].body.text;
-    assert.match(askStudentText, /\nref:[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    const askStudentBody = fetchCalls[1].body;
+    assert.equal(askStudentBody.text, TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber);
+    assert.doesNotMatch(askStudentBody.text, /ref:/);
+    assert.equal(Object.hasOwn(askStudentBody, 'parse_mode'), false);
+    assert.deepEqual(askStudentBody.link_preview_options, { is_disabled: true });
+    assert.equal(askStudentBody.entities.length, 1);
+    assert.equal(askStudentBody.entities[0].type, 'text_link');
+    assert.equal(askStudentBody.entities[0].offset, 0);
+    assert.equal(askStudentBody.entities[0].length, '🔐'.length);
+    assert.match(askStudentBody.entities[0].url, /^https:\/\/portal\.test\/\?tg=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
 
     // 3. Öğrenci numarası yanıtı
     const res3 = await handleTelegramWebhook(createWebhookRequest({
@@ -186,14 +194,22 @@ test('handleTelegramWebhook drives full 3-step reference reminder over fake fetc
                 reply_to_message: {
                     message_id: 20,
                     from: { id: 999, is_bot: true },
-                    text: askStudentText
+                    text: askStudentBody.text,
+                    entities: askStudentBody.entities
                 }
             }
         }
     }), env, 'req-flow-3', deps);
     assert.equal(res3.status, 200);
     assert.match(fetchCalls[2].body.text, /Başvuru numaranız: ITU-8M9N-2P3Q/);
-    assert.ok(fetchCalls[2].body.text.includes('https://portal.test/basvuruya-devam-et/'));
+    assert.equal(fetchCalls[2].body.text.includes('https://portal.test/basvuruya-devam-et/'), false);
+    assert.deepEqual(fetchCalls[2].body.link_preview_options, { is_disabled: true });
+    assert.deepEqual(fetchCalls[2].body.reply_markup, {
+        inline_keyboard: [[
+            { text: 'Numarayı Kopyala', copy_text: { text: 'ITU-8M9N-2P3Q' } },
+            { text: 'Siteye Git', url: 'https://portal.test/basvuruya-devam-et/' }
+        ]]
+    });
     assert.doesNotMatch(fetchCalls[2].body.text, ACCESS_CODE_PATTERN);
 });
 
@@ -249,7 +265,10 @@ test('handleTelegramWebhook persists /start language via D1 rateLimits across co
             }
         }
     }), env, 'req-wh-lang-2', deps);
-    assert.ok(fetchCalls[1].text.startsWith(TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber));
+    assert.equal(fetchCalls[1].text, TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber);
+    assert.doesNotMatch(fetchCalls[1].text, /ref:/);
+    assert.deepEqual(fetchCalls[1].link_preview_options, { is_disabled: true });
+    assert.equal(fetchCalls[1].entities[0].type, 'text_link');
     assert.equal(fetchCalls[1].reply_markup.force_reply, true);
     assert.equal(Object.hasOwn(fetchCalls[1].reply_markup, 'selective'), false);
 
@@ -279,13 +298,17 @@ test('handleTelegramWebhook persists /start language via D1 rateLimits across co
                 reply_to_message: {
                     message_id: 2,
                     from: { id: 999, is_bot: true },
-                    text: fetchCalls[1].text
+                    text: fetchCalls[1].text,
+                    entities: fetchCalls[1].entities
                 }
             }
         }
     }), env, 'req-wh-lang-4', deps);
     assert.match(fetchCalls[3].text, /Başvuru numaranız: ITU-1Z2X-3C4V/);
-    assert.ok(fetchCalls[3].text.includes('https://portal.test/basvuruya-devam-et/'));
+    assert.equal(fetchCalls[3].text.includes('https://portal.test/basvuruya-devam-et/'), false);
+    assert.deepEqual(fetchCalls[3].link_preview_options, { is_disabled: true });
+    assert.equal(fetchCalls[3].reply_markup.inline_keyboard[0][0].copy_text.text, 'ITU-1Z2X-3C4V');
+    assert.equal(fetchCalls[3].reply_markup.inline_keyboard[0][1].url, 'https://portal.test/basvuruya-devam-et/');
     assert.doesNotMatch(fetchCalls[3].text, ACCESS_CODE_PATTERN);
 });
 
@@ -335,8 +358,12 @@ test('handleTelegramWebhook writes one 64-hex telegram-recovery-lang-tr row in D
     assert.equal(contactResponse.status, 200);
     assert.equal(fetchCalls.length, 2);
     assert.equal(fetchCalls[0].text, TELEGRAM_RECOVERY_MESSAGES.tr.askContact);
-    assert.ok(fetchCalls[1].text.startsWith(TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber));
-    assert.match(fetchCalls[1].text, /\nref:[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    assert.equal(fetchCalls[1].text, TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber);
+    assert.doesNotMatch(fetchCalls[1].text, /ref:/);
+    assert.deepEqual(fetchCalls[1].link_preview_options, { is_disabled: true });
+    assert.equal(fetchCalls[1].entities[0].type, 'text_link');
+    assert.equal(fetchCalls[1].entities[0].offset, 0);
+    assert.equal(fetchCalls[1].entities[0].length, '🔐'.length);
     assert.equal(fetchCalls[1].reply_markup.force_reply, true);
     assert.equal(Object.hasOwn(fetchCalls[1].reply_markup, 'selective'), false);
 
@@ -462,4 +489,56 @@ test('worker fetch routes POST /api/webhooks/telegram without origin header and 
         {}
     );
     assert.equal(unconfiguredResponse.status, 503);
+});
+
+test('createTelegramMessageSender forwards entities, link_preview_options, and inline_keyboard unchanged and redacts tg query token on error', async () => {
+    const sentRequests = [];
+    const sender = createTelegramMessageSender({
+        botToken: FAKE_BOT_TOKEN,
+        fetchImplementation: async (url, init) => {
+            sentRequests.push({ url, body: JSON.parse(init.body) });
+            return Response.json({ ok: true, result: { message_id: sentRequests.length } });
+        }
+    });
+
+    const promptPayload = {
+        chat_id: 601,
+        text: TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber,
+        entities: [{ type: 'text_link', offset: 0, length: 2, url: 'https://portal.test/?tg=syntheticPayload.syntheticSig' }],
+        link_preview_options: { is_disabled: true },
+        reply_markup: { force_reply: true, input_field_placeholder: 'Öğrenci numaranızı yazın' }
+    };
+    await sender(promptPayload);
+
+    const successPayload = {
+        chat_id: 601,
+        text: TELEGRAM_RECOVERY_MESSAGES.tr.success('ITU-1A2B-3C4D'),
+        link_preview_options: { is_disabled: true },
+        reply_markup: {
+            inline_keyboard: [[
+                { text: 'Numarayı Kopyala', copy_text: { text: 'ITU-1A2B-3C4D' } },
+                { text: 'Siteye Git', url: 'https://portal.test/basvuruya-devam-et/' }
+            ]]
+        }
+    };
+    await sender(successPayload);
+
+    assert.equal(sentRequests[0].url, `https://api.telegram.org/bot${FAKE_BOT_TOKEN}/sendMessage`);
+    assert.deepEqual(sentRequests[0].body, promptPayload);
+    assert.deepEqual(sentRequests[1].body, successPayload);
+
+    const failingSender = createTelegramMessageSender({
+        botToken: FAKE_BOT_TOKEN,
+        fetchImplementation: async () => {
+            throw new Error('upstream rejected https://portal.test/?tg=syntheticPayload.syntheticSig');
+        }
+    });
+    await assert.rejects(
+        () => failingSender(promptPayload),
+        (error) => {
+            assert.equal(error.message.includes('syntheticPayload.syntheticSig'), false);
+            assert.match(error.message, /\?tg=\[REDACTED\]/);
+            return true;
+        }
+    );
 });

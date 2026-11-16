@@ -36,6 +36,8 @@ export function redactTelegramSecrets(value, secrets = []) {
     let text = typeof value === 'string' ? value : String(value ?? '');
     text = text.replace(/\/bot[^/\s?#"']+/gi, '/bot[REDACTED]');
     text = text.replace(/\bbot\d{5,20}:[A-Za-z0-9_-]{10,}/g, 'bot[REDACTED]');
+    // Durum belirteci taşıyan görünmez bağlantı URL'lerindeki `tg` parametresini de maskele.
+    text = text.replace(/([?&]tg=)[^&\s#"']+/gi, '$1[REDACTED]');
     for (const secret of secrets) {
         if (typeof secret !== 'string' || secret.length === 0) continue;
         text = text.split(secret).join('[REDACTED]');

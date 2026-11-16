@@ -16,7 +16,9 @@ const DAY_SECONDS = 24 * 60 * 60;
 export const TELEGRAM_LANGUAGE_MEMORY_WINDOW_SECONDS = 15 * 60;
 const TELEGRAM_LANGUAGE_MEMORY_MAX_REQUESTS = 1_000_000;
 const TELEGRAM_LANGUAGE_MEMORY_ENDPOINT_PREFIX = 'telegram-recovery-lang-';
-const DEFAULT_RESUME_PORTAL_URL = 'https://topkapiunigoc.com/basvuruya-devam-et/';
+const DEFAULT_PORTAL_ORIGIN = 'https://topkapiunigoc.com';
+const DEFAULT_RESUME_PORTAL_URL = `${DEFAULT_PORTAL_ORIGIN}/basvuruya-devam-et/`;
+const STUDENT_NUMBER_PROMPT_EMOJI = '🔐';
 
 export const SUPPORTED_TELEGRAM_LANGUAGES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 const SUPPORTED_LANGUAGE_SET = new Set(SUPPORTED_TELEGRAM_LANGUAGES);
@@ -32,80 +34,90 @@ export const TELEGRAM_RECOVERY_MESSAGES = Object.freeze({
         askContact: 'Başvuru numaranızı almak için lütfen aşağıdaki düğmeyle Telegram hesabınıza kayıtlı telefon numaranızı paylaşın.',
         sharePhoneButton: 'Telefon numaramı paylaş',
         contactRejected: 'Yalnızca kendi Telegram hesabınıza ait telefon numarasını paylaşabilirsiniz.',
-        askStudentNumber: 'Lütfen bu mesajı yanıtlayarak öğrenci numaranızı yazın.',
+        askStudentNumber: `${STUDENT_NUMBER_PROMPT_EMOJI} Lütfen bu mesajı yanıtlayarak öğrenci numaranızı yazın.`,
         studentNumberPlaceholder: 'Öğrenci numaranızı yazın',
         replyInstruction: 'Öğrenci numaranızı göndermek için lütfen botun bir önceki mesajını YANITLAYIN (mesaja basılı tutun veya sola kaydırıp Yanıtla’yı seçin) ve öğrenci numaranızı yazın. Baştan başlamak için /start gönderin.',
         mismatch: 'Bilgiler eşleşmedi; e-posta yolunu deneyin veya ofisle iletişime geçin.',
         rateLimited: 'Günlük deneme sınırına ulaşıldı. Lütfen daha sonra tekrar deneyin veya ofisle iletişime geçin.',
         usageHint: 'Başvuru numaranızı almak için /start komutunu gönderin.',
-        success: (referenceNumber, portalUrl = DEFAULT_RESUME_PORTAL_URL) => [
+        copyButton: 'Numarayı Kopyala',
+        openSiteButton: 'Siteye Git',
+        success: (referenceNumber) => [
             `Başvuru numaranız: ${referenceNumber}`,
             '',
-            `Devam etmek için ${portalUrl} adresinde başvuru numaranızı ve öğrenci numaranızı girin.`
+            'Devam etmek için aşağıdaki düğmeden siteye gidip başvuru numaranızı ve öğrenci numaranızı girin.'
         ].join('\n')
     }),
     en: Object.freeze({
         askContact: 'To get your application number, please share the phone number registered on your Telegram account using the button below.',
         sharePhoneButton: 'Share my phone number',
         contactRejected: 'You can only share the phone number belonging to your own Telegram account.',
-        askStudentNumber: 'Please reply to this message with your student number.',
+        askStudentNumber: `${STUDENT_NUMBER_PROMPT_EMOJI} Please reply to this message with your student number.`,
         studentNumberPlaceholder: 'Type your student number',
         replyInstruction: 'To send your student number, please REPLY to the bot’s previous message (press and hold or swipe the message and choose Reply) and type your student number, or send /start to restart.',
         mismatch: 'Details did not match; try the email recovery option or contact the office.',
         rateLimited: 'Daily attempt limit reached. Please try again later or contact the office.',
         usageHint: 'Send /start to get your application number.',
-        success: (referenceNumber, portalUrl = DEFAULT_RESUME_PORTAL_URL) => [
+        copyButton: 'Copy Number',
+        openSiteButton: 'Open Website',
+        success: (referenceNumber) => [
             `Your application number: ${referenceNumber}`,
             '',
-            `To continue, enter your application number and student number at ${portalUrl}.`
+            'To continue, open the website using the button below and enter your application number and student number.'
         ].join('\n')
     }),
     ru: Object.freeze({
         askContact: 'Чтобы получить номер заявки, поделитесь номером телефона, привязанным к вашему аккаунту Telegram, с помощью кнопки ниже.',
         sharePhoneButton: 'Поделиться номером телефона',
         contactRejected: 'Вы можете поделиться только номером телефона, принадлежащим вашему аккаунту Telegram.',
-        askStudentNumber: 'Пожалуйста, ответьте на это сообщение и укажите ваш студенческий номер.',
+        askStudentNumber: `${STUDENT_NUMBER_PROMPT_EMOJI} Пожалуйста, ответьте на это сообщение и укажите ваш студенческий номер.`,
         studentNumberPlaceholder: 'Введите номер студента',
         replyInstruction: 'Чтобы отправить студенческий номер, пожалуйста, ОТВЕТЬТЕ на предыдущее сообщение бота (нажмите и удерживайте или смахните сообщение и выберите «Ответить») и введите номер студента, либо отправьте /start, чтобы начать заново.',
         mismatch: 'Данные не совпали; попробуйте восстановление по электронной почте или обратитесь в офис.',
         rateLimited: 'Достигнут дневной лимит попыток. Попробуйте позже или обратитесь в офис.',
         usageHint: 'Отправьте /start, чтобы получить номер вашей заявки.',
-        success: (referenceNumber, portalUrl = DEFAULT_RESUME_PORTAL_URL) => [
+        copyButton: 'Скопировать номер',
+        openSiteButton: 'Перейти на сайт',
+        success: (referenceNumber) => [
             `Номер вашей заявки: ${referenceNumber}`,
             '',
-            `Чтобы продолжить, введите номер заявки и номер студента на странице ${portalUrl}.`
+            'Чтобы продолжить, перейдите на сайт по кнопке ниже и введите номер заявки и номер студента.'
         ].join('\n')
     }),
     tk: Object.freeze({
         askContact: 'Arza belgiňizi almak üçin aşakdaky düwme arkaly Telegram hasabyňyza birikdirilen telefon belgiňizi paýlaşyň.',
         sharePhoneButton: 'Telefon belgimi paýlaş',
         contactRejected: 'Diňe öz Telegram hasabyňyza degişli telefon belgini paýlaşyp bilersiňiz.',
-        askStudentNumber: 'Bu habara jogap berip talyp belgiňizi ýazyň.',
+        askStudentNumber: `${STUDENT_NUMBER_PROMPT_EMOJI} Bu habara jogap berip talyp belgiňizi ýazyň.`,
         studentNumberPlaceholder: 'Talyp belgiňizi ýazyň',
         replyInstruction: 'Talyp belgiňizi ibermek üçin botuň öňki habaryna JOGAP BERIŇ (habara basyp saklaň ýa-da süýşürip Jogap ber saýlaň) we talyp belgiňizi ýazyň, ýa-da täzeden başlamak üçin /start iberiň.',
         mismatch: 'Maglumatlar gabat gelmedi; e-poçta ýoluny synap görüň ýa-da ofis bilen habarlaşyň.',
         rateLimited: 'Gündelik synanyşyk çägine ýetildi. Soňrak täzeden synanyşyň ýa-da ofis bilen habarlaşyň.',
         usageHint: 'Arza belgiňizi almak üçin /start buýrugyny iberiň.',
-        success: (referenceNumber, portalUrl = DEFAULT_RESUME_PORTAL_URL) => [
+        copyButton: 'Belgini göçür',
+        openSiteButton: 'Sahypa git',
+        success: (referenceNumber) => [
             `Arza belgiňiz: ${referenceNumber}`,
             '',
-            `Dowam etmek üçin ${portalUrl} salgysynda arza belgiňizi we talyp belgiňizi giriziň.`
+            'Dowam etmek üçin aşakdaky düwme arkaly sahypa girip, arza belgiňizi we talyp belgiňizi giriziň.'
         ].join('\n')
     }),
     ar: Object.freeze({
         askContact: 'للحصول على رقم طلبك، يرجى مشاركة رقم الهاتف المسجل في حسابك على تيليجرام باستخدام الزر أدناه.',
         sharePhoneButton: 'مشاركة رقم هاتفي',
         contactRejected: 'يمكنك فقط مشاركة رقم الهاتف المرتبط بحسابك الشخصي على تيليجرام.',
-        askStudentNumber: 'يرجى الرد على هذه الرسالة بكتابة رقم الطالب الخاص بك.',
+        askStudentNumber: `${STUDENT_NUMBER_PROMPT_EMOJI} يرجى الرد على هذه الرسالة بكتابة رقم الطالب الخاص بك.`,
         studentNumberPlaceholder: 'اكتب رقم الطالب الخاص بك',
         replyInstruction: 'لإرسال رقم الطالب الخاص بك، يرجى الرد على رسالة البوت السابقة (اضغط مطولاً أو اسحب الرسالة واختر «رد») ثم اكتب رقم الطالب، أو أرسل /start للبدء من جديد.',
         mismatch: 'لم تتطابق البيانات؛ جرّب الاسترداد عبر البريد الإلكتروني أو تواصل مع المكتب.',
         rateLimited: 'تم بلوغ الحد اليومي للمحاولات. يرجى المحاولة لاحقًا أو التواصل مع المكتب.',
         usageHint: 'أرسل /start للحصول على رقم طلبك.',
-        success: (referenceNumber, portalUrl = DEFAULT_RESUME_PORTAL_URL) => [
+        copyButton: 'نسخ الرقم',
+        openSiteButton: 'فتح الموقع',
+        success: (referenceNumber) => [
             `رقم طلبك: ${referenceNumber}`,
             '',
-            `للمتابعة، أدخل رقم الطلب ورقم الطالب عبر الرابط ${portalUrl}.`
+            'للمتابعة، افتح الموقع من الزر أدناه وأدخل رقم الطلب ورقم الطالب.'
         ].join('\n')
     })
 });
@@ -280,9 +292,47 @@ async function verifyRecoveryStateToken(token, { expectedUserId, nowEpochSec, se
     };
 }
 
+function resolvePortalOrigin(portalUrl) {
+    if (typeof portalUrl === 'string' && portalUrl.length > 0) {
+        try {
+            const parsed = new URL(portalUrl);
+            if (parsed.protocol === 'https:' && !parsed.username && !parsed.password) {
+                return parsed.origin;
+            }
+        } catch {
+            // Geçersiz portal URL'si gelirse varsayılan kanonik kökene dönülür.
+        }
+    }
+    return DEFAULT_PORTAL_ORIGIN;
+}
+
 function extractRefTokenFromReply(replyToMessage) {
     if (!replyToMessage || typeof replyToMessage !== 'object') return null;
     if (replyToMessage.from?.is_bot !== true) return null;
+
+    // Önce görünmez text_link varlığındaki `tg` sorgu parametresini oku.
+    if (Array.isArray(replyToMessage.entities)) {
+        for (const entity of replyToMessage.entities) {
+            if (!entity || typeof entity !== 'object' || entity.type !== 'text_link' || typeof entity.url !== 'string') {
+                continue;
+            }
+            let parsedUrl;
+            try {
+                parsedUrl = new URL(entity.url);
+            } catch {
+                continue;
+            }
+            if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+                continue;
+            }
+            const token = parsedUrl.searchParams.get('tg');
+            if (typeof token === 'string' && token.length > 0) {
+                return token;
+            }
+        }
+    }
+
+    // Sürüm öncesi gönderilmiş istemlerle geriye dönük uyumluluk için eski `ref:<token>` satırına düş.
     if (typeof replyToMessage.text !== 'string') return null;
     const match = /(?:^|\r?\n)ref:([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\s*$/.exec(replyToMessage.text);
     return match ? match[1] : null;
@@ -437,6 +487,7 @@ export function createTelegramRecoveryBot({
             const resolvedPortalUrl = typeof context?.resumePortalUrl === 'string' && context.resumePortalUrl.length > 0
                 ? context.resumePortalUrl
                 : resumePortalUrl;
+            const canonicalOrigin = resolvePortalOrigin(resolvedPortalUrl);
 
             // Telegram aynı güncellemeyi yeniden gönderirse ikinci kez işleme.
             const isFreshUpdate = await consumeRateLimitSlot(rateLimiter, database, {
@@ -509,10 +560,20 @@ export function createTelegramRecoveryBot({
                     expiryEpochSec: nowEpochSec + STATE_TTL_SECONDS
                 }, resolvedSecret);
 
+                // Durum belirteci mesaj metninde görünmez şekilde baştaki kilit emojisi üzerindeki text_link varlığında taşınır.
                 // Özel sohbette selective: true yanıt kipini tetiklemediği için yalnızca force_reply gönderilir.
                 await sendTelegramMessage({
                     chat_id: chatId,
-                    text: `${messages.askStudentNumber}\n\nref:${token}`,
+                    text: messages.askStudentNumber,
+                    entities: [
+                        {
+                            type: 'text_link',
+                            offset: 0,
+                            length: STUDENT_NUMBER_PROMPT_EMOJI.length,
+                            url: `${canonicalOrigin}/?tg=${token}`
+                        }
+                    ],
+                    link_preview_options: { is_disabled: true },
                     reply_markup: {
                         force_reply: true,
                         input_field_placeholder: messages.studentNumberPlaceholder
@@ -614,7 +675,20 @@ export function createTelegramRecoveryBot({
 
                 await sendTelegramMessage({
                     chat_id: chatId,
-                    text: messages.success(application.referenceNumber, resolvedPortalUrl)
+                    text: messages.success(application.referenceNumber),
+                    link_preview_options: { is_disabled: true },
+                    reply_markup: {
+                        inline_keyboard: [[
+                            {
+                                text: messages.copyButton,
+                                copy_text: { text: application.referenceNumber }
+                            },
+                            {
+                                text: messages.openSiteButton,
+                                url: `${canonicalOrigin}/basvuruya-devam-et/`
+                            }
+                        ]]
+                    }
                 });
                 return { handled: true, step: 'verify', outcome: 'recovered', language };
             }
