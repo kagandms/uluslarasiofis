@@ -267,7 +267,7 @@ export function createResubmissionUploadRepository(database) {
                     input.expiresAt, input.createdAt, input.fileId),
                 database.prepare(`
                     UPDATE upload_intents SET status = 'rejected'
-                    WHERE changes() = 1 AND id <> ? AND status = 'pending' AND revision_file_id IN (
+                    WHERE changes() = 1 AND id <> ? AND +status = 'pending' AND revision_file_id IN (
                         SELECT files.id FROM document_revision_files AS files
                         JOIN document_revisions AS revisions ON revisions.id = files.revision_id
                         WHERE revisions.document_record_id = ? AND revisions.is_current = 0
@@ -282,7 +282,7 @@ export function createResubmissionUploadRepository(database) {
                         JOIN document_revision_files AS old_files ON old_files.revision_id = revisions.id
                         JOIN upload_intents AS old_intents ON old_intents.revision_file_id = old_files.id
                         WHERE revisions.document_record_id = ? AND revisions.is_current = 0
-                      AND revisions.status = 'pending_scan' AND old_intents.status = 'rejected'
+                      AND revisions.status = 'pending_scan' AND +old_intents.status = 'rejected'
                           AND old_intents.id <> ?
                     )
                 `).bind(input.createdAt, input.documentRecordId, input.intentId),

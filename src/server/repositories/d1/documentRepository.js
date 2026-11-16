@@ -16,24 +16,21 @@ export function createDocumentRepository(database) {
                        files.upload_status, files.scan_status, files.original_filename, files.media_type,
                        files.id AS file_id,
                        files.cleanup_status AS current_cleanup_status, intents.status AS upload_intent_status,
-                       CASE
-                         WHEN EXISTS (
-                           SELECT 1 FROM document_revisions AS cleanup_revisions
-                           -- Record-first loops reuse the existing document and revision indexes.
-                           CROSS JOIN document_revision_files AS cleanup_files
-                           WHERE cleanup_files.revision_id = cleanup_revisions.id
-                             AND cleanup_revisions.document_record_id = records.id
-                             AND cleanup_files.cleanup_status = 'pending'
-                         ) THEN 'pending'
-                         WHEN EXISTS (
-                           SELECT 1 FROM document_revisions AS cleanup_revisions
-                           CROSS JOIN document_revision_files AS cleanup_files
-                           WHERE cleanup_files.revision_id = cleanup_revisions.id
-                             AND cleanup_revisions.document_record_id = records.id
-                             AND cleanup_files.cleanup_status = 'complete'
-                         ) THEN 'complete'
-                         ELSE NULL
-                       END AS cleanup_status
+                       (
+                         SELECT CASE MAX(CASE cleanup_files.cleanup_status
+                                           WHEN 'pending' THEN 2
+                                           WHEN 'complete' THEN 1
+                                         END)
+                                  WHEN 2 THEN 'pending'
+                                  WHEN 1 THEN 'complete'
+                                  ELSE NULL
+                                END
+                         FROM document_revisions AS cleanup_revisions
+                         -- Record-first loops reuse the existing document and revision indexes.
+                         CROSS JOIN document_revision_files AS cleanup_files
+                         WHERE cleanup_files.revision_id = cleanup_revisions.id
+                           AND cleanup_revisions.document_record_id = records.id
+                       ) AS cleanup_status
                 FROM applications
                 JOIN document_requirements AS requirements
                   ON requirements.application_type = applications.application_type
@@ -100,25 +97,25 @@ export function createDocumentRepository(database) {
                 `).bind(documentRecordId, applicationId, requirementId),
                 database.prepare(`
                     UPDATE upload_intents SET status = 'rejected'
-                    WHERE status = 'pending' AND revision_file_id IN (
+                    WHERE revision_file_id IN (
                         SELECT files.id FROM document_revision_files AS files
                         JOIN document_revisions AS revisions ON revisions.id = files.revision_id
                         JOIN document_records AS records ON records.id = revisions.document_record_id
                         WHERE records.application_id = ? AND records.requirement_id = ?
                           AND revisions.is_current = 0 AND revisions.status = 'pending_scan'
-                    )
+                    ) AND +status = 'pending'
                 `).bind(applicationId, requirementId),
                 database.prepare(`
                     UPDATE document_revision_files SET upload_status = 'rejected'
                     WHERE id IN (
-                        SELECT revision_file_id FROM upload_intents
-                        WHERE status = 'rejected' AND revision_file_id IN (
+                        SELECT intents.revision_file_id FROM upload_intents AS intents
+                        WHERE intents.revision_file_id IN (
                             SELECT files.id FROM document_revision_files AS files
                             JOIN document_revisions AS revisions ON revisions.id = files.revision_id
                             JOIN document_records AS records ON records.id = revisions.document_record_id
                             WHERE records.application_id = ? AND records.requirement_id = ?
                               AND revisions.is_current = 0 AND revisions.status = 'pending_scan'
-                        )
+                        ) AND +intents.status = 'rejected'
                     )
                 `).bind(applicationId, requirementId),
                 database.prepare(`
@@ -277,11 +274,11 @@ export function createDocumentRepository(database) {
             await database.batch([
                 database.prepare(`
                     UPDATE upload_intents SET status = 'rejected'
-                    WHERE status = 'pending' AND revision_file_id IN (
+                    WHERE revision_file_id IN (
                         SELECT files.id FROM document_revision_files AS files
                         JOIN document_revisions AS revisions ON revisions.id = files.revision_id
                         WHERE revisions.document_record_id = ?
-                    )
+                    ) AND +status = 'pending'
                 `).bind(record.id),
                 database.prepare(`
                     UPDATE document_revisions SET is_current = 0, status = 'superseded'
