@@ -95,7 +95,7 @@
         "APP_ENV": "production",
         "PHYSICAL_INTAKE_MODE": "on",
         "PHYSICAL_RECEIPTS_CREATE_ENABLED": "true",
-        "PUBLIC_PORTAL_ORIGIN": "https://goc.topkapiuni.workers.dev",
+        "PUBLIC_PORTAL_ORIGIN": "https://topkapiunigoc.com",
         "PUBLIC_PORTAL_ORIGIN_ALLOWLIST": "https://goc.topkapiuni.workers.dev,https://topkapiunigoc.com",
         "PORTAL_CANONICAL_ORIGIN": "https://topkapiunigoc.com",
         "PORTAL_REDIRECT_ENABLED": "false",
