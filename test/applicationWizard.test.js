@@ -233,8 +233,7 @@ test('new application is never marked saved before a server draft exists and war
     acknowledgement.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     root.querySelector('[name="student_number"]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
 
-    assert.equal(root.querySelector('[data-save-status]').dataset.i18n, 'autosave_saving');
-    assert.match(root.querySelector('[data-save-status]').textContent, /kaydediliyor/i);
+    assert.equal(root.querySelector('[data-save-status]').hidden, true);
     await submitWizard(root);
 
     assert.equal(state.application, null);
@@ -316,9 +315,10 @@ test('requirements refresh failure reports a load error after preserving the sav
     document.defaultView.close();
 });
 
-test('valid contact details create a server draft and survive a wizard refresh without Continue', async () => {
+test('valid contact details do not create a server draft before Continue and create it once on Continue', async () => {
     const { document, root } = createRoot();
     let createCalls = 0;
+    let ackCalls = 0;
     let savedPhone = '';
     let savedPrivacyNoticeVersion = '';
     let application = null;
@@ -326,20 +326,22 @@ test('valid contact details create a server draft and survive a wizard refresh w
         async readCurrentApplication() { throw Object.assign(new Error('No current session.'), { code: 'APPLICATION_SESSION_REQUIRED' }); },
         async createApplicationDraft(fields) {
             createCalls += 1;
+            savedPhone = fields.phone;
             savedPrivacyNoticeVersion = fields.privacy_notice_version;
             application = {
                 id: 'draft-autosave-1', status: 'draft', student_number: fields.student_number,
                 application_type: fields.application_type, email: fields.email, phone: fields.phone,
                 contact_acknowledgement: { current_version: 'contact-reachability-v1', accepted_current: false },
-                access_credentials: { reference_number: 'IT-TEST-1', access_code: 'TEST-CODE-1' }
+                access_credentials: { reference_number: 'IT-TEST-1' }
             };
             return { ...application };
         },
-        async autosaveCurrentApplication(fields) {
-            savedPhone = fields.student_phone;
-            application = { ...application, ...fields };
+        async acceptCurrentContactAcknowledgement() {
+            ackCalls += 1;
+            application.contact_acknowledgement.accepted_current = true;
             return { ...application };
-        }
+        },
+        async readCurrentStudentDocumentRequirements() { return { requirements: [] }; }
     };
     const state = await initializeApplicationWizard(root, api);
     root.querySelector('[name="student_number"]').value = 'SYN-CONTACT-KEEP';
@@ -350,11 +352,25 @@ test('valid contact details create a server draft and survive a wizard refresh w
     await new Promise((resolve) => setTimeout(resolve, 550));
     await new Promise((resolve) => setImmediate(resolve));
 
+    assert.equal(createCalls, 0);
+    assert.equal(ackCalls, 0);
+    assert.equal(state.application, null);
+    assert.doesNotMatch(root.textContent, /IT-TEST-1/);
+
+    const acknowledgement = root.querySelector('[name="contact_acknowledgement_accepted"]');
+    acknowledgement.checked = true;
+    acknowledgement.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    assert.equal(createCalls, 0);
+
+    await submitWizard(root);
+
     assert.equal(createCalls, 1);
+    assert.equal(ackCalls, 1);
     assert.equal(savedPrivacyNoticeVersion, 'test-approved-v1');
     assert.equal(state.application.id, 'draft-autosave-1');
+    assert.equal(state.step, 1);
     assert.equal(savedPhone, '+905551112233');
-    assert.equal(root.querySelector('[name="student_number"]').value, 'SYN-CONTACT-KEEP');
+    assert.equal(root.querySelectorAll('.application-credentials-banner').length, 1);
     assert.match(root.textContent, /IT-TEST-1/);
     document.defaultView.close();
 });
@@ -1567,7 +1583,7 @@ test('step 0 contact inputs persist to storage across reloads and clear on new a
     doc3.defaultView.close();
 });
 
-test('step 0 contact inputs display autosave_saving and autosave_saved status indicators', async () => {
+test('step 0 contact inputs stay neutral before Continue and show autosave_saved only after server draft creation', async () => {
     const { document, root } = createRoot();
     const storageMap = new Map();
     const mockStorage = {
@@ -1576,10 +1592,31 @@ test('step 0 contact inputs display autosave_saving and autosave_saved status in
         removeItem: (k) => storageMap.delete(k)
     };
     Object.defineProperty(document.defaultView, 'localStorage', { value: mockStorage, configurable: true });
+    let createCalls = 0;
     const api = {
         async readCurrentApplication() {
             throw Object.assign(new Error('session required'), { code: 'APPLICATION_SESSION_REQUIRED' });
-        }
+        },
+        async createApplicationDraft(fields) {
+            createCalls += 1;
+            return {
+                id: 'draft-status-1',
+                status: 'draft',
+                student_number: fields.student_number,
+                application_type: fields.application_type,
+                student_email: fields.email,
+                student_phone: fields.phone,
+                contact_acknowledgement: { current_version: 'v1', accepted_current: false }
+            };
+        },
+        async acceptCurrentContactAcknowledgement() {
+            return {
+                id: 'draft-status-1',
+                status: 'draft',
+                contact_acknowledgement: { current_version: 'v1', accepted_current: true }
+            };
+        },
+        async readCurrentStudentDocumentRequirements() { return { requirements: [] }; }
     };
     await initializeApplicationWizard(root, api);
     const studentNumInput = root.querySelector('[name="student_number"]');
@@ -1587,12 +1624,25 @@ test('step 0 contact inputs display autosave_saving and autosave_saved status in
     studentNumInput.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
 
     const statusNode = root.querySelector('[data-save-status]');
-    assert.equal(statusNode.dataset.i18n, 'autosave_saving');
-    assert.match(statusNode.textContent, /Kaydediliyor/);
+    assert.equal(statusNode.hidden, true);
+    assert.ok(storageMap.has('portal_draft_contact_fields'));
 
     await new Promise((resolve) => setTimeout(resolve, 450));
-    assert.equal(statusNode.dataset.i18n, 'autosave_saved');
-    assert.match(statusNode.textContent, /Tüm değişiklikler kaydedildi/);
+    assert.equal(statusNode.hidden, true);
+    assert.equal(createCalls, 0);
+
+    root.querySelector('[name="application_type"]').value = 'initial';
+    root.querySelector('[name="student_email"]').value = 'synthetic@example.edu';
+    root.querySelector('[data-phone-visible]').value = '+905551112233';
+    root.querySelector('[name="contact_acknowledgement_accepted"]').checked = true;
+    root.querySelector('[data-phone-visible]').dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    await submitWizard(root);
+
+    assert.equal(createCalls, 1);
+    const savedStatusNode = root.querySelector('[data-save-status]');
+    assert.equal(savedStatusNode.hidden, false);
+    assert.equal(savedStatusNode.dataset.i18n, 'autosave_saved');
+    assert.match(savedStatusNode.textContent, /Tüm değişiklikler kaydedildi/);
 
     document.defaultView.close();
 });

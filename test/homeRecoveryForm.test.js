@@ -389,3 +389,143 @@ test('wizard sends UI language on contact acknowledgement, omits language on dra
         dom.window.close();
     }
 });
+
+test('home hero secondary action buttons use home-cta-secondary and no tertiary class remains', async () => {
+    const homeHtml = await readFile(resolve(process.cwd(), 'index.html'), 'utf8');
+    const dom = new JSDOM(homeHtml, { url: 'https://portal.test/' });
+    const doc = dom.window.document;
+
+    const startLink = doc.querySelector('.home-actions a[href="/basvuru/"]');
+    assert.ok(startLink.classList.contains('home-cta-primary'));
+    assert.equal(startLink.classList.contains('home-cta-secondary'), false);
+
+    for (const selector of [
+        'a[href="/basvurum/"]',
+        'a[href="/basvuruya-devam-et/"]',
+        '#btn-access-recovery',
+        '#btn-hero-guide',
+        '#home-privacy-notice'
+    ]) {
+        const button = doc.querySelector(`.home-actions ${selector}`);
+        assert.ok(button, `${selector} must exist in .home-actions`);
+        assert.ok(button.classList.contains('home-cta'), `${selector} must have home-cta`);
+        assert.ok(button.classList.contains('home-cta-secondary'), `${selector} must have home-cta-secondary`);
+        assert.equal(button.classList.contains('home-cta-tertiary'), false, `${selector} must not have home-cta-tertiary`);
+    }
+
+    dom.window.close();
+});
+
+test('recovery panel restarts staggered reveal in reading order on each open and respects reduced motion', async () => {
+    const [homeHtml, publicCss] = await Promise.all([
+        readFile(resolve(process.cwd(), 'index.html'), 'utf8'),
+        readFile(resolve(process.cwd(), 'src/public/public.css'), 'utf8')
+    ]);
+
+    // Üst hero paragraf animasyonu kurtarma paneli içindeki paragraflara taşmamalı ve sıralı gecikme tanımlı olmalı.
+    assert.match(publicCss, /\.public-hero\s*>\s*p:not\(\.public-eyebrow\)/);
+    assert.match(publicCss, /\.recovery-panel\.is-revealing\s*>\s*:nth-child\(1\)\s*\{\s*animation-delay:\s*0ms;\s*\}/);
+    assert.match(publicCss, /\.recovery-panel\.is-revealing\s*>\s*:nth-child\(2\)\s*\{\s*animation-delay:\s*70ms;\s*\}/);
+    assert.match(publicCss, /\.recovery-panel\.is-revealing\s*>\s*:nth-child\(3\)\s*\{\s*animation-delay:\s*140ms;\s*\}/);
+    assert.match(publicCss, /\.recovery-panel\.is-revealing\s*>\s*:nth-child\(4\)\s*\{\s*animation-delay:\s*210ms;\s*\}/);
+    assert.match(publicCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.recovery-panel\.is-revealing\s*>\s*\*[\s\S]*animation:\s*none\s*!important;/);
+
+    const dom = new JSDOM(homeHtml, { url: 'https://portal.test/' });
+    const doc = dom.window.document;
+    const toggle = doc.getElementById('btn-access-recovery');
+    const panel = doc.getElementById('access-recovery-panel');
+
+    const childTags = [...panel.children].map((node) => node.tagName);
+    assert.deepEqual(childTags, ['H2', 'P', 'DIV', 'FORM']);
+
+    initHomeRecoveryForm({
+        root: doc,
+        api: {
+            async readApplicationRecoveryOptions() { return { email: true, telegram: { enabled: false, url: null } }; },
+            async requestApplicationAccessCodeRecoveryByEmail() { return { ok: true }; }
+        },
+        getMessage: createMessageResolver(doc)
+    });
+
+    toggle.click();
+    assert.equal(panel.hidden, false);
+    assert.equal(panel.classList.contains('is-revealing'), true);
+
+    toggle.click();
+    assert.equal(panel.hidden, true);
+    assert.equal(panel.classList.contains('is-revealing'), false);
+
+    toggle.click();
+    assert.equal(panel.hidden, false);
+    assert.equal(panel.classList.contains('is-revealing'), true);
+
+    // Azaltılmış hareket tercihinde animasyon sınıfı eklenmemeli.
+    dom.window.matchMedia = () => ({ matches: true });
+    panel.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.equal(panel.classList.contains('is-revealing'), false);
+    toggle.click();
+    assert.equal(panel.hidden, false);
+    assert.equal(panel.classList.contains('is-revealing'), false);
+
+    dom.window.close();
+});
+
+test('repeated recovery submits clear previous feedback first, then re-animate confirmation and spam warning together', async () => {
+    const homeHtml = await readFile(resolve(process.cwd(), 'index.html'), 'utf8');
+    const dom = new JSDOM(homeHtml, { url: 'https://portal.test/' });
+    const doc = dom.window.document;
+
+    let pendingResolve = null;
+    initHomeRecoveryForm({
+        root: doc,
+        api: {
+            async readApplicationRecoveryOptions() { return { email: true, telegram: { enabled: false, url: null } }; },
+            requestApplicationAccessCodeRecoveryByEmail() {
+                return new Promise((resolve) => { pendingResolve = resolve; });
+            }
+        },
+        getMessage: createMessageResolver(doc)
+    });
+
+    const form = doc.getElementById('access-recovery-form');
+    const input = doc.getElementById('recovery-student-number');
+    const feedback = doc.getElementById('recovery-feedback');
+    const messageEl = doc.getElementById('recovery-feedback-message');
+    const spamEl = doc.getElementById('recovery-spam-warning');
+    input.value = 'SYN-REPEAT-1';
+
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(messageEl.textContent, '');
+    assert.equal(spamEl.hidden, true);
+    pendingResolve({ ok: true });
+    await new Promise((resolveTick) => setImmediate(resolveTick));
+
+    assert.equal(feedback.dataset.feedbackType, 'confirmed');
+    assert.equal(feedback.classList.contains('is-animating'), true);
+    assert.equal(messageEl.textContent, RECOVERY_MESSAGES.tr.recoveryConfirmation);
+    assert.equal(spamEl.hidden, false);
+
+    // İkinci gönderimde alan önce temizlenmeli, yanıt gelince animasyonla yeniden gösterilmeli.
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(messageEl.textContent, '');
+    assert.equal(feedback.dataset.feedbackType, undefined);
+    assert.equal(spamEl.hidden, true);
+    assert.equal(feedback.classList.contains('is-animating'), false);
+
+    pendingResolve({ ok: true });
+    await new Promise((resolveTick) => setImmediate(resolveTick));
+    assert.equal(feedback.dataset.feedbackType, 'confirmed');
+    assert.equal(feedback.classList.contains('is-animating'), true);
+    assert.equal(messageEl.textContent, RECOVERY_MESSAGES.tr.recoveryConfirmation);
+    assert.equal(spamEl.hidden, false);
+
+    // Azaltılmış hareket tercihinde mesaj gösterilmeli ancak animasyon sınıfı eklenmemeli.
+    dom.window.matchMedia = () => ({ matches: true });
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    pendingResolve({ ok: true });
+    await new Promise((resolveTick) => setImmediate(resolveTick));
+    assert.equal(messageEl.textContent, RECOVERY_MESSAGES.tr.recoveryConfirmation);
+    assert.equal(feedback.classList.contains('is-animating'), false);
+
+    dom.window.close();
+});
