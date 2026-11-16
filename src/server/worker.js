@@ -31,6 +31,7 @@ import { readCurrentApplicationRating, readStaffApplicationRatings, saveCurrentA
 import { enqueueStaffNotification, previewStaffNotification, readStaffNotificationHistory,
     retryStaffNotification } from './routes/staffNotificationRoutes.js';
 import { handleMetaWhatsAppWebhook } from './services/metaWhatsAppWebhook.js';
+import { handleTelegramWebhook } from './routes/telegramWebhookRoutes.js';
 import { createMetaWhatsAppProvider } from './services/metaWhatsAppProvider.js';
 import { runNotificationDispatchBatch } from './services/notificationDispatcher.js';
 import { handleStaffApplicationDeletion } from './routes/staffApplicationDeletionRoutes.js';
@@ -155,6 +156,9 @@ async function routeApi(request, environment, requestId, cache) {
     }
     if (pathname === '/api/webhooks/whatsapp') {
         return handleMetaWhatsAppWebhook(request, environment, requestId);
+    }
+    if (pathname === '/api/webhooks/telegram') {
+        return handleTelegramWebhook(request, environment, requestId);
     }
     const archiveManifestMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/documents\/archive-manifest$/);
     if (archiveManifestMatch) {

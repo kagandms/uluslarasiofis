@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { generateAccessCode, hashAccessCode, verifyAccessCode } from '../src/server/auth/applicationAccessCode.js';
+import { createOpaqueSessionToken, hashSessionToken } from '../src/server/auth/sessionToken.js';
+import { createD1Repositories } from '../src/server/repositories/d1/index.js';
+import {
+    consumeRecoveryApplicationRateLimit,
+    findRecoverableApplication,
+    rotateAccessCodeForRecovery
+} from '../src/server/services/accessRecoveryService.js';
 import { createTelegramRecoveryBot, normalizeTelegramPhone } from '../src/server/services/telegramBot.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
@@ -373,4 +381,83 @@ test('daily rate limits enforce 3 attempts per Telegram user and 3 rotations per
     const nextDayResult = await attemptRecovery({ userId: 1001 });
     assert.equal(nextDayResult.outcome, 'recovered');
     assert.equal(harness.rotateCalls.length, 4);
+});
+
+test('real accessRecoveryService and D1 rate limits share the 3/day per-application quota between email and Telegram', async () => {
+    const database = new TestD1Database();
+    applyAllMigrations(database);
+    const repositories = createD1Repositories(database);
+    const initialCode = generateAccessCode();
+    const initialHash = await hashAccessCode(initialCode);
+    const nowMs = Date.UTC(2026, 10, 16, 12, 0, 0);
+    const nowIso = new Date(nowMs).toISOString();
+    const nowSeconds = Math.floor(nowMs / 1000);
+
+    const application = await repositories.applications.createDraftWithSession({
+        applicationId: crypto.randomUUID(),
+        studentId: crypto.randomUUID(),
+        studentNumber: 'SYN-TG-REAL-01',
+        applicationType: 'initial',
+        studentEmail: 'tg-real@example.invalid',
+        studentPhone: '+905550000777',
+        sessionId: crypto.randomUUID(),
+        tokenHash: await hashSessionToken(createOpaqueSessionToken()),
+        expiresAt: new Date(nowMs + 3600_000).toISOString(),
+        createdAt: nowIso,
+        auditEventId: crypto.randomUUID(),
+        requestId: 'req-tg-seed-1',
+        accessCodeHash: initialHash
+    });
+
+    // E-posta kurtarma kotasından 2 hak tüketilir; geriye aynı başvuru için 1 hak kalır.
+    assert.equal(await consumeRecoveryApplicationRateLimit(repositories.rateLimits, {
+        applicationId: application.id,
+        nowSeconds
+    }), true);
+    assert.equal(await consumeRecoveryApplicationRateLimit(repositories.rateLimits, {
+        applicationId: application.id,
+        nowSeconds
+    }), true);
+
+    const sentMessages = [];
+    const bot = createTelegramRecoveryBot({
+        findRecoverableApplication,
+        rotateAccessCodeForRecovery,
+        sendTelegramMessage: async (payload) => {
+            sentMessages.push(payload);
+            return { message_id: sentMessages.length };
+        },
+        rateLimiter: repositories.rateLimits,
+        stateSecret: FAKE_STATE_SECRET,
+        now: () => nowMs
+    });
+
+    // 3. hak Telegram üzerinden kullanılır ve gerçek D1 erişim kodu döndürülür.
+    await bot.handleUpdate(database, contactUpdate(100, { phoneNumber: '905550000777', userId: 5001 }), { requestId: 'req-tg-real-1' });
+    const thirdRecovery = await bot.handleUpdate(
+        database,
+        replyUpdate(101, 'syn-tg-real-01', { message_id: 1, from: { is_bot: true }, text: sentMessages[0].text }, { userId: 5001 }),
+        { requestId: 'req-tg-real-2' }
+    );
+    assert.equal(thirdRecovery.outcome, 'recovered');
+
+    const updatedRow = database.prepare('SELECT access_code_hash, access_code_version FROM applications WHERE id = ?')
+        .bind(application.id)
+        .first();
+    assert.equal(updatedRow.access_code_version, 2);
+    assert.equal(await verifyAccessCode(initialCode, updatedRow.access_code_hash), false);
+    assert.ok(sentMessages[1].text.includes(application.reference_number));
+
+    // Aynı gün 4. deneme (farklı Telegram kullanıcısı veya e-posta) ortak başvuru sınırına takılır.
+    await bot.handleUpdate(database, contactUpdate(102, { phoneNumber: '905550000777', userId: 5002 }), { requestId: 'req-tg-real-3' });
+    const fourthRecovery = await bot.handleUpdate(
+        database,
+        replyUpdate(103, 'SYN-TG-REAL-01', { message_id: 2, from: { is_bot: true }, text: sentMessages[2].text }, { userId: 5002 }),
+        { requestId: 'req-tg-real-4' }
+    );
+    assert.equal(fourthRecovery.outcome, 'rate_limited_application');
+    assert.equal(await consumeRecoveryApplicationRateLimit(repositories.rateLimits, {
+        applicationId: application.id,
+        nowSeconds
+    }), false);
 });

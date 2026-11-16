@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import worker from '../src/server/worker.js';
 import {
     createTelegramMessageSender,
     handleTelegramWebhook
@@ -295,4 +296,20 @@ test('wrangler.jsonc and runtime-secret-metadata.mjs declare matching Telegram c
         allExpectedSecrets,
         wrangler.env.production.secrets.required
     ));
+});
+
+test('worker fetch routes POST /api/webhooks/telegram without origin header and enforces 401 and 503', async () => {
+    const wrongSecretResponse = await worker.fetch(
+        createWebhookRequest({ secretHeader: 'wrong-secret-token' }),
+        createFakeEnv(),
+        {}
+    );
+    assert.equal(wrongSecretResponse.status, 401);
+
+    const unconfiguredResponse = await worker.fetch(
+        createWebhookRequest(),
+        {},
+        {}
+    );
+    assert.equal(unconfiguredResponse.status, 503);
 });

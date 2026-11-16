@@ -2,6 +2,10 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js/max';
 import { normalizePhoneNumber } from '../../shared/phoneNumber.js';
 import { createRateLimitRepository } from '../repositories/d1/rateLimitRepository.js';
 import { consumePublicRateLimit } from '../security/requestRateLimit.js';
+import {
+    RECOVERY_APPLICATION_DAILY_LIMIT,
+    RECOVERY_TELEGRAM_USER_DAILY_LIMIT
+} from './accessRecoveryService.js';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -16,18 +20,6 @@ const SUPPORTED_LANGUAGE_SET = new Set(SUPPORTED_TELEGRAM_LANGUAGES);
 const UPDATE_IDEMPOTENCY_LIMIT = Object.freeze({
     endpoint: 'telegram-recovery-update',
     maxRequests: 1,
-    windowSeconds: DAY_SECONDS
-});
-
-const USER_RECOVERY_DAILY_LIMIT = Object.freeze({
-    endpoint: 'telegram-recovery-user',
-    maxRequests: 3,
-    windowSeconds: DAY_SECONDS
-});
-
-const APPLICATION_RECOVERY_DAILY_LIMIT = Object.freeze({
-    endpoint: 'telegram-recovery-application',
-    maxRequests: 3,
     windowSeconds: DAY_SECONDS
 });
 
@@ -355,6 +347,8 @@ export function createTelegramRecoveryBot({
     sendTelegramMessage,
     rateLimiter,
     normalizePhone = normalizeTelegramPhone,
+    userDailyLimit = RECOVERY_TELEGRAM_USER_DAILY_LIMIT,
+    applicationDailyLimit = RECOVERY_APPLICATION_DAILY_LIMIT,
     stateSecret,
     webhookSecret,
     now
@@ -484,8 +478,8 @@ export function createTelegramRecoveryBot({
                 const messages = TELEGRAM_RECOVERY_MESSAGES[language];
 
                 const userAllowed = await consumeRateLimitSlot(rateLimiter, database, {
-                    ...USER_RECOVERY_DAILY_LIMIT,
-                    identity: `user:${fromId}`,
+                    ...userDailyLimit,
+                    identity: String(fromId),
                     nowSeconds: nowEpochSec
                 });
                 if (!userAllowed) {
@@ -532,9 +526,10 @@ export function createTelegramRecoveryBot({
                     return { handled: true, step: 'verify', outcome: 'mismatch', language };
                 }
 
+                // E-posta ve Telegram kanallarının başvuru başına günlük 3 kurtarma hakkını paylaşması için ortak uç nokta ve kimlik kullanılır.
                 const applicationAllowed = await consumeRateLimitSlot(rateLimiter, database, {
-                    ...APPLICATION_RECOVERY_DAILY_LIMIT,
-                    identity: `app:${application.applicationId}`,
+                    ...applicationDailyLimit,
+                    identity: application.applicationId,
                     nowSeconds: nowEpochSec
                 });
                 if (!applicationAllowed) {

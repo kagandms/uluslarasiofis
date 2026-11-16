@@ -1,6 +1,12 @@
 import { errorResponse, jsonResponse } from '../http/apiResponse.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
-import { createTelegramRecoveryBot } from '../services/telegramBot.js';
+import {
+    RECOVERY_APPLICATION_DAILY_LIMIT,
+    RECOVERY_TELEGRAM_USER_DAILY_LIMIT,
+    findRecoverableApplication,
+    rotateAccessCodeForRecovery
+} from '../services/accessRecoveryService.js';
+import { createTelegramRecoveryBot, normalizeTelegramPhone } from '../services/telegramBot.js';
 
 const encoder = new TextEncoder();
 const TELEGRAM_API_ORIGIN = 'https://api.telegram.org';
@@ -140,7 +146,7 @@ async function readBoundedWebhookJson(request) {
     return parsed;
 }
 
-async function resolveRecoveryFunctions(deps, environment) {
+function resolveRecoveryFunctions(deps, environment) {
     if (typeof deps?.findRecoverableApplication === 'function'
         && typeof deps?.rotateAccessCodeForRecovery === 'function') {
         return {
@@ -151,12 +157,9 @@ async function resolveRecoveryFunctions(deps, environment) {
     if (environment?.ACCESS_RECOVERY_SERVICE) {
         return environment.ACCESS_RECOVERY_SERVICE;
     }
-    // accessRecoveryService.js ayrı dalda geliştirildiği için yalnızca çalışma zamanında gerekirse dinamik yüklenir.
-    const modulePath = '../services/accessRecoveryService.js';
-    const service = await import(modulePath);
     return {
-        findRecoverableApplication: deps?.findRecoverableApplication ?? service.findRecoverableApplication,
-        rotateAccessCodeForRecovery: deps?.rotateAccessCodeForRecovery ?? service.rotateAccessCodeForRecovery
+        findRecoverableApplication: deps?.findRecoverableApplication ?? findRecoverableApplication,
+        rotateAccessCodeForRecovery: deps?.rotateAccessCodeForRecovery ?? rotateAccessCodeForRecovery
     };
 }
 
@@ -194,7 +197,7 @@ export async function handleTelegramWebhook(request, environment, requestId = ''
         const update = await readBoundedWebhookJson(request);
         let bot = deps?.bot;
         if (!bot) {
-            const recoveryFunctions = await resolveRecoveryFunctions(deps, environment);
+            const recoveryFunctions = resolveRecoveryFunctions(deps, environment);
             const sendTelegramMessage = typeof deps?.sendTelegramMessage === 'function'
                 ? deps.sendTelegramMessage
                 : createTelegramMessageSender({
@@ -211,7 +214,9 @@ export async function handleTelegramWebhook(request, environment, requestId = ''
                 rotateAccessCodeForRecovery: recoveryFunctions.rotateAccessCodeForRecovery,
                 sendTelegramMessage,
                 rateLimiter,
-                normalizePhone: deps?.normalizePhone,
+                normalizePhone: deps?.normalizePhone ?? normalizeTelegramPhone,
+                userDailyLimit: deps?.userDailyLimit ?? RECOVERY_TELEGRAM_USER_DAILY_LIMIT,
+                applicationDailyLimit: deps?.applicationDailyLimit ?? RECOVERY_APPLICATION_DAILY_LIMIT,
                 stateSecret: webhookSecret,
                 now: deps?.now
             });
