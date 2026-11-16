@@ -16,6 +16,19 @@ function isNetworkFailure(error) {
     return !error || error.code === 'NETWORK_ERROR' || typeof error.status !== 'number';
 }
 
+function prefersReducedMotion(root) {
+    return Boolean(root?.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+}
+
+function restartRevealAnimation(element, className, root) {
+    if (!element) return;
+    element.classList.remove(className);
+    if (prefersReducedMotion(root)) return;
+    // Animasyonun her açılışta ve her tekrar gönderimde yeniden başlaması için yerleşimi zorla yenile.
+    void element.offsetWidth;
+    element.classList.add(className);
+}
+
 /**
  * Telegram kurtarma bağlantısını etkin dile göre ?start=recover_<dil> parametresiyle oluşturur.
  * @param {string|null|undefined} baseUrl Sunucudan dönen Telegram temel URL'si.
@@ -136,13 +149,17 @@ export function initHomeRecoveryForm({ root = document, api, getMessage } = {}) 
             panel.hidden = !shouldOpen;
             toggleButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
             if (shouldOpen) {
+                restartRevealAnimation(panel, 'is-revealing', root);
                 studentNumberInput?.focus?.();
+            } else {
+                panel.classList.remove('is-revealing');
             }
         });
 
         panel.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && !panel.hidden) {
                 panel.hidden = true;
+                panel.classList.remove('is-revealing');
                 toggleButton.setAttribute('aria-expanded', 'false');
                 toggleButton.focus?.();
             }
@@ -165,6 +182,11 @@ export function initHomeRecoveryForm({ root = document, api, getMessage } = {}) 
         if (!studentNumber) return;
 
         isSubmitting = true;
+        // Tekrarlanan gönderimlerde önceki onay kutusunu temizleyerek sonucun yeniden göründüğünü ve okunduğunu hissettir.
+        feedbackState = 'idle';
+        feedbackContainer?.classList.remove('is-animating');
+        syncFeedbackMessages();
+
         if (submitButton) {
             submitButton.disabled = true;
             submitButton.textContent = resolveMessage('recoverySubmitting');
@@ -185,6 +207,9 @@ export function initHomeRecoveryForm({ root = document, api, getMessage } = {}) 
                 submitButton.textContent = resolveMessage('recoveryEmailSubmit');
             }
             syncFeedbackMessages();
+            if (feedbackState === 'confirmed' || feedbackState === 'network_error') {
+                restartRevealAnimation(feedbackContainer, 'is-animating', root);
+            }
         }
     });
 
