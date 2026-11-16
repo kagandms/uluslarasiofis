@@ -13,6 +13,7 @@ import { createRequestId, errorResponse, jsonResponse } from './http/apiResponse
 import { isRouteResult } from './http/routeResult.js';
 import { createCurrentStudentDocumentUploadIntent, deleteCurrentStudentDocument, previewCurrentStudentDocument, finalizeCurrentStudentDocument, readCurrentStudentDocumentRequirements, uploadLocalStudentDocument } from './routes/applicationDocumentRoutes.js';
 import { acceptCurrentApplicationDeclaration, acceptCurrentContactAcknowledgement, accessApplicationWithReference, autosaveCurrentApplication, createApplicationDraft, logoutApplication, readApplicationPrivacyNotice, readCurrentApplication, readCurrentApplicationStatus, regenerateCurrentAccessCode, resetStaffApplicationAccessCode, submitCurrentApplication, updateCurrentApplication } from './routes/applicationRoutes.js';
+import { readApplicationRecoveryOptions, requestEmailAccessRecovery } from './routes/applicationRecoveryRoutes.js';
 import { lookupApplicationTracking, readCurrentApplicationTracking } from './routes/applicationTrackingRoutes.js';
 import { readPrivateDocument } from './routes/documentRoutes.js';
 import { createCurrentResubmissionUploadIntent, finalizeCurrentResubmissionUpload, readCurrentResubmissionEligibility } from './routes/resubmissionUploadRoutes.js';
@@ -278,6 +279,8 @@ async function routeApi(request, environment, requestId, cache) {
         return readStaffApplicationDetail(request, environment, applicationId);
     }
     if (pathname === '/api/public/applications/access') return accessApplicationWithReference(request, environment, requestId);
+    if (pathname === '/api/application-recovery/options') return readApplicationRecoveryOptions(request, environment);
+    if (pathname === '/api/application-recovery/email') return requestEmailAccessRecovery(request, environment, requestId);
     if (pathname === '/api/public/applications/privacy-notice') return readApplicationPrivacyNotice(request, environment);
     if (pathname === '/api/public/applications/current/regenerate-access-code') return regenerateCurrentAccessCode(request, environment, requestId);
     if (pathname === '/api/public/applications') return createApplicationDraft(request, environment, requestId);
