@@ -1,0 +1,298 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import {
+    createTelegramMessageSender,
+    handleTelegramWebhook
+} from '../src/server/routes/telegramWebhookRoutes.js';
+import { assertProductionRuntimeSecretMetadata } from '../scripts/ci/runtime-secret-metadata.mjs';
+
+const FAKE_BOT_TOKEN = '999999999:SYNTHETIC-FAKE-BOT-TOKEN-VALUE';
+const FAKE_WEBHOOK_SECRET = 'synthetic-webhook-secret-token-value';
+
+function createWebhookRequest({
+    method = 'POST',
+    secretHeader = FAKE_WEBHOOK_SECRET,
+    body = { update_id: 1 }
+} = {}) {
+    const headers = new Headers({ 'Content-Type': 'application/json' });
+    if (secretHeader !== undefined && secretHeader !== null) {
+        headers.set('X-Telegram-Bot-Api-Secret-Token', secretHeader);
+    }
+    return new Request('https://portal.test/api/webhooks/telegram', {
+        method,
+        headers,
+        body: method === 'GET' ? undefined : (typeof body === 'string' ? body : JSON.stringify(body))
+    });
+}
+
+function createFakeEnv(overrides = {}) {
+    return {
+        TELEGRAM_BOT_TOKEN: FAKE_BOT_TOKEN,
+        TELEGRAM_WEBHOOK_SECRET: FAKE_WEBHOOK_SECRET,
+        ...overrides
+    };
+}
+
+test('handleTelegramWebhook rejects non-POST requests with 405', async () => {
+    const response = await handleTelegramWebhook(
+        createWebhookRequest({ method: 'GET' }),
+        createFakeEnv(),
+        'req-method-1'
+    );
+    assert.equal(response.status, 405);
+});
+
+test('handleTelegramWebhook fails closed with 503 without calling Telegram when webhook secret or bot token config is missing', async () => {
+    let fetchCalled = false;
+    let lookupCalled = false;
+    let rotateCalled = false;
+    const deps = {
+        fetch: async () => { fetchCalled = true; return Response.json({ ok: true }); },
+        findRecoverableApplication: async () => { lookupCalled = true; return null; },
+        rotateAccessCodeForRecovery: async () => { rotateCalled = true; return null; }
+    };
+
+    const missingSecret = await handleTelegramWebhook(
+        createWebhookRequest(),
+        createFakeEnv({ TELEGRAM_WEBHOOK_SECRET: '' }),
+        'req-cfg-1',
+        deps
+    );
+    const missingBotToken = await handleTelegramWebhook(
+        createWebhookRequest(),
+        createFakeEnv({ TELEGRAM_BOT_TOKEN: '' }),
+        'req-cfg-2',
+        deps
+    );
+    const omittedBoth = await handleTelegramWebhook(
+        createWebhookRequest(),
+        {},
+        'req-cfg-3',
+        deps
+    );
+
+    assert.equal(missingSecret.status, 503);
+    assert.equal(missingBotToken.status, 503);
+    assert.equal(omittedBoth.status, 503);
+    assert.equal(fetchCalled, false);
+    assert.equal(lookupCalled, false);
+    assert.equal(rotateCalled, false);
+    assert.equal((await missingSecret.text()).includes(FAKE_BOT_TOKEN), false);
+    assert.equal((await missingBotToken.text()).includes(FAKE_WEBHOOK_SECRET), false);
+});
+
+test('handleTelegramWebhook rejects missing or invalid secret header with 401 without calling fetch or deps', async () => {
+    let fetchCalled = false;
+    let lookupCalled = false;
+    const deps = {
+        fetch: async () => { fetchCalled = true; return Response.json({ ok: true }); },
+        findRecoverableApplication: async () => { lookupCalled = true; return null; },
+        rotateAccessCodeForRecovery: async () => null
+    };
+
+    const missingHeader = await handleTelegramWebhook(
+        createWebhookRequest({ secretHeader: null }),
+        createFakeEnv(),
+        'req-auth-1',
+        deps
+    );
+    const wrongHeader = await handleTelegramWebhook(
+        createWebhookRequest({ secretHeader: 'wrong-secret-token' }),
+        createFakeEnv(),
+        'req-auth-2',
+        deps
+    );
+
+    assert.equal(missingHeader.status, 401);
+    assert.equal(wrongHeader.status, 401);
+    assert.equal(fetchCalled, false);
+    assert.equal(lookupCalled, false);
+});
+
+test('handleTelegramWebhook drives full 3-step recovery over fake fetch and returns 200', async () => {
+    const fetchCalls = [];
+    const rotated = [];
+    const seenUpdates = new Set();
+
+    const deps = {
+        fetch: async (url, init) => {
+            fetchCalls.push({ url, body: JSON.parse(init.body) });
+            return Response.json({ ok: true, result: { message_id: fetchCalls.length } });
+        },
+        findRecoverableApplication: async (_db, { studentNumber }) => {
+            if (studentNumber !== 'TEST-2026-0100') return null;
+            return {
+                applicationId: 'app-100',
+                referenceNumber: 'ITU-8M9N-2P3Q',
+                studentEmail: 'synthetic100@example.invalid',
+                studentPhone: '+905550000900',
+                language: 'tr'
+            };
+        },
+        rotateAccessCodeForRecovery: async (_db, input) => {
+            rotated.push(input);
+            return { accessCode: 'ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ23' };
+        },
+        rateLimiter: async ({ endpoint, identity }) => {
+            if (endpoint === 'telegram-recovery-update') {
+                if (seenUpdates.has(identity)) return false;
+                seenUpdates.add(identity);
+            }
+            return true;
+        },
+        now: () => Date.UTC(2026, 10, 16, 12, 0, 0)
+    };
+
+    const env = createFakeEnv();
+
+    // 1. /start
+    const res1 = await handleTelegramWebhook(createWebhookRequest({
+        body: {
+            update_id: 7001,
+            message: {
+                message_id: 1,
+                from: { id: 500, is_bot: false, language_code: 'tr' },
+                chat: { id: 500, type: 'private' },
+                text: '/start recover_tr'
+            }
+        }
+    }), env, 'req-flow-1', deps);
+    assert.equal(res1.status, 200);
+    assert.equal(fetchCalls[0].url, `https://api.telegram.org/bot${FAKE_BOT_TOKEN}/sendMessage`);
+
+    // 2. Contact paylaşımı
+    const res2 = await handleTelegramWebhook(createWebhookRequest({
+        body: {
+            update_id: 7002,
+            message: {
+                message_id: 2,
+                from: { id: 500, is_bot: false, language_code: 'tr' },
+                chat: { id: 500, type: 'private' },
+                contact: { phone_number: '905550000900', user_id: 500 }
+            }
+        }
+    }), env, 'req-flow-2', deps);
+    assert.equal(res2.status, 200);
+    const askStudentText = fetchCalls[1].body.text;
+    assert.match(askStudentText, /\nref:[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+
+    // 3. Öğrenci numarası yanıtı
+    const res3 = await handleTelegramWebhook(createWebhookRequest({
+        body: {
+            update_id: 7003,
+            message: {
+                message_id: 3,
+                from: { id: 500, is_bot: false, language_code: 'tr' },
+                chat: { id: 500, type: 'private' },
+                text: 'TEST-2026-0100',
+                reply_to_message: {
+                    message_id: 20,
+                    from: { id: 999, is_bot: true },
+                    text: askStudentText
+                }
+            }
+        }
+    }), env, 'req-flow-3', deps);
+    assert.equal(res3.status, 200);
+    assert.equal(rotated.length, 1);
+    assert.equal(rotated[0].channel, 'telegram');
+    assert.match(fetchCalls[2].body.text, /ITU-8M9N-2P3Q/);
+    assert.match(fetchCalls[2].body.text, /ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ23/);
+});
+
+test('handleTelegramWebhook always returns 200 for valid-secret requests and redacts tokens from errors and logs', async () => {
+    const loggedEntries = [];
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+        loggedEntries.push(JSON.stringify(args));
+    };
+
+    try {
+        // 1. Geçersiz JSON gövdesi bile geçerli gizli anahtarda 200 döner.
+        const badJsonResponse = await handleTelegramWebhook(
+            createWebhookRequest({ body: '{invalid-json' }),
+            createFakeEnv(),
+            'req-bad-json'
+        );
+        assert.equal(badJsonResponse.status, 200);
+        const badJsonText = await badJsonResponse.text();
+        assert.equal(badJsonText.includes(FAKE_BOT_TOKEN), false);
+        assert.equal(badJsonText.includes(FAKE_WEBHOOK_SECRET), false);
+
+        // 2. fetch hata mesajında bot token'ı geçse bile günlüklerde ve yanıtta maskelenir, durum 200 kalır.
+        const failingFetchResponse = await handleTelegramWebhook(
+            createWebhookRequest({
+                body: {
+                    update_id: 8001,
+                    message: {
+                        message_id: 1,
+                        from: { id: 600, is_bot: false, language_code: 'tr' },
+                        chat: { id: 600, type: 'private' },
+                        text: '/start'
+                    }
+                }
+            }),
+            createFakeEnv(),
+            'req-fetch-fail',
+            {
+                fetch: async () => {
+                    throw new Error(`connect failed to https://api.telegram.org/bot${FAKE_BOT_TOKEN}/sendMessage with ${FAKE_WEBHOOK_SECRET}`);
+                },
+                findRecoverableApplication: async () => null,
+                rotateAccessCodeForRecovery: async () => null
+            }
+        );
+        assert.equal(failingFetchResponse.status, 200);
+        const failingResponseText = await failingFetchResponse.text();
+        assert.equal(failingResponseText.includes(FAKE_BOT_TOKEN), false);
+        assert.equal(failingResponseText.includes(FAKE_WEBHOOK_SECRET), false);
+
+        // 3. createTelegramMessageSender fırlattığı hatada da belirteci maskeler.
+        const sender = createTelegramMessageSender({
+            botToken: FAKE_BOT_TOKEN,
+            fetchImplementation: async () => {
+                throw new Error(`network failure on https://api.telegram.org/bot${FAKE_BOT_TOKEN}/sendMessage`);
+            }
+        });
+        await assert.rejects(
+            () => sender({ chat_id: 600, text: 'test' }),
+            (error) => {
+                assert.equal(error.message.includes(FAKE_BOT_TOKEN), false);
+                assert.match(error.message, /\[REDACTED\]/);
+                return true;
+            }
+        );
+
+        assert.ok(loggedEntries.length >= 2);
+        for (const entry of loggedEntries) {
+            assert.equal(entry.includes(FAKE_BOT_TOKEN), false);
+            assert.equal(entry.includes(FAKE_WEBHOOK_SECRET), false);
+        }
+    } finally {
+        console.error = originalConsoleError;
+    }
+});
+
+test('wrangler.jsonc and runtime-secret-metadata.mjs declare matching Telegram configuration', () => {
+    const wrangler = JSON.parse(readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
+    assert.equal(wrangler.env.staging.vars.TELEGRAM_BOT_USERNAME, '');
+    assert.equal(wrangler.env.production.vars.TELEGRAM_BOT_USERNAME, '');
+    assert.equal(wrangler.env.production.secrets.required.includes('TELEGRAM_BOT_TOKEN'), false);
+    assert.equal(wrangler.env.production.secrets.required.includes('TELEGRAM_WEBHOOK_SECRET'), false);
+
+    const allExpectedSecrets = [
+        'APPS_SCRIPT_API_KEY', 'APPS_SCRIPT_URL', 'AZURE_VISION_ENDPOINT', 'AZURE_VISION_KEY',
+        'D1_ANALYTICS_API_TOKEN',
+        'PRINTER_SECRET', 'PRINT_R2_ACCESS_KEY_ID', 'PRINT_R2_SECRET_ACCESS_KEY',
+        'R2_ACCESS_KEY_ID', 'R2_ACCOUNT_ID', 'R2_SECRET_ACCESS_KEY',
+        'REFERENCE_MAIL_ENDPOINT', 'REFERENCE_MAIL_TOKEN',
+        'SCANNER_SECRET', 'STAFF_BOOTSTRAP_TOKEN',
+        'TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET'
+    ].map((name) => ({ name, type: 'secret_text' }));
+
+    assert.doesNotThrow(() => assertProductionRuntimeSecretMetadata(
+        allExpectedSecrets,
+        wrangler.env.production.secrets.required
+    ));
+});
