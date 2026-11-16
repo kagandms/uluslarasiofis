@@ -10,6 +10,8 @@ const STAFF_PORTAL_PATTERN_SOURCE = 'bridge.js';
 const TEMPORARY_STORAGE_TIMESTAMP_KEY = 'temporaryStudentDataSavedAt';
 const TEMPORARY_STUDENT_DATA_KEYS = ['studentData', 'pendingPassportCrop', 'croppedPhotoBase64'];
 const YOKSIS_TAB_STORAGE_KEY = 'activeYoksisTabId';
+const YOKSIS_SIDE_BY_SIDE_STORAGE_KEY = 'yoksisSideBySideEnabled';
+const YOKSIS_SIDE_WINDOW_STATE_KEY = 'yoksisSideBySideWindowState';
 
 let ikametTabId = null;
 let applyTabId = null;
@@ -577,13 +579,253 @@ function writeSessionYoksisTabId(tabId) {
     });
 }
 
-async function getBackgroundYoksisTab() {
+// Ekran ve yan yana pencere yerleştirme yardımcıları
+function parseScreenArea(screenArea) {
+    if (!screenArea || typeof screenArea !== 'object' || Array.isArray(screenArea)) return null;
+    const availLeft = Number.isFinite(screenArea.availLeft) ? screenArea.availLeft : 0;
+    const availTop = Number.isFinite(screenArea.availTop) ? screenArea.availTop : 0;
+    const availWidth = screenArea.availWidth;
+    const availHeight = screenArea.availHeight;
+    if (!Number.isFinite(availWidth) || !Number.isFinite(availHeight) || availWidth < 2 || availHeight < 1) {
+        return null;
+    }
+    return {
+        availLeft: Math.round(availLeft),
+        availTop: Math.round(availTop),
+        availWidth: Math.round(availWidth),
+        availHeight: Math.round(availHeight)
+    };
+}
+
+function buildSideBySideWindowBounds(screenArea) {
+    const leftWidth = Math.floor(screenArea.availWidth / 2);
+    const rightWidth = screenArea.availWidth - leftWidth;
+    return {
+        portalBounds: {
+            left: screenArea.availLeft,
+            top: screenArea.availTop,
+            width: leftWidth,
+            height: screenArea.availHeight
+        },
+        yoksisBounds: {
+            left: screenArea.availLeft + leftWidth,
+            top: screenArea.availTop,
+            width: rightWidth,
+            height: screenArea.availHeight
+        }
+    };
+}
+
+function isYoksisSideBySideEnabled() {
+    const localStorage = chrome.storage?.local;
+    if (!localStorage?.get) return Promise.resolve(true);
+    return new Promise((resolve) => {
+        localStorage.get(YOKSIS_SIDE_BY_SIDE_STORAGE_KEY, (stored) => {
+            if (chrome.runtime?.lastError) {
+                resolve(true);
+                return;
+            }
+            resolve(stored?.[YOKSIS_SIDE_BY_SIDE_STORAGE_KEY] !== false);
+        });
+    });
+}
+
+function readSessionSideBySideWindowState() {
+    const sessionStorage = chrome.storage?.session;
+    if (!sessionStorage?.get) return Promise.resolve(null);
+    return new Promise((resolve) => {
+        sessionStorage.get(YOKSIS_SIDE_WINDOW_STATE_KEY, (stored) => {
+            const state = stored?.[YOKSIS_SIDE_WINDOW_STATE_KEY];
+            if (!state || typeof state !== 'object') {
+                resolve(null);
+                return;
+            }
+            resolve({
+                yoksisWindowId: Number.isInteger(state.yoksisWindowId) ? state.yoksisWindowId : null,
+                portalWindowId: Number.isInteger(state.portalWindowId) ? state.portalWindowId : null
+            });
+        });
+    });
+}
+
+function writeSessionSideBySideWindowState(state) {
+    const sessionStorage = chrome.storage?.session;
+    if (!sessionStorage?.set) return Promise.resolve();
+    return new Promise((resolve) => {
+        sessionStorage.set({ [YOKSIS_SIDE_WINDOW_STATE_KEY]: state }, () => resolve());
+    });
+}
+
+async function resolveSideBySideWindowPlan(request) {
+    if (request?.yknViewOpen !== true) return null;
+    const screenArea = parseScreenArea(request?.screenArea);
+    if (!screenArea) return null;
+    if (!await isYoksisSideBySideEnabled()) return null;
+
+    const { portalBounds, yoksisBounds } = buildSideBySideWindowBounds(screenArea);
+    let portalWindowId = Number.isInteger(request?.portalSenderTab?.windowId)
+        ? request.portalSenderTab.windowId
+        : null;
+    if (!Number.isInteger(portalWindowId) && Number.isInteger(request?.portalSenderTab?.id)) {
+        const senderTab = await readTabById(request.portalSenderTab.id);
+        if (Number.isInteger(senderTab?.windowId)) portalWindowId = senderTab.windowId;
+    }
+
+    return {
+        portalBounds,
+        yoksisBounds,
+        portalWindowId,
+        yoksisCreatedInNewWindow: false,
+        portalPlaced: false,
+        portalPlacementAttempted: false
+    };
+}
+
+async function moveWindowToBounds(windowId, bounds) {
+    if (!Number.isInteger(windowId) || !bounds || typeof chrome.windows?.update !== 'function') return false;
+    try {
+        if (typeof chrome.windows.get === 'function') {
+            await chrome.windows.get(windowId);
+        }
+        await chrome.windows.update(windowId, { state: 'normal' });
+        await chrome.windows.update(windowId, {
+            left: bounds.left,
+            top: bounds.top,
+            width: bounds.width,
+            height: bounds.height
+        });
+        return true;
+    } catch (error) {
+        console.warn('[YKN] Pencere konumu güncellenemedi:', { errorName: error?.name || 'Error' });
+        return false;
+    }
+}
+
+async function arrangeSideBySideWindows(yoksisTab, sideWindowPlan) {
+    if (!sideWindowPlan || !yoksisTab) return yoksisTab;
+    const { portalWindowId, portalBounds, yoksisBounds, yoksisCreatedInNewWindow } = sideWindowPlan;
+    const sessionState = await readSessionSideBySideWindowState();
+    let currentYoksisTab = yoksisTab;
+    let yoksisPlacedWindowId = Number.isInteger(currentYoksisTab.windowId) ? currentYoksisTab.windowId : null;
+    let portalPlaced = false;
+
+    const alreadyPlacedPair = Number.isInteger(yoksisPlacedWindowId)
+        && Number.isInteger(portalWindowId)
+        && yoksisPlacedWindowId !== portalWindowId
+        && sessionState?.yoksisWindowId === yoksisPlacedWindowId
+        && sessionState?.portalWindowId === portalWindowId;
+
+    if (alreadyPlacedPair) {
+        sideWindowPlan.portalPlaced = true;
+        sideWindowPlan.portalPlacementAttempted = true;
+        return currentYoksisTab;
+    }
+
+    if (yoksisCreatedInNewWindow && Number.isInteger(yoksisPlacedWindowId)) {
+        // YÖKSİS sağ yarıda yeni pencerede açıldı; portal penceresini sol yarıya taşı.
+        if (Number.isInteger(portalWindowId)) {
+            sideWindowPlan.portalPlacementAttempted = true;
+            portalPlaced = await moveWindowToBounds(portalWindowId, portalBounds);
+            sideWindowPlan.portalPlaced = portalPlaced;
+        }
+        await writeSessionSideBySideWindowState({
+            yoksisWindowId: yoksisPlacedWindowId,
+            portalWindowId: portalPlaced ? portalWindowId : (sessionState?.portalWindowId ?? null)
+        });
+        return currentYoksisTab;
+    }
+
+    const sharesPortalWindow = Number.isInteger(portalWindowId)
+        && Number.isInteger(currentYoksisTab.windowId)
+        && currentYoksisTab.windowId === portalWindowId;
+
+    if (sharesPortalWindow) {
+        if (typeof chrome.windows?.create === 'function') {
+            try {
+                const createdWindow = await chrome.windows.create({
+                    tabId: currentYoksisTab.id,
+                    state: 'normal',
+                    focused: false,
+                    left: yoksisBounds.left,
+                    top: yoksisBounds.top,
+                    width: yoksisBounds.width,
+                    height: yoksisBounds.height
+                });
+                if (Number.isInteger(createdWindow?.id)) {
+                    yoksisPlacedWindowId = createdWindow.id;
+                    currentYoksisTab = { ...currentYoksisTab, windowId: createdWindow.id };
+                } else {
+                    yoksisPlacedWindowId = null;
+                }
+            } catch (error) {
+                console.warn('[YKN] YÖKSİS sekmesi yeni pencereye taşınamadı:', {
+                    errorName: error?.name || 'Error'
+                });
+                yoksisPlacedWindowId = null;
+            }
+        } else {
+            yoksisPlacedWindowId = null;
+        }
+    } else if (Number.isInteger(yoksisPlacedWindowId) && sessionState?.yoksisWindowId !== yoksisPlacedWindowId) {
+        const movedYoksis = await moveWindowToBounds(yoksisPlacedWindowId, yoksisBounds);
+        if (!movedYoksis) yoksisPlacedWindowId = null;
+    }
+
+    if (Number.isInteger(portalWindowId)) {
+        sideWindowPlan.portalPlacementAttempted = true;
+        portalPlaced = await moveWindowToBounds(portalWindowId, portalBounds);
+        sideWindowPlan.portalPlaced = portalPlaced;
+    }
+
+    if (Number.isInteger(yoksisPlacedWindowId) && (!Number.isInteger(portalWindowId) || yoksisPlacedWindowId !== portalWindowId)) {
+        await writeSessionSideBySideWindowState({
+            yoksisWindowId: yoksisPlacedWindowId,
+            portalWindowId: portalPlaced ? portalWindowId : (sessionState?.portalWindowId ?? null)
+        });
+    }
+
+    return currentYoksisTab;
+}
+
+async function getBackgroundYoksisTab(sideWindowPlan = null) {
     const startedAt = startYknTiming();
     let yoksisTab;
     try {
         yoksisTab = await resolveYoksisTab();
     } catch (_) {
-        yoksisTab = await createTab({ url: YOKSIS_URL, active: false });
+        if (sideWindowPlan?.yoksisBounds && typeof chrome.windows?.create === 'function') {
+            try {
+                const createdWindow = await chrome.windows.create({
+                    url: YOKSIS_URL,
+                    focused: false,
+                    state: 'normal',
+                    left: sideWindowPlan.yoksisBounds.left,
+                    top: sideWindowPlan.yoksisBounds.top,
+                    width: sideWindowPlan.yoksisBounds.width,
+                    height: sideWindowPlan.yoksisBounds.height
+                });
+                let createdTab = createdWindow?.tabs?.[0] || null;
+                if (!createdTab && Number.isInteger(createdWindow?.id)) {
+                    const windowTabs = await queryTabs({ windowId: createdWindow.id });
+                    createdTab = windowTabs?.[0] || null;
+                }
+                if (createdTab && Number.isInteger(createdTab.id)) {
+                    yoksisTab = Number.isInteger(createdTab.windowId)
+                        ? createdTab
+                        : { ...createdTab, windowId: createdWindow.id };
+                    sideWindowPlan.yoksisCreatedInNewWindow = true;
+                } else {
+                    throw new Error('Yeni YÖKSİS penceresinde sekme oluşturulamadı.');
+                }
+            } catch (error) {
+                console.warn('[YKN] YÖKSİS penceresi açılamadı, sekme olarak açılıyor:', {
+                    errorName: error?.name || 'Error'
+                });
+                yoksisTab = await createTab({ url: YOKSIS_URL, active: false });
+            }
+        } else {
+            yoksisTab = await createTab({ url: YOKSIS_URL, active: false });
+        }
         yoksisTabId = yoksisTab.id;
         await writeSessionYoksisTabId(yoksisTab.id);
     }
@@ -1893,7 +2135,7 @@ function readTabById(tabId) {
  * @param {chrome.tabs.Tab|null} senderTab Sender tab of the portal request, as provided by runtime.onMessage.
  * @returns {Promise<boolean>} Whether the portal tab was activated.
  */
-async function returnToPortalTab(senderTab = null) {
+async function returnToPortalTab(senderTab = null, sideWindowPlan = null) {
     try {
         let portalTab = senderTab && typeof senderTab.id === 'number' && isAllowedPortalUrl(senderTab.url || '')
             ? senderTab
@@ -1904,8 +2146,16 @@ async function returnToPortalTab(senderTab = null) {
             portalTab = await readTabById(portalTabId);
         }
         if (!portalTab) return false;
+        if (sideWindowPlan && !sideWindowPlan.portalPlacementAttempted && portalTab.windowId && sideWindowPlan.portalBounds) {
+            sideWindowPlan.portalPlacementAttempted = true;
+            sideWindowPlan.portalPlaced = await moveWindowToBounds(portalTab.windowId, sideWindowPlan.portalBounds);
+        }
         await updateTab(portalTab.id, { active: true });
-        if (portalTab.windowId) await chrome.windows.update(portalTab.windowId, { focused: true }).catch(() => {});
+        if (portalTab.windowId) {
+            await chrome.windows.update(portalTab.windowId, { focused: true }).catch((error) => {
+                console.warn('[YKN] Portal penceresi odaklanamadı:', { errorName: error?.name || 'Error' });
+            });
+        }
         return true;
     } catch (_) {
         return false;
@@ -1933,7 +2183,9 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         .trim()
         .toUpperCase();
     if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
-    const yoksisTab = await getBackgroundYoksisTab();
+    const sideWindowPlan = await resolveSideBySideWindowPlan(request);
+    let yoksisTab = await getBackgroundYoksisTab(sideWindowPlan);
+    yoksisTab = await arrangeSideBySideWindows(yoksisTab, sideWindowPlan);
 
     const expectedStudent = {
         passportNo: request.data?.pasaportNo || request.data?.passportNo || '',
@@ -2105,7 +2357,11 @@ async function transferToYoksisOperation(request, totalStartedAt) {
     };
     return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
         await updateTab(yoksisTab.id, { active: true });
-        if (yoksisTab.windowId) await chrome.windows.update(yoksisTab.windowId, { focused: true });
+        if (yoksisTab.windowId) {
+            await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch((error) => {
+                console.warn('YÖKSİS window focus failed.', { errorName: error?.name || 'Error' });
+            });
+        }
         const response = await performSearch();
         if (response.success && (response.formReady || response.manualOverrideAvailable)) {
             await saveTemporaryStudentData({ ...request.data, yoksisId: kabulId,
@@ -2117,7 +2373,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         // Portal'dan başlatılan aramada kabul kodu YÖKSİS'te doğrulanınca kullanıcıyı tekrar portal sekmesine al.
         // Manuel onay gereken durumda YÖKSİS sekmesi açık kalır ki kayıt kontrol edilebilsin.
         if (response.success && response.formReady === true && request.portalSenderTab) {
-            await returnToPortalTab(request.portalSenderTab);
+            await returnToPortalTab(request.portalSenderTab, sideWindowPlan);
         }
         return response;
     });
