@@ -7,7 +7,7 @@ Durum: taslak ve kurtarma e-postaları tek dilli gönderim, gönderici kimliği 
 Sistem iki tür başvuru e-postası gönderir:
 
 1. **Taslak / ilk başvuru e-postası:** Öğrenci ilk adımdaki iletişim sorumluluğu onayını işaretleyip "Devam et" dediğinde kayıtlı e-posta adresine başvuru numarası, öğrenci numarası, başvuru türü ve kanonik portal bağlantısı gönderilir. Erişim kodu içermez.
-2. **Erişim kodu kurtarma e-postası ("Başvuru kodumu unuttum"):** Öğrenci ana sayfadan kurtarma istediğinde, aktif başvurusu ve kayıtlı e-postası varsa başvuru numarası, öğrenci numarası ve **yeni** erişim kodu gönderilir. Eski erişim kodu hemen geçersiz olur; e-postada "siz istemediyseniz yok sayın" uyarısı yer alır.
+2. **Başvuru numarası hatırlatma e-postası ("Başvuru Numaramı Unuttum"):** Öğrenci ana sayfadan başvuru numarasını istediğinde, aktif başvurusu ve kayıtlı e-postası varsa mevcut başvuru numarası, öğrenci numarası ve kanonik `/basvuruya-devam-et/` bağlantısı gönderilir. Erişim kodu üretilmez, döndürülmez veya gönderilmez; e-postada "siz istemediyseniz yok sayın" ve gereksiz (spam) klasörü uyarısı yer alır.
 
 **Tek dilli gönderim:** Her iki e-posta da öğrencinin istek anındaki arayüz dilinde (`tr`, `en`, `ru`, `tk`, `ar`) tek dilli konu ve tek dilli düz metin gövdeyle gönderilir. Geçerli bir dil bilgisi gelmezse mevcut beş dilli birleşik gövdeye geri dönülür.
 
@@ -24,7 +24,7 @@ Taslak otomatik kaydedildiğinde mail gönderilmez, çünkü öğrenci henüz e-
 ## Kotalar
 
 - Ücretsiz Gmail hesabında günde 100 alıcı sınırı varsayılır (**doğrulanmamış; Google'ın güncel belgesinden ve Google Workspace seçeneğinin sınırlarından teyit edilmeli**: [Apps Script kotaları](https://developers.google.com/apps-script/quotas)).
-- **70/30 kota bölüşümü:** Kayan 24 saatlik pencerede günlük 100 gönderimlik bütçenin en fazla **70** adedi ilk kayıt (taslak) e-postalarına, **30** adedi erişim kodu kurtarma e-postalarına ayrılır.
+- **70/30 kota bölüşümü:** Günlük 100 gönderimlik bütçenin en fazla **70** adedi kayan 24 saatlik pencerede (`application_reference_mails`) ilk kayıt (taslak) e-postalarına, **30** adedi `public_rate_limits` üzerindeki sabit 24 saatlik küresel sayaç (`reference-reminder-mail-daily`) ile başvuru numarası hatırlatma e-postalarına ayrılır. Kotaya ulaşıldığında hatırlatma isteği yine genel `202` yanıtı döner ve e-posta göndermez.
 - Taslak e-postalarında günlük limit aşılırsa kayıt `quota_deferred` olarak işaretlenir ve sonraki gönderimde yeniden denenir.
 
 ## Kurulum adımları
@@ -52,7 +52,7 @@ Canlıya geçiş öncesinde Gmail, Outlook/Hotmail, Yandex, Mail.ru, iCloud ve b
 ## Güvenlik notları
 
 - Taslak e-postası yalnızca başvuru numarası, öğrenci numarası, başvuru türü ve kanonik portal bağlantısını içerir; erişim kodu ve pasaport bilgisi içermez.
-- Kurtarma e-postası yalnızca yeni üretilen erişim kodunu (eski kodu geçersiz kılar), başvuru numarasını, öğrenci numarasını ve kanonik portal bağlantısını içerir; pasaport bilgisi içermez.
+- Hatırlatma e-postası yalnızca mevcut başvuru numarasını, öğrenci numarasını ve kanonik `/basvuruya-devam-et/` bağlantısını içerir; erişim kodu ve pasaport bilgisi içermez.
 - Mail adresi ve mail gövdesi veritabanına kaydedilmez. Tabloda yalnızca durum, deneme sayısı ve hata kodu tutulur.
 - Apps Script URL'si, token ve `REPLY_TO` değeri repoya yazılmaz. Token sızarsa Apps Script'te yeni bir token üretin ve iki tarafı da güncelleyin.
 

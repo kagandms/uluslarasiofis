@@ -1540,16 +1540,10 @@ button.home-cta { font-family: inherit; font-size: 1.02rem; font-weight: 700; li
     align-items: center;
     gap: 0.75rem;
 }
-.recovery-telegram-link {
+.recovery-actions a.application-button {
     text-decoration: none;
-    border: 1px solid var(--public-burgundy-border);
-    color: var(--public-burgundy);
-    background: var(--public-burgundy-soft);
 }
-.recovery-telegram-link:hover {
-    background: #f5e2e7;
-}
-.recovery-telegram-link[hidden] {
+.recovery-actions a.application-button[hidden] {
     display: none;
 }
 .recovery-feedback {

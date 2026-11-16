@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { generateAccessCode, hashAccessCode, verifyAccessCode } from '../src/server/auth/applicationAccessCode.js';
+import { generateAccessCode, hashAccessCode } from '../src/server/auth/applicationAccessCode.js';
 import { createOpaqueSessionToken, hashSessionToken } from '../src/server/auth/sessionToken.js';
 import { createAccessCodeRotationStatements } from '../src/server/repositories/d1/application-access-statements.js';
 import { createD1Repositories } from '../src/server/repositories/d1/index.js';
@@ -8,9 +8,9 @@ import {
     consumeRecoveryApplicationRateLimit,
     consumeRecoveryIpRateLimit,
     consumeRecoveryTelegramUserRateLimit,
+    consumeReferenceReminderMailQuota,
     findRecoverableApplication,
-    normalizeRecoveryLanguage,
-    rotateAccessCodeForRecovery
+    normalizeRecoveryLanguage
 } from '../src/server/services/accessRecoveryService.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
@@ -84,60 +84,7 @@ test('findRecoverableApplication returns active non-deleted application only', a
     assert.equal(await findRecoverableApplication(database, { studentNumber: 'SYN-REC-SVC-01' }), null);
 });
 
-test('rotateAccessCodeForRecovery replaces old code immediately, writes audit event and preserves open sessions', async () => {
-    const { database, application, initialCode, sessionId } = await createSeededDatabase();
-    const now = new Date().toISOString();
-
-    const rotated = await rotateAccessCodeForRecovery(database, {
-        applicationId: application.id,
-        channel: 'email',
-        requestId: 'req_recovery_1',
-        now
-    });
-
-    assert.ok(rotated?.accessCode);
-    assert.notEqual(rotated.accessCode, initialCode);
-
-    const updatedRow = database.prepare('SELECT access_code_hash, access_code_version FROM applications WHERE id = ?')
-        .bind(application.id).first();
-    assert.equal(updatedRow.access_code_version, 2);
-    assert.equal(await verifyAccessCode(initialCode, updatedRow.access_code_hash), false);
-    assert.equal(await verifyAccessCode(rotated.accessCode, updatedRow.access_code_hash), true);
-
-    // Açık öğrenci oturumu iptal edilmemeli.
-    const sessionRow = database.prepare('SELECT revoked_at FROM application_sessions WHERE id = ?')
-        .bind(sessionId).first();
-    assert.equal(sessionRow.revoked_at, null);
-
-    // Denetim olayı yazılmalı.
-    const auditRow = database.prepare(`SELECT event_type, actor_type, request_id, safe_metadata_json
-        FROM audit_events WHERE application_id = ? AND event_type = 'application.access_code_recovered'`)
-        .bind(application.id).first();
-    assert.ok(auditRow);
-    assert.equal(auditRow.event_type, 'application.access_code_recovered');
-    assert.equal(auditRow.actor_type, 'system');
-    assert.equal(auditRow.request_id, 'req_recovery_1');
-    assert.deepEqual(JSON.parse(auditRow.safe_metadata_json), { accessCodeRotated: true, channel: 'email' });
-});
-
-test('rotateAccessCodeForRecovery returns null for terminal applications and rejects invalid channel', async () => {
-    const { database, application } = await createSeededDatabase();
-
-    await assert.rejects(
-        () => rotateAccessCodeForRecovery(database, { applicationId: application.id, channel: 'sms', requestId: 'req_1' }),
-        TypeError
-    );
-
-    await database.prepare("UPDATE applications SET status = 'completed' WHERE id = ?").bind(application.id).run();
-    const result = await rotateAccessCodeForRecovery(database, {
-        applicationId: application.id,
-        channel: 'telegram',
-        requestId: 'req_2'
-    });
-    assert.equal(result, null);
-});
-
-test('createAccessCodeRotationStatements preserves student and staff rotation behavior and enforces version guard', async () => {
+test('createAccessCodeRotationStatements preserves student and staff rotation behavior and rejects recovery actor', async () => {
     const { database, application, sessionId } = await createSeededDatabase();
     const now = new Date().toISOString();
 
@@ -173,19 +120,17 @@ test('createAccessCodeRotationStatements preserves student and staff rotation be
         'application.access_code_regenerated'
     );
 
-    // Eski versiyonla recovery çakışması reddedilir (version guard).
-    const staleRecovery = await database.batch(createAccessCodeRotationStatements(database, {
+    // Kaldırılan 'recovery' actorType dalı artık reddedilmelidir.
+    assert.throws(() => createAccessCodeRotationStatements(database, {
         applicationId: application.id,
-        accessCodeHash: await hashAccessCode(generateAccessCode()),
+        accessCodeHash: studentHash,
         accessCodeCreatedAt: now,
         auditEventId: crypto.randomUUID(),
-        requestId: 'req_stale',
-        expectedAccessCodeVersion: 1,
+        requestId: 'req_removed_recovery',
+        expectedAccessCodeVersion: 2,
         actorType: 'recovery',
-        channel: 'telegram'
-    }));
-    assert.equal(staleRecovery[0].meta.changes, 0);
-    assert.equal(staleRecovery[1].meta.changes, 0);
+        channel: 'email'
+    }), TypeError);
 
     // staff: açık oturumları iptal eder ve staff.application_access_code_reset yazar.
     await database.prepare(`INSERT INTO staff_users (id, username, normalized_username, password_hash, display_name, role)
@@ -219,7 +164,7 @@ test('createAccessCodeRotationStatements preserves student and staff rotation be
     }), TypeError);
 });
 
-test('recovery rate limit helpers enforce 3/day per application, 5/15m per IP and 3/day per Telegram user', async () => {
+test('recovery rate limit helpers enforce 3/day per application, 5/15m per IP, 3/day per Telegram user and 30/day global mail quota', async () => {
     const database = new TestD1Database();
     applyAllMigrations(database);
     const { rateLimits } = createD1Repositories(database);
@@ -240,6 +185,12 @@ test('recovery rate limit helpers enforce 3/day per application, 5/15m per IP an
         assert.equal(await consumeRecoveryTelegramUserRateLimit(rateLimits, { telegramUserId: 'tg-100', nowSeconds }), true);
     }
     assert.equal(await consumeRecoveryTelegramUserRateLimit(rateLimits, { telegramUserId: 'tg-100', nowSeconds }), false);
+
+    for (let i = 0; i < 30; i += 1) {
+        assert.equal(await consumeReferenceReminderMailQuota(rateLimits, { nowSeconds }), true);
+    }
+    assert.equal(await consumeReferenceReminderMailQuota(rateLimits, { nowSeconds }), false);
+    assert.equal(await consumeReferenceReminderMailQuota(rateLimits, { nowSeconds: nowSeconds + 86_401 }), true);
 
     assert.equal(normalizeRecoveryLanguage('tk'), 'tk');
     assert.equal(normalizeRecoveryLanguage('xx'), null);

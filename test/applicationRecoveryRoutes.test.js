@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createD1Repositories } from '../src/server/repositories/d1/index.js';
+import { consumeReferenceReminderMailQuota } from '../src/server/services/accessRecoveryService.js';
 import worker from '../src/server/worker.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TEST_APPLICATION_PRIVACY_NOTICE, withTestApplicationPrivacyNoticeVersion } from './helpers/application-privacy-notice.js';
@@ -9,6 +11,13 @@ const TOKEN = 't'.repeat(40);
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbTestRecovery/exec';
 const PORTAL_CANONICAL_ORIGIN = 'https://portal.test';
 const ACCESS_CODE_PATTERN = /[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{6}/;
+const EXPECTED_MAIL_SUBJECTS = Object.freeze({
+    tr: 'Başvuru numaranız',
+    en: 'Your application number',
+    ru: 'Номер вашей заявки',
+    tk: 'Arza belgiňiz',
+    ar: 'رقم طلبك'
+});
 
 function createTestEnvironment(overrides = {}) {
     const database = new TestD1Database();
@@ -100,10 +109,8 @@ test('POST /api/application-recovery/email enforces method, same-origin and stud
     }), environment, {})).status, 400);
 });
 
-test('POST /api/application-recovery/email rotates code, keeps open sessions, sends mail and hides unregistered records', async () => {
+test('POST /api/application-recovery/email sends existing reference number without rotating code across all 5 languages and hides unknown records', async () => {
     const { database, environment, sentMails } = createTestEnvironment();
-    const { cookie, referenceNumber, accessCode: initialCode } = await createApplicant(environment, 'SYN-REC-ROUTE-1', '198.51.100.11');
-    assert.equal(sentMails.length, 0);
 
     const unknownResponse = await worker.fetch(makeRequest('/api/application-recovery/email', {
         method: 'POST',
@@ -115,61 +122,73 @@ test('POST /api/application-recovery/email rotates code, keeps open sessions, se
     assert.equal(unknownPayload.ok, true);
     assert.equal(sentMails.length, 0);
 
-    const registeredResponse = await worker.fetch(makeRequest('/api/application-recovery/email', {
-        method: 'POST',
-        ip: '198.51.100.13',
-        body: { student_number: 'syn-rec-route-1', language: 'en' }
-    }), environment, {});
-    const registeredPayload = await registeredResponse.json();
-    assert.equal(registeredResponse.status, 202);
-    assert.deepEqual(Object.keys(registeredPayload).sort(), Object.keys(unknownPayload).sort());
-    assert.equal(registeredPayload.ok, true);
+    for (const [index, locale] of ['tr', 'en', 'ru', 'tk', 'ar'].entries()) {
+        const studentNumber = `SYN-REC-LANG-${locale.toUpperCase()}`;
+        const { cookie, referenceNumber, accessCode: initialCode } = await createApplicant(
+            environment,
+            studentNumber,
+            `198.51.100.${100 + index}`
+        );
+        const beforeRow = database.prepare('SELECT access_code_hash, access_code_version FROM applications WHERE reference_number = ?')
+            .bind(referenceNumber).first();
 
-    assert.equal(sentMails.length, 1);
-    assert.equal(sentMails[0].to, 'syn-rec-route-1@example.invalid');
-    assert.equal(sentMails[0].subject, 'Your application access code has been reset');
-    assert.ok(sentMails[0].text.includes(referenceNumber));
-    assert.ok(sentMails[0].text.includes('https://portal.test/basvurum/'));
-    assert.match(sentMails[0].text, /ignore/i);
-    assert.match(sentMails[0].text, /spam/i);
+        const response = await worker.fetch(makeRequest('/api/application-recovery/email', {
+            method: 'POST',
+            ip: `198.51.100.${120 + index}`,
+            body: { student_number: studentNumber.toLowerCase(), language: locale }
+        }), environment, {});
+        const payload = await response.json();
+        assert.equal(response.status, 202);
+        assert.deepEqual(Object.keys(payload).sort(), Object.keys(unknownPayload).sort());
+        assert.equal(payload.ok, true);
 
-    const extractedCode = sentMails[0].text.match(ACCESS_CODE_PATTERN)?.[0];
-    assert.ok(extractedCode);
-    assert.notEqual(extractedCode, initialCode);
+        assert.equal(sentMails.length, index + 1);
+        const sentMail = sentMails[index];
+        assert.equal(sentMail.to, `${studentNumber.toLowerCase()}@example.invalid`);
+        assert.equal(sentMail.subject, EXPECTED_MAIL_SUBJECTS[locale]);
+        assert.ok(sentMail.text.includes(referenceNumber));
+        assert.ok(sentMail.text.includes(studentNumber.toLowerCase()));
+        assert.ok(sentMail.text.includes('https://portal.test/basvuruya-devam-et/'));
+        assert.doesNotMatch(sentMail.text, ACCESS_CODE_PATTERN);
 
-    // Eski kod geçersiz, yeni kod geçerli olmalı.
-    const oldLogin = await worker.fetch(makeRequest('/api/public/applications/access', {
-        method: 'POST',
-        ip: '198.51.100.14',
-        body: { reference_number: referenceNumber, access_code: initialCode }
-    }), environment, {});
-    assert.equal(oldLogin.status, 401);
+        // Başvurunun erişim kodu özeti ve sürümü değişmemiş olmalıdır.
+        const afterRow = database.prepare('SELECT access_code_hash, access_code_version FROM applications WHERE reference_number = ?')
+            .bind(referenceNumber).first();
+        assert.equal(afterRow.access_code_hash, beforeRow.access_code_hash);
+        assert.equal(afterRow.access_code_version, beforeRow.access_code_version);
 
-    const newLogin = await worker.fetch(makeRequest('/api/public/applications/access', {
-        method: 'POST',
-        ip: '198.51.100.14',
-        body: { reference_number: referenceNumber, access_code: extractedCode }
-    }), environment, {});
-    assert.equal(newLogin.status, 200);
+        // İlk erişim kodu ve açık oturum hâlâ geçerli olmalıdır.
+        const accessCheck = await worker.fetch(makeRequest('/api/public/applications/access', {
+            method: 'POST',
+            ip: `198.51.100.${140 + index}`,
+            body: { reference_number: referenceNumber, access_code: initialCode }
+        }), environment, {});
+        assert.equal(accessCheck.status, 200);
+        const sessionCheck = await worker.fetch(makeRequest('/api/public/applications/current/status', { cookie }), environment, {});
+        assert.equal(sessionCheck.status, 200);
+    }
 
-    // Açık öğrenci oturumu iptal edilmemiş olmalı.
-    const sessionCheck = await worker.fetch(makeRequest('/api/public/applications/current/status', { cookie }), environment, {});
-    assert.equal(sessionCheck.status, 200);
+    assert.equal(
+        database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'application.access_code_recovered'").first().count,
+        0
+    );
 
-    // Terminal başvuruda yanıt yine 202 olur ama kod döndürülmez ve mail atılmaz.
-    database.prepare("UPDATE applications SET status = 'completed' WHERE reference_number = ?").bind(referenceNumber).run();
+    // Terminal başvuruda yanıt yine 202 olur ama mail atılmaz.
+    const terminalStudent = 'SYN-REC-TERM-1';
+    const { referenceNumber: terminalRef } = await createApplicant(environment, terminalStudent, '198.51.100.160');
+    database.prepare("UPDATE applications SET status = 'completed' WHERE reference_number = ?").bind(terminalRef).run();
     const terminalResponse = await worker.fetch(makeRequest('/api/application-recovery/email', {
         method: 'POST',
-        ip: '198.51.100.15',
-        body: { student_number: 'SYN-REC-ROUTE-1', language: 'tr' }
+        ip: '198.51.100.161',
+        body: { student_number: terminalStudent, language: 'tr' }
     }), environment, {});
     assert.equal(terminalResponse.status, 202);
-    assert.equal(sentMails.length, 1);
+    assert.equal(sentMails.length, 5);
 });
 
 test('POST /api/application-recovery/email falls back to five-language mail when language is invalid', async () => {
     const { environment, sentMails } = createTestEnvironment();
-    await createApplicant(environment, 'SYN-REC-LANG', '198.51.100.20');
+    const { referenceNumber } = await createApplicant(environment, 'SYN-REC-LANG', '198.51.100.20');
     assert.equal(sentMails.length, 0);
 
     const response = await worker.fetch(makeRequest('/api/application-recovery/email', {
@@ -180,17 +199,22 @@ test('POST /api/application-recovery/email falls back to five-language mail when
 
     assert.equal(response.status, 202);
     assert.equal(sentMails.length, 1);
-    assert.equal(sentMails[0].subject, 'Başvuru erişim kodunuz yenilendi · Application access code reset');
+    assert.equal(sentMails[0].subject, 'Başvuru numaranız · Application number');
     assert.equal(sentMails[0].text.split('\n\n---\n\n').length, 5);
+    assert.ok(sentMails[0].text.includes(referenceNumber));
+    assert.ok(sentMails[0].text.includes('https://portal.test/basvuruya-devam-et/'));
+    assert.doesNotMatch(sentMails[0].text, ACCESS_CODE_PATTERN);
 });
 
 test('POST /api/application-recovery/email enforces 3/day per-application and 5/15m per-IP limits while still returning 202', async () => {
-    const { environment, sentMails } = createTestEnvironment();
+    const { database, environment, sentMails } = createTestEnvironment();
     const { referenceNumber } = await createApplicant(environment, 'SYN-REC-LIMIT-1', '198.51.100.30');
     await createApplicant(environment, 'SYN-REC-LIMIT-2', '198.51.100.31');
+    const beforeRow = database.prepare('SELECT access_code_hash, access_code_version FROM applications WHERE reference_number = ?')
+        .bind(referenceNumber).first();
     assert.equal(sentMails.length, 0);
 
-    // Aynı başvuru için 3 kurtarma (farklı IP'lerden) başarılı, 4. istek 202 döner ama mail atmaz / kodu değiştirmez.
+    // Aynı başvuru için 3 hatırlatma (farklı IP'lerden) başarılı, 4. istek 202 döner ama mail atmaz.
     for (let i = 0; i < 3; i += 1) {
         const res = await worker.fetch(makeRequest('/api/application-recovery/email', {
             method: 'POST',
@@ -200,7 +224,7 @@ test('POST /api/application-recovery/email enforces 3/day per-application and 5/
         assert.equal(res.status, 202);
     }
     assert.equal(sentMails.length, 3);
-    const thirdCode = sentMails[2].text.match(ACCESS_CODE_PATTERN)?.[0];
+    assert.doesNotMatch(sentMails[2].text, ACCESS_CODE_PATTERN);
 
     const fourthRes = await worker.fetch(makeRequest('/api/application-recovery/email', {
         method: 'POST',
@@ -210,13 +234,10 @@ test('POST /api/application-recovery/email enforces 3/day per-application and 5/
     assert.equal(fourthRes.status, 202);
     assert.equal(sentMails.length, 3);
 
-    // 3. kod hâlâ geçerli olmalı.
-    const checkThirdCode = await worker.fetch(makeRequest('/api/public/applications/access', {
-        method: 'POST',
-        ip: '198.51.100.50',
-        body: { reference_number: referenceNumber, access_code: thirdCode }
-    }), environment, {});
-    assert.equal(checkThirdCode.status, 200);
+    const afterRow = database.prepare('SELECT access_code_hash, access_code_version FROM applications WHERE reference_number = ?')
+        .bind(referenceNumber).first();
+    assert.equal(afterRow.access_code_hash, beforeRow.access_code_hash);
+    assert.equal(afterRow.access_code_version, beforeRow.access_code_version);
 
     // Aynı IP'den 5 istek sonrası 6. istek (başka geçerli öğrenci için bile) 202 döner ama mail atmaz.
     const sharedIp = '198.51.100.60';
@@ -237,60 +258,54 @@ test('POST /api/application-recovery/email enforces 3/day per-application and 5/
     assert.equal(sentMails.length, 3);
 });
 
-test('POST /api/application-recovery/email does not rotate code when 30-mail recovery quota is full and ignores Telegram events', async () => {
+test('POST /api/application-recovery/email stops sending when 30-mail global counter is exhausted and still returns 202', async () => {
     const { database, environment, sentMails } = createTestEnvironment();
-    const { referenceNumber, accessCode: initialCode } = await createApplicant(environment, 'SYN-REC-QUOTA', '198.51.100.70');
+    const { referenceNumber } = await createApplicant(environment, 'SYN-REC-QUOTA', '198.51.100.70');
+    const beforeRow = database.prepare('SELECT access_code_hash, access_code_version FROM applications WHERE reference_number = ?')
+        .bind(referenceNumber).first();
     assert.equal(sentMails.length, 0);
 
-    const appRow = database.prepare('SELECT id FROM applications WHERE reference_number = ?').bind(referenceNumber).first();
-    const recentTime = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-
-    // 30 Telegram kurtarma olayı e-posta kotasını doldurmamalı.
-    for (let i = 0; i < 30; i += 1) {
-        database.prepare(`INSERT INTO audit_events (id, event_type, actor_type, application_id, request_id, safe_metadata_json, created_at)
-            VALUES (?, 'application.access_code_recovered', 'system', ?, ?, '{"accessCodeRotated":true,"channel":"telegram"}', ?)`)
-            .bind(`tg-rec-${i}`, appRow.id, `req-tg-${i}`, recentTime).run();
-    }
-
-    // 29 e-posta kurtarma olayı + 1 eski (26 saat önce) olay: toplam son 24 saatte 29, izin verilmeli.
-    const expiredTime = new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString();
-    database.prepare(`INSERT INTO audit_events (id, event_type, actor_type, application_id, request_id, safe_metadata_json, created_at)
-        VALUES ('old-email-rec', 'application.access_code_recovered', 'system', ?, 'req-old', '{"accessCodeRotated":true,"channel":"email"}', ?)`)
-        .bind(appRow.id, expiredTime).run();
+    const { rateLimits } = createD1Repositories(database);
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    // Küresel sabit penceredeki 30 kotanın 29'unu doldur; 30. istek gitmeli, 31. engellenmelidir.
     for (let i = 0; i < 29; i += 1) {
-        database.prepare(`INSERT INTO audit_events (id, event_type, actor_type, application_id, request_id, safe_metadata_json, created_at)
-            VALUES (?, 'application.access_code_recovered', 'system', ?, ?, '{"accessCodeRotated":true,"channel":"email"}', ?)`)
-            .bind(`email-rec-${i}`, appRow.id, `req-email-${i}`, recentTime).run();
+        await consumeReferenceReminderMailQuota(rateLimits, { nowSeconds });
     }
 
-    // 30. e-posta kurtarması çalışmalı.
-    const thirtieth = await worker.fetch(makeRequest('/api/application-recovery/email', {
+    // Kayıt dışı öğrenci aramaları küresel 30/gün e-posta kotasını tüketmemelidir.
+    const unknownBefore = await worker.fetch(makeRequest('/api/application-recovery/email', {
         method: 'POST',
         ip: '198.51.100.71',
+        body: { student_number: 'SYN-UNKNOWN-NO-QUOTA-BURN', language: 'tr' }
+    }), environment, {});
+    assert.equal(unknownBefore.status, 202);
+    assert.equal(sentMails.length, 0);
+
+    // 30. e-posta gönderilmelidir.
+    const thirtieth = await worker.fetch(makeRequest('/api/application-recovery/email', {
+        method: 'POST',
+        ip: '198.51.100.72',
         body: { student_number: 'SYN-REC-QUOTA', language: 'tr' }
     }), environment, {});
     assert.equal(thirtieth.status, 202);
     assert.equal(sentMails.length, 1);
-    const rotatedCode = sentMails[0].text.match(ACCESS_CODE_PATTERN)?.[0];
-    assert.ok(rotatedCode);
-    assert.notEqual(rotatedCode, initialCode);
+    assert.ok(sentMails[0].text.includes(referenceNumber));
+    assert.doesNotMatch(sentMails[0].text, ACCESS_CODE_PATTERN);
 
-    // 31. e-posta kurtarması kotaya takılmalı: 202 döner, yeni mail gitmez, 30. kod geçerli kalır.
+    // 31. istek kotaya takılmalı: 202 döner, yeni mail gitmez, erişim kodu değişmez.
     const thirtyFirst = await worker.fetch(makeRequest('/api/application-recovery/email', {
         method: 'POST',
-        ip: '198.51.100.72',
+        ip: '198.51.100.73',
         body: { student_number: 'SYN-REC-QUOTA', language: 'tr' }
     }), environment, {});
     assert.equal(thirtyFirst.status, 202);
     assert.equal((await thirtyFirst.json()).ok, true);
     assert.equal(sentMails.length, 1);
 
-    const verifyCodeStillValid = await worker.fetch(makeRequest('/api/public/applications/access', {
-        method: 'POST',
-        ip: '198.51.100.73',
-        body: { reference_number: referenceNumber, access_code: rotatedCode }
-    }), environment, {});
-    assert.equal(verifyCodeStillValid.status, 200);
+    const afterRow = database.prepare('SELECT access_code_hash, access_code_version FROM applications WHERE reference_number = ?')
+        .bind(referenceNumber).first();
+    assert.equal(afterRow.access_code_hash, beforeRow.access_code_hash);
+    assert.equal(afterRow.access_code_version, beforeRow.access_code_version);
 });
 
 test('POST /api/application-recovery/email still returns 202 when mail transport fails', async () => {

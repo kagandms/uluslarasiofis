@@ -6,10 +6,15 @@ import {
     createTelegramMessageSender,
     handleTelegramWebhook
 } from '../src/server/routes/telegramWebhookRoutes.js';
+import { TELEGRAM_RECOVERY_MESSAGES } from '../src/server/services/telegramBot.js';
+import { hashRateLimitIdentity } from '../src/server/security/requestRateLimit.js';
 import { assertProductionRuntimeSecretMetadata } from '../scripts/ci/runtime-secret-metadata.mjs';
+import { applyAllMigrations } from './helpers/apply-migrations.js';
+import { TestD1Database } from './helpers/d1-test-binding.js';
 
 const FAKE_BOT_TOKEN = '999999999:SYNTHETIC-FAKE-BOT-TOKEN-VALUE';
 const FAKE_WEBHOOK_SECRET = 'synthetic-webhook-secret-token-value';
+const ACCESS_CODE_PATTERN = /[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{6}/;
 
 function createWebhookRequest({
     method = 'POST',
@@ -47,11 +52,9 @@ test('handleTelegramWebhook rejects non-POST requests with 405', async () => {
 test('handleTelegramWebhook fails closed with 503 without calling Telegram when webhook secret or bot token config is missing', async () => {
     let fetchCalled = false;
     let lookupCalled = false;
-    let rotateCalled = false;
     const deps = {
         fetch: async () => { fetchCalled = true; return Response.json({ ok: true }); },
-        findRecoverableApplication: async () => { lookupCalled = true; return null; },
-        rotateAccessCodeForRecovery: async () => { rotateCalled = true; return null; }
+        findRecoverableApplication: async () => { lookupCalled = true; return null; }
     };
 
     const missingSecret = await handleTelegramWebhook(
@@ -78,7 +81,6 @@ test('handleTelegramWebhook fails closed with 503 without calling Telegram when 
     assert.equal(omittedBoth.status, 503);
     assert.equal(fetchCalled, false);
     assert.equal(lookupCalled, false);
-    assert.equal(rotateCalled, false);
     assert.equal((await missingSecret.text()).includes(FAKE_BOT_TOKEN), false);
     assert.equal((await missingBotToken.text()).includes(FAKE_WEBHOOK_SECRET), false);
 });
@@ -88,8 +90,7 @@ test('handleTelegramWebhook rejects missing or invalid secret header with 401 wi
     let lookupCalled = false;
     const deps = {
         fetch: async () => { fetchCalled = true; return Response.json({ ok: true }); },
-        findRecoverableApplication: async () => { lookupCalled = true; return null; },
-        rotateAccessCodeForRecovery: async () => null
+        findRecoverableApplication: async () => { lookupCalled = true; return null; }
     };
 
     const missingHeader = await handleTelegramWebhook(
@@ -111,9 +112,8 @@ test('handleTelegramWebhook rejects missing or invalid secret header with 401 wi
     assert.equal(lookupCalled, false);
 });
 
-test('handleTelegramWebhook drives full 3-step recovery over fake fetch and returns 200', async () => {
+test('handleTelegramWebhook drives full 3-step reference reminder over fake fetch without rotating access code and returns 200', async () => {
     const fetchCalls = [];
-    const rotated = [];
     const seenUpdates = new Set();
 
     const deps = {
@@ -131,10 +131,6 @@ test('handleTelegramWebhook drives full 3-step recovery over fake fetch and retu
                 language: 'tr'
             };
         },
-        rotateAccessCodeForRecovery: async (_db, input) => {
-            rotated.push(input);
-            return { accessCode: 'ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ23' };
-        },
         rateLimiter: async ({ endpoint, identity }) => {
             if (endpoint === 'telegram-recovery-update') {
                 if (seenUpdates.has(identity)) return false;
@@ -145,7 +141,7 @@ test('handleTelegramWebhook drives full 3-step recovery over fake fetch and retu
         now: () => Date.UTC(2026, 10, 16, 12, 0, 0)
     };
 
-    const env = createFakeEnv();
+    const env = createFakeEnv({ PORTAL_CANONICAL_ORIGIN: 'https://portal.test' });
 
     // 1. /start
     const res1 = await handleTelegramWebhook(createWebhookRequest({
@@ -196,10 +192,165 @@ test('handleTelegramWebhook drives full 3-step recovery over fake fetch and retu
         }
     }), env, 'req-flow-3', deps);
     assert.equal(res3.status, 200);
-    assert.equal(rotated.length, 1);
-    assert.equal(rotated[0].channel, 'telegram');
-    assert.match(fetchCalls[2].body.text, /ITU-8M9N-2P3Q/);
-    assert.match(fetchCalls[2].body.text, /ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ23/);
+    assert.match(fetchCalls[2].body.text, /Başvuru numaranız: ITU-8M9N-2P3Q/);
+    assert.ok(fetchCalls[2].body.text.includes('https://portal.test/basvuruya-devam-et/'));
+    assert.doesNotMatch(fetchCalls[2].body.text, ACCESS_CODE_PATTERN);
+});
+
+test('handleTelegramWebhook persists /start language via D1 rateLimits across contact, plain-text guidance, and reply without selective', async () => {
+    const database = new TestD1Database();
+    applyAllMigrations(database);
+    const fetchCalls = [];
+    const nowMs = Date.UTC(2026, 10, 16, 14, 0, 0);
+
+    const deps = {
+        fetch: async (_url, init) => {
+            fetchCalls.push(JSON.parse(init.body));
+            return Response.json({ ok: true, result: { message_id: fetchCalls.length } });
+        },
+        findRecoverableApplication: async (_db, { studentNumber }) => {
+            if (studentNumber !== 'SYN-WH-2026') return null;
+            return {
+                applicationId: 'app-wh-2026',
+                referenceNumber: 'ITU-1Z2X-3C4V',
+                studentEmail: 'wh-test@example.invalid',
+                studentPhone: '+905550000911',
+                language: 'ru'
+            };
+        },
+        now: () => nowMs
+    };
+
+    const env = createFakeEnv({ DB: database, PORTAL_CANONICAL_ORIGIN: 'https://portal.test' });
+
+    // 1. /start recover_tr (kullanıcının Telegram dili ru olsa bile akış Türkçe kalmalı)
+    await handleTelegramWebhook(createWebhookRequest({
+        body: {
+            update_id: 9101,
+            message: {
+                message_id: 1,
+                from: { id: 8801, is_bot: false, language_code: 'ru' },
+                chat: { id: 8801, type: 'private' },
+                text: '/start recover_tr'
+            }
+        }
+    }), env, 'req-wh-lang-1', deps);
+    assert.equal(fetchCalls[0].text, TELEGRAM_RECOVERY_MESSAGES.tr.askContact);
+
+    // 2. Contact paylaşımı: askStudentNumber Türkçe olmalı ve selective anahtarı bulunmamalı
+    await handleTelegramWebhook(createWebhookRequest({
+        body: {
+            update_id: 9102,
+            message: {
+                message_id: 2,
+                from: { id: 8801, is_bot: false, language_code: 'ru' },
+                chat: { id: 8801, type: 'private' },
+                contact: { phone_number: '905550000911', user_id: 8801 }
+            }
+        }
+    }), env, 'req-wh-lang-2', deps);
+    assert.ok(fetchCalls[1].text.startsWith(TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber));
+    assert.equal(fetchCalls[1].reply_markup.force_reply, true);
+    assert.equal(Object.hasOwn(fetchCalls[1].reply_markup, 'selective'), false);
+
+    // 3. Öğrenci yanıtlamadan düz metin yazarsa hatırlanan Türkçe dilde yanıt talimatı verilmeli
+    await handleTelegramWebhook(createWebhookRequest({
+        body: {
+            update_id: 9103,
+            message: {
+                message_id: 3,
+                from: { id: 8801, is_bot: false, language_code: 'ru' },
+                chat: { id: 8801, type: 'private' },
+                text: 'SYN-WH-2026'
+            }
+        }
+    }), env, 'req-wh-lang-3', deps);
+    assert.equal(fetchCalls[2].text, TELEGRAM_RECOVERY_MESSAGES.tr.replyInstruction);
+
+    // 4. Bot mesajını yanıtlayarak gönderince Türkçe başarı mesajı ile mevcut başvuru numarası dönmeli
+    await handleTelegramWebhook(createWebhookRequest({
+        body: {
+            update_id: 9104,
+            message: {
+                message_id: 4,
+                from: { id: 8801, is_bot: false, language_code: 'ru' },
+                chat: { id: 8801, type: 'private' },
+                text: 'SYN-WH-2026',
+                reply_to_message: {
+                    message_id: 2,
+                    from: { id: 999, is_bot: true },
+                    text: fetchCalls[1].text
+                }
+            }
+        }
+    }), env, 'req-wh-lang-4', deps);
+    assert.match(fetchCalls[3].text, /Başvuru numaranız: ITU-1Z2X-3C4V/);
+    assert.ok(fetchCalls[3].text.includes('https://portal.test/basvuruya-devam-et/'));
+    assert.doesNotMatch(fetchCalls[3].text, ACCESS_CODE_PATTERN);
+});
+
+test('handleTelegramWebhook writes one 64-hex telegram-recovery-lang-tr row in D1 for /start recover_tr and prompts in Turkish on contact', async () => {
+    const database = new TestD1Database();
+    applyAllMigrations(database);
+    const fetchCalls = [];
+    const nowMs = Date.UTC(2026, 10, 16, 15, 0, 0);
+
+    const deps = {
+        fetch: async (_url, init) => {
+            fetchCalls.push(JSON.parse(init.body));
+            return Response.json({ ok: true, result: { message_id: fetchCalls.length } });
+        },
+        findRecoverableApplication: async () => null,
+        now: () => nowMs
+    };
+
+    const env = createFakeEnv({ DB: database });
+
+    // 1. Kullanıcının language_code değeri 'ru' iken /start recover_tr gönderilir
+    const startResponse = await handleTelegramWebhook(createWebhookRequest({
+        body: {
+            update_id: 9201,
+            message: {
+                message_id: 1,
+                from: { id: 7702, is_bot: false, language_code: 'ru' },
+                chat: { id: 9902, type: 'private' },
+                text: '/start recover_tr'
+            }
+        }
+    }), env, 'req-wh-d1-row-1', deps);
+    assert.equal(startResponse.status, 200);
+
+    // 2. Kişi paylaşımı sonrasında öğrenci numarası istemi Türkçe olmalı
+    const contactResponse = await handleTelegramWebhook(createWebhookRequest({
+        body: {
+            update_id: 9202,
+            message: {
+                message_id: 2,
+                from: { id: 7702, is_bot: false, language_code: 'ru' },
+                chat: { id: 9902, type: 'private' },
+                contact: { phone_number: '905550000922', user_id: 7702 }
+            }
+        }
+    }), env, 'req-wh-d1-row-2', deps);
+    assert.equal(contactResponse.status, 200);
+    assert.equal(fetchCalls.length, 2);
+    assert.equal(fetchCalls[0].text, TELEGRAM_RECOVERY_MESSAGES.tr.askContact);
+    assert.ok(fetchCalls[1].text.startsWith(TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber));
+    assert.match(fetchCalls[1].text, /\nref:[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    assert.equal(fetchCalls[1].reply_markup.force_reply, true);
+    assert.equal(Object.hasOwn(fetchCalls[1].reply_markup, 'selective'), false);
+
+    // 3. Yalnızca bir 'telegram-recovery-lang-tr' satırı 64 haneli hex özetle saklanmalı; ham kimlik içermemeli
+    const storedRows = database.prepare('SELECT endpoint, request_key_hash FROM public_rate_limits').all().results;
+    const langRows = storedRows.filter((row) => row.endpoint.startsWith('telegram-recovery-lang-'));
+    assert.equal(langRows.length, 1);
+    assert.equal(langRows[0].endpoint, 'telegram-recovery-lang-tr');
+    assert.match(langRows[0].request_key_hash, /^[0-9a-f]{64}$/);
+    assert.equal(langRows[0].request_key_hash, await hashRateLimitIdentity('user:7702'));
+    for (const row of storedRows) {
+        assert.equal(row.request_key_hash.includes('7702'), false);
+        assert.equal(row.request_key_hash.includes('9902'), false);
+    }
 });
 
 test('handleTelegramWebhook always returns 200 for valid-secret requests and redacts tokens from errors and logs', async () => {
@@ -240,8 +391,7 @@ test('handleTelegramWebhook always returns 200 for valid-secret requests and red
                 fetch: async () => {
                     throw new Error(`connect failed to https://api.telegram.org/bot${FAKE_BOT_TOKEN}/sendMessage with ${FAKE_WEBHOOK_SECRET}`);
                 },
-                findRecoverableApplication: async () => null,
-                rotateAccessCodeForRecovery: async () => null
+                findRecoverableApplication: async () => null
             }
         );
         assert.equal(failingFetchResponse.status, 200);

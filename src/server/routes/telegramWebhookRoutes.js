@@ -3,9 +3,9 @@ import { createD1Repositories } from '../repositories/d1/index.js';
 import {
     RECOVERY_APPLICATION_DAILY_LIMIT,
     RECOVERY_TELEGRAM_USER_DAILY_LIMIT,
-    findRecoverableApplication,
-    rotateAccessCodeForRecovery
+    findRecoverableApplication
 } from '../services/accessRecoveryService.js';
+import { resolveMailPortalUrl } from '../services/referenceMailService.js';
 import { createTelegramRecoveryBot, normalizeTelegramPhone } from '../services/telegramBot.js';
 
 const encoder = new TextEncoder();
@@ -147,19 +147,16 @@ async function readBoundedWebhookJson(request) {
 }
 
 function resolveRecoveryFunctions(deps, environment) {
-    if (typeof deps?.findRecoverableApplication === 'function'
-        && typeof deps?.rotateAccessCodeForRecovery === 'function') {
+    if (typeof deps?.findRecoverableApplication === 'function') {
         return {
-            findRecoverableApplication: deps.findRecoverableApplication,
-            rotateAccessCodeForRecovery: deps.rotateAccessCodeForRecovery
+            findRecoverableApplication: deps.findRecoverableApplication
         };
     }
     if (environment?.ACCESS_RECOVERY_SERVICE) {
         return environment.ACCESS_RECOVERY_SERVICE;
     }
     return {
-        findRecoverableApplication: deps?.findRecoverableApplication ?? findRecoverableApplication,
-        rotateAccessCodeForRecovery: deps?.rotateAccessCodeForRecovery ?? rotateAccessCodeForRecovery
+        findRecoverableApplication: deps?.findRecoverableApplication ?? findRecoverableApplication
     };
 }
 
@@ -195,6 +192,7 @@ export async function handleTelegramWebhook(request, environment, requestId = ''
     const secretsToRedact = [webhookSecret, botToken].filter((item) => typeof item === 'string' && item.length > 0);
     try {
         const update = await readBoundedWebhookJson(request);
+        const resumePortalUrl = new URL('/basvuruya-devam-et/', resolveMailPortalUrl(environment, request.url)).href;
         let bot = deps?.bot;
         if (!bot) {
             const recoveryFunctions = resolveRecoveryFunctions(deps, environment);
@@ -211,12 +209,12 @@ export async function handleTelegramWebhook(request, environment, requestId = ''
                     : undefined);
             bot = createTelegramRecoveryBot({
                 findRecoverableApplication: recoveryFunctions.findRecoverableApplication,
-                rotateAccessCodeForRecovery: recoveryFunctions.rotateAccessCodeForRecovery,
                 sendTelegramMessage,
                 rateLimiter,
                 normalizePhone: deps?.normalizePhone ?? normalizeTelegramPhone,
                 userDailyLimit: deps?.userDailyLimit ?? RECOVERY_TELEGRAM_USER_DAILY_LIMIT,
                 applicationDailyLimit: deps?.applicationDailyLimit ?? RECOVERY_APPLICATION_DAILY_LIMIT,
+                resumePortalUrl,
                 stateSecret: webhookSecret,
                 now: deps?.now
             });
@@ -224,7 +222,8 @@ export async function handleTelegramWebhook(request, environment, requestId = ''
 
         await bot.handleUpdate(environment?.DB ?? null, update, {
             requestId,
-            stateSecret: webhookSecret
+            stateSecret: webhookSecret,
+            resumePortalUrl
         });
     } catch (error) {
         console.error('Telegram webhook processing failed.', {

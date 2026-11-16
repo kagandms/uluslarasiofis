@@ -3,20 +3,24 @@ import { test } from 'node:test';
 import {
   DAILY_DRAFT_MAIL_QUOTA,
   DAILY_RECOVERY_MAIL_QUOTA,
-  buildRecoveryMail,
+  REFERENCE_REMINDER_MAIL_DAILY_LIMIT,
   buildReferenceMail,
+  buildReferenceReminderMail,
   readMailQuotaStatus,
   readReferenceMailConfig,
   resolveMailPortalUrl,
   sendDraftReferenceMail,
-  sendRecoveryReferenceMail
+  sendReferenceReminderMail
 } from '../src/server/services/referenceMailService.js';
-import { generateAccessCode } from '../src/server/auth/applicationAccessCode.js';
+import { createRateLimitRepository } from '../src/server/repositories/d1/rateLimitRepository.js';
+import { consumePublicRateLimit } from '../src/server/security/requestRateLimit.js';
 import { createNotificationFixture } from './helpers/notification-fixtures.js';
 
 const TOKEN = 't'.repeat(40);
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbTestDeployment/exec';
 const PORTAL_URL = 'https://portal.test/basvurum/';
+const RESUME_PORTAL_URL = 'https://portal.test/basvuruya-devam-et/';
+const ACCESS_CODE_PATTERN = /[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{6}/;
 
 function configuredEnvironment(database, overrides = {}) {
   return { DB: database, REFERENCE_MAIL_TOKEN: TOKEN, REFERENCE_MAIL_ENDPOINT: ENDPOINT, ...overrides };
@@ -208,40 +212,70 @@ test('draft mail defers locally when 70-recipient rolling 24h draft quota is ful
   assert.equal(quota.recoveryRemaining, DAILY_RECOVERY_MAIL_QUOTA);
 });
 
-test('recovery mail sends plain text with new access code and returns failed without throwing on transport error', async () => {
-  const accessCode = generateAccessCode();
+test('reference reminder mail sends plain text with reference and student number without access code and returns failed on transport error', async () => {
   const { calls, fetchImplementation } = recordingFetch([{ ok: true }, new Error('network down')]);
   const environment = configuredEnvironment({});
 
-  const okResult = await sendRecoveryReferenceMail(environment, {
+  const okResult = await sendReferenceReminderMail(environment, {
     recipient: 'student@example.invalid',
     referenceNumber: 'ITU-7K9M-4X2P',
     studentNumber: 'SYN-001',
-    accessCode,
-    portalUrl: PORTAL_URL,
+    portalUrl: RESUME_PORTAL_URL,
     language: 'tr',
     fetchImplementation
   });
   assert.equal(okResult.status, 'sent');
   assert.equal(calls.length, 1);
-  assert.ok(calls[0].body.text.includes(accessCode));
   assert.ok(calls[0].body.text.includes('ITU-7K9M-4X2P'));
+  assert.ok(calls[0].body.text.includes('SYN-001'));
+  assert.ok(calls[0].body.text.includes(RESUME_PORTAL_URL));
+  assert.doesNotMatch(calls[0].body.text, ACCESS_CODE_PATTERN);
 
-  const failResult = await sendRecoveryReferenceMail(environment, {
+  const failResult = await sendReferenceReminderMail(environment, {
     recipient: 'student@example.invalid',
     referenceNumber: 'ITU-7K9M-4X2P',
     studentNumber: 'SYN-001',
-    accessCode,
-    portalUrl: PORTAL_URL,
+    portalUrl: RESUME_PORTAL_URL,
     language: 'en',
     fetchImplementation
   });
   assert.equal(failResult.status, 'failed');
   assert.equal(failResult.errorCode, 'network');
-  assert.throws(() => buildRecoveryMail({
-    referenceNumber: 'ITU-7K9M-4X2P',
+  assert.throws(() => buildReferenceReminderMail({
+    referenceNumber: 'invalid-ref',
     studentNumber: 'SYN-001',
-    accessCode: 'invalid-code',
-    portalUrl: PORTAL_URL
+    portalUrl: RESUME_PORTAL_URL
   }), TypeError);
+  assert.throws(() => buildReferenceReminderMail({
+    referenceNumber: 'ITU-7K9M-4X2P',
+    studentNumber: '',
+    portalUrl: RESUME_PORTAL_URL
+  }), TypeError);
+});
+
+test('readMailQuotaStatus reads reference-reminder-mail-daily from public_rate_limits and isolates blocked counts from draft quota', async () => {
+  const { database } = await createNotificationFixture();
+  const rateLimits = createRateLimitRepository(database);
+  const nowMs = Date.UTC(2026, 10, 16, 12, 0, 0);
+  const nowSeconds = Math.floor(nowMs / 1000);
+  const nowIso = new Date(nowMs).toISOString();
+
+  // 30 başarılı + 5 reddedilmiş deneme global sayacı artırsa da recoverySentCount 30 ile sınırlanır.
+  for (let i = 0; i < 35; i += 1) {
+    await consumePublicRateLimit(rateLimits, {
+      ...REFERENCE_REMINDER_MAIL_DAILY_LIMIT,
+      nowSeconds
+    });
+  }
+
+  const fullQuota = await readMailQuotaStatus(database, nowIso);
+  assert.equal(fullQuota.recoverySentCount, DAILY_RECOVERY_MAIL_QUOTA);
+  assert.equal(fullQuota.recoveryRemaining, 0);
+  assert.equal(fullQuota.draftRemaining, DAILY_DRAFT_MAIL_QUOTA);
+  assert.equal(fullQuota.totalRemaining, DAILY_DRAFT_MAIL_QUOTA);
+
+  const nextDayIso = new Date(nowMs + 86_401 * 1000).toISOString();
+  const resetQuota = await readMailQuotaStatus(database, nextDayIso);
+  assert.equal(resetQuota.recoverySentCount, 0);
+  assert.equal(resetQuota.recoveryRemaining, DAILY_RECOVERY_MAIL_QUOTA);
 });

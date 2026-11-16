@@ -1,4 +1,5 @@
-import { isValidAccessCodeFormat } from '../auth/applicationAccessCode.js';
+import { createRateLimitRepository } from '../repositories/d1/rateLimitRepository.js';
+import { hashRateLimitIdentity } from '../security/requestRateLimit.js';
 
 const MAX_ATTEMPTS = 5;
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -10,11 +11,18 @@ const REFERENCE_PATTERN = /^ITU-[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}$/;
 export const DAILY_TOTAL_MAIL_QUOTA = 100;
 export const DAILY_DRAFT_MAIL_QUOTA = 70;
 export const DAILY_RECOVERY_MAIL_QUOTA = 30;
+// Hatırlatma e-postaları için public_rate_limits üzerinde günlük 30 alıcılı sabit pencere politikası.
+export const REFERENCE_REMINDER_MAIL_DAILY_LIMIT = Object.freeze({
+  endpoint: 'reference-reminder-mail-daily',
+  identity: 'global',
+  maxRequests: DAILY_RECOVERY_MAIL_QUOTA,
+  windowSeconds: 86_400
+});
 export const SUPPORTED_MAIL_LANGUAGES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 
 const SUPPORTED_MAIL_LANGUAGE_SET = new Set(SUPPORTED_MAIL_LANGUAGES);
 const DEFAULT_DRAFT_SUBJECT = 'Başvuru taslağınız kaydedildi · Application draft saved';
-const DEFAULT_RECOVERY_SUBJECT = 'Başvuru erişim kodunuz yenilendi · Application access code reset';
+const DEFAULT_REMINDER_SUBJECT = 'Başvuru numaranız · Application number';
 
 const MAIL_TEXT = Object.freeze({
   tr: { subject: 'Başvuru taslağınız kaydedildi', greeting: 'Merhaba,', intro: 'Başvuru taslağınız kaydedildi.', ref: 'Başvuru numaranız', student: 'Öğrenci numaranız', type: 'Başvuru türü', next: 'Başvurunuzu tamamlamak için portala girin:', login: 'Giriş için başvuru numaranız ve öğrenci numaranız gerekir. Lütfen bunları saklayın.', types: { initial: 'İlk başvuru', renewal: 'Yenileme', transition: 'Geçiş başvurusu' } },
@@ -24,59 +32,54 @@ const MAIL_TEXT = Object.freeze({
   ar: { subject: 'تم حفظ مسودة طلبك', greeting: 'مرحبًا،', intro: 'تم حفظ مسودة طلبك.', ref: 'رقم الطلب', student: 'رقم الطالب', type: 'نوع الطلب', next: 'لإكمال طلبك، افتح البوابة:', login: 'للدخول تحتاج إلى رقم الطلب ورقم الطالب. احتفظ بهما.', types: { initial: 'طلب أولي', renewal: 'تجديد', transition: 'طلب انتقال' } }
 });
 
-const RECOVERY_MAIL_TEXT = Object.freeze({
+const REMINDER_MAIL_TEXT = Object.freeze({
   tr: {
-    subject: 'Başvuru erişim kodunuz yenilendi',
+    subject: 'Başvuru numaranız',
     greeting: 'Merhaba,',
-    intro: 'Başvurunuz için yeni bir erişim kodu oluşturuldu. Eski erişim kodunuz artık geçersizdir.',
+    intro: 'Aktif başvurunuza ait başvuru numaranız aşağıdadır.',
     ref: 'Başvuru numaranız',
     student: 'Öğrenci numaranız',
-    code: 'Yeni erişim kodunuz',
-    next: 'Başvurunuza devam etmek için portala girin:',
+    next: 'Başvurunuza devam etmek için aşağıdaki bağlantıda başvuru numaranızı ve öğrenci numaranızı girin:',
     ignore: 'Bu işlemi siz istemediyseniz bu e-postayı yok sayabilirsiniz.',
     spam: 'E-posta birkaç dakika içinde görünmezse gereksiz (spam) klasörünü kontrol edin.'
   },
   en: {
-    subject: 'Your application access code has been reset',
+    subject: 'Your application number',
     greeting: 'Hello,',
-    intro: 'A new access code has been created for your application. Your previous access code is no longer valid.',
+    intro: 'Here is the application number for your active application.',
     ref: 'Application number',
     student: 'Student number',
-    code: 'New access code',
-    next: 'To continue your application, open the portal:',
+    next: 'To continue your application, enter your application number and student number at:',
     ignore: 'If you did not request this, you can safely ignore this email.',
     spam: 'If you do not see emails within a few minutes, please check your spam or junk folder.'
   },
   ru: {
-    subject: 'Код доступа к вашей заявке обновлён',
+    subject: 'Номер вашей заявки',
     greeting: 'Здравствуйте!',
-    intro: 'Для вашей заявки создан новый код доступа. Прежний код доступа больше не действителен.',
+    intro: 'Ниже указан номер вашей активной заявки.',
     ref: 'Номер заявки',
     student: 'Номер студента',
-    code: 'Новый код доступа',
-    next: 'Чтобы продолжить работу с заявкой, откройте портал:',
-    ignore: 'Если вы не запрашивали это изменение, просто проигнорируйте это письмо.',
+    next: 'Чтобы продолжить работу с заявкой, введите номер заявки и номер студента на странице:',
+    ignore: 'Если вы не запрашивали это письмо, просто проигнорируйте его.',
     spam: 'Если письмо не появилось во входящих в течение нескольких минут, проверьте папку «Спам».'
   },
   tk: {
-    subject: 'Arzaňyzyň giriş kody täzelendi',
+    subject: 'Arza belgiňiz',
     greeting: 'Salam,',
-    intro: 'Arzaňyz üçin täze giriş kody döredildi. Öňki giriş kodyňyz indi güýjüni ýitirdi.',
+    intro: 'Işjeň arzaňyzyň belgisi aşakdadyr.',
     ref: 'Arzaňyzyň belgisi',
     student: 'Talyp belgisi',
-    code: 'Täze giriş kodyňyz',
-    next: 'Arzaňyzy dowam etdirmek üçin portala giriň:',
+    next: 'Arzaňyzy dowam etdirmek üçin aşakdaky baglanyşykda arza belgiňizi we talyp belgiňizi giriziň:',
     ignore: 'Bu amaly siz islemän bolsaňyz, bu haty üns bermän geçip bilersiňiz.',
     spam: 'Hat birnäçe minudyň içinde görünmese, gereksiz (spam) bukjasyny barlaň.'
   },
   ar: {
-    subject: 'تم تجديد رمز الدخول لطلبك',
+    subject: 'رقم طلبك',
     greeting: 'مرحبًا،',
-    intro: 'تم إنشاء رمز دخول جديد لطلبك. لم يعد رمز الدخول السابق صالحًا.',
+    intro: 'فيما يلي رقم الطلب الخاص بطلبك النشط.',
     ref: 'رقم الطلب',
     student: 'رقم الطالب',
-    code: 'رمز الدخول الجديد',
-    next: 'لمتابعة طلبك، افتح البوابة:',
+    next: 'لمتابعة طلبك، أدخل رقم الطلب ورقم الطالب عبر الرابط التالي:',
     ignore: 'إذا لم تطلب هذا الإجراء، يمكنك تجاهل هذا البريد الإلكتروني.',
     spam: 'إذا لم يصل البريد خلال بضع دقائق، يرجى التحقق من مجلد الرسائل غير المرغوب فيها (Spam).'
   }
@@ -162,14 +165,13 @@ function formatDraftSection(labels, { referenceNumber, studentNumber, applicatio
   ].join('\n');
 }
 
-function formatRecoverySection(labels, { referenceNumber, studentNumber, accessCode, portalUrl }) {
+function formatReminderSection(labels, { referenceNumber, studentNumber, portalUrl }) {
   return [
     labels.greeting,
     labels.intro,
     '',
     `${labels.ref}: ${referenceNumber}`,
     `${labels.student}: ${studentNumber}`,
-    `${labels.code}: ${accessCode}`,
     '',
     `${labels.next} ${portalUrl}`,
     '',
@@ -207,46 +209,49 @@ export function buildReferenceMail({ referenceNumber, studentNumber, application
 }
 
 /**
- * Erişim kodu kurtarma e-postasını düz metin olarak oluşturur. Geçerli dilde tek dilli, eksik veya
- * geçersiz dilde beş dilli birleşik gövde ve iki dilli konu üretir. Yön işaretçisi (LRM/RLM) eklemez.
- * @param {{referenceNumber: string, studentNumber: string, accessCode: string, portalUrl: string, language?: string|null}} input
+ * Başvuru numarası hatırlatma e-postasını düz metin olarak oluşturur. Geçerli dilde tek dilli, eksik veya
+ * geçersiz dilde beş dilli birleşik gövde ve iki dilli konu üretir. Erişim kodu içermez; yön işaretçisi eklemez.
+ * @param {{referenceNumber: string, studentNumber: string, portalUrl: string, language?: string|null}} input
  * @returns {{subject: string, text: string}} Konu ve düz metin e-posta gövdesi.
  */
-export function buildRecoveryMail({ referenceNumber, studentNumber, accessCode, portalUrl, language = null }) {
+export function buildReferenceReminderMail({ referenceNumber, studentNumber, portalUrl, language = null }) {
   if (!REFERENCE_PATTERN.test(referenceNumber)) throw new TypeError('Invalid application reference.');
   if (typeof studentNumber !== 'string' || studentNumber.length === 0 || studentNumber.length > 64) {
     throw new TypeError('Invalid student number.');
   }
-  if (!isValidAccessCodeFormat(accessCode)) throw new TypeError('Invalid access code.');
   if (typeof portalUrl !== 'string' || portalUrl.length === 0) throw new TypeError('Invalid portal URL.');
 
   const normalizedLanguage = normalizeMailLanguage(language);
   if (normalizedLanguage) {
-    const labels = RECOVERY_MAIL_TEXT[normalizedLanguage];
+    const labels = REMINDER_MAIL_TEXT[normalizedLanguage];
     return {
       subject: labels.subject,
-      text: formatRecoverySection(labels, { referenceNumber, studentNumber, accessCode, portalUrl })
+      text: formatReminderSection(labels, { referenceNumber, studentNumber, portalUrl })
     };
   }
-  const sections = Object.values(RECOVERY_MAIL_TEXT).map((labels) =>
-    formatRecoverySection(labels, { referenceNumber, studentNumber, accessCode, portalUrl })
+  const sections = Object.values(REMINDER_MAIL_TEXT).map((labels) =>
+    formatReminderSection(labels, { referenceNumber, studentNumber, portalUrl })
   );
   return {
-    subject: DEFAULT_RECOVERY_SUBJECT,
+    subject: DEFAULT_REMINDER_SUBJECT,
     text: sections.join('\n\n---\n\n')
   };
 }
 
 /**
- * Kayan 24 saatlik pencerede taslak ve kurtarma e-posta kota kullanımını mevcut tablolardan sayar.
+ * Taslak ve hatırlatma e-posta kota kullanımını sayar; taslaklar 24 saatlik kayan pencereden,
+ * hatırlatma e-postaları `public_rate_limits` üzerindeki sabit 24 saatlik küresel sayaçtan okunur.
  * @param {D1Database} database Cloudflare D1 bağlamı.
  * @param {string} [now] UTC ISO zaman damgası.
  * @returns {Promise<{draftSentCount: number, recoverySentCount: number, totalSentCount: number, draftRemaining: number, recoveryRemaining: number, totalRemaining: number}>}
  */
 export async function readMailQuotaStatus(database, now = new Date().toISOString()) {
   const timestampMs = Date.parse(now);
-  const cutoff = new Date((Number.isFinite(timestampMs) ? timestampMs : Date.now()) - 24 * 60 * 60 * 1000).toISOString();
-  const [draftRow, recoveryRow] = await Promise.all([
+  const effectiveMs = Number.isFinite(timestampMs) ? timestampMs : Date.now();
+  const cutoff = new Date(effectiveMs - 24 * 60 * 60 * 1000).toISOString();
+  const nowSeconds = Math.floor(effectiveMs / 1000);
+  const reminderHash = await hashRateLimitIdentity(REFERENCE_REMINDER_MAIL_DAILY_LIMIT.identity);
+  const [draftRow, reminderRow] = await Promise.all([
     database.prepare(`
       SELECT COUNT(*) AS count
       FROM application_reference_mails
@@ -254,16 +259,16 @@ export async function readMailQuotaStatus(database, now = new Date().toISOString
         AND sent_at IS NOT NULL
         AND datetime(sent_at) >= datetime(?)
     `).bind(cutoff).first(),
-    database.prepare(`
-      SELECT COUNT(*) AS count
-      FROM audit_events
-      WHERE event_type = 'application.access_code_recovered'
-        AND (json_extract(safe_metadata_json, '$.channel') IS NULL OR json_extract(safe_metadata_json, '$.channel') = 'email')
-        AND datetime(created_at) >= datetime(?)
-    `).bind(cutoff).first()
+    createRateLimitRepository(database).peek({
+      endpoint: REFERENCE_REMINDER_MAIL_DAILY_LIMIT.endpoint,
+      requestKeyHash: reminderHash,
+      nowSeconds,
+      windowSeconds: REFERENCE_REMINDER_MAIL_DAILY_LIMIT.windowSeconds
+    })
   ]);
   const draftSentCount = Number(draftRow?.count || 0);
-  const recoverySentCount = Number(recoveryRow?.count || 0);
+  // Engellenen denemeler request_count değerini 30 üstüne çıkarsa bile taslak bütçesinden düşmemek için üst sınır uygula.
+  const recoverySentCount = Math.min(DAILY_RECOVERY_MAIL_QUOTA, Math.max(0, Number(reminderRow?.request_count || 0)));
   const totalSentCount = draftSentCount + recoverySentCount;
   const totalRemaining = Math.max(0, DAILY_TOTAL_MAIL_QUOTA - totalSentCount);
   const draftRemaining = Math.min(totalRemaining, Math.max(0, DAILY_DRAFT_MAIL_QUOTA - draftSentCount));
@@ -389,22 +394,22 @@ export async function sendDraftReferenceMail(environment, { applicationId, porta
 }
 
 /**
- * Kurtarma e-postasını gönderir. Gönderim hatasında asla hata fırlatmaz; uç noktanın 202 yanıtını bozmaz.
+ * Başvuru numarası hatırlatma e-postasını gönderir. Gönderim hatasında asla hata fırlatmaz; uç noktanın 202 yanıtını bozmaz.
  * @param {object} environment Worker bağlamı.
- * @param {{recipient: string, referenceNumber: string, studentNumber: string, accessCode: string, portalUrl: string, language?: string|null, fetchImplementation?: Function}} input
+ * @param {{recipient: string, referenceNumber: string, studentNumber: string, portalUrl: string, language?: string|null, fetchImplementation?: Function}} input
  * @returns {Promise<{status: 'sent'|'quota_deferred'|'failed'|'skipped', errorCode: string|null}>}
  */
-export async function sendRecoveryReferenceMail(environment, { recipient, referenceNumber, studentNumber, accessCode, portalUrl, language = null, fetchImplementation } = {}) {
+export async function sendReferenceReminderMail(environment, { recipient, referenceNumber, studentNumber, portalUrl, language = null, fetchImplementation } = {}) {
   try {
     const config = readReferenceMailConfig(environment);
     if (!config || !EMAIL_PATTERN.test(recipient || '')) {
       return { status: 'skipped', errorCode: config ? 'invalid_recipient' : 'unconfigured' };
     }
     const transport = fetchImplementation || environment?.REFERENCE_MAIL_FETCH || fetch;
-    const mail = buildRecoveryMail({ referenceNumber, studentNumber, accessCode, portalUrl, language });
+    const mail = buildReferenceReminderMail({ referenceNumber, studentNumber, portalUrl, language });
     return await postToMailer(config, { to: recipient, subject: mail.subject, text: mail.text }, transport);
   } catch {
-    console.warn('recovery_mail_skipped');
+    console.warn('reference_reminder_mail_skipped');
     return { status: 'failed', errorCode: 'network' };
   }
 }

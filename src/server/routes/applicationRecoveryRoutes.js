@@ -4,10 +4,9 @@ import { routeResult } from '../http/routeResult.js';
 import {
     consumeRecoveryApplicationRateLimit,
     consumeRecoveryIpRateLimit,
+    consumeReferenceReminderMailQuota,
     findRecoverableApplication,
-    hasRecoveryMailQuotaAvailable,
     normalizeRecoveryLanguage,
-    rotateAccessCodeForRecovery,
     simulateRecoveryWork
 } from '../services/accessRecoveryService.js';
 import {
@@ -15,7 +14,7 @@ import {
     isValidReferenceMailRecipient,
     readReferenceMailConfig,
     resolveMailPortalUrl,
-    sendRecoveryReferenceMail
+    sendReferenceReminderMail
 } from '../services/referenceMailService.js';
 import { createRepositories, requireMethod, requireSameOrigin } from './shared.js';
 
@@ -44,15 +43,15 @@ export function readApplicationRecoveryOptions(request, environment) {
 }
 
 /**
- * E-posta ile erişim kodu kurtarma isteğini işler.
+ * E-posta ile başvuru numarası hatırlatma isteğini işler.
  * Kayıt var/yok, hız sınırı veya kota dolu durumlarında aynı 202 {"ok":true} yanıtını döner.
  * @param {Request} request Aynı kökenli JSON POST isteği.
  * @param {object} environment Worker bağlamı.
- * @param {string} requestId Denetim kaydı için istek kimliği.
+ * @param {string} _requestId İstek izleme kimliği (yönlendirici imzası için korunur).
  * @returns {Promise<object>} 202 durum kodlu genel yanıt.
  * @throws {ApiError} Yöntem, köken, gövde veya öğrenci numarası biçimi geçersizse.
  */
-export async function requestEmailAccessRecovery(request, environment, requestId) {
+export async function requestEmailAccessRecovery(request, environment, _requestId) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
     const body = await readJsonBody(request);
@@ -65,9 +64,7 @@ export async function requestEmailAccessRecovery(request, environment, requestId
     const language = normalizeRecoveryLanguage(body.language);
     const repositories = createRepositories(environment);
 
-    const nowDate = new Date();
-    const now = nowDate.toISOString();
-    const nowSeconds = Math.floor(nowDate.getTime() / 1000);
+    const nowSeconds = Math.floor(Date.now() / 1000);
     const clientAddress = request.headers.get('CF-Connecting-IP') || 'unknown-client';
 
     // Zamanlama sızıntısını önlemek için kayıt olmasa da benzer DB/özet işleri çalıştırılır.
@@ -76,7 +73,6 @@ export async function requestEmailAccessRecovery(request, environment, requestId
         nowSeconds
     });
     const application = await findRecoverableApplication(environment.DB, { studentNumber });
-    const quotaAvailable = await hasRecoveryMailQuotaAvailable(environment.DB, now);
     const mailConfig = readReferenceMailConfig(environment);
 
     let appAllowed = false;
@@ -96,26 +92,23 @@ export async function requestEmailAccessRecovery(request, environment, requestId
         && application
         && isValidReferenceMailNumber(application.referenceNumber)
         && isValidReferenceMailRecipient(application.studentEmail)
-        && quotaAvailable
         && mailConfig
     );
 
     if (isEligible) {
-        const rotated = await rotateAccessCodeForRecovery(environment.DB, {
-            applicationId: application.applicationId,
-            channel: 'email',
-            requestId,
-            now
-        });
-        if (rotated?.accessCode) {
-            await sendRecoveryReferenceMail(environment, {
+        // Küresel günlük 30 alıcı kotasını yalnızca gerçekten e-posta gönderilecek uygun isteklerde tüket.
+        const quotaAllowed = await consumeReferenceReminderMailQuota(repositories.rateLimits, { nowSeconds });
+        if (quotaAllowed) {
+            const portalUrl = new URL('/basvuruya-devam-et/', resolveMailPortalUrl(environment, request.url)).href;
+            await sendReferenceReminderMail(environment, {
                 recipient: application.studentEmail,
                 referenceNumber: application.referenceNumber,
                 studentNumber,
-                accessCode: rotated.accessCode,
-                portalUrl: resolveMailPortalUrl(environment, request.url),
+                portalUrl,
                 language
             });
+        } else {
+            await simulateRecoveryWork();
         }
     } else {
         await simulateRecoveryWork();
