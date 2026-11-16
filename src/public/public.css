@@ -135,7 +135,7 @@ a { color: inherit; }
 .public-hero { max-width: 52rem; margin-block-end: clamp(2rem, 5vw, 3.5rem); }
 .public-eyebrow { margin: 0 0 0.9rem; color: var(--public-burgundy); font-size: 0.9rem; font-weight: 700; letter-spacing: 0.04em; }
 .public-hero h1, .placeholder-panel h1 { max-width: 48rem; margin: 0; color: #1f2329; font-size: clamp(2.15rem, 5vw, 3.8rem); line-height: 1.12; letter-spacing: -0.035em; }
-.public-hero p:last-child, .placeholder-panel p { max-width: 42rem; margin-block: 1rem 0; color: #59616d; font-size: clamp(1rem, 2vw, 1.15rem); line-height: 1.7; }
+.public-hero > p:last-child, .placeholder-panel p { max-width: 42rem; margin-block: 1rem 0; color: #59616d; font-size: clamp(1rem, 2vw, 1.15rem); line-height: 1.7; }
 
 .home-actions { display: flex; flex-wrap: wrap; gap: 0.85rem; margin-block-start: 1.5rem; }
 .home-cta { display: inline-flex; align-items: center; justify-content: center; min-height: 3rem; padding: 0.75rem 1.4rem; border: 1px solid var(--public-burgundy); border-radius: 0.7rem; font-weight: 700; text-decoration: none; transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease; cursor: pointer; }
@@ -267,7 +267,7 @@ a { color: inherit; }
 .application-document-card [role="status"] { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
 .application-document-card button:disabled { cursor: wait; opacity: 0.65; }
 [data-save-status] { display: inline-flex; align-items: center; gap: 0.5rem; margin: 0; padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-size: 0.84rem; font-weight: 600; width: fit-content; }
-[data-save-status][data-i18n*="saved"] { background: #edf7ed; color: #166534; border: 1px solid #bbf7d0; }
+[data-save-status][data-i18n="autosave_saved"] { background: #edf7ed; color: #166534; border: 1px solid #bbf7d0; }
 [data-save-status][data-i18n*="saving"] { background: #f3f4f6; color: #4b5563; border: 1px solid #e5e7eb; }
 [data-save-status][data-i18n*="Failed"], [data-save-status][data-i18n*="session"] { background: #fdf2f2; color: #9b1c1c; border: 1px solid #f8b4b4; }
 .application-review { display: grid; gap: 1.25rem; }
@@ -446,12 +446,14 @@ html[dir="rtl"] .tracking-state, html[dir="rtl"] .tracking-summary, html[dir="rt
 html[dir="rtl"] .tracking-notification-preferences { direction: rtl; }
 html[dir="rtl"] .tracking-details { direction: rtl; }
 html[dir="rtl"] .tracking-lookup-form, html[dir="rtl"] .physical-tracking-form { direction: rtl; }
+html[dir="rtl"] .recovery-panel { direction: rtl; text-align: start; }
 html[dir="rtl"] .resubmission-upload-control { direction: rtl; }
 html[dir="rtl"] input[type="tel"],
 html[dir="rtl"] input[type="email"],
 html[dir="rtl"] input[name="passport_number"],
 html[dir="rtl"] input[name="reference_number"],
-html[dir="rtl"] input[name="fingerprint_code"] {
+html[dir="rtl"] input[name="fingerprint_code"],
+html[dir="rtl"] input[name="recovery_student_number"] {
     direction: ltr;
     text-align: end;
     unicode-bidi: plaintext;
@@ -718,7 +720,7 @@ html[dir="rtl"] .public-home-link:hover {
 .public-hero h1 {
     animation: public-hero-title 950ms cubic-bezier(0.16, 1, 0.3, 1) 180ms both;
 }
-.public-hero p:not(.public-eyebrow) {
+.public-hero > p:not(.public-eyebrow) {
     animation: public-hero-text 950ms cubic-bezier(0.16, 1, 0.3, 1) 320ms both;
 }
 .home-actions {
@@ -1080,6 +1082,11 @@ body[data-page="home"] .status-timeline-step.scroll-reveal-item.is-revealed .sta
 
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    .recovery-panel.is-revealing > *,
+    .recovery-feedback.is-animating {
+        animation: none !important;
+        animation-delay: 0ms !important;
+    }
 }
 
 /* --- Public Guide Modal & CTA --- */
@@ -1445,3 +1452,157 @@ button.home-cta { font-family: inherit; font-size: 1.02rem; font-weight: 700; li
 .public-guide-figure { margin: 0; }
 .public-guide-figure img { display: block; width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
 .public-guide-figure figcaption { margin-top: 0.4rem; font-size: 0.8rem; color: #64748b; }
+
+/* Ana sayfa erişim kodu kurtarma paneli ve taslak spam uyarısı */
+.recovery-panel {
+    display: grid;
+    gap: 0.9rem;
+    max-width: 44rem;
+    margin-block-start: 1.25rem;
+    padding: clamp(1rem, 2.5vw, 1.4rem);
+    border: 1px solid #e4e5e8;
+    border-top: 3px solid var(--public-burgundy);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 10px 30px rgb(31 35 41 / 5%);
+}
+.recovery-panel[hidden] {
+    display: none;
+}
+/* Kurtarma paneli açılırken satırlar yukarıdan aşağıya doğal okuma sırasıyla belirir. */
+@keyframes recovery-reveal-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.recovery-panel.is-revealing > * {
+    animation: recovery-reveal-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.recovery-panel.is-revealing > :nth-child(1) { animation-delay: 0ms; }
+.recovery-panel.is-revealing > :nth-child(2) { animation-delay: 70ms; }
+.recovery-panel.is-revealing > :nth-child(3) { animation-delay: 140ms; }
+.recovery-panel.is-revealing > :nth-child(4) { animation-delay: 210ms; }
+.recovery-feedback.is-animating {
+    animation: recovery-reveal-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.recovery-panel h2 {
+    margin: 0;
+    color: var(--public-burgundy);
+    font-size: 1.2rem;
+}
+.recovery-panel p.recovery-intro {
+    margin: 0;
+    color: #505766;
+    font-size: 0.94rem;
+    line-height: 1.55;
+}
+.recovery-language-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.45rem;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid #e5e8ee;
+    border-radius: 0.6rem;
+    background: #f8f9fb;
+    color: #343943;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+.recovery-language-badge {
+    padding: 0.12rem 0.5rem;
+    border-radius: 99px;
+    background: var(--public-burgundy-soft);
+    border: 1px solid var(--public-burgundy-border);
+    color: var(--public-burgundy);
+    font-size: 0.84rem;
+}
+.recovery-language-hint {
+    color: #59616d;
+    font-size: 0.82rem;
+}
+.recovery-form {
+    display: grid;
+    gap: 0.9rem;
+}
+.recovery-form .application-form-field {
+    display: grid;
+    gap: 0.4rem;
+}
+.recovery-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+.recovery-telegram-link {
+    text-decoration: none;
+    border: 1px solid var(--public-burgundy-border);
+    color: var(--public-burgundy);
+    background: var(--public-burgundy-soft);
+}
+.recovery-telegram-link:hover {
+    background: #f5e2e7;
+}
+.recovery-telegram-link[hidden] {
+    display: none;
+}
+.recovery-feedback {
+    display: grid;
+    gap: 0.45rem;
+}
+.recovery-feedback[data-feedback-type="confirmed"] {
+    padding: 0.8rem 0.95rem;
+    border: 1px solid #8dbb9a;
+    border-radius: 0.65rem;
+    background: var(--public-success-soft);
+    color: #185b34;
+}
+.recovery-feedback[data-feedback-type="error"] {
+    padding: 0.8rem 0.95rem;
+    border: 1px solid #f8b4b4;
+    border-radius: 0.65rem;
+    background: #fdf2f2;
+    color: #9b1c1c;
+}
+.recovery-panel p.recovery-feedback-message,
+.recovery-panel p.recovery-spam-warning {
+    margin: 0;
+    color: inherit;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+.recovery-panel p.recovery-feedback-message {
+    font-weight: 600;
+}
+.recovery-panel p.recovery-spam-warning {
+    font-size: 0.88rem;
+}
+.recovery-spam-warning[hidden] {
+    display: none;
+}
+.credentials-spam-warning {
+    margin: 0;
+    padding: 0.55rem 0.8rem;
+    border-inline-start: 4px solid #d89b27;
+    border-radius: 0.45rem;
+    background: #fffaf0;
+    color: #60430e;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+@media (max-width: 480px) {
+    .recovery-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+    .recovery-actions > button,
+    .recovery-actions > a {
+        width: 100%;
+    }
+}

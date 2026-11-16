@@ -1,5 +1,5 @@
 import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_FIELDS, DOCUMENT_ANSWER_OPTIONS, listRequiredDocumentAnswers, listMissingDocumentAnswers } from '../shared/document-conditions.js';
-import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
+import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
 import { createDraftAutosave } from './draftAutosave.js';
 import { createPhoneField } from './phoneField.js';
 import { createNationalityField } from './nationalityField.js';
@@ -1043,7 +1043,9 @@ function createReferenceBanner(document, state, messages) {
     });
     const important = createTranslatedElement(document, 'p', 'applicationReferenceImportant', messages.applicationReferenceImportant);
     important.className = 'credentials-banner-important';
-    banner.append(refText, copyButton, createCredentialCopyStatus(document), important);
+    const spamWarning = createTranslatedElement(document, 'p', 'recoverySpamWarning', messages.recoverySpamWarning);
+    spamWarning.className = 'credentials-spam-warning';
+    banner.append(refText, copyButton, createCredentialCopyStatus(document), important, spamWarning);
     return banner;
 }
 
@@ -1585,6 +1587,11 @@ function createAutosave(state, api, root) {
     });
 }
 
+function readActiveLocale(document) {
+    const lang = String(document?.documentElement?.lang || '').trim().toLowerCase();
+    return SUPPORTED_LOCALES.includes(lang) ? lang : 'tr';
+}
+
 function createContactDraft(fields, privacyNoticeVersion) {
     return {
         student_number: fields.student_number,
@@ -1814,7 +1821,9 @@ async function saveStep(root, state, api) {
     try {
         if (state.step === 0 && !state.application) {
             failureStage = 'draft_creation';
-            state.application = await api.createApplicationDraft(createContactDraft(fields, state.privacyNotice?.version));
+            state.application = await api.createApplicationDraft(
+                createContactDraft(fields, state.privacyNotice?.version)
+            );
             clearContactDraftFields(root.ownerDocument.defaultView);
             state.saveStatus = 'saved';
             state.autosave = createAutosave(state, api, root);
@@ -1830,7 +1839,7 @@ async function saveStep(root, state, api) {
             failureStage = 'contact_acknowledgement';
             const version = state.application.contact_acknowledgement?.current_version;
             if (!version) throw Object.assign(new Error('Contact acknowledgement version is unavailable.'), { code: 'CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT' });
-            state.application = await api.acceptCurrentContactAcknowledgement(version);
+            state.application = await api.acceptCurrentContactAcknowledgement(version, readActiveLocale(root.ownerDocument));
             if (!state.application.contact_acknowledgement?.accepted_current) {
                 throw Object.assign(new Error('Contact acknowledgement was not confirmed.'), { code: 'CONTACT_ACKNOWLEDGEMENT_REQUIRED' });
             }
@@ -1974,13 +1983,6 @@ async function submitApplication(root, state, api) {
     }
 }
 
-function canCreateContactDraft(form) {
-    if (!form) return false;
-    setContactPhoneValidity(form);
-    return ['student_number', 'student_email', 'student_phone', 'application_type']
-        .every((name) => form.querySelector(`[name="${name}"]`)?.checkValidity() === true);
-}
-
 function handleWizardInput(root, state, api, event) {
     const target = event?.target;
     if (target?.name === 'passport_number' && state.errorKey === 'passportIdentityAlreadyActive') {
@@ -1996,46 +1998,11 @@ function handleWizardInput(root, state, api, event) {
         state.formValues = readVisibleFields(root, state.application || {});
         if (state.application && state.autosave) scheduleCurrentFields(root, state);
         if (!state.application) {
+            // Sunucu taslağı yalnızca Devam et düğmesine basıldığında oluşturulur; öncesinde alanlar tarayıcıda tutulur.
             saveContactDraftFields(root.ownerDocument.defaultView, state.formValues);
-            state.saveStatus = 'saving';
-            updateSaveStatus(root, state);
-            if (state.contactDraftTimer !== null) root.ownerDocument.defaultView.clearTimeout(state.contactDraftTimer);
-            const form = root.querySelector('#application-step-form');
-            if (!state.isCreatingContactDraft && canCreateContactDraft(form)) {
-                state.contactDraftTimer = root.ownerDocument.defaultView.setTimeout(async () => {
-                    state.contactDraftTimer = null;
-                    if (state.application || state.isCreatingContactDraft) return;
-                    state.isCreatingContactDraft = true;
-                    try {
-                        const fields = readVisibleFields(root, {});
-                        state.application = await api.createApplicationDraft(createContactDraft(fields, state.privacyNotice?.version));
-                        clearContactDraftFields(root.ownerDocument.defaultView);
-                        state.autosave = createAutosave(state, api, root);
-                        const latestFields = readVisibleFields(root, state.application);
-                        state.autosave.schedule(buildAutosaveValues(latestFields));
-                        await state.autosave.flush();
-                        state.saveStatus = 'saved';
-                        updateSaveStatus(root, state);
-                        renderWizard(root, state);
-                    } catch (error) {
-                        state.saveStatus = 'failed';
-                        if (error.code === 'APPLICATION_PRIVACY_NOTICE_VERSION_CONFLICT'
-                            || error.code === 'APPLICATION_PRIVACY_NOTICE_UNAVAILABLE') {
-                            state.errorKey = createErrorKey(error, 'applicationSaveFailed');
-                            state.errorRequestId = readSafeRequestId(error.requestId);
-                            await prepareNewApplicationIntake(root, state, api);
-                        }
-                        updateSaveStatus(root, state);
-                    } finally {
-                        state.isCreatingContactDraft = false;
-                    }
-                }, 450);
-            } else {
-                state.contactDraftTimer = root.ownerDocument.defaultView.setTimeout(() => {
-                    state.contactDraftTimer = null;
-                    state.saveStatus = 'saved';
-                    updateSaveStatus(root, state);
-                }, 400);
+            if (state.saveStatus !== 'idle') {
+                state.saveStatus = 'idle';
+                updateSaveStatus(root, state);
             }
         }
         updateContactContinueButton(root);
@@ -2197,7 +2164,6 @@ export async function initializeApplicationWizard(root, api, options = {}) {
             const restored = loadContactDraftFields(root.ownerDocument.defaultView);
             if (restored) {
                 state.formValues = restored;
-                state.saveStatus = 'saved';
             }
             await prepareNewApplicationIntake(root, state, api);
             return state;
