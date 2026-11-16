@@ -15,7 +15,7 @@ import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../../shared/academic-calendar
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import { readSubmissionReadiness } from '../services/submissionReadiness.js';
-import { resolveMailPortalUrl, sendDraftReferenceMail } from '../services/referenceMailService.js';
+import { normalizeMailLanguage, resolveMailPortalUrl, sendDraftReferenceMail } from '../services/referenceMailService.js';
 import { listApplicationDocumentPolicies } from '../domain/documentPolicy.js';
 import { createAuditEvent, createRepositories, enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
 import { DEFAULT_APPLICATION_PRIVACY_NOTICE } from '../domain/applicationPrivacyNotice.js';
@@ -554,8 +554,10 @@ export async function acceptCurrentContactAcknowledgement(request, environment, 
     if (session.status !== 'draft') throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemiyor.');
 
     const body = await readJsonBody(request);
-    if (Object.keys(body).some((key) => !['accepted', 'version'].includes(key))
-        || body.accepted !== true || typeof body.version !== 'string') {
+    if (Object.keys(body).some((key) => !['accepted', 'version', 'language'].includes(key))
+        || body.accepted !== true
+        || typeof body.version !== 'string'
+        || (Object.hasOwn(body, 'language') && typeof body.language !== 'string')) {
         throw new ApiError(400, 'CONTACT_ACKNOWLEDGEMENT_REQUIRED', 'İletişim sorumluluğu onayını kabul ederek devam edin.');
     }
     if (body.version !== CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION) {
@@ -581,9 +583,11 @@ export async function acceptCurrentContactAcknowledgement(request, environment, 
         requestId
     });
     if (!application) throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru artık düzenlenemiyor.');
+    // İsteğe bağlı arayüz dilini yalnızca taslak e-postası için ilet; dil sunucuda saklanmaz.
     await sendDraftReferenceMail(environment, {
         applicationId: session.application_id,
-        portalUrl: resolveMailPortalUrl(environment, request.url)
+        portalUrl: resolveMailPortalUrl(environment, request.url),
+        language: normalizeMailLanguage(body.language)
     });
     return { application: createApplicationDto(application, environment) };
 }

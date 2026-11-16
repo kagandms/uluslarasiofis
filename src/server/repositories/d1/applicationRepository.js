@@ -396,6 +396,32 @@ export function createApplicationRepository(database) {
                 LIMIT 1
             `).bind(normalizedStudentNumber).first();
         },
+        async findRecoverableByStudentNumber(studentNumber) {
+            if (typeof studentNumber !== 'string') return null;
+            let normalizedStudentNumber;
+            try {
+                normalizedStudentNumber = normalizeStudentNumber(studentNumber);
+            } catch {
+                return null;
+            }
+            // Yalnızca tamamlanmamış/iptal edilmemiş ve arşivlenmemiş tek aktif başvuruyu döndürür.
+            return database.prepare(`
+                SELECT applications.id, applications.reference_number, applications.student_email,
+                       applications.student_phone, applications.access_code_version,
+                       applications.status, students.student_number,
+                       notification_preferences.whatsapp_consent_language AS language
+                FROM applications
+                JOIN students ON students.id = applications.student_id
+                LEFT JOIN notification_preferences ON notification_preferences.application_id = applications.id
+                WHERE students.normalized_student_number = ?
+                  AND applications.status NOT IN ('completed', 'cancelled', 'rejected')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM application_deletions
+                      WHERE application_deletions.application_id = applications.id
+                  )
+                LIMIT 1
+            `).bind(normalizedStudentNumber).first();
+        },
         async hasOtherActiveApplicationForPassportIdentity(passportNumber, dateOfBirth, applicationId) {
             if (typeof passportNumber !== 'string' || !passportNumber.trim() || !dateOfBirth) return false;
             const normalizedPassportNumber = passportNumber.trim().toUpperCase();

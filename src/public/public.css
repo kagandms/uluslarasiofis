@@ -446,12 +446,14 @@ html[dir="rtl"] .tracking-state, html[dir="rtl"] .tracking-summary, html[dir="rt
 html[dir="rtl"] .tracking-notification-preferences { direction: rtl; }
 html[dir="rtl"] .tracking-details { direction: rtl; }
 html[dir="rtl"] .tracking-lookup-form, html[dir="rtl"] .physical-tracking-form { direction: rtl; }
+html[dir="rtl"] .recovery-panel { direction: rtl; text-align: start; }
 html[dir="rtl"] .resubmission-upload-control { direction: rtl; }
 html[dir="rtl"] input[type="tel"],
 html[dir="rtl"] input[type="email"],
 html[dir="rtl"] input[name="passport_number"],
 html[dir="rtl"] input[name="reference_number"],
-html[dir="rtl"] input[name="fingerprint_code"] {
+html[dir="rtl"] input[name="fingerprint_code"],
+html[dir="rtl"] input[name="recovery_student_number"] {
     direction: ltr;
     text-align: end;
     unicode-bidi: plaintext;
@@ -1445,3 +1447,136 @@ button.home-cta { font-family: inherit; font-size: 1.02rem; font-weight: 700; li
 .public-guide-figure { margin: 0; }
 .public-guide-figure img { display: block; width: 100%; height: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
 .public-guide-figure figcaption { margin-top: 0.4rem; font-size: 0.8rem; color: #64748b; }
+
+/* Ana sayfa erişim kodu kurtarma paneli ve taslak spam uyarısı */
+.recovery-panel {
+    display: grid;
+    gap: 0.9rem;
+    max-width: 44rem;
+    margin-block-start: 1.25rem;
+    padding: clamp(1rem, 2.5vw, 1.4rem);
+    border: 1px solid #e4e5e8;
+    border-top: 3px solid var(--public-burgundy);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 10px 30px rgb(31 35 41 / 5%);
+}
+.recovery-panel[hidden] {
+    display: none;
+}
+.recovery-panel h2 {
+    margin: 0;
+    color: var(--public-burgundy);
+    font-size: 1.2rem;
+}
+.recovery-panel p.recovery-intro {
+    margin: 0;
+    color: #505766;
+    font-size: 0.94rem;
+    line-height: 1.55;
+}
+.recovery-language-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.45rem;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid #e5e8ee;
+    border-radius: 0.6rem;
+    background: #f8f9fb;
+    color: #343943;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+.recovery-language-badge {
+    padding: 0.12rem 0.5rem;
+    border-radius: 99px;
+    background: var(--public-burgundy-soft);
+    border: 1px solid var(--public-burgundy-border);
+    color: var(--public-burgundy);
+    font-size: 0.84rem;
+}
+.recovery-language-hint {
+    color: #59616d;
+    font-size: 0.82rem;
+}
+.recovery-form {
+    display: grid;
+    gap: 0.9rem;
+}
+.recovery-form .application-form-field {
+    display: grid;
+    gap: 0.4rem;
+}
+.recovery-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+.recovery-telegram-link {
+    text-decoration: none;
+    border: 1px solid var(--public-burgundy-border);
+    color: var(--public-burgundy);
+    background: var(--public-burgundy-soft);
+}
+.recovery-telegram-link:hover {
+    background: #f5e2e7;
+}
+.recovery-telegram-link[hidden] {
+    display: none;
+}
+.recovery-feedback {
+    display: grid;
+    gap: 0.45rem;
+}
+.recovery-feedback[data-feedback-type="confirmed"] {
+    padding: 0.8rem 0.95rem;
+    border: 1px solid #8dbb9a;
+    border-radius: 0.65rem;
+    background: var(--public-success-soft);
+    color: #185b34;
+}
+.recovery-feedback[data-feedback-type="error"] {
+    padding: 0.8rem 0.95rem;
+    border: 1px solid #f8b4b4;
+    border-radius: 0.65rem;
+    background: #fdf2f2;
+    color: #9b1c1c;
+}
+.recovery-panel p.recovery-feedback-message,
+.recovery-panel p.recovery-spam-warning {
+    margin: 0;
+    color: inherit;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+.recovery-panel p.recovery-feedback-message {
+    font-weight: 600;
+}
+.recovery-panel p.recovery-spam-warning {
+    font-size: 0.88rem;
+}
+.recovery-spam-warning[hidden] {
+    display: none;
+}
+.credentials-spam-warning {
+    margin: 0;
+    padding: 0.55rem 0.8rem;
+    border-inline-start: 4px solid #d89b27;
+    border-radius: 0.45rem;
+    background: #fffaf0;
+    color: #60430e;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+@media (max-width: 480px) {
+    .recovery-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+    .recovery-actions > button,
+    .recovery-actions > a {
+        width: 100%;
+    }
+}

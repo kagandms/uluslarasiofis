@@ -1,8 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  buildReferenceMail, readReferenceMailConfig, resolveMailPortalUrl, sendDraftReferenceMail
+  DAILY_DRAFT_MAIL_QUOTA,
+  DAILY_RECOVERY_MAIL_QUOTA,
+  buildRecoveryMail,
+  buildReferenceMail,
+  readMailQuotaStatus,
+  readReferenceMailConfig,
+  resolveMailPortalUrl,
+  sendDraftReferenceMail,
+  sendRecoveryReferenceMail
 } from '../src/server/services/referenceMailService.js';
+import { generateAccessCode } from '../src/server/auth/applicationAccessCode.js';
 import { createNotificationFixture } from './helpers/notification-fixtures.js';
 
 const TOKEN = 't'.repeat(40);
@@ -164,4 +173,75 @@ test('resolveMailPortalUrl uses a valid canonical origin and falls back to the r
       'https://worker.example.workers.dev/basvurum/'
     );
   }
+});
+
+function seedSentDraftMails(database, count, sentAt) {
+  for (let i = 0; i < count; i += 1) {
+    const studentId = `quota-student-${i}`;
+    const appId = `quota-app-${i}`;
+    database.prepare('INSERT INTO students (id, student_number, normalized_student_number) VALUES (?, ?, ?)')
+      .bind(studentId, `QUOTA-${i}`, `QUOTA-${i}`).run();
+    database.prepare("INSERT INTO applications (id, student_id, application_type, status) VALUES (?, ?, 'initial', 'draft')")
+      .bind(appId, studentId).run();
+    database.prepare(`INSERT INTO application_reference_mails (application_id, status, attempts, created_at, updated_at, sent_at)
+        VALUES (?, 'sent', 1, ?, ?, ?)`).bind(appId, sentAt, sentAt, sentAt).run();
+  }
+}
+
+test('draft mail defers locally when 70-recipient rolling 24h draft quota is full so 30 slots stay for recovery', async () => {
+  const { database, applicationId } = await createNotificationFixture();
+  const now = new Date().toISOString();
+  const withinWindow = new Date(Date.parse(now) - 60 * 60 * 1000).toISOString();
+  seedSentDraftMails(database, DAILY_DRAFT_MAIL_QUOTA, withinWindow);
+  const { calls, fetchImplementation } = recordingFetch([{ ok: true }]);
+
+  await sendDraftReferenceMail(configuredEnvironment(database), { applicationId, portalUrl: PORTAL_URL, now, fetchImplementation });
+
+  assert.equal(calls.length, 0);
+  const row = await mailRow(database, applicationId);
+  assert.equal(row.status, 'quota_deferred');
+  assert.equal(row.last_error_code, 'quota');
+
+  const quota = await readMailQuotaStatus(database, now);
+  assert.equal(quota.draftSentCount, DAILY_DRAFT_MAIL_QUOTA);
+  assert.equal(quota.draftRemaining, 0);
+  assert.equal(quota.recoveryRemaining, DAILY_RECOVERY_MAIL_QUOTA);
+});
+
+test('recovery mail sends plain text with new access code and returns failed without throwing on transport error', async () => {
+  const accessCode = generateAccessCode();
+  const { calls, fetchImplementation } = recordingFetch([{ ok: true }, new Error('network down')]);
+  const environment = configuredEnvironment({});
+
+  const okResult = await sendRecoveryReferenceMail(environment, {
+    recipient: 'student@example.invalid',
+    referenceNumber: 'ITU-7K9M-4X2P',
+    studentNumber: 'SYN-001',
+    accessCode,
+    portalUrl: PORTAL_URL,
+    language: 'tr',
+    fetchImplementation
+  });
+  assert.equal(okResult.status, 'sent');
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].body.text.includes(accessCode));
+  assert.ok(calls[0].body.text.includes('ITU-7K9M-4X2P'));
+
+  const failResult = await sendRecoveryReferenceMail(environment, {
+    recipient: 'student@example.invalid',
+    referenceNumber: 'ITU-7K9M-4X2P',
+    studentNumber: 'SYN-001',
+    accessCode,
+    portalUrl: PORTAL_URL,
+    language: 'en',
+    fetchImplementation
+  });
+  assert.equal(failResult.status, 'failed');
+  assert.equal(failResult.errorCode, 'network');
+  assert.throws(() => buildRecoveryMail({
+    referenceNumber: 'ITU-7K9M-4X2P',
+    studentNumber: 'SYN-001',
+    accessCode: 'invalid-code',
+    portalUrl: PORTAL_URL
+  }), TypeError);
 });
