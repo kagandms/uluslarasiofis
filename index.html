@@ -84,9 +84,33 @@
           <a class="home-cta home-cta-primary" href="/basvuru/" data-i18n="homeStartAction">Başvuruya Başla</a>
           <a class="home-cta home-cta-secondary" href="/basvurum/" data-i18n="homeTrackAction">Başvurumu Sorgula</a>
           <a class="home-cta home-cta-secondary" href="/basvuruya-devam-et/" data-i18n="homeResumeAction">Başvuruma Devam Et</a>
+          <button type="button" id="btn-access-recovery" class="home-cta home-cta-tertiary" aria-expanded="false" aria-controls="access-recovery-panel" data-i18n="recoveryToggleAction">Başvuru kodumu unuttum</button>
           <button type="button" id="btn-hero-guide" class="home-cta home-cta-tertiary" data-i18n="homeGuideAction">Nasıl Kullanılır?</button>
           <a id="home-privacy-notice" class="home-cta home-cta-tertiary" href="https://www.topkapi.edu.tr/tr-TR/gizlilik-politikasi/13455" target="_blank" rel="noopener noreferrer" data-i18n="homeOfficialPrivacyNotice">Üniversitenin KVKK metni</a>
         </nav>
+        <section id="access-recovery-panel" class="recovery-panel" aria-labelledby="recovery-form-heading" hidden>
+          <h2 id="recovery-form-heading" data-i18n="recoveryFormHeading">Erişim kodu kurtarma</h2>
+          <p class="recovery-intro" data-i18n="recoveryFormIntro">Öğrenci numaranızı girin. Aktif bir başvurunuz varsa, kayıtlı e-posta adresinize yeni erişim kodu gönderilecektir.</p>
+          <div class="recovery-language-row">
+            <span class="recovery-language-label" data-i18n="recoveryEmailLanguageLabel">E-posta dili</span><span aria-hidden="true">:</span>
+            <strong id="recovery-current-language" class="recovery-language-badge" data-i18n="recoveryCurrentLanguageName">Türkçe</strong>
+            <span class="recovery-language-hint" data-i18n="recoveryLanguageSwitchHint">Farklı bir dil için sayfanın üstündeki dil seçimini değiştirebilirsiniz.</span>
+          </div>
+          <form id="access-recovery-form" class="recovery-form">
+            <label class="application-form-field" for="recovery-student-number">
+              <span data-i18n="studentNumber">Öğrenci numarası</span>
+              <input type="text" id="recovery-student-number" name="recovery_student_number" maxlength="64" autocomplete="off" dir="ltr" required aria-required="true" />
+            </label>
+            <div class="recovery-actions">
+              <button type="submit" class="application-button application-button-primary" data-i18n="recoveryEmailSubmit">E-posta ile yeni kod iste</button>
+              <a id="recovery-telegram-link" class="application-button application-button-secondary recovery-telegram-link" target="_blank" rel="noopener noreferrer" data-i18n="recoveryTelegramAction" hidden>Telegram ile kodu kurtar</a>
+            </div>
+            <div id="recovery-feedback" class="recovery-feedback" role="status" aria-live="polite">
+              <p id="recovery-feedback-message" class="recovery-feedback-message"></p>
+              <p id="recovery-spam-warning" class="recovery-spam-warning" data-i18n="recoverySpamWarning" hidden>E-posta birkaç dakika içinde gelmezse gereksiz (spam) klasörünü kontrol edin</p>
+            </div>
+          </form>
+        </section>
       </section>
 
       <section class="public-section" aria-labelledby="process-heading">

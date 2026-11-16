@@ -1,6 +1,7 @@
 import { FINAL_DOCUMENT_MESSAGES } from './final-document-messages.js';
 import { DOCUMENT_CONDITION_MESSAGES } from './document-condition-messages.js';
 import { PHYSICAL_RECEIPT_MESSAGES } from './physical-receipt-messages.js';
+import { RECOVERY_MESSAGES } from './recovery-messages.js';
 
 export const SUPPORTED_LOCALES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 
@@ -233,7 +234,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessInvalidCredentials: 'Başvuru numarası veya öğrenci numarası hatalı.',
         submissionCredentialsReminder: 'Başvuru numaranızı saklamayı unutmayınız. Farklı bir cihazdan başvurunuza erişmek için başvuru numaranız ve öğrenci numaranız gerekecektir.',
         ...DOCUMENT_CONDITION_MESSAGES.tr,
-        ...FINAL_DOCUMENT_MESSAGES.tr
+        ...FINAL_DOCUMENT_MESSAGES.tr,
+        ...RECOVERY_MESSAGES.tr
     }),
     en: Object.freeze({
         languageLabel: 'Language selection',
@@ -463,7 +465,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessInvalidCredentials: 'Invalid application number or student number.',
         submissionCredentialsReminder: 'Remember to keep your application number. You will need it together with your student number to access your application from another device.',
         ...DOCUMENT_CONDITION_MESSAGES.en,
-        ...FINAL_DOCUMENT_MESSAGES.en
+        ...FINAL_DOCUMENT_MESSAGES.en,
+        ...RECOVERY_MESSAGES.en
     }),
     ru: Object.freeze({
         languageLabel: 'Выбор языка',
@@ -693,7 +696,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessInvalidCredentials: 'Неверный номер заявки или номер студента.',
         submissionCredentialsReminder: 'Не забудьте сохранить номер заявки. Он понадобится вместе с номером студента для доступа к заявке с другого устройства.',
         ...DOCUMENT_CONDITION_MESSAGES.ru,
-        ...FINAL_DOCUMENT_MESSAGES.ru
+        ...FINAL_DOCUMENT_MESSAGES.ru,
+        ...RECOVERY_MESSAGES.ru
     }),
     tk: Object.freeze({
         languageLabel: 'Dil saýlaň',
@@ -923,7 +927,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessInvalidCredentials: 'Arza belgisi ýa-da talyp belgisi nädogry.',
         submissionCredentialsReminder: 'Arza belgiňizi saklamagy ýatdan çykarmaň. Başga enjamdan arzaňyza girmek üçin arza belgiňiz we talyp belgiňiz gerek bolar.',
         ...DOCUMENT_CONDITION_MESSAGES.tk,
-        ...FINAL_DOCUMENT_MESSAGES.tk
+        ...FINAL_DOCUMENT_MESSAGES.tk,
+        ...RECOVERY_MESSAGES.tk
     }),
     ar: Object.freeze({
         languageLabel: 'اختيار اللغة',
@@ -1153,7 +1158,8 @@ export const PUBLIC_MESSAGES = Object.freeze({
         accessInvalidCredentials: 'رقم الطلب أو رقم الطالب غير صحيح.',
         submissionCredentialsReminder: 'تذكّر الاحتفاظ برقم طلبك. ستحتاجه مع رقم الطالب للوصول إلى طلبك من جهاز آخر.',
         ...DOCUMENT_CONDITION_MESSAGES.ar,
-        ...FINAL_DOCUMENT_MESSAGES.ar
+        ...FINAL_DOCUMENT_MESSAGES.ar,
+        ...RECOVERY_MESSAGES.ar
     })
 });
 

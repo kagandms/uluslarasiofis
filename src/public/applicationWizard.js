@@ -1,5 +1,5 @@
 import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_FIELDS, DOCUMENT_ANSWER_OPTIONS, listRequiredDocumentAnswers, listMissingDocumentAnswers } from '../shared/document-conditions.js';
-import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
+import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
 import { createDraftAutosave } from './draftAutosave.js';
 import { createPhoneField } from './phoneField.js';
 import { createNationalityField } from './nationalityField.js';
@@ -1043,7 +1043,9 @@ function createReferenceBanner(document, state, messages) {
     });
     const important = createTranslatedElement(document, 'p', 'applicationReferenceImportant', messages.applicationReferenceImportant);
     important.className = 'credentials-banner-important';
-    banner.append(refText, copyButton, createCredentialCopyStatus(document), important);
+    const spamWarning = createTranslatedElement(document, 'p', 'recoverySpamWarning', messages.recoverySpamWarning);
+    spamWarning.className = 'credentials-spam-warning';
+    banner.append(refText, copyButton, createCredentialCopyStatus(document), important, spamWarning);
     return banner;
 }
 
@@ -1585,6 +1587,11 @@ function createAutosave(state, api, root) {
     });
 }
 
+function readActiveLocale(document) {
+    const lang = String(document?.documentElement?.lang || '').trim().toLowerCase();
+    return SUPPORTED_LOCALES.includes(lang) ? lang : 'tr';
+}
+
 function createContactDraft(fields, privacyNoticeVersion) {
     return {
         student_number: fields.student_number,
@@ -1814,7 +1821,9 @@ async function saveStep(root, state, api) {
     try {
         if (state.step === 0 && !state.application) {
             failureStage = 'draft_creation';
-            state.application = await api.createApplicationDraft(createContactDraft(fields, state.privacyNotice?.version));
+            state.application = await api.createApplicationDraft(
+                createContactDraft(fields, state.privacyNotice?.version)
+            );
             clearContactDraftFields(root.ownerDocument.defaultView);
             state.saveStatus = 'saved';
             state.autosave = createAutosave(state, api, root);
@@ -1830,7 +1839,7 @@ async function saveStep(root, state, api) {
             failureStage = 'contact_acknowledgement';
             const version = state.application.contact_acknowledgement?.current_version;
             if (!version) throw Object.assign(new Error('Contact acknowledgement version is unavailable.'), { code: 'CONTACT_ACKNOWLEDGEMENT_VERSION_CONFLICT' });
-            state.application = await api.acceptCurrentContactAcknowledgement(version);
+            state.application = await api.acceptCurrentContactAcknowledgement(version, readActiveLocale(root.ownerDocument));
             if (!state.application.contact_acknowledgement?.accepted_current) {
                 throw Object.assign(new Error('Contact acknowledgement was not confirmed.'), { code: 'CONTACT_ACKNOWLEDGEMENT_REQUIRED' });
             }
@@ -2008,7 +2017,9 @@ function handleWizardInput(root, state, api, event) {
                     state.isCreatingContactDraft = true;
                     try {
                         const fields = readVisibleFields(root, {});
-                        state.application = await api.createApplicationDraft(createContactDraft(fields, state.privacyNotice?.version));
+                        state.application = await api.createApplicationDraft(
+                            createContactDraft(fields, state.privacyNotice?.version)
+                        );
                         clearContactDraftFields(root.ownerDocument.defaultView);
                         state.autosave = createAutosave(state, api, root);
                         const latestFields = readVisibleFields(root, state.application);
