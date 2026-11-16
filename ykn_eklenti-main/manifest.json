@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YKN ve Pasaport Aktarıcı",
-  "version": "1.2.123",
+  "version": "1.2.124",
   "description": "Topkapı Üniversitesi - YÖKSİS Veri Aktarım Eklentisi",
   "permissions": [
     "storage",
@@ -12,6 +12,8 @@
   "host_permissions": [
     "https://goc-staging.topkapiuni.workers.dev/*",
     "https://goc.topkapiuni.workers.dev/*",
+    "https://topkapiunigoc.com/*",
+    "https://www.topkapiunigoc.com/*",
     "https://topkapiikamet.vercel.app/*",
     "https://apply.topkapi.edu.tr/*",
     "https://yoksis.yok.gov.tr/*",
@@ -55,6 +57,8 @@
       "matches": [
         "https://goc-staging.topkapiuni.workers.dev/*",
         "https://goc.topkapiuni.workers.dev/*",
+        "https://topkapiunigoc.com/*",
+        "https://www.topkapiunigoc.com/*",
         "https://topkapiikamet.vercel.app/*",
         "http://localhost/*",
         "http://127.0.0.1/*"
