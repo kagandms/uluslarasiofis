@@ -161,8 +161,15 @@
                 && request.pdfBase64.length <= 12_582_912;
         }
 
-        if (request.action === 'FILL_YOKSIS_FORM' || request.action === 'TRANSFER_TO_YOKSIS') {
+        if (request.action === 'FILL_YOKSIS_FORM') {
             return Boolean(request.data) && typeof request.data === 'object' && !Array.isArray(request.data);
+        }
+
+        if (request.action === 'TRANSFER_TO_YOKSIS') {
+            return Boolean(request.data)
+                && typeof request.data === 'object'
+                && !Array.isArray(request.data)
+                && (request.background === undefined || typeof request.background === 'boolean');
         }
 
         return true;

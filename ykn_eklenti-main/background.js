@@ -2162,6 +2162,80 @@ async function returnToPortalTab(senderTab = null, sideWindowPlan = null) {
     }
 }
 
+/**
+ * Arka plan aramasında kullanıcı müdahalesi gerektiğinde YÖKSİS sekmesini ve penceresini öne alır.
+ * @param {chrome.tabs.Tab|null} yoksisTab
+ * @returns {Promise<boolean>}
+ */
+async function surfaceYoksisTab(yoksisTab) {
+    if (!Number.isInteger(yoksisTab?.id)) return false;
+    try {
+        await updateTab(yoksisTab.id, { active: true });
+    } catch (error) {
+        console.warn('[YKN] YÖKSİS sekmesi öne getirilemedi:', { errorName: error?.name || 'Error' });
+    }
+    if (Number.isInteger(yoksisTab.windowId) && typeof chrome.windows?.update === 'function') {
+        try {
+            await chrome.windows.update(yoksisTab.windowId, { focused: true });
+        } catch (error) {
+            console.warn('[YKN] YÖKSİS penceresi odaklanamadı:', { errorName: error?.name || 'Error' });
+        }
+    }
+    return true;
+}
+
+/**
+ * Arka plan araması başarısız olduğunda veya manuel onay gerektirdiğinde neden kodunu üretir.
+ * @param {object|null|undefined} response
+ * @returns {'manual_confirmation'|'search_failed'}
+ */
+function resolveBackgroundAttentionReason(response) {
+    if (response?.manualOverrideAvailable === true) {
+        return 'manual_confirmation';
+    }
+    return 'search_failed';
+}
+
+/**
+ * Arka plan modunda dönen yanıtı sözleşme alanlarıyla tamamlar; gerekirse YÖKSİS sekmesini öne alır.
+ * @param {object} response
+ * @param {chrome.tabs.Tab|null} yoksisTab
+ * @returns {Promise<object>}
+ */
+async function finalizeBackgroundTransferResponse(response, yoksisTab) {
+    const isFormVerified = response?.success === true && response?.formReady === true;
+    if (isFormVerified) {
+        return {
+            ...response,
+            background: true,
+            surfaced: false
+        };
+    }
+    const surfaced = await surfaceYoksisTab(yoksisTab);
+    return {
+        ...response,
+        background: true,
+        surfaced,
+        ...(surfaced ? { attentionReason: resolveBackgroundAttentionReason(response) } : {})
+    };
+}
+
+/**
+ * Arka plan aramasında fırlatılan hataları kullanıcıya yüzeye çıkarılan yanıt formatına dönüştürür.
+ * @param {Error|unknown} error
+ * @param {chrome.tabs.Tab|null} yoksisTab
+ * @param {string|undefined} requestId
+ * @param {number} totalStartedAt
+ * @returns {Promise<object>}
+ */
+async function handleBackgroundTransferError(error, yoksisTab, requestId, totalStartedAt) {
+    finishYknTiming('yoksis-transfer-total', totalStartedAt, 'failed', 'transfer_failed', requestId);
+    return finalizeBackgroundTransferResponse({
+        success: false,
+        error: error?.message || 'YÖKSİS araması tamamlanamadı.'
+    }, yoksisTab);
+}
+
 async function transferToYoksis(request) {
     const totalStartedAt = startYknTiming();
     try {
@@ -2173,29 +2247,35 @@ async function transferToYoksis(request) {
 }
 
 async function transferToYoksisOperation(request, totalStartedAt) {
-    // Kabul kodu okunduktan sonra YÖKSİS sekmesi bulunur veya açılır;
-    // YKN Talebi V2 ekranı güvenli biçimde açılıp kod aratılır.
-    const kabulId = String(request.data?.yoksisId || request.data?.kabulId || request.kabulId || '')
-        .replace(/[–—−]/g, '-')
-        .replace(/\s*-\s*/g, '-')
-        // OCR tireyi kaybettiyse "821 EC2 34" biçimini kanonik hale getir.
-        .replace(/\s+/g, '-')
-        .trim()
-        .toUpperCase();
-    if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
-    const sideWindowPlan = await resolveSideBySideWindowPlan(request);
-    let yoksisTab = await getBackgroundYoksisTab(sideWindowPlan);
-    yoksisTab = await arrangeSideBySideWindows(yoksisTab, sideWindowPlan);
+    const isBackgroundMode = request?.background === true;
+    let yoksisTab = null;
 
-    const expectedStudent = {
-        passportNo: request.data?.pasaportNo || request.data?.passportNo || '',
-        studentName: request.data?.ad || request.data?.name || request.data?.adi || request.data?.firstName || '',
-        studentSurname: request.data?.soyad || request.data?.surname || request.data?.soyadi || request.data?.lastName || '',
-        motherName: request.data?.anneAdi || '',
-        fatherName: request.data?.babaAdi || ''
-    };
+    try {
+        // Kabul kodu okunduktan sonra YÖKSİS sekmesi bulunur veya açılır;
+        // YKN Talebi V2 ekranı güvenli biçimde açılıp kod aratılır.
+        const kabulId = String(request.data?.yoksisId || request.data?.kabulId || request.kabulId || '')
+            .replace(/[–—−]/g, '-')
+            .replace(/\s*-\s*/g, '-')
+            // OCR tireyi kaybettiyse "821 EC2 34" biçimini kanonik hale getir.
+            .replace(/\s+/g, '-')
+            .trim()
+            .toUpperCase();
+        if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
+        const sideWindowPlan = isBackgroundMode ? null : await resolveSideBySideWindowPlan(request);
+        yoksisTab = await getBackgroundYoksisTab(sideWindowPlan);
+        if (!isBackgroundMode) {
+            yoksisTab = await arrangeSideBySideWindows(yoksisTab, sideWindowPlan);
+        }
 
-    const performSearch = async () => {
+        const expectedStudent = {
+            passportNo: request.data?.pasaportNo || request.data?.passportNo || '',
+            studentName: request.data?.ad || request.data?.name || request.data?.adi || request.data?.firstName || '',
+            studentSurname: request.data?.soyad || request.data?.surname || request.data?.soyadi || request.data?.lastName || '',
+            motherName: request.data?.anneAdi || '',
+            fatherName: request.data?.babaAdi || ''
+        };
+
+        const performSearch = async () => {
         await saveTemporaryStudentData(request.data);
 
         await waitForContentScript(yoksisTab.id, 'yoksis', { frameId: 0 });
@@ -2354,29 +2434,43 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             ...(await getVerifiedYoksisTarget(yoksisTab.id)),
             message: 'Kabul mektup kodu YÖKSİS\'e aktarıldı ve öğrenci formu doğrulandı.'
         };
-    };
-    return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
-        await updateTab(yoksisTab.id, { active: true });
-        if (yoksisTab.windowId) {
-            await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch((error) => {
-                console.warn('YÖKSİS window focus failed.', { errorName: error?.name || 'Error' });
-            });
-        }
-        const response = await performSearch();
-        if (response.success && (response.formReady || response.manualOverrideAvailable)) {
-            await saveTemporaryStudentData({ ...request.data, yoksisId: kabulId,
-                yoksisReady: response.formReady === true,
-                yoksisManualOverrideAvailable: response.manualOverrideAvailable === true,
-                yoksisSearchRequestId: response.yoksisSearchRequestId || request.requestId,
-                yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
-        }
-        // Portal'dan başlatılan aramada kabul kodu YÖKSİS'te doğrulanınca kullanıcıyı tekrar portal sekmesine al.
-        // Manuel onay gereken durumda YÖKSİS sekmesi açık kalır ki kayıt kontrol edilebilsin.
-        if (response.success && response.formReady === true && request.portalSenderTab) {
-            await returnToPortalTab(request.portalSenderTab, sideWindowPlan);
-        }
-        return response;
-    });
+        };
+        return await runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
+            if (!isBackgroundMode) {
+                await updateTab(yoksisTab.id, { active: true });
+                if (yoksisTab.windowId) {
+                    await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch((error) => {
+                        console.warn('YÖKSİS window focus failed.', { errorName: error?.name || 'Error' });
+                    });
+                }
+            }
+            try {
+                const response = await performSearch();
+                if (response.success && (response.formReady || response.manualOverrideAvailable)) {
+                    await saveTemporaryStudentData({ ...request.data, yoksisId: kabulId,
+                        yoksisReady: response.formReady === true,
+                        yoksisManualOverrideAvailable: response.manualOverrideAvailable === true,
+                        yoksisSearchRequestId: response.yoksisSearchRequestId || request.requestId,
+                        yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
+                }
+                if (isBackgroundMode) {
+                    return await finalizeBackgroundTransferResponse(response, yoksisTab);
+                }
+                // Portal'dan başlatılan aramada kabul kodu YÖKSİS'te doğrulanınca kullanıcıyı tekrar portal sekmesine al.
+                // Manuel onay gereken durumda YÖKSİS sekmesi açık kalır ki kayıt kontrol edilebilsin.
+                if (response.success && response.formReady === true && request.portalSenderTab) {
+                    await returnToPortalTab(request.portalSenderTab, sideWindowPlan);
+                }
+                return response;
+            } catch (error) {
+                if (!isBackgroundMode) throw error;
+                return await handleBackgroundTransferError(error, yoksisTab, request.requestId, totalStartedAt);
+            }
+        });
+    } catch (error) {
+        if (!isBackgroundMode) throw error;
+        return await handleBackgroundTransferError(error, yoksisTab, request.requestId, totalStartedAt);
+    }
 }
 
 
