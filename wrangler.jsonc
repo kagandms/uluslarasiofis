@@ -113,7 +113,7 @@
         "PRINT_MAX_PAGE_COPIES": "200",
         "PUBLIC_DECLARATION_VERSION": "student-information-accuracy-v1",
         "STAFF_SHARED_USERNAME": "international.office.topkapi@topkapi.edu.tr",
-        "TELEGRAM_BOT_USERNAME": ""
+        "TELEGRAM_BOT_USERNAME": "topkapiunigoc_bot"
       },
       "d1_databases": [
         {

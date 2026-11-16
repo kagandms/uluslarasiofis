@@ -278,7 +278,7 @@ test('handleTelegramWebhook always returns 200 for valid-secret requests and red
 test('wrangler.jsonc and runtime-secret-metadata.mjs declare matching Telegram configuration', () => {
     const wrangler = JSON.parse(readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
     assert.equal(wrangler.env.staging.vars.TELEGRAM_BOT_USERNAME, '');
-    assert.equal(wrangler.env.production.vars.TELEGRAM_BOT_USERNAME, '');
+    assert.equal(wrangler.env.production.vars.TELEGRAM_BOT_USERNAME, 'topkapiunigoc_bot');
     assert.equal(wrangler.env.production.secrets.required.includes('TELEGRAM_BOT_TOKEN'), false);
     assert.equal(wrangler.env.production.secrets.required.includes('TELEGRAM_WEBHOOK_SECRET'), false);
 
