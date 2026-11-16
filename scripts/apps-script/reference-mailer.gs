@@ -3,7 +3,8 @@
 // Deployment (oone once by the office account owner, see docs/reference-mail-setup.md):
 //   1. Create a new Apps Script project while signed in to the office Google account.
 //   2. Paste this file as Code.gs.
-//   3. Project Settings > Script properties: add REFERENCE_MAIL_TOKEN with a long random value.
+//   3. Project Settings > Script properties: add REFERENCE_MAIL_TOKEN with a long random value,
+//      and REPLY_TO with the monitored office e-mail address (never noReply).
 //   4. Deploy > New deployment > Web app: Execute as "Me", Who has access "Anyone".
 //   5. Copy the /exec URL and the same token into the Worker secrets REFERENCE_MAIL_ENDPOINT and REFERENCE_MAIL_TOKEN.
 //
@@ -11,6 +12,7 @@
 // Error codes: unauthorized, bad_request, quota (daily MailApp quota exhausted), send_failed.
 
 var TOKEN_PROPERTY = 'REFERENCE_MAIL_TOKEN';
+var REPLY_TO_PROPERTY = 'REPLY_TO';
 var SENDER_NAME = 'İstanbul Topkapı Üniversitesi Uluslararası Öğrenci Ofisi';
 var MAX_TEXT_CHARS = 8000;
 var MAX_SUBJECT_CHARS = 200;
@@ -24,7 +26,8 @@ function doPost(e) {
     return jsonResponse_({ ok: false, error: 'bad_request' });
   }
 
-  var expected = PropertiesService.getScriptProperties().getProperty(TOKEN_PROPERTY);
+  var scriptProperties = PropertiesService.getScriptProperties();
+  var expected = scriptProperties.getProperty(TOKEN_PROPERTY);
   if (!expected || !sameText_(String(body.token || ''), expected)) {
     return jsonResponse_({ ok: false, error: 'unauthorized' });
   }
@@ -39,8 +42,23 @@ function doPost(e) {
     return jsonResponse_({ ok: false, error: 'quota' });
   }
 
+  // Yanıt adresi kod içine sabitlenmez; Script Property üzerinden okunur ve noReply kullanılmaz.
+  var rawReplyTo = scriptProperties.getProperty(REPLY_TO_PROPERTY);
+  var replyTo = typeof rawReplyTo === 'string' ? rawReplyTo.trim() : '';
+
+  // Gövde düz metin (text/plain, UTF-8) olarak bırakılır; Kiril, Arapça ve Türkmence karakterler korunur.
+  var mailOptions = {
+    to: body.to,
+    subject: body.subject,
+    body: body.text,
+    name: SENDER_NAME
+  };
+  if (replyTo && EMAIL_PATTERN.test(replyTo)) {
+    mailOptions.replyTo = replyTo;
+  }
+
   try {
-    MailApp.sendEmail({ to: body.to, subject: body.subject, body: body.text, name: SENDER_NAME });
+    MailApp.sendEmail(mailOptions);
     return jsonResponse_({ ok: true });
   } catch (error) {
     return jsonResponse_({ ok: false, error: 'send_failed' });
