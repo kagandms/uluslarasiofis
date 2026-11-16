@@ -16,6 +16,7 @@ const DAY_SECONDS = 24 * 60 * 60;
 export const TELEGRAM_LANGUAGE_MEMORY_WINDOW_SECONDS = 15 * 60;
 const TELEGRAM_LANGUAGE_MEMORY_MAX_REQUESTS = 1_000_000;
 const TELEGRAM_LANGUAGE_MEMORY_ENDPOINT_PREFIX = 'telegram-recovery-lang-';
+const DEFAULT_RESUME_PORTAL_URL = 'https://topkapiunigoc.com/basvuruya-devam-et/';
 
 export const SUPPORTED_TELEGRAM_LANGUAGES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 const SUPPORTED_LANGUAGE_SET = new Set(SUPPORTED_TELEGRAM_LANGUAGES);
@@ -28,7 +29,7 @@ const UPDATE_IDEMPOTENCY_LIMIT = Object.freeze({
 
 export const TELEGRAM_RECOVERY_MESSAGES = Object.freeze({
     tr: Object.freeze({
-        askContact: 'Erişim kodunuzu yenilemek için lütfen aşağıdaki düğmeyle Telegram hesabınıza kayıtlı telefon numaranızı paylaşın.',
+        askContact: 'Başvuru numaranızı almak için lütfen aşağıdaki düğmeyle Telegram hesabınıza kayıtlı telefon numaranızı paylaşın.',
         sharePhoneButton: 'Telefon numaramı paylaş',
         contactRejected: 'Yalnızca kendi Telegram hesabınıza ait telefon numarasını paylaşabilirsiniz.',
         askStudentNumber: 'Lütfen bu mesajı yanıtlayarak öğrenci numaranızı yazın.',
@@ -36,18 +37,15 @@ export const TELEGRAM_RECOVERY_MESSAGES = Object.freeze({
         replyInstruction: 'Öğrenci numaranızı göndermek için lütfen botun bir önceki mesajını YANITLAYIN (mesaja basılı tutun veya sola kaydırıp Yanıtla’yı seçin) ve öğrenci numaranızı yazın. Baştan başlamak için /start gönderin.',
         mismatch: 'Bilgiler eşleşmedi; e-posta yolunu deneyin veya ofisle iletişime geçin.',
         rateLimited: 'Günlük deneme sınırına ulaşıldı. Lütfen daha sonra tekrar deneyin veya ofisle iletişime geçin.',
-        usageHint: 'Başvuru erişim kodunuzu yenilemek için /start komutunu gönderin.',
-        success: (referenceNumber, accessCode) => [
-            'Erişim kodunuz yenilendi. Eski erişim kodu artık geçersizdir.',
+        usageHint: 'Başvuru numaranızı almak için /start komutunu gönderin.',
+        success: (referenceNumber, portalUrl = DEFAULT_RESUME_PORTAL_URL) => [
+            `Başvuru numaranız: ${referenceNumber}`,
             '',
-            `Başvuru numarası: ${referenceNumber}`,
-            `Yeni erişim kodu: ${accessCode}`,
-            '',
-            'Lütfen bu kodu güvenli bir yerde saklayın ve başkalarıyla paylaşmayın.'
+            `Devam etmek için ${portalUrl} adresinde başvuru numaranızı ve öğrenci numaranızı girin.`
         ].join('\n')
     }),
     en: Object.freeze({
-        askContact: 'To reset your access code, please share the phone number registered on your Telegram account using the button below.',
+        askContact: 'To get your application number, please share the phone number registered on your Telegram account using the button below.',
         sharePhoneButton: 'Share my phone number',
         contactRejected: 'You can only share the phone number belonging to your own Telegram account.',
         askStudentNumber: 'Please reply to this message with your student number.',
@@ -55,18 +53,15 @@ export const TELEGRAM_RECOVERY_MESSAGES = Object.freeze({
         replyInstruction: 'To send your student number, please REPLY to the bot’s previous message (press and hold or swipe the message and choose Reply) and type your student number, or send /start to restart.',
         mismatch: 'Details did not match; try the email recovery option or contact the office.',
         rateLimited: 'Daily attempt limit reached. Please try again later or contact the office.',
-        usageHint: 'Send /start to begin resetting your application access code.',
-        success: (referenceNumber, accessCode) => [
-            'Your access code has been reset. The previous access code is no longer valid.',
+        usageHint: 'Send /start to get your application number.',
+        success: (referenceNumber, portalUrl = DEFAULT_RESUME_PORTAL_URL) => [
+            `Your application number: ${referenceNumber}`,
             '',
-            `Application number: ${referenceNumber}`,
-            `New access code: ${accessCode}`,
-            '',
-            'Please store this code safely and do not share it with anyone.'
+            `To continue, enter your application number and student number at ${portalUrl}.`
         ].join('\n')
     }),
     ru: Object.freeze({
-        askContact: 'Чтобы сбросить код доступа, поделитесь номером телефона, привязанным к вашему аккаунту Telegram, с помощью кнопки ниже.',
+        askContact: 'Чтобы получить номер заявки, поделитесь номером телефона, привязанным к вашему аккаунту Telegram, с помощью кнопки ниже.',
         sharePhoneButton: 'Поделиться номером телефона',
         contactRejected: 'Вы можете поделиться только номером телефона, принадлежащим вашему аккаунту Telegram.',
         askStudentNumber: 'Пожалуйста, ответьте на это сообщение и укажите ваш студенческий номер.',
@@ -74,18 +69,15 @@ export const TELEGRAM_RECOVERY_MESSAGES = Object.freeze({
         replyInstruction: 'Чтобы отправить студенческий номер, пожалуйста, ОТВЕТЬТЕ на предыдущее сообщение бота (нажмите и удерживайте или смахните сообщение и выберите «Ответить») и введите номер студента, либо отправьте /start, чтобы начать заново.',
         mismatch: 'Данные не совпали; попробуйте восстановление по электронной почте или обратитесь в офис.',
         rateLimited: 'Достигнут дневной лимит попыток. Попробуйте позже или обратитесь в офис.',
-        usageHint: 'Отправьте /start, чтобы начать восстановление кода доступа.',
-        success: (referenceNumber, accessCode) => [
-            'Ваш код доступа обновлён. Прежний код доступа больше недействителен.',
+        usageHint: 'Отправьте /start, чтобы получить номер вашей заявки.',
+        success: (referenceNumber, portalUrl = DEFAULT_RESUME_PORTAL_URL) => [
+            `Номер вашей заявки: ${referenceNumber}`,
             '',
-            `Номер заявки: ${referenceNumber}`,
-            `Новый код доступа: ${accessCode}`,
-            '',
-            'Сохраните этот код в надёжном месте и не передавайте его третьим лицам.'
+            `Чтобы продолжить, введите номер заявки и номер студента на странице ${portalUrl}.`
         ].join('\n')
     }),
     tk: Object.freeze({
-        askContact: 'Giriş koduňyzy täzelemek üçin aşakdaky düwme arkaly Telegram hasabyňyza birikdirilen telefon belgiňizi paýlaşyň.',
+        askContact: 'Arza belgiňizi almak üçin aşakdaky düwme arkaly Telegram hasabyňyza birikdirilen telefon belgiňizi paýlaşyň.',
         sharePhoneButton: 'Telefon belgimi paýlaş',
         contactRejected: 'Diňe öz Telegram hasabyňyza degişli telefon belgini paýlaşyp bilersiňiz.',
         askStudentNumber: 'Bu habara jogap berip talyp belgiňizi ýazyň.',
@@ -93,18 +85,15 @@ export const TELEGRAM_RECOVERY_MESSAGES = Object.freeze({
         replyInstruction: 'Talyp belgiňizi ibermek üçin botuň öňki habaryna JOGAP BERIŇ (habara basyp saklaň ýa-da süýşürip Jogap ber saýlaň) we talyp belgiňizi ýazyň, ýa-da täzeden başlamak üçin /start iberiň.',
         mismatch: 'Maglumatlar gabat gelmedi; e-poçta ýoluny synap görüň ýa-da ofis bilen habarlaşyň.',
         rateLimited: 'Gündelik synanyşyk çägine ýetildi. Soňrak täzeden synanyşyň ýa-da ofis bilen habarlaşyň.',
-        usageHint: 'Arza giriş koduňyzy täzelemek üçin /start buýrugyny iberiň.',
-        success: (referenceNumber, accessCode) => [
-            'Giriş koduňyz täzelendi. Öňki giriş kody indi işlemeýär.',
+        usageHint: 'Arza belgiňizi almak üçin /start buýrugyny iberiň.',
+        success: (referenceNumber, portalUrl = DEFAULT_RESUME_PORTAL_URL) => [
+            `Arza belgiňiz: ${referenceNumber}`,
             '',
-            `Arza belgisi: ${referenceNumber}`,
-            `Täze giriş kody: ${accessCode}`,
-            '',
-            'Bu kody ygtybarly ýerde saklaň we başgalar bilen paýlaşmaň.'
+            `Dowam etmek üçin ${portalUrl} salgysynda arza belgiňizi we talyp belgiňizi giriziň.`
         ].join('\n')
     }),
     ar: Object.freeze({
-        askContact: 'لإعادة تعيين رمز الوصول الخاص بك، يرجى مشاركة رقم الهاتف المسجل في حسابك على تيليجرام باستخدام الزر أدناه.',
+        askContact: 'للحصول على رقم طلبك، يرجى مشاركة رقم الهاتف المسجل في حسابك على تيليجرام باستخدام الزر أدناه.',
         sharePhoneButton: 'مشاركة رقم هاتفي',
         contactRejected: 'يمكنك فقط مشاركة رقم الهاتف المرتبط بحسابك الشخصي على تيليجرام.',
         askStudentNumber: 'يرجى الرد على هذه الرسالة بكتابة رقم الطالب الخاص بك.',
@@ -112,14 +101,11 @@ export const TELEGRAM_RECOVERY_MESSAGES = Object.freeze({
         replyInstruction: 'لإرسال رقم الطالب الخاص بك، يرجى الرد على رسالة البوت السابقة (اضغط مطولاً أو اسحب الرسالة واختر «رد») ثم اكتب رقم الطالب، أو أرسل /start للبدء من جديد.',
         mismatch: 'لم تتطابق البيانات؛ جرّب الاسترداد عبر البريد الإلكتروني أو تواصل مع المكتب.',
         rateLimited: 'تم بلوغ الحد اليومي للمحاولات. يرجى المحاولة لاحقًا أو التواصل مع المكتب.',
-        usageHint: 'أرسل /start لبدء إعادة تعيين رمز الوصول لطلبك.',
-        success: (referenceNumber, accessCode) => [
-            'تم تجديد رمز الوصول الخاص بك. الرمز السابق لم يعد صالحًا.',
+        usageHint: 'أرسل /start للحصول على رقم طلبك.',
+        success: (referenceNumber, portalUrl = DEFAULT_RESUME_PORTAL_URL) => [
+            `رقم طلبك: ${referenceNumber}`,
             '',
-            `رقم الطلب: ${referenceNumber}`,
-            `رمز الوصول الجديد: ${accessCode}`,
-            '',
-            'يرجى حفظ هذا الرمز في مكان آمن وعدم مشاركته مع أي شخص.'
+            `للمتابعة، أدخل رقم الطلب ورقم الطالب عبر الرابط ${portalUrl}.`
         ].join('\n')
     })
 });
@@ -401,18 +387,18 @@ export async function recallTelegramRecoveryLanguage({ rateLimiter, database, us
 }
 
 /**
- * Veritabanında sohbet kimliği veya geçici durum saklamadan Telegram erişim kodu kurtarma botunu oluşturur.
- * @param {object} deps Bağımlılıklar: kurtarma servisi işlevleri, mesaj gönderici, hız sınırlayıcı, telefon normalizasyonu ve saat.
- * @returns {{handleUpdate(database: unknown, update: unknown, context?: {requestId?: string, stateSecret?: string, webhookSecret?: string}): Promise<object>}}
+ * Veritabanında sohbet kimliği veya geçici durum saklamadan Telegram başvuru numarası hatırlatma botunu oluşturur.
+ * @param {object} deps Bağımlılıklar: başvuru arama işlevi, mesaj gönderici, hız sınırlayıcı, telefon normalizasyonu, portal URL ve saat.
+ * @returns {{handleUpdate(database: unknown, update: unknown, context?: {requestId?: string, stateSecret?: string, webhookSecret?: string, resumePortalUrl?: string}): Promise<object>}}
  */
 export function createTelegramRecoveryBot({
     findRecoverableApplication,
-    rotateAccessCodeForRecovery,
     sendTelegramMessage,
     rateLimiter,
     normalizePhone = normalizeTelegramPhone,
     userDailyLimit = RECOVERY_TELEGRAM_USER_DAILY_LIMIT,
     applicationDailyLimit = RECOVERY_APPLICATION_DAILY_LIMIT,
+    resumePortalUrl = DEFAULT_RESUME_PORTAL_URL,
     stateSecret,
     webhookSecret,
     now
@@ -447,9 +433,10 @@ export function createTelegramRecoveryBot({
 
             const nowMs = readNowEpochMs(now);
             const nowEpochSec = Math.floor(nowMs / 1000);
-            const nowIso = new Date(nowMs).toISOString();
-            const requestId = typeof context?.requestId === 'string' ? context.requestId : '';
             const resolvedSecret = context?.stateSecret ?? context?.webhookSecret ?? stateSecret ?? webhookSecret;
+            const resolvedPortalUrl = typeof context?.resumePortalUrl === 'string' && context.resumePortalUrl.length > 0
+                ? context.resumePortalUrl
+                : resumePortalUrl;
 
             // Telegram aynı güncellemeyi yeniden gönderirse ikinci kez işleme.
             const isFreshUpdate = await consumeRateLimitSlot(rateLimiter, database, {
@@ -611,7 +598,7 @@ export function createTelegramRecoveryBot({
                     return { handled: true, step: 'verify', outcome: 'mismatch', language };
                 }
 
-                // E-posta ve Telegram kanallarının başvuru başına günlük 3 kurtarma hakkını paylaşması için ortak uç nokta ve kimlik kullanılır.
+                // E-posta ve Telegram kanallarının başvuru başına günlük 3 hatırlatma hakkını paylaşması için ortak uç nokta ve kimlik kullanılır.
                 const applicationAllowed = await consumeRateLimitSlot(rateLimiter, database, {
                     ...applicationDailyLimit,
                     identity: application.applicationId,
@@ -625,26 +612,9 @@ export function createTelegramRecoveryBot({
                     return { handled: true, step: 'verify', outcome: 'rate_limited_application', language };
                 }
 
-                const rotated = typeof rotateAccessCodeForRecovery === 'function'
-                    ? await rotateAccessCodeForRecovery(database, {
-                        applicationId: application.applicationId,
-                        channel: 'telegram',
-                        requestId,
-                        now: nowIso
-                    })
-                    : null;
-
-                if (!rotated?.accessCode) {
-                    await sendTelegramMessage({
-                        chat_id: chatId,
-                        text: messages.mismatch
-                    });
-                    return { handled: true, step: 'verify', outcome: 'rotation_unavailable', language };
-                }
-
                 await sendTelegramMessage({
                     chat_id: chatId,
-                    text: messages.success(application.referenceNumber, rotated.accessCode)
+                    text: messages.success(application.referenceNumber, resolvedPortalUrl)
                 });
                 return { handled: true, step: 'verify', outcome: 'recovered', language };
             }

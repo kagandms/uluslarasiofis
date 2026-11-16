@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CONTACT_RESPONSIBILITY_ACKNOWLEDGEMENT_VERSION } from '../src/config/constants.js';
-import { generateAccessCode } from '../src/server/auth/applicationAccessCode.js';
-import { buildRecoveryMail, buildReferenceMail } from '../src/server/services/referenceMailService.js';
+import { buildReferenceMail, buildReferenceReminderMail } from '../src/server/services/referenceMailService.js';
 import worker from '../src/server/worker.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TEST_APPLICATION_PRIVACY_NOTICE, withTestApplicationPrivacyNoticeVersion } from './helpers/application-privacy-notice.js';
@@ -12,6 +11,8 @@ const TOKEN = 't'.repeat(40);
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbTestLanguage/exec';
 const PORTAL_CANONICAL_ORIGIN = 'https://portal.test';
 const PORTAL_URL = 'https://portal.test/basvurum/';
+const RESUME_PORTAL_URL = 'https://portal.test/basvuruya-devam-et/';
+const ACCESS_CODE_PATTERN = /[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{6}/;
 const DIRECTION_CONTROL_MARKS = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
 
 const GREETINGS = Object.freeze({
@@ -30,12 +31,12 @@ const DRAFT_MARKERS = Object.freeze({
     ar: { subject: 'تم حفظ مسودة طلبك', typeLabel: 'تجديد' }
 });
 
-const RECOVERY_MARKERS = Object.freeze({
-    tr: { subject: 'Başvuru erişim kodunuz yenilendi', ignore: /yok sayabilirsiniz/u, spam: /gereksiz \(spam\)/u },
-    en: { subject: 'Your application access code has been reset', ignore: /safely ignore/u, spam: /spam or junk/u },
-    ru: { subject: 'Код доступа к вашей заявке обновлён', ignore: /проигнорируйте/u, spam: /«Спам»/u },
-    tk: { subject: 'Arzaňyzyň giriş kody täzelendi', ignore: /üns bermän/u, spam: /gereksiz \(spam\)/u },
-    ar: { subject: 'تم تجديد رمز الدخول لطلبك', ignore: /تجاهل هذا البريد/u, spam: /\(Spam\)/u }
+const REMINDER_MARKERS = Object.freeze({
+    tr: { subject: 'Başvuru numaranız', ignore: /yok sayabilirsiniz/u, spam: /gereksiz \(spam\)/u },
+    en: { subject: 'Your application number', ignore: /safely ignore/u, spam: /spam or junk/u },
+    ru: { subject: 'Номер вашей заявки', ignore: /проигнорируйте/u, spam: /«Спам»/u },
+    tk: { subject: 'Arza belgiňiz', ignore: /üns bermän/u, spam: /gereksiz \(spam\)/u },
+    ar: { subject: 'رقم طلبك', ignore: /تجاهل هذا البريد/u, spam: /\(Spam\)/u }
 });
 
 test('buildReferenceMail renders single-language subject and body for each of the 5 supported languages', () => {
@@ -80,25 +81,24 @@ test('buildReferenceMail falls back to five-language body and default subject wh
     }
 });
 
-test('buildRecoveryMail renders single-language plain text with new code, ignore warning and spam note for all 5 languages', () => {
-    const accessCode = generateAccessCode();
+test('buildReferenceReminderMail renders single-language plain text with reference, student number, resume link, ignore warning and spam note without access code', () => {
     for (const locale of ['tr', 'en', 'ru', 'tk', 'ar']) {
-        const mail = buildRecoveryMail({
+        const mail = buildReferenceReminderMail({
             referenceNumber: 'ITU-7K9M-4X2P',
             studentNumber: 'SYN-REC-001',
-            accessCode,
-            portalUrl: PORTAL_URL,
+            portalUrl: RESUME_PORTAL_URL,
             language: locale
         });
-        assert.equal(mail.subject, RECOVERY_MARKERS[locale].subject);
-        assert.equal(mail.text.includes('---'), false, `${locale} recovery mail must be single-language`);
+        assert.equal(mail.subject, REMINDER_MARKERS[locale].subject);
+        assert.equal(mail.text.includes('---'), false, `${locale} reminder mail must be single-language`);
         assert.ok(mail.text.includes(GREETINGS[locale]));
         assert.ok(mail.text.includes('ITU-7K9M-4X2P'));
         assert.ok(mail.text.includes('SYN-REC-001'));
-        assert.ok(mail.text.includes(accessCode));
-        assert.ok(mail.text.includes(PORTAL_URL));
-        assert.match(mail.text, RECOVERY_MARKERS[locale].ignore);
-        assert.match(mail.text, RECOVERY_MARKERS[locale].spam);
+        assert.ok(mail.text.includes(RESUME_PORTAL_URL));
+        assert.match(mail.text, REMINDER_MARKERS[locale].ignore);
+        assert.match(mail.text, REMINDER_MARKERS[locale].spam);
+        assert.doesNotMatch(mail.text, ACCESS_CODE_PATTERN);
+        assert.doesNotMatch(mail.text, /erişim kodu|access code|код доступа|giriş kod|رمز الدخول|رمز الوصول/iu);
         assert.doesNotMatch(mail.text, DIRECTION_CONTROL_MARKS);
         assert.doesNotMatch(mail.subject, DIRECTION_CONTROL_MARKS);
         assert.doesNotMatch(mail.text, /<html|<body|<a\s+href|bit\.ly|tinyurl/i);
@@ -110,22 +110,21 @@ test('buildRecoveryMail renders single-language plain text with new code, ignore
     }
 });
 
-test('buildRecoveryMail falls back to five-language combined body and bilingual subject when language is missing or invalid', () => {
-    const accessCode = generateAccessCode();
+test('buildReferenceReminderMail falls back to five-language combined body and bilingual subject when language is missing or invalid', () => {
     for (const invalidLanguage of [undefined, null, '', 'es', 'AR', 42]) {
-        const mail = buildRecoveryMail({
+        const mail = buildReferenceReminderMail({
             referenceNumber: 'ITU-7K9M-4X2P',
             studentNumber: 'SYN-REC-002',
-            accessCode,
-            portalUrl: PORTAL_URL,
+            portalUrl: RESUME_PORTAL_URL,
             language: invalidLanguage
         });
-        assert.equal(mail.subject, 'Başvuru erişim kodunuz yenilendi · Application access code reset');
+        assert.equal(mail.subject, 'Başvuru numaranız · Application number');
         assert.equal(mail.text.split('\n\n---\n\n').length, 5);
         for (const greeting of Object.values(GREETINGS)) {
             assert.ok(mail.text.includes(greeting));
         }
-        assert.equal(mail.text.split(accessCode).length - 1, 5);
+        assert.equal(mail.text.split('ITU-7K9M-4X2P').length - 1, 5);
+        assert.doesNotMatch(mail.text, ACCESS_CODE_PATTERN);
     }
 });
 

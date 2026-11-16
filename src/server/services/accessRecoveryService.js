@@ -1,15 +1,17 @@
-import { generateAccessCode, hashAccessCode } from '../auth/applicationAccessCode.js';
 import { createApplicationRepository } from '../repositories/d1/applicationRepository.js';
 import { consumePublicRateLimit } from '../security/requestRateLimit.js';
 import {
+    REFERENCE_REMINDER_MAIL_DAILY_LIMIT,
     SUPPORTED_MAIL_LANGUAGES,
     normalizeMailLanguage,
     readMailQuotaStatus
 } from './referenceMailService.js';
 
+const encoder = new TextEncoder();
+
+export { REFERENCE_REMINDER_MAIL_DAILY_LIMIT };
 export const SUPPORTED_RECOVERY_LANGUAGES = SUPPORTED_MAIL_LANGUAGES;
 export const RECOVERY_CHANNELS = Object.freeze(['email', 'telegram']);
-const RECOVERY_CHANNEL_SET = new Set(RECOVERY_CHANNELS);
 
 // Başvuru başına günde en fazla 3 kurtarma, IP başına 15 dakikada 5 istek sınırı.
 export const RECOVERY_APPLICATION_DAILY_LIMIT = Object.freeze({
@@ -64,48 +66,6 @@ export async function findRecoverableApplication(database, { studentNumber } = {
 }
 
 /**
- * Kurtarma akışı için erişim kodunu atomik ve sürüm korumalı biçimde yeniler.
- * Açık öğrenci oturumları iptal edilmez; yalnızca eski erişim kodu geçersiz olur.
- * @param {D1Database} database Cloudflare D1 bağlamı.
- * @param {{applicationId: string, channel: 'email'|'telegram', requestId?: string, now?: string}} input
- * @returns {Promise<{accessCode: string}|null>} Üretilen yeni erişim kodu veya başarısızlıkta null.
- */
-export async function rotateAccessCodeForRecovery(database, { applicationId, channel, requestId, now = new Date().toISOString() } = {}) {
-    if (!database || typeof database.prepare !== 'function') {
-        throw new TypeError('A D1 database binding is required.');
-    }
-    if (!RECOVERY_CHANNEL_SET.has(channel)) {
-        throw new TypeError('Recovery channel must be email or telegram.');
-    }
-    if (typeof applicationId !== 'string' || applicationId.length === 0) return null;
-
-    const repository = createApplicationRepository(database);
-    const application = await repository.findById(applicationId);
-    if (!application || ['completed', 'cancelled', 'rejected'].includes(application.status)) {
-        return null;
-    }
-    if (!Number.isSafeInteger(application.access_code_version) || application.access_code_version < 1) {
-        return null;
-    }
-
-    const accessCode = generateAccessCode();
-    const accessCodeHash = await hashAccessCode(accessCode);
-    const updated = await repository.updateAccessCode({
-        applicationId,
-        accessCodeHash,
-        accessCodeCreatedAt: now,
-        auditEventId: crypto.randomUUID(),
-        requestId: requestId || crypto.randomUUID(),
-        expectedAccessCodeVersion: application.access_code_version,
-        actorType: 'recovery',
-        channel
-    });
-
-    if (!updated) return null;
-    return { accessCode };
-}
-
-/**
  * Mevcut hız sınırı deposu üzerinden belirtilen kurtarma politikası için kota tüketir.
  * @param {{consume(input: object): Promise<object|null>}} rateLimitRepository Hız sınırı deposu.
  * @param {{endpoint: string, identity: string, maxRequests: number, windowSeconds: number, nowSeconds?: number}} input
@@ -151,17 +111,24 @@ export function consumeRecoveryTelegramUserRateLimit(rateLimitRepository, { tele
     });
 }
 
-/** Kayan 24 saatte kurtarma e-postası için ayrılan 30 alıcı kotasında yer olup olmadığını döndürür. */
+/** Başvuru numarası hatırlatma e-postası için günlük 30 alıcı kotasından bir hak tüketir. */
+export function consumeReferenceReminderMailQuota(rateLimitRepository, { nowSeconds } = {}) {
+    return consumeRecoveryRateLimit(rateLimitRepository, {
+        ...REFERENCE_REMINDER_MAIL_DAILY_LIMIT,
+        nowSeconds
+    });
+}
+
+/** Sabit pencerede hatırlatma e-postası için ayrılan 30 alıcı kotasında yer olup olmadığını döndürür. */
 export async function hasRecoveryMailQuotaAvailable(database, now = new Date().toISOString()) {
     const quota = await readMailQuotaStatus(database, now);
     return quota.recoveryRemaining > 0;
 }
 
 /**
- * Kayıt bulunmayan veya sınır aşan yollarda zamanlama farkını azaltmak için eşdeğer kod özetleme işi yapar.
+ * Kayıt bulunmayan veya sınır aşan yollarda zamanlama farkını azaltmak için eşdeğer özetleme işi yapar.
  * @returns {Promise<void>}
  */
 export async function simulateRecoveryWork() {
-    const dummyCode = generateAccessCode();
-    await hashAccessCode(dummyCode);
+    await crypto.subtle.digest('SHA-256', encoder.encode('reference-reminder-timing'));
 }

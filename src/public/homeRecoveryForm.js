@@ -54,7 +54,7 @@ export function buildTelegramRecoveryUrl(baseUrl, language) {
 }
 
 /**
- * Ana sayfadaki erişim kodu kurtarma formunu, Telegram seçeneğini ve dil senkronizasyonunu bağlar.
+ * Ana sayfadaki başvuru numarası hatırlatma formunu, Telegram seçeneğini ve dil senkronizasyonunu bağlar.
  * @param {{root?: Document, api: {readApplicationRecoveryOptions?: Function, requestApplicationAccessCodeRecoveryByEmail: Function}, getMessage?: (key: string) => string}} options Sayfa belgesi, API ve çeviri yardımcısı.
  * @returns {void} Form mevcutsa olay dinleyicilerini başlatır.
  */
@@ -86,6 +86,7 @@ export function initHomeRecoveryForm({ root = document, api, getMessage } = {}) 
 
     function syncTelegramLink() {
         if (!telegramLink) return;
+        telegramLink.textContent = resolveMessage('recoveryTelegramAction');
         const url = telegramState.enabled
             ? buildTelegramRecoveryUrl(telegramState.baseUrl, readActiveLocale(root))
             : null;

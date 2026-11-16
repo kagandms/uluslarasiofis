@@ -41,8 +41,85 @@ test('all five languages define every recovery key including spam warning and re
             assert.equal(typeof RECOVERY_MESSAGES[locale][key], 'string');
             assert.ok(RECOVERY_MESSAGES[locale][key].trim().length > 0, `${locale}.${key} must be non-empty`);
             assert.equal(PUBLIC_MESSAGES[locale][key], RECOVERY_MESSAGES[locale][key]);
+            assert.doesNotMatch(
+                RECOVERY_MESSAGES[locale][key],
+                /erişim kodu|access code|код доступа|giriş kod|رمز الدخول|رمز الوصول|kodum|kodunu|kody/iu,
+                `${locale}.${key} must not reference access code`
+            );
         }
     }
+});
+
+test('recovery action buttons share identical primary class list and localized labels in all five languages', async () => {
+    const homeHtml = await readFile(resolve(process.cwd(), 'index.html'), 'utf8');
+    const expectedLabels = {
+        tr: {
+            toggle: 'Başvuru Numaramı Unuttum',
+            email: 'E-posta ile Başvuru Numaramı Al',
+            telegram: 'Telegram ile Başvuru Numaramı Al'
+        },
+        en: {
+            toggle: 'I Forgot My Application Number',
+            email: 'Get My Application Number by Email',
+            telegram: 'Get My Application Number by Telegram'
+        },
+        ru: {
+            toggle: 'Я забыл(а) номер заявки',
+            email: 'Получить номер заявки по e-mail',
+            telegram: 'Получить номер заявки в Telegram'
+        },
+        tk: {
+            toggle: 'Arza belgimi unutdym',
+            email: 'Arza belgimi e-poçta bilen almak',
+            telegram: 'Arza belgimi Telegram bilen almak'
+        },
+        ar: {
+            toggle: 'نسيت رقم الطلب',
+            email: 'احصل على رقم طلبي عبر البريد الإلكتروني',
+            telegram: 'احصل على رقم طلبي عبر تيليجرام'
+        }
+    };
+
+    const dom = new JSDOM(homeHtml, { url: 'https://portal.test/' });
+    const doc = dom.window.document;
+    const toggle = doc.getElementById('btn-access-recovery');
+    const submitBtn = doc.querySelector('#access-recovery-form button[type="submit"]');
+    const telegramLink = doc.getElementById('recovery-telegram-link');
+
+    assert.ok(submitBtn);
+    assert.ok(telegramLink);
+    assert.deepEqual([...telegramLink.classList].sort(), [...submitBtn.classList].sort());
+    assert.equal(submitBtn.classList.contains('application-button-primary'), true);
+    assert.equal(telegramLink.classList.contains('application-button-secondary'), false);
+
+    initHomeRecoveryForm({
+        root: doc,
+        api: {
+            async readApplicationRecoveryOptions() {
+                return { email: true, telegram: { enabled: true, url: 'https://t.me/synthetic_bot?start=recover' } };
+            },
+            async requestApplicationAccessCodeRecoveryByEmail() {
+                return { ok: true };
+            }
+        },
+        getMessage: createMessageResolver(doc)
+    });
+    await new Promise((resolveTick) => setImmediate(resolveTick));
+
+    for (const locale of SUPPORTED_LOCALES) {
+        doc.documentElement.lang = locale;
+        doc.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
+        doc.dispatchEvent(new dom.window.Event('public:locale-changed'));
+        assert.equal(RECOVERY_MESSAGES[locale].recoveryToggleAction, expectedLabels[locale].toggle);
+        assert.equal(submitBtn.textContent, expectedLabels[locale].email);
+        assert.equal(telegramLink.textContent, expectedLabels[locale].telegram);
+    }
+
+    assert.equal(toggle.dataset.i18n, 'recoveryToggleAction');
+    assert.equal(submitBtn.dataset.i18n, 'recoveryEmailSubmit');
+    assert.equal(telegramLink.dataset.i18n, 'recoveryTelegramAction');
+
+    dom.window.close();
 });
 
 test('home page recovery toggle opens accessible form, supports keyboard Escape, and shows current language', async () => {

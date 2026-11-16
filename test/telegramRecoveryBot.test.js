@@ -5,8 +5,7 @@ import { createOpaqueSessionToken, hashSessionToken } from '../src/server/auth/s
 import { createD1Repositories } from '../src/server/repositories/d1/index.js';
 import {
     consumeRecoveryApplicationRateLimit,
-    findRecoverableApplication,
-    rotateAccessCodeForRecovery
+    findRecoverableApplication
 } from '../src/server/services/accessRecoveryService.js';
 import { createTelegramRecoveryBot, normalizeTelegramPhone, TELEGRAM_RECOVERY_MESSAGES } from '../src/server/services/telegramBot.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
@@ -14,6 +13,8 @@ import { TestD1Database } from './helpers/d1-test-binding.js';
 
 const FAKE_STATE_SECRET = 'synthetic-telegram-webhook-secret-for-tests';
 const GENERIC_MISMATCH_TR = 'Bilgiler eşleşmedi; e-posta yolunu deneyin veya ofisle iletişime geçin.';
+const RESUME_PORTAL_URL = 'https://portal.test/basvuruya-devam-et/';
+const ACCESS_CODE_PATTERN = /[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{5}-[2-9A-HJ-NP-Z]{6}/;
 
 function createMemoryRateLimiter() {
     const counters = new Map();
@@ -47,8 +48,8 @@ function createMemoryRateLimiter() {
 function createBotHarness(options = {}) {
     const {
         applicationsByStudentNumber = new Map(),
-        rotatedCode = '23456-789AB-CDEFG-HJKLM-NPQRST',
         initialNowMs = Date.UTC(2026, 10, 16, 10, 0, 0),
+        resumePortalUrl = RESUME_PORTAL_URL,
         database = null
     } = options;
     // `rateLimiter: undefined` açıkça geçirildiğinde bellek içi sahte sınırlayıcıya düşmek yerine D1 yolunu kullan.
@@ -58,22 +59,18 @@ function createBotHarness(options = {}) {
     let currentNowMs = initialNowMs;
     const sentMessages = [];
     const lookupCalls = [];
-    const rotateCalls = [];
 
     const bot = createTelegramRecoveryBot({
         findRecoverableApplication: async (_db, { studentNumber }) => {
             lookupCalls.push(studentNumber);
             return applicationsByStudentNumber.get(studentNumber.trim().toUpperCase()) ?? null;
         },
-        rotateAccessCodeForRecovery: async (_db, input) => {
-            rotateCalls.push(input);
-            return rotatedCode ? { accessCode: rotatedCode } : null;
-        },
         sendTelegramMessage: async (payload) => {
             sentMessages.push(payload);
             return { message_id: sentMessages.length };
         },
         rateLimiter,
+        resumePortalUrl,
         stateSecret: FAKE_STATE_SECRET,
         now: () => currentNowMs
     });
@@ -83,7 +80,6 @@ function createBotHarness(options = {}) {
         database,
         sentMessages,
         lookupCalls,
-        rotateCalls,
         advanceSeconds(seconds) {
             currentNowMs += seconds * 1000;
         }
@@ -169,7 +165,7 @@ test('/start command uses payload language first, falls back to from.language_co
     assert.match(sentMessages[4].text, /telefon belgiňizi paýlaşyň/i);
 });
 
-test('full recovery flow succeeds when normalized student_phone and student number match an active application', async () => {
+test('full flow replies with existing reference number and resume URL without access code in all 5 languages', async () => {
     const applications = new Map([
         ['TEST-2026-0001', {
             applicationId: 'app-0001',
@@ -179,38 +175,41 @@ test('full recovery flow succeeds when normalized student_phone and student numb
             language: 'tr'
         }]
     ]);
-    const harness = createBotHarness({ applicationsByStudentNumber: applications });
 
-    await harness.bot.handleUpdate(null, startUpdate(10, '/start recover_tr'), { requestId: 'req-10' });
-    await harness.bot.handleUpdate(null, contactUpdate(11, { phoneNumber: '905550000101', languageCode: 'en' }), { requestId: 'req-11' });
+    let updateId = 10;
+    for (const [index, locale] of ['tr', 'en', 'ru', 'tk', 'ar'].entries()) {
+        // Her dil yinelemesinde başvuru başına günlük hız sınırına takılmamak için temiz bellek içi sınırlayıcı kullanılır.
+        const harness = createBotHarness({ applicationsByStudentNumber: applications });
+        const userId = 1001 + index;
+        await harness.bot.handleUpdate(null, startUpdate(updateId++, `/start recover_${locale}`, { userId, chatId: userId }), { requestId: `req-s-${locale}` });
+        await harness.bot.handleUpdate(null, contactUpdate(updateId++, { phoneNumber: '905550000101', userId, chatId: userId, languageCode: 'en' }), { requestId: `req-c-${locale}` });
 
-    const askStudentMsg = harness.sentMessages[1];
-    assert.equal(askStudentMsg.reply_markup.force_reply, true);
-    assert.equal(Object.hasOwn(askStudentMsg.reply_markup, 'selective'), false);
-    assert.ok(askStudentMsg.text.startsWith(TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber));
-    assert.match(askStudentMsg.text, /\nref:[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
-    assert.equal(askStudentMsg.text.includes(FAKE_STATE_SECRET), false);
+        const askStudentMsg = harness.sentMessages[harness.sentMessages.length - 1];
+        assert.equal(askStudentMsg.reply_markup.force_reply, true);
+        assert.equal(Object.hasOwn(askStudentMsg.reply_markup, 'selective'), false);
+        assert.ok(askStudentMsg.text.startsWith(TELEGRAM_RECOVERY_MESSAGES[locale].askStudentNumber));
+        assert.match(askStudentMsg.text, /\nref:[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+        assert.equal(askStudentMsg.text.includes(FAKE_STATE_SECRET), false);
 
-    const verifyResult = await harness.bot.handleUpdate(
-        null,
-        replyUpdate(12, 'test-2026-0001', { message_id: 2, from: { is_bot: true }, text: askStudentMsg.text }),
-        { requestId: 'req-12' }
-    );
+        const verifyResult = await harness.bot.handleUpdate(
+            null,
+            replyUpdate(updateId++, 'test-2026-0001', { message_id: 2, from: { is_bot: true }, text: askStudentMsg.text }, { userId, chatId: userId }),
+            { requestId: `req-v-${locale}` }
+        );
 
-    assert.equal(verifyResult.outcome, 'recovered');
-    assert.deepEqual(harness.lookupCalls, ['test-2026-0001']);
-    assert.equal(harness.rotateCalls.length, 1);
-    assert.equal(harness.rotateCalls[0].applicationId, 'app-0001');
-    assert.equal(harness.rotateCalls[0].channel, 'telegram');
-    assert.equal(harness.rotateCalls[0].requestId, 'req-12');
-
-    const successText = harness.sentMessages[2].text;
-    assert.match(successText, /ITU-7K9M-4X2P/);
-    assert.match(successText, /23456-789AB-CDEFG-HJKLM-NPQRST/);
-    assert.equal(successText.includes(FAKE_STATE_SECRET), false);
+        assert.equal(verifyResult.outcome, 'recovered');
+        assert.equal(verifyResult.language, locale);
+        const successText = harness.sentMessages[harness.sentMessages.length - 1].text;
+        assert.equal(successText, TELEGRAM_RECOVERY_MESSAGES[locale].success('ITU-7K9M-4X2P', RESUME_PORTAL_URL));
+        assert.match(successText, /ITU-7K9M-4X2P/);
+        assert.ok(successText.includes(RESUME_PORTAL_URL));
+        assert.doesNotMatch(successText, ACCESS_CODE_PATTERN);
+        assert.equal(successText.includes(FAKE_STATE_SECRET), false);
+        assert.equal(harness.lookupCalls.length, 1);
+    }
 });
 
-test('wrong phone match and missing record return the exact same generic mismatch message without rotating code', async () => {
+test('wrong phone match and missing record return the exact same generic mismatch message', async () => {
     const applications = new Map([
         ['TEST-2026-0002', {
             applicationId: 'app-0002',
@@ -238,7 +237,6 @@ test('wrong phone match and missing record return the exact same generic mismatc
 
     assert.equal(wrongPhoneResult.outcome, 'mismatch');
     assert.equal(missingRecordResult.outcome, 'mismatch');
-    assert.equal(harness.rotateCalls.length, 0);
     assert.equal(harness.sentMessages[1].text, GENERIC_MISMATCH_TR);
     assert.equal(harness.sentMessages[2].text, GENERIC_MISMATCH_TR);
 });
@@ -262,7 +260,6 @@ test('contact shared from another user or missing user_id is rejected without is
     assert.doesNotMatch(harness.sentMessages[0].text, /ref:/);
     assert.doesNotMatch(harness.sentMessages[1].text, /ref:/);
     assert.equal(harness.lookupCalls.length, 0);
-    assert.equal(harness.rotateCalls.length, 0);
 });
 
 test('tampered, non-bot, cross-user, and expired state tokens fail closed with generic mismatch message', async () => {
@@ -308,7 +305,6 @@ test('tampered, non-bot, cross-user, and expired state tokens fail closed with g
     );
 
     assert.equal(harness.lookupCalls.length, 0);
-    assert.equal(harness.rotateCalls.length, 0);
     for (const index of [1, 2, 3, 4]) {
         assert.equal(harness.sentMessages[index].text, GENERIC_MISMATCH_TR);
     }
@@ -342,11 +338,10 @@ test('repeated update_id is ignored idempotently, including against D1 public_ra
     assert.equal(first.outcome, 'recovered');
     assert.equal(second.handled, false);
     assert.equal(second.reason, 'duplicate_update');
-    assert.equal(harness.rotateCalls.length, 1);
     assert.equal(harness.sentMessages.length, 2);
 });
 
-test('daily rate limits enforce 3 attempts per Telegram user and 3 rotations per application', async () => {
+test('daily rate limits enforce 3 attempts per Telegram user and 3 attempts per application', async () => {
     const applications = new Map([
         ['TEST-2026-0005', {
             applicationId: 'app-0005',
@@ -376,31 +371,30 @@ test('daily rate limits enforce 3 attempts per Telegram user and 3 rotations per
         );
     }
 
-    // Kullanıcı 1001 aynı gün 3 kez başarılı kurtarma yapar.
+    // Kullanıcı 1001 aynı gün 3 kez başarılı hatırlatma alır.
+    let recoveredCount = 0;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
         const res = await attemptRecovery({ userId: 1001 });
         assert.equal(res.outcome, 'recovered');
+        recoveredCount += 1;
     }
-    assert.equal(harness.rotateCalls.length, 3);
+    assert.equal(recoveredCount, 3);
 
     // Aynı kullanıcının 4. denemesi kullanıcı limiti nedeniyle engellenir.
     const userLimited = await attemptRecovery({ userId: 1001 });
     assert.equal(userLimited.outcome, 'rate_limited_user');
-    assert.equal(harness.rotateCalls.length, 3);
 
-    // Farklı bir Telegram kullanıcısı aynı başvuruyu 4. kez döndürmeye çalışırsa başvuru limiti engeller.
+    // Farklı bir Telegram kullanıcısı aynı başvuruyu 4. kez sorgulamaya çalışırsa başvuru limiti engeller.
     const appLimited = await attemptRecovery({ userId: 2002, chatId: 2002 });
     assert.equal(appLimited.outcome, 'rate_limited_application');
-    assert.equal(harness.rotateCalls.length, 3);
 
     // 24 saat sonra her iki sınır da sıfırlanır.
     harness.advanceSeconds(24 * 60 * 60 + 1);
     const nextDayResult = await attemptRecovery({ userId: 1001 });
     assert.equal(nextDayResult.outcome, 'recovered');
-    assert.equal(harness.rotateCalls.length, 4);
 });
 
-test('real accessRecoveryService and D1 rate limits share the 3/day per-application quota between email and Telegram', async () => {
+test('real accessRecoveryService and D1 rate limits share the 3/day per-application quota between email and Telegram without rotating access code', async () => {
     const database = new TestD1Database();
     applyAllMigrations(database);
     const repositories = createD1Repositories(database);
@@ -426,7 +420,7 @@ test('real accessRecoveryService and D1 rate limits share the 3/day per-applicat
         accessCodeHash: initialHash
     });
 
-    // E-posta kurtarma kotasından 2 hak tüketilir; geriye aynı başvuru için 1 hak kalır.
+    // E-posta hatırlatma kotasından 2 hak tüketilir; geriye aynı başvuru için 1 hak kalır.
     assert.equal(await consumeRecoveryApplicationRateLimit(repositories.rateLimits, {
         applicationId: application.id,
         nowSeconds
@@ -439,17 +433,17 @@ test('real accessRecoveryService and D1 rate limits share the 3/day per-applicat
     const sentMessages = [];
     const bot = createTelegramRecoveryBot({
         findRecoverableApplication,
-        rotateAccessCodeForRecovery,
         sendTelegramMessage: async (payload) => {
             sentMessages.push(payload);
             return { message_id: sentMessages.length };
         },
         rateLimiter: repositories.rateLimits,
+        resumePortalUrl: RESUME_PORTAL_URL,
         stateSecret: FAKE_STATE_SECRET,
         now: () => nowMs
     });
 
-    // 3. hak Telegram üzerinden kullanılır ve gerçek D1 erişim kodu döndürülür.
+    // 3. hak Telegram üzerinden kullanılır ve mevcut başvuru numarası döndürülür; erişim kodu değişmez.
     await bot.handleUpdate(database, contactUpdate(100, { phoneNumber: '905550000777', userId: 5001 }), { requestId: 'req-tg-real-1' });
     const thirdRecovery = await bot.handleUpdate(
         database,
@@ -458,12 +452,15 @@ test('real accessRecoveryService and D1 rate limits share the 3/day per-applicat
     );
     assert.equal(thirdRecovery.outcome, 'recovered');
 
-    const updatedRow = database.prepare('SELECT access_code_hash, access_code_version FROM applications WHERE id = ?')
+    const unchangedRow = database.prepare('SELECT access_code_hash, access_code_version FROM applications WHERE id = ?')
         .bind(application.id)
         .first();
-    assert.equal(updatedRow.access_code_version, 2);
-    assert.equal(await verifyAccessCode(initialCode, updatedRow.access_code_hash), false);
+    assert.equal(unchangedRow.access_code_version, 1);
+    assert.equal(unchangedRow.access_code_hash, initialHash);
+    assert.equal(await verifyAccessCode(initialCode, unchangedRow.access_code_hash), true);
     assert.ok(sentMessages[1].text.includes(application.reference_number));
+    assert.ok(sentMessages[1].text.includes(RESUME_PORTAL_URL));
+    assert.doesNotMatch(sentMessages[1].text, ACCESS_CODE_PATTERN);
 
     // Aynı gün 4. deneme (farklı Telegram kullanıcısı veya e-posta) ortak başvuru sınırına takılır.
     await bot.handleUpdate(database, contactUpdate(102, { phoneNumber: '905550000777', userId: 5002 }), { requestId: 'req-tg-real-3' });
@@ -505,7 +502,7 @@ test('step 2 and step 3 keep /start payload language when from.language_code dif
         replyUpdate(202, 'SYN-LANG-2026', { message_id: 2, from: { is_bot: true }, text: memoryAskStudent.text }, { userId: 7001, chatId: 8001, languageCode: 'ru' })
     );
     assert.equal(memoryReply.language, 'tr');
-    assert.match(memoryHarness.sentMessages[2].text, /Erişim kodunuz yenilendi/);
+    assert.match(memoryHarness.sentMessages[2].text, /Başvuru numaranız: ITU-9R8T-7Y6U/);
     for (const sent of memoryHarness.sentMessages) {
         if (sent.reply_markup) {
             assert.equal(Object.hasOwn(sent.reply_markup, 'selective'), false);
@@ -535,7 +532,7 @@ test('step 2 and step 3 keep /start payload language when from.language_code dif
     );
     assert.equal(d1Reply.outcome, 'recovered');
     assert.equal(d1Reply.language, 'tr');
-    assert.match(d1Harness.sentMessages[2].text, /Erişim kodunuz yenilendi/);
+    assert.match(d1Harness.sentMessages[2].text, /Başvuru numaranız: ITU-9R8T-7Y6U/);
 
     const storedRows = database.prepare('SELECT endpoint, request_key_hash FROM public_rate_limits').all().results;
     const langRows = storedRows.filter((row) => row.endpoint.startsWith('telegram-recovery-lang-'));
