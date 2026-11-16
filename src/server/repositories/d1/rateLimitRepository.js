@@ -1,7 +1,7 @@
 /**
  * Creates the short-lived hashed-key public request limiter repository.
  * @param {D1Database} database Cloudflare D1 binding.
- * @returns {{consume(input: object): Promise<object|null>}} Rate limit persistence operations.
+ * @returns {{consume(input: object): Promise<object|null>, peek(input: object): Promise<{request_count: number, window_started_at: number}|null>}} Rate limit persistence operations.
  */
 export function createRateLimitRepository(database) {
     return Object.freeze({
@@ -38,6 +38,19 @@ export function createRateLimitRepository(database) {
                 SELECT request_count, blocked_until
                 FROM public_rate_limits WHERE endpoint = ? AND request_key_hash = ?
             `).bind(endpoint, requestKeyHash).first();
+        },
+        /**
+         * Belirtilen uç nokta ve anahtar özeti için etkin pencere içindeki sayacı yazma yapmadan okur.
+         * @param {{endpoint: string, requestKeyHash: string, nowSeconds: number, windowSeconds: number}} input Sorgu parametreleri.
+         * @returns {Promise<{request_count: number, window_started_at: number}|null>} Pencere içindeki kayıt veya yoksa/süresi dolmuşsa null.
+         */
+        async peek({ endpoint, requestKeyHash, nowSeconds, windowSeconds }) {
+            const row = await database.prepare(`
+                SELECT request_count, window_started_at
+                FROM public_rate_limits
+                WHERE endpoint = ? AND request_key_hash = ? AND window_started_at > ?
+            `).bind(endpoint, requestKeyHash, nowSeconds - windowSeconds).first();
+            return row ?? null;
         }
     });
 }

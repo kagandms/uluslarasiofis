@@ -1,7 +1,7 @@
 // Erişim kodu kurtarma akışı ve spam klasörü uyarısı için beş dilli metinler.
 export const RECOVERY_MESSAGES = Object.freeze({
     tr: Object.freeze({
-        recoveryToggleAction: 'Başvuru kodumu unuttum',
+        recoveryToggleAction: 'Başvuru Kodumu Unuttum',
         recoveryFormHeading: 'Erişim kodu kurtarma',
         recoveryFormIntro: 'Öğrenci numaranızı girin. Aktif bir başvurunuz varsa, kayıtlı e-posta adresinize yeni erişim kodu gönderilecektir.',
         recoveryEmailLanguageLabel: 'E-posta dili',
@@ -15,7 +15,7 @@ export const RECOVERY_MESSAGES = Object.freeze({
         recoveryTelegramAction: 'Telegram ile kodu kurtar'
     }),
     en: Object.freeze({
-        recoveryToggleAction: 'I forgot my application code',
+        recoveryToggleAction: 'I Forgot My Application Code',
         recoveryFormHeading: 'Access code recovery',
         recoveryFormIntro: 'Enter your student number. If you have an active application, a new access code will be sent to your registered email address.',
         recoveryEmailLanguageLabel: 'Email language',

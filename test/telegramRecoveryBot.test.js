@@ -8,7 +8,7 @@ import {
     findRecoverableApplication,
     rotateAccessCodeForRecovery
 } from '../src/server/services/accessRecoveryService.js';
-import { createTelegramRecoveryBot, normalizeTelegramPhone } from '../src/server/services/telegramBot.js';
+import { createTelegramRecoveryBot, normalizeTelegramPhone, TELEGRAM_RECOVERY_MESSAGES } from '../src/server/services/telegramBot.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
 import { TestD1Database } from './helpers/d1-test-binding.js';
 
@@ -29,17 +29,32 @@ function createMemoryRateLimiter() {
             existing.count += 1;
             const blockedUntil = existing.count > maxRequests ? nowSeconds + windowSeconds : null;
             return { request_count: existing.count, blocked_until: blockedUntil };
+        },
+        async peek({ endpoint, requestKeyHash, nowSeconds, windowSeconds }) {
+            const key = `${endpoint}:${requestKeyHash}`;
+            const existing = counters.get(key);
+            if (!existing || existing.windowStartedAt <= nowSeconds - windowSeconds) {
+                return null;
+            }
+            return {
+                request_count: existing.count,
+                window_started_at: existing.windowStartedAt
+            };
         }
     };
 }
 
-function createBotHarness({
-    applicationsByStudentNumber = new Map(),
-    rotatedCode = '23456-789AB-CDEFG-HJKLM-NPQRST',
-    initialNowMs = Date.UTC(2026, 10, 16, 10, 0, 0),
-    rateLimiter = createMemoryRateLimiter(),
-    database = null
-} = {}) {
+function createBotHarness(options = {}) {
+    const {
+        applicationsByStudentNumber = new Map(),
+        rotatedCode = '23456-789AB-CDEFG-HJKLM-NPQRST',
+        initialNowMs = Date.UTC(2026, 10, 16, 10, 0, 0),
+        database = null
+    } = options;
+    // `rateLimiter: undefined` açıkça geçirildiğinde bellek içi sahte sınırlayıcıya düşmek yerine D1 yolunu kullan.
+    const rateLimiter = Object.hasOwn(options, 'rateLimiter')
+        ? options.rateLimiter
+        : (database ? undefined : createMemoryRateLimiter());
     let currentNowMs = initialNowMs;
     const sentMessages = [];
     const lookupCalls = [];
@@ -171,6 +186,8 @@ test('full recovery flow succeeds when normalized student_phone and student numb
 
     const askStudentMsg = harness.sentMessages[1];
     assert.equal(askStudentMsg.reply_markup.force_reply, true);
+    assert.equal(Object.hasOwn(askStudentMsg.reply_markup, 'selective'), false);
+    assert.ok(askStudentMsg.text.startsWith(TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber));
     assert.match(askStudentMsg.text, /\nref:[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     assert.equal(askStudentMsg.text.includes(FAKE_STATE_SECRET), false);
 
@@ -460,4 +477,129 @@ test('real accessRecoveryService and D1 rate limits share the 3/day per-applicat
         applicationId: application.id,
         nowSeconds
     }), false);
+});
+
+test('step 2 and step 3 keep /start payload language when from.language_code differs, and no message sets selective', async () => {
+    const applications = new Map([
+        ['SYN-LANG-2026', {
+            applicationId: 'app-lang-1',
+            referenceNumber: 'ITU-9R8T-7Y6U',
+            studentEmail: 'lang-test@example.invalid',
+            studentPhone: '+905550000888',
+            language: 'ru'
+        }]
+    ]);
+
+    // 1. Sahte bellek içi hız sınırlayıcı ile doğrulama
+    const memoryHarness = createBotHarness({ applicationsByStudentNumber: applications });
+    await memoryHarness.bot.handleUpdate(null, startUpdate(200, '/start recover_tr', { userId: 7001, chatId: 8001, languageCode: 'ru' }));
+    await memoryHarness.bot.handleUpdate(null, contactUpdate(201, { phoneNumber: '+905550000888', userId: 7001, chatId: 8001, languageCode: 'ru' }));
+
+    const memoryAskStudent = memoryHarness.sentMessages[1];
+    assert.ok(memoryAskStudent.text.startsWith(TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber));
+    assert.equal(memoryAskStudent.reply_markup.force_reply, true);
+    assert.equal(Object.hasOwn(memoryAskStudent.reply_markup, 'selective'), false);
+
+    const memoryReply = await memoryHarness.bot.handleUpdate(
+        null,
+        replyUpdate(202, 'SYN-LANG-2026', { message_id: 2, from: { is_bot: true }, text: memoryAskStudent.text }, { userId: 7001, chatId: 8001, languageCode: 'ru' })
+    );
+    assert.equal(memoryReply.language, 'tr');
+    assert.match(memoryHarness.sentMessages[2].text, /Erişim kodunuz yenilendi/);
+    for (const sent of memoryHarness.sentMessages) {
+        if (sent.reply_markup) {
+            assert.equal(Object.hasOwn(sent.reply_markup, 'selective'), false);
+        }
+    }
+
+    // 2. Gerçek TestD1Database (public_rate_limits) ile doğrulama ve ham kimlik/sohbet kimliği saklanmadığının kontrolü
+    const database = new TestD1Database();
+    applyAllMigrations(database);
+    const d1Harness = createBotHarness({
+        applicationsByStudentNumber: applications,
+        rateLimiter: undefined,
+        database
+    });
+
+    await d1Harness.bot.handleUpdate(database, startUpdate(210, '/start recover_tr', { userId: 7002, chatId: 9002, languageCode: 'ru' }));
+    await d1Harness.bot.handleUpdate(database, contactUpdate(211, { phoneNumber: '+905550000888', userId: 7002, chatId: 9002, languageCode: 'ru' }));
+
+    const d1AskStudent = d1Harness.sentMessages[1];
+    assert.ok(d1AskStudent.text.startsWith(TELEGRAM_RECOVERY_MESSAGES.tr.askStudentNumber));
+    assert.equal(d1AskStudent.reply_markup.force_reply, true);
+    assert.equal(Object.hasOwn(d1AskStudent.reply_markup, 'selective'), false);
+
+    const d1Reply = await d1Harness.bot.handleUpdate(
+        database,
+        replyUpdate(212, 'SYN-LANG-2026', { message_id: 2, from: { is_bot: true }, text: d1AskStudent.text }, { userId: 7002, chatId: 9002, languageCode: 'ru' })
+    );
+    assert.equal(d1Reply.outcome, 'recovered');
+    assert.equal(d1Reply.language, 'tr');
+    assert.match(d1Harness.sentMessages[2].text, /Erişim kodunuz yenilendi/);
+
+    const storedRows = database.prepare('SELECT endpoint, request_key_hash FROM public_rate_limits').all().results;
+    const langRows = storedRows.filter((row) => row.endpoint.startsWith('telegram-recovery-lang-'));
+    assert.equal(langRows.length, 1);
+    assert.equal(langRows[0].endpoint, 'telegram-recovery-lang-tr');
+    assert.match(langRows[0].request_key_hash, /^[0-9a-f]{64}$/);
+    for (const row of storedRows) {
+        assert.equal(row.request_key_hash.includes('7002'), false);
+        assert.equal(row.request_key_hash.includes('9002'), false);
+    }
+});
+
+test('plain text without reply_to_message gives localized reply instruction after /start and falls back to usageHint without memory or after expiry', async () => {
+    const harness = createBotHarness();
+
+    // Bellek yokken genel usageHint döndürülmeli
+    const coldHint = await harness.bot.handleUpdate(null, {
+        update_id: 300,
+        message: {
+            message_id: 300,
+            from: { id: 4001, is_bot: false, language_code: 'en' },
+            chat: { id: 4001, type: 'private' },
+            text: 'SYN-NO-START'
+        }
+    });
+    assert.equal(coldHint.step, 'hint');
+    assert.equal(coldHint.language, 'en');
+    assert.equal(harness.sentMessages[0].text, TELEGRAM_RECOVERY_MESSAGES.en.usageHint);
+
+    // 5 dilde /start sonrası reply_to_message olmadan düz metin gönderildiğinde hatırlanan dilde yanıt talimatı verilmeli
+    let nextUpdateId = 310;
+    const clientLanguageOverrides = { tr: 'ru', en: 'tr', ru: 'en', tk: 'ar', ar: 'tk' };
+    for (const [index, lang] of ['tr', 'en', 'ru', 'tk', 'ar'].entries()) {
+        const userId = 4100 + index;
+        const clientLang = clientLanguageOverrides[lang];
+        await harness.bot.handleUpdate(null, startUpdate(nextUpdateId++, `/start recover_${lang}`, { userId, chatId: userId, languageCode: clientLang }));
+        const plainRes = await harness.bot.handleUpdate(null, {
+            update_id: nextUpdateId++,
+            message: {
+                message_id: nextUpdateId,
+                from: { id: userId, is_bot: false, language_code: clientLang },
+                chat: { id: userId, type: 'private' },
+                text: 'SYN-PLAIN-TEXT'
+            }
+        });
+        assert.equal(plainRes.step, 'hint');
+        assert.equal(plainRes.outcome, 'reply_required');
+        assert.equal(plainRes.language, lang);
+        assert.equal(harness.sentMessages[harness.sentMessages.length - 1].text, TELEGRAM_RECOVERY_MESSAGES[lang].replyInstruction);
+    }
+
+    // 15 dakikalık pencere dolduktan sonra eski usageHint davranışına dönülmeli
+    harness.advanceSeconds(901);
+    const expiredHint = await harness.bot.handleUpdate(null, {
+        update_id: nextUpdateId++,
+        message: {
+            message_id: nextUpdateId,
+            from: { id: 4100, is_bot: false, language_code: 'ru' },
+            chat: { id: 4100, type: 'private' },
+            text: 'SYN-AFTER-EXPIRY'
+        }
+    });
+    assert.equal(expiredHint.step, 'hint');
+    assert.equal(expiredHint.outcome, undefined);
+    assert.equal(expiredHint.language, 'ru');
+    assert.equal(harness.sentMessages[harness.sentMessages.length - 1].text, TELEGRAM_RECOVERY_MESSAGES.ru.usageHint);
 });
