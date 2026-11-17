@@ -2246,26 +2246,29 @@ function resolveBackgroundAttentionReason(response) {
 }
 
 /**
- * Arka plan modunda dönen yanıtı sözleşme alanlarıyla tamamlar; form doğrulandıysa portala döner,
- * aksi durumda YÖKSİS sekmesini öne alır (veya önde bırakır).
+ * Arka plan modunda dönen yanıtı sözleşme alanlarıyla tamamlar; form doğrulandıysa
+ * ve sekme bizim tarafımızdan öne alındıysa portala döner, aksi durumda
+ * YÖKSİS sekmesini öne alır (veya önde bırakır).
  * @param {object} response
  * @param {chrome.tabs.Tab|null} yoksisTab
  * @param {chrome.tabs.Tab|null} portalSenderTab
- * @param {boolean} alreadySurfaced
+ * @param {boolean} surfacedByUs
  * @returns {Promise<object>}
  */
-async function finalizeBackgroundTransferResponse(response, yoksisTab, portalSenderTab = null, alreadySurfaced = false) {
+async function finalizeBackgroundTransferResponse(response, yoksisTab, portalSenderTab = null, surfacedByUs = false) {
     const isFormVerified = response?.success === true && response?.formReady === true;
     if (isFormVerified) {
-        await returnToPortalTab(portalSenderTab);
+        if (surfacedByUs) {
+            await returnToPortalTab(portalSenderTab);
+        }
         return {
             ...response,
             background: true,
             surfaced: false,
-            briefSurface: true
+            briefSurface: surfacedByUs
         };
     }
-    const surfaced = alreadySurfaced || await surfaceYoksisTab(yoksisTab);
+    const surfaced = surfacedByUs || await surfaceYoksisTab(yoksisTab);
     return {
         ...response,
         background: true,
@@ -2281,15 +2284,15 @@ async function finalizeBackgroundTransferResponse(response, yoksisTab, portalSen
  * @param {string|undefined} requestId
  * @param {number} totalStartedAt
  * @param {chrome.tabs.Tab|null} portalSenderTab
- * @param {boolean} alreadySurfaced
+ * @param {boolean} surfacedByUs
  * @returns {Promise<object>}
  */
-async function handleBackgroundTransferError(error, yoksisTab, requestId, totalStartedAt, portalSenderTab = null, alreadySurfaced = false) {
+async function handleBackgroundTransferError(error, yoksisTab, requestId, totalStartedAt, portalSenderTab = null, surfacedByUs = false) {
     finishYknTiming('yoksis-transfer-total', totalStartedAt, 'failed', 'transfer_failed', requestId);
     return finalizeBackgroundTransferResponse({
         success: false,
         error: error?.message || 'YÖKSİS araması tamamlanamadı.'
-    }, yoksisTab, portalSenderTab, alreadySurfaced);
+    }, yoksisTab, portalSenderTab, surfacedByUs);
 }
 
 async function transferToYoksis(request) {
@@ -2316,7 +2319,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         totalMs: Math.max(0, Math.round(Date.now() - opStartedAt))
     });
     let yoksisTab = null;
-    let alreadySurfaced = false;
+    let surfacedByUs = false;
 
     try {
         // Kabul kodu okunduktan sonra YÖKSİS sekmesi bulunur veya açılır;
@@ -2334,8 +2337,18 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         if (!isBackgroundMode) {
             yoksisTab = await arrangeSideBySideWindows(yoksisTab, sideWindowPlan);
         } else {
-            // Pasif YÖKSİS sekmesinde gezinme ve ZK yavaşladığı için kısa arama penceresinde sekme öne alınır.
-            alreadySurfaced = await surfaceYoksisTab(yoksisTab);
+            const freshYoksisTab = Number.isInteger(yoksisTab?.id)
+                ? (await readTabById(yoksisTab.id)) || yoksisTab
+                : yoksisTab;
+            yoksisTab = freshYoksisTab;
+            const needsSurface = !(
+                freshYoksisTab?.active === true
+                && freshYoksisTab?.windowId !== request.portalSenderTab?.windowId
+            );
+            if (needsSurface) {
+                // Pasif veya portal ile aynı penceredeki YÖKSİS sekmesinde gezinme/ZK yavaşladığı için kısa arama penceresinde sekme öne alınır.
+                surfacedByUs = await surfaceYoksisTab(freshYoksisTab);
+            }
         }
 
         const expectedStudent = {
@@ -2546,7 +2559,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                         response,
                         yoksisTab,
                         request.portalSenderTab,
-                        alreadySurfaced
+                        surfacedByUs
                     );
                     return { ...finalized, phaseMs: buildPhaseMs() };
                 }
@@ -2564,7 +2577,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                     request.requestId,
                     totalStartedAt,
                     request.portalSenderTab,
-                    alreadySurfaced
+                    surfacedByUs
                 );
                 return { ...errorResponse, phaseMs: buildPhaseMs() };
             }
@@ -2577,7 +2590,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             request.requestId,
             totalStartedAt,
             request.portalSenderTab,
-            alreadySurfaced
+            surfacedByUs
         );
         return { ...errorResponse, phaseMs: buildPhaseMs() };
     }

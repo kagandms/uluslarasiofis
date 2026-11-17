@@ -162,7 +162,7 @@ test('ykn-pro-actions places background search button first and leaves existing 
     assert.match(buttons[0].textContent, /Arka Planda YÖKSİS’te Ara ve Fotoğrafı Kırp/);
     assert.equal(
         buttons[0].getAttribute('title'),
-        'YÖKSİS sekmesi birkaç saniye öne alınıp aranır, sonra portala dönülür; aynı anda pasaport fotoğrafı kırpma ekranı açılır'
+        'YÖKSİS aranır ve aynı anda pasaport fotoğrafı kırpma ekranı açılır; YÖKSİS ayrı pencerede açıksa sekme değişmez'
     );
 });
 
@@ -292,7 +292,7 @@ test('one-tap background search opens cropper simultaneously, queues crop transf
     const bgRequestId = bgTransferMsg.payload.requestId;
     assert.match(
         document.getElementById('ykn-status-container').textContent,
-        /YÖKSİS aranıyor \(sekme birkaç saniye öne alınır, sonra portala dönülür\)\. Fotoğrafı kırpabilirsiniz\./
+        /YÖKSİS aranıyor \(sekme gerekirse birkaç saniye öne alınır\)\. Fotoğrafı kırpabilirsiniz\./
     );
 
     // sync-fields çalışırken kilitli kalmalıdır

@@ -266,6 +266,7 @@ function createBackgroundSearchHarness(options = {}) {
         storageValues,
         portalSecurity: backgroundContext.YKN_PORTAL_SECURITY,
         waitForYoksisFormReady: backgroundContext.waitForYoksisFormReady,
+        transferToYoksis: backgroundContext.transferToYoksis,
         async sendTransfer(overrides = {}) {
             assert.ok(messageHandler, 'background message listener was not registered');
             const senderTab = tabs.find((candidate) => candidate.id === portalTabId) || {
@@ -913,4 +914,173 @@ test('arka plan hata yanıtları da tamsayı phaseMs taşır; ön plan yanıtlar
     const foregroundResponse = await foregroundHarness.sendTransfer({ background: false, requestId: 'fg-no-phase' });
     assert.equal(foregroundResponse.success, true);
     assert.equal('phaseMs' in foregroundResponse, false);
+});
+
+test('arka plan modunda YÖKSİS başka pencerede aktif (görünür) ise sekme öne alınmaz, pencere odaklanmaz, portala dönülmez ve briefSurface false döner', async () => {
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        initialTabs: [
+            { id: 1, url: 'http://localhost:5173/yetkili/', active: true, windowId: 10 },
+            { id: 42, url: 'https://yoksis.yok.gov.tr/student', active: true, windowId: 20 }
+        ]
+    });
+
+    const response = await harness.sendTransfer({ background: true, requestId: 'bg-visible-other-win-1' });
+
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, true);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, false);
+    assert.equal(response.briefSurface, false);
+    assert.equal('attentionReason' in response, false);
+
+    assert.equal(harness.calls.some((call) => call.type === 'update-tab'), false);
+    assert.equal(harness.calls.some((call) => call.type === 'update-window'), false);
+    assert.equal(
+        harness.calls.some((call) => call.type === 'message' && call.message.action === 'OPEN_YOKSIS_YKN_REQUEST'),
+        true
+    );
+    assert.equal(
+        harness.calls.some((call) => call.type === 'message' && call.message.action === 'searchWithId'),
+        true
+    );
+});
+
+test('arka plan modunda YÖKSİS portal ile AYNI pencerede aktif olsa bile öne alınır ve doğrulamadan sonra portala dönülür', async () => {
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 10,
+        initialTabs: [
+            { id: 1, url: 'http://localhost:5173/yetkili/', active: true, windowId: 10 },
+            { id: 42, url: 'https://yoksis.yok.gov.tr/student', active: true, windowId: 10 }
+        ]
+    });
+
+    const response = await harness.sendTransfer({ background: true, requestId: 'bg-active-same-win-1' });
+
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, true);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, false);
+    assert.equal(response.briefSurface, true);
+
+    const tabActivations = harness.calls
+        .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
+        .map((call) => call.tabId);
+    assert.deepEqual(tabActivations, [42, 1]);
+
+    const windowFocusCalls = harness.calls
+        .filter((call) => call.type === 'update-window' && call.updateProperties.focused === true)
+        .map((call) => call.windowId);
+    assert.deepEqual(windowFocusCalls, [10, 10]);
+});
+
+test('arka plan modunda YÖKSİS başka pencerede görünürken hata veya manuel onay gerekirse dikkat için öne getirilir', async () => {
+    for (const scenario of [
+        {
+            name: 'arama hatası',
+            options: { navigationResult: { success: false, error: 'Menü açılmadı' } },
+            expectedSuccess: false,
+            expectedReason: 'search_failed'
+        },
+        {
+            name: 'manuel onay',
+            options: {
+                searchResult: {
+                    success: true,
+                    searchTriggered: true,
+                    formReady: false,
+                    manualOverrideAvailable: true
+                }
+            },
+            expectedSuccess: true,
+            expectedReason: 'manual_confirmation'
+        }
+    ]) {
+        const harness = createBackgroundSearchHarness({
+            portalWindowId: 10,
+            yoksisWindowId: 20,
+            initialTabs: [
+                { id: 1, url: 'http://localhost:5173/yetkili/', active: true, windowId: 10 },
+                { id: 42, url: 'https://yoksis.yok.gov.tr/student', active: true, windowId: 20 }
+            ],
+            ...scenario.options
+        });
+
+        const response = await harness.sendTransfer({
+            background: true,
+            requestId: `bg-visible-attention-${scenario.name}`
+        });
+
+        assert.equal(response.success, scenario.expectedSuccess, scenario.name);
+        assert.equal(response.background, true, scenario.name);
+        assert.equal(response.surfaced, true, scenario.name);
+        assert.equal(response.attentionReason, scenario.expectedReason, scenario.name);
+        assert.equal('briefSurface' in response, false, scenario.name);
+
+        assert.deepEqual(
+            JSON.parse(JSON.stringify(harness.calls.filter((call) => call.type === 'update-tab'))),
+            [{ type: 'update-tab', tabId: 42, updateProperties: { active: true } }],
+            scenario.name
+        );
+        assert.deepEqual(
+            JSON.parse(JSON.stringify(harness.calls.filter((call) => call.type === 'update-window'))),
+            [{ type: 'update-window', windowId: 20, updateProperties: { focused: true } }],
+            scenario.name
+        );
+    }
+});
+
+test('arka plan modunda portalSenderTab yoksa ve YÖKSİS sekmesi pasifse öne alınıp sonra portala dönülür', async () => {
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20
+    });
+
+    const response = await harness.transferToYoksis({
+        background: true,
+        requestId: 'bg-no-sender-1',
+        data: { yoksisId: 'SYNTH-123-AB', firstName: 'SYNTHETIC', lastName: 'STUDENT' }
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, true);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, false);
+    assert.equal(response.briefSurface, true);
+
+    const tabActivations = harness.calls
+        .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
+        .map((call) => call.tabId);
+    assert.deepEqual(tabActivations, [42, 1]);
+});
+
+test('arka plan dışındaki modda YÖKSİS başka pencerede aktif olsa bile önceki odaklama ve portala dönüş davranışı korunur', async () => {
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        initialTabs: [
+            { id: 1, url: 'http://localhost:5173/yetkili/', active: true, windowId: 10 },
+            { id: 42, url: 'https://yoksis.yok.gov.tr/student', active: true, windowId: 20 }
+        ]
+    });
+
+    const response = await harness.sendTransfer({ background: false, requestId: 'fg-visible-other-win-1' });
+
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, true);
+    assert.equal('background' in response, false);
+    assert.equal('surfaced' in response, false);
+    assert.equal('briefSurface' in response, false);
+
+    const tabActivations = harness.calls
+        .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
+        .map((call) => call.tabId);
+    assert.deepEqual(tabActivations, [42, 1]);
+
+    const windowFocusCalls = harness.calls
+        .filter((call) => call.type === 'update-window' && call.updateProperties.focused === true)
+        .map((call) => call.windowId);
+    assert.deepEqual(windowFocusCalls, [20, 10]);
 });
