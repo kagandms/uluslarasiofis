@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { test } from 'node:test';
 import { initializeStaffApplicationsManager } from '../src/staff/applicationsManager.js';
+import { createApplicationQueueTable } from '../src/staff/application-queue-table.js';
 import { initWorkspaceNavigation } from '../src/ui/workspaceNavigation.js';
 
 const STAFF_HTML = readFileSync(new URL('../yetkili/index.html', import.meta.url), 'utf8');
@@ -1312,9 +1313,21 @@ test('online queue searches while typing and changes status immediately without 
     assert.equal(document.activeElement, input);
     assert.equal(input.value, 'ITU-ABCD');
     const status = root.querySelector('[name="status"]');
+    assert.equal(status.querySelector('[value="new"]'), null);
     assert.equal(status.querySelector('[value="completed"]'), null);
     assert.equal(status.querySelector('[value="terminal"]'), null);
     assert.equal(status.querySelector('[value="migration"]').textContent, 'Göç İdaresine Gönderildi');
+    assert.deepEqual(
+        [...status.options].map((option) => [option.value, option.textContent]),
+        [
+            ['all', 'Tüm durumlar'],
+            ['draft', 'Taslaklar'],
+            ['under_review', 'İncelemede'],
+            ['resubmission_required', 'Yeniden yükleme gerekli'],
+            ['approved', 'Onaylandı'],
+            ['migration', 'Göç İdaresine Gönderildi']
+        ]
+    );
     status.value = 'resubmission_required';
     status.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     await new Promise(resolve => setImmediate(resolve));
@@ -1522,4 +1535,51 @@ test('resubmission_required keeps waiting message and marks none of the six stat
     const buttons = [...root.querySelectorAll('.staff-application-status-actions button')];
     assert.equal(buttons.length, 6);
     assert.equal(buttons.every((button) => button.getAttribute('aria-pressed') === 'false' && button.disabled), true);
+});
+
+test('online queue and shared queue table expose column and action wrapping layout hooks', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const api = {
+        async queryApplications() {
+            return createQueuePayload([{ ...QUEUE_ITEM, status: 'approved_for_processing' }]);
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const queueWrapper = root.querySelector('.staff-applications-queue');
+    assert.ok(queueWrapper);
+    const onlineTable = queueWrapper.querySelector('.staff-applications-table');
+    assert.ok(onlineTable);
+    assert.ok(onlineTable.querySelector('th.staff-record-note-col'));
+    assert.ok(onlineTable.querySelector('td.staff-record-note-cell'));
+    assert.ok(onlineTable.querySelector('td[data-label="Ad Soyad"]'));
+    assert.ok(onlineTable.querySelector('td[data-label="Durum"]'));
+    assert.ok(onlineTable.querySelector('td[data-label="Öğrenci No"]'));
+    assert.ok(onlineTable.querySelector('td[data-label="Gönderim Tarihi"]'));
+    assert.ok(onlineTable.querySelector('td[data-label="Son Güncelleme"]'));
+    assert.ok(onlineTable.querySelector('td[data-label="Detay"]'));
+
+    const sharedTable = createApplicationQueueTable(document, [{ ...QUEUE_ITEM, status: 'approved_for_processing' }], {
+        noteKind: 'online',
+        skipNoteLoad: true,
+        statusLabel: () => 'İşleme alınmak üzere onaylandı',
+        actions: () => [
+            { label: 'Detay', action: 'open-detail', run: () => {} },
+            { label: 'İndir', action: 'download-application-archive', run: () => {} }
+        ]
+    });
+    assert.ok(sharedTable.querySelector('th.staff-queue-col-name'));
+    assert.ok(sharedTable.querySelector('td.staff-queue-col-name'));
+    assert.ok(sharedTable.querySelector('th.staff-queue-col-status'));
+    assert.ok(sharedTable.querySelector('td.staff-queue-col-status'));
+    assert.equal(sharedTable.querySelectorAll('td.staff-queue-col-nowrap').length, 3);
+    assert.ok(sharedTable.querySelector('th.staff-queue-col-actions'));
+    const actionsCell = sharedTable.querySelector('td.staff-queue-actions-cell');
+    assert.ok(actionsCell);
+    assert.equal(actionsCell.dataset.label, 'Detay');
+    assert.equal(actionsCell.querySelectorAll('button.staff-queue-action-btn').length, 2);
 });
