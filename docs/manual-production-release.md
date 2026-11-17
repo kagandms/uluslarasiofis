@@ -161,6 +161,25 @@ Read-only check afterwards (`wrangler versions view`, version `b2befc3e-77de-43a
 Dated 16 November 2026. The owner approved, in the session conversation, the protected-path changes contained in commit `3fd520bf273fd44c91bb8af862c725174d3070fa`: the runtime secret allowlist gained `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` (17 reviewed names; both are optional and are not in the required print secrets list, the bot stays disabled when either is missing); `wrangler.jsonc` gained the plain-text variable `TELEGRAM_BOT_USERNAME` (staging empty, production `topkapiunigoc_bot`); and the production `PUBLIC_PORTAL_ORIGIN` changed from `https://goc.topkapiuni.workers.dev` to `https://topkapiunigoc.com` (commit `8547d71`, so new receipts and the A4 student guide QR codes encode the canonical domain; the workers.dev origin remains in `PUBLIC_PORTAL_ORIGIN_ALLOWLIST`). No migration changed.
 The owner set both live variables and the two secrets by hand (dashboard and `wrangler secret put --env production`); this workflow never sets them. Read-only check afterwards (`wrangler versions view`, version `57e774e8-0ee0-4869-ac0f-995875aa0b4f`, active at 100%): `TELEGRAM_BOT_USERNAME` and `PUBLIC_PORTAL_ORIGIN` equal the declared configuration and the live Worker has 17 secret bindings including both Telegram names. No secret values were read or recorded. The baseline advance records the reviewed source boundary only; it does not prove live artifact equality or that the Telegram webhook works end to end.
 
+## 0043 and 0044 baseline evidence
+
+Dated 17 November 2026. Source: the owner explicitly approved, in the session conversation, applying
+`migrations/0043_approve_documents_of_migrated_applications.sql` (SHA-256
+`cb84fd32da8d13ac1f3dd4dd101d69b131485bacf4a003dfa21a93bf9ba55db6`) and
+`migrations/0044_staff_record_notes.sql` (SHA-256
+`94e69c474716526060fe186acb7e83454a4916bece97bc06843b50816cc11dd4`) to production D1 with
+`npm run db:migrate:production`; this workflow never applies migrations. A Time Travel bookmark was recorded
+before the apply (`000006c3-0000022e-00005126-77871334fbd4e68dfe2ed802556bf005`). `0043` approved the current clean,
+finalized document revisions of applications already in `sent_to_migration`, `migration_approved` or `completed`
+(861 applications in scope, 857 changed, 7408 revisions) and wrote one system audit event per changed
+application (857 rows, request id `migration-0043`); application status and `updated_at` were not changed.
+`0044` created the empty `staff_record_notes` table. `0044` first failed once with the transient D1 overload
+error 7429 and was re-applied successfully. Read-only checks afterwards: `wrangler d1 migrations list --remote`
+reports no pending migrations, zero eligible revisions remain unapproved, 857 audit rows exist,
+`staff_record_notes` has 0 rows and the in-scope application count is unchanged. The baseline advance records
+the reviewed source boundary (commit `04d72c2be5d65536cf1a7d141f6f9f24f26b7e4a`) that includes these schema
+changes; it does not prove live artifact equality, rollback safety, or that the Worker has been published.
+
 ## Permissions and remaining recovery risk
 
 Existing account-scoped **Workers Scripts Edit** must permit Worker assets upload, version creation and
