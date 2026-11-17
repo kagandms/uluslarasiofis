@@ -47,6 +47,7 @@ import { getScheduledWork } from './services/scheduled-work.js';
 import { readCloudflareUsage } from './services/cloudflare-usage-metrics.js';
 import { handleStaffWorkHours } from './routes/staffWorkHoursRoutes.js';
 import { handleStaffYoksisDocumentAudit } from './routes/staffYoksisDocumentAuditRoutes.js';
+import { handleStaffRecordNotes } from './routes/staffRecordNoteRoutes.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -204,6 +205,9 @@ async function routeApi(request, environment, requestId, cache) {
     if (pathname === '/api/staff/auth/bootstrap') return bootstrapStaff(request, environment, requestId);
     if (pathname === '/api/staff/applications/query') return queryStaffApplications(request, environment);
     if (pathname === '/api/staff/application-ratings') return readStaffApplicationRatings(request, environment);
+    if (pathname === '/api/staff/record-notes' || pathname.startsWith('/api/staff/record-notes/')) {
+        return handleStaffRecordNotes(request, environment, requestId);
+    }
     const gocnetEventMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/gocnet-attempts\/([^/]+)\/events$/);
     if (gocnetEventMatch) {
         let applicationId;
