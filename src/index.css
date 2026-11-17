@@ -703,10 +703,19 @@ body.dark-mode .ykn-status-item {
 }
 
 #view-ykn .ykn-pro-actions > button {
-    flex: 1 1 0;
+    flex: 1 1 auto;
+    width: 100%;
     min-height: 3.5rem;
     padding: 0.55rem 0.65rem !important;
     font-size: 0.82rem !important;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Gizlenen eski YKN düğmeleri CSS kurallarıyla da görünmez ve odaklanamaz kalır */
+#view-ykn .ykn-pro-actions > button[hidden],
+.ykn-pro-actions > button[hidden] {
+    display: none !important;
 }
 
 #view-ykn .ykn-status-card {
@@ -797,7 +806,7 @@ body.dark-mode .ykn-status-item {
 }
 
 /* ==========================================
-   YKN PRO 2-TUŞ İŞLEM ALANI (OFİS STANDARDI)
+   YKN PRO TEK TUŞ İŞLEM ALANI (OFİS STANDARDI)
    ========================================== */
 .ykn-pro-actions #btn-ykn-background-search,
 .ykn-pro-actions #btn-copy {
@@ -814,7 +823,6 @@ body.dark-mode .ykn-status-item {
     box-shadow: none;
 }
 
-body.dark-mode .ykn-pro-actions #btn-ykn-background-search,
 body.dark-mode .ykn-pro-actions #btn-copy {
     background: #232330;
     color: #f4f6f8;
@@ -822,7 +830,6 @@ body.dark-mode .ykn-pro-actions #btn-copy {
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
-body.dark-mode .ykn-pro-actions #btn-ykn-background-search:hover:not(:disabled),
 body.dark-mode .ykn-pro-actions #btn-copy:hover:not(:disabled) {
     background: #2d2d3c;
     color: #ffffff;
@@ -830,7 +837,6 @@ body.dark-mode .ykn-pro-actions #btn-copy:hover:not(:disabled) {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
-body.dark-mode .ykn-pro-actions #btn-ykn-background-search:disabled,
 body.dark-mode .ykn-pro-actions #btn-copy:disabled {
     background: #1c1c24;
     color: #717182;

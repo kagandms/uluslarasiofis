@@ -159,11 +159,46 @@ test('ykn-pro-actions places background search button first and leaves existing 
     assert.equal(buttons[0].id, 'btn-ykn-background-search');
     assert.equal(buttons[1].id, 'btn-read-acceptance');
     assert.equal(buttons[2].id, 'btn-copy');
-    assert.match(buttons[0].textContent, /Arka Planda YÖKSİS’te Ara ve Fotoğrafı Kırp/);
+    assert.match(
+        buttons[0].textContent,
+        /Arka Planda YÖKSİS’te Ara ve Fotoğrafı Kırp/
+    );
     assert.equal(
         buttons[0].getAttribute('title'),
         'YÖKSİS sekmesi bir an öne gelip aramayı başlatır ve portala döner; aynı anda pasaport fotoğrafı kırpma ekranı açılır'
     );
+});
+
+test('two older YKN action buttons stay hidden while one-tap button remains visible, enabled, and posts extension messages', async (context) => {
+    const { document, postedMessages, loadSyntheticStudent } = await createPortalHarness(context, 'single-button');
+    loadSyntheticStudent({ yoksisId: 'PQ7-654-RS', documentsReady: true });
+
+    const proActions = document.getElementById('ykn-pro-actions');
+    const btnBg = document.getElementById('btn-ykn-background-search');
+    const btnReadAcceptance = document.getElementById('btn-read-acceptance');
+    const btnCopy = document.getElementById('btn-copy');
+
+    assert.equal(proActions.style.display, 'flex');
+    assert.equal(btnReadAcceptance.hasAttribute('hidden'), true);
+    assert.equal(btnReadAcceptance.hidden, true);
+    assert.notEqual(btnReadAcceptance.style.display, 'flex');
+    assert.equal(btnCopy.hasAttribute('hidden'), true);
+    assert.equal(btnCopy.hidden, true);
+    assert.notEqual(btnCopy.style.display, 'flex');
+
+    assert.equal(btnBg.hasAttribute('hidden'), false);
+    assert.equal(btnBg.hidden, false);
+    assert.equal(btnBg.disabled, false);
+    assert.equal(btnBg.classList.contains('btn-primary'), true);
+
+    const beforeClickCount = postedMessages.length;
+    btnBg.click();
+
+    const postedSinceClick = postedMessages.slice(beforeClickCount);
+    const transferMsg = postedSinceClick.find((m) => m?.payload?.action === 'TRANSFER_TO_YOKSIS');
+    assert.ok(transferMsg, 'TRANSFER_TO_YOKSIS message should be posted on one-tap click');
+    assert.equal(transferMsg.payload.background, true);
+    assert.equal(transferMsg.payload.data.yoksisId, 'PQ7-654-RS');
 });
 
 test('cropper modal keeps transfer enabled with queue label while running, disables for failed/needs_attention, and restores original label when opened', async (context) => {
@@ -488,7 +523,7 @@ test('needs_attention while pending clears the pending flag and reports manual_c
     const statusText = document.getElementById('ykn-status-container').textContent;
     assert.match(
         statusText,
-        /YÖKSİS formu otomatik doğrulanamadı; YÖKSİS sekmesinde kontrol edip “1\. Kabul Mektubunu Oku ve YÖKSİS’te Ara” ile devam edin/
+        /YÖKSİS formu otomatik doğrulanamadı; YÖKSİS sekmesinde kontrol edip “Arka Planda YÖKSİS’te Ara ve Fotoğrafı Kırp” ile devam edin/
     );
     assert.match(statusText, /Bekleyen aktarım iptal edildi:/);
 
