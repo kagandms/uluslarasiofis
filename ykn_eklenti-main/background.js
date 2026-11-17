@@ -37,6 +37,9 @@ const CONTENT_READY_MAX_DELAY_MS = 1_000;
 // için bu sınırın daha uzun olması gerekir.
 const YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS = 32_000;
 const YOKSIS_REFRESH_TIMEOUT_MS = 30_000;
+// Arka plan sekmesi pasifken ilk form beklemesi zaman kaybetmeden kısa öne alma
+// denemesine geçebilsin diye daha kısa zaman aşımı uygulanır.
+const BACKGROUND_FIRST_FORM_WAIT_MS = 2500;
 
 function startYknTiming() {
     return globalThis.performance?.now?.() ?? Date.now();
@@ -2098,12 +2101,16 @@ async function getYoksisFormState(tabId, requestId) {
 }
 
 async function waitForYoksisFormReady(tabId, requestId, options = {}) {
+    const rawTimeoutMs = options?.timeoutMs;
+    const timeoutMs = Number.isFinite(rawTimeoutMs)
+        ? Math.min(10_000, Math.max(1_000, Math.round(rawTimeoutMs)))
+        : 10_000;
     try {
         await waitForContentScript(tabId, 'yoksis', { frameId: 0 });
         const readiness = await withTimeout(
             sendTabMessage(tabId, {
                 action: 'WAIT_YOKSIS_FORM',
-                timeoutMs: 10000,
+                timeoutMs,
                 requestId,
                 afterFingerprint: options.afterFingerprint || '',
                 afterDomRevision: options.afterDomRevision,
@@ -2112,7 +2119,7 @@ async function waitForYoksisFormReady(tabId, requestId, options = {}) {
                 requireBoundSearch: options.requireBoundSearch === true,
                 expectedKabulId: options.expectedKabulId || ''
             }, { frameId: 0 }),
-            11_000,
+            timeoutMs + 1000,
             'YÖKSİS formu hazır olma zaman aşımı'
         );
         if (readiness && readiness.formReady === false && readiness.message) {
@@ -2407,7 +2414,12 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                     expectedStudent
                 };
                 const formValidationStartedAt = startYknTiming();
-                const delayedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, waitOptions);
+                // Arka plan modunda ilk form beklemesini kısa tut; başarısız olursa
+                // sekme kısa süre öne alınıp varsayılan 10 sn ile yeniden denenir.
+                const firstWaitOptions = isBackgroundMode
+                    ? { ...waitOptions, timeoutMs: BACKGROUND_FIRST_FORM_WAIT_MS }
+                    : waitOptions;
+                const delayedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, firstWaitOptions);
                 if (delayedFormReady) {
                     finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'ok', undefined, request.requestId);
                     finishYknTiming('yoksis-transfer-total', totalStartedAt, 'ok', undefined, request.requestId);

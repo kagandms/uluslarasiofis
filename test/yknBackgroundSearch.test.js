@@ -265,6 +265,7 @@ function createBackgroundSearchHarness(options = {}) {
         tabs,
         storageValues,
         portalSecurity: backgroundContext.YKN_PORTAL_SECURITY,
+        waitForYoksisFormReady: backgroundContext.waitForYoksisFormReady,
         async sendTransfer(overrides = {}) {
             assert.ok(messageHandler, 'background message listener was not registered');
             const senderTab = tabs.find((candidate) => candidate.id === portalTabId) || {
@@ -624,6 +625,8 @@ test('arka plan modunda ilk form bekleme başarısız olup kısa öne almadan so
     const response = await harness.sendTransfer({ background: true, requestId: 'bg-brief-surface-1' });
 
     assert.equal(waitAttempt, 2);
+    assert.equal(waitMessages[0].timeoutMs, 2500);
+    assert.equal(waitMessages[1].timeoutMs, 10000);
     assert.equal(waitMessages[1].afterFingerprint, waitMessages[0].afterFingerprint);
     assert.equal(waitMessages[1].afterDomRevision, waitMessages[0].afterDomRevision);
     assert.equal(waitMessages[1].requireFreshResult, waitMessages[0].requireFreshResult);
@@ -755,4 +758,49 @@ test('arka plan dışındaki modda ilk form bekleme başarısız olursa ek öne 
         .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
         .map((call) => call.tabId);
     assert.deepEqual(tabActivations, [42]);
+});
+
+test('ön plan modunda ilk form bekleme 10000 ms zaman aşımını korur', async () => {
+    const waitMessages = [];
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        searchResult: {
+            success: true,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'fp-1',
+            domRevisionBeforeSearch: 1
+        },
+        onWaitForm(message, callback) {
+            waitMessages.push(message);
+            callback({ success: true, formReady: true });
+        }
+    });
+
+    const response = await harness.sendTransfer({ background: false, requestId: 'fg-wait-timeout-1' });
+
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, true);
+    assert.equal(waitMessages.length, 1);
+    assert.equal(waitMessages[0].timeoutMs, 10000);
+});
+
+test('waitForYoksisFormReady options.timeoutMs değerini 1000..10000 aralığına sınırlar', async () => {
+    const waitMessages = [];
+    const harness = createBackgroundSearchHarness({
+        onWaitForm(message, callback) {
+            waitMessages.push(message);
+            callback({ success: true, formReady: true });
+        }
+    });
+
+    await harness.waitForYoksisFormReady(42, 'clamp-low', { timeoutMs: 500 });
+    await harness.waitForYoksisFormReady(42, 'clamp-high', { timeoutMs: 99999 });
+    await harness.waitForYoksisFormReady(42, 'clamp-default');
+
+    assert.deepEqual(
+        waitMessages.map((msg) => msg.timeoutMs),
+        [1000, 10000, 10000]
+    );
 });
