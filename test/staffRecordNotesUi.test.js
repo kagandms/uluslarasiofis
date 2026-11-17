@@ -13,6 +13,7 @@ const ONLINE_ITEMS = [
     {
         id: 'online-001',
         student_number: '20260001',
+        passport_number: 'SYN-PASS-0001',
         first_name: 'Deniz',
         last_name: 'Kaya',
         application_type: 'initial',
@@ -23,6 +24,7 @@ const ONLINE_ITEMS = [
     {
         id: 'online-002',
         student_number: '20260002',
+        passport_number: 'SYN-PASS-0002',
         first_name: 'Ece',
         last_name: 'Demir',
         application_type: 'renewal',
@@ -148,7 +150,7 @@ test('online queue places note button in first cell and loads all page notes in 
     const secondButton = rows[1].querySelector('td:first-child button[data-action="record-note"]');
     assert.ok(firstButton);
     assert.ok(secondButton);
-    assert.equal(rows[0].querySelector('td:nth-child(2)')?.textContent, '20260001');
+    assert.equal(rows[0].querySelector('td[data-label="Pasaport No"]')?.textContent, 'SYN-PASS-0001');
 
     assert.equal(firstButton.classList.contains('has-note'), true);
     assert.equal(firstButton.dataset.hasNote, 'true');

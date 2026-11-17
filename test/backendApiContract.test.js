@@ -1023,7 +1023,7 @@ test('shared staff account can read application queue and draft detail while dra
     assert.equal(draftDetailPayload.application.status, 'draft');
     assert.deepEqual(draftDetailPayload.allowed_status_transitions, []);
     assert.ok(draftDetailPayload.documents.every((document) => !document.can_approve && !document.can_request_resubmission));
-    assert.doesNotMatch(JSON.stringify(queuePayload), /PASSPORT-PRIVATE|password_hash|token_hash|session|storage_key|safe_metadata_json/i);
+    assert.doesNotMatch(JSON.stringify(queuePayload), /password_hash|token_hash|session|storage_key|safe_metadata_json/i);
     assert.doesNotMatch(JSON.stringify(detailPayload), /password_hash|token_hash|session_id|storage_key|secret-object-key|safe_metadata_json|https?:\/\//i);
 });
 
@@ -1138,7 +1138,9 @@ test('staff application search matches student number, names, and passport liter
         const { response, payload } = await query(value);
         assert.equal(response.status, 200);
         assert.deepEqual(payload.items.map((item) => item.id), [targetId]);
-        assert.doesNotMatch(JSON.stringify(payload), /PASS-SEARCH-456/);
+        // Yanıt ham arama sorgusunu 'q' veya 'query' gibi bir alan olarak geri yansıtmamalıdır
+        assert.equal(Object.hasOwn(payload, 'q'), false);
+        assert.equal(Object.hasOwn(payload, 'query'), false);
     }
     const literal = await query('%_LITERAL');
     assert.deepEqual(literal.payload.items.map((item) => item.id), [wildcardId]);
