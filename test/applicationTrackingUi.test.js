@@ -244,7 +244,9 @@ test('owner resubmission view mounts controls only for server-eligible codes and
 
     assert.match(root.textContent, new RegExp(officeMessage));
     assert.equal(root.querySelectorAll('input[type="file"]').length, 1);
-    assert.equal(root.querySelector('input[type="file"]').accept, 'application/pdf');
+    const fileInput = root.querySelector('input[type="file"]');
+    assert.equal(fileInput.accept, 'application/pdf,image/jpeg,image/png,image/webp');
+    assert.equal(fileInput.multiple, true);
     assert.equal(root.querySelectorAll('.resubmission-upload-control button').length, 1);
     assert.equal(intentCalls, 0);
     document.defaultView.close();
