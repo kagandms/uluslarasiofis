@@ -2,6 +2,22 @@ import { formatApplicationTimestamp } from '../shared/application-timestamps.js'
 import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
 
 const HEADERS = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
+/* Sütun başlıklarına göre masaüstü genişlik ve kaydırma CSS sınıflarını eşler. */
+const COLUMN_CLASS_BY_LABEL = Object.freeze({
+    'Öğrenci No': 'staff-queue-col-nowrap',
+    'Takip No': 'staff-queue-col-nowrap',
+    'Sıra': 'staff-queue-col-nowrap',
+    'Ad Soyad': 'staff-queue-col-name',
+    'Durum': 'staff-queue-col-status',
+    'Ofis Durumu': 'staff-queue-col-status',
+    'Gönderim Tarihi': 'staff-queue-col-nowrap',
+    'Son Güncelleme': 'staff-queue-col-nowrap',
+    'Teslim Tarihi': 'staff-queue-col-nowrap'
+});
+
+function resolveColumnClass(label) {
+    return COLUMN_CLASS_BY_LABEL[label] || '';
+}
 
 /** Formats a queue timestamp. @param {string} value ISO timestamp. @returns {string} Turkish date or placeholder. */
 export function formatQueueDate(value) {
@@ -40,8 +56,11 @@ function createRow(document, item, options, index, noteEntries) {
     }
     if (options.rowNumber) {
         const number = document.createElement('td');
+        const numberLabel = headers[hasNotes ? 1 : 0];
+        const numberClass = resolveColumnClass(numberLabel);
         number.textContent = options.rowNumber(item, index);
-        number.dataset.label = headers[hasNotes ? 1 : 0];
+        number.dataset.label = numberLabel;
+        if (numberClass) number.className = numberClass;
         row.append(number);
     }
     const values = options.values ? options.values(item) : [item.student_number || '—', [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
@@ -49,17 +68,21 @@ function createRow(document, item, options, index, noteEntries) {
         formatQueueDate(item.submitted_at), formatQueueDate(item.updated_at)];
     values.forEach((value, valueIndex) => {
         const cell = document.createElement('td');
+        const label = headers[valueIndex + columnOffset];
+        const columnClass = resolveColumnClass(label);
         if (value?.nodeType) cell.append(value);
         else cell.textContent = value || '—';
-        cell.dataset.label = headers[valueIndex + columnOffset];
+        cell.dataset.label = label;
+        if (columnClass) cell.className = columnClass;
         row.append(cell);
     });
     const actions = document.createElement('td');
+    actions.className = 'staff-queue-actions-cell';
     actions.dataset.label = 'Detay';
     options.actions(item).forEach(action => {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'btn btn-outline';
+        button.className = 'btn btn-outline staff-queue-action-btn';
         button.textContent = action.label;
         button.dataset.action = action.action;
         button.disabled = Boolean(action.isDisabled);
@@ -98,6 +121,11 @@ export function createApplicationQueueTable(document, items, options) {
         if (hasNotes && index === 0) {
             cell.className = 'staff-record-note-col';
             cell.setAttribute('aria-label', 'Not');
+        } else if (index === headers.length - 1 && label === '') {
+            cell.className = 'staff-queue-col-actions';
+        } else {
+            const columnClass = resolveColumnClass(label);
+            if (columnClass) cell.className = columnClass;
         }
         headerRow.append(cell);
     });

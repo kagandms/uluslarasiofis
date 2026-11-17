@@ -25,7 +25,7 @@ const DOCUMENT_STATE_LABELS = Object.freeze({
     complete: 'Tamamlandı'
 });
 const STATUS_FILTERS = Object.freeze([
-    ['all', 'Tüm durumlar'], ['draft', 'Taslaklar'], ['new', 'Yeni'], ['under_review', 'İncelemede'],
+    ['all', 'Tüm durumlar'], ['draft', 'Taslaklar'], ['under_review', 'İncelemede'],
     ['resubmission_required', 'Yeniden yükleme gerekli'], ['approved', 'Onaylandı'],
     ['migration', 'Göç İdaresine Gönderildi']
 ]);

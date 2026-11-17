@@ -2114,7 +2114,8 @@ body.dark-mode .history-badge {
     border-bottom: 1px solid var(--card-border);
     padding: 0.75rem 0.55rem;
     text-align: left;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    word-break: normal;
     vertical-align: top;
 }
 
@@ -2129,10 +2130,8 @@ body.dark-mode .history-badge {
     font-size: 0.88rem;
 }
 
-.staff-applications-table td[data-label="Detay"] {
-    white-space: nowrap;
-}
-
+.staff-applications-table td.staff-queue-actions-cell .btn,
+.staff-applications-table td.staff-queue-actions-cell button,
 .staff-applications-table td[data-label="Detay"] .btn,
 .staff-applications-table td[data-label="Detay"] button {
     display: inline-flex;
@@ -2157,11 +2156,15 @@ body.dark-mode .history-badge {
     transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 
+.staff-applications-table td.staff-queue-actions-cell .btn:last-child,
+.staff-applications-table td.staff-queue-actions-cell button:last-child,
 .staff-applications-table td[data-label="Detay"] .btn:last-child,
 .staff-applications-table td[data-label="Detay"] button:last-child {
     margin-inline-end: 0;
 }
 
+.staff-applications-table td.staff-queue-actions-cell .btn:hover:not(:disabled),
+.staff-applications-table td.staff-queue-actions-cell button:hover:not(:disabled),
 .staff-applications-table td[data-label="Detay"] .btn:hover:not(:disabled),
 .staff-applications-table td[data-label="Detay"] button:hover:not(:disabled) {
     background: var(--accent-hover);
@@ -2171,6 +2174,8 @@ body.dark-mode .history-badge {
     transform: translateY(-1px);
 }
 
+.staff-applications-table td.staff-queue-actions-cell .btn:focus-visible,
+.staff-applications-table td.staff-queue-actions-cell button:focus-visible,
 .staff-applications-table td[data-label="Detay"] .btn:focus-visible,
 .staff-applications-table td[data-label="Detay"] button:focus-visible {
     outline: 2px solid #ffffff;
@@ -2178,12 +2183,16 @@ body.dark-mode .history-badge {
     box-shadow: 0 0 0 4px rgb(var(--accent-rgb) / 0.55);
 }
 
+.staff-applications-table td.staff-queue-actions-cell .btn:active:not(:disabled),
+.staff-applications-table td.staff-queue-actions-cell button:active:not(:disabled),
 .staff-applications-table td[data-label="Detay"] .btn:active:not(:disabled),
 .staff-applications-table td[data-label="Detay"] button:active:not(:disabled) {
     transform: translateY(0);
     box-shadow: 0 1px 4px rgb(var(--accent-rgb) / 0.25);
 }
 
+.staff-applications-table td.staff-queue-actions-cell .btn:disabled,
+.staff-applications-table td.staff-queue-actions-cell button:disabled,
 .staff-applications-table td[data-label="Detay"] .btn:disabled,
 .staff-applications-table td[data-label="Detay"] button:disabled {
     opacity: 0.55;
@@ -2607,17 +2616,79 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
     border-left-color: #ef4444;
 }
 
+/* Başvuru kuyruğu tablosu sütun genişlikleri, kelime kaydırma ve satır işlem düğmeleri */
+.staff-applications-queue {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.staff-applications-table th.staff-record-note-col,
+.staff-applications-table td.staff-record-note-cell {
+    min-width: 3rem;
+    width: 3rem;
+}
+
+.staff-applications-table th.staff-queue-col-name,
+.staff-applications-table td.staff-queue-col-name,
+.staff-applications-table td[data-label="Ad Soyad"] {
+    min-width: 11rem;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+.staff-applications-table th.staff-queue-col-status,
+.staff-applications-table td.staff-queue-col-status,
+.staff-applications-table td[data-label="Durum"],
+.staff-applications-table td[data-label="Ofis Durumu"] {
+    min-width: 9rem;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+.staff-applications-table th.staff-queue-col-nowrap,
+.staff-applications-table td.staff-queue-col-nowrap,
+.staff-applications-table td[data-label="Öğrenci No"],
+.staff-applications-table td[data-label="Takip No"],
+.staff-applications-table td[data-label="Sıra"],
+.staff-applications-table td[data-label="Gönderim Tarihi"],
+.staff-applications-table td[data-label="Son Güncelleme"],
+.staff-applications-table td[data-label="Teslim Tarihi"] {
+    white-space: nowrap;
+}
+
+.staff-applications-table th.staff-queue-col-actions {
+    max-width: 26rem;
+}
+
+.staff-applications-table td.staff-queue-actions-cell,
 .staff-applications-table td[data-label="Detay"] {
     align-items: center;
     display: flex;
     flex-direction: row;
-    flex-wrap: nowrap;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.5rem;
+    max-width: 26rem;
+    white-space: normal;
 }
 
+.staff-applications-table td.staff-queue-actions-cell .btn,
+.staff-applications-table td.staff-queue-actions-cell button,
 .staff-applications-table td[data-label="Detay"] .btn,
 .staff-applications-table td[data-label="Detay"] button {
+    flex: 0 0 auto;
     margin: 0;
+    white-space: nowrap;
+}
+
+.staff-applications-table td.staff-queue-actions-cell .staff-gocnet-transfer-status,
+.staff-applications-table td.staff-queue-actions-cell .staff-spreadsheet-transfer-error,
+.staff-applications-table td[data-label="Detay"] .staff-gocnet-transfer-status,
+.staff-applications-table td[data-label="Detay"] .staff-spreadsheet-transfer-error {
+    flex: 1 0 100%;
+    white-space: normal;
 }
 
 .staff-application-workflow {
@@ -2859,14 +2930,34 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
         border-bottom: 0;
     }
 
+    .staff-applications-table td.staff-queue-col-name,
+    .staff-applications-table td[data-label="Ad Soyad"],
+    .staff-applications-table td.staff-queue-col-status,
+    .staff-applications-table td[data-label="Durum"],
+    .staff-applications-table td[data-label="Ofis Durumu"],
+    .staff-applications-table td.staff-queue-col-nowrap,
+    .staff-applications-table td[data-label="Öğrenci No"],
+    .staff-applications-table td[data-label="Takip No"],
+    .staff-applications-table td[data-label="Sıra"],
+    .staff-applications-table td[data-label="Gönderim Tarihi"],
+    .staff-applications-table td[data-label="Son Güncelleme"],
+    .staff-applications-table td[data-label="Teslim Tarihi"] {
+        min-width: 0;
+        white-space: normal;
+    }
+
+    .staff-applications-table td.staff-queue-actions-cell,
     .staff-applications-table td[data-label="Detay"] {
         display: flex;
         flex-wrap: wrap;
         justify-content: flex-end;
         align-items: center;
         gap: 11px;
+        max-width: none;
     }
 
+    .staff-applications-table td.staff-queue-actions-cell .btn,
+    .staff-applications-table td.staff-queue-actions-cell button,
     .staff-applications-table td[data-label="Detay"] .btn,
     .staff-applications-table td[data-label="Detay"] button {
         margin-inline-end: 0;
@@ -3605,6 +3696,7 @@ body.dark-mode .staff-record-note-scope {
 @media (max-width: 900px) {
     .staff-applications-table td.staff-record-note-cell {
         align-items: center;
+        min-width: 0;
         text-align: right;
         width: 100%;
     }
