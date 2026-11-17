@@ -48,7 +48,7 @@ function createQueuePayload(items, page = 1, pageSize = 25, totalItems = items.l
 }
 
 const QUEUE_ITEM = {
-    id: 'app-001', student_number: 'STU-001', passport_number: 'P123456', first_name: 'Ayşe', last_name: 'Yılmaz',
+    id: 'app-001', student_number: 'STU-001', first_name: 'Ayşe', last_name: 'Yılmaz',
     application_type: 'renewal', status: 'under_review', submitted_at: '2026-09-29T10:00:00.000Z',
     updated_at: '2026-09-30T10:00:00.000Z',
     assigned_staff: { staff_id: 'staff-001', display_name: 'Reviewer One' }
@@ -144,12 +144,12 @@ test('applications workspace is prominent and opening it loads a queue without d
     assert.equal(document.getElementById('workspace-title').textContent.trim(), 'İkamet Başvuruları');
     assert.equal(document.getElementById('view-applications').hidden, false);
     assert.equal(requests.length, 1);
-    assert.match(root.textContent, /P123456/);
+    assert.match(root.textContent, /STU-001/);
     assert.doesNotMatch(root.textContent, /Atanan Personel|Atanmamış|Reviewer One/);
-    assert.equal(root.querySelectorAll('th').length, 7);
-    assert.equal(root.querySelectorAll('tbody tr:first-child > td').length, 7);
+    assert.equal(root.querySelectorAll('th').length, 8);
+    assert.equal(root.querySelectorAll('tbody tr:first-child > td').length, 8);
     assert.equal([...root.querySelectorAll('td')].some((cell) => cell.dataset.label === 'Atanan Personel'), false);
-    assert.ok(root.querySelectorAll('th')[1]?.textContent.includes('Pasaport No'));
+    assert.ok(root.querySelectorAll('th')[1]?.textContent.includes('Öğrenci No'));
     assert.ok(root.querySelector('[data-action="open-detail"]'));
     assert.ok(root.querySelector('[data-action="download-application-archive"]'));
 
@@ -1570,7 +1570,7 @@ test('online queue and shared queue table expose column and action wrapping layo
     assert.ok(onlineTable.querySelector('td.staff-record-note-cell'));
     assert.ok(onlineTable.querySelector('td[data-label="Ad Soyad"]'));
     assert.ok(onlineTable.querySelector('td[data-label="Durum"]'));
-    assert.ok(onlineTable.querySelector('td[data-label="Pasaport No"]'));
+    assert.ok(onlineTable.querySelector('td[data-label="Öğrenci No"]'));
     assert.ok(onlineTable.querySelector('td[data-label="Gönderim Tarihi"]'));
     assert.ok(onlineTable.querySelector('td[data-label="Son Güncelleme"]'));
     assert.ok(onlineTable.querySelector('td[data-label="Detay"]'));

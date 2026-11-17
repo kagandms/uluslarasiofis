@@ -220,7 +220,7 @@ function createMigrationBulkExportAction(document, state, onExport) {
 function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer, noteOptions = null) {
     const table = document.createElement('table');
     table.className = 'staff-applications-table';
-    const headers = ['', 'Pasaport No', 'Ad Soyad', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
+    const headers = ['', 'Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
     const head = document.createElement('thead');
     const headerRow = document.createElement('tr');
     headers.forEach((header, index) => {
@@ -250,8 +250,9 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
         row.append(noteCell);
         if (item.id) noteEntries.push({ id: item.id, setNote });
         const values = [
-            item.passport_number,
+            item.student_number,
             [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
+            item.application_type === 'transition' ? 'Geçiş başvurusu' : item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru',
             readStatusLabel(item.status),
             formatDate(item.submitted_at || item.created_at),
             formatDate(item.updated_at)
