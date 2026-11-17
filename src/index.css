@@ -2122,12 +2122,12 @@ body.dark-mode .history-badge {
     text-align: left;
     overflow-wrap: break-word;
     word-break: normal;
-    vertical-align: top;
 }
 
 .staff-applications-table th {
     color: var(--text-secondary);
     font-size: 0.78rem;
+    vertical-align: top;
     white-space: nowrap;
 }
 
@@ -2135,6 +2135,8 @@ body.dark-mode .history-badge {
     color: var(--text-primary);
     font-size: 0.88rem;
     line-height: 1.25;
+    /* Veri hücrelerini satır içinde dikey olarak ortala */
+    vertical-align: middle;
 }
 
 .staff-applications-table td.staff-queue-actions-cell .btn,
