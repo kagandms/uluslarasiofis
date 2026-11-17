@@ -227,8 +227,9 @@ test('queue translates ready A4 state and preserves stale document warning', () 
     assert.match(root.textContent, /Hazır/);
     assert.match(root.textContent, /A4 güncel değil/);
     assert.doesNotMatch(root.textContent, /ready/);
-    assert.equal(root.querySelector('tbody tr td').textContent, '1');
-    assert.equal(root.querySelector('tbody tr td').dataset.label, 'Sıra');
+    assert.ok(root.querySelector('tbody tr td:first-child button'));
+    assert.equal(root.querySelector('tbody tr td[data-label="Sıra"]').textContent, '1');
+    assert.equal(root.querySelector('tbody tr td[data-label="Sıra"]').dataset.label, 'Sıra');
     assert.equal(root.querySelectorAll('input[type=date]').length, 2);
     root.querySelector('#staff-physical-from-date').value = '2026-10-01';
     root.querySelector('#staff-physical-to-date').value = '2026-10-13';
