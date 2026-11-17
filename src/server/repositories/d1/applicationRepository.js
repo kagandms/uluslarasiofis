@@ -217,7 +217,7 @@ export function createApplicationRepository(database) {
             if (!selected) return null;
             return this.findById(selected.id);
         },
-        async queryStaffApplications({ statuses, isDraft = false, isDeleted = false, includeDeleted = false, searchPattern, submittedAtFrom = null, submittedAtUntil = null, pageSize, offset }) {
+        async queryStaffApplications({ statuses, isDraft = false, isDeleted = false, includeDeleted = false, searchPattern, submittedAtFrom = null, submittedAtUntil = null, hasNote = null, pageSize, offset }) {
             const conditions = [isDraft && !isDeleted && !includeDeleted ? "applications.status = 'draft'"
                 : isDeleted || includeDeleted ? '1=1' : "applications.status <> 'draft'"];
             const queryValues = [];
@@ -254,6 +254,12 @@ export function createApplicationRepository(database) {
                     OR COALESCE(applications.passport_number, '') LIKE ? ESCAPE '\\'
                 )`);
                 queryValues.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+            }
+            const noteExistsClause = "EXISTS (SELECT 1 FROM staff_record_notes AS notes WHERE notes.record_kind = 'online' AND notes.record_id = applications.id)";
+            if (hasNote === 'yes') {
+                conditions.push(noteExistsClause);
+            } else if (hasNote === 'no') {
+                conditions.push(`NOT ${noteExistsClause}`);
             }
             const whereClause = conditions.join(' AND ');
             const pageResult = await database.prepare(`

@@ -72,13 +72,17 @@ function nextCalendarDate(date) {
 }
 
 function readApplicationQuery(body) {
-    const allowedKeys = new Set(['q', 'status', 'page', 'page_size', 'from_date', 'to_date']);
+    const allowedKeys = new Set(['q', 'status', 'page', 'page_size', 'from_date', 'to_date', 'has_note']);
     if (Object.keys(body).some((key) => !allowedKeys.has(key))) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Arama ve filtre bilgilerini kontrol edip tekrar deneyin.');
     }
     const statusFilter = body.status ?? 'all';
     if (typeof statusFilter !== 'string' || !Object.hasOwn(APPLICATION_STATUS_FILTERS, statusFilter)) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru durumu filtresini kontrol edip tekrar deneyin.');
+    }
+    const noteFilter = body.has_note === undefined ? 'all' : body.has_note;
+    if (typeof noteFilter !== 'string' || !['all', 'yes', 'no'].includes(noteFilter)) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Not filtresini kontrol edip tekrar deneyin.');
     }
     const pageSize = readPageNumber(body.page_size, 25, MAX_PAGE_SIZE);
     const maximumPage = Math.floor(Number.MAX_SAFE_INTEGER / pageSize);
@@ -95,6 +99,7 @@ function readApplicationQuery(body) {
         includeDeleted: statusFilter === 'archive_all',
         submittedAtFrom: fromDate ? istanbulMidnightUtc(fromDate) : null,
         submittedAtUntil: toDate ? istanbulMidnightUtc(nextCalendarDate(toDate)) : null,
+        hasNote: noteFilter === 'all' ? null : noteFilter,
         page: readPageNumber(body.page, 1, maximumPage),
         pageSize
     };
@@ -248,6 +253,7 @@ export async function queryStaffApplications(request, environment) {
         submittedAtFrom: query.submittedAtFrom,
         submittedAtUntil: query.submittedAtUntil,
         searchPattern: query.searchTerm ? escapeLikeTerm(query.searchTerm) : null,
+        hasNote: query.hasNote,
         pageSize: query.pageSize,
         offset
     });
