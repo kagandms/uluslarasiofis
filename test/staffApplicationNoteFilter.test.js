@@ -55,6 +55,7 @@ let syntheticSeedCounter = 0;
 async function seedOnlineApplication(database, {
     id = crypto.randomUUID(),
     studentNumber = `SYN-${String(++syntheticSeedCounter).padStart(4, '0')}-${id}`,
+    passportNumber = null,
     firstName = 'Sentetik',
     lastName = 'Başvuran',
     status = 'under_review',
@@ -68,10 +69,10 @@ async function seedOnlineApplication(database, {
     `).bind(studentId, studentNumber, studentNumber.toUpperCase()).run();
     await database.prepare(`
         INSERT INTO applications (
-            id, student_id, first_name, last_name, application_type, status, is_under_18,
+            id, student_id, passport_number, first_name, last_name, application_type, status, is_under_18,
             address_evidence_type, document_policy_version, reference_number, updated_at
-        ) VALUES (?, ?, ?, ?, 'initial', ?, 0, 'rental_contract', 1, ?, ?)
-    `).bind(id, studentId, firstName, lastName, status, referenceNumber, updatedAt).run();
+        ) VALUES (?, ?, ?, ?, ?, 'initial', ?, 0, 'rental_contract', 1, ?, ?)
+    `).bind(id, studentId, passportNumber, firstName, lastName, status, referenceNumber, updatedAt).run();
     return id;
 }
 
@@ -256,4 +257,30 @@ test('has_note validation rejects invalid values with VALIDATION_ERROR', async (
         assert.equal(payload.error.code, 'VALIDATION_ERROR');
         assert.equal(payload.error.message, 'Not filtresini kontrol edip tekrar deneyin.');
     }
+});
+
+test('staff queue DTO includes passport_number when present and null when absent', async () => {
+    const { environment, database } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+
+    await seedOnlineApplication(database, {
+        id: 'app-passport-1',
+        passportNumber: 'SYN-PASS-001',
+        updatedAt: '2026-11-17T10:02:00.000Z'
+    });
+    await seedOnlineApplication(database, {
+        id: 'app-passport-2',
+        passportNumber: null,
+        updatedAt: '2026-11-17T10:01:00.000Z'
+    });
+
+    const { response, payload } = await queryApplications(environment, cookie, {});
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+        payload.items.map((item) => ({ id: item.id, passport_number: item.passport_number })),
+        [
+            { id: 'app-passport-1', passport_number: 'SYN-PASS-001' },
+            { id: 'app-passport-2', passport_number: null }
+        ]
+    );
 });
