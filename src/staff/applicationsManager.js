@@ -1676,8 +1676,13 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 }
             } else {
                 await event('failed');
-                const reason = typeof result.reason === 'string' && result.reason ? ` Neden: ${result.reason.slice(0, 160)}` : '';
-                state.gocnetResults[applicationId] = `Sonuç doğrulanamadı. YÖKSİS’i kontrol edin; otomatik tekrar yapılmadı.${reason}`;
+                const rawReason = typeof result.reason === 'string' ? result.reason : '';
+                const isScreenGuardReason = /^(?:not_on_gocnet_screen|history_section_missing)\b/.test(rawReason);
+                const reason = rawReason ? ` Neden: ${rawReason.slice(0, 160)}` : '';
+                // Geçmiş aşamasında henüz kayıt açılmadığı için ekran hatasında kullanıcıyı doğrudan iletim ekranına yönlendirir.
+                state.gocnetResults[applicationId] = isScreenGuardReason
+                    ? 'Kayıt açılmadı. YÖKSİS sekmesini GöçNet iletim ekranına getirip tekrar deneyin.'
+                    : `Sonuç doğrulanamadı. YÖKSİS’i kontrol edin; otomatik tekrar yapılmadı.${reason}`;
             }
         } catch (error) {
             console.error('GöçNet preflight failed.', { errorName: error?.name || 'Error' });

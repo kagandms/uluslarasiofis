@@ -2,7 +2,9 @@
 // İkamet Portalı (Web Sayfası) ile Eklenti (Background) arasında köprü görevi görür.
 (() => {
     if (window !== window.top) return;
-    const BRIDGE_VERSION = '1.2.124';
+    const BRIDGE_VERSION = '1.2.130';
+    // Portalın desteklenen eklenti yeteneklerini algılayabilmesi için sabit özellik listesi
+    const BRIDGE_FEATURES = Object.freeze(['background_transfer']);
     const isStaffRoute = () => window.location.pathname === '/yetkili'
         || window.location.pathname.startsWith('/yetkili/');
     if (!isStaffRoute()) return;
@@ -49,10 +51,31 @@
         reportBridgeFailure(payload, error);
     }
 
+    function readScreenArea() {
+        const screenObj = window.screen || {};
+        return {
+            availLeft: Number.isFinite(screenObj.availLeft) ? screenObj.availLeft : 0,
+            availTop: Number.isFinite(screenObj.availTop) ? screenObj.availTop : 0,
+            availWidth: Number.isFinite(screenObj.availWidth) ? screenObj.availWidth : 0,
+            availHeight: Number.isFinite(screenObj.availHeight) ? screenObj.availHeight : 0
+        };
+    }
+
+    function isYknViewOpen() {
+        const yknView = document.getElementById('view-ykn');
+        const workspaceContent = document.getElementById('workspace-content');
+        return Boolean(
+            yknView
+            && !yknView.hidden
+            && !yknView.hasAttribute('hidden')
+            && (!workspaceContent || (!workspaceContent.hidden && !workspaceContent.hasAttribute('hidden')))
+        );
+    }
+
 // Sayfa yüklendiğinde portala eklenti köprüsünün hazır olduğunu bildir
 void hasStaffSession().then((isAuthenticated) => {
     if (!isAuthenticated || !isStaffRoute()) return;
-    window.postMessage({ source: 'EXTENSION', type: 'PONG', ready: true }, window.location.origin);
+    window.postMessage({ source: 'EXTENSION', type: 'PONG', ready: true, features: BRIDGE_FEATURES }, window.location.origin);
 });
 
 // Web sayfasından gelen mesajları dinle ve arka plana ilet
@@ -85,7 +108,8 @@ window.addEventListener('message', async (event) => {
                 source: 'EXTENSION',
                 type: 'PONG',
                 ready: true,
-                requestId: payload.requestId
+                requestId: payload.requestId,
+                features: BRIDGE_FEATURES
             }, window.location.origin);
         } catch (error) {
             reportBridgeFailure(payload, error);
@@ -105,9 +129,11 @@ window.addEventListener('message', async (event) => {
         }
 
         chrome.runtime.sendMessage({
+            ...payload,
             source: 'IKAMET_PORTAL',
             action: payload.action,
-            ...payload
+            screenArea: readScreenArea(),
+            yknViewOpen: isYknViewOpen()
         }, (response) => {
             if (typeof chrome !== 'undefined' && chrome.runtime?.lastError) {
                 reportBridgeFailure(payload, chrome.runtime.lastError);

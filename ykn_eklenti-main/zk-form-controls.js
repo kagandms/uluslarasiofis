@@ -1,5 +1,5 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.124') return;
+    if (window.YknZkForm?.version === '1.2.130') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
     const COUNTRY_ALIAS_GROUPS = [
@@ -514,18 +514,44 @@
             verified: target.input.value === options.phoneNational && widget.getValue?.() === options.phoneNational };
     }
 
+    const GOCNET_HEADING_SELECTOR = 'h1, h2, h3, h4, h5, legend, .z-caption, .z-groupbox-legend';
+
+    // GöçNet geçmiş sorgusu başarısız olduğunda kişisel veri veya URL içermeyen kısa özet üretir.
+    function summarizeGocnetQueryContext(documents) {
+        let headingCount = 0;
+        let listboxCount = 0;
+        let hasScreenHeading = false;
+        for (const targetDocument of documents) {
+            const visibleHeadings = Array.from(targetDocument.querySelectorAll(GOCNET_HEADING_SELECTOR)).filter(isVisible);
+            headingCount += visibleHeadings.filter((heading) =>
+                normalizeCompact(heading.textContent).startsWith('kayitliikametislemlerilistesi')).length;
+            if (!hasScreenHeading && visibleHeadings.some((heading) =>
+                normalizeCompact(heading.textContent).startsWith('ikametiznibasvurubelgeleriningocneteiletilmesi'))) {
+                hasScreenHeading = true;
+            }
+            listboxCount += targetDocument.querySelectorAll('.z-listbox').length;
+        }
+        return {
+            documentCount: documents.length,
+            headingCount,
+            listboxCount,
+            hasScreenHeading,
+            summary: `belge: ${documents.length}, başlık: ${headingCount}, liste: ${listboxCount}, ekran başlığı: ${hasScreenHeading ? 'var' : 'yok'}`
+        };
+    }
+
     async function queryGocnetRecords(options) {
         if (!/^20\d{2}-\d{2}-\d{5,8}$/.test(options.applicationNumber || '')
             || typeof options.requestId !== 'string' || options.requestId.length < 1 || options.requestId.length > 128) {
             throw new Error('GöçNet sorgu isteği doğrulanamadı.');
         }
         await waitForIdle();
-        const diagnostics = [];
-        const targets = collectDocuments().map((targetDocument) => {
-            const headings = Array.from(targetDocument.querySelectorAll('h1, h2, h3, h4, h5, legend, .z-caption, .z-groupbox-legend'))
+        const documents = collectDocuments();
+        const targets = documents.map((targetDocument) => {
+            const headings = Array.from(targetDocument.querySelectorAll(GOCNET_HEADING_SELECTOR))
                 .filter((heading) => isVisible(heading)
                     && normalizeCompact(heading.textContent).startsWith('kayitliikametislemlerilistesi'));
-            if (headings.length !== 1) { diagnostics.push(`h${headings.length}`); return null; }
+            if (headings.length !== 1) return null;
             const hasHistoryHeaders = (list) => Array.from(list.querySelectorAll('.z-listbox-header th'))
                 .map((cell) => normalizeCompact(cell.textContent))
                 .filter((header) => ['eikametbasvuruno', 'ogrencino', 'gocnetkayitno'].includes(header)).length === 3;
@@ -535,7 +561,7 @@
                 lists = Array.from(section.querySelectorAll('.z-listbox')).filter(hasHistoryHeaders);
                 if (lists.length) break;
             }
-            if (lists.length !== 1) { diagnostics.push(`l${lists.length}`); return null; }
+            if (lists.length !== 1) return null;
             const numbers = Array.from(section.querySelectorAll('input[placeholder="Tüm veya kısmi no..."]')).filter(isVisible);
             const students = Array.from(section.querySelectorAll('input[placeholder="Öğrenci no..."]')).filter(isVisible);
             const processFilters = Array.from(section.querySelectorAll('select')).filter(isVisible);
@@ -544,12 +570,18 @@
             if (numbers.length !== 1 || students.length !== 1 || students[0].value.trim() || processFilters.length !== 1
                 || normalizeCompact(processFilters[0].selectedOptions?.[0]?.textContent) !== 'tumu'
                 || buttons.length !== 1 || buttons[0].disabled) {
-                diagnostics.push(`n${numbers.length}s${students.length}p${processFilters.length}b${buttons.length}`);
                 return null;
             }
             return { targetDocument, list: lists[0], number: numbers[0], process: processFilters[0], button: buttons[0] };
         }).filter(Boolean);
-        if (targets.length !== 1) throw new Error(`GöçNet kayıt listesi belirsiz veya filtreleri kısıtlı. [docs=${diagnostics.length}/${targets.length} ${diagnostics.join(',')}]`);
+        if (targets.length !== 1) {
+            const context = summarizeGocnetQueryContext(documents);
+            if (context.headingCount === 0) {
+                const reasonCode = context.hasScreenHeading ? 'history_section_missing' : 'not_on_gocnet_screen';
+                throw new Error(`${reasonCode} (${context.summary})`);
+            }
+            throw new Error(`GöçNet kayıt listesi belirsiz veya filtreleri kısıtlı. (${context.summary})`);
+        }
         const target = targets[0];
         const targetWindow = target.targetDocument.defaultView;
         const numberWidget = findZkWidget(target.number, targetWindow);
@@ -750,5 +782,5 @@
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.124', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.130', execute });
 })();

@@ -10,6 +10,8 @@ const STAFF_PORTAL_PATTERN_SOURCE = 'bridge.js';
 const TEMPORARY_STORAGE_TIMESTAMP_KEY = 'temporaryStudentDataSavedAt';
 const TEMPORARY_STUDENT_DATA_KEYS = ['studentData', 'pendingPassportCrop', 'croppedPhotoBase64'];
 const YOKSIS_TAB_STORAGE_KEY = 'activeYoksisTabId';
+const YOKSIS_SIDE_BY_SIDE_STORAGE_KEY = 'yoksisSideBySideEnabled';
+const YOKSIS_SIDE_WINDOW_STATE_KEY = 'yoksisSideBySideWindowState';
 
 let ikametTabId = null;
 let applyTabId = null;
@@ -577,13 +579,254 @@ function writeSessionYoksisTabId(tabId) {
     });
 }
 
-async function getBackgroundYoksisTab() {
+// Ekran ve yan yana pencere yerleştirme yardımcıları
+function parseScreenArea(screenArea) {
+    if (!screenArea || typeof screenArea !== 'object' || Array.isArray(screenArea)) return null;
+    const availLeft = Number.isFinite(screenArea.availLeft) ? screenArea.availLeft : 0;
+    const availTop = Number.isFinite(screenArea.availTop) ? screenArea.availTop : 0;
+    const availWidth = screenArea.availWidth;
+    const availHeight = screenArea.availHeight;
+    if (!Number.isFinite(availWidth) || !Number.isFinite(availHeight) || availWidth < 2 || availHeight < 1) {
+        return null;
+    }
+    return {
+        availLeft: Math.round(availLeft),
+        availTop: Math.round(availTop),
+        availWidth: Math.round(availWidth),
+        availHeight: Math.round(availHeight)
+    };
+}
+
+function buildSideBySideWindowBounds(screenArea) {
+    const leftWidth = Math.floor(screenArea.availWidth / 2);
+    const rightWidth = screenArea.availWidth - leftWidth;
+    return {
+        portalBounds: {
+            left: screenArea.availLeft,
+            top: screenArea.availTop,
+            width: leftWidth,
+            height: screenArea.availHeight
+        },
+        yoksisBounds: {
+            left: screenArea.availLeft + leftWidth,
+            top: screenArea.availTop,
+            width: rightWidth,
+            height: screenArea.availHeight
+        }
+    };
+}
+
+// Yan yana pencere yerleştirme varsayılan olarak kapalıdır; yalnızca açıkça true kaydedildiğinde etkinleşir.
+function isYoksisSideBySideEnabled() {
+    const localStorage = chrome.storage?.local;
+    if (!localStorage?.get) return Promise.resolve(false);
+    return new Promise((resolve) => {
+        localStorage.get(YOKSIS_SIDE_BY_SIDE_STORAGE_KEY, (stored) => {
+            if (chrome.runtime?.lastError) {
+                resolve(false);
+                return;
+            }
+            resolve(stored?.[YOKSIS_SIDE_BY_SIDE_STORAGE_KEY] === true);
+        });
+    });
+}
+
+function readSessionSideBySideWindowState() {
+    const sessionStorage = chrome.storage?.session;
+    if (!sessionStorage?.get) return Promise.resolve(null);
+    return new Promise((resolve) => {
+        sessionStorage.get(YOKSIS_SIDE_WINDOW_STATE_KEY, (stored) => {
+            const state = stored?.[YOKSIS_SIDE_WINDOW_STATE_KEY];
+            if (!state || typeof state !== 'object') {
+                resolve(null);
+                return;
+            }
+            resolve({
+                yoksisWindowId: Number.isInteger(state.yoksisWindowId) ? state.yoksisWindowId : null,
+                portalWindowId: Number.isInteger(state.portalWindowId) ? state.portalWindowId : null
+            });
+        });
+    });
+}
+
+function writeSessionSideBySideWindowState(state) {
+    const sessionStorage = chrome.storage?.session;
+    if (!sessionStorage?.set) return Promise.resolve();
+    return new Promise((resolve) => {
+        sessionStorage.set({ [YOKSIS_SIDE_WINDOW_STATE_KEY]: state }, () => resolve());
+    });
+}
+
+async function resolveSideBySideWindowPlan(request) {
+    if (request?.yknViewOpen !== true) return null;
+    const screenArea = parseScreenArea(request?.screenArea);
+    if (!screenArea) return null;
+    if (!await isYoksisSideBySideEnabled()) return null;
+
+    const { portalBounds, yoksisBounds } = buildSideBySideWindowBounds(screenArea);
+    let portalWindowId = Number.isInteger(request?.portalSenderTab?.windowId)
+        ? request.portalSenderTab.windowId
+        : null;
+    if (!Number.isInteger(portalWindowId) && Number.isInteger(request?.portalSenderTab?.id)) {
+        const senderTab = await readTabById(request.portalSenderTab.id);
+        if (Number.isInteger(senderTab?.windowId)) portalWindowId = senderTab.windowId;
+    }
+
+    return {
+        portalBounds,
+        yoksisBounds,
+        portalWindowId,
+        yoksisCreatedInNewWindow: false,
+        portalPlaced: false,
+        portalPlacementAttempted: false
+    };
+}
+
+async function moveWindowToBounds(windowId, bounds) {
+    if (!Number.isInteger(windowId) || !bounds || typeof chrome.windows?.update !== 'function') return false;
+    try {
+        if (typeof chrome.windows.get === 'function') {
+            await chrome.windows.get(windowId);
+        }
+        await chrome.windows.update(windowId, { state: 'normal' });
+        await chrome.windows.update(windowId, {
+            left: bounds.left,
+            top: bounds.top,
+            width: bounds.width,
+            height: bounds.height
+        });
+        return true;
+    } catch (error) {
+        console.warn('[YKN] Pencere konumu güncellenemedi:', { errorName: error?.name || 'Error' });
+        return false;
+    }
+}
+
+async function arrangeSideBySideWindows(yoksisTab, sideWindowPlan) {
+    if (!sideWindowPlan || !yoksisTab) return yoksisTab;
+    const { portalWindowId, portalBounds, yoksisBounds, yoksisCreatedInNewWindow } = sideWindowPlan;
+    const sessionState = await readSessionSideBySideWindowState();
+    let currentYoksisTab = yoksisTab;
+    let yoksisPlacedWindowId = Number.isInteger(currentYoksisTab.windowId) ? currentYoksisTab.windowId : null;
+    let portalPlaced = false;
+
+    const alreadyPlacedPair = Number.isInteger(yoksisPlacedWindowId)
+        && Number.isInteger(portalWindowId)
+        && yoksisPlacedWindowId !== portalWindowId
+        && sessionState?.yoksisWindowId === yoksisPlacedWindowId
+        && sessionState?.portalWindowId === portalWindowId;
+
+    if (alreadyPlacedPair) {
+        sideWindowPlan.portalPlaced = true;
+        sideWindowPlan.portalPlacementAttempted = true;
+        return currentYoksisTab;
+    }
+
+    if (yoksisCreatedInNewWindow && Number.isInteger(yoksisPlacedWindowId)) {
+        // YÖKSİS sağ yarıda yeni pencerede açıldı; portal penceresini sol yarıya taşı.
+        if (Number.isInteger(portalWindowId)) {
+            sideWindowPlan.portalPlacementAttempted = true;
+            portalPlaced = await moveWindowToBounds(portalWindowId, portalBounds);
+            sideWindowPlan.portalPlaced = portalPlaced;
+        }
+        await writeSessionSideBySideWindowState({
+            yoksisWindowId: yoksisPlacedWindowId,
+            portalWindowId: portalPlaced ? portalWindowId : (sessionState?.portalWindowId ?? null)
+        });
+        return currentYoksisTab;
+    }
+
+    const sharesPortalWindow = Number.isInteger(portalWindowId)
+        && Number.isInteger(currentYoksisTab.windowId)
+        && currentYoksisTab.windowId === portalWindowId;
+
+    if (sharesPortalWindow) {
+        if (typeof chrome.windows?.create === 'function') {
+            try {
+                const createdWindow = await chrome.windows.create({
+                    tabId: currentYoksisTab.id,
+                    state: 'normal',
+                    focused: false,
+                    left: yoksisBounds.left,
+                    top: yoksisBounds.top,
+                    width: yoksisBounds.width,
+                    height: yoksisBounds.height
+                });
+                if (Number.isInteger(createdWindow?.id)) {
+                    yoksisPlacedWindowId = createdWindow.id;
+                    currentYoksisTab = { ...currentYoksisTab, windowId: createdWindow.id };
+                } else {
+                    yoksisPlacedWindowId = null;
+                }
+            } catch (error) {
+                console.warn('[YKN] YÖKSİS sekmesi yeni pencereye taşınamadı:', {
+                    errorName: error?.name || 'Error'
+                });
+                yoksisPlacedWindowId = null;
+            }
+        } else {
+            yoksisPlacedWindowId = null;
+        }
+    } else if (Number.isInteger(yoksisPlacedWindowId) && sessionState?.yoksisWindowId !== yoksisPlacedWindowId) {
+        const movedYoksis = await moveWindowToBounds(yoksisPlacedWindowId, yoksisBounds);
+        if (!movedYoksis) yoksisPlacedWindowId = null;
+    }
+
+    if (Number.isInteger(portalWindowId)) {
+        sideWindowPlan.portalPlacementAttempted = true;
+        portalPlaced = await moveWindowToBounds(portalWindowId, portalBounds);
+        sideWindowPlan.portalPlaced = portalPlaced;
+    }
+
+    if (Number.isInteger(yoksisPlacedWindowId) && (!Number.isInteger(portalWindowId) || yoksisPlacedWindowId !== portalWindowId)) {
+        await writeSessionSideBySideWindowState({
+            yoksisWindowId: yoksisPlacedWindowId,
+            portalWindowId: portalPlaced ? portalWindowId : (sessionState?.portalWindowId ?? null)
+        });
+    }
+
+    return currentYoksisTab;
+}
+
+async function getBackgroundYoksisTab(sideWindowPlan = null) {
     const startedAt = startYknTiming();
     let yoksisTab;
     try {
         yoksisTab = await resolveYoksisTab();
     } catch (_) {
-        yoksisTab = await createTab({ url: YOKSIS_URL, active: false });
+        if (sideWindowPlan?.yoksisBounds && typeof chrome.windows?.create === 'function') {
+            try {
+                const createdWindow = await chrome.windows.create({
+                    url: YOKSIS_URL,
+                    focused: false,
+                    state: 'normal',
+                    left: sideWindowPlan.yoksisBounds.left,
+                    top: sideWindowPlan.yoksisBounds.top,
+                    width: sideWindowPlan.yoksisBounds.width,
+                    height: sideWindowPlan.yoksisBounds.height
+                });
+                let createdTab = createdWindow?.tabs?.[0] || null;
+                if (!createdTab && Number.isInteger(createdWindow?.id)) {
+                    const windowTabs = await queryTabs({ windowId: createdWindow.id });
+                    createdTab = windowTabs?.[0] || null;
+                }
+                if (createdTab && Number.isInteger(createdTab.id)) {
+                    yoksisTab = Number.isInteger(createdTab.windowId)
+                        ? createdTab
+                        : { ...createdTab, windowId: createdWindow.id };
+                    sideWindowPlan.yoksisCreatedInNewWindow = true;
+                } else {
+                    throw new Error('Yeni YÖKSİS penceresinde sekme oluşturulamadı.');
+                }
+            } catch (error) {
+                console.warn('[YKN] YÖKSİS penceresi açılamadı, sekme olarak açılıyor:', {
+                    errorName: error?.name || 'Error'
+                });
+                yoksisTab = await createTab({ url: YOKSIS_URL, active: false });
+            }
+        } else {
+            yoksisTab = await createTab({ url: YOKSIS_URL, active: false });
+        }
         yoksisTabId = yoksisTab.id;
         await writeSessionYoksisTabId(yoksisTab.id);
     }
@@ -1776,10 +2019,34 @@ async function fillStoredYoksisStudent(request) {
     });
 }
 
+// Son content-script arama hatasını veya olumsuz yanıtını tekilleştirilmiş hata teşhisi için tutar.
+let lastContentSearchFailure = null;
+
 async function searchYoksisFromContent(tabId, kabulId, requestId, expectedStudent = null) {
+    // Önceki aramadan kalan başarısızlık bilgisini yeni çağrı başında temizle.
+    lastContentSearchFailure = null;
+    const sanitizeFailureMessage = (rawMessage, fallbackMessage = '') => {
+        let text = String(rawMessage || '').replace(/\s+/g, ' ').trim();
+        // Öğrenci pasaport veya kabul kodu varsa teşhis mesajına sızmasını engelle.
+        const sensitiveTokens = [
+            kabulId,
+            expectedStudent?.passportNo,
+            expectedStudent?.pasaportNo
+        ].filter((value) => typeof value === 'string' && value.trim().length >= 4);
+        for (const token of sensitiveTokens) {
+            const escaped = token.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            text = text.replace(new RegExp(escaped, 'gi'), '');
+        }
+        text = text.replace(/\s+/g, ' ').trim();
+        if (!text && fallbackMessage) {
+            text = String(fallbackMessage).replace(/\s+/g, ' ').trim();
+        }
+        return text.slice(0, 160);
+    };
+
     try {
         await waitForContentScript(tabId, 'yoksis', { frameId: 0 });
-        return await withTimeout(
+        const response = await withTimeout(
             sendTabMessage(tabId, {
                 action: 'searchWithId',
                 kabulId,
@@ -1789,8 +2056,28 @@ async function searchYoksisFromContent(tabId, kabulId, requestId, expectedStuden
             YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS,
             'YÖKSİS arama zaman aşımı'
         );
+        if (response && response.success === false) {
+            const rawFailureMessage = typeof response.message === 'string' && response.message.trim()
+                ? response.message
+                : (typeof response.error === 'string' && response.error.trim() ? response.error : '');
+            const sanitized = sanitizeFailureMessage(rawFailureMessage);
+            if (sanitized) {
+                lastContentSearchFailure = {
+                    requestId,
+                    errorName: 'ContentResponseFailure',
+                    message: sanitized
+                };
+            }
+        }
+        return response;
     } catch (error) {
-        console.warn('[YKN] Content-script YÖKSİS araması başarısız:', { errorName: error?.name || 'Error' });
+        const errorName = error?.name || 'Error';
+        lastContentSearchFailure = {
+            requestId,
+            errorName,
+            message: sanitizeFailureMessage(error?.message, errorName)
+        };
+        console.warn('[YKN] Content-script YÖKSİS araması başarısız:', { errorName });
         return null;
     }
 }
@@ -1811,12 +2098,16 @@ async function getYoksisFormState(tabId, requestId) {
 }
 
 async function waitForYoksisFormReady(tabId, requestId, options = {}) {
+    const rawTimeoutMs = options?.timeoutMs;
+    const timeoutMs = Number.isFinite(rawTimeoutMs)
+        ? Math.min(10_000, Math.max(1_000, Math.round(rawTimeoutMs)))
+        : 10_000;
     try {
         await waitForContentScript(tabId, 'yoksis', { frameId: 0 });
         const readiness = await withTimeout(
             sendTabMessage(tabId, {
                 action: 'WAIT_YOKSIS_FORM',
-                timeoutMs: 10000,
+                timeoutMs,
                 requestId,
                 afterFingerprint: options.afterFingerprint || '',
                 afterDomRevision: options.afterDomRevision,
@@ -1825,7 +2116,7 @@ async function waitForYoksisFormReady(tabId, requestId, options = {}) {
                 requireBoundSearch: options.requireBoundSearch === true,
                 expectedKabulId: options.expectedKabulId || ''
             }, { frameId: 0 }),
-            11_000,
+            timeoutMs + 1000,
             'YÖKSİS formu hazır olma zaman aşımı'
         );
         if (readiness && readiness.formReady === false && readiness.message) {
@@ -1893,7 +2184,7 @@ function readTabById(tabId) {
  * @param {chrome.tabs.Tab|null} senderTab Sender tab of the portal request, as provided by runtime.onMessage.
  * @returns {Promise<boolean>} Whether the portal tab was activated.
  */
-async function returnToPortalTab(senderTab = null) {
+async function returnToPortalTab(senderTab = null, sideWindowPlan = null) {
     try {
         let portalTab = senderTab && typeof senderTab.id === 'number' && isAllowedPortalUrl(senderTab.url || '')
             ? senderTab
@@ -1904,12 +2195,101 @@ async function returnToPortalTab(senderTab = null) {
             portalTab = await readTabById(portalTabId);
         }
         if (!portalTab) return false;
+        if (sideWindowPlan && !sideWindowPlan.portalPlacementAttempted && portalTab.windowId && sideWindowPlan.portalBounds) {
+            sideWindowPlan.portalPlacementAttempted = true;
+            sideWindowPlan.portalPlaced = await moveWindowToBounds(portalTab.windowId, sideWindowPlan.portalBounds);
+        }
         await updateTab(portalTab.id, { active: true });
-        if (portalTab.windowId) await chrome.windows.update(portalTab.windowId, { focused: true }).catch(() => {});
+        if (portalTab.windowId) {
+            await chrome.windows.update(portalTab.windowId, { focused: true }).catch((error) => {
+                console.warn('[YKN] Portal penceresi odaklanamadı:', { errorName: error?.name || 'Error' });
+            });
+        }
         return true;
     } catch (_) {
         return false;
     }
+}
+
+/**
+ * Arka plan aramasında kullanıcı müdahalesi gerektiğinde YÖKSİS sekmesini ve penceresini öne alır.
+ * @param {chrome.tabs.Tab|null} yoksisTab
+ * @returns {Promise<boolean>}
+ */
+async function surfaceYoksisTab(yoksisTab) {
+    if (!Number.isInteger(yoksisTab?.id)) return false;
+    try {
+        await updateTab(yoksisTab.id, { active: true });
+    } catch (error) {
+        console.warn('[YKN] YÖKSİS sekmesi öne getirilemedi:', { errorName: error?.name || 'Error' });
+    }
+    if (Number.isInteger(yoksisTab.windowId) && typeof chrome.windows?.update === 'function') {
+        try {
+            await chrome.windows.update(yoksisTab.windowId, { focused: true });
+        } catch (error) {
+            console.warn('[YKN] YÖKSİS penceresi odaklanamadı:', { errorName: error?.name || 'Error' });
+        }
+    }
+    return true;
+}
+
+/**
+ * Arka plan araması başarısız olduğunda veya manuel onay gerektirdiğinde neden kodunu üretir.
+ * @param {object|null|undefined} response
+ * @returns {'manual_confirmation'|'search_failed'}
+ */
+function resolveBackgroundAttentionReason(response) {
+    if (response?.manualOverrideAvailable === true) {
+        return 'manual_confirmation';
+    }
+    return 'search_failed';
+}
+
+/**
+ * Arka plan modunda dönen yanıtı sözleşme alanlarıyla tamamlar; form doğrulandıysa portala döner,
+ * aksi durumda YÖKSİS sekmesini öne alır (veya önde bırakır).
+ * @param {object} response
+ * @param {chrome.tabs.Tab|null} yoksisTab
+ * @param {chrome.tabs.Tab|null} portalSenderTab
+ * @param {boolean} alreadySurfaced
+ * @returns {Promise<object>}
+ */
+async function finalizeBackgroundTransferResponse(response, yoksisTab, portalSenderTab = null, alreadySurfaced = false) {
+    const isFormVerified = response?.success === true && response?.formReady === true;
+    if (isFormVerified) {
+        await returnToPortalTab(portalSenderTab);
+        return {
+            ...response,
+            background: true,
+            surfaced: false,
+            briefSurface: true
+        };
+    }
+    const surfaced = alreadySurfaced || await surfaceYoksisTab(yoksisTab);
+    return {
+        ...response,
+        background: true,
+        surfaced,
+        ...(surfaced ? { attentionReason: resolveBackgroundAttentionReason(response) } : {})
+    };
+}
+
+/**
+ * Arka plan aramasında fırlatılan hataları kullanıcıya yüzeye çıkarılan yanıt formatına dönüştürür.
+ * @param {Error|unknown} error
+ * @param {chrome.tabs.Tab|null} yoksisTab
+ * @param {string|undefined} requestId
+ * @param {number} totalStartedAt
+ * @param {chrome.tabs.Tab|null} portalSenderTab
+ * @param {boolean} alreadySurfaced
+ * @returns {Promise<object>}
+ */
+async function handleBackgroundTransferError(error, yoksisTab, requestId, totalStartedAt, portalSenderTab = null, alreadySurfaced = false) {
+    finishYknTiming('yoksis-transfer-total', totalStartedAt, 'failed', 'transfer_failed', requestId);
+    return finalizeBackgroundTransferResponse({
+        success: false,
+        error: error?.message || 'YÖKSİS araması tamamlanamadı.'
+    }, yoksisTab, portalSenderTab, alreadySurfaced);
 }
 
 async function transferToYoksis(request) {
@@ -1923,27 +2303,50 @@ async function transferToYoksis(request) {
 }
 
 async function transferToYoksisOperation(request, totalStartedAt) {
-    // Kabul kodu okunduktan sonra YÖKSİS sekmesi bulunur veya açılır;
-    // YKN Talebi V2 ekranı güvenli biçimde açılıp kod aratılır.
-    const kabulId = String(request.data?.yoksisId || request.data?.kabulId || request.kabulId || '')
-        .replace(/[–—−]/g, '-')
-        .replace(/\s*-\s*/g, '-')
-        // OCR tireyi kaybettiyse "821 EC2 34" biçimini kanonik hale getir.
-        .replace(/\s+/g, '-')
-        .trim()
-        .toUpperCase();
-    if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
-    const yoksisTab = await getBackgroundYoksisTab();
+    const isBackgroundMode = request?.background === true;
+    const opStartedAt = Date.now();
+    let searchMs = 0;
+    let firstWaitMs = 0;
+    let retryMs = 0;
+    // Arka plan yanıtlarına eklenecek tamsayı aşama sürelerini üretir (öğrenci verisi içermez).
+    const buildPhaseMs = () => ({
+        searchMs,
+        firstWaitMs,
+        retryMs,
+        totalMs: Math.max(0, Math.round(Date.now() - opStartedAt))
+    });
+    let yoksisTab = null;
+    let alreadySurfaced = false;
 
-    const expectedStudent = {
-        passportNo: request.data?.pasaportNo || request.data?.passportNo || '',
-        studentName: request.data?.ad || request.data?.name || request.data?.adi || request.data?.firstName || '',
-        studentSurname: request.data?.soyad || request.data?.surname || request.data?.soyadi || request.data?.lastName || '',
-        motherName: request.data?.anneAdi || '',
-        fatherName: request.data?.babaAdi || ''
-    };
+    try {
+        // Kabul kodu okunduktan sonra YÖKSİS sekmesi bulunur veya açılır;
+        // YKN Talebi V2 ekranı güvenli biçimde açılıp kod aratılır.
+        const kabulId = String(request.data?.yoksisId || request.data?.kabulId || request.kabulId || '')
+            .replace(/[–—−]/g, '-')
+            .replace(/\s*-\s*/g, '-')
+            // OCR tireyi kaybettiyse "821 EC2 34" biçimini kanonik hale getir.
+            .replace(/\s+/g, '-')
+            .trim()
+            .toUpperCase();
+        if (!kabulId) throw new Error('Kabul Mektup ID bulunamadı.');
+        const sideWindowPlan = isBackgroundMode ? null : await resolveSideBySideWindowPlan(request);
+        yoksisTab = await getBackgroundYoksisTab(sideWindowPlan);
+        if (!isBackgroundMode) {
+            yoksisTab = await arrangeSideBySideWindows(yoksisTab, sideWindowPlan);
+        } else {
+            // Pasif YÖKSİS sekmesinde gezinme ve ZK yavaşladığı için kısa arama penceresinde sekme öne alınır.
+            alreadySurfaced = await surfaceYoksisTab(yoksisTab);
+        }
 
-    const performSearch = async () => {
+        const expectedStudent = {
+            passportNo: request.data?.pasaportNo || request.data?.passportNo || '',
+            studentName: request.data?.ad || request.data?.name || request.data?.adi || request.data?.firstName || '',
+            studentSurname: request.data?.soyad || request.data?.surname || request.data?.soyadi || request.data?.lastName || '',
+            motherName: request.data?.anneAdi || '',
+            fatherName: request.data?.babaAdi || ''
+        };
+
+        const performSearch = async () => {
         await saveTemporaryStudentData(request.data);
 
         await waitForContentScript(yoksisTab.id, 'yoksis', { frameId: 0 });
@@ -1964,6 +2367,9 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         // MAIN world yalnızca bu yol arama kontrolünü hiç bulamazsa fallback'tir.
         const searchStartedAt = startYknTiming();
         let response = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId, expectedStudent);
+        if (isBackgroundMode) {
+            searchMs = Math.max(0, Math.round(Date.now() - opStartedAt));
+        }
         reportYknTiming('acceptance-input-readiness', response?.timing?.inputReadyDurationMs,
             response?.timing ? 'ok' : 'unavailable', response?.timing ? undefined : 'timing_unavailable', request.requestId);
         reportYknTiming('acceptance-id-write-and-verification', response?.timing?.inputWriteDurationMs,
@@ -1984,7 +2390,12 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             // formunun fallback sonunda "hazır" sayılmasını engeller.
             const stateBeforeMainSearch = await getYoksisFormState(yoksisTab.id, request.requestId);
             if (!stateBeforeMainSearch || stateBeforeMainSearch.hasPopulatedStudentForm !== false) {
-                throw new Error('YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin.');
+                // Aynı istek için content-script hatası veya reddi kaydedildiyse kök nedeni ekle.
+                const failureReason = lastContentSearchFailure?.requestId === request.requestId
+                    ? lastContentSearchFailure.message
+                    : '';
+                const reasonSuffix = failureReason ? ` Neden: ${failureReason}` : '';
+                throw new Error(`YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin.${reasonSuffix}`);
             }
             const formValidationStartedAt = startYknTiming();
             const mainSearch = await runVerifiedMainWorldSearch(
@@ -2009,6 +2420,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         }
         finishYknTiming('acceptance-id-input-and-search', searchStartedAt, 'ok', undefined, request.requestId);
 
+        let waitOptions = null;
         if (response?.searchTriggered === true && response.formReady !== true) {
             if (response.message && response.message.startsWith('YÖKSİS:')) {
                 throw new Error(response.message);
@@ -2016,7 +2428,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             const hasFreshBaseline = typeof response.formFingerprintBeforeSearch === 'string'
                 && Number.isFinite(response.domRevisionBeforeSearch);
             if (hasFreshBaseline) {
-                const waitOptions = {
+                waitOptions = {
                     expectedKabulId: kabulId,
                     afterFingerprint: response.formFingerprintBeforeSearch,
                     afterDomRevision: response.domRevisionBeforeSearch,
@@ -2024,7 +2436,11 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                     expectedStudent
                 };
                 const formValidationStartedAt = startYknTiming();
+                const firstWaitStartedAt = isBackgroundMode ? Date.now() : 0;
                 const delayedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, waitOptions);
+                if (isBackgroundMode) {
+                    firstWaitMs = Math.max(0, Math.round(Date.now() - firstWaitStartedAt));
+                }
                 if (delayedFormReady) {
                     finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'ok', undefined, request.requestId);
                     finishYknTiming('yoksis-transfer-total', totalStartedAt, 'ok', undefined, request.requestId);
@@ -2078,6 +2494,10 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 throw new Error('Kabul kodu gönderildi ancak yeni YÖKSİS öğrenci formu doğrulanmadı. Aynı arama otomatik tekrar gönderilmedi.');
             }
             const target = await getVerifiedYoksisTarget(yoksisTab.id);
+            const delayedErrorReason = isBackgroundMode && typeof waitOptions?.lastErrorMessage === 'string'
+                ? waitOptions.lastErrorMessage.replace(/\s+/g, ' ').trim().slice(0, 160)
+                : '';
+            const delayedReasonSuffix = delayedErrorReason ? ` Neden: ${delayedErrorReason}` : '';
             const manualResponse = {
                 success: true,
                 transferred: true,
@@ -2086,7 +2506,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 manualOverrideAvailable: true,
                 yoksisSearchRequestId: request.requestId,
                 ...target,
-                message: 'Kabul kodu aratıldı; form otomatik doğrulanamadı. YÖKSİS kaydını kontrol edip manuel aktarımı seçebilirsiniz.'
+                message: `Kabul kodu aratıldı; form otomatik doğrulanamadı. YÖKSİS kaydını kontrol edip manuel aktarımı seçebilirsiniz.${delayedReasonSuffix}`
             };
             finishYknTiming('yoksis-transfer-total', totalStartedAt, 'partial', 'manual_confirmation_required', request.requestId);
             return manualResponse;
@@ -2102,25 +2522,65 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             ...(await getVerifiedYoksisTarget(yoksisTab.id)),
             message: 'Kabul mektup kodu YÖKSİS\'e aktarıldı ve öğrenci formu doğrulandı.'
         };
-    };
-    return runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
-        await updateTab(yoksisTab.id, { active: true });
-        if (yoksisTab.windowId) await chrome.windows.update(yoksisTab.windowId, { focused: true });
-        const response = await performSearch();
-        if (response.success && (response.formReady || response.manualOverrideAvailable)) {
-            await saveTemporaryStudentData({ ...request.data, yoksisId: kabulId,
-                yoksisReady: response.formReady === true,
-                yoksisManualOverrideAvailable: response.manualOverrideAvailable === true,
-                yoksisSearchRequestId: response.yoksisSearchRequestId || request.requestId,
-                yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
-        }
-        // Portal'dan başlatılan aramada kabul kodu YÖKSİS'te doğrulanınca kullanıcıyı tekrar portal sekmesine al.
-        // Manuel onay gereken durumda YÖKSİS sekmesi açık kalır ki kayıt kontrol edilebilsin.
-        if (response.success && response.formReady === true && request.portalSenderTab) {
-            await returnToPortalTab(request.portalSenderTab);
-        }
-        return response;
-    });
+        };
+        return await runYoksisOperation(yoksisTab.id, 'search', request.requestId, async () => {
+            if (!isBackgroundMode) {
+                await updateTab(yoksisTab.id, { active: true });
+                if (yoksisTab.windowId) {
+                    await chrome.windows.update(yoksisTab.windowId, { focused: true }).catch((error) => {
+                        console.warn('YÖKSİS window focus failed.', { errorName: error?.name || 'Error' });
+                    });
+                }
+            }
+            try {
+                const response = await performSearch();
+                if (response.success && (response.formReady || response.manualOverrideAvailable)) {
+                    await saveTemporaryStudentData({ ...request.data, yoksisId: kabulId,
+                        yoksisReady: response.formReady === true,
+                        yoksisManualOverrideAvailable: response.manualOverrideAvailable === true,
+                        yoksisSearchRequestId: response.yoksisSearchRequestId || request.requestId,
+                        yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
+                }
+                if (isBackgroundMode) {
+                    const finalized = await finalizeBackgroundTransferResponse(
+                        response,
+                        yoksisTab,
+                        request.portalSenderTab,
+                        alreadySurfaced
+                    );
+                    return { ...finalized, phaseMs: buildPhaseMs() };
+                }
+                // Portal'dan başlatılan aramada kabul kodu YÖKSİS'te doğrulanınca kullanıcıyı tekrar portal sekmesine al.
+                // Manuel onay gereken durumda YÖKSİS sekmesi açık kalır ki kayıt kontrol edilebilsin.
+                if (response.success && response.formReady === true && request.portalSenderTab) {
+                    await returnToPortalTab(request.portalSenderTab, sideWindowPlan);
+                }
+                return response;
+            } catch (error) {
+                if (!isBackgroundMode) throw error;
+                const errorResponse = await handleBackgroundTransferError(
+                    error,
+                    yoksisTab,
+                    request.requestId,
+                    totalStartedAt,
+                    request.portalSenderTab,
+                    alreadySurfaced
+                );
+                return { ...errorResponse, phaseMs: buildPhaseMs() };
+            }
+        });
+    } catch (error) {
+        if (!isBackgroundMode) throw error;
+        const errorResponse = await handleBackgroundTransferError(
+            error,
+            yoksisTab,
+            request.requestId,
+            totalStartedAt,
+            request.portalSenderTab,
+            alreadySurfaced
+        );
+        return { ...errorResponse, phaseMs: buildPhaseMs() };
+    }
 }
 
 
