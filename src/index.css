@@ -2078,6 +2078,11 @@ body.dark-mode .history-badge {
     grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(140px, 1fr)) auto;
 }
 
+/* Çevrimiçi listede Not filtresi eklendiğinde 6 sütunlu ızgara düzeni */
+.staff-applications-filters.has-note-filter {
+    grid-template-columns: minmax(200px, 2fr) repeat(4, minmax(130px, 1fr)) auto;
+}
+
 .staff-applications-filters > div {
     min-width: 0;
 }
@@ -2623,10 +2628,11 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
     overflow-x: auto;
 }
 
+/* Not ekle / Notu düzenle düğmesi için genişletilmiş sütun */
 .staff-applications-table th.staff-record-note-col,
 .staff-applications-table td.staff-record-note-cell {
-    min-width: 3rem;
-    width: 3rem;
+    min-width: 7.5rem;
+    width: 7.5rem;
 }
 
 .staff-applications-table th.staff-queue-col-name,
@@ -3495,7 +3501,8 @@ body.dark-mode .staff-modal-footer {
 /* --- Personel Kayıt Notları (Yalnız Personel) --- */
 .staff-applications-table th.staff-record-note-col,
 .staff-applications-table td.staff-record-note-cell {
-    width: 2.75rem;
+    min-width: 7.5rem;
+    width: 7.5rem;
     text-align: center;
     vertical-align: middle;
 }
@@ -3505,13 +3512,17 @@ body.dark-mode .staff-modal-footer {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    padding: 0;
+    gap: 0.35rem;
+    min-height: 2rem;
+    padding: 0.3rem 0.6rem;
     border: 1.5px solid #7e1830;
     border-radius: 8px;
     background: transparent;
     color: #7e1830;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
     cursor: pointer;
     transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -3529,6 +3540,7 @@ body.dark-mode .staff-modal-footer {
 }
 
 .staff-record-note-icon {
+    flex-shrink: 0;
     fill: none;
     stroke: currentColor;
     stroke-width: 1.9;
@@ -3538,11 +3550,9 @@ body.dark-mode .staff-modal-footer {
 
 .staff-record-note-dot {
     display: none;
-    position: absolute;
-    top: 3px;
-    right: 3px;
-    width: 7px;
-    height: 7px;
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
     border-radius: 999px;
     background: #ffffff;
 }
@@ -3572,8 +3582,13 @@ body.dark-mode .staff-modal-footer {
     stroke: #5a0e27;
 }
 
+/* Not mevcutken artı işaretini gizle, yalnızca nokta göster */
+.staff-record-note-btn.has-note .staff-record-note-plus {
+    display: none;
+}
+
 .staff-record-note-btn.has-note .staff-record-note-dot {
-    display: block;
+    display: inline-block;
     background: #ffffff;
 }
 

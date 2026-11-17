@@ -152,6 +152,7 @@ test('online queue places note button in first cell and loads all page notes in 
 
     assert.equal(firstButton.classList.contains('has-note'), true);
     assert.equal(firstButton.dataset.hasNote, 'true');
+    assert.equal(firstButton.querySelector('.staff-record-note-label')?.textContent, 'Notu düzenle');
     assert.ok(firstButton.title.includes(longNote.slice(0, 80)));
     assert.equal(firstButton.title.includes(longNote), false);
     assert.ok(firstButton.title.includes('Yalnız personel görür'));
@@ -159,6 +160,7 @@ test('online queue places note button in first cell and loads all page notes in 
 
     assert.equal(secondButton.classList.contains('has-note'), false);
     assert.equal(secondButton.dataset.hasNote, 'false');
+    assert.equal(secondButton.querySelector('.staff-record-note-label')?.textContent, 'Not ekle');
     assert.ok(secondButton.title.includes('Not ekle'));
 });
 
@@ -307,6 +309,7 @@ test('dialog opens with existing note, saves trimmed body via PUT, and updates b
     assert.equal(queryCalls, 1);
     assert.equal(requests.filter((entry) => entry.method === 'GET').length, 1);
     assert.equal(noteButton.classList.contains('has-note'), true);
+    assert.equal(noteButton.querySelector('.staff-record-note-label')?.textContent, 'Notu düzenle');
     assert.ok(noteButton.title.includes('Güncellenmiş personel notu'));
 });
 
@@ -409,6 +412,7 @@ test('Notu Sil calls DELETE and clears button state in place', async (context) =
     assert.equal(document.querySelector('dialog.staff-record-note-dialog'), null);
     assert.equal(noteButton.classList.contains('has-note'), false);
     assert.equal(noteButton.dataset.hasNote, 'false');
+    assert.equal(noteButton.querySelector('.staff-record-note-label')?.textContent, 'Not ekle');
     assert.ok(noteButton.title.includes('Not ekle'));
 });
 
