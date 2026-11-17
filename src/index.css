@@ -2632,7 +2632,7 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
 .staff-applications-table th.staff-queue-col-name,
 .staff-applications-table td.staff-queue-col-name,
 .staff-applications-table td[data-label="Ad Soyad"] {
-    min-width: 11rem;
+    min-width: 10rem;
     white-space: normal;
     overflow-wrap: break-word;
     word-break: normal;
@@ -2642,7 +2642,7 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
 .staff-applications-table td.staff-queue-col-status,
 .staff-applications-table td[data-label="Durum"],
 .staff-applications-table td[data-label="Ofis Durumu"] {
-    min-width: 9rem;
+    min-width: 8rem;
     white-space: normal;
     overflow-wrap: break-word;
     word-break: normal;
@@ -2693,7 +2693,7 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
     white-space: normal;
     text-align: center;
     line-height: 1.2;
-    max-width: 13rem;
+    max-width: 9.5rem;
     width: auto;
     min-width: 0;
 }
