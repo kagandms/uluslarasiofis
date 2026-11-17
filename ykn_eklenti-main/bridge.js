@@ -49,6 +49,27 @@
         reportBridgeFailure(payload, error);
     }
 
+    function readScreenArea() {
+        const screenObj = window.screen || {};
+        return {
+            availLeft: Number.isFinite(screenObj.availLeft) ? screenObj.availLeft : 0,
+            availTop: Number.isFinite(screenObj.availTop) ? screenObj.availTop : 0,
+            availWidth: Number.isFinite(screenObj.availWidth) ? screenObj.availWidth : 0,
+            availHeight: Number.isFinite(screenObj.availHeight) ? screenObj.availHeight : 0
+        };
+    }
+
+    function isYknViewOpen() {
+        const yknView = document.getElementById('view-ykn');
+        const workspaceContent = document.getElementById('workspace-content');
+        return Boolean(
+            yknView
+            && !yknView.hidden
+            && !yknView.hasAttribute('hidden')
+            && (!workspaceContent || (!workspaceContent.hidden && !workspaceContent.hasAttribute('hidden')))
+        );
+    }
+
 // Sayfa yüklendiğinde portala eklenti köprüsünün hazır olduğunu bildir
 void hasStaffSession().then((isAuthenticated) => {
     if (!isAuthenticated || !isStaffRoute()) return;
@@ -105,9 +126,11 @@ window.addEventListener('message', async (event) => {
         }
 
         chrome.runtime.sendMessage({
+            ...payload,
             source: 'IKAMET_PORTAL',
             action: payload.action,
-            ...payload
+            screenArea: readScreenArea(),
+            yknViewOpen: isYknViewOpen()
         }, (response) => {
             if (typeof chrome !== 'undefined' && chrome.runtime?.lastError) {
                 reportBridgeFailure(payload, chrome.runtime.lastError);

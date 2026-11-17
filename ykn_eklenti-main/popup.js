@@ -1,9 +1,31 @@
+const YOKSIS_SIDE_BY_SIDE_STORAGE_KEY = 'yoksisSideBySideEnabled';
+
 document.addEventListener('DOMContentLoaded', () => {
     const btnAcceptance = document.getElementById('btn-read-acceptance');
     const btnCopy = document.getElementById('btn-copy');
     const statusMessage = document.getElementById('status-message');
+    const chkSideBySide = document.getElementById('chk-yoksis-side-by-side');
 
     if (!btnAcceptance || !btnCopy || !statusMessage) return;
+
+    // Yan yana pencere tercihi varsayılan olarak açıktır.
+    if (chkSideBySide) {
+        if (chrome.storage?.local?.get) {
+            chrome.storage.local.get(YOKSIS_SIDE_BY_SIDE_STORAGE_KEY, (stored) => {
+                if (!chrome.runtime?.lastError) {
+                    chkSideBySide.checked = stored?.[YOKSIS_SIDE_BY_SIDE_STORAGE_KEY] !== false;
+                }
+            });
+        }
+        chkSideBySide.addEventListener('change', () => {
+            if (!chrome.storage?.local?.set) return;
+            chrome.storage.local.set({
+                [YOKSIS_SIDE_BY_SIDE_STORAGE_KEY]: Boolean(chkSideBySide.checked)
+            }, () => {
+                void chrome.runtime?.lastError;
+            });
+        });
+    }
 
     let statusTimer = null;
 
