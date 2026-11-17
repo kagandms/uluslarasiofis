@@ -625,7 +625,7 @@ test('arka plan modunda ilk form bekleme başarısız olup kısa öne almadan so
     const response = await harness.sendTransfer({ background: true, requestId: 'bg-brief-surface-1' });
 
     assert.equal(waitAttempt, 2);
-    assert.equal(waitMessages[0].timeoutMs, 2500);
+    assert.equal(waitMessages[0].timeoutMs, 1000);
     assert.equal(waitMessages[1].timeoutMs, 10000);
     assert.equal(waitMessages[1].afterFingerprint, waitMessages[0].afterFingerprint);
     assert.equal(waitMessages[1].afterDomRevision, waitMessages[0].afterDomRevision);
@@ -803,4 +803,88 @@ test('waitForYoksisFormReady options.timeoutMs değerini 1000..10000 aralığın
         waitMessages.map((msg) => msg.timeoutMs),
         [1000, 10000, 10000]
     );
+});
+
+/**
+ * Arka plan yanıtındaki phaseMs nesnesinin beklenen tamsayı alanlarını doğrulayan yardımcı.
+ */
+function assertValidPhaseMs(phaseMs) {
+    assert.ok(phaseMs && typeof phaseMs === 'object', 'phaseMs object should exist');
+    assert.deepEqual(
+        Object.keys(phaseMs).sort(),
+        ['firstWaitMs', 'retryMs', 'searchMs', 'totalMs']
+    );
+    for (const key of ['searchMs', 'firstWaitMs', 'retryMs', 'totalMs']) {
+        assert.equal(Number.isInteger(phaseMs[key]), true, `${key} should be an integer`);
+        assert.ok(phaseMs[key] >= 0, `${key} should be non-negative`);
+    }
+}
+
+test('arka plan başarı yanıtı tamsayı phaseMs alanlarını taşır ve gecikmeli ilk bekleme 1000 ms ile istenir', async () => {
+    const directHarness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20
+    });
+    const directResponse = await directHarness.sendTransfer({ background: true, requestId: 'bg-phase-direct' });
+    assert.equal(directResponse.success, true);
+    assertValidPhaseMs(directResponse.phaseMs);
+    assert.equal(directResponse.phaseMs.firstWaitMs, 0);
+    assert.equal(directResponse.phaseMs.retryMs, 0);
+
+    const waitMessages = [];
+    const firstWaitHarness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        searchResult: {
+            success: true,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'fp-1',
+            domRevisionBeforeSearch: 1
+        },
+        onWaitForm(message, callback) {
+            waitMessages.push(message);
+            callback({ success: true, formReady: true });
+        }
+    });
+    const firstWaitResponse = await firstWaitHarness.sendTransfer({ background: true, requestId: 'bg-phase-first-wait' });
+    assert.equal(firstWaitResponse.success, true);
+    assert.equal(waitMessages.length, 1);
+    assert.equal(waitMessages[0].timeoutMs, 1000);
+    assertValidPhaseMs(firstWaitResponse.phaseMs);
+    assert.equal(firstWaitResponse.phaseMs.retryMs, 0);
+});
+
+test('arka plan hata yanıtları da tamsayı phaseMs taşır; ön plan yanıtlarında phaseMs bulunmaz', async () => {
+    const missingCodeHarness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20
+    });
+    const missingCodeResponse = await missingCodeHarness.sendTransfer({
+        background: true,
+        requestId: 'bg-phase-missing-code',
+        data: { yoksisId: '', firstName: 'SYNTHETIC', lastName: 'STUDENT' }
+    });
+    assert.equal(missingCodeResponse.success, false);
+    assertValidPhaseMs(missingCodeResponse.phaseMs);
+    assert.equal(missingCodeResponse.phaseMs.searchMs, 0);
+    assert.equal(missingCodeResponse.phaseMs.firstWaitMs, 0);
+    assert.equal(missingCodeResponse.phaseMs.retryMs, 0);
+
+    const navFailHarness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        navigationResult: { success: false, error: 'Menü açılamadı' }
+    });
+    const navFailResponse = await navFailHarness.sendTransfer({ background: true, requestId: 'bg-phase-nav-fail' });
+    assert.equal(navFailResponse.success, false);
+    assertValidPhaseMs(navFailResponse.phaseMs);
+
+    const foregroundHarness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20
+    });
+    const foregroundResponse = await foregroundHarness.sendTransfer({ background: false, requestId: 'fg-no-phase' });
+    assert.equal(foregroundResponse.success, true);
+    assert.equal('phaseMs' in foregroundResponse, false);
 });

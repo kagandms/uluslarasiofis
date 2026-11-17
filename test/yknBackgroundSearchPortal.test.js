@@ -638,3 +638,74 @@ test('parallel acceptance letter and passport document reads do not clobber each
     assert.equal(btnBg.disabled, true);
     assert.equal(document.getElementById('btn-sync-yoksis-fields').disabled, true);
 });
+
+test('portal prints background phase timing status line when response includes phaseMs', async (context) => {
+    const { document, postedMessages, dispatchExtensionMessage, loadSyntheticStudent } = await createPortalHarness(context, 'phase-ms-present');
+    loadSyntheticStudent({ yoksisId: 'ST1-234-UV', documentsReady: true });
+
+    const btnBg = document.getElementById('btn-ykn-background-search');
+    const btnSync = document.getElementById('btn-sync-yoksis-fields');
+    btnBg.click();
+
+    const bgTransferMsg = [...postedMessages].reverse().find((m) => m?.payload?.action === 'TRANSFER_TO_YOKSIS');
+    assert.ok(bgTransferMsg, 'TRANSFER_TO_YOKSIS should be posted');
+
+    dispatchExtensionMessage({
+        type: 'RESPONSE',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: bgTransferMsg.payload.requestId,
+        response: {
+            success: true,
+            formReady: true,
+            background: true,
+            yoksisTabId: 77,
+            yoksisTabUrl: 'https://yoksis.example/student',
+            phaseMs: {
+                searchMs: 1200,
+                firstWaitMs: 1000,
+                retryMs: 840,
+                totalMs: 3040
+            }
+        }
+    });
+
+    assert.equal(btnBg.disabled, false);
+    assert.equal(btnSync.disabled, false);
+
+    const statusContainer = document.getElementById('ykn-status-container');
+    const infoTexts = [...statusContainer.querySelectorAll('.ykn-status-item.is-info .ykn-status-text')]
+        .map((el) => el.textContent);
+    assert.ok(
+        infoTexts.includes('Arka plan süreleri: arama 1.2 sn, ilk doğrulama 1.0 sn, yeniden doğrulama 0.8 sn, toplam 3.0 sn.'),
+        `Expected timing status line in: ${JSON.stringify(infoTexts)}`
+    );
+    assert.match(statusContainer.textContent, /YÖKSİS öğrenci formu hazır ve kimlik doğrulandı/);
+});
+
+test('portal prints nothing extra when background response lacks phaseMs', async (context) => {
+    const { document, postedMessages, dispatchExtensionMessage, loadSyntheticStudent } = await createPortalHarness(context, 'phase-ms-absent');
+    loadSyntheticStudent({ yoksisId: 'ST2-345-WX', documentsReady: true });
+
+    const btnBg = document.getElementById('btn-ykn-background-search');
+    btnBg.click();
+
+    const bgTransferMsg = [...postedMessages].reverse().find((m) => m?.payload?.action === 'TRANSFER_TO_YOKSIS');
+    assert.ok(bgTransferMsg, 'TRANSFER_TO_YOKSIS should be posted');
+
+    dispatchExtensionMessage({
+        type: 'RESPONSE',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: bgTransferMsg.payload.requestId,
+        response: {
+            success: true,
+            formReady: true,
+            background: true,
+            yoksisTabId: 77,
+            yoksisTabUrl: 'https://yoksis.example/student'
+        }
+    });
+
+    const statusText = document.getElementById('ykn-status-container').textContent;
+    assert.doesNotMatch(statusText, /Arka plan süreleri:/);
+    assert.match(statusText, /YÖKSİS öğrenci formu hazır ve kimlik doğrulandı/);
+});

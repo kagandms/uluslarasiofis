@@ -1069,6 +1069,22 @@ export function initYknManager() {
         });
     }
 
+    function formatBackgroundPhaseSeconds(ms) {
+        return (Math.max(0, ms) / 1000).toFixed(1);
+    }
+
+    function reportBackgroundPhaseTimings(phaseMs) {
+        if (!phaseMs || typeof phaseMs !== 'object') return;
+        const { searchMs, firstWaitMs, retryMs, totalMs } = phaseMs;
+        if (![searchMs, firstWaitMs, retryMs, totalMs].every((value) => Number.isFinite(value) && value >= 0)) {
+            return;
+        }
+        addStatus(
+            `Arka plan süreleri: arama ${formatBackgroundPhaseSeconds(searchMs)} sn, ilk doğrulama ${formatBackgroundPhaseSeconds(firstWaitMs)} sn, yeniden doğrulama ${formatBackgroundPhaseSeconds(retryMs)} sn, toplam ${formatBackgroundPhaseSeconds(totalMs)} sn.`,
+            'info'
+        );
+    }
+
     function handleBackgroundTransferResponse(response, requestId) {
         const nextState = applyExtensionResponse(backgroundSearchState, {
             ...(response || {}),
@@ -1077,6 +1093,7 @@ export function initYknManager() {
         if (nextState === backgroundSearchState) return;
         clearBackgroundSearchTimeout();
         bindYoksisTarget(response);
+        reportBackgroundPhaseTimings(response?.phaseMs);
 
         if (nextState.status === 'success') {
             currentStudentData = {

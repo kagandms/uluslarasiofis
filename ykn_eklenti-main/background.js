@@ -38,8 +38,8 @@ const CONTENT_READY_MAX_DELAY_MS = 1_000;
 const YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS = 32_000;
 const YOKSIS_REFRESH_TIMEOUT_MS = 30_000;
 // Arka plan sekmesi pasifken ilk form beklemesi zaman kaybetmeden kısa öne alma
-// denemesine geçebilsin diye daha kısa zaman aşımı uygulanır.
-const BACKGROUND_FIRST_FORM_WAIT_MS = 2500;
+// denemesine geçebilsin diye en düşük sınır olan 1000 ms uygulanır.
+const BACKGROUND_FIRST_FORM_WAIT_MS = 1000;
 
 function startYknTiming() {
     return globalThis.performance?.now?.() ?? Date.now();
@@ -2300,6 +2300,17 @@ async function transferToYoksis(request) {
 
 async function transferToYoksisOperation(request, totalStartedAt) {
     const isBackgroundMode = request?.background === true;
+    const opStartedAt = Date.now();
+    let searchMs = 0;
+    let firstWaitMs = 0;
+    let retryMs = 0;
+    // Arka plan yanıtlarına eklenecek tamsayı aşama sürelerini üretir (öğrenci verisi içermez).
+    const buildPhaseMs = () => ({
+        searchMs,
+        firstWaitMs,
+        retryMs,
+        totalMs: Math.max(0, Math.round(Date.now() - opStartedAt))
+    });
     let yoksisTab = null;
 
     try {
@@ -2348,6 +2359,9 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         // MAIN world yalnızca bu yol arama kontrolünü hiç bulamazsa fallback'tir.
         const searchStartedAt = startYknTiming();
         let response = await searchYoksisFromContent(yoksisTab.id, kabulId, request.requestId, expectedStudent);
+        if (isBackgroundMode) {
+            searchMs = Math.max(0, Math.round(Date.now() - opStartedAt));
+        }
         reportYknTiming('acceptance-input-readiness', response?.timing?.inputReadyDurationMs,
             response?.timing ? 'ok' : 'unavailable', response?.timing ? undefined : 'timing_unavailable', request.requestId);
         reportYknTiming('acceptance-id-write-and-verification', response?.timing?.inputWriteDurationMs,
@@ -2419,7 +2433,11 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 const firstWaitOptions = isBackgroundMode
                     ? { ...waitOptions, timeoutMs: BACKGROUND_FIRST_FORM_WAIT_MS }
                     : waitOptions;
+                const firstWaitStartedAt = isBackgroundMode ? Date.now() : 0;
                 const delayedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, firstWaitOptions);
+                if (isBackgroundMode) {
+                    firstWaitMs = Math.max(0, Math.round(Date.now() - firstWaitStartedAt));
+                }
                 if (delayedFormReady) {
                     finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'ok', undefined, request.requestId);
                     finishYknTiming('yoksis-transfer-total', totalStartedAt, 'ok', undefined, request.requestId);
@@ -2435,12 +2453,14 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 if (isBackgroundMode) {
                     // Arka plan sekmesi pasifken ZK zamanlayıcıları gecikebileceğinden
                     // sekmeyi kısa süre öne çıkarıp form doğrulamasını ikinci kez deneriz.
-                    await surfaceYoksisTab(yoksisTab);
+                    const retryStartedAt = Date.now();
                     let surfacedFormReady = false;
                     try {
+                        await surfaceYoksisTab(yoksisTab);
                         surfacedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, waitOptions);
                     } finally {
                         await returnToPortalTab(request.portalSenderTab);
+                        retryMs = Math.max(0, Math.round(Date.now() - retryStartedAt));
                     }
                     if (surfacedFormReady) {
                         finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'ok', undefined, request.requestId);
@@ -2545,7 +2565,8 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                         yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
                 }
                 if (isBackgroundMode) {
-                    return await finalizeBackgroundTransferResponse(response, yoksisTab);
+                    const finalized = await finalizeBackgroundTransferResponse(response, yoksisTab);
+                    return { ...finalized, phaseMs: buildPhaseMs() };
                 }
                 // Portal'dan başlatılan aramada kabul kodu YÖKSİS'te doğrulanınca kullanıcıyı tekrar portal sekmesine al.
                 // Manuel onay gereken durumda YÖKSİS sekmesi açık kalır ki kayıt kontrol edilebilsin.
@@ -2555,12 +2576,14 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 return response;
             } catch (error) {
                 if (!isBackgroundMode) throw error;
-                return await handleBackgroundTransferError(error, yoksisTab, request.requestId, totalStartedAt);
+                const errorResponse = await handleBackgroundTransferError(error, yoksisTab, request.requestId, totalStartedAt);
+                return { ...errorResponse, phaseMs: buildPhaseMs() };
             }
         });
     } catch (error) {
         if (!isBackgroundMode) throw error;
-        return await handleBackgroundTransferError(error, yoksisTab, request.requestId, totalStartedAt);
+        const errorResponse = await handleBackgroundTransferError(error, yoksisTab, request.requestId, totalStartedAt);
+        return { ...errorResponse, phaseMs: buildPhaseMs() };
     }
 }
 
