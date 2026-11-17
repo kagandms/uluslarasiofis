@@ -623,7 +623,7 @@ test('ardışık aramalarda neden sızdırılmaz, 160 karakterle sınırlanır v
     );
 });
 
-test('arka plan modunda tek form bekleme (10000 ms) başarılı olursa portala dönülür ve briefSurface true döner', async () => {
+test('arka plan modunda ilk form bekleme (4000 ms) öncesi portala erken dönülür, başarılı olursa ikinci öne alma yapılmaz ve briefSurface true döner', async () => {
     let waitAttempt = 0;
     const waitMessages = [];
     const harness = createBackgroundSearchHarness({
@@ -646,7 +646,7 @@ test('arka plan modunda tek form bekleme (10000 ms) başarılı olursa portala d
     const response = await harness.sendTransfer({ background: true, requestId: 'bg-brief-surface-1' });
 
     assert.equal(waitAttempt, 1);
-    assert.equal(waitMessages[0].timeoutMs, 10000);
+    assert.equal(waitMessages[0].timeoutMs, 4000);
 
     assert.equal(response.success, true);
     assert.equal(response.transferred, true);
@@ -655,6 +655,7 @@ test('arka plan modunda tek form bekleme (10000 ms) başarılı olursa portala d
     assert.equal(response.briefSurface, true);
     assert.equal(response.background, true);
     assert.equal(response.surfaced, false);
+    assert.equal(response.phaseMs.retryMs, 0);
     assert.equal(response.yoksisTabId, 42);
     assert.equal(response.yoksisTabUrl, 'https://yoksis.yok.gov.tr/student');
     assert.equal(
@@ -665,13 +666,19 @@ test('arka plan modunda tek form bekleme (10000 ms) başarılı olursa portala d
     const yoksisActivateIdx = harness.calls.findIndex(
         (call) => call.type === 'update-tab' && call.tabId === 42 && call.updateProperties.active === true
     );
-    const waitIdx = harness.calls.findIndex(
-        (call) => call.type === 'message' && call.message.action === 'WAIT_YOKSIS_FORM'
+    const searchIdx = harness.calls.findIndex(
+        (call) => call.type === 'message' && call.message.action === 'searchWithId'
     );
     const portalActivateIdx = harness.calls.findIndex(
         (call) => call.type === 'update-tab' && call.tabId === 1 && call.updateProperties.active === true
     );
-    assert.ok(yoksisActivateIdx >= 0 && waitIdx > yoksisActivateIdx && portalActivateIdx > waitIdx);
+    const waitIdx = harness.calls.findIndex(
+        (call) => call.type === 'message' && call.message.action === 'WAIT_YOKSIS_FORM'
+    );
+    assert.ok(yoksisActivateIdx >= 0);
+    assert.ok(searchIdx > yoksisActivateIdx);
+    assert.ok(portalActivateIdx > searchIdx);
+    assert.ok(waitIdx > portalActivateIdx, 'İlk form beklemeden önce portal sekmesine dönülmeli');
 
     const tabActivations = harness.calls
         .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
@@ -684,8 +691,9 @@ test('arka plan modunda tek form bekleme (10000 ms) başarılı olursa portala d
     assert.deepEqual(windowFocusCalls, [20, 10]);
 });
 
-test('arka plan modunda tek form bekleme başarısız olursa YÖKSİS önde kalır, manualOverrideAvailable korunur ve 160 karakterle sınırlı Neden eklenir', async () => {
+test('arka plan modunda ilk (4000 ms) ve ikinci (10000 ms) form bekleme başarısız olursa YÖKSİS önde kalır, ek portal dönüşü yapılmaz ve 160 karakterle sınırlı Neden eklenir', async () => {
     let waitAttempt = 0;
+    const waitMessages = [];
     const longReason = `ZK formu beklemede hazır olmadı: ${'ayrinti '.repeat(30)}`;
     const harness = createBackgroundSearchHarness({
         portalWindowId: 10,
@@ -703,8 +711,9 @@ test('arka plan modunda tek form bekleme başarısız olursa YÖKSİS önde kal�
             domRevision: 2,
             hasPopulatedStudentForm: false
         },
-        onWaitForm(_message, callback) {
+        onWaitForm(message, callback) {
             waitAttempt += 1;
+            waitMessages.push(message);
             callback({
                 success: true,
                 formReady: false,
@@ -716,7 +725,8 @@ test('arka plan modunda tek form bekleme başarısız olursa YÖKSİS önde kal�
 
     const response = await harness.sendTransfer({ background: true, requestId: 'bg-brief-surface-fail-1' });
 
-    assert.equal(waitAttempt, 1);
+    assert.equal(waitAttempt, 2);
+    assert.deepEqual(waitMessages.map((msg) => msg.timeoutMs), [4000, 10000]);
     assert.equal(response.success, true);
     assert.equal(response.formReady, false);
     assert.equal(response.manualOverrideAvailable, true);
@@ -736,7 +746,12 @@ test('arka plan modunda tek form bekleme başarısız olursa YÖKSİS önde kal�
     const tabActivations = harness.calls
         .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
         .map((call) => call.tabId);
-    assert.deepEqual(tabActivations, [42]);
+    assert.deepEqual(tabActivations, [42, 1, 42]);
+
+    const windowFocusCalls = harness.calls
+        .filter((call) => call.type === 'update-window' && call.updateProperties.focused === true)
+        .map((call) => call.windowId);
+    assert.deepEqual(windowFocusCalls, [20, 10, 20]);
 });
 
 test('arka plan dışındaki modda ilk form bekleme başarısız olursa ek öne alma, portala dönüş veya Neden eki yapılmaz', async () => {
@@ -847,7 +862,7 @@ function assertValidPhaseMs(phaseMs) {
     }
 }
 
-test('arka plan başarı yanıtı tamsayı phaseMs alanlarını taşır ve gecikmeli bekleme varsayılan 10000 ms ile tek kez istenir', async () => {
+test('arka plan başarı yanıtı tamsayı phaseMs alanlarını taşır ve ilk gecikmeli bekleme 4000 ms ile tek kez istenir', async () => {
     const directHarness = createBackgroundSearchHarness({
         portalWindowId: 10,
         yoksisWindowId: 20
@@ -877,7 +892,7 @@ test('arka plan başarı yanıtı tamsayı phaseMs alanlarını taşır ve gecik
     const firstWaitResponse = await firstWaitHarness.sendTransfer({ background: true, requestId: 'bg-phase-first-wait' });
     assert.equal(firstWaitResponse.success, true);
     assert.equal(waitMessages.length, 1);
-    assert.equal(waitMessages[0].timeoutMs, 10000);
+    assert.equal(waitMessages[0].timeoutMs, 4000);
     assertValidPhaseMs(firstWaitResponse.phaseMs);
     assert.equal(firstWaitResponse.phaseMs.retryMs, 0);
 });
@@ -1083,4 +1098,232 @@ test('arka plan dışındaki modda YÖKSİS başka pencerede aktif olsa bile ön
         .filter((call) => call.type === 'update-window' && call.updateProperties.focused === true)
         .map((call) => call.windowId);
     assert.deepEqual(windowFocusCalls, [20, 10]);
+});
+
+test('arka plan modunda ilk bekleme (4000 ms) başarısız olup ikinci bekleme (10000 ms) başarılı olursa yeniden öne alınıp portala dönülür', async () => {
+    let waitAttempt = 0;
+    const waitMessages = [];
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        searchResult: {
+            success: true,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'fp-1',
+            domRevisionBeforeSearch: 1
+        },
+        onWaitForm(message, callback) {
+            waitAttempt += 1;
+            waitMessages.push(message);
+            if (waitAttempt === 1) {
+                callback({ success: true, formReady: false, manualOverrideAvailable: false });
+                return;
+            }
+            callback({ success: true, formReady: true });
+        }
+    });
+
+    const response = await harness.sendTransfer({ background: true, requestId: 'bg-retry-success-1' });
+
+    assert.equal(waitAttempt, 2);
+    assert.deepEqual(waitMessages.map((msg) => msg.timeoutMs), [4000, 10000]);
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, true);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, false);
+    assert.equal(response.briefSurface, true);
+    assertValidPhaseMs(response.phaseMs);
+
+    const tabActivations = harness.calls
+        .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
+        .map((call) => call.tabId);
+    assert.deepEqual(tabActivations, [42, 1, 42, 1]);
+
+    const windowFocusCalls = harness.calls
+        .filter((call) => call.type === 'update-window' && call.updateProperties.focused === true)
+        .map((call) => call.windowId);
+    assert.deepEqual(windowFocusCalls, [20, 10, 20, 10]);
+
+    const orderedSteps = harness.calls
+        .filter((call) => (
+            (call.type === 'update-tab' && call.updateProperties.active === true)
+            || (call.type === 'message' && ['searchWithId', 'WAIT_YOKSIS_FORM'].includes(call.message.action))
+        ))
+        .map((call) => (call.type === 'update-tab' ? `tab:${call.tabId}` : call.message.action));
+    assert.deepEqual(orderedSteps, [
+        'tab:42',
+        'searchWithId',
+        'tab:1',
+        'WAIT_YOKSIS_FORM',
+        'tab:42',
+        'WAIT_YOKSIS_FORM',
+        'tab:1'
+    ]);
+});
+
+test('arka plan modunda her iki bekleme de başarısız ve manuel onay kapalıysa YÖKSİS önde kalır ve son hatadan sonra portala dönülmez', async () => {
+    const waitMessages = [];
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        searchResult: {
+            success: true,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'fp-1',
+            domRevisionBeforeSearch: 1
+        },
+        formState: {
+            success: true,
+            fingerprint: 'fp-2',
+            domRevision: 2,
+            hasPopulatedStudentForm: false
+        },
+        onWaitForm(message, callback) {
+            waitMessages.push(message);
+            callback({
+                success: false,
+                formReady: false,
+                manualOverrideAvailable: false,
+                message: 'YÖKSİS: Kayıt bulunamadı'
+            });
+        }
+    });
+
+    const response = await harness.sendTransfer({ background: true, requestId: 'bg-retry-hard-fail-1' });
+
+    assert.deepEqual(waitMessages.map((msg) => msg.timeoutMs), [4000, 10000]);
+    assert.equal(response.success, false);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, true);
+    assert.equal(response.attentionReason, 'search_failed');
+    assert.equal(response.error, 'YÖKSİS: Kayıt bulunamadı');
+
+    const tabActivations = harness.calls
+        .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
+        .map((call) => call.tabId);
+    assert.deepEqual(tabActivations, [42, 1, 42]);
+});
+
+test('arka plan modunda arama tetiklenmezse erken portala dönüş yapılmaz ve YÖKSİS önde kalır', async () => {
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        searchResult: {
+            success: false,
+            searchTriggered: false,
+            formReady: false
+        },
+        formState: {
+            success: true,
+            fingerprint: 'fp-1',
+            domRevision: 1,
+            hasPopulatedStudentForm: false
+        },
+        mainSearchResult: {
+            inputFound: false,
+            buttonFound: false,
+            searchTriggered: false
+        }
+    });
+
+    const response = await harness.sendTransfer({ background: true, requestId: 'bg-not-triggered-1' });
+
+    assert.equal(response.success, false);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, true);
+    assert.equal(response.attentionReason, 'search_failed');
+
+    const tabActivations = harness.calls
+        .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
+        .map((call) => call.tabId);
+    assert.deepEqual(tabActivations, [42]);
+});
+
+test('arka plan modunda MAIN-world fallback aramayı tetiklerse ilk beklemeden önce portala erken dönülür', async () => {
+    const waitMessages = [];
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        searchResult: {
+            success: false,
+            searchTriggered: false,
+            formReady: false
+        },
+        formState: {
+            success: true,
+            fingerprint: 'fp-1',
+            domRevision: 1,
+            hasPopulatedStudentForm: false
+        },
+        mainSearchResult: {
+            inputFound: true,
+            buttonFound: true,
+            searchTriggered: true
+        },
+        onWaitForm(message, callback) {
+            waitMessages.push(message);
+            callback({ success: true, formReady: true });
+        }
+    });
+
+    const response = await harness.sendTransfer({ background: true, requestId: 'bg-main-fallback-flash-1' });
+
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, true);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, false);
+    assert.equal(response.briefSurface, true);
+    assert.deepEqual(waitMessages.map((msg) => msg.timeoutMs), [4000]);
+    assertValidPhaseMs(response.phaseMs);
+    assert.equal(response.phaseMs.retryMs, 0);
+
+    const scriptIdx = harness.calls.findIndex((call) => call.type === 'script');
+    const portalActivateIdx = harness.calls.findIndex(
+        (call) => call.type === 'update-tab' && call.tabId === 1 && call.updateProperties.active === true
+    );
+    const waitIdx = harness.calls.findIndex(
+        (call) => call.type === 'message' && call.message.action === 'WAIT_YOKSIS_FORM'
+    );
+    assert.ok(scriptIdx >= 0 && portalActivateIdx > scriptIdx && waitIdx > portalActivateIdx);
+
+    const tabActivations = harness.calls
+        .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
+        .map((call) => call.tabId);
+    assert.deepEqual(tabActivations, [42, 1]);
+});
+
+test('arka plan modunda YÖKSİS başka pencerede görünürken gecikmeli doğrulama başarılı olursa hiç sekme/pencere çağrısı yapılmaz', async () => {
+    const waitMessages = [];
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        initialTabs: [
+            { id: 1, url: 'http://localhost:5173/yetkili/', active: true, windowId: 10 },
+            { id: 42, url: 'https://yoksis.yok.gov.tr/student', active: true, windowId: 20 }
+        ],
+        searchResult: {
+            success: true,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'fp-1',
+            domRevisionBeforeSearch: 1
+        },
+        onWaitForm(message, callback) {
+            waitMessages.push(message);
+            callback({ success: true, formReady: true });
+        }
+    });
+
+    const response = await harness.sendTransfer({ background: true, requestId: 'bg-visible-delayed-1' });
+
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, true);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, false);
+    assert.equal(response.briefSurface, false);
+    assert.deepEqual(waitMessages.map((msg) => msg.timeoutMs), [4000]);
+    assert.equal(harness.calls.some((call) => call.type === 'update-tab'), false);
+    assert.equal(harness.calls.some((call) => call.type === 'update-window'), false);
 });
