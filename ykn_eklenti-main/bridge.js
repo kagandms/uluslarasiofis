@@ -3,6 +3,8 @@
 (() => {
     if (window !== window.top) return;
     const BRIDGE_VERSION = '1.2.124';
+    // Portalın desteklenen eklenti yeteneklerini algılayabilmesi için sabit özellik listesi
+    const BRIDGE_FEATURES = Object.freeze(['background_transfer']);
     const isStaffRoute = () => window.location.pathname === '/yetkili'
         || window.location.pathname.startsWith('/yetkili/');
     if (!isStaffRoute()) return;
@@ -73,7 +75,7 @@
 // Sayfa yüklendiğinde portala eklenti köprüsünün hazır olduğunu bildir
 void hasStaffSession().then((isAuthenticated) => {
     if (!isAuthenticated || !isStaffRoute()) return;
-    window.postMessage({ source: 'EXTENSION', type: 'PONG', ready: true }, window.location.origin);
+    window.postMessage({ source: 'EXTENSION', type: 'PONG', ready: true, features: BRIDGE_FEATURES }, window.location.origin);
 });
 
 // Web sayfasından gelen mesajları dinle ve arka plana ilet
@@ -106,7 +108,8 @@ window.addEventListener('message', async (event) => {
                 source: 'EXTENSION',
                 type: 'PONG',
                 ready: true,
-                requestId: payload.requestId
+                requestId: payload.requestId,
+                features: BRIDGE_FEATURES
             }, window.location.origin);
         } catch (error) {
             reportBridgeFailure(payload, error);
