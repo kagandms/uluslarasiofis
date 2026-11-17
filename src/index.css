@@ -3376,3 +3376,216 @@ body.dark-mode .staff-modal-footer {
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* --- Personel Kayıt Notları (Yalnız Personel) --- */
+.staff-applications-table th.staff-record-note-col,
+.staff-applications-table td.staff-record-note-cell {
+    width: 2.75rem;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.staff-record-note-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.staff-record-note-btn:hover {
+    border-color: #7e1830;
+    color: #7e1830;
+    background: rgb(126 24 48 / 0.06);
+}
+
+.staff-record-note-btn:focus-visible {
+    outline: 2px solid #7e1830;
+    outline-offset: 2px;
+}
+
+.staff-record-note-icon {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.staff-record-note-dot {
+    display: none;
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #7e1830;
+}
+
+.staff-record-note-btn.has-note {
+    border-color: rgb(126 24 48 / 0.45);
+    background: rgb(126 24 48 / 0.1);
+    color: #7e1830;
+}
+
+.staff-record-note-btn.has-note .staff-record-note-icon {
+    fill: currentColor;
+}
+
+.staff-record-note-btn.has-note .staff-record-note-fold {
+    fill: none;
+    stroke: var(--card-bg, #ffffff);
+}
+
+.staff-record-note-btn.has-note .staff-record-note-dot {
+    display: block;
+}
+
+body.dark-mode .staff-record-note-btn:hover,
+body.dark-mode .staff-record-note-btn.has-note {
+    border-color: rgb(245 168 187 / 0.55);
+    background: rgb(166 43 74 / 0.22);
+    color: #f5a8bb;
+}
+
+body.dark-mode .staff-record-note-btn.has-note .staff-record-note-dot {
+    background: #f5a8bb;
+}
+
+.staff-record-note-dialog {
+    box-sizing: border-box;
+    width: min(460px, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+    margin: auto;
+    padding: 1.25rem;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--card-bg, #ffffff);
+    color: var(--text-primary, #1e293b);
+    box-shadow: 0 18px 48px rgb(0 0 0 / 24%);
+}
+
+.staff-record-note-dialog::backdrop {
+    background: rgb(15 23 42 / 0.45);
+    backdrop-filter: blur(2px);
+}
+
+.staff-record-note-form {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.staff-record-note-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.staff-record-note-header h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    color: var(--text-primary);
+}
+
+.staff-record-note-scope {
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: rgb(126 24 48 / 0.1);
+    color: #7e1830;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+body.dark-mode .staff-record-note-scope {
+    background: rgb(245 168 187 / 0.16);
+    color: #f5a8bb;
+}
+
+.staff-record-note-student {
+    margin: 0;
+    font-weight: 600;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.staff-record-note-meta {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.staff-record-note-textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 7rem;
+    padding: 0.65rem 0.75rem;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.staff-record-note-counts {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.staff-record-note-counter {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.staff-record-note-counter.is-over-limit {
+    color: var(--danger, #dc3545);
+}
+
+.staff-record-note-error {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--danger, #dc3545);
+}
+
+.staff-record-note-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    margin-top: 0.25rem;
+}
+
+.staff-record-note-actions-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.staff-record-note-dialog .btn-danger {
+    background: var(--danger, #dc3545);
+    border-color: var(--danger, #dc3545);
+    color: #ffffff;
+}
+
+@media (max-width: 900px) {
+    .staff-applications-table td.staff-record-note-cell {
+        align-items: center;
+        text-align: right;
+        width: 100%;
+    }
+}

@@ -10,6 +10,7 @@ import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloa
 import { createApplicationQueueFilters } from './application-queue-filters.js';
 import { describeGocnetPreparationError, prepareGocnetTransfer } from './gocnet-transfer.js';
 import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
+import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
 
 const STATUS_LABELS = Object.freeze({
     draft: 'Taslak',
@@ -209,17 +210,38 @@ function createMigrationBulkExportAction(document, state, onExport) {
     return wrapper;
 }
 
-function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer) {
+function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer, noteOptions = null) {
     const table = document.createElement('table');
     table.className = 'staff-applications-table';
-    const headers = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
+    const headers = ['', 'Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
     const head = document.createElement('thead');
     const headerRow = document.createElement('tr');
-    headers.forEach((header) => headerRow.append(createText(document, 'th', '', header)));
+    headers.forEach((header, index) => {
+        const cell = createText(document, 'th', index === 0 ? 'staff-record-note-col' : '', header);
+        if (index === 0) cell.setAttribute('aria-label', 'Not');
+        headerRow.append(cell);
+    });
     head.append(headerRow);
     const body = document.createElement('tbody');
+    const noteEntries = [];
     items.forEach((item) => {
         const row = document.createElement('tr');
+        const studentName = [item.first_name, item.last_name].filter(Boolean).join(' ');
+        const noteCell = document.createElement('td');
+        noteCell.className = 'staff-record-note-cell';
+        noteCell.dataset.label = 'Not';
+        const { button, setNote } = createRecordNoteButton(document, {
+            kind: 'online',
+            id: item.id,
+            studentName,
+            note: noteOptions?.notesById?.get(item.id) ?? null,
+            onChange: (updatedNote) => {
+                noteOptions?.notesById?.set(item.id, updatedNote);
+            }
+        });
+        noteCell.append(button);
+        row.append(noteCell);
+        if (item.id) noteEntries.push({ id: item.id, setNote });
         const values = [
             item.student_number,
             [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
@@ -230,7 +252,7 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
         ];
         values.forEach((value, index) => {
             const cell = createText(document, 'td', '', displayValue(value));
-            cell.dataset.label = headers[index];
+            cell.dataset.label = headers[index + 1];
             row.append(cell);
         });
         const actionCell = document.createElement('td');
@@ -326,6 +348,15 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
         body.append(row);
     });
     table.append(head, body);
+    if (noteOptions?.shouldLoad && noteEntries.length > 0) {
+        noteOptions.onLoadStarted?.();
+        void loadTableRecordNotes(document, 'online', noteEntries).then((notesById) => {
+            if (!noteOptions?.notesById) return;
+            noteEntries.forEach(({ id }) => {
+                noteOptions.notesById.set(id, Object.hasOwn(notesById, id) ? notesById[id] : null);
+            });
+        });
+    }
     return table;
 }
 
@@ -442,7 +473,11 @@ function renderQueue(root, state, handlers) {
         panel.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
             handlers.onDownloadArchive, handlers.onArchiveApplication, state.archiveApplicationId, handlers.onSendToMigration,
             handlers.onResetDraftAccess, state.spreadsheetPending, state.spreadsheetErrors, handlers.onSpreadsheetTransfer,
-            state.gocnetPending, state.gocnetResults, handlers.onGocnetTransfer));
+            state.gocnetPending, state.gocnetResults, handlers.onGocnetTransfer, {
+                notesById: state.recordNotes,
+                shouldLoad: !state.loading && state.recordNotesResult !== state.result,
+                onLoadStarted: () => { state.recordNotesResult = state.result; }
+            }));
         if (state.archiveMessage) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveMessage));
         if (state.archiveError) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveError));
         if (state.archiveMessage || state.archiveError) {
@@ -1082,6 +1117,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         archiveError: null, archiveMessage: null,
         spreadsheetPending: new Set(), spreadsheetErrors: {},
         gocnetPending: new Set(), gocnetResults: {},
+        recordNotes: new Map(), recordNotesResult: null,
         query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queueRequestId = 0;
@@ -1453,6 +1489,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             const result = await api.queryApplications({ ...state.query });
             if (requestId !== queueRequestId) return;
             state.result = result;
+            state.recordNotesResult = null;
+            state.recordNotes.clear();
         } catch (error) {
             if (requestId !== queueRequestId) return;
             state.error = true;
@@ -1743,6 +1781,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     async function refreshQueueSnapshot() {
         try {
             state.result = await api.queryApplications({ ...state.query });
+            state.recordNotesResult = null;
+            state.recordNotes.clear();
         } catch {
             // The visible detail remains usable; queue reloads when staff returns to it.
         }
