@@ -145,10 +145,10 @@ test('applications workspace is prominent and opening it loads a queue without d
     assert.equal(requests.length, 1);
     assert.match(root.textContent, /STU-001/);
     assert.doesNotMatch(root.textContent, /Atanan Personel|Atanmamış|Reviewer One/);
-    assert.equal(root.querySelectorAll('th').length, 7);
-    assert.equal(root.querySelectorAll('tbody tr:first-child > td').length, 7);
+    assert.equal(root.querySelectorAll('th').length, 8);
+    assert.equal(root.querySelectorAll('tbody tr:first-child > td').length, 8);
     assert.equal([...root.querySelectorAll('td')].some((cell) => cell.dataset.label === 'Atanan Personel'), false);
-    assert.ok(root.querySelector('th')?.textContent.includes('Öğrenci No'));
+    assert.ok(root.querySelectorAll('th')[1]?.textContent.includes('Öğrenci No'));
     assert.ok(root.querySelector('[data-action="open-detail"]'));
     assert.ok(root.querySelector('[data-action="download-application-archive"]'));
 
