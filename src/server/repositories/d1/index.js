@@ -10,6 +10,7 @@ import { createResubmissionUploadRepository } from './resubmissionUploadReposito
 import { createNotificationRepository } from './notificationRepository.js';
 import { createRateLimitRepository } from './rateLimitRepository.js';
 import { createSessionRepository } from './sessionRepository.js';
+import { createStaffRecordNoteRepository } from './staffRecordNoteRepository.js';
 import { createStaffRepository } from './staffRepository.js';
 import { createStudentRepository } from './studentRepository.js';
 
@@ -35,6 +36,7 @@ export function createD1Repositories(database) {
         rateLimits: createRateLimitRepository(database),
         sessions: createSessionRepository(database),
         staff: createStaffRepository(database),
+        staffRecordNotes: createStaffRecordNoteRepository(database),
         students: createStudentRepository(database)
     });
 }
