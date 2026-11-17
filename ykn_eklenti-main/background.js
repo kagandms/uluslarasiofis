@@ -37,9 +37,6 @@ const CONTENT_READY_MAX_DELAY_MS = 1_000;
 // için bu sınırın daha uzun olması gerekir.
 const YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS = 32_000;
 const YOKSIS_REFRESH_TIMEOUT_MS = 30_000;
-// Arka plan sekmesi pasifken ilk form beklemesi zaman kaybetmeden kısa öne alma
-// denemesine geçebilsin diye en düşük sınır olan 1000 ms uygulanır.
-const BACKGROUND_FIRST_FORM_WAIT_MS = 1000;
 
 function startYknTiming() {
     return globalThis.performance?.now?.() ?? Date.now();
@@ -2249,21 +2246,26 @@ function resolveBackgroundAttentionReason(response) {
 }
 
 /**
- * Arka plan modunda dönen yanıtı sözleşme alanlarıyla tamamlar; gerekirse YÖKSİS sekmesini öne alır.
+ * Arka plan modunda dönen yanıtı sözleşme alanlarıyla tamamlar; form doğrulandıysa portala döner,
+ * aksi durumda YÖKSİS sekmesini öne alır (veya önde bırakır).
  * @param {object} response
  * @param {chrome.tabs.Tab|null} yoksisTab
+ * @param {chrome.tabs.Tab|null} portalSenderTab
+ * @param {boolean} alreadySurfaced
  * @returns {Promise<object>}
  */
-async function finalizeBackgroundTransferResponse(response, yoksisTab) {
+async function finalizeBackgroundTransferResponse(response, yoksisTab, portalSenderTab = null, alreadySurfaced = false) {
     const isFormVerified = response?.success === true && response?.formReady === true;
     if (isFormVerified) {
+        await returnToPortalTab(portalSenderTab);
         return {
             ...response,
             background: true,
-            surfaced: false
+            surfaced: false,
+            briefSurface: true
         };
     }
-    const surfaced = await surfaceYoksisTab(yoksisTab);
+    const surfaced = alreadySurfaced || await surfaceYoksisTab(yoksisTab);
     return {
         ...response,
         background: true,
@@ -2278,14 +2280,16 @@ async function finalizeBackgroundTransferResponse(response, yoksisTab) {
  * @param {chrome.tabs.Tab|null} yoksisTab
  * @param {string|undefined} requestId
  * @param {number} totalStartedAt
+ * @param {chrome.tabs.Tab|null} portalSenderTab
+ * @param {boolean} alreadySurfaced
  * @returns {Promise<object>}
  */
-async function handleBackgroundTransferError(error, yoksisTab, requestId, totalStartedAt) {
+async function handleBackgroundTransferError(error, yoksisTab, requestId, totalStartedAt, portalSenderTab = null, alreadySurfaced = false) {
     finishYknTiming('yoksis-transfer-total', totalStartedAt, 'failed', 'transfer_failed', requestId);
     return finalizeBackgroundTransferResponse({
         success: false,
         error: error?.message || 'YÖKSİS araması tamamlanamadı.'
-    }, yoksisTab);
+    }, yoksisTab, portalSenderTab, alreadySurfaced);
 }
 
 async function transferToYoksis(request) {
@@ -2312,6 +2316,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         totalMs: Math.max(0, Math.round(Date.now() - opStartedAt))
     });
     let yoksisTab = null;
+    let alreadySurfaced = false;
 
     try {
         // Kabul kodu okunduktan sonra YÖKSİS sekmesi bulunur veya açılır;
@@ -2328,6 +2333,9 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         yoksisTab = await getBackgroundYoksisTab(sideWindowPlan);
         if (!isBackgroundMode) {
             yoksisTab = await arrangeSideBySideWindows(yoksisTab, sideWindowPlan);
+        } else {
+            // Pasif YÖKSİS sekmesinde gezinme ve ZK yavaşladığı için kısa arama penceresinde sekme öne alınır.
+            alreadySurfaced = await surfaceYoksisTab(yoksisTab);
         }
 
         const expectedStudent = {
@@ -2428,13 +2436,8 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                     expectedStudent
                 };
                 const formValidationStartedAt = startYknTiming();
-                // Arka plan modunda ilk form beklemesini kısa tut; başarısız olursa
-                // sekme kısa süre öne alınıp varsayılan 10 sn ile yeniden denenir.
-                const firstWaitOptions = isBackgroundMode
-                    ? { ...waitOptions, timeoutMs: BACKGROUND_FIRST_FORM_WAIT_MS }
-                    : waitOptions;
                 const firstWaitStartedAt = isBackgroundMode ? Date.now() : 0;
-                const delayedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, firstWaitOptions);
+                const delayedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, waitOptions);
                 if (isBackgroundMode) {
                     firstWaitMs = Math.max(0, Math.round(Date.now() - firstWaitStartedAt));
                 }
@@ -2449,32 +2452,6 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                         ...(await getVerifiedYoksisTarget(yoksisTab.id)),
                         message: 'Kabul mektup kodu YÖKSİS’e aktarıldı ve gecikmeli öğrenci formu doğrulandı.'
                     };
-                }
-                if (isBackgroundMode) {
-                    // Arka plan sekmesi pasifken ZK zamanlayıcıları gecikebileceğinden
-                    // sekmeyi kısa süre öne çıkarıp form doğrulamasını ikinci kez deneriz.
-                    const retryStartedAt = Date.now();
-                    let surfacedFormReady = false;
-                    try {
-                        await surfaceYoksisTab(yoksisTab);
-                        surfacedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, waitOptions);
-                    } finally {
-                        await returnToPortalTab(request.portalSenderTab);
-                        retryMs = Math.max(0, Math.round(Date.now() - retryStartedAt));
-                    }
-                    if (surfacedFormReady) {
-                        finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'ok', undefined, request.requestId);
-                        finishYknTiming('yoksis-transfer-total', totalStartedAt, 'ok', undefined, request.requestId);
-                        return {
-                            success: true,
-                            transferred: true,
-                            searchTriggered: true,
-                            formReady: true,
-                            briefSurface: true,
-                            ...(await getVerifiedYoksisTarget(yoksisTab.id)),
-                            message: 'Kabul mektup kodu YÖKSİS’e aktarıldı; form doğrulaması için sekme kısa süre öne alındı.'
-                        };
-                    }
                 }
                 finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'failed', 'fresh_form_not_confirmed', request.requestId);
                 const currentFormState = await getYoksisFormState(yoksisTab.id, request.requestId);
@@ -2565,7 +2542,12 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                         yoksisTabId: response.yoksisTabId, yoksisTabUrl: response.yoksisTabUrl });
                 }
                 if (isBackgroundMode) {
-                    const finalized = await finalizeBackgroundTransferResponse(response, yoksisTab);
+                    const finalized = await finalizeBackgroundTransferResponse(
+                        response,
+                        yoksisTab,
+                        request.portalSenderTab,
+                        alreadySurfaced
+                    );
                     return { ...finalized, phaseMs: buildPhaseMs() };
                 }
                 // Portal'dan başlatılan aramada kabul kodu YÖKSİS'te doğrulanınca kullanıcıyı tekrar portal sekmesine al.
@@ -2576,13 +2558,27 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 return response;
             } catch (error) {
                 if (!isBackgroundMode) throw error;
-                const errorResponse = await handleBackgroundTransferError(error, yoksisTab, request.requestId, totalStartedAt);
+                const errorResponse = await handleBackgroundTransferError(
+                    error,
+                    yoksisTab,
+                    request.requestId,
+                    totalStartedAt,
+                    request.portalSenderTab,
+                    alreadySurfaced
+                );
                 return { ...errorResponse, phaseMs: buildPhaseMs() };
             }
         });
     } catch (error) {
         if (!isBackgroundMode) throw error;
-        const errorResponse = await handleBackgroundTransferError(error, yoksisTab, request.requestId, totalStartedAt);
+        const errorResponse = await handleBackgroundTransferError(
+            error,
+            yoksisTab,
+            request.requestId,
+            totalStartedAt,
+            request.portalSenderTab,
+            alreadySurfaced
+        );
         return { ...errorResponse, phaseMs: buildPhaseMs() };
     }
 }

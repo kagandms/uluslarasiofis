@@ -1048,8 +1048,8 @@ export function initYknManager() {
         syncUserEnteredPassportDates();
         setBackgroundSearchState(startBackgroundSearch(backgroundSearchState, { requestId }));
         addStatus(`Kabul kodu bulundu ve kopyalandı: ${yoksisId}`, 'success');
-        addStatus('YÖKSİS arka planda aranıyor (sekme değiştirilmedi). Bu sırada fotoğrafı kırpabilirsiniz.', 'info');
-        showToast('YÖKSİS arka planda aranıyor (sekme değiştirilmedi).', 'info');
+        addStatus('YÖKSİS aranıyor (sekme birkaç saniye öne alınır, sonra portala dönülür). Fotoğrafı kırpabilirsiniz.', 'info');
+        showToast('YÖKSİS aranıyor (sekme birkaç saniye öne alınır, sonra portala dönülür).', 'info');
 
         clearBackgroundSearchTimeout();
         backgroundSearchTimeoutTimer = setTimeout(() => {
@@ -2748,7 +2748,7 @@ export function initYknManager() {
             backgroundAcceptanceRequestId = bgLetterRequestId;
             if (!activeSearchRequestId) activeSearchRequestId = bgLetterRequestId;
             setBackgroundSearchState(startReadingLetter(backgroundSearchState));
-            addStatus('Kabul mektubu okunuyor ve ardından arka planda YÖKSİS’te aranacak...', 'info');
+            addStatus('Kabul mektubu okunuyor ve ardından YÖKSİS’te aranacak (sekme birkaç saniye öne alınır, sonra portala dönülür)...', 'info');
 
             clearBackgroundSearchTimeout();
             backgroundSearchTimeoutTimer = setTimeout(() => {

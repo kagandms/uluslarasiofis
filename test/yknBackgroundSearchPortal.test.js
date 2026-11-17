@@ -162,7 +162,7 @@ test('ykn-pro-actions places background search button first and leaves existing 
     assert.match(buttons[0].textContent, /Arka Planda YÖKSİS’te Ara ve Fotoğrafı Kırp/);
     assert.equal(
         buttons[0].getAttribute('title'),
-        'Sekme değiştirmeden YÖKSİS’te aranır ve aynı anda pasaport fotoğrafını kırpma ekranı açılır'
+        'YÖKSİS sekmesi birkaç saniye öne alınıp aranır, sonra portala dönülür; aynı anda pasaport fotoğrafı kırpma ekranı açılır'
     );
 });
 
@@ -290,6 +290,10 @@ test('one-tap background search opens cropper simultaneously, queues crop transf
     assert.equal(bgTransferMsg.payload.background, true);
     assert.equal(bgTransferMsg.payload.data.yoksisId, 'XY9-876-ZW');
     const bgRequestId = bgTransferMsg.payload.requestId;
+    assert.match(
+        document.getElementById('ykn-status-container').textContent,
+        /YÖKSİS aranıyor \(sekme birkaç saniye öne alınır, sonra portala dönülür\)\. Fotoğrafı kırpabilirsiniz\./
+    );
 
     // sync-fields çalışırken kilitli kalmalıdır
     const beforeSyncAttemptCount = postedMessages.length;
@@ -362,6 +366,10 @@ test('needs_attention, 45s timeout, and acceptance extraction path behave accord
     btnBg.click();
     assert.equal(btnBg.disabled, true);
     assert.equal(btnSync.disabled, true);
+    assert.match(
+        document.getElementById('ykn-status-container').textContent,
+        /Kabul mektubu okunuyor ve ardından YÖKSİS’te aranacak \(sekme birkaç saniye öne alınır, sonra portala dönülür\)\.\.\./
+    );
 
     const extractMsg = [...postedMessages].reverse().find((m) => m?.payload?.action === 'EXTRACT_KABUL_CODE');
     assert.ok(extractMsg, 'EXTRACT_KABUL_CODE should be posted when yoksisId is missing');
