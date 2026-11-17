@@ -1279,7 +1279,7 @@ test('queue shortcut marks an approved application sent to migration', async (co
     document.querySelector('.home-actions [data-workspace-view="applications"]').click();
     await new Promise((resolve) => setImmediate(resolve));
     const sendButton = root.querySelector('[data-action="send-to-migration"]');
-    assert.equal(sendButton.textContent, 'Göç İdaresine İletildi Olarak İşaretle');
+    assert.equal(sendButton.textContent, 'Göçe İletildi');
     sendButton.click();
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(calls, [[item.id, 'sent_to_migration', item.updated_at, null, true]]);

@@ -340,7 +340,7 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
             send.type = 'button';
             send.className = 'btn btn-outline';
             send.dataset.action = 'send-to-migration';
-            send.textContent = 'Göç İdaresine İletildi Olarak İşaretle';
+            send.textContent = 'Göçe İletildi';
             send.addEventListener('click', () => onSendToMigration(item));
             actionCell.append(send);
         }
