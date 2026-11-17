@@ -1168,7 +1168,7 @@ export function initYknManager() {
             const reasonText = nextState.reasonKey === 'login_required'
                 ? 'YÖKSİS oturumu gerekli'
                 : (nextState.reasonKey === 'manual_confirmation'
-                    ? 'YÖKSİS formu otomatik doğrulanamadı; YÖKSİS sekmesinde kontrol edip “1. Kabul Mektubunu Oku ve YÖKSİS’te Ara” ile devam edin'
+                    ? 'YÖKSİS formu otomatik doğrulanamadı; YÖKSİS sekmesinde kontrol edip “Arka Planda YÖKSİS’te Ara ve Fotoğrafı Kırp” ile devam edin'
                     : (response?.error || response?.message || nextState.errorMessage || 'YÖKSİS araması tamamlanamadı'));
             const statusMessage = nextState.surfaced
                 ? `YÖKSİS sekmesi öne getirildi: ${reasonText}.`
