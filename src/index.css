@@ -799,10 +799,22 @@ body.dark-mode .ykn-status-item {
 /* ==========================================
    YKN PRO 2-TUŞ İŞLEM ALANI (OFİS STANDARDI)
    ========================================== */
+.ykn-pro-actions #btn-ykn-background-search,
 .ykn-pro-actions #btn-copy {
     transition: var(--transition);
 }
 
+.ykn-pro-actions #btn-ykn-background-search:disabled,
+.ykn-pro-actions #btn-ykn-background-search.is-loading,
+#btn-passport-crop-transfer:disabled,
+#btn-passport-crop-transfer[aria-disabled="true"] {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+body.dark-mode .ykn-pro-actions #btn-ykn-background-search,
 body.dark-mode .ykn-pro-actions #btn-copy {
     background: #232330;
     color: #f4f6f8;
@@ -810,6 +822,7 @@ body.dark-mode .ykn-pro-actions #btn-copy {
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
+body.dark-mode .ykn-pro-actions #btn-ykn-background-search:hover:not(:disabled),
 body.dark-mode .ykn-pro-actions #btn-copy:hover:not(:disabled) {
     background: #2d2d3c;
     color: #ffffff;
@@ -817,6 +830,7 @@ body.dark-mode .ykn-pro-actions #btn-copy:hover:not(:disabled) {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
+body.dark-mode .ykn-pro-actions #btn-ykn-background-search:disabled,
 body.dark-mode .ykn-pro-actions #btn-copy:disabled {
     background: #1c1c24;
     color: #717182;
