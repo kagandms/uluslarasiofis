@@ -109,6 +109,7 @@ function createQueueItemDto(application) {
     return {
         id: application.id,
         student_number: application.student_number,
+        passport_number: application.passport_number ?? null,
         first_name: application.first_name,
         last_name: application.last_name,
         application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
