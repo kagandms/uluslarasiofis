@@ -168,6 +168,10 @@ function createBackgroundSearchHarness(options = {}) {
                     return;
                 }
                 if (message.action === 'WAIT_YOKSIS_FORM') {
+                    if (typeof options.onWaitForm === 'function') {
+                        options.onWaitForm(message, callback);
+                        return;
+                    }
                     callback(options.waitFormResult || { success: true, formReady: true });
                     return;
                 }
@@ -586,4 +590,169 @@ test('ardışık aramalarda neden sızdırılmaz, 160 karakterle sınırlanır v
         third.error,
         'YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin.'
     );
+});
+
+test('arka plan modunda ilk form bekleme başarısız olup kısa öne almadan sonra ikinci bekleme başarılı olursa portala dönülür ve briefSurface true döner', async () => {
+    let waitAttempt = 0;
+    const waitMessages = [];
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        searchResult: {
+            success: true,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'fp-1',
+            domRevisionBeforeSearch: 1
+        },
+        onWaitForm(message, callback) {
+            waitAttempt += 1;
+            waitMessages.push(message);
+            if (waitAttempt === 1) {
+                callback({
+                    success: true,
+                    formReady: false,
+                    manualOverrideAvailable: true,
+                    message: 'Gizli sekmede ZK formu henüz dolmadı'
+                });
+                return;
+            }
+            callback({ success: true, formReady: true });
+        }
+    });
+
+    const response = await harness.sendTransfer({ background: true, requestId: 'bg-brief-surface-1' });
+
+    assert.equal(waitAttempt, 2);
+    assert.equal(waitMessages[1].afterFingerprint, waitMessages[0].afterFingerprint);
+    assert.equal(waitMessages[1].afterDomRevision, waitMessages[0].afterDomRevision);
+    assert.equal(waitMessages[1].requireFreshResult, waitMessages[0].requireFreshResult);
+    assert.equal(waitMessages[1].expectedKabulId, waitMessages[0].expectedKabulId);
+
+    assert.equal(response.success, true);
+    assert.equal(response.transferred, true);
+    assert.equal(response.searchTriggered, true);
+    assert.equal(response.formReady, true);
+    assert.equal(response.briefSurface, true);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, false);
+    assert.equal(response.yoksisTabId, 42);
+    assert.equal(response.yoksisTabUrl, 'https://yoksis.yok.gov.tr/student');
+    assert.equal(
+        response.message,
+        'Kabul mektup kodu YÖKSİS’e aktarıldı; form doğrulaması için sekme kısa süre öne alındı.'
+    );
+
+    const tabActivations = harness.calls
+        .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
+        .map((call) => call.tabId);
+    assert.deepEqual(tabActivations, [42, 1]);
+
+    const windowFocusCalls = harness.calls
+        .filter((call) => call.type === 'update-window' && call.updateProperties.focused === true)
+        .map((call) => call.windowId);
+    assert.deepEqual(windowFocusCalls, [20, 10]);
+});
+
+test('arka plan modunda her iki form bekleme de başarısız olursa portala dönülür, manualOverrideAvailable korunur ve 160 karakterle sınırlı Neden eklenir', async () => {
+    let waitAttempt = 0;
+    const longReason = `ZK formu ikinci beklemede de hazır olmadı: ${'ayrinti '.repeat(30)}`;
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        searchResult: {
+            success: true,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'fp-1',
+            domRevisionBeforeSearch: 1
+        },
+        formState: {
+            success: true,
+            fingerprint: 'fp-2',
+            domRevision: 2,
+            hasPopulatedStudentForm: false
+        },
+        onWaitForm(_message, callback) {
+            waitAttempt += 1;
+            callback({
+                success: true,
+                formReady: false,
+                manualOverrideAvailable: true,
+                message: waitAttempt === 1 ? 'İlk deneme zaman aşımı' : longReason
+            });
+        }
+    });
+
+    const response = await harness.sendTransfer({ background: true, requestId: 'bg-brief-surface-fail-1' });
+
+    assert.equal(waitAttempt, 2);
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, false);
+    assert.equal(response.manualOverrideAvailable, true);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, true);
+    assert.equal(response.attentionReason, 'manual_confirmation');
+    assert.equal('briefSurface' in response, false);
+    assert.ok(
+        response.message.startsWith(
+            'Kabul kodu aratıldı; form otomatik doğrulanamadı. YÖKSİS kaydını kontrol edip manuel aktarımı seçebilirsiniz. Neden: '
+        )
+    );
+    const reasonText = response.message.split('Neden: ')[1];
+    assert.equal(reasonText, longReason.replace(/\s+/g, ' ').trim().slice(0, 160));
+    assert.equal(reasonText.length, 160);
+
+    const tabActivations = harness.calls
+        .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
+        .map((call) => call.tabId);
+    assert.deepEqual(tabActivations, [42, 1, 42]);
+});
+
+test('arka plan dışındaki modda ilk form bekleme başarısız olursa ek öne alma, portala dönüş veya Neden eki yapılmaz', async () => {
+    let waitAttempt = 0;
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        searchResult: {
+            success: true,
+            searchTriggered: true,
+            formReady: false,
+            formFingerprintBeforeSearch: 'fp-1',
+            domRevisionBeforeSearch: 1
+        },
+        formState: {
+            success: true,
+            fingerprint: 'fp-2',
+            domRevision: 2,
+            hasPopulatedStudentForm: false
+        },
+        onWaitForm(_message, callback) {
+            waitAttempt += 1;
+            callback({
+                success: true,
+                formReady: false,
+                manualOverrideAvailable: true,
+                message: 'Ön plan form doğrulaması başarısız'
+            });
+        }
+    });
+
+    const response = await harness.sendTransfer({ background: false, requestId: 'fg-wait-fail-1' });
+
+    assert.equal(waitAttempt, 1);
+    assert.equal(response.success, true);
+    assert.equal(response.formReady, false);
+    assert.equal(response.manualOverrideAvailable, true);
+    assert.equal('briefSurface' in response, false);
+    assert.equal('background' in response, false);
+    assert.equal(
+        response.message,
+        'Kabul kodu aratıldı; form otomatik doğrulanamadı. YÖKSİS kaydını kontrol edip manuel aktarımı seçebilirsiniz.'
+    );
+
+    const tabActivations = harness.calls
+        .filter((call) => call.type === 'update-tab' && call.updateProperties.active === true)
+        .map((call) => call.tabId);
+    assert.deepEqual(tabActivations, [42]);
 });

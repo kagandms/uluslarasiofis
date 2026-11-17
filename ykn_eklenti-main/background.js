@@ -2391,6 +2391,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         }
         finishYknTiming('acceptance-id-input-and-search', searchStartedAt, 'ok', undefined, request.requestId);
 
+        let waitOptions = null;
         if (response?.searchTriggered === true && response.formReady !== true) {
             if (response.message && response.message.startsWith('YÖKSİS:')) {
                 throw new Error(response.message);
@@ -2398,7 +2399,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             const hasFreshBaseline = typeof response.formFingerprintBeforeSearch === 'string'
                 && Number.isFinite(response.domRevisionBeforeSearch);
             if (hasFreshBaseline) {
-                const waitOptions = {
+                waitOptions = {
                     expectedKabulId: kabulId,
                     afterFingerprint: response.formFingerprintBeforeSearch,
                     afterDomRevision: response.domRevisionBeforeSearch,
@@ -2418,6 +2419,30 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                         ...(await getVerifiedYoksisTarget(yoksisTab.id)),
                         message: 'Kabul mektup kodu YÖKSİS’e aktarıldı ve gecikmeli öğrenci formu doğrulandı.'
                     };
+                }
+                if (isBackgroundMode) {
+                    // Arka plan sekmesi pasifken ZK zamanlayıcıları gecikebileceğinden
+                    // sekmeyi kısa süre öne çıkarıp form doğrulamasını ikinci kez deneriz.
+                    await surfaceYoksisTab(yoksisTab);
+                    let surfacedFormReady = false;
+                    try {
+                        surfacedFormReady = await waitForYoksisFormReady(yoksisTab.id, request.requestId, waitOptions);
+                    } finally {
+                        await returnToPortalTab(request.portalSenderTab);
+                    }
+                    if (surfacedFormReady) {
+                        finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'ok', undefined, request.requestId);
+                        finishYknTiming('yoksis-transfer-total', totalStartedAt, 'ok', undefined, request.requestId);
+                        return {
+                            success: true,
+                            transferred: true,
+                            searchTriggered: true,
+                            formReady: true,
+                            briefSurface: true,
+                            ...(await getVerifiedYoksisTarget(yoksisTab.id)),
+                            message: 'Kabul mektup kodu YÖKSİS’e aktarıldı; form doğrulaması için sekme kısa süre öne alındı.'
+                        };
+                    }
                 }
                 finishYknTiming('fresh-student-form-validation', formValidationStartedAt, 'failed', 'fresh_form_not_confirmed', request.requestId);
                 const currentFormState = await getYoksisFormState(yoksisTab.id, request.requestId);
@@ -2460,6 +2485,10 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 throw new Error('Kabul kodu gönderildi ancak yeni YÖKSİS öğrenci formu doğrulanmadı. Aynı arama otomatik tekrar gönderilmedi.');
             }
             const target = await getVerifiedYoksisTarget(yoksisTab.id);
+            const delayedErrorReason = isBackgroundMode && typeof waitOptions?.lastErrorMessage === 'string'
+                ? waitOptions.lastErrorMessage.replace(/\s+/g, ' ').trim().slice(0, 160)
+                : '';
+            const delayedReasonSuffix = delayedErrorReason ? ` Neden: ${delayedErrorReason}` : '';
             const manualResponse = {
                 success: true,
                 transferred: true,
@@ -2468,7 +2497,7 @@ async function transferToYoksisOperation(request, totalStartedAt) {
                 manualOverrideAvailable: true,
                 yoksisSearchRequestId: request.requestId,
                 ...target,
-                message: 'Kabul kodu aratıldı; form otomatik doğrulanamadı. YÖKSİS kaydını kontrol edip manuel aktarımı seçebilirsiniz.'
+                message: `Kabul kodu aratıldı; form otomatik doğrulanamadı. YÖKSİS kaydını kontrol edip manuel aktarımı seçebilirsiniz.${delayedReasonSuffix}`
             };
             finishYknTiming('yoksis-transfer-total', totalStartedAt, 'partial', 'manual_confirmation_required', request.requestId);
             return manualResponse;
