@@ -412,6 +412,7 @@ test('arka plan öne çıkarma sırasında tab/window update hata verse bile yal
 test('varsayılan akış (background yok veya false) sekme odaklama, yan yana yerleştirme ve portala dönüşü korur', async () => {
     for (const extraFields of [{}, { background: false }]) {
         const harness = createBackgroundSearchHarness({
+            localStorage: { yoksisSideBySideEnabled: true },
             portalWindowId: 10,
             yoksisWindowId: 10
         });
