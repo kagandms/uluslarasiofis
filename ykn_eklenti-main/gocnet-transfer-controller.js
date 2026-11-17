@@ -379,14 +379,25 @@ async function queryGocnetRegistration(rootDocument, applicationNumber, { signal
     return resultPromise;
 }
 
+// Ekran kapısı kodlarını ilk sırada koruyarak portalın neden kodunu tanımasını sağlar.
+function formatZkCommandFailureReason(error) {
+    const text = String(error || '').slice(0, 110);
+    return /^(?:not_on_gocnet_screen|history_section_missing)\b/.test(text)
+        ? text
+        : `zk_command_failed: ${text}`;
+}
+
 async function queryGocnetRecordList(rootDocument, applicationNumber, requestId) {
+    lastReason = '';
     if (!rootDocument || !/^20\d{2}-\d{2}-\d{5,8}$/.test(applicationNumber)
         || typeof requestId !== 'string' || requestId.length > 128 || typeof chrome === 'undefined') return 'unknown';
     try {
         const response = await chrome.runtime.sendMessage({ action: 'YOKSIS_ZK_COMMAND', command: {
             action: 'queryGocnetRecords', applicationNumber, requestId
         } });
-        if (response?.success !== true || response.freshResponse !== true) return noteReason(response?.success === true ? 'zk_command_stale' : `zk_command_failed: ${String(response?.error || '').slice(0, 110)}`);
+        if (response?.success !== true || response.freshResponse !== true) {
+            return noteReason(response?.success === true ? 'zk_command_stale' : formatZkCommandFailureReason(response?.error));
+        }
         return readGocnetRecordListResult(rootDocument, { applicationNumber, freshResponse: true });
     } catch {
         return 'unknown';
