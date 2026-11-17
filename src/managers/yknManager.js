@@ -1085,6 +1085,33 @@ export function initYknManager() {
         );
     }
 
+    function formatFillPhaseSeconds(ms) {
+        return (Math.max(0, ms) / 1000).toFixed(1).replace('.', ',');
+    }
+
+    // YÖKSİS aktarım aşama sürelerini Türkçe ondalık biçimiyle (virgül) durum paneline yazar.
+    function reportFillPhaseTimings(phaseMs) {
+        if (!phaseMs || typeof phaseMs !== 'object') return;
+        const {
+            tabPrepMs,
+            readyMs,
+            fieldsMs,
+            verifyFieldsMs,
+            photoMs,
+            verifyPhotoMs,
+            completeMs,
+            totalMs
+        } = phaseMs;
+        if (![tabPrepMs, readyMs, fieldsMs, verifyFieldsMs, photoMs, verifyPhotoMs, completeMs, totalMs]
+            .every((value) => Number.isFinite(value) && value >= 0)) {
+            return;
+        }
+        addStatus(
+            `YÖKSİS aktarım süreleri: sekme hazırlığı ${formatFillPhaseSeconds(tabPrepMs)} sn, hazırlık ${formatFillPhaseSeconds(readyMs)} sn, alanlar ${formatFillPhaseSeconds(fieldsMs)} sn, alan doğrulama ${formatFillPhaseSeconds(verifyFieldsMs)} sn, fotoğraf ${formatFillPhaseSeconds(photoMs)} sn, foto doğrulama ${formatFillPhaseSeconds(verifyPhotoMs)} sn, tamamlama ${formatFillPhaseSeconds(completeMs)} sn, toplam ${formatFillPhaseSeconds(totalMs)} sn.`,
+            'info'
+        );
+    }
+
     function handleBackgroundTransferResponse(response, requestId) {
         const nextState = applyExtensionResponse(backgroundSearchState, {
             ...(response || {}),
@@ -3077,6 +3104,7 @@ export function initYknManager() {
 
                 btnSyncYoksisFields.disabled = !getTransferGate(backgroundSearchState).allowed;
                 btnSyncYoksisFields.classList.remove('is-loading');
+                reportFillPhaseTimings(response?.phaseMs);
 
                 if (response?.success) {
                     addStatus('✓ Pasaport ve öğrenci alanları YÖKSİS formunda başarıyla güncellendi.', 'success');
@@ -3443,6 +3471,7 @@ export function initYknManager() {
             } else if (event.data.action === 'FILL_YOKSIS_FORM'
                 && isOneClickActive(ONE_CLICK_STAGE.YOKSIS_FILLING)) {
                 clearOneClickTimeout();
+                reportFillPhaseTimings(response?.phaseMs);
                 const photoRequired = Boolean(currentStudentData?.croppedPhotoBase64);
                 const missingFields = Array.isArray(response?.missingFields) ? response.missingFields : [];
                 const photoUploadFailed = photoRequired && response?.photoUploaded !== true;
@@ -3562,6 +3591,7 @@ export function initYknManager() {
                     btnCopy.disabled = false;
                     btnCopy.classList.remove('is-loading');
                 }
+                reportFillPhaseTimings(response?.phaseMs);
 
                 if (response?.success) {
                     const hasPhoto = Boolean(currentStudentData?.croppedPhotoBase64);

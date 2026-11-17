@@ -1929,29 +1929,65 @@ async function completeMissingYoksisFields(context, mainResponse) {
 
 async function transferYoksisFieldsAndPhoto(context) {
     const startedAt = startYknTiming();
+    const fieldsStartedAt = Date.now();
     const mainResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, {
         phase: 'fields', requestId: context.requestId
     });
+    const fieldsMs = Math.max(0, Math.round(Date.now() - fieldsStartedAt));
+    const verifyFieldsStartedAt = Date.now();
     const settled = await verifyTransferredYoksisFields(context);
+    const verifyFieldsMs = Math.max(0, Math.round(Date.now() - verifyFieldsStartedAt));
     if (settled?.error && (!settled.filledFields || settled.filledFields.length === 0)) {
-        return { ...buildVerifiedFillResponse(mainResponse, settled, context.studentData), success: false, partial: true };
+        return {
+            ...buildVerifiedFillResponse(mainResponse, settled, context.studentData),
+            success: false,
+            partial: true,
+            phaseMs: {
+                fieldsMs,
+                verifyFieldsMs,
+                photoMs: 0,
+                verifyPhotoMs: 0,
+                completeMs: 0
+            }
+        };
     }
     let photoResponse = null;
+    let photoMs = 0;
     if (context.studentData.croppedPhotoBase64) {
+        const photoStartedAt = Date.now();
         photoResponse = await syncYoksisFormInMainWorld(context.tabId, context.studentData, {
             phase: 'photo', requestId: context.requestId
         });
+        photoMs = Math.max(0, Math.round(Date.now() - photoStartedAt));
         reportYknTiming('photo-file-preparation-and-form-assignment', photoResponse?.photoUploadDurationMs,
             photoResponse?.photoUploaded ? 'assigned' : 'failed');
     }
-    const verification = photoResponse ? await verifyTransferredYoksisFields(context) : settled;
+    let verifyPhotoMs = 0;
+    let verification = settled;
+    if (photoResponse) {
+        const verifyPhotoStartedAt = Date.now();
+        verification = await verifyTransferredYoksisFields(context);
+        verifyPhotoMs = Math.max(0, Math.round(Date.now() - verifyPhotoStartedAt));
+    }
     const verified = buildVerifiedFillResponse({ ...mainResponse, photoUploaded: photoResponse?.photoUploaded === true }, verification, context.studentData);
+    const completeStartedAt = Date.now();
     const result = await completeMissingYoksisFields(context, verified);
+    const completeMs = Math.max(0, Math.round(Date.now() - completeStartedAt));
     finishYknTiming('main-world-fields-and-photo-transfer', startedAt, result.partial ? 'partial' : 'ok');
-    return result;
+    return {
+        ...result,
+        phaseMs: {
+            fieldsMs,
+            verifyFieldsMs,
+            photoMs,
+            verifyPhotoMs,
+            completeMs
+        }
+    };
 }
 
 async function fillReadyYoksisStudent(context, options = {}) {
+    const readyStartedAt = Date.now();
     // Intentional operator policy: manual transfer bypasses unreliable form-open detection.
     const formReady = options.manualOverrideConfirmed === true || await waitForYoksisFormReady(context.tabId, context.requestId, {
         requireBoundSearch: true, expectedKabulId: context.studentData.yoksisId || context.studentData.kabulId || '', expectedStudent: context.studentData
@@ -1965,8 +2001,16 @@ async function fillReadyYoksisStudent(context, options = {}) {
             throw new Error('YÖKSİS ekranı manuel aktarım için uygun değil. Kabul kodunu yeniden aratıp doğru öğrenci formunu kontrol edin.');
         }
     }
+    const readyMs = Math.max(0, Math.round(Date.now() - readyStartedAt));
     await saveTemporaryStudentData(context.studentData);
-    return await transferYoksisFieldsAndPhoto(context);
+    const result = await transferYoksisFieldsAndPhoto(context);
+    return {
+        ...result,
+        phaseMs: {
+            ...(result?.phaseMs || {}),
+            readyMs
+        }
+    };
 }
 
 async function checkManualYoksisFill(context) {
@@ -1981,6 +2025,7 @@ async function checkManualYoksisFill(context) {
 }
 
 async function fillBoundYoksisStudent(studentData, requestId, options = {}) {
+    const fillStartedAt = Date.now();
     const isManualOverride = options.manualOverrideConfirmed === true;
     if (studentData.yoksisReady !== true && !isManualOverride) {
         throw new Error('Kabul kodu için doğrulanmış yeni YÖKSİS öğrenci formu yok. Önce kabul kodunu aratın.');
@@ -1991,10 +2036,12 @@ async function fillBoundYoksisStudent(studentData, requestId, options = {}) {
     const tab = (!hasBoundTab && isManualOverride)
         ? await resolveYoksisTab()
         : await resolveExpectedYoksisTab(studentData.yoksisTabId, studentData.yoksisTabUrl);
+    const tabPrepStartedAt = Date.now();
     await updateTab(tab.id, { active: true });
     if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true }).catch(error => {
         console.warn('YÖKSİS window focus failed.', { errorName: error.name });
     });
+    const tabPrepMs = Math.max(0, Math.round(Date.now() - tabPrepStartedAt));
     const startedAt = startYknTiming();
     const response = await runYoksisOperation(tab.id, 'fill', requestId, async () => {
         const result = await fillReadyYoksisStudent({ tabId: tab.id, studentData, requestId }, options);
@@ -2003,7 +2050,21 @@ async function fillBoundYoksisStudent(studentData, requestId, options = {}) {
         return { ...result, ...(isComplete ? { temporaryDataCleared: await clearTemporaryStudentData() } : {}) };
     });
     finishYknTiming('yoksis-fill-total', startedAt, response.partial ? 'partial' : 'ok');
-    return response;
+    // Doldurma yanıtına eklenecek tamsayı aşama sürelerini birleştirir (öğrenci verisi içermez).
+    const transferPhaseMs = response?.phaseMs || {};
+    return {
+        ...response,
+        phaseMs: {
+            tabPrepMs,
+            readyMs: transferPhaseMs.readyMs ?? 0,
+            fieldsMs: transferPhaseMs.fieldsMs ?? 0,
+            verifyFieldsMs: transferPhaseMs.verifyFieldsMs ?? 0,
+            photoMs: transferPhaseMs.photoMs ?? 0,
+            verifyPhotoMs: transferPhaseMs.verifyPhotoMs ?? 0,
+            completeMs: transferPhaseMs.completeMs ?? 0,
+            totalMs: Math.max(0, Math.round(Date.now() - fillStartedAt))
+        }
+    };
 }
 
 async function fillStoredYoksisStudent(request) {
