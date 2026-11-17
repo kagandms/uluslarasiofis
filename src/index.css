@@ -2141,8 +2141,8 @@ body.dark-mode .history-badge {
     width: auto;
     min-width: 62px;
     min-height: 36px;
-    padding: 0.4rem 0.75rem;
-    font-size: 0.82rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
     font-weight: 600;
     white-space: nowrap;
     background: var(--accent);
@@ -2685,17 +2685,6 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
 .staff-applications-table td[data-label="Detay"] button {
     margin: 0;
     white-space: nowrap;
-}
-
-/* Uzun Göç İdaresi durum düğmesinin satır içinde kaydırılması */
-.staff-applications-table td.staff-queue-actions-cell button[data-action="send-to-migration"],
-.staff-applications-table td[data-label="Detay"] button[data-action="send-to-migration"] {
-    white-space: normal;
-    text-align: center;
-    line-height: 1.2;
-    max-width: 9.5rem;
-    width: auto;
-    min-width: 0;
 }
 
 .staff-applications-table td.staff-queue-actions-cell .staff-gocnet-transfer-status,
@@ -3519,23 +3508,24 @@ body.dark-mode .staff-modal-footer {
     width: 2rem;
     height: 2rem;
     padding: 0;
-    border: 1px solid var(--card-border);
+    border: 1.5px solid #7e1830;
     border-radius: 8px;
     background: transparent;
-    color: var(--text-secondary);
+    color: #7e1830;
     cursor: pointer;
-    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .staff-record-note-btn:hover {
-    border-color: #7e1830;
-    color: #7e1830;
-    background: rgb(126 24 48 / 0.06);
+    border-color: #5a0e27;
+    color: #5a0e27;
+    background: rgb(126 24 48 / 0.08);
 }
 
 .staff-record-note-btn:focus-visible {
     outline: 2px solid #7e1830;
     outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgb(126 24 48 / 0.22);
 }
 
 .staff-record-note-icon {
@@ -3554,13 +3544,19 @@ body.dark-mode .staff-modal-footer {
     width: 7px;
     height: 7px;
     border-radius: 999px;
-    background: #7e1830;
+    background: #ffffff;
 }
 
 .staff-record-note-btn.has-note {
-    border-color: rgb(126 24 48 / 0.45);
-    background: rgb(126 24 48 / 0.1);
-    color: #7e1830;
+    border-color: #7e1830;
+    background: #7e1830;
+    color: #ffffff;
+}
+
+.staff-record-note-btn.has-note:hover {
+    border-color: #5a0e27;
+    background: #5a0e27;
+    color: #ffffff;
 }
 
 .staff-record-note-btn.has-note .staff-record-note-icon {
@@ -3569,22 +3565,58 @@ body.dark-mode .staff-modal-footer {
 
 .staff-record-note-btn.has-note .staff-record-note-fold {
     fill: none;
-    stroke: var(--card-bg, #ffffff);
+    stroke: #7e1830;
+}
+
+.staff-record-note-btn.has-note:hover .staff-record-note-fold {
+    stroke: #5a0e27;
 }
 
 .staff-record-note-btn.has-note .staff-record-note-dot {
     display: block;
+    background: #ffffff;
 }
 
-body.dark-mode .staff-record-note-btn:hover,
-body.dark-mode .staff-record-note-btn.has-note {
-    border-color: rgb(245 168 187 / 0.55);
-    background: rgb(166 43 74 / 0.22);
+body.dark-mode .staff-record-note-btn {
+    border-color: #d96b86;
+    background: transparent;
     color: #f5a8bb;
 }
 
+body.dark-mode .staff-record-note-btn:hover {
+    border-color: #f5a8bb;
+    background: rgb(166 43 74 / 0.22);
+    color: #ffd6e0;
+}
+
+body.dark-mode .staff-record-note-btn:focus-visible {
+    outline: 2px solid #f5a8bb;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgb(245 168 187 / 0.28);
+}
+
+body.dark-mode .staff-record-note-btn.has-note {
+    border-color: #a62b4a;
+    background: #7e1830;
+    color: #ffffff;
+}
+
+body.dark-mode .staff-record-note-btn.has-note:hover {
+    border-color: #c23b5c;
+    background: #5a0e27;
+    color: #ffffff;
+}
+
+body.dark-mode .staff-record-note-btn.has-note .staff-record-note-fold {
+    stroke: #7e1830;
+}
+
+body.dark-mode .staff-record-note-btn.has-note:hover .staff-record-note-fold {
+    stroke: #5a0e27;
+}
+
 body.dark-mode .staff-record-note-btn.has-note .staff-record-note-dot {
-    background: #f5a8bb;
+    background: #ffffff;
 }
 
 .staff-record-note-dialog {
