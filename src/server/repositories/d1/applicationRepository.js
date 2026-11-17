@@ -263,7 +263,7 @@ export function createApplicationRepository(database) {
             }
             const whereClause = conditions.join(' AND ');
             const pageResult = await database.prepare(`
-                SELECT applications.id, students.student_number, applications.first_name,
+                SELECT applications.id, students.student_number, applications.passport_number AS passport_number, applications.first_name,
                        applications.last_name, applications.application_type, applications.application_route, applications.status,
                        applications.submitted_at, applications.created_at, applications.updated_at,
                        application_deletions.state AS deletion_state,
