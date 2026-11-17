@@ -74,6 +74,12 @@ function createSideBySideBackgroundHarness(options = {}) {
                     callback();
                 },
                 get(_keys, callback) {
+                    if (options.throwOnStorageGet) {
+                        chrome.runtime.lastError = { message: 'Storage read error' };
+                        callback({});
+                        chrome.runtime.lastError = null;
+                        return;
+                    }
                     callback(storageValues);
                 },
                 remove(keys, callback) {
@@ -258,6 +264,60 @@ function getPlacementCalls(calls) {
     );
 }
 
+test('tercih anahtarı yoksa hiçbir pencere yerleştirme çağrısı yapılmaz ve YÖKSİS normal sekme olarak açılır', async () => {
+    const sameWindowHarness = createSideBySideBackgroundHarness({
+        yoksisWindowId: 10,
+        portalWindowId: 10
+    });
+
+    const sameWindowResponse = await sameWindowHarness.sendTransfer({ requestId: 'missing-key-same-window' });
+
+    assert.equal(sameWindowResponse.success, true);
+    assert.deepEqual(getPlacementCalls(sameWindowHarness.calls), []);
+
+    const newTabHarness = createSideBySideBackgroundHarness({
+        portalWindowId: 10,
+        hasYoksisTab: false
+    });
+
+    const newTabResponse = await newTabHarness.sendTransfer({ requestId: 'missing-key-new-tab' });
+
+    assert.equal(newTabResponse.success, true);
+    assert.deepEqual(getPlacementCalls(newTabHarness.calls), []);
+    assert.equal(newTabHarness.calls.some((call) => call.type === 'create-tab'), true);
+});
+
+test('storage okuma hatasında pencere yerleştirme devre dışı kalır', async () => {
+    const harness = createSideBySideBackgroundHarness({
+        localStorage: { yoksisSideBySideEnabled: true },
+        throwOnStorageGet: true,
+        yoksisWindowId: 10,
+        portalWindowId: 10
+    });
+
+    const response = await harness.sendTransfer({ requestId: 'storage-read-error' });
+
+    assert.equal(response.success, true);
+    assert.deepEqual(getPlacementCalls(harness.calls), []);
+});
+
+test('yoksisSideBySideEnabled true olarak kaydedildiğinde pencere yerleştirme çalışır', async () => {
+    const harness = createSideBySideBackgroundHarness({
+        localStorage: { yoksisSideBySideEnabled: true },
+        portalWindowId: 10,
+        yoksisWindowId: 10
+    });
+
+    const response = await harness.sendTransfer({
+        requestId: 'stored-true-enabled',
+        screenArea: { availLeft: 0, availTop: 0, availWidth: 1600, availHeight: 900 }
+    });
+
+    assert.equal(response.success, true);
+    assert.ok(getPlacementCalls(harness.calls).length > 0);
+    assert.equal(harness.calls.some((call) => call.type === 'create-window'), true);
+});
+
 test('tercih kapalıyken hiçbir yeni pencere yerleştirme çağrısı yapılmaz', async () => {
     const harness = createSideBySideBackgroundHarness({
         localStorage: { yoksisSideBySideEnabled: false },
@@ -277,6 +337,7 @@ test('tercih kapalıyken hiçbir yeni pencere yerleştirme çağrısı yapılmaz
 
 test('YÖKSİS ve portal aynı penceredeyse YÖKSİS sağ yarıya yeni pencereye taşınır ve portal sol yarıya alınır', async () => {
     const harness = createSideBySideBackgroundHarness({
+        localStorage: { yoksisSideBySideEnabled: true },
         portalWindowId: 10,
         yoksisWindowId: 10
     });
@@ -319,6 +380,7 @@ test('YÖKSİS ve portal aynı penceredeyse YÖKSİS sağ yarıya yeni pencereye
 
 test('ikinci aramada aynı pencere çifti tekrar taşınmaz', async () => {
     const harness = createSideBySideBackgroundHarness({
+        localStorage: { yoksisSideBySideEnabled: true },
         portalWindowId: 10,
         yoksisWindowId: 10
     });
@@ -340,6 +402,7 @@ test('ikinci aramada aynı pencere çifti tekrar taşınmaz', async () => {
 
 test('YÖKSİS sekmesi yoksa sağ yarıda yeni pencerede açılır ve arama akışı tamamlanır', async () => {
     const harness = createSideBySideBackgroundHarness({
+        localStorage: { yoksisSideBySideEnabled: true },
         portalWindowId: 10,
         hasYoksisTab: false
     });
@@ -383,6 +446,7 @@ test('yknViewOpen false veya screenArea yokken pencere yerleştirme çağrısı 
         { screenArea: { availLeft: 0, availTop: 0, availWidth: 0, availHeight: 900 }, yknViewOpen: true }
     ]) {
         const harness = createSideBySideBackgroundHarness({
+            localStorage: { yoksisSideBySideEnabled: true },
             portalWindowId: 10,
             yoksisWindowId: 10
         });
@@ -403,6 +467,7 @@ test('windows API hatalarında uyarı loglanır ancak arama ve aktarım yine ba�
         { throwOnWindowUpdate: true, yoksisWindowId: 20 }
     ]) {
         const harness = createSideBySideBackgroundHarness({
+            localStorage: { yoksisSideBySideEnabled: true },
             portalWindowId: 10,
             ...faultOption
         });
@@ -486,9 +551,9 @@ test('bridge.js ekran alanını ve yknViewOpen durumunu sahteciliğe izin vermed
     }
 });
 
-test('popup onay kutusu varsayılan olarak açıktır ve chrome.storage.local ile senkronlanır', async () => {
+test('popup onay kutusu varsayılan olarak kapalıdır ve chrome.storage.local ile senkronlanır', async () => {
     for (const [initialStored, expectedInitialChecked] of [
-        [{}, true],
+        [{}, false],
         [{ yoksisSideBySideEnabled: false }, false],
         [{ yoksisSideBySideEnabled: true }, true]
     ]) {
