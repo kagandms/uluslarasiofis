@@ -60,7 +60,7 @@ export function createApplicationReviewRepository(database, notes) {
             ]);
             return results.every((result) => result?.meta?.changes === 1);
         },
-        async transitionApplicationStatus({ applicationId, currentStatus, expectedUpdatedAt, targetStatus, rejectionReason, rejectionNoteId, staffId, now, requestId, auditId }) {
+        async transitionApplicationStatus({ applicationId, currentStatus, expectedUpdatedAt, targetStatus, rejectionReason, rejectionNoteId, staffId, now, requestId, auditId, documentsAuditId = crypto.randomUUID() }) {
             const isCompleted = targetStatus === 'completed';
             const isTerminal = isCompleted || targetStatus === 'rejected';
             const terminalAt = isTerminal ? now : null;
@@ -92,6 +92,56 @@ export function createApplicationReviewRepository(database, notes) {
                     UPDATE application_sessions SET revoked_at = NULL
                     WHERE application_id = ? AND changes() = 1
                 `).bind(applicationId));
+            }
+            if (targetStatus === 'sent_to_migration') {
+                // Başvuru Göç İdaresine gönderildiğinde güncel, temiz ve kesinleşmiş belgeleri topluca onayla.
+                statements.push(
+                    database.prepare(`
+                        UPDATE document_revisions
+                        SET status = 'approved', reviewed_at = ?, reviewed_by_staff_id = ?
+                        WHERE is_current = 1
+                          AND status IN ('submitted', 'resubmission_required')
+                          AND EXISTS (
+                            SELECT 1 FROM document_records AS records
+                            WHERE records.id = document_revisions.document_record_id
+                              AND records.application_id = ?
+                          )
+                          AND EXISTS (
+                            SELECT 1 FROM document_revision_files AS files
+                            WHERE files.revision_id = document_revisions.id
+                              AND files.upload_status = 'finalized'
+                              AND files.scan_status = 'clean'
+                              AND files.cleanup_status = 'none'
+                          )
+                          AND EXISTS (
+                            SELECT 1 FROM applications
+                            WHERE id = ? AND status = 'sent_to_migration' AND updated_at = ?
+                          )
+                    `).bind(now, staffId, applicationId, applicationId, now),
+                    database.prepare(`
+                        UPDATE document_records
+                        SET review_status = 'approved', updated_at = ?
+                        WHERE application_id = ?
+                          AND review_status IN ('pending', 'under_review', 'resubmission_required')
+                          AND EXISTS (
+                            SELECT 1 FROM applications
+                            WHERE id = ? AND status = 'sent_to_migration' AND updated_at = ?
+                          )
+                          AND EXISTS (
+                            SELECT 1 FROM document_revisions AS revisions
+                            WHERE revisions.document_record_id = document_records.id
+                              AND revisions.is_current = 1
+                              AND revisions.status = 'approved'
+                          )
+                    `).bind(now, applicationId, applicationId, now),
+                    database.prepare(`
+                        INSERT INTO audit_events (
+                            id, event_type, actor_type, actor_staff_id, application_id, request_id, safe_metadata_json
+                        ) SELECT ?, 'staff.application_documents_approved_on_migration', 'staff', ?, ?, ?, ?
+                        WHERE changes() > 0
+                    `).bind(documentsAuditId, staffId, applicationId, requestId,
+                        JSON.stringify({ applicationStatus: 'sent_to_migration', result: 'success' }))
+                );
             }
             const results = await database.batch(statements);
             const auditIndex = targetStatus === 'rejected' ? 2 : 1;
