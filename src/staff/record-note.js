@@ -138,7 +138,11 @@ function createNoteSvg(document) {
     foldPath.setAttribute('class', 'staff-record-note-fold');
     foldPath.setAttribute('d', 'M15 21v-6h6');
 
-    svg.append(bodyPath, foldPath);
+    const plusPath = document.createElementNS(SVG_NS, 'path');
+    plusPath.setAttribute('class', 'staff-record-note-plus');
+    plusPath.setAttribute('d', 'M12 8v6M9 11h6');
+
+    svg.append(bodyPath, foldPath, plusPath);
     return svg;
 }
 
@@ -154,6 +158,11 @@ export function applyRecordNoteButtonState(button, note, studentName = '') {
     const hasNote = Boolean(activeNote);
     button.classList.toggle('has-note', hasNote);
     button.dataset.hasNote = hasNote ? 'true' : 'false';
+
+    const label = button.querySelector('.staff-record-note-label');
+    if (label) {
+        label.textContent = hasNote ? 'Notu düzenle' : 'Not ekle';
+    }
 
     if (hasNote) {
         const preview = buildNotePreview(activeNote.body);
@@ -426,10 +435,13 @@ export function createRecordNoteButton(document, options) {
     button.dataset.noteKind = kind;
     button.dataset.noteId = id || '';
 
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'staff-record-note-label';
+
     const dot = document.createElement('span');
     dot.className = 'staff-record-note-dot';
     dot.setAttribute('aria-hidden', 'true');
-    button.append(createNoteSvg(document), dot);
+    button.append(createNoteSvg(document), labelSpan, dot);
 
     const setNote = (nextNote) => {
         currentNote = normalizeNote(nextNote);

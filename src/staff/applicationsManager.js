@@ -29,6 +29,11 @@ const STATUS_FILTERS = Object.freeze([
     ['resubmission_required', 'Yeniden yükleme gerekli'], ['approved', 'Onaylandı'],
     ['migration', 'Göç İdaresine Gönderildi']
 ]);
+const NOTE_FILTERS = Object.freeze([
+    ['all', 'Tüm kayıtlar'],
+    ['yes', 'Notu olanlar'],
+    ['no', 'Notu olmayanlar']
+]);
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const WORKFLOW_STATUSES = Object.freeze([
     'under_review',
@@ -117,6 +122,7 @@ function createSearchForm(document, state, onSubmit, onChange) {
     const form = createApplicationQueueFilters(document, {
         query: state.query,
         statusOptions: STATUS_FILTERS,
+        noteFilter: { label: 'Not', options: NOTE_FILTERS },
         idPrefix: 'staff-application',
         disabled: state.loading,
         onSubmit
@@ -126,6 +132,7 @@ function createSearchForm(document, state, onSubmit, onChange) {
     const readQuery = () => ({
         q: search.value,
         status: form.elements.namedItem('status').value,
+        has_note: form.elements.namedItem('has_note').value,
         from_date: form.elements.namedItem('from_date').value,
         to_date: form.elements.namedItem('to_date').value
     });
@@ -1118,7 +1125,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         spreadsheetPending: new Set(), spreadsheetErrors: {},
         gocnetPending: new Set(), gocnetResults: {},
         recordNotes: new Map(), recordNotesResult: null,
-        query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
+        query: { q: '', status: 'all', has_note: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queueRequestId = 0;
     let searchTimer = null;
@@ -1735,11 +1742,12 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             if (state.view === 'queue') void submitSearch(state.query);
         }, 250);
     }
-    async function submitSearch({ q, status, from_date, to_date }) {
+    async function submitSearch({ q, status, has_note, from_date, to_date }) {
         if (searchTimer !== null) document.defaultView.clearTimeout(searchTimer);
         searchTimer = null;
         if (state.actionPending) return;
-        state.query = { ...state.query, q, status, from_date, to_date, page: 1 };
+        const normalizedHasNote = has_note === 'yes' || has_note === 'no' ? has_note : 'all';
+        state.query = { ...state.query, q, status, has_note: normalizedHasNote, from_date, to_date, page: 1 };
         await loadQueue();
     }
     async function changePage(page) {

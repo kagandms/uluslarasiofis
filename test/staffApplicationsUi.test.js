@@ -207,16 +207,28 @@ test('online application queue uses physical search and date filter layout and s
     assert.equal(form.querySelectorAll('input[type="date"]').length, 2);
     assert.ok(form.querySelector('#staff-application-from-date'));
     assert.ok(form.querySelector('#staff-application-to-date'));
+
+    const noteSelect = form.querySelector('select[name="has_note"]');
+    assert.ok(noteSelect);
+    assert.equal(form.querySelector('label[for="staff-application-has-note"]')?.textContent, 'Not');
+    assert.deepEqual(
+        [...noteSelect.options].map((option) => [option.value, option.textContent]),
+        [['all', 'Tüm kayıtlar'], ['yes', 'Notu olanlar'], ['no', 'Notu olmayanlar']]
+    );
+    assert.equal(noteSelect.value, 'all');
+
     form.querySelector('input[name="q"]').value = 'Ayşe';
     form.querySelector('select[name="status"]').value = 'under_review';
+    noteSelect.value = 'yes';
     form.querySelector('#staff-application-from-date').value = '2026-10-01';
     form.querySelector('#staff-application-to-date').value = '2026-10-12';
     form.dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise(resolve => setImmediate(resolve));
 
     assert.deepEqual(requests.at(-1), {
-        q: 'Ayşe', status: 'under_review', from_date: '2026-10-01', to_date: '2026-10-12', page: 1, page_size: 25
+        q: 'Ayşe', status: 'under_review', has_note: 'yes', from_date: '2026-10-01', to_date: '2026-10-12', page: 1, page_size: 25
     });
+    assert.equal(root.querySelector('select[name="has_note"]')?.value, 'yes');
 });
 
 test('draft queue offers verified code reset without a cancellation action', async (context) => {
