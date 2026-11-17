@@ -2666,7 +2666,7 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
 /* Satır işlem düğmeleri: üç sütunlu iki satırlı ızgara */
 .staff-applications-table td.staff-queue-actions-cell,
 .staff-applications-table td[data-label="Detay"] {
-    align-items: center;
+    align-items: start;
     display: grid;
     grid-template-columns: repeat(3, max-content);
     gap: 0.45rem 0.5rem;
@@ -2681,6 +2681,17 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
 .staff-applications-table td[data-label="Detay"] button {
     margin: 0;
     white-space: nowrap;
+}
+
+/* Uzun Göç İdaresi durum düğmesinin satır içinde kaydırılması */
+.staff-applications-table td.staff-queue-actions-cell button[data-action="send-to-migration"],
+.staff-applications-table td[data-label="Detay"] button[data-action="send-to-migration"] {
+    white-space: normal;
+    text-align: center;
+    line-height: 1.2;
+    max-width: 13rem;
+    width: auto;
+    min-width: 0;
 }
 
 .staff-applications-table td.staff-queue-actions-cell .staff-gocnet-transfer-status,
