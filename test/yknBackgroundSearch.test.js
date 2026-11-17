@@ -149,11 +149,22 @@ function createBackgroundSearchHarness(options = {}) {
                     return;
                 }
                 if (message.action === 'searchWithId') {
-                    callback(options.searchResult || { success: true, searchTriggered: true, formReady: true });
+                    if (typeof options.onSearchWithId === 'function') {
+                        options.onSearchWithId(message, callback);
+                        return;
+                    }
+                    if (options.hangSearchWithId) {
+                        return;
+                    }
+                    callback('searchResult' in options ? options.searchResult : { success: true, searchTriggered: true, formReady: true });
                     return;
                 }
                 if (message.action === 'GET_YOKSIS_FORM_STATE') {
-                    callback(options.formState || { success: true, fingerprint: 'fp-1', domRevision: 1, hasPopulatedStudentForm: false });
+                    if (typeof options.onGetFormState === 'function') {
+                        options.onGetFormState(message, callback);
+                        return;
+                    }
+                    callback('formState' in options ? options.formState : { success: true, fingerprint: 'fp-1', domRevision: 1, hasPopulatedStudentForm: false });
                     return;
                 }
                 if (message.action === 'WAIT_YOKSIS_FORM') {
@@ -227,7 +238,10 @@ function createBackgroundSearchHarness(options = {}) {
         Promise,
         Date,
         Error,
-        setTimeout,
+        // Uzun arama zaman aşımını testte beklememek için 20-50 sn aralığındaki zamanlayıcıyı hızlandır.
+        setTimeout: options.fastSearchTimeout
+            ? (fn, delay, ...args) => setTimeout(fn, delay >= 20_000 && delay <= 50_000 ? 0 : delay, ...args)
+            : setTimeout,
         clearTimeout
     });
     backgroundContext.importScripts = (...scriptNames) => {
@@ -465,4 +479,111 @@ test('portal-security TRANSFER_TO_YOKSIS doğrulaması boolean/yoksa kabul eder,
         assert.match(rejected.error, /İstek doğrulanamadı/);
     }
     assert.equal(harness.calls.some((call) => call.type === 'message' && call.message.action === 'searchWithId'), false);
+});
+
+test('content script zaman aşımında koruma hatasına Neden: YÖKSİS arama zaman aşımı eklenir', async () => {
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        hangSearchWithId: true,
+        fastSearchTimeout: true,
+        formState: null
+    });
+
+    const response = await harness.sendTransfer({ background: true, requestId: 'bg-timeout-1' });
+
+    assert.equal(response.success, false);
+    assert.equal(response.background, true);
+    assert.equal(response.surfaced, true);
+    assert.equal(response.attentionReason, 'search_failed');
+    assert.equal(
+        response.error,
+        'YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin. Neden: YÖKSİS arama zaman aşımı'
+    );
+    assert.equal(harness.warnings.length, 1);
+});
+
+test('content script success false ve mesaj döndürdüğünde koruma hatası bu nedeni gösterir', async () => {
+    for (const scenario of [
+        {
+            requestId: 'bg-refusal-msg',
+            searchResult: { success: false, searchTriggered: false, message: 'Yeni öğrenci onayı verilmedi' },
+            expectedReason: 'Yeni öğrenci onayı verilmedi'
+        },
+        {
+            requestId: 'bg-refusal-err',
+            searchResult: { success: false, searchTriggered: false, error: 'YÖKSİS arama kontrolü hazır değil' },
+            expectedReason: 'YÖKSİS arama kontrolü hazır değil'
+        }
+    ]) {
+        const harness = createBackgroundSearchHarness({
+            portalWindowId: 10,
+            yoksisWindowId: 20,
+            searchResult: scenario.searchResult,
+            formState: { success: true, fingerprint: 'fp-busy', domRevision: 2, hasPopulatedStudentForm: true }
+        });
+
+        const response = await harness.sendTransfer({ background: true, requestId: scenario.requestId });
+
+        assert.equal(response.success, false, scenario.requestId);
+        assert.equal(response.background, true, scenario.requestId);
+        assert.equal(response.surfaced, true, scenario.requestId);
+        assert.equal(response.attentionReason, 'search_failed', scenario.requestId);
+        assert.equal(
+            response.error,
+            `YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin. Neden: ${scenario.expectedReason}`,
+            scenario.requestId
+        );
+    }
+});
+
+test('ardışık aramalarda neden sızdırılmaz, 160 karakterle sınırlanır ve başarılı arama değişmez', async () => {
+    let step = 0;
+    const harness = createBackgroundSearchHarness({
+        portalWindowId: 10,
+        yoksisWindowId: 20,
+        onSearchWithId(_message, callback) {
+            step += 1;
+            if (step === 1) {
+                callback({
+                    success: false,
+                    searchTriggered: false,
+                    message: `Kod SYNTH-123-AB ve pasaport SYNTHPASS99 işlenemedi: ${'detay '.repeat(40)}`
+                });
+                return;
+            }
+            if (step === 2) {
+                callback({ success: true, searchTriggered: true, formReady: true });
+                return;
+            }
+            callback({ success: false, searchTriggered: false });
+        },
+        onGetFormState(_message, callback) {
+            callback({ success: true, fingerprint: 'fp-1', domRevision: 1, hasPopulatedStudentForm: true });
+        }
+    });
+
+    const first = await harness.sendTransfer({
+        background: true,
+        requestId: 'bg-seq-1',
+        data: { yoksisId: 'SYNTH-123-AB', pasaportNo: 'SYNTHPASS99', firstName: 'SYNTHETIC', lastName: 'STUDENT' }
+    });
+    assert.equal(first.success, false);
+    assert.match(first.error, /Neden: /);
+    assert.equal(first.error.includes('SYNTH-123-AB'), false);
+    assert.equal(first.error.includes('SYNTHPASS99'), false);
+    const reasonText = first.error.split('Neden: ')[1];
+    assert.ok(reasonText.length > 0 && reasonText.length <= 160);
+
+    const second = await harness.sendTransfer({ background: true, requestId: 'bg-seq-2' });
+    assert.equal(second.success, true);
+    assert.equal(second.formReady, true);
+    assert.equal(second.surfaced, false);
+
+    const third = await harness.sendTransfer({ background: true, requestId: 'bg-seq-3' });
+    assert.equal(third.success, false);
+    assert.equal(
+        third.error,
+        'YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin.'
+    );
 });

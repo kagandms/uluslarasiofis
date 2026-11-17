@@ -2,7 +2,7 @@
 // İkamet Portalı (Web Sayfası) ile Eklenti (Background) arasında köprü görevi görür.
 (() => {
     if (window !== window.top) return;
-    const BRIDGE_VERSION = '1.2.125';
+    const BRIDGE_VERSION = '1.2.126';
     // Portalın desteklenen eklenti yeteneklerini algılayabilmesi için sabit özellik listesi
     const BRIDGE_FEATURES = Object.freeze(['background_transfer']);
     const isStaffRoute = () => window.location.pathname === '/yetkili'

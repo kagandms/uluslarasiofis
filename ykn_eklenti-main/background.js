@@ -2019,10 +2019,34 @@ async function fillStoredYoksisStudent(request) {
     });
 }
 
+// Son content-script arama hatasını veya olumsuz yanıtını tekilleştirilmiş hata teşhisi için tutar.
+let lastContentSearchFailure = null;
+
 async function searchYoksisFromContent(tabId, kabulId, requestId, expectedStudent = null) {
+    // Önceki aramadan kalan başarısızlık bilgisini yeni çağrı başında temizle.
+    lastContentSearchFailure = null;
+    const sanitizeFailureMessage = (rawMessage, fallbackMessage = '') => {
+        let text = String(rawMessage || '').replace(/\s+/g, ' ').trim();
+        // Öğrenci pasaport veya kabul kodu varsa teşhis mesajına sızmasını engelle.
+        const sensitiveTokens = [
+            kabulId,
+            expectedStudent?.passportNo,
+            expectedStudent?.pasaportNo
+        ].filter((value) => typeof value === 'string' && value.trim().length >= 4);
+        for (const token of sensitiveTokens) {
+            const escaped = token.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            text = text.replace(new RegExp(escaped, 'gi'), '');
+        }
+        text = text.replace(/\s+/g, ' ').trim();
+        if (!text && fallbackMessage) {
+            text = String(fallbackMessage).replace(/\s+/g, ' ').trim();
+        }
+        return text.slice(0, 160);
+    };
+
     try {
         await waitForContentScript(tabId, 'yoksis', { frameId: 0 });
-        return await withTimeout(
+        const response = await withTimeout(
             sendTabMessage(tabId, {
                 action: 'searchWithId',
                 kabulId,
@@ -2032,8 +2056,28 @@ async function searchYoksisFromContent(tabId, kabulId, requestId, expectedStuden
             YOKSIS_SEARCH_RESPONSE_TIMEOUT_MS,
             'YÖKSİS arama zaman aşımı'
         );
+        if (response && response.success === false) {
+            const rawFailureMessage = typeof response.message === 'string' && response.message.trim()
+                ? response.message
+                : (typeof response.error === 'string' && response.error.trim() ? response.error : '');
+            const sanitized = sanitizeFailureMessage(rawFailureMessage);
+            if (sanitized) {
+                lastContentSearchFailure = {
+                    requestId,
+                    errorName: 'ContentResponseFailure',
+                    message: sanitized
+                };
+            }
+        }
+        return response;
     } catch (error) {
-        console.warn('[YKN] Content-script YÖKSİS araması başarısız:', { errorName: error?.name || 'Error' });
+        const errorName = error?.name || 'Error';
+        lastContentSearchFailure = {
+            requestId,
+            errorName,
+            message: sanitizeFailureMessage(error?.message, errorName)
+        };
+        console.warn('[YKN] Content-script YÖKSİS araması başarısız:', { errorName });
         return null;
     }
 }
@@ -2317,7 +2361,12 @@ async function transferToYoksisOperation(request, totalStartedAt) {
             // formunun fallback sonunda "hazır" sayılmasını engeller.
             const stateBeforeMainSearch = await getYoksisFormState(yoksisTab.id, request.requestId);
             if (!stateBeforeMainSearch || stateBeforeMainSearch.hasPopulatedStudentForm !== false) {
-                throw new Error('YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin.');
+                // Aynı istek için content-script hatası veya reddi kaydedildiyse kök nedeni ekle.
+                const failureReason = lastContentSearchFailure?.requestId === request.requestId
+                    ? lastContentSearchFailure.message
+                    : '';
+                const reasonSuffix = failureReason ? ` Neden: ${failureReason}` : '';
+                throw new Error(`YÖKSİS formunun mevcut durumu doğrulanamadı; önceki öğrenci formuna yazmamak için arama başlatılmadı. Sayfayı yenileyip tekrar deneyin.${reasonSuffix}`);
             }
             const formValidationStartedAt = startYknTiming();
             const mainSearch = await runVerifiedMainWorldSearch(
