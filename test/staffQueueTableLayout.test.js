@@ -111,7 +111,7 @@ test('queue table CSS enforces column widths, whole-word wrapping, action wrappi
     assert.match(INDEX_CSS, /\.staff-applications-table\s+td\[data-label="Ofis Durumu"\][^{]*\{[^}]*min-width:\s*9rem;/s);
     assert.match(INDEX_CSS, /\.staff-applications-table\s+td\[data-label="Öğrenci No"\][^{]*\{[^}]*white-space:\s*nowrap;/s);
     assert.match(INDEX_CSS, /\.staff-applications-table\s+td\.staff-record-note-cell\s*\{[^}]*width:\s*3rem;/s);
-    assert.match(INDEX_CSS, /\.staff-applications-table\s+td\.staff-queue-actions-cell,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;[^}]*gap:[^;]+;[^}]*max-width:\s*26rem;/s);
+    assert.match(INDEX_CSS, /\.staff-applications-table\s+td\.staff-queue-actions-cell,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:[^;]+;[^}]*gap:[^;]+;[^}]*max-width:\s*26rem;/s);
     assert.match(INDEX_CSS, /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*\.staff-applications-table\s+td::before\s*\{[^}]*content:\s*attr\(data-label\);/s);
     assert.match(INDEX_CSS, /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*\.staff-applications-table\s+td\.staff-queue-actions-cell,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s*\{[^}]*max-width:\s*none;/s);
 });
