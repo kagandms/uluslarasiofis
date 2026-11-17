@@ -29,13 +29,21 @@ const STATUS_FILTERS = Object.freeze([
     ['migration', 'Göç İdaresine Gönderildi']
 ]);
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+const WORKFLOW_STATUSES = Object.freeze([
+    'under_review',
+    'approved_for_processing',
+    'sent_to_migration',
+    'migration_approved',
+    'completed',
+    'rejected'
+]);
 const STATUS_ACTION_LABELS = Object.freeze({
-    under_review: 'İncelemeye Başla',
-    approved_for_processing: 'İşlem İçin Onayla',
-    sent_to_migration: 'Göç İdaresine Aktarıldı Olarak İşaretle',
+    under_review: 'İncelemede',
+    approved_for_processing: 'İşlem İçin Onaylandı',
+    sent_to_migration: 'Göç İdaresine Gönderildi',
     migration_approved: 'Göç İdaresi Onayladı',
-    completed: 'Başvuruyu Tamamla',
-    rejected: 'Başvuruyu Reddet'
+    completed: 'Tamamlandı',
+    rejected: 'Reddedildi'
 });
 const STATUS_ORDER = Object.freeze({
     submitted: 1,
@@ -46,16 +54,20 @@ const STATUS_ORDER = Object.freeze({
     migration_approved: 5,
     completed: 6
 });
-const STATUS_REVERT_LABELS = Object.freeze({
-    under_review: '◀ Durumu Geri Al: İncelemede',
-    approved_for_processing: '◀ Durumu Geri Al: İşlem İçin Onaylandı',
-    sent_to_migration: '◀ Durumu Geri Al: Göç İdaresine Gönderildi',
-    migration_approved: '◀ Durumu Geri Al: Göç İdaresi Onayladı'
-});
 
 function isStatusRevert(currentStatus, targetStatus) {
     if (targetStatus === 'rejected') return false;
     return (STATUS_ORDER[targetStatus] || 0) < (STATUS_ORDER[currentStatus] || 0);
+}
+
+/* Ulaşılamayan durum düğmesi için veriden doğrulanabilen kısa açıklamayı döner. */
+function readUnreachableStatusReason(currentStatus, targetStatus, documents) {
+    if (currentStatus === 'under_review' && targetStatus === 'approved_for_processing'
+        && Array.isArray(documents)
+        && documents.some((doc) => doc && doc.required !== false && doc.review_status !== 'approved')) {
+        return 'Önce tüm zorunlu belgeler onaylanmalı.';
+    }
+    return 'Bu duruma şu an geçilemez.';
 }
 const APPLICATION_DOCUMENT_ROUTE = (applicationId, code, action) =>
     `/api/staff/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(code)}/${action}`;
@@ -723,24 +735,27 @@ function createApplicationWorkflow(document, application, detail, state, handler
     const actions = document.createElement('div');
     actions.className = 'staff-application-status-actions';
     actions.setAttribute('role', 'group');
-    actions.setAttribute('aria-label', 'Bu başvuruda kullanılabilen durumlar');
-    transitions.filter((status) => status !== 'rejected' && !isStatusRevert(application.status, status))
-        .forEach((status) => actions.append(createStatusTransitionButton(document, application.status, status, state, handlers)));
-    if (transitions.includes('rejected')) {
-        actions.append(createStatusTransitionButton(document, application.status, 'rejected', state, handlers));
-    }
-    section.append(actions);
-    const reverts = transitions.filter((status) => isStatusRevert(application.status, status));
-    if (reverts.length) {
-        const revertActions = document.createElement('div');
-        revertActions.className = 'staff-application-status-actions staff-application-status-reverts';
-        revertActions.setAttribute('role', 'group');
-        revertActions.setAttribute('aria-label', 'Geri alınabilecek durumlar');
-        reverts.forEach((status) => revertActions.append(
-            createStatusTransitionButton(document, application.status, status, state, handlers)
-        ));
-        section.append(revertActions);
-    }
+    actions.setAttribute('aria-label', 'Başvuru durumunu değiştir');
+    const descriptions = [];
+    WORKFLOW_STATUSES.forEach((status) => {
+        const isCurrent = application.status === status;
+        const isAllowed = transitions.includes(status);
+        let unreachableReason = null;
+        let describedById = null;
+        if (!isCurrent && !isAllowed) {
+            unreachableReason = readUnreachableStatusReason(application.status, status, detail.documents);
+            describedById = `staff-status-reason-${status}`;
+            const description = createText(document, 'span', 'sr-only', unreachableReason);
+            description.id = describedById;
+            descriptions.push(description);
+        }
+        actions.append(createStatusTransitionButton(document, application.status, status, state, handlers, {
+            isAllowed,
+            unreachableReason,
+            describedById
+        }));
+    });
+    section.append(actions, ...descriptions);
     if (state.rejectionTarget === 'rejected' && transitions.includes('rejected')) {
         section.append(createApplicationRejectionForm(document, state, handlers));
     }
@@ -752,24 +767,33 @@ function createApplicationWorkflow(document, application, detail, state, handler
     return section;
 }
 
-function createStatusTransitionButton(document, currentStatus, targetStatus, state, handlers) {
+function createStatusTransitionButton(document, currentStatus, targetStatus, state, handlers, options = {}) {
+    const isCurrent = currentStatus === targetStatus;
+    const isAllowed = Boolean(options.isAllowed);
     const isRevert = isStatusRevert(currentStatus, targetStatus);
-    const label = isRevert
-        ? (STATUS_REVERT_LABELS[targetStatus] || `◀ Durumu Geri Al: ${STATUS_LABELS[targetStatus] || targetStatus}`)
-        : STATUS_ACTION_LABELS[targetStatus];
+    const label = STATUS_ACTION_LABELS[targetStatus] || targetStatus;
     const action = document.createElement('button');
     action.type = 'button';
-    action.className = targetStatus === 'rejected'
-        ? 'btn btn-danger'
-        : (isRevert ? 'btn btn-outline staff-status-revert-btn' : 'btn btn-primary');
+    action.className = 'btn btn-primary';
     action.dataset.action = targetStatus === 'rejected' ? 'begin-application-rejection' : 'application-status-transition';
     action.dataset.targetStatus = targetStatus;
     if (isRevert) action.dataset.isRevert = 'true';
-    action.disabled = Boolean(state.actionPending);
-    action.textContent = state.actionPending === `status:${targetStatus}` ? 'İşleniyor…' : label;
-    action.addEventListener('click', () => targetStatus === 'rejected'
-        ? handlers.onBeginRejection()
-        : handlers.onTransition(targetStatus, null));
+    action.setAttribute('aria-pressed', isCurrent ? 'true' : 'false');
+    if (options.unreachableReason) action.title = options.unreachableReason;
+    if (options.describedById) action.setAttribute('aria-describedby', options.describedById);
+    action.disabled = isCurrent || !isAllowed || Boolean(state.actionPending);
+    if (state.actionPending === `status:${targetStatus}`) {
+        action.textContent = 'İşleniyor…';
+    } else if (isCurrent) {
+        action.textContent = `✓ ${label}`;
+    } else {
+        action.textContent = label;
+    }
+    action.addEventListener('click', () => {
+        if (isCurrent || !isAllowed || state.actionPending) return;
+        if (targetStatus === 'rejected') handlers.onBeginRejection();
+        else handlers.onTransition(targetStatus, null);
+    });
     return action;
 }
 

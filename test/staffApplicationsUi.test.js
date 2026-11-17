@@ -790,7 +790,9 @@ test('approved documents and terminal applications remain read-only with preview
     assert.match(root.textContent, /Onaylandı/);
     assert.equal(root.querySelector('[data-action="approve-document"]'), null);
     assert.equal(root.querySelector('[data-action="request-document-resubmission"]'), null);
-    assert.equal(root.querySelector('[data-action="application-status-transition"]'), null);
+    const statusButtons = [...root.querySelectorAll('.staff-application-status-actions button')];
+    assert.equal(statusButtons.length, 6);
+    assert.equal(statusButtons.every((button) => button.disabled), true);
     assert.ok(root.querySelector('[data-action="preview-document"]'));
     assert.equal(root.querySelector('[data-action="download-document"]'), null);
     assert.equal(root.querySelector('[data-action="download-application-archive"]')?.textContent, 'Belgeleri ZIP indir');
@@ -879,7 +881,7 @@ test('staff must enter an official reason before rejecting an application at Mig
     ]]);
 });
 
-test('staff application workflow renders rollback action with outline style and revert label', async (context) => {
+test('staff application workflow renders rollback action in the bordeaux row with revert metadata', async (context) => {
     const { document, root } = createStaffDom();
     installDocument(context, document);
     const api = {
@@ -906,14 +908,15 @@ test('staff application workflow renders rollback action with outline style and 
     const forwardButton = root.querySelector('[data-action="application-status-transition"][data-target-status="completed"]');
     assert.ok(forwardButton);
     assert.equal(forwardButton.classList.contains('btn-primary'), true);
-    assert.equal(forwardButton.textContent, 'Başvuruyu Tamamla');
+    assert.equal(forwardButton.disabled, false);
+    assert.equal(forwardButton.textContent, 'Tamamlandı');
 
     const revertButton = root.querySelector('[data-action="application-status-transition"][data-target-status="sent_to_migration"]');
     assert.ok(revertButton);
-    assert.equal(revertButton.classList.contains('btn-outline'), true);
-    assert.equal(revertButton.classList.contains('staff-status-revert-btn'), true);
+    assert.equal(revertButton.classList.contains('btn-primary'), true);
+    assert.equal(revertButton.disabled, false);
     assert.equal(revertButton.dataset.isRevert, 'true');
-    assert.match(revertButton.textContent, /Durumu Geri Al/);
+    assert.equal(revertButton.textContent, 'Göç İdaresine Gönderildi');
 });
 
 test('staff application workflow renders rollback action when application is completed', async (context) => {
@@ -940,12 +943,17 @@ test('staff application workflow renders rollback action when application is com
     root.querySelector('[data-action="open-detail"]').click();
     await new Promise((resolve) => setImmediate(resolve));
 
+    const currentButton = root.querySelector('[data-action="application-status-transition"][data-target-status="completed"]');
+    assert.equal(currentButton.getAttribute('aria-pressed'), 'true');
+    assert.equal(currentButton.disabled, true);
+    assert.equal(currentButton.textContent, '✓ Tamamlandı');
+
     const revertButton = root.querySelector('[data-action="application-status-transition"][data-target-status="migration_approved"]');
     assert.ok(revertButton);
-    assert.equal(revertButton.classList.contains('btn-outline'), true);
-    assert.equal(revertButton.classList.contains('staff-status-revert-btn'), true);
+    assert.equal(revertButton.classList.contains('btn-primary'), true);
+    assert.equal(revertButton.disabled, false);
     assert.equal(revertButton.dataset.isRevert, 'true');
-    assert.equal(revertButton.textContent, '◀ Durumu Geri Al: Göç İdaresi Onayladı');
+    assert.equal(revertButton.textContent, 'Göç İdaresi Onayladı');
 });
 
 test('staff sees available status actions directly and rejection reason only after choosing reject', async (context) => {
@@ -975,8 +983,9 @@ test('staff sees available status actions directly and rejection reason only aft
     assert.ok(root.querySelector('[data-action="application-status-transition"][data-target-status="approved_for_processing"]'));
     assert.equal(root.querySelector('[data-action="application-rejection-reason"]'), null);
     const rejectChoice = root.querySelector('[data-action="begin-application-rejection"]');
-    assert.equal(rejectChoice.textContent, 'Başvuruyu Reddet');
-    assert.equal(rejectChoice.classList.contains('btn-danger'), true);
+    assert.equal(rejectChoice.textContent, 'Reddedildi');
+    assert.equal(rejectChoice.classList.contains('btn-primary'), true);
+    assert.equal(rejectChoice.classList.contains('btn-danger'), false);
     assert.equal(rejectChoice.dataset.isRevert, undefined);
     assert.equal(transitions.length, 0);
 
@@ -1370,4 +1379,147 @@ test('typing another query discards an earlier response before the debounce expi
     await new Promise(resolve => document.defaultView.setTimeout(resolve, 300));
     assert.equal(root.querySelector('[name="q"]').value, 'ITU-AB');
     assert.match(root.textContent, /Ayşe/);
+});
+
+test('status workflow row renders six bordeaux buttons in order with current, reachable, and disabled explanations', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const transitions = [];
+    const api = {
+        async queryApplications() { return createQueuePayload([QUEUE_ITEM]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM, status: 'under_review' },
+                assignment: null,
+                allowed_status_transitions: ['rejected'],
+                documents: [{
+                    code: 'passport', label_key: 'documentPassport', required: true,
+                    revision_number: 1, review_status: 'pending', revision_status: 'submitted',
+                    upload_status: 'finalized', scan_status: 'clean', cleanup_status: null, filename: 'passport.pdf'
+                }]
+            };
+        },
+        async transitionApplication(...args) { transitions.push(args); }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const group = root.querySelector('.staff-application-status-actions[role="group"]');
+    assert.ok(group);
+    assert.equal(group.getAttribute('aria-label'), 'Başvuru durumunu değiştir');
+    const buttons = [...group.querySelectorAll('button')];
+    assert.deepEqual(
+        buttons.map((button) => button.dataset.targetStatus),
+        ['under_review', 'approved_for_processing', 'sent_to_migration', 'migration_approved', 'completed', 'rejected']
+    );
+    assert.equal(buttons.every((button) => button.classList.contains('btn') && button.classList.contains('btn-primary')), true);
+    assert.equal(buttons.some((button) => button.classList.contains('btn-danger') || button.classList.contains('btn-outline')), false);
+
+    const [underReviewBtn, approvedBtn, sentBtn, migrationApprovedBtn, completedBtn, rejectedBtn] = buttons;
+    assert.equal(underReviewBtn.getAttribute('aria-pressed'), 'true');
+    assert.equal(underReviewBtn.disabled, true);
+    assert.equal(underReviewBtn.textContent, '✓ İncelemede');
+
+    assert.equal(approvedBtn.disabled, true);
+    assert.equal(approvedBtn.getAttribute('aria-pressed'), 'false');
+    assert.equal(approvedBtn.title, 'Önce tüm zorunlu belgeler onaylanmalı.');
+    assert.equal(document.getElementById(approvedBtn.getAttribute('aria-describedby'))?.textContent, 'Önce tüm zorunlu belgeler onaylanmalı.');
+
+    for (const unreachable of [sentBtn, migrationApprovedBtn, completedBtn]) {
+        assert.equal(unreachable.disabled, true);
+        assert.equal(unreachable.getAttribute('aria-pressed'), 'false');
+        assert.equal(unreachable.title, 'Bu duruma şu an geçilemez.');
+        assert.equal(document.getElementById(unreachable.getAttribute('aria-describedby'))?.textContent, 'Bu duruma şu an geçilemez.');
+    }
+
+    assert.equal(rejectedBtn.disabled, false);
+    assert.equal(rejectedBtn.textContent, 'Reddedildi');
+    assert.equal(rejectedBtn.dataset.action, 'begin-application-rejection');
+    rejectedBtn.click();
+    assert.ok(root.querySelector('[data-action="application-rejection-reason"]'));
+    assert.equal(transitions.length, 0);
+});
+
+test('status workflow disables all six buttons and shows pending label while transition is in flight', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let resolveTransition;
+    const transitions = [];
+    let currentStatus = 'approved_for_processing';
+    const api = {
+        async queryApplications() { return createQueuePayload([{ ...QUEUE_ITEM, status: currentStatus }]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM, status: currentStatus },
+                assignment: null,
+                allowed_status_transitions: ['sent_to_migration', 'under_review', 'rejected'],
+                documents: []
+            };
+        },
+        transitionApplication(id, targetStatus, updatedAt) {
+            transitions.push([id, targetStatus, updatedAt]);
+            return new Promise((resolve) => {
+                resolveTransition = () => {
+                    currentStatus = targetStatus;
+                    resolve();
+                };
+            });
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const sendBtn = root.querySelector('[data-target-status="sent_to_migration"]');
+    assert.equal(sendBtn.disabled, false);
+    sendBtn.click();
+
+    const buttonsWhilePending = [...root.querySelectorAll('.staff-application-status-actions button')];
+    assert.equal(buttonsWhilePending.length, 6);
+    assert.equal(buttonsWhilePending.every((button) => button.disabled), true);
+    assert.equal(root.querySelector('[data-target-status="sent_to_migration"]').textContent, 'İşleniyor…');
+    assert.deepEqual(transitions, [[QUEUE_ITEM.id, 'sent_to_migration', QUEUE_ITEM.updated_at]]);
+
+    resolveTransition();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const updatedCurrent = root.querySelector('[data-target-status="sent_to_migration"]');
+    assert.equal(updatedCurrent.getAttribute('aria-pressed'), 'true');
+    assert.equal(updatedCurrent.disabled, true);
+    assert.equal(updatedCurrent.textContent, '✓ Göç İdaresine Gönderildi');
+});
+
+test('resubmission_required keeps waiting message and marks none of the six status buttons as current', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const api = {
+        async queryApplications() { return createQueuePayload([{ ...QUEUE_ITEM, status: 'resubmission_required' }]); },
+        async readApplicationDetail() {
+            return {
+                application: { ...QUEUE_ITEM, status: 'resubmission_required' },
+                assignment: null,
+                allowed_status_transitions: [],
+                documents: []
+            };
+        }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.match(root.textContent, /Öğrenciden belge bekleniyor\./);
+    const buttons = [...root.querySelectorAll('.staff-application-status-actions button')];
+    assert.equal(buttons.length, 6);
+    assert.equal(buttons.every((button) => button.getAttribute('aria-pressed') === 'false' && button.disabled), true);
 });
