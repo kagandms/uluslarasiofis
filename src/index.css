@@ -2653,10 +2653,14 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
 .staff-applications-table td[data-label="Öğrenci No"],
 .staff-applications-table td[data-label="Takip No"],
 .staff-applications-table td[data-label="Sıra"],
-.staff-applications-table td[data-label="Gönderim Tarihi"],
-.staff-applications-table td[data-label="Son Güncelleme"],
 .staff-applications-table td[data-label="Teslim Tarihi"] {
     white-space: nowrap;
+}
+
+/* Çevrimiçi başvuru tablosundaki tarih sütunlarının tarih ve saat arasında iki satıra sarılmasını sağlar */
+.staff-applications-table td[data-label="Gönderim Tarihi"],
+.staff-applications-table td[data-label="Son Güncelleme"] {
+    white-space: normal;
 }
 
 .staff-applications-table th.staff-queue-col-actions {
