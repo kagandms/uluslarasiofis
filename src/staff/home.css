@@ -480,7 +480,8 @@ body.dark-mode #home-screen .home-action:focus-visible {
 .work-hours-reminder p { margin: 0; font-size: 0.72rem; line-height: 1.25; font-weight: 700; }
 .work-hours-reminder .btn { min-height: 34px; padding: 0.3rem 0.6rem; font-size: 0.7rem; }
 
-#staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer { min-height: 42px; color: #fff; background: #217346; border-color: #185c37; white-space: nowrap; }
+/* Excel aktarım düğmesi diğer satır düğmeleriyle aynı boyutları kullanır */
+#staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer { min-height: 30px; padding: 0.3rem 0.6rem; font-size: 0.8rem; color: #fff; background: #217346; border-color: #185c37; white-space: nowrap; }
 #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer:hover:not(:disabled) { color: #fff; background: #185c37; border-color: #104126; }
 #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
 #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer[data-spreadsheet-state="remove"] { color: #fff; background: #b42318; border-color: #8a1c13; }
