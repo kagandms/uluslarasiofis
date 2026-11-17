@@ -30,22 +30,33 @@ function buildWhere(query) {
         clauses.push(`${deliveryDate} <= ?`);
         bindings.push(query.toDate);
     }
+    const noteExistsClause = "EXISTS (SELECT 1 FROM staff_record_notes AS notes WHERE notes.record_kind = 'physical' AND notes.record_id = physical_intakes.id)";
+    if (query.hasNote === 'yes') {
+        clauses.push(noteExistsClause);
+    } else if (query.hasNote === 'no') {
+        clauses.push(`NOT ${noteExistsClause}`);
+    }
     return { sql: clauses.join(' AND '), bindings };
 }
 
 async function listIntakes(database, query) {
     const where = buildWhere(query);
-    const results = await database.batch([
+    // TestD1Database.batch() yalnızca run() çalıştırıp results döndürmediği için okuma sorguları .all() ve .first() ile çalıştırılır.
+    const [itemsResult, countResult] = await Promise.all([
         // The inner query ranks only the narrow rows; INTAKE_COLUMNS' correlated lookups then run for the page rows alone.
         database.prepare(`SELECT ${INTAKE_COLUMNS} FROM physical_intakes WHERE id IN (
                 SELECT id FROM physical_intakes WHERE ${where.sql}
                 ORDER BY updated_at DESC,submitted_at DESC,id DESC LIMIT ? OFFSET ?)
             ORDER BY updated_at DESC,submitted_at DESC,id DESC`)
-            .bind(...where.bindings, query.pageSize, (query.page - 1) * query.pageSize),
-        database.prepare(`SELECT count(*) AS total FROM physical_intakes WHERE ${where.sql}`).bind(...where.bindings)
+            .bind(...where.bindings, query.pageSize, (query.page - 1) * query.pageSize)
+            .all(),
+        database.prepare(`SELECT count(*) AS total FROM physical_intakes WHERE ${where.sql}`)
+            .bind(...where.bindings)
+            .first()
     ]);
-    return { items: results[0].results, pagination: { page: query.page, page_size: query.pageSize,
-        total: results[1].results[0].total, total_pages: Math.ceil(results[1].results[0].total / query.pageSize) } };
+    const total = countResult?.total ?? 0;
+    return { items: itemsResult.results ?? [], pagination: { page: query.page, page_size: query.pageSize,
+        total, total_pages: Math.ceil(total / query.pageSize) } };
 }
 
 async function updateIntake(database, input) {
