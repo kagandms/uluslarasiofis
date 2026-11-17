@@ -616,16 +616,17 @@ function buildSideBySideWindowBounds(screenArea) {
     };
 }
 
+// Yan yana pencere yerleştirme varsayılan olarak kapalıdır; yalnızca açıkça true kaydedildiğinde etkinleşir.
 function isYoksisSideBySideEnabled() {
     const localStorage = chrome.storage?.local;
-    if (!localStorage?.get) return Promise.resolve(true);
+    if (!localStorage?.get) return Promise.resolve(false);
     return new Promise((resolve) => {
         localStorage.get(YOKSIS_SIDE_BY_SIDE_STORAGE_KEY, (stored) => {
             if (chrome.runtime?.lastError) {
-                resolve(true);
+                resolve(false);
                 return;
             }
-            resolve(stored?.[YOKSIS_SIDE_BY_SIDE_STORAGE_KEY] !== false);
+            resolve(stored?.[YOKSIS_SIDE_BY_SIDE_STORAGE_KEY] === true);
         });
     });
 }
