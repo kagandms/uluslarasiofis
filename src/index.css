@@ -2623,6 +2623,25 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
     gap: 0.65rem;
 }
 
+/* Durum satırındaki mevcut ve ulaşılamayan düğme durumları */
+.staff-application-status-actions .btn-primary[aria-pressed="true"] {
+    background-color: #5a0e27;
+    border-color: #5a0e27;
+    color: #ffffff;
+    cursor: default;
+    opacity: 1;
+}
+
+.staff-application-status-actions .btn-primary:disabled:not([aria-pressed="true"]) {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.staff-application-status-actions .btn-primary:disabled:hover {
+    box-shadow: none;
+    transform: none;
+}
+
 .staff-application-status-reverts {
     border-top: 1px solid var(--card-border);
     padding-top: 0.75rem;
