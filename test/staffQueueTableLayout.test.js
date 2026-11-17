@@ -106,9 +106,9 @@ test('queue table CSS enforces column widths, whole-word wrapping, action wrappi
     assert.match(INDEX_CSS, /\.staff-applications-queue\s*\{[^}]*overflow-x:\s*auto;/s);
     assert.match(INDEX_CSS, /\.staff-applications-table\s+th,\s*\.staff-applications-table\s+td\s*\{[^}]*overflow-wrap:\s*break-word;[^}]*word-break:\s*normal;/s);
     assert.doesNotMatch(INDEX_CSS, /\.staff-applications-table\s+th,\s*\.staff-applications-table\s+td\s*\{[^}]*(overflow-wrap:\s*anywhere|word-break:\s*break-all)/s);
-    assert.match(INDEX_CSS, /\.staff-applications-table\s+td\[data-label="Ad Soyad"\]\s*\{[^}]*min-width:\s*11rem;/s);
-    assert.match(INDEX_CSS, /\.staff-applications-table\s+td\[data-label="Durum"\][^{]*\{[^}]*min-width:\s*9rem;/s);
-    assert.match(INDEX_CSS, /\.staff-applications-table\s+td\[data-label="Ofis Durumu"\][^{]*\{[^}]*min-width:\s*9rem;/s);
+    assert.match(INDEX_CSS, /\.staff-applications-table\s+td\[data-label="Ad Soyad"\]\s*\{[^}]*min-width:\s*10rem;/s);
+    assert.match(INDEX_CSS, /\.staff-applications-table\s+td\[data-label="Durum"\][^{]*\{[^}]*min-width:\s*8rem;/s);
+    assert.match(INDEX_CSS, /\.staff-applications-table\s+td\[data-label="Ofis Durumu"\][^{]*\{[^}]*min-width:\s*8rem;/s);
     assert.match(INDEX_CSS, /\.staff-applications-table\s+td\[data-label="Öğrenci No"\][^{]*\{[^}]*white-space:\s*nowrap;/s);
     assert.match(INDEX_CSS, /\.staff-applications-table\s+td\.staff-record-note-cell\s*\{[^}]*width:\s*3rem;/s);
     assert.match(INDEX_CSS, /\.staff-applications-table\s+td\.staff-queue-actions-cell,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:[^;]+;[^}]*gap:[^;]+;[^}]*max-width:\s*26rem;/s);
