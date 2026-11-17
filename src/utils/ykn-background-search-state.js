@@ -165,7 +165,7 @@ export function resetBackgroundSearch() {
 /**
  * Mevcut arka plan arama durumuna göre YÖKSİS aktarım kapısı bilgisini döndürür.
  * @param {object} [state] Mevcut durum.
- * @returns {{ allowed: boolean, reasonKey: string | null, label: string }}
+ * @returns {{ allowed: boolean, queueable: boolean, reasonKey: string | null, label: string }}
  */
 export function getTransferGate(state) {
     const status = state?.status || BACKGROUND_SEARCH_STATUS.IDLE;
@@ -173,6 +173,7 @@ export function getTransferGate(state) {
     if (status === BACKGROUND_SEARCH_STATUS.IDLE || status === BACKGROUND_SEARCH_STATUS.SUCCESS) {
         return {
             allowed: true,
+            queueable: false,
             reasonKey: null,
             label: ''
         };
@@ -181,6 +182,7 @@ export function getTransferGate(state) {
     if (status === BACKGROUND_SEARCH_STATUS.READING_LETTER || status === BACKGROUND_SEARCH_STATUS.RUNNING) {
         return {
             allowed: false,
+            queueable: true,
             reasonKey: status,
             label: 'YÖKSİS aranıyor...'
         };
@@ -192,12 +194,13 @@ export function getTransferGate(state) {
         if (reasonKey === 'login_required') {
             label = 'YÖKSİS oturumu gerekli';
         } else if (reasonKey === 'manual_confirmation') {
-            label = 'YÖKSİS formu otomatik doğrulanamadı, YÖKSİS sekmesinden kontrol edin';
+            label = 'YÖKSİS formu otomatik doğrulanamadı; YÖKSİS sekmesinde kontrol edip “1. Kabul Mektubunu Oku ve YÖKSİS’te Ara” ile devam edin';
         } else if (state?.errorMessage) {
             label = state.errorMessage;
         }
         return {
             allowed: false,
+            queueable: false,
             reasonKey,
             label
         };
@@ -212,6 +215,7 @@ export function getTransferGate(state) {
     }
     return {
         allowed: false,
+        queueable: false,
         reasonKey,
         label
     };
@@ -221,7 +225,7 @@ let latestTransferGate = getTransferGate(createBackgroundSearchState());
 
 /**
  * Son yayımlanan YÖKSİS aktarım kapısı durumunu döndürür (sonradan açılan kırpıcı için).
- * @returns {{ allowed: boolean, reasonKey: string | null, label: string }}
+ * @returns {{ allowed: boolean, queueable: boolean, reasonKey: string | null, label: string }}
  */
 export function getLatestTransferGate() {
     return { ...latestTransferGate };
@@ -230,12 +234,13 @@ export function getLatestTransferGate() {
 /**
  * Son YÖKSİS aktarım kapısı değerini durum veya kapı nesnesinden günceller.
  * @param {object} gateOrState Durum nesnesi veya doğrudan kapı nesnesi.
- * @returns {{ allowed: boolean, reasonKey: string | null, label: string }}
+ * @returns {{ allowed: boolean, queueable: boolean, reasonKey: string | null, label: string }}
  */
 export function setLatestTransferGate(gateOrState) {
     if (gateOrState && typeof gateOrState === 'object' && typeof gateOrState.allowed === 'boolean') {
         latestTransferGate = {
             allowed: gateOrState.allowed,
+            queueable: Boolean(gateOrState.queueable),
             reasonKey: gateOrState.reasonKey ?? null,
             label: typeof gateOrState.label === 'string' ? gateOrState.label : ''
         };

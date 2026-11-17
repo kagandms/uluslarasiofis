@@ -20,12 +20,13 @@ test('idle state allows transfer so the default flow stays untouched', () => {
     assert.equal(initial.requestId, null);
     assert.deepEqual(getTransferGate(initial), {
         allowed: true,
+        queueable: false,
         reasonKey: null,
         label: ''
     });
 });
 
-test('reading_letter and running states close the transfer gate with waiting label', () => {
+test('reading_letter and running states close the transfer gate with queueable waiting label', () => {
     const idle = createBackgroundSearchState();
     const reading = startReadingLetter(idle);
 
@@ -33,6 +34,7 @@ test('reading_letter and running states close the transfer gate with waiting lab
     assert.equal(reading.status, BACKGROUND_SEARCH_STATUS.READING_LETTER);
     assert.deepEqual(getTransferGate(reading), {
         allowed: false,
+        queueable: true,
         reasonKey: 'reading_letter',
         label: 'YÖKSİS aranıyor...'
     });
@@ -43,6 +45,7 @@ test('reading_letter and running states close the transfer gate with waiting lab
     assert.equal(running.requestId, 'bg-req-1');
     assert.deepEqual(getTransferGate(running), {
         allowed: false,
+        queueable: true,
         reasonKey: 'running',
         label: 'YÖKSİS aranıyor...'
     });
@@ -54,6 +57,7 @@ test('startBackgroundSearch without requestId transitions to failed', () => {
     assert.equal(failed.status, BACKGROUND_SEARCH_STATUS.FAILED);
     assert.equal(failed.reasonKey, 'missing_request_id');
     assert.equal(getTransferGate(failed).allowed, false);
+    assert.equal(getTransferGate(failed).queueable, false);
 });
 
 test('applyExtensionResponse opens gate only when success === true and formReady === true', () => {
@@ -70,6 +74,7 @@ test('applyExtensionResponse opens gate only when success === true and formReady
     assert.equal(succeeded.formReady, true);
     assert.deepEqual(getTransferGate(succeeded), {
         allowed: true,
+        queueable: false,
         reasonKey: null,
         label: ''
     });
@@ -88,8 +93,9 @@ test('applyExtensionResponse moves manualOverride without formReady to needs_att
     assert.equal(next.reasonKey, 'manual_confirmation');
     assert.deepEqual(getTransferGate(next), {
         allowed: false,
+        queueable: false,
         reasonKey: 'manual_confirmation',
-        label: 'YÖKSİS formu otomatik doğrulanamadı, YÖKSİS sekmesinden kontrol edin'
+        label: 'YÖKSİS formu otomatik doğrulanamadı; YÖKSİS sekmesinde kontrol edip “1. Kabul Mektubunu Oku ve YÖKSİS’te Ara” ile devam edin'
     });
 });
 
@@ -107,6 +113,7 @@ test('applyExtensionResponse moves surfaced or attentionReason responses to need
     assert.equal(loginRequired.reasonKey, 'login_required');
     assert.deepEqual(getTransferGate(loginRequired), {
         allowed: false,
+        queueable: false,
         reasonKey: 'login_required',
         label: 'YÖKSİS oturumu gerekli'
     });
@@ -123,6 +130,7 @@ test('applyExtensionResponse moves surfaced or attentionReason responses to need
     assert.equal(surfacedSearchFail.reasonKey, 'search_failed');
     assert.deepEqual(getTransferGate(surfacedSearchFail), {
         allowed: false,
+        queueable: false,
         reasonKey: 'search_failed',
         label: 'Kayıt eşleşmedi'
     });
@@ -140,6 +148,7 @@ test('applyExtensionResponse moves non-surfaced failure to failed and closes gat
     assert.equal(failed.reasonKey, 'search_failed');
     assert.deepEqual(getTransferGate(failed), {
         allowed: false,
+        queueable: false,
         reasonKey: 'search_failed',
         label: 'YÖKSİS sekmesine ulaşılamadı'
     });
@@ -173,6 +182,7 @@ test('failBackgroundSearch handles timeout and document_read_failed and closes g
     assert.equal(timedOut.reasonKey, 'timeout');
     assert.deepEqual(getTransferGate(timedOut), {
         allowed: false,
+        queueable: false,
         reasonKey: 'timeout',
         label: 'YÖKSİS arama süresi doldu, tekrar deneyin'
     });
@@ -183,6 +193,7 @@ test('failBackgroundSearch handles timeout and document_read_failed and closes g
     assert.equal(docFailed.reasonKey, 'document_read_failed');
     assert.deepEqual(getTransferGate(docFailed), {
         allowed: false,
+        queueable: false,
         reasonKey: 'document_read_failed',
         label: 'Kabul mektubu okunamadı, tekrar deneyin'
     });
@@ -192,13 +203,16 @@ test('resetBackgroundSearch returns idle and opens gate, and latest gate store t
     const reset = resetBackgroundSearch();
     assert.equal(reset.status, BACKGROUND_SEARCH_STATUS.IDLE);
     assert.equal(getTransferGate(reset).allowed, true);
+    assert.equal(getTransferGate(reset).queueable, false);
 
     const running = startBackgroundSearch(createBackgroundSearchState(), { requestId: 'bg-req-7' });
     setLatestTransferGate(running);
     assert.equal(getLatestTransferGate().allowed, false);
+    assert.equal(getLatestTransferGate().queueable, true);
     assert.equal(getLatestTransferGate().reasonKey, 'running');
 
     setLatestTransferGate(reset);
     assert.equal(getLatestTransferGate().allowed, true);
+    assert.equal(getLatestTransferGate().queueable, false);
     assert.equal(getLatestTransferGate().reasonKey, null);
 });

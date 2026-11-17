@@ -237,7 +237,14 @@ function applyTransferGate(gateInput) {
         btnTransfer.setAttribute('data-original-title', btnTransfer.getAttribute('title') || '');
     }
 
-    if (gate.allowed === false) {
+    if (gate.allowed === false && gate.queueable === true) {
+        // Arka plan araması sürerken kuyruklu aktarım açık kalır
+        const queueLabel = 'Kırp ve YÖKSİS Bitince Aktar';
+        btnTransfer.disabled = false;
+        btnTransfer.setAttribute('aria-disabled', 'false');
+        btnTransfer.setAttribute('title', queueLabel);
+        btnTransfer.textContent = queueLabel;
+    } else if (gate.allowed === false) {
         const gateLabel = typeof gate.label === 'string' && gate.label.trim()
             ? gate.label.trim()
             : 'YÖKSİS aranıyor...';
@@ -469,7 +476,12 @@ function downloadCroppedImage(autoTransfer = false) {
     }));
 
     if (autoTransfer) {
-        showToast('Fotoğraf hazırlandı; YÖKSİS’e aktarılıyor...', 'info');
+        const gate = resolveCurrentTransferGate();
+        if (gate && gate.allowed === false && gate.queueable === true) {
+            showToast('Fotoğraf hazırlandı; YÖKSİS araması bitince otomatik aktarılacak.', 'info');
+        } else {
+            showToast('Fotoğraf hazırlandı; YÖKSİS’e aktarılıyor...', 'info');
+        }
     } else {
         showToast(`Fotoğraf hazırlandı ve indirildi: ${fileName}`, 'success');
     }
@@ -672,7 +684,7 @@ export function initPassportCropperModal() {
     if (btnTransfer) {
         btnTransfer.addEventListener('click', () => {
             const gate = resolveCurrentTransferGate();
-            if (gate && gate.allowed === false) return;
+            if (gate && gate.allowed === false && gate.queueable !== true) return;
             downloadCroppedImage(true);
         });
     }

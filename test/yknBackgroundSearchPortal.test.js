@@ -52,8 +52,12 @@ async function createPortalHarness(context, suffix) {
     const dom = new JSDOM(htmlTemplate, { url: 'https://portal.test/yetkili/' });
     context.after(() => dom.window.close());
 
+    let cropperInitCount = 0;
     dom.window.document.execCommand = () => true;
     dom.window.Cropper = class {
+        constructor() {
+            cropperInitCount += 1;
+        }
         destroy() {}
         rotateTo() {}
         getImageData() {
@@ -89,7 +93,13 @@ async function createPortalHarness(context, suffix) {
         }));
     }
 
-    function loadSyntheticStudent({ yoksisId = 'AB1-234-CD', documentsReady = true } = {}) {
+    function loadSyntheticStudent({
+        yoksisId = 'AB1-234-CD',
+        documentsReady = true,
+        passportImageSrc = 'data:image/jpeg;base64,AA==',
+        acceptanceCandidates = [],
+        passportDocumentUrl = ''
+    } = {}) {
         const doc = dom.window.document;
         doc.getElementById('ykn-passport-input').value = 'SYNTH12345';
         doc.getElementById('btn-ykn-search').click();
@@ -106,7 +116,8 @@ async function createPortalHarness(context, suffix) {
                 fullName: 'ORNEK OGRENCI',
                 passportNo: 'SYNTH12345',
                 yoksisId,
-                passportImageSrc: 'data:image/jpeg;base64,AA=='
+                ...(passportImageSrc ? { passportImageSrc } : {}),
+                ...(passportDocumentUrl ? { passportDocumentUrl } : {})
             }
         });
 
@@ -119,7 +130,9 @@ async function createPortalHarness(context, suffix) {
                 passportNo: 'SYNTH12345',
                 yoksisId,
                 documentsReady,
-                passportImageSrc: 'data:image/jpeg;base64,AA=='
+                ...(passportImageSrc ? { passportImageSrc } : {}),
+                ...(acceptanceCandidates.length ? { acceptanceCandidates } : {}),
+                ...(passportDocumentUrl ? { passportDocumentUrl } : {})
             }
         });
 
@@ -131,6 +144,7 @@ async function createPortalHarness(context, suffix) {
         document: dom.window.document,
         postedMessages,
         fakeTimers,
+        getCropperInitCount: () => cropperInitCount,
         dispatchExtensionMessage,
         loadSyntheticStudent
     };
@@ -145,14 +159,14 @@ test('ykn-pro-actions places background search button first and leaves existing 
     assert.equal(buttons[0].id, 'btn-ykn-background-search');
     assert.equal(buttons[1].id, 'btn-read-acceptance');
     assert.equal(buttons[2].id, 'btn-copy');
-    assert.match(buttons[0].textContent, /Kabul Kodunu Arka Planda YÖKSİS’te Ara/);
+    assert.match(buttons[0].textContent, /Arka Planda YÖKSİS’te Ara ve Fotoğrafı Kırp/);
     assert.equal(
         buttons[0].getAttribute('title'),
-        'Sekme değiştirmeden YÖKSİS’te aranır; bu sırada fotoğrafı kırpabilirsiniz'
+        'Sekme değiştirmeden YÖKSİS’te aranır ve aynı anda pasaport fotoğrafını kırpma ekranı açılır'
     );
 });
 
-test('cropper modal disables transfer button when gate is closed, restores original label when opened, and blocks transfer clicks', async (context) => {
+test('cropper modal keeps transfer enabled with queue label while running, disables for failed/needs_attention, and restores original label when opened', async (context) => {
     const dom = new JSDOM(htmlTemplate, { url: 'https://portal.test/yetkili/' });
     context.after(() => dom.window.close());
     dom.window.Cropper = class {
@@ -185,9 +199,10 @@ test('cropper modal disables transfer button when gate is closed, restores origi
         croppedEvents += 1;
     });
 
-    // Kapı kapalıyken sonradan açılan modal bile düğmeyi kilitli başlatmalıdır
+    // Kapı kuyruklanabilir (running) durumdayken aktarım düğmesi etkin kalır ve kuyruk etiketini gösterir
     dom.window.__YKN_TRANSFER_GATE__ = {
         allowed: false,
+        queueable: true,
         reasonKey: 'running',
         label: 'YÖKSİS aranıyor...'
     };
@@ -195,17 +210,46 @@ test('cropper modal disables transfer button when gate is closed, restores origi
     cropper.initPassportCropperModal();
     cropper.openPassportCropper({ imageSrc: 'data:image/jpeg;base64,AA==' });
 
-    assert.equal(btnTransfer.disabled, true);
-    assert.equal(btnTransfer.getAttribute('aria-disabled'), 'true');
-    assert.equal(btnTransfer.textContent, 'YÖKSİS aranıyor...');
-    assert.equal(btnTransfer.getAttribute('title'), 'YÖKSİS aranıyor...');
+    assert.equal(btnTransfer.disabled, false);
+    assert.equal(btnTransfer.getAttribute('aria-disabled'), 'false');
+    assert.equal(btnTransfer.textContent, 'Kırp ve YÖKSİS Bitince Aktar');
 
     btnTransfer.click();
-    assert.equal(croppedEvents, 0);
+    assert.equal(croppedEvents, 1);
+
+    // Kuyruklanamayan needs_attention / failed durumunda düğme kilitlenir ve tıklamayı engeller
+    cropper.openPassportCropper({ imageSrc: 'data:image/jpeg;base64,AA==' });
+    dom.window.dispatchEvent(new dom.window.CustomEvent('ykn:transfer-gate', {
+        detail: {
+            allowed: false,
+            queueable: false,
+            reasonKey: 'login_required',
+            label: 'YÖKSİS oturumu gerekli'
+        }
+    }));
+
+    assert.equal(btnTransfer.disabled, true);
+    assert.equal(btnTransfer.getAttribute('aria-disabled'), 'true');
+    assert.equal(btnTransfer.textContent, 'YÖKSİS oturumu gerekli');
+    assert.equal(btnTransfer.getAttribute('title'), 'YÖKSİS oturumu gerekli');
+
+    btnTransfer.click();
+    assert.equal(croppedEvents, 1);
+
+    dom.window.dispatchEvent(new dom.window.CustomEvent('ykn:transfer-gate', {
+        detail: {
+            allowed: false,
+            queueable: false,
+            reasonKey: 'search_failed',
+            label: 'YÖKSİS araması başarısız oldu, tekrar deneyin'
+        }
+    }));
+    assert.equal(btnTransfer.disabled, true);
+    assert.equal(btnTransfer.textContent, 'YÖKSİS araması başarısız oldu, tekrar deneyin');
 
     // Kapı açılınca özgün metin ve başlık geri yüklenmelidir
     dom.window.dispatchEvent(new dom.window.CustomEvent('ykn:transfer-gate', {
-        detail: { allowed: true, reasonKey: null, label: '' }
+        detail: { allowed: true, queueable: false, reasonKey: null, label: '' }
     }));
 
     assert.equal(btnTransfer.disabled, false);
@@ -214,21 +258,32 @@ test('cropper modal disables transfer button when gate is closed, restores origi
     assert.equal(btnTransfer.getAttribute('title'), originalTitle);
 });
 
-test('background search gates transfer & sync-fields, allows photo save, and unlocks upon verified formReady response', async (context) => {
-    const { dom, document, postedMessages, dispatchExtensionMessage, loadSyntheticStudent } = await createPortalHarness(context, 'flow');
+test('one-tap background search opens cropper simultaneously, queues crop transfer while running, and posts FILL_YOKSIS_FORM once upon success', async (context) => {
+    const { dom, document, postedMessages, getCropperInitCount, dispatchExtensionMessage, loadSyntheticStudent } = await createPortalHarness(context, 'flow');
     loadSyntheticStudent({ yoksisId: 'XY9-876-ZW', documentsReady: true });
 
     const btnBg = document.getElementById('btn-ykn-background-search');
     const btnSync = document.getElementById('btn-sync-yoksis-fields');
     const btnCropTransfer = document.getElementById('btn-passport-crop-transfer');
     const btnCropDownload = document.getElementById('btn-passport-crop-download');
-    const btnCopy = document.getElementById('btn-copy');
+    const cropperModal = document.getElementById('passport-cropper-modal');
 
     btnBg.click();
 
     assert.equal(btnBg.disabled, true);
     assert.equal(btnBg.classList.contains('is-loading'), true);
     assert.equal(btnSync.disabled, true);
+    assert.equal(cropperModal.classList.contains('show'), true);
+    assert.equal(getCropperInitCount(), 1);
+    assert.equal(btnCropTransfer.disabled, false);
+    assert.equal(btnCropTransfer.textContent, 'Kırp ve YÖKSİS Bitince Aktar');
+    assert.equal(btnCropDownload.disabled, false);
+
+    // Çalışırken ikinci basış hiçbir şey yapmaz ve kırpıcıyı ikinci kez açmaz
+    const countAfterFirstClick = postedMessages.length;
+    btnBg.click();
+    assert.equal(postedMessages.length, countAfterFirstClick);
+    assert.equal(getCropperInitCount(), 1);
 
     const bgTransferMsg = [...postedMessages].reverse().find((m) => m?.payload?.action === 'TRANSFER_TO_YOKSIS');
     assert.ok(bgTransferMsg, 'TRANSFER_TO_YOKSIS should be posted');
@@ -236,23 +291,25 @@ test('background search gates transfer & sync-fields, allows photo save, and unl
     assert.equal(bgTransferMsg.payload.data.yoksisId, 'XY9-876-ZW');
     const bgRequestId = bgTransferMsg.payload.requestId;
 
-    // Arka plan araması sürerken kırpıcı açılabilmeli ve aktarım tuşu kilitli kalmalıdır
-    btnCopy.click();
-    assert.equal(btnCropTransfer.disabled, true);
-    assert.equal(btnCropTransfer.textContent, 'YÖKSİS aranıyor...');
-    assert.equal(btnCropDownload.disabled, false);
-
-    // Savunma amaçlı: kapı kapalıyken sync (disabled kaldırılsa bile) veya autoTransfer hiçbir FILL_YOKSIS_FORM / ikinci TRANSFER göndermemelidir
-    const beforeBlockedCount = postedMessages.length;
+    // sync-fields çalışırken kilitli kalmalıdır
+    const beforeSyncAttemptCount = postedMessages.length;
     btnSync.disabled = false;
     btnSync.click();
     btnSync.disabled = true;
+    assert.equal(postedMessages.length, beforeSyncAttemptCount);
+    assert.match(document.getElementById('ykn-status-container').textContent, /YÖKSİS alan aktarımı bekletildi/);
+
+    // Arama sürerken fotoğraf onaylanınca yalnızca SAVE_CROPPED_PHOTO gider, FILL_YOKSIS_FORM gönderilmez
+    const beforeCropCount = postedMessages.length;
     dom.window.dispatchEvent(new dom.window.CustomEvent('ykn:photo-cropped', {
         detail: { dataUrl: 'data:image/jpeg;base64,AA==', fileName: 'test.jpg', autoTransfer: true }
     }));
-    const newMsgsDuringBlock = postedMessages.slice(beforeBlockedCount).map((m) => m.payload.action);
-    assert.deepEqual(newMsgsDuringBlock, ['SAVE_CROPPED_PHOTO']);
-    assert.match(document.getElementById('ykn-status-container').textContent, /YÖKSİS alan aktarımı bekletildi/);
+    const newMsgsDuringQueue = postedMessages.slice(beforeCropCount).map((m) => m.payload.action);
+    assert.deepEqual(newMsgsDuringQueue, ['SAVE_CROPPED_PHOTO']);
+    assert.match(
+        document.getElementById('ykn-status-container').textContent,
+        /Fotoğraf hazır; YÖKSİS araması bitince otomatik aktarılacak\./
+    );
 
     // Eski/uyumsuz requestId yanıtı yok sayılmalıdır
     dispatchExtensionMessage({
@@ -262,9 +319,9 @@ test('background search gates transfer & sync-fields, allows photo save, and unl
         response: { success: true, formReady: true }
     });
     assert.equal(btnBg.disabled, true);
-    assert.equal(btnCropTransfer.disabled, true);
+    assert.equal(postedMessages.filter((m) => m?.payload?.action === 'FILL_YOKSIS_FORM').length, 0);
 
-    // Doğru requestId ile formReady === true yanıtı kapıyı açar
+    // Doğru requestId ile formReady === true yanıtı kapıyı açar ve bekleyen FILL_YOKSIS_FORM'u tam 1 kez gönderir
     dispatchExtensionMessage({
         type: 'RESPONSE',
         action: 'TRANSFER_TO_YOKSIS',
@@ -278,14 +335,19 @@ test('background search gates transfer & sync-fields, allows photo save, and unl
         }
     });
 
+    await Promise.resolve();
+
     assert.equal(btnBg.disabled, false);
     assert.equal(btnBg.classList.contains('is-loading'), false);
     assert.equal(btnSync.disabled, false);
     assert.equal(btnCropTransfer.disabled, false);
     assert.match(btnCropTransfer.textContent, /Her Şeyi YÖKSİS'e Aktar/);
 
+    const fillMessages = postedMessages.filter((m) => m?.payload?.action === 'FILL_YOKSIS_FORM');
+    assert.equal(fillMessages.length, 1);
+
     const statusText = document.getElementById('ykn-status-container').textContent;
-    assert.match(statusText, /YÖKSİS öğrenci formu hazır ve kimlik doğrulandı/);
+    assert.match(statusText, /YÖKSİS doğrulandı; aktarım başlatılıyor\./);
     assert.doesNotMatch(statusText, /portala dönüldü/i);
 });
 
@@ -383,4 +445,196 @@ test('old #btn-read-acceptance, new Ara search, and workspace change reset backg
     document.dispatchEvent(new dom.window.CustomEvent('workspace:view-changed', { detail: { viewName: 'cover' } }));
     assert.equal(btnSync.disabled, false);
     assert.equal(btnBg.disabled, false);
+});
+
+test('needs_attention while pending clears the pending flag and reports manual_confirmation guidance', async (context) => {
+    const { dom, document, postedMessages, dispatchExtensionMessage, loadSyntheticStudent } = await createPortalHarness(context, 'pending-attention');
+    loadSyntheticStudent({ yoksisId: 'GH4-123-JK', documentsReady: true });
+
+    const btnBg = document.getElementById('btn-ykn-background-search');
+    const btnCropTransfer = document.getElementById('btn-passport-crop-transfer');
+
+    btnBg.click();
+    const bgTransferMsg = [...postedMessages].reverse().find((m) => m?.payload?.action === 'TRANSFER_TO_YOKSIS');
+    assert.ok(bgTransferMsg);
+
+    // Kırpma onaylanıp kuyruğa alınır
+    dom.window.dispatchEvent(new dom.window.CustomEvent('ykn:photo-cropped', {
+        detail: { dataUrl: 'data:image/jpeg;base64,AA==', fileName: 'pending.jpg', autoTransfer: true }
+    }));
+
+    // needs_attention (manual_confirmation) gelince bekleyen aktarım iptal edilir ve FILL_YOKSIS_FORM gönderilmez
+    dispatchExtensionMessage({
+        type: 'RESPONSE',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: bgTransferMsg.payload.requestId,
+        response: {
+            success: true,
+            formReady: false,
+            manualOverrideAvailable: true
+        }
+    });
+
+    assert.equal(postedMessages.filter((m) => m?.payload?.action === 'FILL_YOKSIS_FORM').length, 0);
+    assert.equal(btnCropTransfer.disabled, true);
+    const statusText = document.getElementById('ykn-status-container').textContent;
+    assert.match(
+        statusText,
+        /YÖKSİS formu otomatik doğrulanamadı; YÖKSİS sekmesinde kontrol edip “1\. Kabul Mektubunu Oku ve YÖKSİS’te Ara” ile devam edin/
+    );
+    assert.match(statusText, /Bekleyen aktarım iptal edildi:/);
+
+    // Sonradan yeni bir başarılı arama gelse bile temizlenmiş bekleyen bayrak yüzünden otomatik FILL_YOKSIS_FORM tetiklenmez
+    btnBg.click();
+    const bgTransferMsg2 = [...postedMessages].reverse().find((m) => m?.payload?.action === 'TRANSFER_TO_YOKSIS');
+    dispatchExtensionMessage({
+        type: 'RESPONSE',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: bgTransferMsg2.payload.requestId,
+        response: { success: true, formReady: true }
+    });
+    await Promise.resolve();
+    assert.equal(postedMessages.filter((m) => m?.payload?.action === 'FILL_YOKSIS_FORM').length, 0);
+});
+
+test('extension feature check blocks background search when PONG lacks background_transfer and allows when present', async (context) => {
+    const { document, postedMessages, dispatchExtensionMessage, loadSyntheticStudent } = await createPortalHarness(context, 'feature-check');
+    loadSyntheticStudent({ yoksisId: 'KL5-999-MN', documentsReady: true });
+
+    const pingMsg = [...postedMessages].reverse().find((m) => m?.payload?.action === 'PING');
+    assert.ok(pingMsg, 'PING handshake should be posted');
+
+    // Eski eklenti PONG yanıtında background_transfer özelliği yok
+    dispatchExtensionMessage({
+        type: 'PONG',
+        requestId: pingMsg.payload.requestId,
+        features: []
+    });
+
+    const btnBg = document.getElementById('btn-ykn-background-search');
+    const cropperModal = document.getElementById('passport-cropper-modal');
+    const beforeBlockedCount = postedMessages.length;
+
+    btnBg.click();
+
+    assert.equal(postedMessages.length, beforeBlockedCount);
+    assert.equal(btnBg.disabled, false);
+    assert.equal(cropperModal.classList.contains('show'), false);
+    assert.match(
+        document.getElementById('ykn-status-container').textContent,
+        /Yüklü eklenti arka plan aramasını desteklemiyor\. Eklentiyi son sürümle yeniden yükleyin\./
+    );
+
+    // Güncel eklenti PONG yanıtı background_transfer içerince akış normal çalışır
+    document.getElementById('btn-ykn-extension-recheck').click();
+    const recheckPing = [...postedMessages].reverse().find((m) => m?.payload?.action === 'PING');
+    dispatchExtensionMessage({
+        type: 'PONG',
+        requestId: recheckPing.payload.requestId,
+        features: ['background_transfer']
+    });
+
+    btnBg.click();
+    const transferMsg = [...postedMessages].reverse().find((m) => m?.payload?.action === 'TRANSFER_TO_YOKSIS');
+    assert.ok(transferMsg, 'TRANSFER_TO_YOKSIS should be posted when feature is supported');
+    assert.equal(cropperModal.classList.contains('show'), true);
+});
+
+test('idle state keeps immediate FILL_YOKSIS_FORM transfer behavior', async (context) => {
+    const { dom, document, postedMessages, dispatchExtensionMessage, loadSyntheticStudent } = await createPortalHarness(context, 'idle-flow');
+    loadSyntheticStudent({ yoksisId: 'MN6-321-OP', documentsReady: true });
+
+    const btnCopy = document.getElementById('btn-copy');
+    const btnCropTransfer = document.getElementById('btn-passport-crop-transfer');
+
+    btnCopy.click();
+    assert.equal(document.getElementById('passport-cropper-modal').classList.contains('show'), true);
+    assert.equal(btnCropTransfer.disabled, false);
+    assert.match(btnCropTransfer.textContent, /Her Şeyi YÖKSİS'e Aktar/);
+
+    dom.window.dispatchEvent(new dom.window.CustomEvent('ykn:photo-cropped', {
+        detail: { dataUrl: 'data:image/jpeg;base64,AA==', fileName: 'idle.jpg', autoTransfer: true }
+    }));
+
+    // Boşta (idle) durumda yoksisReady/bağlı sekme yoksa startManualYoksisFillAfterCrop önce hazırlık aramasını bekler
+    const prepTransferMsg = [...postedMessages].reverse().find((m) => m?.payload?.action === 'TRANSFER_TO_YOKSIS');
+    assert.ok(prepTransferMsg, 'TRANSFER_TO_YOKSIS preparation request should be posted');
+    assert.equal(prepTransferMsg.payload.waitForForm, true);
+
+    dispatchExtensionMessage({
+        type: 'RESPONSE',
+        action: 'TRANSFER_TO_YOKSIS',
+        requestId: prepTransferMsg.payload.requestId,
+        response: {
+            success: true,
+            formReady: true,
+            yoksisTabId: 88,
+            yoksisTabUrl: 'https://yoksis.example/student'
+        }
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const actions = postedMessages.map((m) => m?.payload?.action);
+    assert.ok(actions.includes('SAVE_CROPPED_PHOTO'));
+    assert.ok(actions.includes('FILL_YOKSIS_FORM'));
+});
+
+test('parallel acceptance letter and passport document reads do not clobber each other or fail background search on passport read failure', async (context) => {
+    const { document, postedMessages, dispatchExtensionMessage, loadSyntheticStudent } = await createPortalHarness(context, 'parallel-reads');
+    loadSyntheticStudent({
+        yoksisId: '',
+        documentsReady: true,
+        passportImageSrc: '',
+        acceptanceCandidates: ['https://apply.test/acceptance-1.pdf'],
+        passportDocumentUrl: 'https://apply.test/passport-1.pdf'
+    });
+
+    // STUDENT_FOUND aşamasında başlayan ön pasaport okumasını sonlandırarak tıklama anında iki paralel okumanın başlatılmasını doğrula
+    const initialPassportPrefetch = [...postedMessages]
+        .reverse()
+        .find((m) => m?.payload?.action === 'READ_APPLY_DOCUMENT' && m?.payload?.documentKind === 'passport');
+    assert.ok(initialPassportPrefetch, 'STUDENT_FOUND should prefetch passport document');
+    dispatchExtensionMessage({
+        type: 'EVENT',
+        action: 'DOCUMENT_READ_FAILED',
+        requestId: initialPassportPrefetch.payload.requestId,
+        error: 'İlk pasaport ön okuması tamamlanamadı',
+        data: {
+            documentKind: 'passport',
+            documentUrl: 'https://apply.test/passport-1.pdf'
+        }
+    });
+
+    const btnBg = document.getElementById('btn-ykn-background-search');
+    const beforeClickCount = postedMessages.length;
+
+    btnBg.click();
+
+    const docRequests = postedMessages
+        .slice(beforeClickCount)
+        .filter((m) => m?.payload?.action === 'READ_APPLY_DOCUMENT');
+
+    assert.equal(docRequests.length, 2);
+    const acceptanceReq = docRequests.find((m) => m.payload.documentKind === 'acceptanceLetter');
+    const passportReq = docRequests.find((m) => m.payload.documentKind === 'passport');
+    assert.ok(acceptanceReq, 'acceptanceLetter READ_APPLY_DOCUMENT should be posted');
+    assert.ok(passportReq, 'passport READ_APPLY_DOCUMENT should be posted');
+    assert.notEqual(acceptanceReq.payload.requestId, passportReq.payload.requestId);
+
+    // Pasaport okuması hata verse bile kabul mektubu arka plan araması reading_letter durumunda kalır
+    dispatchExtensionMessage({
+        type: 'EVENT',
+        action: 'DOCUMENT_READ_FAILED',
+        requestId: passportReq.payload.requestId,
+        error: 'Pasaport indirilemedi',
+        data: {
+            documentKind: 'passport',
+            documentUrl: 'https://apply.test/passport-1.pdf'
+        }
+    });
+
+    assert.equal(btnBg.disabled, true);
+    assert.equal(document.getElementById('btn-sync-yoksis-fields').disabled, true);
 });
