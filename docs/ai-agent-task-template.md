@@ -16,6 +16,7 @@ is no longer supported for individual accounts; use Antigravity `agy`).
 - In headless `accept-edits` mode the delegated agent cannot run shell commands (execution is
   auto-denied and produces nothing), so tell it not to run any command and have the orchestrator
   run tests, build, and dry-run. Do not use `--dangerously-skip-permissions` to work around this.
+- Name the skills the agent should use in the SKILLS field of the prompt. agy sees a different skill set than Claude and does not trigger skills reliably on its own. Skills that need shell commands (for example tdd-workflow) are the orchestrator job, and swarm is never used.
 - Pass the task prompt with `-p`. Example for a read-only review:
 
 ```bash
@@ -84,6 +85,7 @@ DO NOT TOUCH: everything else, especially migrations/, package.json, package-loc
 CONTEXT: <relevant files to read first, links to docs, the bug or requirement>
 DONE WHEN: <observable result, e.g. test X passes, behavior Y>
 CHECKS YOU MAY RUN: npm test | <specific test file> | none
+SKILLS: <skill names the agent should use, or none>
 RULES: Follow AGENTS.md and GEMINI.md. No commit, no push, no merge, no branch or worktree
   changes. No deploy, no wrangler, no workflow dispatch. No deleting anything. Read-only tasks
   must not create or modify any file.
