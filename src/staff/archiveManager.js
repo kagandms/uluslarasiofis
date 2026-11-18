@@ -3,7 +3,7 @@ import { isPlausibleBirthDate } from '../shared/age.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
-import { createApplicationQueueFilters } from './application-queue-filters.js';
+import { createApplicationQueueFilters, splitNoteStatus } from './application-queue-filters.js';
 import { createApplicationQueueTable } from './application-queue-table.js';
 
 const STATUS_LABELS = Object.freeze({
@@ -23,13 +23,9 @@ const ARCHIVE_STATUS_FILTERS = Object.freeze([
     ['deleted', 'Silinen'],
     ['completed', 'Tamamlandı'],
     ['cancelled', 'İptal edildi'],
-    ['rejected', 'Reddedildi']
-]);
-/* Kayıt notu filtresi seçenekleri (çevrimiçi liste ile aynı) */
-const NOTE_FILTERS = Object.freeze([
-    ['all', 'Tüm kayıtlar'],
-    ['yes', 'Notu olanlar'],
-    ['no', 'Notu olmayanlar']
+    ['rejected', 'Reddedildi'],
+    ['noted', 'Notu olanlar'],
+    ['not_noted', 'Notu olmayanlar']
 ]);
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 function createText(document, tag, className, value) {
@@ -63,7 +59,6 @@ function createSearchForm(document, state, onSubmit) {
     const form = createApplicationQueueFilters(document, {
         query: state.query,
         statusOptions: ARCHIVE_STATUS_FILTERS,
-        noteFilter: { label: 'Not', options: NOTE_FILTERS },
         idPrefix: 'staff-archive',
         disabled: state.loading,
         onSubmit
@@ -72,7 +67,6 @@ function createSearchForm(document, state, onSubmit) {
     status.addEventListener('change', () => onSubmit({
         q: form.elements.namedItem('q').value,
         status: status.value,
-        has_note: form.elements.namedItem('has_note').value,
         from_date: form.elements.namedItem('from_date').value,
         to_date: form.elements.namedItem('to_date').value
     }));
@@ -516,7 +510,7 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
         preview: null, result: null, archiveApplicationId: null, archiveNotice: null,
         recordNotes: new Map(),
-        query: { q: '', status: 'archive_all', has_note: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
+        query: { q: '', status: 'archive_all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queryRequestId = 0;
     let detailRequestId = 0;
@@ -704,7 +698,7 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         state.errorStatus = null;
         render();
         try {
-            const result = await api.queryApplications({ ...state.query });
+            const result = await api.queryApplications({ ...state.query, ...splitNoteStatus(state.query.status) });
             if (requestId !== queryRequestId) return;
             state.result = result;
             state.recordNotes.clear();
@@ -749,16 +743,14 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         await loadQueue();
     }
 
-    async function submitSearch({ q, status, has_note, from_date, to_date }) {
+    async function submitSearch({ q, status, from_date, to_date }) {
         cancelArchive();
         detailRequestId += 1;
         discardPreview();
-        const normalizedHasNote = has_note === 'yes' || has_note === 'no' ? has_note : 'all';
         state.query = {
             ...state.query,
             q,
             status,
-            has_note: normalizedHasNote,
             from_date: from_date ?? '',
             to_date: to_date ?? '',
             page: 1

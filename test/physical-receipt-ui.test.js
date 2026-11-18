@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createPhysicalReceiptTemplate } from '../src/services/physical-receipt-template.js';
 import { renderPhysicalIntakes } from '../src/staff/physical-intake-view.js';
+import { createApplicationQueueFilters, splitNoteStatus } from '../src/staff/application-queue-filters.js';
 import { initializeApplicationTracking } from '../src/public/applicationTracking.js';
 import { createPhysicalTrackingPanel } from '../src/public/physical-application-tracking.js';
 import { buildDocumentAssetUrl,waitDocumentAssets } from '../src/services/document-logo-loader.js';
@@ -231,10 +232,57 @@ test('queue translates ready A4 state and preserves stale document warning', () 
     assert.equal(root.querySelector('tbody tr td[data-label="Pasaport No"]').textContent, '—');
     assert.equal(root.querySelector('tbody tr td[data-label="Pasaport No"]').dataset.label, 'Pasaport No');
     assert.equal(root.querySelectorAll('input[type=date]').length, 2);
+    assert.equal(root.querySelector('select[name="has_note"]'), null);
+    assert.equal(root.querySelectorAll('select').length, 1);
+    const statusOptions = [...root.querySelectorAll('select[name="status"] option')].map(option => [option.value, option.textContent]);
+    assert.deepEqual(statusOptions.slice(-2), [['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']]);
     root.querySelector('#staff-physical-from-date').value = '2026-10-01';
     root.querySelector('#staff-physical-to-date').value = '2026-10-13';
     root.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
     assert.equal(appliedFilters.from_date, '2026-10-01');
     assert.equal(appliedFilters.to_date, '2026-10-13');
+    dom.window.close();
+});
+
+test('splitNoteStatus maps noted and not_noted to status all with has_note and preserves physical Durum selection', () => {
+    assert.deepEqual(splitNoteStatus('noted'), { status: 'all', has_note: 'yes' });
+    assert.deepEqual(splitNoteStatus('not_noted'), { status: 'all', has_note: 'no' });
+    assert.deepEqual(splitNoteStatus('all'), { status: 'all', has_note: 'all' });
+    assert.deepEqual(splitNoteStatus('under_review'), { status: 'under_review', has_note: 'all' });
+    assert.deepEqual(splitNoteStatus('archive_all'), { status: 'archive_all', has_note: 'all' });
+
+    const dom = new JSDOM('<main></main>');
+    const root = dom.window.document.querySelector('main');
+    const submitted = [];
+    const form = createApplicationQueueFilters(dom.window.document, {
+        query: { q: '', status: 'noted', from_date: '', to_date: '' },
+        statusOptions: [['all', 'Tüm durumlar'], ['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']],
+        noteFilter: { label: 'Not', options: [['all', 'Tüm kayıtlar']] },
+        idPrefix: 'test-queue',
+        onSubmit: nextQuery => submitted.push(nextQuery)
+    });
+    assert.equal(form.querySelector('select[name="has_note"]'), null);
+    assert.equal(form.classList.contains('has-note-filter'), false);
+    assert.equal(form.querySelector('select[name="status"]').value, 'noted');
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.deepEqual(submitted, [{ q: '', status: 'noted', from_date: '', to_date: '' }]);
+
+    const changed = [];
+    renderPhysicalIntakes(root, {
+        view: 'queue',
+        query: { q: '', status: 'noted', page: 1, page_size: 25 },
+        result: { items: [], pagination: { page: 1, page_size: 25, total_pages: 1, total: 0 } }
+    }, {
+        newReceipt: () => {},
+        search: () => {},
+        queryChange: (nextQuery, debounce) => changed.push({ nextQuery, debounce })
+    });
+    const physicalStatus = root.querySelector('select[name="status"]');
+    assert.equal(root.querySelector('select[name="has_note"]'), null);
+    assert.equal(physicalStatus.value, 'noted');
+    physicalStatus.value = 'not_noted';
+    physicalStatus.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    assert.deepEqual(changed, [{ nextQuery: { q: '', status: 'not_noted', from_date: '', to_date: '' }, debounce: false }]);
+    assert.deepEqual(splitNoteStatus(changed[0].nextQuery.status), { status: 'all', has_note: 'no' });
     dom.window.close();
 });

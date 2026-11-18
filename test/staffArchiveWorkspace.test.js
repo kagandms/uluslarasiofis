@@ -164,6 +164,8 @@ test('archive keeps terminal filters and adds the Silinen view', async (context)
     assert.equal(queries[0].page, 1);
 
     // Check filter options
+    assert.equal(archiveRoot.querySelector('select[name="has_note"]'), null);
+    assert.equal(archiveRoot.querySelectorAll('select').length, 1);
     const statusSelect = archiveRoot.querySelector('[name="status"]');
     assert.ok(statusSelect, 'Status select must exist');
     const options = [...statusSelect.querySelectorAll('option')].map((opt) => [opt.value, opt.textContent.trim()]);
@@ -172,13 +174,31 @@ test('archive keeps terminal filters and adds the Silinen view', async (context)
         ['deleted', 'Silinen'],
         ['completed', 'Tamamlandı'],
         ['cancelled', 'İptal edildi'],
-        ['rejected', 'Reddedildi']
+        ['rejected', 'Reddedildi'],
+        ['noted', 'Notu olanlar'],
+        ['not_noted', 'Notu olmayanlar']
     ]);
     statusSelect.value = 'deleted';
     statusSelect.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(queries.at(-1).status, 'deleted', 'changing the filter immediately requests deleted applications');
+    assert.equal(queries.at(-1).has_note, 'all');
     assert.match(archiveRoot.textContent, /Silinen/);
+
+    // Notu olanlar / olmayanlar seçimleri status: 'all' ve ilgili has_note değeri gönderir, seçimi korur
+    archiveRoot.querySelector('[name="status"]').value = 'noted';
+    archiveRoot.querySelector('[name="status"]').dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(queries.at(-1).status, 'all');
+    assert.equal(queries.at(-1).has_note, 'yes');
+    assert.equal(archiveRoot.querySelector('[name="status"]')?.value, 'noted');
+
+    archiveRoot.querySelector('[name="status"]').value = 'not_noted';
+    archiveRoot.querySelector('[name="status"]').dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(queries.at(-1).status, 'all');
+    assert.equal(queries.at(-1).has_note, 'no');
+    assert.equal(archiveRoot.querySelector('[name="status"]')?.value, 'not_noted');
 
     // Active statuses must NOT be present
     const disallowedValues = ['all', 'new', 'under_review', 'resubmission_required', 'approved', 'migration', 'submitted'];

@@ -13,6 +13,13 @@ function createField(document, className, labelText, input) {
     return field;
 }
 
+/* Durum seçimindeki not filtrelerini API'nin status ve has_note alanlarına ayırır. */
+export function splitNoteStatus(status) {
+    if (status === 'noted') return { status: 'all', has_note: 'yes' };
+    if (status === 'not_noted') return { status: 'all', has_note: 'no' };
+    return { status, has_note: 'all' };
+}
+
 /** Renders the common searchable, status-filtered, date-bounded staff queue form. */
 export function createApplicationQueueFilters(document, options) {
     const form = document.createElement('form');
@@ -37,25 +44,6 @@ export function createApplicationQueueFilters(document, options) {
         status.append(option);
     }
 
-    let noteSelect = null;
-    if (options.noteFilter) {
-        form.classList.add('has-note-filter');
-        noteSelect = document.createElement('select');
-        noteSelect.className = 'glass-input';
-        noteSelect.name = 'has_note';
-        noteSelect.id = `${options.idPrefix}-has-note`;
-        const currentNoteFilter = options.query.has_note || 'all';
-        const noteOptions = Array.isArray(options.noteFilter.options)
-            ? options.noteFilter.options
-            : [];
-        for (const [value, label] of noteOptions) {
-            const option = createText(document, 'option', label);
-            option.value = value;
-            option.selected = value === currentNoteFilter;
-            noteSelect.append(option);
-        }
-    }
-
     const fromDate = document.createElement('input');
     fromDate.type = 'date';
     fromDate.className = 'glass-input';
@@ -76,24 +64,14 @@ export function createApplicationQueueFilters(document, options) {
     submit.disabled = Boolean(options.disabled);
     form.addEventListener('submit', event => {
         event.preventDefault();
-        const nextQuery = { q: search.value, status: status.value, from_date: fromDate.value, to_date: toDate.value };
-        if (noteSelect) {
-            nextQuery.has_note = noteSelect.value;
-        }
-        options.onSubmit(nextQuery);
+        options.onSubmit({ q: search.value, status: status.value, from_date: fromDate.value, to_date: toDate.value });
     });
-    const fields = [
+    form.append(
         createField(document, 'physical-filter-search', 'Başvuru ara', search),
-        createField(document, 'physical-filter-status', 'Durum', status)
-    ];
-    if (noteSelect) {
-        fields.push(createField(document, 'staff-filter-note', options.noteFilter.label || 'Not', noteSelect));
-    }
-    fields.push(
+        createField(document, 'physical-filter-status', 'Durum', status),
         createField(document, 'physical-filter-start-date', 'Başlangıç tarihi', fromDate),
         createField(document, 'physical-filter-end-date', 'Bitiş tarihi', toDate),
         submit
     );
-    form.append(...fields);
     return form;
 }
