@@ -75,7 +75,7 @@ export function assetPlan(root) {
         const bytes = readFileSync(join(root, 'dist', entry.path));
         assert.equal(bytes.length, entry.bytes); assert.equal(digest(bytes), entry.sha256);
         if (name === '_headers') {
-            assert.equal(bytes.toString(), '/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n');
+            assert.equal(bytes.toString(), "/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/pdfjs-support/*\n  Cache-Control: public, max-age=31536000, immutable\n\n/fonts/*\n  Cache-Control: public, max-age=604800\n\n/logo_tr_dark.png\n  Cache-Control: public, max-age=86400\n\n/logo_tr_transparent.png\n  Cache-Control: public, max-age=86400\n\n/goc_logo.png\n  Cache-Control: public, max-age=86400\n\n/topkapi_logo.jpg\n  Cache-Control: public, max-age=86400\n\n/header_logo.jpg\n  Cache-Control: public, max-age=86400\n\n/icon-192.png\n  Cache-Control: public, max-age=86400\n\n/icon-512.png\n  Cache-Control: public, max-age=86400\n\n/icon.png\n  Cache-Control: public, max-age=86400\n\n/apple-touch-icon.png\n  Cache-Control: public, max-age=86400\n\n/favicon-48x48.png\n  Cache-Control: public, max-age=86400\n\n/favicon-96x96.png\n  Cache-Control: public, max-age=86400\n\n/favicon.ico\n  Cache-Control: public, max-age=86400\n");
             continue;
         }
         assert.ok(!['/wrangler.json', '/.dev.vars', '/_redirects', '/_worker.js'].includes(`/${name}`), 'Unexpected asset control file requires review.');
