@@ -141,6 +141,7 @@ function getExpectedYoksisFieldsForVerification(studentData) {
     add('Doğum Yeri Açıklaması', studentData.dogumYeriAciklamasi, studentData.dogumYeri, studentData.birthPlace);
     add('Belgeyi Veren Makam', studentData.verenMakam, studentData.issuingAuthority);
     add('Belge No', studentData.pasaportNo, studentData.passportNo);
+    add('Uyruk Kimlik No', studentData.uyrukKimlikNo);
     add('Doğum Tarihi', studentData.birthDate, studentData.dogumTarihi);
     add('Düzenleme Tarihi', studentData.issueDate, studentData.passportIssueDate, studentData.duzenlemeTarihi,
         studentData.pasaportDuzenlemeTarihi, studentData.verilisTarihi, studentData.belgeDuzenlemeTarihi);
@@ -169,6 +170,7 @@ async function verifyYoksisFields(data, requestId) {
     addExpected('Doğum Yeri Açıklaması', data.dogumYeriAciklamasi || data.dogumYeri || data.birthPlace, ['Doğum Yeri Açıklaması', 'Place of Birth Description']);
     addExpected('Belgeyi Veren Makam', data.verenMakam || data.issuingAuthority, ['Belgeyi Veren Makam', 'Veren Makam', 'Issuing Authority']);
     addExpected('Belge No', data.pasaportNo || data.passportNo, ['Belge No']);
+    addExpected('Uyruk Kimlik No', data.uyrukKimlikNo, ['Uyruk Kimlik No', 'Uyruk Kimlik Numarası', 'Kimlik No']);
     addExpected('Doğum Tarihi', data.birthDate || data.dogumTarihi, ['Doğum Tarihi', 'Date of Birth', 'Birth Date']);
     addExpected('Düzenleme Tarihi', data.issueDate || data.passportIssueDate || data.duzenlemeTarihi || data.pasaportDuzenlemeTarihi || data.verilisTarihi || data.belgeDuzenlemeTarihi,
         ['Belge Düzenleme Tarihi', 'Düzenleme Tarihi', 'Belgenin Düzenleme Tarihi', 'Belge Düzenlenme Tarihi', 'Düzenlenme Tarihi', 'Pasaport Düzenleme Tarihi', 'Pasaport Düzenlenme Tarihi', 'Pasaport Veriliş Tarihi', 'Belge Veriliş Tarihi', 'Veriliş Tarihi', 'Tanzim Tarihi', 'Date of Issue', 'Issue Date']);
@@ -1336,7 +1338,7 @@ async function waitForYoksisSearchControlsToSettle(options = {}) {
 }
 
 function getYoksisStudentFormControls() {
-    const aliases = [['Adı', 'Öğrenci Adı'], ['Soyadı'], ['Anne Adı'], ['Baba Adı'], ['Belge No']];
+    const aliases = [['Adı', 'Öğrenci Adı'], ['Soyadı'], ['Anne Adı'], ['Baba Adı'], ['Belge No'], ['Uyruk Kimlik No', 'Uyruk Kimlik Numarası', 'Kimlik No']];
     const controls = aliases.flatMap(labels => getAllDocs(document).map(root =>
         globalThis.YknFieldTargets.find({ root, labels, kind: 'existing-text' })
     ));
@@ -1552,6 +1554,7 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
                 findTargetElementByFuzzyLabels(['Soyadı', 'Soyad', 'Öğrenci Soyadı', 'Last Name', 'Surname'], 'input'),
                 findTargetElementByFuzzyLabels(['Doğum Tarihi', 'Date of Birth', 'Birth Date'], 'input'),
                 findBelgeNoInMainPanel(),
+                findTargetElementByFuzzyLabels(['Uyruk Kimlik No', 'Uyruk Kimlik Numarası', 'Kimlik No'], 'input'),
                 findTargetElementByFuzzyLabels(['Uyruğu', 'Uyruk', 'Nationality'], 'select') || findTargetElementByFuzzyLabels(['Uyruğu', 'Uyruk', 'Nationality'], 'input'),
                 findTargetElementByFuzzyLabels(['Cinsiyet', 'Cinsiyeti', 'Gender'], 'input')
             ].filter(Boolean).length;
@@ -3856,6 +3859,7 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 || findTargetElementByFuzzyLabels(['Baba Adı', 'Baba İsmi', 'Father Name', "Father's Name"], 'input')
                 || findTargetElementByFuzzyLabels(['Adı', 'Ad', 'Öğrenci Adı', 'First Name', 'Given Name'], 'input')
                 || findTargetElementByFuzzyLabels(['Soyadı', 'Soyad', 'Öğrenci Soyadı', 'Last Name', 'Surname'], 'input')
+                || findTargetElementByFuzzyLabels(['Uyruk Kimlik No', 'Uyruk Kimlik Numarası', 'Kimlik No'], 'input')
                 || findBelgeNoInMainPanel()
                 || findTargetElementByFuzzyLabels(['Uyruğu', 'Uyruk', 'Nationality'], 'select')
                 || findTargetElementByFuzzyLabels(['Uyruğu', 'Uyruk', 'Nationality'], 'input')
@@ -4028,6 +4032,12 @@ if (typeof chrome !== 'undefined' && chrome?.runtime?.onMessage) {
                 await simulateInput(foreignIdentityInput, '');
             }
             if (recordField('Belge No', passportValue, await simulateInput(belgeNoInput, passportValue))) successCount++;
+
+            const uyrukKimlikNoVal = String(data.uyrukKimlikNo ?? '').trim();
+            if (uyrukKimlikNoVal) {
+                const uyrukKimlikNoInput = findTargetElementByFuzzyLabels(['Uyruk Kimlik No', 'Uyruk Kimlik Numarası', 'Kimlik No'], 'input');
+                if (recordField('Uyruk Kimlik No', uyrukKimlikNoVal, await simulateInput(uyrukKimlikNoInput, uyrukKimlikNoVal))) successCount++;
+            }
 
             const issueDateInput = findTargetElementByFuzzyLabels([
                 'Belge Düzenleme Tarihi',

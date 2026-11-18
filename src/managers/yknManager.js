@@ -1,6 +1,7 @@
 import { showToast } from '../ui/toastManager.js';
 import {
     extractPassportDatesFromText,
+    extractPassportMetadata,
     extractYoksisIdFromText,
     isValidYoksisId,
     parseDateValue,
@@ -1876,6 +1877,12 @@ export function initYknManager() {
                 // Pasaport dijital metin analizi (tüm sayfalardan)
                 const fullDigitalText = renderedPages.map(p => p.text).filter(Boolean).join('\n');
                 let passportDates = extractPassportDatesFromText(fullDigitalText, { birthDate: currentStudentData?.birthDate });
+                if (currentStudentData) {
+                    const digitalPassportMeta = extractPassportMetadata(fullDigitalText, {
+                        birthDate: currentStudentData?.birthDate
+                    });
+                    currentStudentData.uyrukKimlikNo = digitalPassportMeta.uyrukKimlikNo || currentStudentData.uyrukKimlikNo || '';
+                }
 
                 if (passportDates.issueDate && !currentStudentData.issueDate) {
                     currentStudentData.issueDate = passportDates.issueDate;
@@ -1973,6 +1980,15 @@ export function initYknManager() {
                                         if (detectedSex) {
                                             currentStudentData.cinsiyet = detectedSex;
                                             currentStudentData.genderSource = 'passport';
+                                        }
+                                    }
+
+                                    if (currentStudentData && !currentStudentData.uyrukKimlikNo) {
+                                        const ocrPassportMeta = extractPassportMetadata(pageOcrText, {
+                                            birthDate: currentStudentData?.birthDate
+                                        });
+                                        if (ocrPassportMeta.uyrukKimlikNo) {
+                                            currentStudentData.uyrukKimlikNo = ocrPassportMeta.uyrukKimlikNo;
                                         }
                                     }
                                 }

@@ -58,3 +58,12 @@ test('student document lookup excludes the passport search and national identity
         assert.equal(selected?.id, 'document');
     } finally { dom.window.close(); }
 });
+
+test('nationality identity lookup resolves Uyruk Kimlik No cleanly', () => {
+    const { dom, find } = createResolver('<table><tr><td>Belge No</td><td><input id="search" placeholder="Pasaport/Belge No"></td></tr><tr><td>Uyruk Kimlik No</td><td><input id="identity"></td><td>Belge No</td><td><input id="document"></td></tr></table>');
+    try {
+        const selected = find(['Uyruk Kimlik No', 'Uyruk Kimlik Numarası', 'Kimlik No']);
+
+        assert.equal(selected?.id, 'identity');
+    } finally { dom.window.close(); }
+});

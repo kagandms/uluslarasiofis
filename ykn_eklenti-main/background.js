@@ -1525,6 +1525,7 @@ async function syncYoksisFormInMainWorld(tabId, studentData, options = {}) {
                         fillTextByLabels(allDocs, ['Belgeyi Veren Makam', 'Veren Makam', 'Issuing Authority'], issuingAuthority, fillResult, 'Belgeyi Veren Makam', false);
                         fillTextByLabels(allDocs, ['Telefon No', 'Telefon Numarası', 'Cep Telefonu No', 'Cep Telefonu', 'GSM', 'Telefon'], '5322431261', fillResult, 'Telefon No', false);
                         fillTextByControl(findStudentDocumentNumber(allDocs), passportNo, fillResult, 'Belge No', false);
+                        fillTextByLabels(allDocs, ['Uyruk Kimlik No', 'Uyruk Kimlik Numarası', 'Kimlik No'], data.uyrukKimlikNo, fillResult, 'Uyruk Kimlik No', false);
                         fillTextByLabels(allDocs, ['Doğum Tarihi', 'Date of Birth', 'Birth Date'], data.birthDate, fillResult, 'Doğum Tarihi', true);
                         fillTextByLabels(allDocs, [
                             'Belge Düzenleme Tarihi', 'Düzenleme Tarihi', 'Belgenin Düzenleme Tarihi',
@@ -1821,6 +1822,7 @@ function getExpectedYoksisFields(studentData) {
     if (hasValue(studentData?.dogumYeriAciklamasi, studentData?.dogumYeri, studentData?.birthPlace)) expected.add('Doğum Yeri Açıklaması');
     if (hasValue(studentData?.verenMakam, studentData?.issuingAuthority)) expected.add('Belgeyi Veren Makam');
     if (hasValue(studentData?.pasaportNo, studentData?.passportNo)) expected.add('Belge No');
+    if (hasValue(studentData?.uyrukKimlikNo)) expected.add('Uyruk Kimlik No');
     if (hasValue(studentData?.birthDate, studentData?.dogumTarihi)) expected.add('Doğum Tarihi');
     if (hasValue(studentData?.issueDate, studentData?.passportIssueDate, studentData?.duzenlemeTarihi,
         studentData?.pasaportDuzenlemeTarihi, studentData?.verilisTarihi, studentData?.belgeDuzenlemeTarihi)) expected.add('Düzenleme Tarihi');
