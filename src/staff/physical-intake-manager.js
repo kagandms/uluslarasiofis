@@ -32,6 +32,18 @@ function render(context) {
     renderPhysicalIntakes(context.root, context.state, context.handlers);
 }
 
+function clearSearchTimer(context) {
+    if (context.searchTimer !== null) {
+        context.root.ownerDocument.defaultView?.clearTimeout?.(context.searchTimer);
+        context.searchTimer = null;
+    }
+}
+
+function normalizeQueryFilter(query) {
+    const normalizedHasNote = query.has_note === 'yes' || query.has_note === 'no' ? query.has_note : 'all';
+    return { ...query, has_note: normalizedHasNote };
+}
+
 async function execute(context, work) {
     if (context.isBusy) return;
     setBusy(context, true);
@@ -40,24 +52,37 @@ async function execute(context, work) {
         console.error('Physical workspace operation failed.', { errorName: error.name, code: error.code });
         if (error.matches?.length) context.state.duplicateMatches = error.matches;
         if (context.state.view === 'create' && context.state.isMetadataFirst) render(context);
+        if (context.state.view === 'queue') {
+            context.state.loading = false;
+            context.state.error = true;
+            context.state.errorStatus = error?.status ?? null;
+            render(context);
+        }
         showMessage(context, error.status === 401 ? 'Oturum sona erdi. Sayfayı yenileyip tekrar giriş yapın.' : error.message);
     } finally { setBusy(context, false); }
 }
 
 async function loadQueue(context) {
+    clearSearchTimer(context);
     removePhysicalPdfDialog(context);
     if (context.state.previewUrl) { URL.revokeObjectURL(context.state.previewUrl); context.state.previewUrl = null; }
     context.state.preparedPdf = null;
+    context.state.loading = true;
+    context.state.error = false;
+    context.state.errorStatus = null;
     const response = await fetch('/api/staff/physical-access', { credentials: 'same-origin', signal: AbortSignal.timeout(15000) });
     if (!response.ok) throw new Error('Fiziksel başvuru erişimi kontrol edilemedi.');
     const access = await response.json();
     if (!access.allowed) {
+        context.accessAllowed = false;
+        context.state.loading = false;
         context.root.replaceChildren();
         const notice = context.root.ownerDocument.createElement('p');
         notice.textContent = 'Fiziksel başvuru bu oturum için etkin değil. ONLINE seçeneğinden mevcut başvurulara ulaşabilirsiniz.';
         context.root.append(notice);
         return;
     }
+    context.accessAllowed = true;
     try { context.state.receiptConfig = await context.api.config(); }
     catch (error) {
         if (error.code !== 'RECEIPTS_SCHEMA_NOT_READY') throw error;
@@ -65,10 +90,65 @@ async function loadQueue(context) {
     }
     const recovered = await recoverPhysicalReceiptRegistration(context);
     if (recovered) context.state.savedIntakeId = recovered.intake.id;
-    context.state.result = await context.api.query({ ...context.state.query, has_note: context.state.query.has_note || 'all' });
+    const requestId = ++context.queueRequestId;
+    const result = await context.api.query({ ...context.state.query, has_note: context.state.query.has_note || 'all' });
+    if (requestId !== context.queueRequestId) return;
+    context.state.result = result;
+    context.state.recordNotesResult = null;
+    context.state.recordNotes.clear();
     context.state.view = 'queue';
+    context.state.loading = false;
     context.state.message = recovered ? 'Öğrenci kaydı kurtarıldı. A4 işlemlerine listeden devam edebilirsiniz.' : 'Fiziksel teslimler — son güncellenen kayıtlar önce gösterilir.';
     render(context);
+}
+
+/* Canlı arama ve sayfa geçişlerinde girdilerin odağını kaybetmeden kuyruğu yeniler. */
+async function queryQueue(context) {
+    if (context.isBusy) return;
+    if (!context.accessAllowed) {
+        await execute(context, () => loadQueue(context));
+        return;
+    }
+    clearSearchTimer(context);
+    const requestId = ++context.queueRequestId;
+    context.state.loading = true;
+    context.state.error = false;
+    context.state.errorStatus = null;
+    render(context);
+    try {
+        const result = await context.api.query({ ...context.state.query, has_note: context.state.query.has_note || 'all' });
+        if (requestId !== context.queueRequestId) return;
+        context.state.result = result;
+        context.state.recordNotesResult = null;
+        context.state.recordNotes.clear();
+        context.state.view = 'queue';
+    } catch (error) {
+        if (requestId !== context.queueRequestId) return;
+        console.error('Physical queue query failed.', { errorName: error.name, code: error.code });
+        context.state.error = true;
+        context.state.errorStatus = error?.status ?? null;
+    } finally {
+        if (requestId === context.queueRequestId) {
+            context.state.loading = false;
+            render(context);
+        }
+    }
+}
+
+function scheduleSearch(context, query, debounce) {
+    if (context.isBusy) return;
+    context.queueRequestId += 1;
+    clearSearchTimer(context);
+    context.state.query = { ...context.state.query, ...normalizeQueryFilter(query), page: 1 };
+    if (!debounce) {
+        void queryQueue(context);
+        return;
+    }
+    const view = context.root.ownerDocument.defaultView;
+    context.searchTimer = view.setTimeout(() => {
+        context.searchTimer = null;
+        if (context.state.view === 'queue') void queryQueue(context);
+    }, 250);
 }
 
 async function openDetail(context, id) {
@@ -237,8 +317,18 @@ function createHandlers(context) {
             run(() => loadQueue(context));
         }, newReceipt: () => run(() => openCreate(context)),
         open: id => run(() => openDetail(context, id)),
-        search: query => run(async () => { context.state.query = { ...context.state.query, ...query, page: 1 }; await loadQueue(context); }),
-        page: page => run(async () => { context.state.query.page = page; await loadQueue(context); }),
+        search: query => {
+            clearSearchTimer(context);
+            context.state.query = { ...context.state.query, ...normalizeQueryFilter(query), page: 1 };
+            return queryQueue(context);
+        },
+        queryChange: (query, debounce) => scheduleSearch(context, query, debounce),
+        retry: () => queryQueue(context),
+        page: page => {
+            clearSearchTimer(context);
+            context.state.query = { ...context.state.query, page };
+            return queryQueue(context);
+        },
         create: () => {
             if (context.isBusy) return;
             const preview = context.state.isMetadataFirst ? reservePhysicalReceiptPreview(context.root.ownerDocument.defaultView) : null;
@@ -259,8 +349,28 @@ function createHandlers(context) {
  */
 export function initializePhysicalIntakeManager(root) {
     if (!IS_PHYSICAL_INTAKE_ENABLED) return;
-    const context = { root, api: createPhysicalIntakeClient(), isBusy: false, controls: [], handlers: null,
-        state: { view: 'queue', query: { q: '', status: 'all', has_note: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }, result: null, detail: null, message: '' } };
+    const context = {
+        root,
+        api: createPhysicalIntakeClient(),
+        isBusy: false,
+        controls: [],
+        handlers: null,
+        queueRequestId: 0,
+        searchTimer: null,
+        accessAllowed: false,
+        state: {
+            view: 'queue',
+            loading: false,
+            error: false,
+            errorStatus: null,
+            recordNotes: new Map(),
+            recordNotesResult: null,
+            query: { q: '', status: 'all', has_note: 'all', from_date: '', to_date: '', page: 1, page_size: 25 },
+            result: null,
+            detail: null,
+            message: ''
+        }
+    };
     context.handlers = createHandlers(context);
     root.textContent = 'Fiziksel başvuru erişimi kontrol ediliyor…';
     import('../services/physical-receipt-pdf.js')
