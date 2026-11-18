@@ -3767,3 +3767,102 @@ body.dark-mode .staff-record-note-scope {
         width: 100%;
     }
 }
+
+/* Fiziksel teslim listesini çevrimiçi başvuru listesiyle görsel olarak eşitleyen kurallar */
+.physical-intake-notice {
+    margin: 0;
+}
+
+.physical-intake-notice:empty {
+    display: none;
+}
+
+#view-physical .physical-intake-panel .staff-applications-filters.has-note-filter {
+    grid-template-columns: minmax(200px, 2fr) repeat(4, minmax(130px, 1fr)) auto;
+}
+
+#view-physical .physical-intake-panel > .btn-primary,
+#view-physical .physical-intake-panel .staff-applications-filters .btn-primary,
+#view-physical .physical-intake-panel .staff-applications-pagination .btn-primary,
+#view-physical .physical-intake-panel .staff-applications-state .btn-outline {
+    min-height: 0;
+}
+
+#view-physical .physical-intake-panel > .btn-primary,
+#view-physical .physical-intake-panel .staff-applications-filters .btn-primary,
+#view-physical .physical-intake-panel .staff-applications-pagination .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+    font-weight: 500;
+}
+
+#view-physical .physical-intake-panel > .btn-primary:hover:not(:disabled),
+#view-physical .physical-intake-panel .staff-applications-filters .btn-primary:hover:not(:disabled),
+#view-physical .physical-intake-panel .staff-applications-pagination .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    box-shadow: 0 4px 10px rgb(var(--accent-rgb) / 0.2);
+}
+
+#view-physical .physical-intake-panel > .btn-primary:focus-visible,
+#view-physical .physical-intake-panel .staff-applications-filters .btn-primary:focus-visible,
+#view-physical .physical-intake-panel .staff-applications-pagination .btn-primary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+body.dark-mode #view-physical .physical-intake-panel > .btn-primary,
+body.dark-mode #view-physical .physical-intake-panel .staff-applications-filters .btn-primary,
+body.dark-mode #view-physical .physical-intake-panel .staff-applications-pagination .btn-primary,
+body.dark-mode #view-physical .physical-intake-panel > .btn-primary:hover:not(:disabled),
+body.dark-mode #view-physical .physical-intake-panel .staff-applications-filters .btn-primary:hover:not(:disabled),
+body.dark-mode #view-physical .physical-intake-panel .staff-applications-pagination .btn-primary:hover:not(:disabled) {
+    background: var(--accent-gradient);
+    border-color: color-mix(in srgb, #75b7e5 45%, #5a0e27);
+    color: #ffffff;
+}
+
+#view-physical .physical-intake-panel > .btn-primary:disabled,
+#view-physical .physical-intake-panel .staff-applications-filters .btn-primary:disabled,
+#view-physical .physical-intake-panel .staff-applications-pagination .btn-primary:disabled {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+    opacity: 0.55;
+}
+
+#view-physical .physical-intake-panel .staff-applications-state .btn-outline {
+    background: transparent;
+    border-color: var(--card-border);
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+#view-physical .physical-intake-panel .staff-applications-state .btn-outline:hover:not(:disabled) {
+    background: rgb(0 0 0 / 5%);
+    border-color: var(--card-border);
+    box-shadow: none;
+    color: var(--text-primary);
+}
+
+#view-physical .physical-intake-panel .staff-applications-table td.staff-queue-actions-cell .btn:disabled,
+#view-physical .physical-intake-panel .staff-applications-table td[data-label="Detay"] .btn:disabled {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
+    opacity: 0.55;
+}
+
+@media (max-width: 900px) {
+    #view-physical .physical-intake-panel .staff-applications-filters.has-note-filter {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    #view-physical .physical-intake-panel .staff-applications-filters,
+    #view-physical .physical-intake-panel .staff-applications-filters.has-note-filter {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

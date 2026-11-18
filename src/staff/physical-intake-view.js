@@ -9,18 +9,24 @@ import { PHYSICAL_RECEIPT_TEMPLATE_VERSION } from '../shared/physical-receipt-ve
 
 const STATUS_LABELS = PHYSICAL_STATUS_LABELS;
 const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['sent_to_migration', 'Göçe Gönderildi'], ['migration_approved', 'Göç Onayladı'], ['completed', 'Tamamlandı'], ['rejected', 'Reddedildi'], ['deleted', 'Silinen']];
+const NOTE_FILTERS = Object.freeze([
+    ['all', 'Tüm kayıtlar'],
+    ['yes', 'Notu olanlar'],
+    ['no', 'Notu olmayanlar']
+]);
 
 
-function text(document, tag, value) {
+function text(document, tag, value, className = '') {
     const node = document.createElement(tag);
+    if (className) node.className = className;
     node.textContent = value;
     return node;
 }
 
-function button(document, label, run) {
+function button(document, label, run, className = 'btn btn-outline') {
     const node = text(document, 'button', label);
     node.type = 'button';
-    node.className = 'btn btn-outline';
+    node.className = className;
     node.addEventListener('click', run);
     return node;
 }
@@ -56,29 +62,77 @@ function formatDeliveryDate(document, item) {
 }
 
 function createFilters(document, state, handlers) {
-    return createApplicationQueueFilters(document, {
-        query: state.query,
+    const form = createApplicationQueueFilters(document, {
+        query: state.query || { q: '', status: 'all', has_note: 'all', from_date: '', to_date: '' },
         statusOptions: FILTERS,
-        noteFilter: { label: 'Not', options: [['all','Tüm kayıtlar'],['yes','Notu olanlar'],['no','Notu olmayanlar']] },
+        noteFilter: { label: 'Not', options: NOTE_FILTERS },
         idPrefix: 'staff-physical',
+        disabled: Boolean(state.loading),
         onSubmit: handlers.search
     });
+    const search = form.querySelector('[name="q"]');
+    if (search) {
+        search.placeholder = 'ITU takip kodu, öğrenci no, ad, soyad veya pasaport no';
+    }
+    /* Çevrimiçi listeyle aynı canlı arama ve anlık filtreleme davranışını uygular. */
+    if (typeof handlers.queryChange === 'function') {
+        const readQuery = () => ({
+            q: search?.value || '',
+            status: form.elements.namedItem('status')?.value || 'all',
+            has_note: form.elements.namedItem('has_note')?.value || 'all',
+            from_date: form.elements.namedItem('from_date')?.value || '',
+            to_date: form.elements.namedItem('to_date')?.value || ''
+        });
+        search?.addEventListener('input', () => handlers.queryChange(readQuery(), true));
+        form.querySelectorAll('select, input[type="date"]').forEach((input) => {
+            input.addEventListener('change', () => handlers.queryChange(readQuery(), false));
+        });
+    }
+    return form;
 }
 
 function createPagination(document, pagination, handlers) {
     const row = document.createElement('div');
     row.className = 'staff-applications-pagination';
-    const previous = button(document, 'Önceki', () => handlers.page(pagination.page - 1));
-    const next = button(document, 'Sonraki', () => handlers.page(pagination.page + 1));
-    previous.disabled = pagination.page <= 1;
-    next.disabled = pagination.page >= pagination.total_pages;
-    row.append(previous, text(document, 'span', `${pagination.page} / ${Math.max(1, pagination.total_pages)} · ${pagination.total} kayıt`), next);
+    const page = Number(pagination?.page) || 1;
+    const totalPages = Math.max(1, Number(pagination?.total_pages) || 1);
+    const totalItems = pagination?.total_items ?? pagination?.total ?? 0;
+    const previous = button(document, 'Önceki', () => handlers.page(page - 1), 'btn btn-primary');
+    previous.dataset.action = 'previous-page';
+    previous.disabled = page <= 1;
+    const pages = text(document, 'p', `Sayfa ${page} / ${totalPages} · ${totalItems} kayıt`);
+    const next = button(document, 'Sonraki', () => handlers.page(page + 1), 'btn btn-primary');
+    next.dataset.action = 'next-page';
+    next.disabled = page >= totalPages;
+    row.append(previous, pages, next);
     return row;
+}
+
+function createQueueError(document, state, onRetry) {
+    const panel = document.createElement('section');
+    panel.className = 'staff-applications-state';
+    const message = state.errorStatus === 401
+        ? 'Yetkili oturumu sona erdi. Sayfayı yenileyip yeniden giriş yapın.'
+        : 'Fiziksel teslimler yüklenemedi. Lütfen tekrar deneyin.';
+    const retry = button(document, 'Tekrar dene', () => onRetry?.(), 'btn btn-outline');
+    retry.dataset.action = 'retry-queue';
+    panel.append(text(document, 'p', message), retry);
+    return panel;
+}
+
+function formatReceiptSummary(item) {
+    if (item.receipt_state && (item.receipt_metadata_version !== item.metadata_version || item.receipt_template_version !== PHYSICAL_RECEIPT_TEMPLATE_VERSION)) {
+        return 'A4 güncel değil';
+    }
+    const stateLabel = item.receipt_state === 'ready' ? 'Hazır' : (item.receipt_state || 'Hazırlanmadı');
+    return `${stateLabel}${item.receipt_print_status ? ` · ${item.receipt_print_status}` : ''}`;
 }
 
 function renderQueue(document, panel, options) {
     const { state, handlers } = options;
-    panel.append(button(document, 'Fiziksel Dosya Gir', handlers.newReceipt), createFilters(document, state, handlers));
+    const createButton = button(document, 'Fiziksel Dosya Gir', handlers.newReceipt, 'btn btn-primary');
+    createButton.dataset.action = 'new-physical-intake';
+    panel.append(createButton, createFilters(document, state, handlers));
     if (state.receiptDelivery) {
         const links = document.createElement('div'); links.className = 'physical-pdf-actions';
         for (const [label, url] of [['PDF’i Aç', state.receiptDelivery.previewUrl], ['PDF İndir', state.receiptDelivery.downloadUrl]]) {
@@ -86,20 +140,57 @@ function renderQueue(document, panel, options) {
         }
         panel.append(links);
     }
-    if (!state.result?.items.length) { panel.append(text(document, 'p', 'Görüntülenecek fiziksel teslim bulunamadı.')); return; }
-    panel.append(createApplicationQueueTable(document, state.result.items, { statusLabel: status => STATUS_LABELS[status] || status,
-        headers: ['', 'Pasaport No','Takip No','Ad Soyad','Teslim Tarihi','Ofis Durumu','PDF','A4',''],
+    if (state.loading && !state.result) {
+        panel.append(text(document, 'p', 'Fiziksel teslimler yükleniyor…', 'staff-applications-state'));
+        return;
+    }
+    if (state.error) {
+        panel.append(createQueueError(document, state, handlers.retry || handlers.search));
+        return;
+    }
+    if (!state.result?.items.length) {
+        panel.append(text(document, 'p', 'Görüntülenecek fiziksel teslim bulunamadı.', 'staff-applications-state'));
+        return;
+    }
+    const shouldLoadNotes = !state.loading && !(state.recordNotes && state.recordNotesResult === state.result);
+    if (shouldLoadNotes && state.recordNotes) {
+        state.recordNotesResult = state.result;
+    }
+    panel.append(createApplicationQueueTable(document, state.result.items, {
+        statusLabel: status => STATUS_LABELS[status] || status,
+        headers: ['', 'Pasaport No', 'Takip No', 'Ad Soyad', 'Teslim Tarihi', 'Ofis Durumu', 'PDF', 'A4', ''],
         noteKind: 'physical',
         noteId: item => item.id,
-        values: item => [item.passport_number || '—', item.tracking_reference || '—', `${item.first_name} ${item.last_name}`, formatDeliveryDate(document, item),
-            item.processing_closed_at ? 'Ofis işlemi kapalı' : STATUS_LABELS[item.status], item.current_pdf_id ? 'PDF var' : 'PDF yok',
-            item.receipt_state && (item.receipt_metadata_version !== item.metadata_version || item.receipt_template_version !== PHYSICAL_RECEIPT_TEMPLATE_VERSION) ? 'A4 güncel değil' : `${item.receipt_state === 'ready' ? 'Hazır' : item.receipt_state || 'Hazırlanmadı'}${item.receipt_print_status ? ` · ${item.receipt_print_status}` : ''}`],
-        actions: item => [{ label: 'Detay', action: 'open-detail', run: () => handlers.open(item.id) },
-            { label: 'İndir', action: 'download-physical-pdf', isDisabled: !item.current_pdf_id || Boolean(item.deleted_at),
+        initialNotes: state.recordNotes,
+        skipNoteLoad: !shouldLoadNotes,
+        onNoteChange: (updatedNote, id) => {
+            state.recordNotes?.set(id, updatedNote);
+        },
+        values: item => [
+            item.passport_number || '—',
+            item.tracking_reference || '—',
+            [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
+            formatDeliveryDate(document, item),
+            item.processing_closed_at ? 'Ofis işlemi kapalı' : STATUS_LABELS[item.status],
+            item.current_pdf_id ? 'PDF var' : 'PDF yok',
+            formatReceiptSummary(item)
+        ],
+        actions: item => [
+            { label: 'Detay', action: 'open-detail', run: () => handlers.open(item.id) },
+            {
+                label: 'İndir',
+                action: 'download-physical-pdf',
+                isDisabled: !item.current_pdf_id || Boolean(item.deleted_at),
                 ariaLabel: 'Güncel PDF’i indir',
-                run: () => window.open(buildPhysicalPdfUrl(item.id, item.current_pdf_id, 'download'), '_blank', 'noopener') },
-            { label: item.deleted_at ? 'Geri Yükle' : 'Sil', action: item.deleted_at ? 'restore' : 'delete',
-                run: () => handlers.mutate(item, item.deleted_at ? 'restore' : 'delete') }]
+                run: () => (document.defaultView || window).open(buildPhysicalPdfUrl(item.id, item.current_pdf_id, 'download'), '_blank', 'noopener')
+            },
+            {
+                label: item.deleted_at ? 'Geri Yükle' : 'Sil',
+                action: item.deleted_at ? 'restore' : 'delete',
+                ariaLabel: `${[item.first_name, item.last_name].filter(Boolean).join(' ') || item.tracking_reference || 'Fiziksel teslim'} kaydını ${item.deleted_at ? 'geri yükle' : 'Silinen arşivine taşı'}`,
+                run: () => handlers.mutate(item, item.deleted_at ? 'restore' : 'delete')
+            }
+        ]
     }), createPagination(document, state.result.pagination, handlers));
 }
 
@@ -249,9 +340,20 @@ export function renderPhysicalIntakes(root, state, handlers) {
     if (state.view === 'create' && state.isMetadataFirst) { renderPhysicalReceiptDialog(root, state, handlers); return; }
     closePhysicalReceiptDialog(root);
     const document = root.ownerDocument;
+    const view = document.defaultView;
+    const scrollY = view?.scrollY || 0;
+    const focused = root.contains(document.activeElement) ? document.activeElement : null;
+    const focusedName = focused?.name;
+    const selectionStart = focused?.selectionStart;
+    const selectionEnd = focused?.selectionEnd;
+
     const panel = document.createElement('div');
     panel.className = 'staff-applications-queue physical-intake-panel';
-    const notice = text(document, 'p', state.message || 'Fiziksel teslimler yükleniyor…');
+    panel.setAttribute('aria-busy', state.loading ? 'true' : 'false');
+    const defaultNotice = state.view === 'queue' && (state.result || state.loading || state.error)
+        ? ''
+        : 'Fiziksel teslimler yükleniyor…';
+    const notice = text(document, 'p', state.message || defaultNotice, 'staff-applications-state physical-intake-notice');
     notice.setAttribute('role', 'status');
     notice.id = 'physical-intake-notice';
     panel.append(notice);
@@ -259,4 +361,15 @@ export function renderPhysicalIntakes(root, state, handlers) {
     if (state.view === 'detail' && state.detail) renderDetail(document, panel, { state, handlers });
     if (state.view === 'queue') renderQueue(document, panel, { state, handlers });
     root.replaceChildren(panel);
+    root.dataset.staffView = state.view;
+
+    /* Yeniden çizim sırasında arama ve filtre odağını korur. */
+    if (focusedName) {
+        const replacement = panel.querySelector(`[name="${focusedName}"]`);
+        replacement?.focus?.({ preventScroll: true });
+        if (selectionStart !== null && selectionStart !== undefined) {
+            replacement?.setSelectionRange?.(selectionStart, selectionEnd);
+        }
+    }
+    if (scrollY > 0) view?.scrollTo?.({ top: scrollY, behavior: 'instant' });
 }
