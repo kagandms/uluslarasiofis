@@ -33,7 +33,6 @@ const STATUS_FILTERS = Object.freeze([
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const WORKFLOW_STATUSES = Object.freeze([
     'under_review',
-    'approved_for_processing',
     'sent_to_migration',
     'migration_approved',
     'completed',
@@ -41,7 +40,6 @@ const WORKFLOW_STATUSES = Object.freeze([
 ]);
 const STATUS_ACTION_LABELS = Object.freeze({
     under_review: 'İncelemede',
-    approved_for_processing: 'İşlem İçin Onaylandı',
     sent_to_migration: 'Göç İdaresine Gönderildi',
     migration_approved: 'Göç İdaresi Onayladı',
     completed: 'Tamamlandı',
@@ -64,7 +62,7 @@ function isStatusRevert(currentStatus, targetStatus) {
 
 /* Ulaşılamayan durum düğmesi için veriden doğrulanabilen kısa açıklamayı döner. */
 function readUnreachableStatusReason(currentStatus, targetStatus, documents) {
-    if (currentStatus === 'under_review' && targetStatus === 'approved_for_processing'
+    if (currentStatus === 'under_review' && targetStatus === 'sent_to_migration'
         && Array.isArray(documents)
         && documents.some((doc) => doc && doc.required !== false && doc.review_status !== 'approved')) {
         return 'Önce tüm zorunlu belgeler onaylanmalı.';
@@ -1949,7 +1947,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     async function revertFromMigration(item) {
         if (state.actionPending) return;
         const confirmed = document.defaultView.confirm(
-            'Bu başvurunun Göç İdaresine iletildi işareti kaldırılacak ve başvuru "İşleme alınmak üzere onaylandı" durumuna dönecek. Devam edilsin mi?'
+            'Bu başvurunun Göç İdaresine iletildi işareti kaldırılacak ve başvuru “İncelemede” durumuna dönecek. Devam edilsin mi?'
         );
         if (!confirmed) return;
         state.actionPending = 'revert-from-migration';
@@ -1957,8 +1955,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         state.archiveMessage = null;
         render();
         try {
-            await api.transitionApplication(item.id, 'approved_for_processing', item.updated_at);
-            state.archiveMessage = 'Başvurunun Göç İdaresine iletildi işareti kaldırıldı.';
+            await api.transitionApplication(item.id, 'under_review', item.updated_at);
+            state.archiveMessage = 'Başvurunun Göç İdaresine iletildi işareti kaldırıldı. Başvuru “İncelemede” durumuna döndü.';
             state.actionPending = null;
             await loadQueue();
         } catch (error) {

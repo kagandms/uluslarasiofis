@@ -1,9 +1,9 @@
 const STATUS_TRANSITIONS = Object.freeze({
     submitted: Object.freeze(['under_review']),
     resubmission_required: Object.freeze(['under_review']),
-    under_review: Object.freeze(['approved_for_processing']),
+    under_review: Object.freeze(['sent_to_migration']),
     approved_for_processing: Object.freeze(['sent_to_migration', 'under_review']),
-    sent_to_migration: Object.freeze(['migration_approved', 'approved_for_processing', 'rejected']),
+    sent_to_migration: Object.freeze(['migration_approved', 'under_review', 'rejected']),
     migration_approved: Object.freeze(['completed', 'sent_to_migration']),
     completed: Object.freeze(['migration_approved'])
 });
@@ -23,6 +23,12 @@ export function evaluateApplicationTransition(currentStatus, targetStatus, guard
         return { allowed: false, code: 'RESUBMISSION_DOCUMENTS_REMAIN' };
     }
     if (targetStatus === 'approved_for_processing' && !guards.allRequiredDocumentsApproved) {
+        return { allowed: false, code: 'APPLICATION_NOT_READY_FOR_APPROVAL' };
+    }
+    // Onaylı eski kayıtlar ve Göç İdaresi onayından geri dönüşler dışında tüm zorunlu belgeler onaylı olmalıdır.
+    if (targetStatus === 'sent_to_migration'
+        && !['approved_for_processing', 'migration_approved'].includes(currentStatus)
+        && !guards.allRequiredDocumentsApproved) {
         return { allowed: false, code: 'APPLICATION_NOT_READY_FOR_APPROVAL' };
     }
     return { allowed: true, code: null };
