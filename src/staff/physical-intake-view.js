@@ -59,6 +59,7 @@ function createFilters(document, state, handlers) {
     return createApplicationQueueFilters(document, {
         query: state.query,
         statusOptions: FILTERS,
+        noteFilter: { label: 'Not', options: [['all','Tüm kayıtlar'],['yes','Notu olanlar'],['no','Notu olmayanlar']] },
         idPrefix: 'staff-physical',
         onSubmit: handlers.search
     });
@@ -87,11 +88,10 @@ function renderQueue(document, panel, options) {
     }
     if (!state.result?.items.length) { panel.append(text(document, 'p', 'Görüntülenecek fiziksel teslim bulunamadı.')); return; }
     panel.append(createApplicationQueueTable(document, state.result.items, { statusLabel: status => STATUS_LABELS[status] || status,
-        headers: ['', 'Sıra','Takip No','Ad Soyad','Teslim Tarihi','Ofis Durumu','PDF','A4',''],
+        headers: ['', 'Pasaport No','Takip No','Ad Soyad','Teslim Tarihi','Ofis Durumu','PDF','A4',''],
         noteKind: 'physical',
         noteId: item => item.id,
-        rowNumber: (_item, index) => String((state.result.pagination.page - 1) * (state.result.pagination.page_size || state.query.page_size || 25) + index + 1),
-        values: item => [item.tracking_reference || '—', `${item.first_name} ${item.last_name}`, formatDeliveryDate(document, item),
+        values: item => [item.passport_number || '—', item.tracking_reference || '—', `${item.first_name} ${item.last_name}`, formatDeliveryDate(document, item),
             item.processing_closed_at ? 'Ofis işlemi kapalı' : STATUS_LABELS[item.status], item.current_pdf_id ? 'PDF var' : 'PDF yok',
             item.receipt_state && (item.receipt_metadata_version !== item.metadata_version || item.receipt_template_version !== PHYSICAL_RECEIPT_TEMPLATE_VERSION) ? 'A4 güncel değil' : `${item.receipt_state === 'ready' ? 'Hazır' : item.receipt_state || 'Hazırlanmadı'}${item.receipt_print_status ? ` · ${item.receipt_print_status}` : ''}`],
         actions: item => [{ label: 'Detay', action: 'open-detail', run: () => handlers.open(item.id) },

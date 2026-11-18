@@ -23,9 +23,13 @@ async function readDetail(repository, id) {
 }
 
 function readQuery(body) {
-    requireKeys(body, ['q', 'status', 'page', 'page_size', 'from_date', 'to_date']);
+    requireKeys(body, ['q', 'status', 'page', 'page_size', 'from_date', 'to_date', 'has_note']);
     const q = body.q ?? '';
     const status = body.status ?? 'all';
+    const hasNote = body.has_note === undefined ? 'all' : body.has_note;
+    if (typeof hasNote !== 'string' || !['all', 'yes', 'no'].includes(hasNote)) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Not filtresini kontrol edip tekrar deneyin.');
+    }
     const page = body.page ?? 1;
     const pageSize = body.page_size ?? 25;
     const fromDate = readOptionalDate(body.from_date, 'Başlangıç tarihi');
@@ -36,7 +40,10 @@ function readQuery(body) {
         || (fromDate && toDate && fromDate > toDate)) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Arama ve sayfalama alanlarını kontrol edin.');
     }
-    return { q: q.trim(), statuses: PHYSICAL_STATUS_FILTERS[status], isDeleted: status === 'deleted', fromDate, toDate, page, pageSize };
+    return {
+        q: q.trim(), statuses: PHYSICAL_STATUS_FILTERS[status], isDeleted: status === 'deleted',
+        hasNote: hasNote === 'all' ? null : hasNote, fromDate, toDate, page, pageSize
+    };
 }
 
 function readOptionalDate(value, label) {
