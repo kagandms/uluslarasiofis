@@ -208,7 +208,7 @@ test('physical queue renders note button before row number, loads notes with one
 
     const headers = [...physicalRoot.querySelectorAll('thead th')].map((th) => th.textContent);
     assert.equal(headers[0], '');
-    assert.equal(headers[1], 'Sıra');
+    assert.equal(headers[1], 'Pasaport No');
 
     const rows = physicalRoot.querySelectorAll('tbody tr');
     assert.equal(rows.length, 2);
