@@ -23,7 +23,6 @@ const ARCHIVE_STATUS_FILTERS = Object.freeze([
     ['deleted', 'Silinen'],
     ['completed', 'Tamamlandı'],
     ['cancelled', 'İptal edildi'],
-    ['rejected', 'Reddedildi'],
     ['noted', 'Notu olanlar'],
     ['not_noted', 'Notu olmayanlar']
 ]);

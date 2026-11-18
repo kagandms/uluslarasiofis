@@ -20,7 +20,7 @@ const APPLICATION_STATUS_FILTERS = Object.freeze({
     terminal: Object.freeze(['completed', 'cancelled', 'rejected']),
     cancelled: Object.freeze(['cancelled']),
     rejected: Object.freeze(['rejected']),
-    archive_all: Object.freeze(['completed', 'cancelled', 'rejected']),
+    archive_all: Object.freeze(['completed', 'cancelled']),
     deleted: Object.freeze([])
 });
 const MAX_PAGE_SIZE = 100;

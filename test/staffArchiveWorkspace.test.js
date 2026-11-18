@@ -174,7 +174,6 @@ test('archive keeps terminal filters and adds the Silinen view', async (context)
         ['deleted', 'Silinen'],
         ['completed', 'Tamamlandı'],
         ['cancelled', 'İptal edildi'],
-        ['rejected', 'Reddedildi'],
         ['noted', 'Notu olanlar'],
         ['not_noted', 'Notu olmayanlar']
     ]);
@@ -221,11 +220,6 @@ test('archive keeps terminal filters and adds the Silinen view', async (context)
     // Filter by İptal edildi
     await submitFilter('cancelled');
     assert.equal(queries.at(-1).status, 'cancelled');
-    assert.equal(queries.at(-1).page, 1);
-
-    // Filter by Reddedildi
-    await submitFilter('rejected');
-    assert.equal(queries.at(-1).status, 'rejected');
     assert.equal(queries.at(-1).page, 1);
 
     // Filter back to Tümü
@@ -961,12 +955,12 @@ test('backend route accepts cancelled and rejected status filters and preserves 
     const crossOrigin = await query({ status: 'archive_all' }, { Origin: 'https://evil.test' });
     assert.equal(crossOrigin.status, 403);
 
-    // Terminal query returns completed, cancelled, rejected (excludes draft & active under_review)
+    // Arşiv sorgusu yalnızca tamamlanan ve iptal edilen başvuruları döndürür (reddedilen, taslak ve incelemedeki başvurular hariç)
     const terminalRes = await query({ status: 'archive_all' });
     assert.equal(terminalRes.status, 200);
     const terminalPayload = await terminalRes.json();
-    assert.equal(terminalPayload.pagination.total_items, 3);
-    assert.deepEqual(terminalPayload.items.map((i) => i.id).sort(), ['app-cancelled', 'app-completed', 'app-rejected']);
+    assert.equal(terminalPayload.pagination.total_items, 2);
+    assert.deepEqual(terminalPayload.items.map((i) => i.id).sort(), ['app-cancelled', 'app-completed']);
 
     // Cancelled query returns ONLY cancelled
     const cancelledRes = await query({ status: 'cancelled' });
@@ -1000,8 +994,8 @@ test('backend route accepts cancelled and rejected status filters and preserves 
     const archiveAllWithDeleted = await query({ status: 'archive_all' });
     assert.equal(archiveAllWithDeleted.status, 200);
     const allPayload = await archiveAllWithDeleted.json();
-    assert.equal(allPayload.pagination.total_items, 4);
-    assert.deepEqual(allPayload.items.map((i) => i.id).sort(), ['app-cancelled', 'app-completed', 'app-rejected', 'app-soft-deleted']);
+    assert.equal(allPayload.pagination.total_items, 3);
+    assert.deepEqual(allPayload.items.map((i) => i.id).sort(), ['app-cancelled', 'app-completed', 'app-soft-deleted']);
     const deletedItem = allPayload.items.find((i) => i.id === 'app-soft-deleted');
     assert.equal(deletedItem.deletion_state, 'soft_deleted');
 
@@ -1010,4 +1004,90 @@ test('backend route accepts cancelled and rejected status filters and preserves 
     const deletedOnlyPayload = await deletedOnlyRes.json();
     assert.equal(deletedOnlyPayload.pagination.total_items, 1);
     assert.equal(deletedOnlyPayload.items[0].id, 'app-soft-deleted');
+});
+
+test('archive_all excludes rejected applications and includes deleted applications', async () => {
+    const database = new TestD1Database();
+    applyAllMigrations(database);
+    const environment = {
+        DB: database,
+        DOCUMENTS: { async get() { return null; }, async head() { return null; }, async put() {}, async delete() {} },
+        ASSETS: { async fetch() { return new Response('ok'); } },
+        STAFF_SHARED_USERNAME: 'admin',
+        APP_ENV: 'test'
+    };
+
+    // Ortak yetkili kullanıcı ve oturumu oluşturur
+    await database.prepare(`
+        INSERT INTO staff_users (id, username, normalized_username, password_hash, display_name, role, is_active)
+        VALUES ('staff-shared', 'admin', 'admin', ?, 'Shared Admin', 'reviewer', 1)
+    `).bind(PASSWORD_HASH).run();
+
+    const sessionToken = 'archive-rule-session-token-000000000000000000';
+    await database.prepare(`
+        INSERT INTO staff_sessions (id, staff_user_id, token_hash, expires_at, last_seen_at)
+        VALUES ('session-archive-rule', 'staff-shared', ?, ?, ?)
+    `).bind(
+        await hashSessionToken(sessionToken),
+        new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
+        new Date().toISOString()
+    ).run();
+
+    const insertApp = async (id, status) => {
+        const studentId = `stu-${id}`;
+        await database.prepare(`
+            INSERT INTO students (id, student_number, normalized_student_number, created_at, updated_at)
+            VALUES (?, ?, ?, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')
+        `).bind(studentId, `SYN-${id}`, `syn-${id}`).run();
+        await database.prepare(`
+            INSERT INTO applications (id, student_id, first_name, last_name, application_type, status, created_at, updated_at)
+            VALUES (?, ?, 'Ada', 'Kaya', 'renewal', ?, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')
+        `).bind(id, studentId, status).run();
+    };
+
+    await insertApp('app-rule-completed', 'completed');
+    await insertApp('app-rule-cancelled', 'cancelled');
+    await insertApp('app-rule-rejected', 'rejected');
+    await insertApp('app-rule-deleted', 'submitted');
+    await insertApp('app-rule-deleted-rejected', 'rejected');
+
+    // Silinen kayıtları soft_deleted olarak işaretler
+    await database.prepare(`
+        INSERT INTO application_deletions (application_id, previous_status, state, deleted_by_staff_id, deleted_at)
+        VALUES
+            ('app-rule-deleted', 'submitted', 'soft_deleted', 'staff-shared', '2026-09-02T00:00:00.000Z'),
+            ('app-rule-deleted-rejected', 'rejected', 'soft_deleted', 'staff-shared', '2026-09-02T00:00:00.000Z')
+    `).run();
+
+    const query = (body) => worker.fetch(new Request('https://portal.test/api/staff/applications/query', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Cookie: `staff_session=${sessionToken}`,
+            Origin: 'https://portal.test'
+        },
+        body: JSON.stringify(body)
+    }), environment, {});
+
+    // archive_all reddedilen aktif kaydı döndürmez, silinen kayıtları döndürür
+    const archiveRes = await query({ status: 'archive_all' });
+    assert.equal(archiveRes.status, 200);
+    const archivePayload = await archiveRes.json();
+    assert.deepEqual(
+        archivePayload.items.map((item) => item.id).sort(),
+        ['app-rule-cancelled', 'app-rule-completed', 'app-rule-deleted', 'app-rule-deleted-rejected']
+    );
+    assert.equal(archivePayload.items.some((item) => item.id === 'app-rule-rejected'), false);
+
+    // Normal liste ve rejected filtresi reddedilen başvuruyu göstermeye devam eder
+    const normalRes = await query({ status: 'all' });
+    assert.equal(normalRes.status, 200);
+    const normalPayload = await normalRes.json();
+    assert.equal(normalPayload.items.some((item) => item.id === 'app-rule-rejected'), true);
+    assert.equal(normalPayload.items.some((item) => item.id === 'app-rule-deleted'), false);
+
+    const rejectedRes = await query({ status: 'rejected' });
+    assert.equal(rejectedRes.status, 200);
+    const rejectedPayload = await rejectedRes.json();
+    assert.deepEqual(rejectedPayload.items.map((item) => item.id), ['app-rule-rejected']);
 });
