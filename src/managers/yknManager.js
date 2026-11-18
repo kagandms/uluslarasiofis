@@ -26,16 +26,6 @@ import {
     isCurrentYknWorkflowResponse,
     isCurrentYknTransferResponse
 } from '../utils/ykn-student-transition.js';
-import {
-    createBackgroundSearchState,
-    startReadingLetter,
-    startBackgroundSearch,
-    applyExtensionResponse,
-    failBackgroundSearch,
-    resetBackgroundSearch,
-    getTransferGate,
-    setLatestTransferGate
-} from '../utils/ykn-background-search-state.js';
 
 const PDFJS_SUPPORT_URL = `/pdfjs-support/${PDFJS_VERSION}`;
 const PASSPORT_MAX_PAGES = 5;
@@ -46,9 +36,6 @@ const PASSPORT_ORIENTATION_OCR_TIMEOUT_MS = 15_000;
 const DOCUMENT_CACHE_MAX_ENTRIES = 8;
 const documentBytesCache = new Map();
 const documentRequestKeys = new Map();
-let pendingTransferAfterBackgroundSearch = false;
-let extensionPongReceived = false;
-let extensionFeatures = [];
 
 function formatYoksisFieldResults(fieldResults) {
     const labelsByStatus = new Map([
@@ -400,7 +387,6 @@ export function initYknManager() {
     const statusContainer = document.getElementById('ykn-status-container');
     
     const proActions = document.getElementById('ykn-pro-actions');
-    const btnBackgroundSearch = document.getElementById('btn-ykn-background-search');
     const btnReadAcceptance = document.getElementById('btn-read-acceptance');
     const btnCopy = document.getElementById('btn-copy');
     const btnCopyInfo = document.getElementById('btn-ykn-copy-info');
@@ -685,13 +671,6 @@ export function initYknManager() {
     }
 
     async function startManualYoksisFillAfterCrop() {
-        const transferGate = getTransferGate(backgroundSearchState);
-        if (!transferGate.allowed) {
-            const warningMessage = transferGate.label || 'YÖKSİS arka plan araması henüz tamamlanmadı.';
-            addStatus(`YÖKSİS aktarımı bekletildi: ${warningMessage}`, 'warning');
-            showToast(warningMessage, 'warning');
-            return;
-        }
         const hasBoundTarget = Number.isInteger(currentStudentData?.yoksisTabId)
             && typeof currentStudentData?.yoksisTabUrl === 'string'
             && Boolean(currentStudentData.yoksisTabUrl);
@@ -918,19 +897,8 @@ export function initYknManager() {
     const oneClickTimingStarts = new Map();
     let shouldOpenCropperWhenReady = false;
     let shouldAutoTransferYoksisAfterAcceptance = false;
-    let shouldAutoBackgroundTransferAfterAcceptance = false;
     let shouldAutoRunAcceptanceAfterSearch = false;
     let shouldAutoRunCopyAfterSearch = false;
-    const BACKGROUND_SEARCH_TIMEOUT_MS = 45_000;
-    let backgroundSearchState = createBackgroundSearchState();
-    let backgroundSearchTimeoutTimer = null;
-    let backgroundAcceptanceRequestId = null;
-    let activeCopyRequestId = null;
-    pendingTransferAfterBackgroundSearch = false;
-    extensionPongReceived = false;
-    extensionFeatures = [];
-    const activeDocumentRequestIds = new Map();
-    const retriedDocumentKinds = new Set();
     const pendingDocumentReads = new Set();
     const cropSourceObjectUrls = new Set();
     const buttonActionTimers = new Map();
@@ -948,252 +916,6 @@ export function initYknManager() {
 
     function createRequestId() {
         return 'ykn-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-    }
-
-    function clearBackgroundSearchTimeout() {
-        if (!backgroundSearchTimeoutTimer) return;
-        clearTimeout(backgroundSearchTimeoutTimer);
-        backgroundSearchTimeoutTimer = null;
-    }
-
-    function updateBackgroundSearchButtonUI() {
-        if (!btnBackgroundSearch) return;
-        const isBusy = backgroundSearchState.status === 'reading_letter'
-            || backgroundSearchState.status === 'running';
-        btnBackgroundSearch.disabled = isBusy;
-        btnBackgroundSearch.classList.toggle('is-loading', isBusy);
-        btnBackgroundSearch.setAttribute('aria-busy', isBusy ? 'true' : 'false');
-    }
-
-    function syncTransferGateUI(gate) {
-        setLatestTransferGate(gate);
-        if (typeof window !== 'undefined') {
-            window.__YKN_TRANSFER_GATE__ = gate;
-            window.dispatchEvent(new CustomEvent('ykn:transfer-gate', { detail: gate }));
-        }
-        if (btnSyncYoksisFields) {
-            if (!btnSyncYoksisFields.hasAttribute('data-original-title')) {
-                btnSyncYoksisFields.setAttribute('data-original-title', btnSyncYoksisFields.getAttribute('title') || '');
-            }
-            btnSyncYoksisFields.disabled = !gate.allowed;
-            btnSyncYoksisFields.setAttribute('aria-disabled', gate.allowed ? 'false' : 'true');
-            if (!gate.allowed && gate.label) {
-                btnSyncYoksisFields.title = gate.label;
-            } else {
-                const originalTitle = btnSyncYoksisFields.getAttribute('data-original-title') || '';
-                if (originalTitle) btnSyncYoksisFields.title = originalTitle;
-                else btnSyncYoksisFields.removeAttribute('title');
-            }
-        }
-    }
-
-    function setBackgroundSearchState(nextState) {
-        backgroundSearchState = nextState;
-        updateBackgroundSearchButtonUI();
-        const gate = getTransferGate(backgroundSearchState);
-        syncTransferGateUI(gate);
-        return gate;
-    }
-
-    function clearPendingTransferAfterBackgroundSearch(reason = '') {
-        if (!pendingTransferAfterBackgroundSearch) return;
-        pendingTransferAfterBackgroundSearch = false;
-        const cleanReason = typeof reason === 'string' && reason.trim()
-            ? reason.trim().replace(/\.$/, '')
-            : 'Arka plan araması tamamlanamadı';
-        addStatus(`Bekleyen aktarım iptal edildi: ${cleanReason}.`, 'warning');
-    }
-
-    function resetBackgroundSearchState() {
-        clearBackgroundSearchTimeout();
-        backgroundAcceptanceRequestId = null;
-        shouldAutoBackgroundTransferAfterAcceptance = false;
-        clearPendingTransferAfterBackgroundSearch('Arka plan araması sıfırlandı');
-        setBackgroundSearchState(resetBackgroundSearch());
-    }
-
-    function failActiveBackgroundSearch(reasonKey, errorMessage = null) {
-        clearBackgroundSearchTimeout();
-        backgroundAcceptanceRequestId = null;
-        shouldAutoBackgroundTransferAfterAcceptance = false;
-        const nextState = failBackgroundSearch(backgroundSearchState, reasonKey, errorMessage);
-        setBackgroundSearchState(nextState);
-        const cancelReason = reasonKey === 'timeout'
-            ? 'YÖKSİS arama süresi doldu'
-            : (errorMessage || 'YÖKSİS araması başarısız oldu');
-        clearPendingTransferAfterBackgroundSearch(cancelReason);
-        const message = reasonKey === 'timeout'
-            ? 'YÖKSİS arka plan araması zaman aşımına uğradı (45 sn). YÖKSİS sekmesini kontrol edip "Arka Planda YÖKSİS’te Ara ve Fotoğrafı Kırp" ile tekrar deneyebilirsiniz.'
-            : `${errorMessage || 'YÖKSİS arka plan araması başarısız oldu.'} Tekrar deneyebilirsiniz.`;
-        addStatus(message, 'error');
-        showToast(
-            reasonKey === 'timeout'
-                ? 'YÖKSİS arka plan araması zaman aşımına uğradı. Tekrar deneyebilirsiniz.'
-                : message,
-            'error'
-        );
-    }
-
-    function triggerBackgroundYoksisSearch(yoksisId) {
-        if (!currentStudentData || !isValidYoksisId(yoksisId)) {
-            failActiveBackgroundSearch('document_read_failed', 'Geçerli kabul mektubu kodu bulunamadı.');
-            return;
-        }
-        backgroundAcceptanceRequestId = null;
-        clearPendingTransferAfterBackgroundSearch('Yeni arama başlatıldı');
-        copyTextToClipboard(yoksisId);
-        const requestId = createRequestId();
-        activeSearchRequestId = requestId;
-        activeTransferRequestId = requestId;
-        syncUserEnteredPassportDates();
-        setBackgroundSearchState(startBackgroundSearch(backgroundSearchState, { requestId }));
-        addStatus(`Kabul kodu bulundu ve kopyalandı: ${yoksisId}`, 'success');
-        addStatus('YÖKSİS aranıyor (sekme bir an öne gelip portala döner). Fotoğrafı kırpabilirsiniz.', 'info');
-        showToast('YÖKSİS aranıyor (sekme bir an öne gelip portala döner).', 'info');
-
-        clearBackgroundSearchTimeout();
-        backgroundSearchTimeoutTimer = setTimeout(() => {
-            backgroundSearchTimeoutTimer = null;
-            if (backgroundSearchState.status !== 'running' || backgroundSearchState.requestId !== requestId) return;
-            failActiveBackgroundSearch('timeout');
-        }, BACKGROUND_SEARCH_TIMEOUT_MS);
-
-        postAppMessage({
-            source: 'WEB_APP',
-            payload: {
-                action: 'TRANSFER_TO_YOKSIS',
-                data: getYoksisTransportData(currentStudentData),
-                background: true,
-                requestId
-            }
-        });
-    }
-
-    function formatBackgroundPhaseSeconds(ms) {
-        return (Math.max(0, ms) / 1000).toFixed(1);
-    }
-
-    function reportBackgroundPhaseTimings(phaseMs) {
-        if (!phaseMs || typeof phaseMs !== 'object') return;
-        const { searchMs, firstWaitMs, retryMs, totalMs } = phaseMs;
-        if (![searchMs, firstWaitMs, retryMs, totalMs].every((value) => Number.isFinite(value) && value >= 0)) {
-            return;
-        }
-        addStatus(
-            `Arka plan süreleri: arama ${formatBackgroundPhaseSeconds(searchMs)} sn, ilk doğrulama ${formatBackgroundPhaseSeconds(firstWaitMs)} sn, yeniden doğrulama ${formatBackgroundPhaseSeconds(retryMs)} sn, toplam ${formatBackgroundPhaseSeconds(totalMs)} sn.`,
-            'info'
-        );
-    }
-
-    function formatFillPhaseSeconds(ms) {
-        return (Math.max(0, ms) / 1000).toFixed(1).replace('.', ',');
-    }
-
-    // YÖKSİS aktarım aşama sürelerini Türkçe ondalık biçimiyle (virgül) durum paneline yazar.
-    function reportFillPhaseTimings(phaseMs) {
-        if (!phaseMs || typeof phaseMs !== 'object') return;
-        const {
-            tabPrepMs,
-            readyMs,
-            fieldsMs,
-            verifyFieldsMs,
-            photoMs,
-            verifyPhotoMs,
-            completeMs,
-            totalMs
-        } = phaseMs;
-        if (![tabPrepMs, readyMs, fieldsMs, verifyFieldsMs, photoMs, verifyPhotoMs, completeMs, totalMs]
-            .every((value) => Number.isFinite(value) && value >= 0)) {
-            return;
-        }
-        addStatus(
-            `YÖKSİS aktarım süreleri: sekme hazırlığı ${formatFillPhaseSeconds(tabPrepMs)} sn, hazırlık ${formatFillPhaseSeconds(readyMs)} sn, alanlar ${formatFillPhaseSeconds(fieldsMs)} sn, alan doğrulama ${formatFillPhaseSeconds(verifyFieldsMs)} sn, fotoğraf ${formatFillPhaseSeconds(photoMs)} sn, foto doğrulama ${formatFillPhaseSeconds(verifyPhotoMs)} sn, tamamlama ${formatFillPhaseSeconds(completeMs)} sn, toplam ${formatFillPhaseSeconds(totalMs)} sn.`,
-            'info'
-        );
-    }
-
-    function handleBackgroundTransferResponse(response, requestId) {
-        const nextState = applyExtensionResponse(backgroundSearchState, {
-            ...(response || {}),
-            requestId
-        });
-        if (nextState === backgroundSearchState) return;
-        clearBackgroundSearchTimeout();
-        bindYoksisTarget(response);
-        reportBackgroundPhaseTimings(response?.phaseMs);
-
-        if (nextState.status === 'success') {
-            currentStudentData = {
-                ...currentStudentData,
-                yoksisReady: true,
-                yoksisManualOverrideAvailable: false,
-                yoksisSearchRequestId: response?.yoksisSearchRequestId || requestId
-            };
-            setWorkflowStepStatus(2, 'success');
-            if (currentWorkflowStep <= 2) {
-                updateWorkflowUI(3);
-            } else {
-                updateWorkflowUI();
-            }
-            setBackgroundSearchState(nextState);
-            if (pendingTransferAfterBackgroundSearch) {
-                pendingTransferAfterBackgroundSearch = false;
-                addStatus('YÖKSİS doğrulandı; aktarım başlatılıyor.', 'info');
-                void startManualYoksisFillAfterCrop();
-                return;
-            }
-            addStatus('YÖKSİS öğrenci formu hazır ve kimlik doğrulandı. Fotoğrafı kırpıp "YÖKSİS’e Aktar"a basabilirsiniz.', 'success');
-            showToast('YÖKSİS öğrenci formu hazır ve kimlik doğrulandı.', 'success');
-            return;
-        }
-
-        if (nextState.status === 'needs_attention') {
-            currentStudentData = {
-                ...currentStudentData,
-                yoksisReady: false,
-                yoksisManualOverrideAvailable: Boolean(
-                    response?.manualOverrideAvailable
-                    ?? response?.yoksisManualOverrideAvailable
-                    ?? (response?.success && response?.formReady !== true)
-                ),
-                yoksisSearchRequestId: response?.yoksisSearchRequestId || requestId
-            };
-            setWorkflowStepStatus(2, 'partial');
-            if (currentWorkflowStep <= 2) {
-                updateWorkflowUI(3);
-            } else {
-                updateWorkflowUI();
-            }
-            setBackgroundSearchState(nextState);
-            const reasonText = nextState.reasonKey === 'login_required'
-                ? 'YÖKSİS oturumu gerekli'
-                : (nextState.reasonKey === 'manual_confirmation'
-                    ? 'YÖKSİS formu otomatik doğrulanamadı; YÖKSİS sekmesinde kontrol edip “Arka Planda YÖKSİS’te Ara ve Fotoğrafı Kırp” ile devam edin'
-                    : (response?.error || response?.message || nextState.errorMessage || 'YÖKSİS araması tamamlanamadı'));
-            const statusMessage = nextState.surfaced
-                ? `YÖKSİS sekmesi öne getirildi: ${reasonText}.`
-                : `${reasonText}.`;
-            addStatus(statusMessage, 'warning');
-            showToast(statusMessage, 'warning');
-            clearPendingTransferAfterBackgroundSearch(reasonText);
-            return;
-        }
-
-        currentStudentData = {
-            ...currentStudentData,
-            yoksisReady: false,
-            yoksisManualOverrideAvailable: false,
-            yoksisSearchRequestId: response?.yoksisSearchRequestId || requestId
-        };
-        setWorkflowStepStatus(2, 'error');
-        setBackgroundSearchState(nextState);
-        const errorText = response?.error || response?.message || nextState.errorMessage || 'YÖKSİS araması başarısız oldu.';
-        const failMessage = nextState.surfaced
-            ? `YÖKSİS sekmesi öne getirildi: ${errorText}`
-            : `${errorText} Tekrar deneyebilirsiniz.`;
-        addStatus(failMessage, 'error');
-        showToast(failMessage, 'error');
-        clearPendingTransferAfterBackgroundSearch(errorText);
     }
 
     function clearExtensionCheckTimeout() {
@@ -1221,8 +943,6 @@ export function initYknManager() {
     function requestExtensionCheck(requestId) {
         clearExtensionCheckTimeout();
         extensionBridgeActive = false;
-        extensionPongReceived = false;
-        extensionFeatures = [];
         extensionCheckRequestId = requestId || createRequestId();
         postAppMessage({
             source: 'WEB_APP',
@@ -1419,10 +1139,6 @@ export function initYknManager() {
         shouldOpenCropperWhenReady = false;
         pendingDocumentReads.clear();
         documentRequestKeys.clear();
-        retriedDocumentKinds.clear();
-        activeDocumentRequestIds.clear();
-        backgroundAcceptanceRequestId = null;
-        activeCopyRequestId = null;
         workflowStepStatuses.clear();
         completedWorkflowSteps.clear();
         oneClickTimingStarts.clear();
@@ -1440,7 +1156,6 @@ export function initYknManager() {
         shouldAutoTransferYoksisAfterAcceptance = false;
         shouldAutoRunAcceptanceAfterSearch = false;
         shouldAutoRunCopyAfterSearch = false;
-        resetBackgroundSearchState();
         if (btnCropPhoto) btnCropPhoto.style.display = 'none';
         if (inputIssueDate) inputIssueDate.value = '';
         if (inputExpiryDate) inputExpiryDate.value = '';
@@ -1701,20 +1416,18 @@ export function initYknManager() {
         if (source.type === 'passport' && currentStudentData?.passportPages?.length) {
             activeCropSourcePages = currentStudentData.passportPages;
             const initialPageIndex = currentStudentData.bestPassportPageIndex || 0;
-            if (!isPassportCropperOpen()) {
-                openPassportCropper({
-                    imageSrc: activeCropSourcePages[initialPageIndex]?.dataUrl
-                        || activeCropSourcePages[0]?.dataUrl
-                        || currentStudentData.passportImageSrc,
-                    pages: activeCropSourcePages,
-                    initialPageIndex,
-                    studentName: currentStudentData.fullName || '',
-                    passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
-                    studentData: currentStudentData,
-                    sources: currentStudentData.cropSources || [],
-                    selectedSourceUrl: source.url
-                });
-            }
+            openPassportCropper({
+                imageSrc: activeCropSourcePages[initialPageIndex]?.dataUrl
+                    || activeCropSourcePages[0]?.dataUrl
+                    || currentStudentData.passportImageSrc,
+                pages: activeCropSourcePages,
+                initialPageIndex,
+                studentName: currentStudentData.fullName || '',
+                passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
+                studentData: currentStudentData,
+                sources: currentStudentData.cropSources || [],
+                selectedSourceUrl: source.url
+            });
             shouldOpenCropperWhenReady = false;
             if (btnCopy) {
                 btnCopy.disabled = false;
@@ -1722,10 +1435,13 @@ export function initYknManager() {
             }
             return true;
         }
-        shouldOpenCropperWhenReady = !isPassportCropperOpen();
-        const resolvedRequestId = requestId || activeSearchRequestId || createRequestId();
+        shouldOpenCropperWhenReady = true;
+        if (!requestId) {
+            activeSearchRequestId = createRequestId();
+            requestId = activeSearchRequestId;
+        }
         setCropperSourceLoading(true);
-        requestApplyDocument('cropSource', source.url, resolvedRequestId);
+        requestApplyDocument('cropSource', source.url, requestId);
         return true;
     }
 
@@ -1834,79 +1550,35 @@ export function initYknManager() {
         openOneClickCropper();
     }
 
-    function releaseDocumentRequestId(reqId) {
-        if (!reqId) return;
-        const count = activeDocumentRequestIds.get(reqId) || 0;
-        if (count <= 1) {
-            activeDocumentRequestIds.delete(reqId);
-        } else {
-            activeDocumentRequestIds.set(reqId, count - 1);
-        }
-    }
-
-    function clearPendingDocumentRead(documentKind, documentUrl, reqId) {
-        const normalizedUrl = String(documentUrl || '').trim();
-        if (documentKind && normalizedUrl) {
-            const cacheKey = getDocumentCacheKey(documentKind, normalizedUrl);
-            const meta = documentRequestKeys.get(cacheKey);
-            pendingDocumentReads.delete(cacheKey);
-            documentRequestKeys.delete(cacheKey);
-            releaseDocumentRequestId(reqId || meta?.requestId);
-            return meta || null;
-        }
-        let matchedMeta = null;
-        for (const [cacheKey, meta] of [...documentRequestKeys.entries()]) {
-            const matchesKind = documentKind && meta?.documentKind === documentKind;
-            const matchesReq = reqId && meta?.requestId === reqId;
-            if (matchesKind || matchesReq) {
-                matchedMeta = matchedMeta || meta;
-                pendingDocumentReads.delete(cacheKey);
-                documentRequestKeys.delete(cacheKey);
-                releaseDocumentRequestId(reqId || meta?.requestId);
-            }
-        }
-        if (!matchedMeta && reqId) {
-            releaseDocumentRequestId(reqId);
-        }
-        return matchedMeta;
-    }
-
     function requestApplyDocument(documentKind, documentUrl, requestId = activeSearchRequestId) {
         const normalizedUrl = String(documentUrl || '').trim();
         if (!normalizedUrl) return;
 
-        const resolvedRequestId = requestId || createRequestId();
         const cacheKey = getDocumentCacheKey(documentKind, normalizedUrl);
         const cachedDocument = documentBytesCache.get(cacheKey);
         if (cachedDocument) {
             // Aynı belge daha önce okunduysa eklentiye yeniden gidilmez.
-            void handleDocumentBytesReady({ ...cachedDocument, requestId: resolvedRequestId }, resolvedRequestId);
+            void handleDocumentBytesReady({ ...cachedDocument, requestId });
             return;
         }
 
-        // Aynı belge türü+URL ikilisi zaten okunuyorsa ikinci istek açma; farklı
-        // belge türleri (kabul mektubu ve pasaport gibi) paralel okunabilir.
-        if (pendingDocumentReads.has(cacheKey)) {
+        const pendingKey = documentRequestKeys.get(documentKind);
+        if (pendingDocumentReads.has(documentKind)) {
+            // Aynı belge zaten isteniyorsa ikinci istek açma; farklı aday için
+            // mevcut akışın önceki isteği temizlemesi beklenir.
+            if (pendingKey === cacheKey) return;
             return;
         }
 
-        pendingDocumentReads.add(cacheKey);
-        documentRequestKeys.set(cacheKey, {
-            documentKind,
-            documentUrl: normalizedUrl,
-            requestId: resolvedRequestId
-        });
-        activeDocumentRequestIds.set(
-            resolvedRequestId,
-            (activeDocumentRequestIds.get(resolvedRequestId) || 0) + 1
-        );
+        pendingDocumentReads.add(documentKind);
+        documentRequestKeys.set(documentKind, cacheKey);
         postAppMessage({
             source: 'WEB_APP',
             payload: {
                 action: 'READ_APPLY_DOCUMENT',
                 documentKind,
                 documentUrl: normalizedUrl,
-                requestId: resolvedRequestId
+                requestId
             }
         });
     }
@@ -1990,7 +1662,7 @@ export function initYknManager() {
             isOneClickActive() ? oneClickWorkflow.workflowId : activeSearchRequestId);
     }
 
-    async function handleDocumentBytesReady(documentData, incomingRequestId = null) {
+    async function handleDocumentBytesReady(documentData) {
         const documentKind = documentData?.documentKind;
         const documentBytes = documentData?.documentBase64
             ? decodeBase64ToBytes(documentData.documentBase64)
@@ -2007,8 +1679,12 @@ export function initYknManager() {
                 documentBase64: documentData.documentBase64
             });
         }
-        const matchedMeta = clearPendingDocumentRead(documentKind, documentUrl, incomingRequestId || documentData?.requestId);
-        const resolvedDocRequestId = incomingRequestId || documentData?.requestId || matchedMeta?.requestId || null;
+        if (documentKind) {
+            pendingDocumentReads.delete(documentKind);
+            if (documentRequestKeys.get(documentKind) === documentCacheKey) {
+                documentRequestKeys.delete(documentKind);
+            }
+        }
 
         try {
             const pdfOffset = isPdfData(documentBytes);
@@ -2041,10 +1717,6 @@ export function initYknManager() {
                                 selectedSourceUrl: sourceUrl
                             });
                             shouldOpenCropperWhenReady = false;
-                            if (btnCopy) {
-                                btnCopy.disabled = false;
-                                btnCopy.classList.remove('is-loading');
-                            }
                         }
                     }
                 }
@@ -2184,7 +1856,7 @@ export function initYknManager() {
                             // Aksi halde crop tamamlanınca yalnızca kaydedilip
                             // FILL_YOKSIS_FORM hiç gönderilmiyordu.
                             openOneClickCropper();
-                        } else if (!isPassportCropperOpen()) {
+                        } else {
                             openPassportCropper({
                                 imageSrc: selectedPage.dataUrl,
                                 pages: allPages,
@@ -2195,12 +1867,8 @@ export function initYknManager() {
                                 sources: currentStudentData?.cropSources || [],
                                 selectedSourceUrl: documentUrl
                             });
-                            addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
                         }
-                        if (btnCopy) {
-                            btnCopy.disabled = false;
-                            btnCopy.classList.remove('is-loading');
-                        }
+                        addStatus('Pasaport fotoğraf kırpıcı açıldı.', 'info');
                         shouldOpenCropperWhenReady = false;
                     }
                 }
@@ -2381,12 +2049,14 @@ export function initYknManager() {
                     currentStudentData.currentPassportCandidateIndex = nextIdx;
                     const nextUrl = candidates[nextIdx];
                     addStatus(`Pasaport belgesinde eksik alanlar var, ek pasaport dosyası taranıyor (${nextIdx + 1}/${candidates.length})...`, 'info');
+                    pendingDocumentReads.delete('passport');
+                    documentRequestKeys.delete('passport');
                     requestApplyDocument(
                         'passport',
                         nextUrl,
                         isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)
                             ? oneClickWorkflow.workflowId
-                            : (resolvedDocRequestId || activeCopyRequestId || activeSearchRequestId)
+                            : activeSearchRequestId
                     );
                     return;
                 }
@@ -2440,14 +2110,12 @@ export function initYknManager() {
                                 || decodedText.match(/(https?:\/\/[^"'\s<>]+\.pdf[^"'\s<>]*)/i);
                             if (match) embedSrc = match[1];
                         }
-                        if (embedSrc && !retriedDocumentKinds.has(documentKind)) {
-                            retriedDocumentKinds.add(documentKind);
+                        if (embedSrc && !pendingDocumentReads.has(documentKind + '_retry')) {
+                            pendingDocumentReads.add(documentKind + '_retry');
+                            pendingDocumentReads.delete(documentKind);
+                            documentRequestKeys.delete(documentKind);
                             addStatus('Kabul mektubu PDF bağlantısı HTML içinde bulundu, alınıyor...', 'info');
-                            requestApplyDocument(
-                                documentKind,
-                                embedSrc.replace(/&amp;/g, '&'),
-                                resolvedDocRequestId || backgroundAcceptanceRequestId || activeSearchRequestId
-                            );
+                            requestApplyDocument(documentKind, embedSrc.replace(/&amp;/g, '&'));
                             return;
                         }
                         text = doc.body ? doc.body.innerText : decodedText;
@@ -2488,12 +2156,14 @@ export function initYknManager() {
                         currentStudentData.currentCandidateIndex = nextIdx;
                         const nextUrl = candidates[nextIdx];
                         addStatus(`Mevcut belgede YÖKSİS ID bulunamadı, diğer kabul belgesi taranıyor (${nextIdx + 1}/${candidates.length})...`, 'info');
+                        pendingDocumentReads.delete('acceptanceLetter');
+                        documentRequestKeys.delete('acceptanceLetter');
                         requestApplyDocument(
                             'acceptanceLetter',
                             nextUrl,
                             isOneClickActive(ONE_CLICK_STAGE.ACCEPTANCE_READING)
                                 ? oneClickWorkflow.workflowId
-                                : (resolvedDocRequestId || backgroundAcceptanceRequestId || activeSearchRequestId)
+                                : activeSearchRequestId
                         );
                         return;
                     }
@@ -2528,10 +2198,6 @@ export function initYknManager() {
                         }
                     });
                 }
-                if (shouldAutoBackgroundTransferAfterAcceptance) {
-                    shouldAutoBackgroundTransferAfterAcceptance = false;
-                    triggerBackgroundYoksisSearch(yoksisId);
-                }
                 if (isOneClickActive(ONE_CLICK_STAGE.ACCEPTANCE_READING)) {
                     startOneClickYoksisSearch();
                 }
@@ -2540,19 +2206,11 @@ export function initYknManager() {
         } catch (error) {
             if (documentKind === 'cropSource') {
                 setCropperSourceLoading(false);
-                if (btnCopy) {
-                    btnCopy.disabled = false;
-                    btnCopy.classList.remove('is-loading');
-                }
                 addStatus(`Seçilen belge açılamadı: ${error.message}`, 'error');
                 if (isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)) {
                     failOneClick('DOCUMENT_READ_FAILED', error.message);
                 }
                 return;
-            }
-            if (documentKind === 'passport' && btnCopy) {
-                btnCopy.disabled = false;
-                btnCopy.classList.remove('is-loading');
             }
             addStatus(`${documentKind === 'passport' ? 'Pasaport' : 'Kabul mektubu'} okunamadı: ${error.message}`, 'error');
             const stage = documentKind === 'passport'
@@ -2560,9 +2218,6 @@ export function initYknManager() {
                 : ONE_CLICK_STAGE.ACCEPTANCE_READING;
             if (documentKind === 'acceptanceLetter') {
                 shouldAutoTransferYoksisAfterAcceptance = false;
-                if (shouldAutoBackgroundTransferAfterAcceptance || backgroundSearchState.status === 'reading_letter') {
-                    failActiveBackgroundSearch('document_read_failed', error.message || 'Kabul mektubu okunamadı.');
-                }
                 if (btnReadAcceptance) {
                     btnReadAcceptance.disabled = false;
                     btnReadAcceptance.classList.remove('is-loading');
@@ -2571,10 +2226,8 @@ export function initYknManager() {
             }
             if (isOneClickActive(stage)) failOneClick('DOCUMENT_READ_FAILED', error.message);
         } finally {
-            if (documentUrl) {
-                pendingDocumentReads.delete(documentCacheKey);
-                documentRequestKeys.delete(documentCacheKey);
-            }
+            pendingDocumentReads.delete(documentKind);
+            documentRequestKeys.delete(documentKind);
         }
     }
 
@@ -2675,138 +2328,8 @@ export function initYknManager() {
         });
     }
 
-    function startCopyAndCropFlow({ skipOpenIfCropperOpen = false } = {}) {
-        if (!currentStudentData) return;
-        if (skipOpenIfCropperOpen && isPassportCropperOpen()) {
-            return;
-        }
-
-        const copyRequestId = createRequestId();
-        activeCopyRequestId = copyRequestId;
-        if (!activeSearchRequestId) activeSearchRequestId = copyRequestId;
-
-        if (btnCopy) {
-            btnCopy.disabled = true;
-            btnCopy.classList.add('is-loading');
-        }
-        addStatus('Apply bilgileri ve pasaport belgesi hazırlanıyor...', 'info');
-        shouldOpenCropperWhenReady = !isPassportCropperOpen();
-
-        if (openPreferredCropSource(copyRequestId)) {
-            return;
-        }
-
-        if (currentStudentData.passportImageSrc) {
-            if (!isPassportCropperOpen()) {
-                openPassportCropper({
-                    imageSrc: currentStudentData.passportImageSrc,
-                    pages: currentStudentData.passportPages || [],
-                    initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
-                    studentName: currentStudentData?.fullName || '',
-                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || '',
-                    studentData: currentStudentData,
-                    sources: currentStudentData.cropSources || [],
-                    selectedSourceUrl: currentStudentData.passportDocumentUrl || ''
-                });
-            }
-            shouldOpenCropperWhenReady = false;
-            if (btnCopy) {
-                btnCopy.disabled = false;
-                btnCopy.classList.remove('is-loading');
-            }
-        } else {
-            const passportDocUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
-            if (passportDocUrl) {
-                addStatus('Pasaport belgesi indiriliyor ve kırpma ekranı açılıyor...', 'info');
-                requestApplyDocument('passport', passportDocUrl, copyRequestId);
-            } else {
-                postAppMessage({
-                    source: 'WEB_APP',
-                    payload: {
-                        action: 'COPY_APPLY_DATA',
-                        requestId: copyRequestId
-                    }
-                });
-                addStatus('Apply profil bilgileri ve pasaport taranıyor...', 'info');
-            }
-        }
-    }
-
-    if (btnBackgroundSearch) {
-        btnBackgroundSearch.addEventListener('click', () => {
-            if (backgroundSearchState.status === 'reading_letter' || backgroundSearchState.status === 'running') {
-                return;
-            }
-            if (extensionPongReceived && !extensionFeatures.includes('background_transfer')) {
-                const unsupportedMessage = 'Yüklü eklenti arka plan aramasını desteklemiyor. Eklentiyi son sürümle yeniden yükleyin.';
-                showToast(unsupportedMessage, 'error');
-                addStatus(unsupportedMessage, 'error');
-                return;
-            }
-            if (!currentStudentData) {
-                showToast('Lütfen önce bir öğrenci arayın.', 'warning');
-                if (inputPassport) inputPassport.focus();
-                return;
-            }
-
-            const enteredPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
-            if (enteredPassport && !currentStudentData.passportNo) {
-                currentStudentData.passportNo = enteredPassport;
-            }
-
-            if (currentStudentData.yoksisId && isValidYoksisId(currentStudentData.yoksisId)) {
-                shouldAutoBackgroundTransferAfterAcceptance = false;
-                shouldAutoTransferYoksisAfterAcceptance = false;
-                triggerBackgroundYoksisSearch(currentStudentData.yoksisId);
-                startCopyAndCropFlow({ skipOpenIfCropperOpen: true });
-                return;
-            }
-
-            if (!currentStudentData.documentsReady) {
-                showToast('Apply belge paneli henüz yükleniyor. Bağlantı hazır olduğunda tekrar deneyin.', 'info');
-                addStatus('Arka plan YÖKSİS araması bekletildi: belge paneli henüz hazır değil.', 'info');
-                return;
-            }
-
-            clearPendingTransferAfterBackgroundSearch('Yeni arama başlatıldı');
-            shouldAutoTransferYoksisAfterAcceptance = false;
-            shouldAutoBackgroundTransferAfterAcceptance = true;
-            const bgLetterRequestId = createRequestId();
-            backgroundAcceptanceRequestId = bgLetterRequestId;
-            if (!activeSearchRequestId) activeSearchRequestId = bgLetterRequestId;
-            setBackgroundSearchState(startReadingLetter(backgroundSearchState));
-            addStatus('Kabul mektubu okunuyor ve ardından YÖKSİS’te aranacak (sekme birkaç saniye öne alınır, sonra portala dönülür)...', 'info');
-
-            clearBackgroundSearchTimeout();
-            backgroundSearchTimeoutTimer = setTimeout(() => {
-                backgroundSearchTimeoutTimer = null;
-                if (backgroundSearchState.status !== 'reading_letter') return;
-                failActiveBackgroundSearch('timeout');
-            }, BACKGROUND_SEARCH_TIMEOUT_MS);
-
-            const candidates = currentStudentData.acceptanceCandidates || (currentStudentData.acceptanceLetterUrl ? [currentStudentData.acceptanceLetterUrl] : []);
-            if (candidates.length > 0) {
-                currentStudentData.currentCandidateIndex = 0;
-                addStatus('Kabul mektubu PDF belgesi Apply oturumundan alınıyor...', 'info');
-                requestApplyDocument('acceptanceLetter', candidates[0], bgLetterRequestId);
-            } else {
-                addStatus('Kabul mektubu ve kod Apply sekmesinde taranıyor...', 'info');
-                postAppMessage({
-                    source: 'WEB_APP',
-                    payload: {
-                        action: 'EXTRACT_KABUL_CODE',
-                        requestId: bgLetterRequestId
-                    }
-                });
-            }
-
-            startCopyAndCropFlow({ skipOpenIfCropperOpen: true });
-        });
-    }
-
     if (btnReadAcceptance) {
         btnReadAcceptance.addEventListener('click', async () => {
-            resetBackgroundSearchState();
             const enteredPassport = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
             const currentPassport = readProfileText(currentStudentData?.passportNo || currentStudentData?.pasaportNo || '').trim().toUpperCase();
             const cleanEntered = enteredPassport.replace(/[^A-Z0-9]/gi, '');
@@ -2935,7 +2458,47 @@ export function initYknManager() {
                 currentStudentData.passportNo = enteredPassport;
             }
 
-            startCopyAndCropFlow();
+            btnCopy.disabled = true;
+            btnCopy.classList.add('is-loading');
+            addStatus('Apply bilgileri ve pasaport belgesi hazırlanıyor...', 'info');
+            shouldOpenCropperWhenReady = true;
+
+            if (!activeSearchRequestId) activeSearchRequestId = createRequestId();
+
+            if (openPreferredCropSource()) {
+                return;
+            }
+
+            if (currentStudentData.passportImageSrc) {
+                openPassportCropper({
+                    imageSrc: currentStudentData.passportImageSrc,
+                    pages: currentStudentData.passportPages || [],
+                    initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
+                    studentName: currentStudentData?.fullName || '',
+                    passportNo: currentStudentData?.passportNo || inputPassport?.value.trim() || '',
+                    studentData: currentStudentData,
+                    sources: currentStudentData.cropSources || [],
+                    selectedSourceUrl: currentStudentData.passportDocumentUrl || ''
+                });
+                shouldOpenCropperWhenReady = false;
+                btnCopy.disabled = false;
+                btnCopy.classList.remove('is-loading');
+            } else {
+                const passportDocUrl = currentStudentData?.passportImageUrl || currentStudentData?.passportDocumentUrl;
+                if (passportDocUrl) {
+                    addStatus('Pasaport belgesi indiriliyor ve kırpma ekranı açılıyor...', 'info');
+                    requestApplyDocument('passport', passportDocUrl);
+                } else {
+                    postAppMessage({
+                        source: 'WEB_APP',
+                        payload: {
+                            action: 'COPY_APPLY_DATA',
+                            requestId: activeSearchRequestId
+                        }
+                    });
+                    addStatus('Apply profil bilgileri ve pasaport taranıyor...', 'info');
+                }
+            }
         });
     }
 
@@ -3076,13 +2639,6 @@ export function initYknManager() {
 
     if (btnSyncYoksisFields) {
         btnSyncYoksisFields.addEventListener('click', async () => {
-            const transferGate = getTransferGate(backgroundSearchState);
-            if (!transferGate.allowed) {
-                const warningMessage = transferGate.label || 'YÖKSİS arka plan araması henüz tamamlanmadı.';
-                addStatus(`YÖKSİS alan aktarımı bekletildi: ${warningMessage}`, 'warning');
-                showToast(warningMessage, 'warning');
-                return;
-            }
             if (!currentStudentData && !inputPassport?.value.trim()) {
                 showToast('Lütfen önce bir öğrenci arayın.', 'warning');
                 return;
@@ -3102,9 +2658,8 @@ export function initYknManager() {
                     requestId: reqId
                 }, 25000);
 
-                btnSyncYoksisFields.disabled = !getTransferGate(backgroundSearchState).allowed;
+                btnSyncYoksisFields.disabled = false;
                 btnSyncYoksisFields.classList.remove('is-loading');
-                reportFillPhaseTimings(response?.phaseMs);
 
                 if (response?.success) {
                     addStatus('✓ Pasaport ve öğrenci alanları YÖKSİS formunda başarıyla güncellendi.', 'success');
@@ -3115,7 +2670,7 @@ export function initYknManager() {
                     showToast(msg, 'warning');
                 }
             } catch (err) {
-                btnSyncYoksisFields.disabled = !getTransferGate(backgroundSearchState).allowed;
+                btnSyncYoksisFields.disabled = false;
                 btnSyncYoksisFields.classList.remove('is-loading');
                 addStatus(`Hata: ${err.message}`, 'error');
                 showToast(`Hata: ${err.message}`, 'error');
@@ -3230,13 +2785,6 @@ export function initYknManager() {
         });
 
         if (autoTransfer) {
-            const transferGate = getTransferGate(backgroundSearchState);
-            if (!transferGate.allowed && transferGate.queueable) {
-                pendingTransferAfterBackgroundSearch = true;
-                addStatus('Fotoğraf hazır; YÖKSİS araması bitince otomatik aktarılacak.', 'info');
-                showToast('Fotoğraf hazır; YÖKSİS araması bitince otomatik aktarılacak.', 'info');
-                return;
-            }
             await startManualYoksisFillAfterCrop();
         } else {
             addStatus(`Vesikalık fotoğraf başarıyla kırpıldı ve kaydedildi (${fileName}). YÖKSİS formunu doldurmak için ilgili tuşa basabilirsiniz.`, 'success');
@@ -3346,8 +2894,6 @@ export function initYknManager() {
         if (event.data.type === 'PONG') {
             const pongRequestId = event.data.requestId;
             if (pongRequestId && pongRequestId !== activeSearchRequestId && pongRequestId !== extensionCheckRequestId) return;
-            extensionPongReceived = true;
-            extensionFeatures = Array.isArray(event.data.features) ? [...event.data.features] : [];
             markExtensionReady();
             if (activeSearchRequestId) addStatus('Eklenti köprüsü hazır.', 'info');
             return;
@@ -3366,33 +2912,15 @@ export function initYknManager() {
             workflow: oneClickWorkflow,
             currentStudentRequestId
         });
-        const isBackgroundTransferResponse = Boolean(
-            event.data.type === 'RESPONSE'
-            && event.data.action === 'TRANSFER_TO_YOKSIS'
-            && requestId
-            && backgroundSearchState.requestId
-            && requestId === backgroundSearchState.requestId
-        );
-        const isBackgroundAcceptanceRequest = Boolean(
-            requestId && backgroundAcceptanceRequestId && requestId === backgroundAcceptanceRequestId
-        );
-        const isCurrentCopyRequest = Boolean(
-            requestId && activeCopyRequestId && requestId === activeCopyRequestId
-        );
-        const isPendingDocumentRequest = Boolean(
-            requestId && activeDocumentRequestIds.has(requestId)
-        );
         const isCurrentStudentRequest = Boolean(requestId && requestId === currentStudentRequestId);
         const isStudentLookupEvent = event.data.type === 'EVENT' && [
             'STUDENT_FOUND', 'STUDENT_DOCUMENTS_FOUND', 'DOCUMENTS_NOT_FOUND', 'STUDENT_NOT_FOUND', 'REQUEST_FAILED'
         ].includes(event.data.action);
         if (isStudentLookupEvent && !isCurrentStudentRequest) return;
         if (requestId && activeSearchRequestId && requestId !== activeSearchRequestId
-            && !isCurrentWorkflowResponse && !isCurrentStudentRequest && !isCurrentYoksisTransferResponse
-            && !isBackgroundTransferResponse && !isBackgroundAcceptanceRequest
-            && !isCurrentCopyRequest && !isPendingDocumentRequest) return;
+            && !isCurrentWorkflowResponse && !isCurrentStudentRequest && !isCurrentYoksisTransferResponse) return;
         if (event.data.type === 'RESPONSE' && event.data.action === 'TRANSFER_TO_YOKSIS'
-            && !isCurrentYoksisTransferResponse && !isBackgroundTransferResponse) return;
+            && !isCurrentYoksisTransferResponse) return;
 
         if (event.data.type === 'RESPONSE') {
             const response = event.data.response;
@@ -3471,7 +2999,6 @@ export function initYknManager() {
             } else if (event.data.action === 'FILL_YOKSIS_FORM'
                 && isOneClickActive(ONE_CLICK_STAGE.YOKSIS_FILLING)) {
                 clearOneClickTimeout();
-                reportFillPhaseTimings(response?.phaseMs);
                 const photoRequired = Boolean(currentStudentData?.croppedPhotoBase64);
                 const missingFields = Array.isArray(response?.missingFields) ? response.missingFields : [];
                 const photoUploadFailed = photoRequired && response?.photoUploaded !== true;
@@ -3526,9 +3053,6 @@ export function initYknManager() {
                         ? `${response.error || response.message} ${fieldResultsText}`.trim()
                         : `YÖKSİS öğrenci alanları doğrulanamadı.${missingText}${failedText}${fieldResultsText ? ` ${fieldResultsText}` : ''}`);
                 }
-                return;
-            } else if (event.data.action === 'TRANSFER_TO_YOKSIS' && isBackgroundTransferResponse) {
-                handleBackgroundTransferResponse(response, requestId);
                 return;
             } else if (event.data.action === 'TRANSFER_TO_YOKSIS') {
                 finishButtonAction('transfer-yoksis');
@@ -3591,7 +3115,6 @@ export function initYknManager() {
                     btnCopy.disabled = false;
                     btnCopy.classList.remove('is-loading');
                 }
-                reportFillPhaseTimings(response?.phaseMs);
 
                 if (response?.success) {
                     const hasPhoto = Boolean(currentStudentData?.croppedPhotoBase64);
@@ -3641,7 +3164,6 @@ export function initYknManager() {
                 }
             } else if (event.data.action === 'COPY_APPLY_DATA') {
                 finishButtonAction('copy-info');
-                const copyFlowRequestId = requestId || activeCopyRequestId || activeSearchRequestId;
                 if (response?.success && response.data) {
                     const data = response.data;
                     const existingCropSources = currentStudentData?.cropSources || [];
@@ -3656,49 +3178,35 @@ export function initYknManager() {
                     setWorkflowStepStatus(3, 'success');
                     if (currentWorkflowStep <= 3) updateWorkflowUI(4);
 
-                    if (openPreferredCropSource(copyFlowRequestId)) {
+                    if (openPreferredCropSource()) {
                         addStatus('Öğrenci bilgileri alındı. Seçilen fotoğraf kaynağı açılıyor.', 'success');
                     } else {
                     const passUrl = currentStudentData.passportImageUrl
                         || currentStudentData.passportDocumentUrl
                         || (currentStudentData.passportCandidates && currentStudentData.passportCandidates[0]);
                     if (passUrl && !currentStudentData.passportImageSrc) {
-                        shouldOpenCropperWhenReady = !isPassportCropperOpen();
+                        shouldOpenCropperWhenReady = true;
                         addStatus('Öğrenci bilgileri kopyalandı. Pasaport hazırlanıyor; fotoğraf kırpma ekranı açılacak.', 'success');
-                        requestApplyDocument('passport', passUrl, copyFlowRequestId);
+                        requestApplyDocument('passport', passUrl);
                     } else if (currentStudentData.passportImageSrc) {
                         shouldOpenCropperWhenReady = false;
-                        if (!isPassportCropperOpen()) {
-                            openPassportCropper({
-                                imageSrc: currentStudentData.passportImageSrc,
-                                pages: currentStudentData.passportPages || [],
-                                initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
-                                studentName: currentStudentData.fullName || '',
-                                passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
-                                studentData: currentStudentData,
-                                sources: currentStudentData.cropSources || [],
-                                selectedSourceUrl: currentStudentData.passportDocumentUrl || currentStudentData.passportImageUrl || ''
-                            });
-                            addStatus('Öğrenci bilgileri kopyalandı. Fotoğraf kırpma ekranı açıldı.', 'success');
-                        }
-                        if (btnCopy) {
-                            btnCopy.disabled = false;
-                            btnCopy.classList.remove('is-loading');
-                        }
+                        openPassportCropper({
+                            imageSrc: currentStudentData.passportImageSrc,
+                            pages: currentStudentData.passportPages || [],
+                            initialPageIndex: currentStudentData.bestPassportPageIndex || 0,
+                            studentName: currentStudentData.fullName || '',
+                            passportNo: currentStudentData.passportNo || inputPassport?.value.trim() || '',
+                            studentData: currentStudentData,
+                            sources: currentStudentData.cropSources || [],
+                            selectedSourceUrl: currentStudentData.passportDocumentUrl || currentStudentData.passportImageUrl || ''
+                        });
+                        addStatus('Öğrenci bilgileri kopyalandı. Fotoğraf kırpma ekranı açıldı.', 'success');
                     } else {
-                        if (btnCopy) {
-                            btnCopy.disabled = false;
-                            btnCopy.classList.remove('is-loading');
-                        }
                         addStatus('Öğrenci bilgileri kopyalandı. Sonraki adımlar bağımsız olarak kullanılabilir.', 'success');
                     }
                     }
                     showToast('Öğrenci bilgileri kopyalandı.', 'success');
                 } else {
-                    if (btnCopy) {
-                        btnCopy.disabled = false;
-                        btnCopy.classList.remove('is-loading');
-                    }
                     setWorkflowStepStatus(3, 'error');
                     const errorMessage = response?.error || response?.message || 'Apply öğrenci bilgileri okunamadı.';
                     addStatus(errorMessage, 'error');
@@ -3741,10 +3249,6 @@ export function initYknManager() {
                                 }
                             });
                         }
-                        if (shouldAutoBackgroundTransferAfterAcceptance) {
-                            shouldAutoBackgroundTransferAfterAcceptance = false;
-                            triggerBackgroundYoksisSearch(validCode);
-                        }
                         if (isOneClickActive(ONE_CLICK_STAGE.ACCEPTANCE_READING)) {
                             startOneClickYoksisSearch();
                         }
@@ -3764,14 +3268,11 @@ export function initYknManager() {
                             candidates[0],
                             isOneClickActive(ONE_CLICK_STAGE.ACCEPTANCE_READING)
                                 ? oneClickWorkflow.workflowId
-                                : (requestId || backgroundAcceptanceRequestId || activeSearchRequestId)
+                                : activeSearchRequestId
                         );
                     } else {
                         finishButtonAction('copy-letter');
                         shouldAutoTransferYoksisAfterAcceptance = false;
-                        if (shouldAutoBackgroundTransferAfterAcceptance || backgroundSearchState.status === 'reading_letter') {
-                            failActiveBackgroundSearch('document_read_failed', 'Kabul mektubu belgesi veya kodu bulunamadı.');
-                        }
                         if (btnReadAcceptance) {
                             btnReadAcceptance.disabled = false;
                             btnReadAcceptance.classList.remove('is-loading');
@@ -3787,9 +3288,6 @@ export function initYknManager() {
                 } else {
                     finishButtonAction('copy-letter');
                     shouldAutoTransferYoksisAfterAcceptance = false;
-                    if (shouldAutoBackgroundTransferAfterAcceptance || backgroundSearchState.status === 'reading_letter') {
-                        failActiveBackgroundSearch('document_read_failed', response?.error || 'Kabul mektubu sorgulanamadı.');
-                    }
                     if (btnReadAcceptance) {
                         btnReadAcceptance.disabled = false;
                         btnReadAcceptance.classList.remove('is-loading');
@@ -3804,54 +3302,28 @@ export function initYknManager() {
             } else if (response?.error) {
                 clearSearchTimeout();
                 if (event.data.action === 'SEARCH_STUDENT') studentName.textContent = 'Arama başlatılamadı';
-                const failedMeta = event.data.action === 'READ_APPLY_DOCUMENT'
-                    ? clearPendingDocumentRead(event.data.documentKind, event.data.documentUrl, requestId)
-                    : null;
-                if ((failedMeta?.documentKind === 'passport' || failedMeta?.documentKind === 'cropSource') && btnCopy) {
-                    btnCopy.disabled = false;
-                    btnCopy.classList.remove('is-loading');
-                    if (failedMeta?.documentKind === 'cropSource') setCropperSourceLoading(false);
-                }
-                const isAcceptanceReadError = isBackgroundAcceptanceRequest
-                    || event.data.action === 'EXTRACT_KABUL_CODE'
-                    || (event.data.action === 'READ_APPLY_DOCUMENT' && failedMeta?.documentKind === 'acceptanceLetter');
-                if (isAcceptanceReadError
-                    && (shouldAutoBackgroundTransferAfterAcceptance || backgroundSearchState.status === 'reading_letter')) {
-                    failActiveBackgroundSearch('document_read_failed', response.error);
-                }
                 addStatus(response.error, 'error');
             }
             return;
         }
 
         if (event.data.type === 'EVENT' && event.data.action === 'DOCUMENT_BYTES_READY') {
-            void handleDocumentBytesReady(event.data.data, requestId);
+            void handleDocumentBytesReady(event.data.data);
             return;
         }
 
         if (event.data.type === 'EVENT' && event.data.action === 'DOCUMENT_READ_FAILED') {
             const documentKind = event.data.data?.documentKind;
-            clearPendingDocumentRead(documentKind, event.data.data?.documentUrl, requestId);
+            if (documentKind) pendingDocumentReads.delete(documentKind);
             if (documentKind === 'cropSource') {
                 setCropperSourceLoading(false);
-                if (btnCopy) {
-                    btnCopy.disabled = false;
-                    btnCopy.classList.remove('is-loading');
-                }
                 addStatus(event.data.error || 'Seçilen belge açılamadı.', 'error');
                 if (isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)) {
                     failOneClick('DOCUMENT_READ_FAILED', event.data.error || 'Seçilen belge açılamadı.');
                 }
                 return;
             }
-            if (documentKind === 'passport' && btnCopy) {
-                btnCopy.disabled = false;
-                btnCopy.classList.remove('is-loading');
-            }
             if (documentKind === 'acceptanceLetter') {
-                if (shouldAutoBackgroundTransferAfterAcceptance || backgroundSearchState.status === 'reading_letter') {
-                    failActiveBackgroundSearch('document_read_failed', event.data.error || 'Kabul mektubu okunamadı.');
-                }
                 finishButtonAction('copy-letter');
                 setWorkflowStepStatus(1, 'error');
             }
@@ -3966,9 +3438,6 @@ export function initYknManager() {
             clearSearchTimeout();
             shouldAutoRunAcceptanceAfterSearch = false;
             shouldAutoRunCopyAfterSearch = false;
-            if (shouldAutoBackgroundTransferAfterAcceptance || backgroundSearchState.status === 'reading_letter') {
-                failActiveBackgroundSearch('document_read_failed', event.data.error || 'Profil belgeleri bulunamadı.');
-            }
             if (btnReadAcceptance) {
                 btnReadAcceptance.disabled = false;
                 btnReadAcceptance.classList.remove('is-loading');
@@ -3990,11 +3459,6 @@ export function initYknManager() {
             clearSearchTimeout();
             shouldAutoRunAcceptanceAfterSearch = false;
             shouldAutoRunCopyAfterSearch = false;
-            if (shouldAutoBackgroundTransferAfterAcceptance || backgroundSearchState.status === 'reading_letter') {
-                failActiveBackgroundSearch('document_read_failed', event.data.error || 'İşlem başarısız oldu.');
-            } else if (backgroundSearchState.status === 'running' && requestId && requestId === backgroundSearchState.requestId) {
-                failActiveBackgroundSearch('search_failed', event.data.error || 'YÖKSİS araması başarısız oldu.');
-            }
             if (btnReadAcceptance) {
                 btnReadAcceptance.disabled = false;
                 btnReadAcceptance.classList.remove('is-loading');
@@ -4021,34 +3485,6 @@ export function initYknManager() {
     };
     window.__YKN_PORTAL_MSG_HANDLER__ = messageHandler;
     window.addEventListener('message', messageHandler);
-
-    if (window.__YKN_WORKSPACE_CHANGE_HANDLER__) {
-        document.removeEventListener('workspace:view-changed', window.__YKN_WORKSPACE_CHANGE_HANDLER__);
-    }
-    const handleWorkspaceViewChanged = () => {
-        if (backgroundSearchState.status !== 'idle' || backgroundSearchTimeoutTimer || shouldAutoBackgroundTransferAfterAcceptance) {
-            resetBackgroundSearchState();
-        }
-    };
-    window.__YKN_WORKSPACE_CHANGE_HANDLER__ = handleWorkspaceViewChanged;
-    document.addEventListener('workspace:view-changed', handleWorkspaceViewChanged);
-
-    if (window.__YKN_WORKSPACE_VISIBILITY_OBSERVER__) {
-        window.__YKN_WORKSPACE_VISIBILITY_OBSERVER__.disconnect();
-    }
-    const viewYknPanel = document.getElementById('view-ykn');
-    const workspaceContentEl = document.getElementById('workspace-content');
-    if (typeof MutationObserver !== 'undefined' && (viewYknPanel || workspaceContentEl)) {
-        const visibilityObserver = new MutationObserver(() => {
-            if ((viewYknPanel?.hidden || workspaceContentEl?.hidden)
-                && (backgroundSearchState.status !== 'idle' || backgroundSearchTimeoutTimer || shouldAutoBackgroundTransferAfterAcceptance)) {
-                resetBackgroundSearchState();
-            }
-        });
-        if (viewYknPanel) visibilityObserver.observe(viewYknPanel, { attributes: true, attributeFilter: ['hidden'] });
-        if (workspaceContentEl) visibilityObserver.observe(workspaceContentEl, { attributes: true, attributeFilter: ['hidden'] });
-        window.__YKN_WORKSPACE_VISIBILITY_OBSERVER__ = visibilityObserver;
-    }
 
     try {
         loadExtensionDownloadMetadata();

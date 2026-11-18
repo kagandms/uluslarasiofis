@@ -2,9 +2,7 @@
 // İkamet Portalı (Web Sayfası) ile Eklenti (Background) arasında köprü görevi görür.
 (() => {
     if (window !== window.top) return;
-    const BRIDGE_VERSION = '1.2.133';
-    // Portalın desteklenen eklenti yeteneklerini algılayabilmesi için sabit özellik listesi
-    const BRIDGE_FEATURES = Object.freeze(['background_transfer']);
+    const BRIDGE_VERSION = '1.2.124';
     const isStaffRoute = () => window.location.pathname === '/yetkili'
         || window.location.pathname.startsWith('/yetkili/');
     if (!isStaffRoute()) return;
@@ -75,7 +73,7 @@
 // Sayfa yüklendiğinde portala eklenti köprüsünün hazır olduğunu bildir
 void hasStaffSession().then((isAuthenticated) => {
     if (!isAuthenticated || !isStaffRoute()) return;
-    window.postMessage({ source: 'EXTENSION', type: 'PONG', ready: true, features: BRIDGE_FEATURES }, window.location.origin);
+    window.postMessage({ source: 'EXTENSION', type: 'PONG', ready: true }, window.location.origin);
 });
 
 // Web sayfasından gelen mesajları dinle ve arka plana ilet
@@ -108,8 +106,7 @@ window.addEventListener('message', async (event) => {
                 source: 'EXTENSION',
                 type: 'PONG',
                 ready: true,
-                requestId: payload.requestId,
-                features: BRIDGE_FEATURES
+                requestId: payload.requestId
             }, window.location.origin);
         } catch (error) {
             reportBridgeFailure(payload, error);

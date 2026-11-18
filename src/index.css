@@ -703,19 +703,10 @@ body.dark-mode .ykn-status-item {
 }
 
 #view-ykn .ykn-pro-actions > button {
-    flex: 1 1 auto;
-    width: 100%;
+    flex: 1 1 0;
     min-height: 3.5rem;
     padding: 0.55rem 0.65rem !important;
     font-size: 0.82rem !important;
-    justify-content: center;
-    text-align: center;
-}
-
-/* Gizlenen eski YKN düğmeleri CSS kurallarıyla da görünmez ve odaklanamaz kalır */
-#view-ykn .ykn-pro-actions > button[hidden],
-.ykn-pro-actions > button[hidden] {
-    display: none !important;
 }
 
 #view-ykn .ykn-status-card {
@@ -806,21 +797,10 @@ body.dark-mode .ykn-status-item {
 }
 
 /* ==========================================
-   YKN PRO TEK TUŞ İŞLEM ALANI (OFİS STANDARDI)
+   YKN PRO 2-TUŞ İŞLEM ALANI (OFİS STANDARDI)
    ========================================== */
-.ykn-pro-actions #btn-ykn-background-search,
 .ykn-pro-actions #btn-copy {
     transition: var(--transition);
-}
-
-.ykn-pro-actions #btn-ykn-background-search:disabled,
-.ykn-pro-actions #btn-ykn-background-search.is-loading,
-#btn-passport-crop-transfer:disabled,
-#btn-passport-crop-transfer[aria-disabled="true"] {
-    opacity: 0.55;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
 }
 
 body.dark-mode .ykn-pro-actions #btn-copy {

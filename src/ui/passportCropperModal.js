@@ -1,6 +1,5 @@
 import { showToast } from './toastManager.js';
 import { normalizeProfileGender, normalizeProfileMaritalStatus } from '../utils/ykn-profile-state.js';
-import { getLatestTransferGate } from '../utils/ykn-background-search-state.js';
 
 let passportCropperInstance = null;
 let baseRotation = 0; // 0, 90, 180, 270...
@@ -9,7 +8,6 @@ let currentAspectRatio = 3 / 4; // Standard biometric portrait ratio
 let cropperPages = []; // [{ dataUrl, pageNumber, label }]
 let currentCropperPageIndex = 0;
 let cropSources = [];
-let latestTransferGate = null;
 
 function getElements() {
     return {
@@ -212,88 +210,11 @@ export function replacePassportPages(newPages) {
     switchToPage(0);
 }
 
-function resolveCurrentTransferGate() {
-    if (typeof window !== 'undefined' && window.__YKN_TRANSFER_GATE__ && typeof window.__YKN_TRANSFER_GATE__.allowed === 'boolean') {
-        return window.__YKN_TRANSFER_GATE__;
-    }
-    if (latestTransferGate && typeof latestTransferGate.allowed === 'boolean') {
-        return latestTransferGate;
-    }
-    return getLatestTransferGate();
-}
-
-function applyTransferGate(gateInput) {
-    const gate = gateInput && typeof gateInput === 'object' && typeof gateInput.allowed === 'boolean'
-        ? gateInput
-        : resolveCurrentTransferGate();
-    const { btnTransfer } = getElements();
-    if (!btnTransfer) return;
-
-    // Kapı açıldığında özgün düğme içeriğini ve başlığını eksiksiz geri yüklemek için sakla
-    if (!btnTransfer.hasAttribute('data-original-html')) {
-        btnTransfer.setAttribute('data-original-html', btnTransfer.innerHTML);
-    }
-    if (!btnTransfer.hasAttribute('data-original-title')) {
-        btnTransfer.setAttribute('data-original-title', btnTransfer.getAttribute('title') || '');
-    }
-
-    if (gate.allowed === false && gate.queueable === true) {
-        // Arka plan araması sürerken kuyruklu aktarım açık kalır
-        const queueLabel = 'Kırp ve YÖKSİS Bitince Aktar';
-        btnTransfer.disabled = false;
-        btnTransfer.setAttribute('aria-disabled', 'false');
-        btnTransfer.setAttribute('title', queueLabel);
-        btnTransfer.textContent = queueLabel;
-    } else if (gate.allowed === false) {
-        const gateLabel = typeof gate.label === 'string' && gate.label.trim()
-            ? gate.label.trim()
-            : 'YÖKSİS aranıyor...';
-        btnTransfer.disabled = true;
-        btnTransfer.setAttribute('aria-disabled', 'true');
-        btnTransfer.setAttribute('title', gateLabel);
-        btnTransfer.textContent = gateLabel;
-    } else {
-        btnTransfer.disabled = false;
-        btnTransfer.setAttribute('aria-disabled', 'false');
-        const originalTitle = btnTransfer.getAttribute('data-original-title');
-        if (originalTitle) {
-            btnTransfer.setAttribute('title', originalTitle);
-        } else {
-            btnTransfer.removeAttribute('title');
-        }
-        const originalHtml = btnTransfer.getAttribute('data-original-html');
-        if (originalHtml !== null) {
-            btnTransfer.innerHTML = originalHtml;
-        }
-    }
-}
-
-function ensureTransferGateListener() {
-    if (typeof window === 'undefined') return;
-    if (window.__YKN_CROPPER_GATE_HANDLER__) {
-        window.removeEventListener('ykn:transfer-gate', window.__YKN_CROPPER_GATE_HANDLER__);
-    }
-    const handleTransferGateEvent = (event) => {
-        latestTransferGate = event?.detail && typeof event.detail === 'object' ? event.detail : null;
-        if (latestTransferGate && typeof latestTransferGate.allowed === 'boolean') {
-            window.__YKN_TRANSFER_GATE__ = latestTransferGate;
-        }
-        applyTransferGate(latestTransferGate);
-    };
-    window.__YKN_CROPPER_GATE_HANDLER__ = handleTransferGateEvent;
-    window.addEventListener('ykn:transfer-gate', handleTransferGateEvent);
-}
-
 export function setCropperSourceLoading(isLoading) {
     const { sourceSelector, btnTransfer, btnDownload } = getElements();
     if (sourceSelector) sourceSelector.disabled = isLoading;
+    if (btnTransfer) btnTransfer.disabled = isLoading;
     if (btnDownload) btnDownload.disabled = isLoading;
-    if (!btnTransfer) return;
-    if (isLoading) {
-        btnTransfer.disabled = true;
-    } else {
-        applyTransferGate(resolveCurrentTransferGate());
-    }
 }
 
 function formatDateDisplay(isoDate) {
@@ -335,7 +256,6 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
         cropperSelectGender,
         cropperSelectMedeni
     } = getElements();
-    ensureTransferGateListener();
     if (!modal || !image) return;
     setCropperSourceLoading(false);
 
@@ -476,12 +396,7 @@ function downloadCroppedImage(autoTransfer = false) {
     }));
 
     if (autoTransfer) {
-        const gate = resolveCurrentTransferGate();
-        if (gate && gate.allowed === false && gate.queueable === true) {
-            showToast('Fotoğraf hazırlandı; YÖKSİS araması bitince otomatik aktarılacak.', 'info');
-        } else {
-            showToast('Fotoğraf hazırlandı; YÖKSİS’e aktarılıyor...', 'info');
-        }
+        showToast('Fotoğraf hazırlandı; YÖKSİS’e aktarılıyor...', 'info');
     } else {
         showToast(`Fotoğraf hazırlandı ve indirildi: ${fileName}`, 'success');
     }
@@ -510,9 +425,6 @@ export function initPassportCropperModal() {
         cropperSelectGender,
         cropperSelectMedeni
     } = getElements();
-
-    ensureTransferGateListener();
-    applyTransferGate(resolveCurrentTransferGate());
 
     function isValidDateString(str) {
         if (!str || typeof str !== 'string') return false;
@@ -682,11 +594,7 @@ export function initPassportCropperModal() {
 
     // Kırp ve YÖKSİS'e Aktar
     if (btnTransfer) {
-        btnTransfer.addEventListener('click', () => {
-            const gate = resolveCurrentTransferGate();
-            if (gate && gate.allowed === false && gate.queueable !== true) return;
-            downloadCroppedImage(true);
-        });
+        btnTransfer.addEventListener('click', () => downloadCroppedImage(true));
     }
 
     // Sayfa değiştirme butonları
