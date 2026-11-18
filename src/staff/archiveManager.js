@@ -1,16 +1,25 @@
 import { formatApplicationTimestamp } from '../shared/application-timestamps.js';
 import { isPlausibleBirthDate } from '../shared/age.js';
+import { PHYSICAL_STATUS_LABELS } from '../config/physical-statuses.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationQueueFilters, splitNoteStatus } from './application-queue-filters.js';
-import { createApplicationQueueTable } from './application-queue-table.js';
+import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
 
 const STATUS_LABELS = Object.freeze({
+    ...PHYSICAL_STATUS_LABELS,
     completed: 'Tamamlandı',
     cancelled: 'İptal edildi',
     rejected: 'Reddedildi',
     deleted: 'Silinen'
+});
+const ARCHIVE_HEADERS = Object.freeze(['', 'Pasaport No', 'Ad Soyad', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', '']);
+const ARCHIVE_COLUMN_CLASSES = Object.freeze({
+    'Ad Soyad': 'staff-queue-col-name',
+    'Durum': 'staff-queue-col-status',
+    'Gönderim Tarihi': 'staff-queue-col-nowrap',
+    'Son Güncelleme': 'staff-queue-col-nowrap'
 });
 const DOCUMENT_STATE_LABELS = Object.freeze({
     pending: 'İnceleme bekliyor', under_review: 'İnceleniyor', approved: 'Onaylandı',
@@ -84,8 +93,26 @@ function createArchiveButton(document, state, applicationId, onDownload) {
     return button;
 }
 
-/* Arşiv satırı için detay, ZIP indirme/iptal ve silinen kayıt geri alma/kalıcı silme işlemlerini üretir */
+/* Arşiv satırı için kayıt türüne göre detay, ZIP indirme/iptal ve geri yükleme/kalıcı silme işlemlerini üretir */
 function buildQueueRowActions(item, state, handlers) {
+    if (item.kind === 'physical') {
+        const studentLabel = [item.first_name, item.last_name].filter(Boolean).join(' ')
+            || item.tracking_reference
+            || 'Fiziksel teslim';
+        return [
+            {
+                label: 'Detay',
+                action: 'open-detail',
+                run: () => handlers.onOpenPhysicalDetail(item)
+            },
+            {
+                label: 'Geri Yükle',
+                action: 'restore',
+                ariaLabel: `${studentLabel} kaydını geri yükle`,
+                run: () => handlers.onRestorePhysical(item)
+            }
+        ];
+    }
     const isActiveArchive = state.archiveApplicationId === item.id;
     const actions = [
         {
@@ -118,28 +145,110 @@ function buildQueueRowActions(item, state, handlers) {
     return actions;
 }
 
-/* Arşiv tablosunu ortak çevrimiçi kuyruk tablosu bileşeni ile oluşturur */
+/* Arşiv tablosunu her satırda kayıt türüne (online/physical) uygun not düğmesiyle oluşturur */
 function createQueueTable(document, items, state, handlers) {
-    return createApplicationQueueTable(document, items, {
-        headers: ['', 'Pasaport No', 'Ad Soyad', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''],
-        noteKind: 'online',
-        noteId: (item) => item.id,
-        initialNotes: state.recordNotes,
-        onNoteChange: (updatedNote, id) => {
-            state.recordNotes?.set(id, updatedNote);
-        },
-        statusLabel: readStatusLabel,
-        values: (item) => [
+    const table = document.createElement('table');
+    table.className = 'staff-applications-table';
+    const head = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    ARCHIVE_HEADERS.forEach((label, index) => {
+        const cell = document.createElement('th');
+        cell.textContent = label;
+        if (index === 0) {
+            cell.className = 'staff-record-note-col';
+            cell.setAttribute('aria-label', 'Not');
+        } else if (index === ARCHIVE_HEADERS.length - 1 && label === '') {
+            cell.className = 'staff-queue-col-actions';
+        } else if (ARCHIVE_COLUMN_CLASSES[label]) {
+            cell.className = ARCHIVE_COLUMN_CLASSES[label];
+        }
+        headerRow.append(cell);
+    });
+    head.append(headerRow);
+
+    const body = document.createElement('tbody');
+    const noteEntriesByKind = { online: [], physical: [] };
+    items.forEach((item) => {
+        const row = document.createElement('tr');
+        const noteKind = item.kind === 'physical' ? 'physical' : 'online';
+        const noteKey = `${noteKind}:${item.id}`;
+        const studentName = [item.first_name, item.last_name].filter(Boolean).join(' ');
+
+        const noteCell = document.createElement('td');
+        noteCell.className = 'staff-record-note-cell';
+        noteCell.dataset.label = 'Not';
+        const { button: noteButton, setNote } = createRecordNoteButton(document, {
+            kind: noteKind,
+            id: item.id,
+            studentName,
+            note: state.recordNotes?.get(noteKey) ?? null,
+            onChange: (updatedNote, id) => {
+                state.recordNotes?.set(`${noteKind}:${id}`, updatedNote);
+            }
+        });
+        noteCell.append(noteButton);
+        row.append(noteCell);
+        if (item.id) noteEntriesByKind[noteKind].push({ id: item.id, setNote });
+
+        const isDeletedItem = Boolean(item.deletion_state || item.deleted_at);
+        const values = [
             displayValue(item.passport_number),
-            [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
-            item.deletion_state && state.query.status === 'archive_all'
+            studentName || '—',
+            isDeletedItem && state.query.status === 'archive_all'
                 ? STATUS_LABELS.deleted
                 : readStatusLabel(item.status),
             formatDate(item.submitted_at || item.created_at),
             formatDate(item.updated_at)
-        ],
-        actions: (item) => buildQueueRowActions(item, state, handlers)
+        ];
+        values.forEach((value, valueIndex) => {
+            const label = ARCHIVE_HEADERS[valueIndex + 1];
+            const cell = createText(document, 'td', ARCHIVE_COLUMN_CLASSES[label] || '', value || '—');
+            cell.dataset.label = label;
+            row.append(cell);
+        });
+
+        const actionsCell = document.createElement('td');
+        actionsCell.className = 'staff-queue-actions-cell';
+        actionsCell.dataset.label = 'Detay';
+        buildQueueRowActions(item, state, handlers).forEach((action) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-outline staff-queue-action-btn';
+            button.textContent = action.label;
+            button.dataset.action = action.action;
+            button.disabled = Boolean(action.isDisabled);
+            if (action.ariaLabel) button.setAttribute('aria-label', action.ariaLabel);
+            button.addEventListener('click', async () => {
+                if (button.disabled) return;
+                button.disabled = true;
+                try {
+                    await action.run();
+                } catch (error) {
+                    console.error('Archive queue action failed.', { errorName: error?.name });
+                } finally {
+                    button.disabled = Boolean(action.isDisabled);
+                }
+            });
+            actionsCell.append(button);
+        });
+        row.append(actionsCell);
+        body.append(row);
     });
+
+    table.append(head, body);
+    if (!state.loading && state.recordNotesResult !== state.result) {
+        state.recordNotesResult = state.result;
+        for (const [kind, entries] of Object.entries(noteEntriesByKind)) {
+            if (entries.length === 0) continue;
+            void loadTableRecordNotes(document, kind, entries).then((notesById) => {
+                if (!state.recordNotes || state.recordNotesResult !== state.result) return;
+                entries.forEach(({ id }) => {
+                    state.recordNotes.set(`${kind}:${id}`, Object.hasOwn(notesById, id) ? notesById[id] : null);
+                });
+            });
+        }
+    }
+    return table;
 }
 
 function createPagination(document, pagination, onPageChange) {
@@ -410,6 +519,48 @@ function createPreviewPanel(document, preview, handlers) {
     return panel;
 }
 
+/* Fiziksel teslim kaydı için arşiv içi salt okunur özet bölümünü oluşturur */
+function createPhysicalSummary(document, detail, isUnavailable) {
+    const intake = detail.intake || {};
+    const section = document.createElement('section');
+    const details = document.createElement('dl');
+    const applicationTypeLabel = intake.application_type === 'transition'
+        ? 'Geçiş başvurusu'
+        : intake.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru';
+    const fields = [
+        ['Takip No', intake.tracking_reference],
+        ['Öğrenci No', intake.student_number],
+        ['Durum', readStatusLabel(intake.status)],
+        ['Başvuru türü', applicationTypeLabel],
+        ['Ad', intake.first_name],
+        ['Soyad', intake.last_name],
+        ['Pasaport No', intake.passport_number],
+        ['Gönderim / Teslim', formatDate(intake.submitted_at || intake.application_date)],
+        ['Son güncelleme', formatDate(intake.updated_at)],
+        ['Silinme tarihi', formatDate(intake.deleted_at)]
+    ];
+    if (intake.rejection_reason) {
+        fields.push(['Ret gerekçesi', intake.rejection_reason]);
+    }
+    if (detail.current_pdf) {
+        fields.push(['Güncel PDF', detail.current_pdf.original_filename || 'Kaydedildi']);
+    }
+    section.className = 'staff-archive-summary';
+    section.append(createText(document, 'h4', '', 'Fiziksel teslim bilgileri'));
+    if (isUnavailable) {
+        section.append(createText(
+            document,
+            'p',
+            'staff-archive-state',
+            'Fiziksel teslim kaydının tam ayrıntısı arşiv görünümünde açılamadı. Kaydı geri yükleyip Fiziksel Teslimler alanından görüntüleyebilirsiniz.'
+        ));
+    }
+    details.className = 'staff-archive-details-grid';
+    fields.forEach(([label, value]) => appendDetail(document, details, label, value));
+    section.append(details);
+    return section;
+}
+
 function renderDetail(root, state, handlers) {
     const document = root.ownerDocument;
     const panel = document.createElement('div');
@@ -428,6 +579,8 @@ function renderDetail(root, state, handlers) {
             ? 'Yetkili oturumu sona erdi. Sayfayı yenileyip yeniden giriş yapın.'
             : 'Başvuru ayrıntıları yüklenemedi. Lütfen tekrar deneyin.';
         panel.append(createText(document, 'p', 'staff-archive-state', message));
+    } else if (state.physicalDetail) {
+        panel.append(createPhysicalSummary(document, state.physicalDetail, state.physicalDetailUnavailable));
     } else if (state.detail) {
         if (['completed', 'cancelled', 'rejected'].includes(state.detail.application.status)) {
             panel.append(createArchiveButton(document, state, state.detail.application.id, handlers.onDownloadArchive));
@@ -493,6 +646,16 @@ function createStaffArchiveApi() {
             return request(`/api/staff/applications/${encodeURIComponent(applicationId)}/purge`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
             });
+        },
+        readPhysicalIntakeDetail(intakeId, signal) {
+            return request(`/api/staff/physical-intakes/${encodeURIComponent(intakeId)}`, { signal });
+        },
+        restorePhysicalIntake(intakeId, lockVersion) {
+            return request(`/api/staff/physical-intakes/${encodeURIComponent(intakeId)}/restore`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lock_version: lockVersion })
+            });
         }
     };
 }
@@ -507,8 +670,9 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
     const document = root.ownerDocument;
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
+        physicalDetail: null, physicalDetailUnavailable: false,
         preview: null, result: null, archiveApplicationId: null, archiveNotice: null,
-        recordNotes: new Map(),
+        recordNotes: new Map(), recordNotesResult: null,
         query: { q: '', status: 'archive_all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queryRequestId = 0;
@@ -537,8 +701,10 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         } else {
             renderQueue(root, state, {
                 onSearch: submitSearch, onRetry: loadQueue, onPageChange: changePage,
-                onOpenDetail: openDetail, onDownloadArchive: downloadArchive,
-                onRestore: restoreApplication, onPurge: purgeApplication,
+                onOpenDetail: openDetail, onOpenPhysicalDetail: openPhysicalDetail,
+                onDownloadArchive: downloadArchive,
+                onRestore: restoreApplication, onRestorePhysical: restorePhysicalIntake,
+                onPurge: purgeApplication,
                 onDismissNotice: () => { state.archiveNotice = null; render(); }
             });
         }
@@ -637,6 +803,8 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         discardPreview();
         state.view = 'queue';
         state.detail = null;
+        state.physicalDetail = null;
+        state.physicalDetailUnavailable = false;
         state.archiveNotice = null;
         state.loading = false;
         state.error = false;
@@ -700,6 +868,7 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
             const result = await api.queryApplications({ ...state.query, ...splitNoteStatus(state.query.status) });
             if (requestId !== queryRequestId) return;
             state.result = result;
+            state.recordNotesResult = null;
             state.recordNotes.clear();
         } catch (error) {
             if (requestId !== queryRequestId) return;
@@ -720,6 +889,25 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         } catch (error) {
             state.archiveNotice = error?.status === 403
                 ? 'Bu işlem için yetkiniz yok.' : 'Başvuru geri alınamadı. Durumu yenileyip tekrar deneyin.';
+        }
+        await loadQueue();
+    }
+
+    async function restorePhysicalIntake(item) {
+        try {
+            if (typeof api.restorePhysicalIntake !== 'function') {
+                throw Object.assign(new Error('Physical restore unavailable.'), { status: 0 });
+            }
+            await api.restorePhysicalIntake(item.id, item.lock_version);
+            state.archiveNotice = 'Fiziksel teslim kaydı geri yüklendi.';
+        } catch (error) {
+            if (error?.status === 403) {
+                state.archiveNotice = 'Bu işlem için yetkiniz yok.';
+            } else if (error?.status === 409) {
+                state.archiveNotice = 'Kayıt değişti veya aynı öğrenci için aktif fiziksel teslim kaydı var. Listeyi yenileyip kontrol edin.';
+            } else {
+                state.archiveNotice = 'Fiziksel teslim kaydı geri yüklenemedi. Durumu yenileyip tekrar deneyin.';
+            }
         }
         await loadQueue();
     }
@@ -775,6 +963,8 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         state.loading = true;
         state.error = false;
         state.detail = null;
+        state.physicalDetail = null;
+        state.physicalDetailUnavailable = false;
         render();
         try {
             const detail = await api.readApplicationDetail(applicationId);
@@ -790,12 +980,53 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         render();
     }
 
+    async function openPhysicalDetail(item) {
+        cancelArchive();
+        queryRequestId += 1;
+        const requestId = ++detailRequestId;
+        discardPreview();
+        state.archiveNotice = null;
+        state.view = 'detail';
+        state.loading = true;
+        state.error = false;
+        state.errorStatus = null;
+        state.detail = null;
+        state.physicalDetail = null;
+        state.physicalDetailUnavailable = false;
+        render();
+        try {
+            if (typeof api.readPhysicalIntakeDetail !== 'function') {
+                throw Object.assign(new Error('Physical detail unavailable.'), { status: 404 });
+            }
+            const detail = await api.readPhysicalIntakeDetail(item.id);
+            if (requestId !== detailRequestId || state.view !== 'detail') return;
+            state.physicalDetail = detail;
+        } catch (error) {
+            if (requestId !== detailRequestId || state.view !== 'detail') return;
+            if (error?.status === 401) {
+                state.error = true;
+                state.errorStatus = 401;
+            } else if ([403, 404, 503].includes(error?.status)) {
+                state.physicalDetailUnavailable = true;
+                state.physicalDetail = { intake: item, files: [], receipts: [] };
+            } else {
+                state.error = true;
+                state.errorStatus = error?.status ?? null;
+            }
+        }
+        if (requestId !== detailRequestId || state.view !== 'detail') return;
+        state.loading = false;
+        render();
+    }
+
     function returnToQueue() {
         detailRequestId += 1;
         cancelArchive();
         discardPreview();
         state.view = 'queue';
         state.detail = null;
+        state.physicalDetail = null;
+        state.physicalDetailUnavailable = false;
         state.archiveNotice = null;
         state.error = false;
         state.loading = false;
@@ -811,6 +1042,8 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         cancelArchive();
         discardPreview();
         state.view = 'queue';
+        state.physicalDetail = null;
+        state.physicalDetailUnavailable = false;
         void loadQueue();
     });
     document.getElementById('btn-workspace-home')?.addEventListener('click', leaveWorkspace);
