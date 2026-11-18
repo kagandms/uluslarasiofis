@@ -11,9 +11,9 @@ const WORKERS_QUERY = `query WorkersRequests($accountTag: string!, $start: strin
     }
   } }
 }`;
-const D1_OPERATIONS_QUERY = `query D1Rows($accountTag: string!, $date: Date) {
+const D1_OPERATIONS_QUERY = `query D1Rows($accountTag: string!, $startDate: Date, $endDate: Date) {
   viewer { accounts(filter: { accountTag: $accountTag }) {
-    d1AnalyticsAdaptiveGroups(limit: 10000, filter: { date_geq: $date, date_leq: $date }) {
+    d1AnalyticsAdaptiveGroups(limit: 10000, filter: { date_geq: $startDate, date_leq: $endDate }) {
       sum { rowsRead rowsWritten }
       dimensions { databaseId }
     }
@@ -68,13 +68,14 @@ export async function readCloudflareUsage({ environment, cache, fetcher = fetch 
     if (!accountId || !apiToken) throw metricsUnavailable();
 
     const run = (query, variables) => runQuery({ query, variables: { accountTag: accountId, ...variables }, apiToken, fetcher });
-    const dayStart = `${date}T00:00:00Z`;
-    const monthStart = `${month}-01T00:00:00Z`;
+    // Aylık limitlerle uyumlu olması için Workers ve D1 sayaçları ay başından itibaren sorgulanır.
+    const monthStartDate = `${month}-01`;
+    const monthStart = `${monthStartDate}T00:00:00Z`;
     const nowIso = now.toISOString();
     const storageStart = new Date(now.getTime() - 3 * 86_400_000).toISOString();
     const [workers, d1Operations, d1Storage, r2Operations, r2Storage] = await Promise.allSettled([
-        run(WORKERS_QUERY, { start: dayStart, end: nowIso }).then(parseWorkers),
-        run(D1_OPERATIONS_QUERY, { date }).then(parseD1Operations),
+        run(WORKERS_QUERY, { start: monthStart, end: nowIso }).then(parseWorkers),
+        run(D1_OPERATIONS_QUERY, { startDate: monthStartDate, endDate: date }).then(parseD1Operations),
         run(D1_STORAGE_QUERY, { date }).then(parseD1Storage),
         run(R2_OPERATIONS_QUERY, { start: monthStart, end: nowIso }).then(parseR2Operations),
         run(R2_STORAGE_QUERY, { start: storageStart, end: nowIso }).then(parseR2Storage)

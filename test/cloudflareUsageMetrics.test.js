@@ -51,7 +51,7 @@ test('catalog keeps the reviewed free-tier limits and order', () => {
         'workers_requests', 'd1_rows_read', 'd1_rows_written', 'd1_largest_db_bytes',
         'd1_total_bytes', 'r2_class_a', 'r2_class_b', 'r2_storage_bytes'
     ]);
-    assert.equal(USAGE_METRICS.find((m) => m.key === 'd1_rows_written').limit, 100000);
+    assert.equal(USAGE_METRICS.find((m) => m.key === 'd1_rows_written').limit, 50_000_000);
     for (const metric of USAGE_METRICS) {
         assert.ok(Number.isSafeInteger(metric.limit) && metric.limit > 0);
         assert.ok(['day', 'month', 'now'].includes(metric.period));
