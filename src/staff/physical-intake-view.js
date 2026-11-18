@@ -65,9 +65,6 @@ function createFilters(document, state, handlers) {
         onSubmit: handlers.search
     });
     const search = form.querySelector('[name="q"]');
-    if (search) {
-        search.placeholder = 'ITU takip kodu, öğrenci no, ad, soyad veya pasaport no';
-    }
     /* Çevrimiçi listeyle aynı canlı arama ve anlık filtreleme davranışını uygular. */
     if (typeof handlers.queryChange === 'function') {
         const readQuery = () => ({
