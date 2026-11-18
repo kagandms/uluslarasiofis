@@ -103,7 +103,7 @@ test('createApplicationQueueTable marks physical intake columns including Ofis D
 });
 
 test('queue table CSS enforces column widths, whole-word wrapping, action wrapping, horizontal scroll, and mobile cards', () => {
-    assert.match(INDEX_CSS, /\.staff-applications-queue\s*\{[^}]*overflow-x:\s*auto;/s);
+    assert.match(INDEX_CSS, /\.staff-applications-queue(?:,\s*\.staff-archive-queue)?\s*\{[^}]*overflow-x:\s*auto;/s);
     assert.match(INDEX_CSS, /\.staff-applications-table\s+th,\s*\.staff-applications-table\s+td\s*\{[^}]*overflow-wrap:\s*break-word;[^}]*word-break:\s*normal;/s);
     assert.doesNotMatch(INDEX_CSS, /\.staff-applications-table\s+th,\s*\.staff-applications-table\s+td\s*\{[^}]*(overflow-wrap:\s*anywhere|word-break:\s*break-all)/s);
     assert.match(INDEX_CSS, /\.staff-applications-table\s+td\[data-label="Ad Soyad"\]\s*\{[^}]*min-width:\s*10rem;/s);
