@@ -8,12 +8,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!btnAcceptance || !btnCopy || !statusMessage) return;
 
-    // Yan yana pencere tercihi varsayılan olarak kapalıdır.
+    // Yan yana pencere tercihi varsayılan olarak açıktır.
     if (chkSideBySide) {
         if (chrome.storage?.local?.get) {
             chrome.storage.local.get(YOKSIS_SIDE_BY_SIDE_STORAGE_KEY, (stored) => {
                 if (!chrome.runtime?.lastError) {
-                    chkSideBySide.checked = stored?.[YOKSIS_SIDE_BY_SIDE_STORAGE_KEY] === true;
+                    chkSideBySide.checked = stored?.[YOKSIS_SIDE_BY_SIDE_STORAGE_KEY] !== false;
                 }
             });
         }

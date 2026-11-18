@@ -302,3 +302,69 @@ test('extracts place of birth with Central Asian and stopWords cleanly', () => {
     const textUz = "O'ZBEKISTON RESPUBLIKASI Tug'ilgan joyi: TOSHKENT Berilgan sanasi: 01.06.2023";
     assert.equal(extractPassportPlaceOfBirth(textUz), 'TOSHKENT');
 });
+
+test('extractPassportMetadata formats 13-digit CNIC from MRZ line 2 optional field', () => {
+    const text = [
+        'P<PAKKHAN<<TARIQ<<<<<<<<<<<<<<<<<<<<<<<<<<<<',
+        'AB12345678PAK9901011M30010121234567890123<02'
+    ].join('\n');
+    const metadata = extractPassportMetadata(text);
+    assert.equal(metadata.uyrukKimlikNo, '12345-6789012-3');
+    assert.equal(extractDatesFromMrz(text).uyrukKimlikNo, '12345-6789012-3');
+});
+
+test('extractPassportMetadata passes through Turkish 11-digit personal number from MRZ line 2', () => {
+    const text = [
+        'P<TURYILMAZ<<DENIZ<<<<<<<<<<<<<<<<<<<<<<<<<<',
+        'U987654321TUR0102034F320515511122233344<<<08'
+    ].join('\n');
+    const metadata = extractPassportMetadata(text);
+    assert.equal(metadata.uyrukKimlikNo, '11122233344');
+});
+
+test('extractPassportMetadata extracts printed Personal No and prefers it over MRZ', () => {
+    const textPrinted = [
+        'PASSPORT',
+        'Personal No: 98765-4321098-7',
+        'Date of birth: 01.01.2000'
+    ].join('\n');
+    assert.equal(extractPassportMetadata(textPrinted).uyrukKimlikNo, '98765-4321098-7');
+
+    const textOtherLabels = [
+        'PASSPORT Personal Number: 1234567890123',
+        'PASAPORT Kişisel No: 11122233344',
+        'PASSPORT Uyruk Kimlik No: 55566677788',
+        'PASSPORT Identity No: XY987654'
+    ];
+    assert.equal(extractPassportMetadata(textOtherLabels[0]).uyrukKimlikNo, '12345-6789012-3');
+    assert.equal(extractPassportMetadata(textOtherLabels[1]).uyrukKimlikNo, '11122233344');
+    assert.equal(extractPassportMetadata(textOtherLabels[2]).uyrukKimlikNo, '55566677788');
+    assert.equal(extractPassportMetadata(textOtherLabels[3]).uyrukKimlikNo, 'XY987654');
+
+    const textBoth = [
+        'Personal No: 99988-7766554-3',
+        'P<PAKKHAN<<TARIQ<<<<<<<<<<<<<<<<<<<<<<<<<<<<',
+        'AB12345678PAK9901011M30010121234567890123<02'
+    ].join('\n');
+    assert.equal(extractPassportMetadata(textBoth).uyrukKimlikNo, '99988-7766554-3');
+});
+
+test('extractPassportMetadata returns empty uyrukKimlikNo when missing or invalid', () => {
+    const textEmptyMrz = [
+        'P<TURDEMIR<<KAGAN<<<<<<<<<<<<<<<<<<<<<<<<<<<<<',
+        'U123456784TUR0205159M3205155<<<<<<<<<<<<<<02'
+    ].join('\n');
+    assert.equal(extractPassportMetadata(textEmptyMrz).uyrukKimlikNo, '');
+
+    const textNoField = 'PASSPORT\nPlace of birth: ANKARA\nDate of issue: 10.01.2024';
+    assert.equal(extractPassportMetadata(textNoField).uyrukKimlikNo, '');
+
+    const textBlankLabel = 'PASSPORT\nPersonal No:\nDate of birth: 01.01.2000';
+    assert.equal(extractPassportMetadata(textBlankLabel).uyrukKimlikNo, '');
+
+    const textInvalidMrzOptional = [
+        'P<TURYILMAZ<<DENIZ<<<<<<<<<<<<<<<<<<<<<<<<<<',
+        'U987654321TUR0102034F3205155ABC?DEF<<<<<<<08'
+    ].join('\n');
+    assert.equal(extractPassportMetadata(textInvalidMrzOptional).uyrukKimlikNo, '');
+});

@@ -451,8 +451,57 @@ function sanitizeMrzDigits(raw) {
         .replace(/B/g, '8');
 }
 
+function formatUyrukKimlikNo(rawValue) {
+    const cleaned = String(rawValue || '').trim();
+    if (!cleaned) return '';
+    if (/^\d{13}$/.test(cleaned)) {
+        return `${cleaned.slice(0, 5)}-${cleaned.slice(5, 12)}-${cleaned.slice(12)}`;
+    }
+    return cleaned;
+}
+
+function parseMrzOptionalField(rawOptional) {
+    if (!rawOptional || rawOptional.length !== 14) return '';
+    if (!/^[A-Z0-9<]+$/i.test(rawOptional)) return '';
+    const trimmed = rawOptional.replace(/[< ]+$/g, '').trim();
+    if (!trimmed) return '';
+    return formatUyrukKimlikNo(trimmed);
+}
+
+function extractPersonalNumberFromMrz(text) {
+    if (!text || typeof text !== 'string') return '';
+    const normalizeMrzChars = (value) => String(value || '')
+        .replace(/[«‹\(\{\[\}\]\)]/g, '<')
+        .toUpperCase();
+
+    const td3Line2HeaderRegex = /^[A-Z0-9<]{9}[0-9A-Z<][A-Z<]{3}[0-9OIZSB]{6}[0-9A-Z<][MF<X0-9][0-9OIZSB]{6}[0-9A-Z<]/;
+
+    const lines = text.split(/[\r\n]+/);
+    for (const rawLine of lines) {
+        const line = normalizeMrzChars(rawLine).trim();
+        if (line.length === 44 && td3Line2HeaderRegex.test(line)) {
+            return parseMrzOptionalField(line.slice(28, 42));
+        }
+    }
+
+    const tokens = normalizeMrzChars(text).split(/\s+/).filter(Boolean);
+    for (const token of tokens) {
+        if (token.length === 44 && td3Line2HeaderRegex.test(token)) {
+            return parseMrzOptionalField(token.slice(28, 42));
+        }
+    }
+
+    const compact = normalizeMrzChars(text).replace(/[\s\r\n]+/g, '');
+    const compactMatch = compact.match(/[A-Z0-9<]{9}[0-9A-Z<][A-Z<]{3}\d{6}[0-9A-Z<][MFX<]\d{6}[0-9A-Z<][A-Z0-9<]{16}/);
+    if (compactMatch) {
+        return parseMrzOptionalField(compactMatch[0].slice(28, 42));
+    }
+
+    return '';
+}
+
 export function extractDatesFromMrz(text, options = {}) {
-    if (!text) return { issueDate: '', expiryDate: '', birthDate: '', cinsiyet: '', passportNumber: '' };
+    if (!text) return { issueDate: '', expiryDate: '', birthDate: '', cinsiyet: '', passportNumber: '', uyrukKimlikNo: '' };
 
     // Clean OCR artifacts: normalize brackets, guillemets, and noise to '<', uppercase
     const cleanedText = text
@@ -462,6 +511,7 @@ export function extractDatesFromMrz(text, options = {}) {
 
     let cinsiyet = '';
     let passportNumber = '';
+    const uyrukKimlikNo = extractPersonalNumberFromMrz(text);
 
     // Extract passport number from line 1 if standard P<XXX pattern is found:
     const pCodeMatch = cleanedText.match(/P[<A-Z0-9]([A-Z]{3})([A-Z0-9<]{9})/);
@@ -488,7 +538,7 @@ export function extractDatesFromMrz(text, options = {}) {
                 const expYear = ey <= 69 ? 2000 + ey : 1900 + ey;
                 const expiryDate = createDateValue(expYear, Number(cleanTarget.slice(2, 4)), Number(cleanTarget.slice(4, 6)));
                 if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
-                    return { issueDate: '', expiryDate, birthDate: options.birthDate, cinsiyet, passportNumber };
+                    return { issueDate: '', expiryDate, birthDate: options.birthDate, cinsiyet, passportNumber, uyrukKimlikNo };
                 }
             }
         }
@@ -520,10 +570,10 @@ export function extractDatesFromMrz(text, options = {}) {
         const expiryDate = createDateValue(expYear, Number(expRaw.slice(2, 4)), Number(expRaw.slice(4, 6)));
 
         if (birthDate && expiryDate) {
-            return { issueDate: '', expiryDate, birthDate, cinsiyet, passportNumber };
+            return { issueDate: '', expiryDate, birthDate, cinsiyet, passportNumber, uyrukKimlikNo };
         }
         if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
-            return { issueDate: '', expiryDate, birthDate: birthDate || '', cinsiyet, passportNumber };
+            return { issueDate: '', expiryDate, birthDate: birthDate || '', cinsiyet, passportNumber, uyrukKimlikNo };
         }
     }
 
@@ -549,14 +599,14 @@ export function extractDatesFromMrz(text, options = {}) {
         const expiryDate = createDateValue(expYear, Number(expRaw.slice(2, 4)), Number(expRaw.slice(4, 6)));
 
         if (birthDate && expiryDate) {
-            return { issueDate: '', expiryDate, birthDate, cinsiyet, passportNumber };
+            return { issueDate: '', expiryDate, birthDate, cinsiyet, passportNumber, uyrukKimlikNo };
         }
         if (expiryDate && expiryDate >= '2020-01-01' && expiryDate <= '2045-12-31') {
-            return { issueDate: '', expiryDate, birthDate: birthDate || '', cinsiyet, passportNumber };
+            return { issueDate: '', expiryDate, birthDate: birthDate || '', cinsiyet, passportNumber, uyrukKimlikNo };
         }
     }
 
-    return { issueDate: '', expiryDate: '', birthDate: '', cinsiyet, passportNumber };
+    return { issueDate: '', expiryDate: '', birthDate: '', cinsiyet, passportNumber, uyrukKimlikNo };
 }
 
 function extractAllCandidateDates(text) {
@@ -1645,6 +1695,136 @@ export function extractPassportGender(text, options = {}) {
     return '';
 }
 
+const PERSONAL_NO_LABELS = [
+    'uyruk kimlik numarası', 'uyruk kimlik numarasi', 'uyruk kimlik no',
+    't.c. kimlik numarası', 't.c. kimlik numarasi', 't.c. kimlik no',
+    'tc kimlik numarası', 'tc kimlik numarasi', 'tc kimlik no',
+    'kimlik numarası', 'kimlik numarasi', 'kimlik no',
+    'kişisel numara', 'kisisel numara', 'kişisel no', 'kisisel no',
+    'personal number', 'personal no.', 'personal no',
+    'national identity number', 'national identity no.', 'national identity no',
+    'identity number', 'identity no.', 'identity no',
+    'citizen number', 'citizen no.', 'citizen no',
+    'numéro personnel', 'numero personnel', 'n° personnel',
+    'личный номер', 'персональный номер', 'личный код'
+];
+
+const PERSONAL_NO_STOP_WORDS = [
+    'date of birth', 'date of issue', 'date of expiry', 'date of expiration', 'valid until',
+    'place of birth', 'issuing authority', 'authority', 'issued by', 'nationality', 'surname', 'given names',
+    'passport no', 'passport number', 'document no', 'document number', 'sex', 'gender', 'signature',
+    'date de naissance', 'date de délivrance', 'date de delivrance', 'date d\'expiration', 'date d expiration',
+    'lieu de naissance', 'autorité', 'autorite', 'nationalité', 'nationalite', 'sexe',
+    'doğum tarihi', 'dogum tarihi', 'doğum yeri', 'dogum yeri', 'düzenleme tarihi', 'duzenleme tarihi',
+    'düzenlenme tarihi', 'duzenlenme tarihi', 'geçerlilik tarihi', 'gecerlilik tarihi', 'veriliş tarihi', 'verilis tarihi',
+    'veren makam', 'belgeyi veren makam', 'belge no', 'pasaport no', 'cinsiyet', 'uyruk', 'uyruğu', 'imza',
+    'дата рождения', 'дата выдачи', 'срок действия', 'действителен до', 'место рождения', 'орган выдачи', 'кем выдан', 'пол', 'гражданство',
+    'p<'
+];
+
+function cleanPersonalNumberCandidate(rawRemainder) {
+    if (!rawRemainder) return '';
+    let candidate = convertEasternToAsciiDigits(rawRemainder)
+        .replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ')
+        .replace(/[–—−]/g, '-')
+        .trim();
+    if (!candidate) return '';
+
+    const mrzIdx = candidate.search(/(?:^|\s)P<[A-Z]{3}/i);
+    if (mrzIdx !== -1) {
+        candidate = candidate.slice(0, mrzIdx).trim();
+    }
+    if (!candidate) return '';
+
+    for (const stop of PERSONAL_NO_STOP_WORDS) {
+        const stopRegex = new RegExp('(?:^|\\s)' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i');
+        const stopMatch = candidate.match(stopRegex);
+        if (stopMatch && stopMatch.index !== undefined) {
+            if (stopMatch.index === 0) return '';
+            candidate = candidate.slice(0, stopMatch.index).trim();
+        }
+    }
+    if (!candidate) return '';
+
+    candidate = candidate.replace(/(\d)\s*-\s*(\d)/g, '$1-$2');
+    if (/^\d{1,4}[./-]\d{1,2}[./-]\d{1,4}\b/.test(candidate)) return '';
+
+    const spacedCnicMatch = candidate.match(/^(\d{5})\s+(\d{7})\s+(\d)(?=\s|$)/);
+    if (spacedCnicMatch) {
+        return `${spacedCnicMatch[1]}-${spacedCnicMatch[2]}-${spacedCnicMatch[3]}`;
+    }
+
+    const tokens = candidate.split(/\s+/).filter(Boolean);
+    for (const rawToken of tokens) {
+        const token = rawToken.replace(/^[:;#.,()\[\]{}"']+|[:;#.,()\[\]{}"']+$/g, '');
+        if (!token) continue;
+        if (!/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/i.test(token)) continue;
+        if (/^\d{1,4}-\d{1,2}-\d{1,4}$/.test(token)) continue;
+        if (/^\d{1,2}(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\d{2,4}$/i.test(token)) continue;
+        const alnum = token.replace(/-/g, '');
+        if (!/\d/.test(alnum)) continue;
+        if (alnum.length < 5 || alnum.length > 25) continue;
+        return formatUyrukKimlikNo(token);
+    }
+
+    return '';
+}
+
+export function extractPassportPersonalNumber(text) {
+    if (!text || typeof text !== 'string') return '';
+    const normalized = convertEasternToAsciiDigits(text).replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
+    const lines = normalized.split(/[\r\n]+/);
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const foundLabel = PERSONAL_NO_LABELS.find(l => {
+            const regex = new RegExp('(?:^|[\\s:;#\\-_/\\\\|.,(])' + escapeRegex(l) + '(?:$|[\\s:;#\\-_/\\\\|.,)])', 'i');
+            return regex.test(line);
+        });
+        if (!foundLabel) continue;
+
+        const labelMatch = line.match(new RegExp(escapeRegex(foundLabel), 'iu'));
+        const labelIndex = labelMatch ? labelMatch.index : line.toLowerCase().indexOf(foundLabel.toLowerCase());
+        const labelLen = labelMatch ? labelMatch[0].length : foundLabel.length;
+        if (labelIndex === -1) continue;
+
+        let remainder = line.slice(labelIndex + labelLen);
+        let keepStripping = true;
+        while (keepStripping) {
+            keepStripping = false;
+            remainder = remainder.replace(/^[\s:;#\-_/\\|.,)]+/, '').trim();
+            for (const l of PERSONAL_NO_LABELS) {
+                const r = new RegExp('^' + escapeRegex(l) + '(?:$|[\\s:;#\\-_/\\\\|.,)])', 'i');
+                if (r.test(remainder)) {
+                    remainder = remainder.replace(new RegExp('^' + escapeRegex(l), 'i'), '').trim();
+                    keepStripping = true;
+                    break;
+                }
+            }
+        }
+        remainder = remainder.replace(/^[/\\|]\s*[^0-9:\r\n]{1,40}:\s*/i, '').trim();
+        remainder = remainder.replace(/^[\s:;#\-_/\\|.,)]+/, '').trim();
+
+        const inlineVal = cleanPersonalNumberCandidate(remainder);
+        if (inlineVal) return inlineVal;
+
+        for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+            const nextLine = lines[j].trim();
+            if (!nextLine) continue;
+            if (isLabelOnlyLine(nextLine, PERSONAL_NO_LABELS)) continue;
+            if (/^P<[A-Z]{3}/i.test(nextLine) || (nextLine.length >= 40 && /^[A-Z0-9<]+$/i.test(nextLine))) break;
+            if (PERSONAL_NO_STOP_WORDS.some(stop => new RegExp('^' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i').test(nextLine))) break;
+            const nextVal = cleanPersonalNumberCandidate(nextLine);
+            if (nextVal) return nextVal;
+            break;
+        }
+    }
+
+    return '';
+}
+
 export function extractPassportMetadata(text, options = {}) {
     const dates = extractPassportDatesFromText(text, options);
     const placeOfBirth = extractPassportPlaceOfBirth(text, options);
@@ -1654,6 +1834,7 @@ export function extractPassportMetadata(text, options = {}) {
     if (!cinsiyet && mrz.cinsiyet) {
         cinsiyet = mrz.cinsiyet;
     }
+    const uyrukKimlikNo = extractPassportPersonalNumber(text) || mrz.uyrukKimlikNo || '';
 
     return {
         issueDate: dates.issueDate || '',
@@ -1661,6 +1842,7 @@ export function extractPassportMetadata(text, options = {}) {
         placeOfBirth: placeOfBirth || '',
         issuingAuthority: issuingAuthority || '',
         cinsiyet: cinsiyet || '',
-        passportNumber: mrz.passportNumber || ''
+        passportNumber: mrz.passportNumber || '',
+        uyrukKimlikNo
     };
 }
