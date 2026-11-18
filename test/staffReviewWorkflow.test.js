@@ -189,6 +189,12 @@ test('staff starts review explicitly and application status updates use optimist
     }), environment);
     const incompleteApproval = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
         method: 'POST', cookie, body: {
+            target_status: 'sent_to_migration',
+            expected_updated_at: database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first().updated_at
+        }
+    }), environment);
+    const removedApprovedStep = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie, body: {
             target_status: 'approved_for_processing',
             expected_updated_at: database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first().updated_at
         }
@@ -204,6 +210,8 @@ test('staff starts review explicitly and application status updates use optimist
     assert.equal((await readJson(stale)).error.code, 'APPLICATION_STATE_CONFLICT');
     assert.equal(incompleteApproval.status, 409);
     assert.equal((await readJson(incompleteApproval)).error.code, 'APPLICATION_NOT_READY_FOR_APPROVAL');
+    assert.equal(removedApprovedStep.status, 409);
+    assert.equal((await readJson(removedApprovedStep)).error.code, 'INVALID_APPLICATION_TRANSITION');
     const applicationLifecycle = database.prepare('SELECT terminal_at, retention_due_at FROM applications WHERE id = ?')
         .bind(applicationId).first();
     assert.equal(applicationLifecycle.terminal_at, null);
@@ -231,10 +239,10 @@ test('approved workflow transitions require all applicable current required docu
         });
     }
     const detail = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment);
-    assert.deepEqual((await readJson(detail)).allowed_status_transitions, ['approved_for_processing']);
+    assert.deepEqual((await readJson(detail)).allowed_status_transitions, ['sent_to_migration']);
 
     const transitions = [
-        'approved_for_processing', 'sent_to_migration', 'migration_approved', 'completed'
+        'sent_to_migration', 'migration_approved', 'completed'
     ];
     let expectedUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first().updated_at;
     const ownerTrackingBeforeComplete = await worker.fetch(request('/api/public/applications/current/tracking', {
@@ -280,7 +288,7 @@ test('approved workflow transitions require all applicable current required docu
         }
     }
     assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status, 'completed');
-    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.application_status_changed'").first().count, 4);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type = 'staff.application_status_changed'").first().count, 3);
     assert.equal(database.prepare(`
         SELECT COUNT(*) AS count FROM audit_events
         WHERE event_type = 'staff.application_status_changed'
@@ -1021,12 +1029,6 @@ test('staff can roll back an accidental status progression and student tracking 
 
     let expectedUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(applicationId).first().updated_at;
     let res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
-        method: 'POST', cookie, body: { target_status: 'approved_for_processing', expected_updated_at: expectedUpdatedAt }
-    }), environment);
-    assert.equal(res.status, 200);
-    expectedUpdatedAt = (await readJson(res)).updated_at;
-
-    res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
         method: 'POST', cookie, body: { target_status: 'sent_to_migration', expected_updated_at: expectedUpdatedAt }
     }), environment);
     assert.equal(res.status, 200);
@@ -1036,7 +1038,22 @@ test('staff can roll back an accidental status progression and student tracking 
     assert.equal((await readJson(tracking)).application.status, 'sent_to_migration');
 
     let detail = await worker.fetch(request(`/api/staff/applications/${applicationId}`, { cookie }), environment);
-    assert.deepEqual((await readJson(detail)).allowed_status_transitions, ['migration_approved', 'approved_for_processing', 'rejected']);
+    assert.deepEqual((await readJson(detail)).allowed_status_transitions, ['migration_approved', 'under_review', 'rejected']);
+
+    // Staff rolls back from sent_to_migration to under_review and advances back to sent_to_migration
+    res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie, body: { target_status: 'under_review', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+    assert.equal(res.status, 200);
+    expectedUpdatedAt = (await readJson(res)).updated_at;
+    tracking = await worker.fetch(request('/api/public/applications/current/tracking', { cookie: ownerCookie }), environment);
+    assert.equal((await readJson(tracking)).application.status, 'under_review');
+
+    res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
+        method: 'POST', cookie, body: { target_status: 'sent_to_migration', expected_updated_at: expectedUpdatedAt }
+    }), environment);
+    assert.equal(res.status, 200);
+    expectedUpdatedAt = (await readJson(res)).updated_at;
 
     // Staff accidentally advances to migration_approved
     res = await worker.fetch(request(`/api/staff/applications/${applicationId}/status`, {
@@ -1257,4 +1274,39 @@ test('staff application search matches partial ITU references and treats wildcar
         assert.equal(response.status, 200);
         assert.deepEqual((await response.json()).items.map((item) => item.id), expected);
     }
+});
+
+test('direct_transfer allowlist and legacy approved_for_processing transitions keep working without approved_for_processing in new flow', async () => {
+    const { environment, database } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+
+    for (const [index, status] of ['submitted', 'under_review', 'resubmission_required', 'approved_for_processing'].entries()) {
+        const id = await seedApplication(database, { studentNumber: `DIRECT-${index}`, status });
+        const application = database.prepare('SELECT updated_at FROM applications WHERE id=?').bind(id).first();
+        const direct = await worker.fetch(request(`/api/staff/applications/${id}/status`, {
+            method: 'POST', cookie,
+            body: { target_status: 'sent_to_migration', expected_updated_at: application.updated_at, direct_transfer: true }
+        }), environment);
+        assert.equal(direct.status, 200, `direct_transfer must stay allowed from ${status}`);
+        assert.equal(database.prepare('SELECT status FROM applications WHERE id=?').bind(id).first().status, 'sent_to_migration');
+    }
+
+    const legacyToReviewId = await seedApplication(database, { studentNumber: 'LEGACY-REV', status: 'approved_for_processing' });
+    const legacyDetail = await readJson(await worker.fetch(request(`/api/staff/applications/${legacyToReviewId}`, { cookie }), environment));
+    assert.deepEqual(legacyDetail.allowed_status_transitions, ['sent_to_migration', 'under_review']);
+    const toReview = await worker.fetch(request(`/api/staff/applications/${legacyToReviewId}/status`, {
+        method: 'POST', cookie,
+        body: { target_status: 'under_review', expected_updated_at: legacyDetail.application.updated_at }
+    }), environment);
+    assert.equal(toReview.status, 200);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id=?').bind(legacyToReviewId).first().status, 'under_review');
+
+    const legacyToMigrationId = await seedApplication(database, { studentNumber: 'LEGACY-MIG', status: 'approved_for_processing' });
+    const legacyUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id=?').bind(legacyToMigrationId).first().updated_at;
+    const toMigration = await worker.fetch(request(`/api/staff/applications/${legacyToMigrationId}/status`, {
+        method: 'POST', cookie,
+        body: { target_status: 'sent_to_migration', expected_updated_at: legacyUpdatedAt }
+    }), environment);
+    assert.equal(toMigration.status, 200);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id=?').bind(legacyToMigrationId).first().status, 'sent_to_migration');
 });
