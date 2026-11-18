@@ -29,7 +29,7 @@ export function createApplicationQueueFilters(document, options) {
     search.className = 'glass-input';
     search.name = 'q';
     search.value = options.query.q || '';
-    search.placeholder = 'Öğrenci no, ad, soyad veya pasaport no';
+    search.placeholder = 'ITU takip kodu, öğrenci no, ad, soyad veya pasaport no';
     search.maxLength = 120;
     search.id = `${options.idPrefix}-search`;
 
