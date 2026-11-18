@@ -2625,8 +2625,9 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
     border-left-color: #ef4444;
 }
 
-/* Başvuru kuyruğu tablosu sütun genişlikleri, kelime kaydırma ve satır işlem düğmeleri */
-.staff-applications-queue {
+/* Başvuru kuyruğu tablosu sütun genişlikleri, kelime kaydırma, satır işlem düğmeleri ve arşiv kuyruğu kapsayıcısı */
+.staff-applications-queue,
+.staff-archive-queue {
     grid-template-columns: minmax(0, 1fr);
     max-width: 100%;
     overflow-x: auto;
@@ -2980,6 +2981,12 @@ body.dark-mode .staff-scanner-failure-item.is-danger {
         width: 88px;
         padding: 0.5rem 0.85rem;
         font-size: 0.88rem;
+    }
+
+    /* Arşiv satırındaki uzun işlem düğmelerinin (ör. Belgeleri ZIP indir) dar ekranlarda taşmasını önler */
+    #staff-archive-manager .staff-applications-table td.staff-queue-actions-cell .btn,
+    #staff-archive-manager .staff-applications-table td.staff-queue-actions-cell button {
+        width: auto;
     }
 }
 

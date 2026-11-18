@@ -48,19 +48,19 @@ function createQueuePayload(items, page = 1, pageSize = 25, totalItems = items.l
 }
 
 const COMPLETED_ITEM = {
-    id: 'app-completed-001', student_number: 'STU-001', first_name: 'Zeynep', last_name: 'Demir',
+    id: 'app-completed-001', student_number: 'STU-001', passport_number: 'SYN-PASS-0001', first_name: 'Zeynep', last_name: 'Demir',
     application_type: 'renewal', status: 'completed', submitted_at: '2026-09-20T10:00:00.000Z',
     updated_at: '2026-09-25T14:30:00.000Z'
 };
 
 const CANCELLED_ITEM = {
-    id: 'app-cancelled-002', student_number: 'STU-002', first_name: 'Murat', last_name: 'Çelik',
+    id: 'app-cancelled-002', student_number: 'STU-002', passport_number: 'SYN-PASS-0002', first_name: 'Murat', last_name: 'Çelik',
     application_type: 'initial', status: 'cancelled', submitted_at: '2026-09-22T09:15:00.000Z',
     updated_at: '2026-09-23T11:00:00.000Z'
 };
 
 const REJECTED_ITEM = {
-    id: 'app-rejected-003', student_number: 'STU-003', first_name: 'Ali', last_name: 'Öztürk',
+    id: 'app-rejected-003', student_number: 'STU-003', passport_number: 'SYN-PASS-0003', first_name: 'Ali', last_name: 'Öztürk',
     application_type: 'initial', status: 'rejected', submitted_at: '2026-09-21T08:00:00.000Z',
     updated_at: '2026-09-24T16:45:00.000Z'
 };
@@ -117,8 +117,8 @@ test('archive workspace is accessible in navigation without disturbing active ap
     assert.equal(document.getElementById('view-applications').hidden, true);
     assert.equal(archiveQueries.length, 1);
     assert.equal(archiveQueries[0].status, 'archive_all', 'Archive queries start with terminal filter');
-    assert.match(archiveRoot.textContent, /STU-001/);
-    assert.match(archiveRoot.textContent, /STU-002/);
+    assert.match(archiveRoot.textContent, /SYN-PASS-0001/);
+    assert.match(archiveRoot.textContent, /SYN-PASS-0002/);
 
     // Switch back to Applications
     appNavButton.click();
@@ -305,16 +305,16 @@ test('stale late requests do not overwrite newer search results', async (context
     // Fast second request finishes first
     resolvers[1].resolve(createQueuePayload([CANCELLED_ITEM]));
     await new Promise((resolve) => setImmediate(resolve));
-    assert.match(archiveRoot.textContent, /STU-002/);
-    assert.doesNotMatch(archiveRoot.textContent, /STU-001/);
+    assert.match(archiveRoot.textContent, /SYN-PASS-0002/);
+    assert.doesNotMatch(archiveRoot.textContent, /SYN-PASS-0001/);
 
     // Slow first request finally finishes later with older data
     resolvers[0].resolve(createQueuePayload([COMPLETED_ITEM]));
     await new Promise((resolve) => setImmediate(resolve));
 
     // The newer result must NOT be overwritten by the stale result
-    assert.match(archiveRoot.textContent, /STU-002/);
-    assert.doesNotMatch(archiveRoot.textContent, /STU-001/);
+    assert.match(archiveRoot.textContent, /SYN-PASS-0002/);
+    assert.doesNotMatch(archiveRoot.textContent, /SYN-PASS-0001/);
 });
 
 test('late detail responses cannot replace the current archive view or another application', async (context) => {
@@ -598,6 +598,7 @@ test('user fields and search input render safely as text and never execute HTML/
     const maliciousItem = {
         id: 'app-xss-999',
         student_number: maliciousPayload,
+        passport_number: maliciousPayload,
         first_name: maliciousPayload,
         last_name: maliciousPayload,
         application_type: 'renewal',

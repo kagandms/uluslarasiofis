@@ -3,6 +3,8 @@ import { isPlausibleBirthDate } from '../shared/age.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
+import { createApplicationQueueFilters } from './application-queue-filters.js';
+import { createApplicationQueueTable } from './application-queue-table.js';
 
 const STATUS_LABELS = Object.freeze({
     completed: 'Tamamlandı',
@@ -22,6 +24,12 @@ const ARCHIVE_STATUS_FILTERS = Object.freeze([
     ['completed', 'Tamamlandı'],
     ['cancelled', 'İptal edildi'],
     ['rejected', 'Reddedildi']
+]);
+/* Kayıt notu filtresi seçenekleri (çevrimiçi liste ile aynı) */
+const NOTE_FILTERS = Object.freeze([
+    ['all', 'Tüm kayıtlar'],
+    ['yes', 'Notu olanlar'],
+    ['no', 'Notu olmayanlar']
 ]);
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 function createText(document, tag, className, value) {
@@ -50,47 +58,24 @@ function readDocumentStateLabel(status) {
     return DOCUMENT_STATE_LABELS[status] || 'Durum bilgisi yok';
 }
 
-function createSelect(document, name, value, options) {
-    const select = document.createElement('select');
-    select.className = 'glass-input';
-    select.name = name;
-    options.forEach(([optionValue, label]) => {
-        const option = document.createElement('option');
-        option.value = optionValue;
-        option.textContent = label;
-        option.selected = optionValue === value;
-        select.append(option);
-    });
-    return select;
-}
-
+/* Arşiv kuyruğu arama ve filtre formunu ortak bileşenle oluşturur */
 function createSearchForm(document, state, onSubmit) {
-    const form = document.createElement('form');
-    const search = document.createElement('input');
-    const label = createText(document, 'label', '', 'Başvuru ara');
-    search.className = 'glass-input';
-    search.name = 'q';
-    search.maxLength = 120;
-    search.value = state.query.q;
-    search.placeholder = 'Öğrenci no, ad, soyad veya pasaport no';
-    label.htmlFor = 'staff-archive-search';
-    search.id = label.htmlFor;
-    const statusLabel = createText(document, 'label', '', 'Durum');
-    const status = createSelect(document, 'status', state.query.status, ARCHIVE_STATUS_FILTERS);
-    statusLabel.htmlFor = 'staff-archive-status';
-    status.id = statusLabel.htmlFor;
-    const submit = document.createElement('button');
-    submit.type = 'submit';
-    submit.className = 'btn btn-primary';
-    submit.disabled = state.loading;
-    submit.textContent = 'Filtrele';
-    form.className = 'staff-archive-filters';
-    form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        onSubmit({ q: search.value, status: status.value });
+    const form = createApplicationQueueFilters(document, {
+        query: state.query,
+        statusOptions: ARCHIVE_STATUS_FILTERS,
+        noteFilter: { label: 'Not', options: NOTE_FILTERS },
+        idPrefix: 'staff-archive',
+        disabled: state.loading,
+        onSubmit
     });
-    status.addEventListener('change', () => onSubmit({ q: search.value, status: status.value }));
-    form.append(label, search, statusLabel, status, submit);
+    const status = form.elements.namedItem('status');
+    status.addEventListener('change', () => onSubmit({
+        q: form.elements.namedItem('q').value,
+        status: status.value,
+        has_note: form.elements.namedItem('has_note').value,
+        from_date: form.elements.namedItem('from_date').value,
+        to_date: form.elements.namedItem('to_date').value
+    }));
     return form;
 }
 
@@ -106,63 +91,62 @@ function createArchiveButton(document, state, applicationId, onDownload) {
     return button;
 }
 
-function createQueueTable(document, items, state, handlers) {
-    const table = document.createElement('table');
-    table.className = 'staff-archive-table';
-    const headers = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
-    const head = document.createElement('thead');
-    const headerRow = document.createElement('tr');
-    headers.forEach((header) => headerRow.append(createText(document, 'th', '', header)));
-    head.append(headerRow);
-    const body = document.createElement('tbody');
-    items.forEach((item) => {
-        const row = document.createElement('tr');
-        const values = [
-            item.student_number,
-            [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
-            item.application_type === 'transition' ? 'Geçiş başvurusu' : item.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru',
-            item.deletion_state && state.query.status === 'archive_all' ? STATUS_LABELS.deleted : readStatusLabel(item.status),
-            formatDate(item.submitted_at),
-            formatDate(item.updated_at)
-        ];
-        values.forEach((value, index) => {
-            const cell = createText(document, 'td', '', displayValue(value));
-            cell.dataset.label = headers[index];
-            row.append(cell);
-        });
-        const actionCell = document.createElement('td');
-        actionCell.dataset.label = 'Detay';
-        const action = document.createElement('button');
-        action.type = 'button';
-        action.className = 'btn btn-primary';
-        action.dataset.action = 'open-detail';
-        action.textContent = 'Detay';
-        action.addEventListener('click', () => handlers.onOpenDetail(item.id));
-        const actions = document.createElement('div');
-        actions.className = 'staff-archive-row-actions';
-        actions.append(action, createArchiveButton(document, state, item.id, handlers.onDownloadArchive));
-        if (state.query.status === 'deleted' || item.deletion_state) {
-            const restore = document.createElement('button');
-            restore.type = 'button';
-            restore.className = 'btn btn-primary';
-            restore.dataset.action = 'restore-application';
-            restore.textContent = 'Geri al';
-            restore.addEventListener('click', () => handlers.onRestore(item.id));
-            const purge = document.createElement('button');
-            purge.type = 'button';
-            purge.className = 'btn btn-primary';
-            purge.dataset.action = 'purge-application';
-            purge.textContent = item.deletion_state === 'purge_pending' ? 'Kalıcı silmeyi sürdür' : 'Kalıcı sil';
-            purge.addEventListener('click', () => handlers.onPurge(item.id));
-            if (item.deletion_state === 'purge_pending') restore.disabled = true;
-            actions.append(restore, purge);
+/* Arşiv satırı için detay, ZIP indirme/iptal ve silinen kayıt geri alma/kalıcı silme işlemlerini üretir */
+function buildQueueRowActions(item, state, handlers) {
+    const isActiveArchive = state.archiveApplicationId === item.id;
+    const actions = [
+        {
+            label: 'Detay',
+            action: 'open-detail',
+            run: () => handlers.onOpenDetail(item.id)
+        },
+        {
+            label: isActiveArchive ? 'ZIP’i iptal et' : 'Belgeleri ZIP indir',
+            action: 'download-application-archive',
+            ariaLabel: isActiveArchive ? 'ZIP indirmeyi iptal et' : 'Belgeleri ZIP indir',
+            run: () => handlers.onDownloadArchive(item.id)
         }
-        actionCell.append(actions);
-        row.append(actionCell);
-        body.append(row);
+    ];
+    if (state.query.status === 'deleted' || item.deletion_state) {
+        actions.push(
+            {
+                label: 'Geri al',
+                action: 'restore-application',
+                isDisabled: item.deletion_state === 'purge_pending',
+                run: () => handlers.onRestore(item.id)
+            },
+            {
+                label: item.deletion_state === 'purge_pending' ? 'Kalıcı silmeyi sürdür' : 'Kalıcı sil',
+                action: 'purge-application',
+                run: () => handlers.onPurge(item.id)
+            }
+        );
+    }
+    return actions;
+}
+
+/* Arşiv tablosunu ortak çevrimiçi kuyruk tablosu bileşeni ile oluşturur */
+function createQueueTable(document, items, state, handlers) {
+    return createApplicationQueueTable(document, items, {
+        headers: ['', 'Pasaport No', 'Ad Soyad', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''],
+        noteKind: 'online',
+        noteId: (item) => item.id,
+        initialNotes: state.recordNotes,
+        onNoteChange: (updatedNote, id) => {
+            state.recordNotes?.set(id, updatedNote);
+        },
+        statusLabel: readStatusLabel,
+        values: (item) => [
+            displayValue(item.passport_number),
+            [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
+            item.deletion_state && state.query.status === 'archive_all'
+                ? STATUS_LABELS.deleted
+                : readStatusLabel(item.status),
+            formatDate(item.submitted_at || item.created_at),
+            formatDate(item.updated_at)
+        ],
+        actions: (item) => buildQueueRowActions(item, state, handlers)
     });
-    table.append(head, body);
-    return table;
 }
 
 function createPagination(document, pagination, onPageChange) {
@@ -531,7 +515,8 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
         preview: null, result: null, archiveApplicationId: null, archiveNotice: null,
-        query: { q: '', status: 'archive_all', page: 1, page_size: 25 }
+        recordNotes: new Map(),
+        query: { q: '', status: 'archive_all', has_note: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queryRequestId = 0;
     let detailRequestId = 0;
@@ -722,6 +707,7 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
             const result = await api.queryApplications({ ...state.query });
             if (requestId !== queryRequestId) return;
             state.result = result;
+            state.recordNotes.clear();
         } catch (error) {
             if (requestId !== queryRequestId) return;
             state.error = true;
@@ -763,11 +749,20 @@ export function initializeStaffArchiveManager(root, api = createStaffArchiveApi(
         await loadQueue();
     }
 
-    async function submitSearch({ q, status }) {
+    async function submitSearch({ q, status, has_note, from_date, to_date }) {
         cancelArchive();
         detailRequestId += 1;
         discardPreview();
-        state.query = { ...state.query, q, status, page: 1 };
+        const normalizedHasNote = has_note === 'yes' || has_note === 'no' ? has_note : 'all';
+        state.query = {
+            ...state.query,
+            q,
+            status,
+            has_note: normalizedHasNote,
+            from_date: from_date ?? '',
+            to_date: to_date ?? '',
+            page: 1
+        };
         await loadQueue();
     }
 
