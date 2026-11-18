@@ -57,7 +57,8 @@ function pdfjsSupportAssetsPlugin() {
 }
 
 export default defineConfig({
-    define: { 'import.meta.env.PHYSICAL_INTAKES_ENABLED': JSON.stringify(['staging', 'production'].includes(process.env.CLOUDFLARE_ENV)) },
+    // Yalnızca yerel geliştirme içindir; üretim derlemelerinde bu değişken ayarlanmaz.
+    define: { 'import.meta.env.PHYSICAL_INTAKES_ENABLED': JSON.stringify(['staging', 'production'].includes(process.env.CLOUDFLARE_ENV) || process.env.PHYSICAL_INTAKES_ENABLED === 'true') },
     plugins: [cloudflare(), pdfjsSupportAssetsPlugin()],
     environments: {
         client: {
