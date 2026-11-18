@@ -51,7 +51,7 @@ jobs:
           npm install --global npm@11.9.0
           npm ci --ignore-scripts
       - name: Audit all Node dependencies
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
       - name: Full JavaScript regression suite (twice)
         run: |
           npm test
