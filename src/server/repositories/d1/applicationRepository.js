@@ -56,6 +56,39 @@ const STAFF_COUNT_CACHE_MS = 60_000;
 // Per-isolate, per-binding cache of staff list totals; only the pagination label may lag by this TTL.
 const staffCountCache = new WeakMap();
 
+// Arşiv listesi yalnızca archive_all ve deleted filtreleri için silinmiş fiziksel teslimleri de sorgular.
+function buildPhysicalArchiveWhere({ searchPattern, submittedAtFrom, submittedAtUntil, hasNote }) {
+    const conditions = ['physical_intakes.deleted_at IS NOT NULL'];
+    const queryValues = [];
+    if (submittedAtFrom) {
+        conditions.push('physical_intakes.submitted_at >= ?');
+        queryValues.push(submittedAtFrom);
+    }
+    if (submittedAtUntil) {
+        conditions.push('physical_intakes.submitted_at < ?');
+        queryValues.push(submittedAtUntil);
+    }
+    if (searchPattern) {
+        conditions.push(`(
+            COALESCE(physical_intakes.tracking_reference, '') LIKE ? ESCAPE '\\'
+            OR COALESCE(physical_intakes.student_number, '') LIKE ? ESCAPE '\\'
+            OR COALESCE(physical_intakes.first_name, '') LIKE ? ESCAPE '\\'
+            OR COALESCE(physical_intakes.last_name, '') LIKE ? ESCAPE '\\'
+            OR (COALESCE(physical_intakes.first_name, '') || ' ' || COALESCE(physical_intakes.last_name, '')) LIKE ? ESCAPE '\\'
+            OR (COALESCE(physical_intakes.last_name, '') || ' ' || COALESCE(physical_intakes.first_name, '')) LIKE ? ESCAPE '\\'
+            OR COALESCE(physical_intakes.passport_number, '') LIKE ? ESCAPE '\\'
+        )`);
+        queryValues.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+    }
+    const noteExistsClause = "EXISTS (SELECT 1 FROM staff_record_notes AS notes WHERE notes.record_kind = 'physical' AND notes.record_id = physical_intakes.id)";
+    if (hasNote === 'yes') {
+        conditions.push(noteExistsClause);
+    } else if (hasNote === 'no') {
+        conditions.push(`NOT ${noteExistsClause}`);
+    }
+    return { whereClause: conditions.join(' AND '), queryValues };
+}
+
 export function createApplicationRepository(database) {
     return Object.freeze({
         async createDraft({ applicationId, studentId, studentNumber, applicationType, applicationRoute = 'standard', studentEmail, studentPhone }) {
@@ -262,6 +295,75 @@ export function createApplicationRepository(database) {
                 conditions.push(`NOT ${noteExistsClause}`);
             }
             const whereClause = conditions.join(' AND ');
+            if (isDeleted || includeDeleted) {
+                const physicalWhere = buildPhysicalArchiveWhere({
+                    searchPattern,
+                    submittedAtFrom,
+                    submittedAtUntil,
+                    hasNote
+                });
+                // Sayfalama, birleşik online + silinmiş fiziksel sonuç kümesi üzerinde updated_at DESC sırasıyla yapılır.
+                const pageResult = await database.prepare(`
+                    SELECT 'online' AS kind,
+                           applications.id AS id,
+                           students.student_number,
+                           applications.passport_number AS passport_number,
+                           applications.first_name,
+                           applications.last_name,
+                           applications.application_type,
+                           applications.application_route,
+                           applications.status,
+                           applications.submitted_at,
+                           applications.created_at AS created_at,
+                           applications.updated_at AS updated_at,
+                           application_deletions.state AS deletion_state,
+                           NULL AS deleted_at,
+                           NULL AS lock_version,
+                           NULL AS tracking_reference,
+                           application_spreadsheet_records.state AS spreadsheet_state,
+                           application_spreadsheet_records.sheet_name AS spreadsheet_sheet_name
+                    FROM applications
+                    JOIN students ON students.id = applications.student_id
+                    LEFT JOIN application_deletions ON application_deletions.application_id=applications.id
+                    LEFT JOIN application_spreadsheet_records ON application_spreadsheet_records.application_id=applications.id
+                    WHERE ${whereClause}
+                    UNION ALL
+                    SELECT 'physical' AS kind,
+                           physical_intakes.id AS id,
+                           physical_intakes.student_number,
+                           physical_intakes.passport_number AS passport_number,
+                           physical_intakes.first_name,
+                           physical_intakes.last_name,
+                           physical_intakes.application_type,
+                           physical_intakes.application_route,
+                           physical_intakes.status,
+                           physical_intakes.submitted_at,
+                           physical_intakes.submitted_at AS created_at,
+                           physical_intakes.updated_at AS updated_at,
+                           'soft_deleted' AS deletion_state,
+                           physical_intakes.deleted_at,
+                           physical_intakes.lock_version,
+                           physical_intakes.tracking_reference,
+                           NULL AS spreadsheet_state,
+                           NULL AS spreadsheet_sheet_name
+                    FROM physical_intakes
+                    WHERE ${physicalWhere.whereClause}
+                    ORDER BY updated_at DESC, created_at DESC, id DESC
+                    LIMIT ? OFFSET ?
+                `).bind(...queryValues, ...physicalWhere.queryValues, pageSize, offset).all();
+                if (offset === 0 && pageResult.results.length < pageSize) {
+                    return { totalItems: pageResult.results.length, items: pageResult.results };
+                }
+                const countSource = searchPattern ? 'applications JOIN students ON students.id = applications.student_id' : 'applications';
+                const countResult = await database.prepare(`
+                    SELECT (
+                        (SELECT COUNT(*) FROM ${countSource} WHERE ${whereClause})
+                        +
+                        (SELECT COUNT(*) FROM physical_intakes WHERE ${physicalWhere.whereClause})
+                    ) AS total_items
+                `).bind(...queryValues, ...physicalWhere.queryValues).first();
+                return { totalItems: countResult.total_items, items: pageResult.results };
+            }
             const pageResult = await database.prepare(`
                 SELECT applications.id, students.student_number, applications.passport_number AS passport_number, applications.first_name,
                        applications.last_name, applications.application_type, applications.application_route, applications.status,

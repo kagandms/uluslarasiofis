@@ -961,6 +961,7 @@ test('backend route accepts cancelled and rejected status filters and preserves 
     const terminalPayload = await terminalRes.json();
     assert.equal(terminalPayload.pagination.total_items, 2);
     assert.deepEqual(terminalPayload.items.map((i) => i.id).sort(), ['app-cancelled', 'app-completed']);
+    assert.equal(terminalPayload.items.every((i) => i.kind === 'online'), true);
 
     // Cancelled query returns ONLY cancelled
     const cancelledRes = await query({ status: 'cancelled' });
@@ -998,12 +999,14 @@ test('backend route accepts cancelled and rejected status filters and preserves 
     assert.deepEqual(allPayload.items.map((i) => i.id).sort(), ['app-cancelled', 'app-completed', 'app-soft-deleted']);
     const deletedItem = allPayload.items.find((i) => i.id === 'app-soft-deleted');
     assert.equal(deletedItem.deletion_state, 'soft_deleted');
+    assert.equal(deletedItem.kind, 'online');
 
     const deletedOnlyRes = await query({ status: 'deleted' });
     assert.equal(deletedOnlyRes.status, 200);
     const deletedOnlyPayload = await deletedOnlyRes.json();
     assert.equal(deletedOnlyPayload.pagination.total_items, 1);
     assert.equal(deletedOnlyPayload.items[0].id, 'app-soft-deleted');
+    assert.equal(deletedOnlyPayload.items[0].kind, 'online');
 });
 
 test('archive_all excludes rejected applications and includes deleted applications', async () => {
