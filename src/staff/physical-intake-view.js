@@ -8,7 +8,7 @@ import { createApplicationQueueFilters } from './application-queue-filters.js';
 import { PHYSICAL_RECEIPT_TEMPLATE_VERSION } from '../shared/physical-receipt-version.js';
 
 const STATUS_LABELS = PHYSICAL_STATUS_LABELS;
-const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['sent_to_migration', 'Göçe Gönderildi'], ['migration_approved', 'Göç Onayladı'], ['completed', 'Tamamlandı'], ['rejected', 'Reddedildi'], ['deleted', 'Silinen'], ['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']];
+const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['sent_to_migration', 'Göç İdaresine Gönderildi'], ['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']];
 
 
 function text(document, tag, value, className = '') {

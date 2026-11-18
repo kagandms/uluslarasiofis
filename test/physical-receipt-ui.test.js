@@ -235,7 +235,14 @@ test('queue translates ready A4 state and preserves stale document warning', () 
     assert.equal(root.querySelector('select[name="has_note"]'), null);
     assert.equal(root.querySelectorAll('select').length, 1);
     const statusOptions = [...root.querySelectorAll('select[name="status"] option')].map(option => [option.value, option.textContent]);
-    assert.deepEqual(statusOptions.slice(-2), [['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']]);
+    assert.deepEqual(statusOptions, [
+        ['all', 'Tüm durumlar'],
+        ['under_review', 'İncelemede'],
+        ['approved', 'Onaylandı'],
+        ['sent_to_migration', 'Göç İdaresine Gönderildi'],
+        ['noted', 'Notu olanlar'],
+        ['not_noted', 'Notu olmayanlar']
+    ]);
     root.querySelector('#staff-physical-from-date').value = '2026-10-01';
     root.querySelector('#staff-physical-to-date').value = '2026-10-13';
     root.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
