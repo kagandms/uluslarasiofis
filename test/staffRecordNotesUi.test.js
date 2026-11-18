@@ -36,7 +36,7 @@ const ONLINE_ITEMS = [
 
 const PHYSICAL_ITEMS = [
     {
-        id: 'phys-001',
+        id: 'phys-001', passport_number: 'SYN-PASS-0001',
         tracking_reference: 'FZK-0001',
         first_name: 'Mert',
         last_name: 'Arslan',
@@ -50,7 +50,7 @@ const PHYSICAL_ITEMS = [
         receipt_template_version: 'v1'
     },
     {
-        id: 'phys-002',
+        id: 'phys-002', passport_number: 'SYN-PASS-0002',
         tracking_reference: 'FZK-0002',
         first_name: 'Selin',
         last_name: 'Yıldız',
@@ -216,8 +216,8 @@ test('physical queue renders note button before row number, loads notes with one
     const secondNoteBtn = rows[1].querySelector('td:first-child button[data-action="record-note"]');
     assert.ok(firstNoteBtn);
     assert.ok(secondNoteBtn);
-    assert.equal(rows[0].querySelector('td:nth-child(2)')?.textContent, '1');
-    assert.equal(rows[1].querySelector('td:nth-child(2)')?.textContent, '2');
+    assert.equal(rows[0].querySelector('td:nth-child(2)')?.textContent, 'SYN-PASS-0001');
+    assert.equal(rows[1].querySelector('td:nth-child(2)')?.textContent, 'SYN-PASS-0002');
     assert.equal(firstNoteBtn.dataset.hasNote, 'false');
     assert.equal(secondNoteBtn.dataset.hasNote, 'true');
     assert.ok(secondNoteBtn.title.includes('Pasaport fotokopisi teyit edildi.'));
