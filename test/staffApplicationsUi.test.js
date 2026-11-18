@@ -1314,6 +1314,46 @@ test('queue shortcut marks an approved application sent to migration', async (co
     assert.deepEqual(calls, [[item.id, 'sent_to_migration', item.updated_at, null, true]]);
 });
 
+test('queue shortcut reverts a sent_to_migration application back to approved_for_processing after confirmation', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const calls = [];
+    const confirmMessages = [];
+    let confirmResult = false;
+    document.defaultView.confirm = (message) => {
+        confirmMessages.push(message);
+        return confirmResult;
+    };
+    const item = { ...QUEUE_ITEM, status: 'sent_to_migration' };
+    const api = {
+        async queryApplications() { return createQueuePayload([item]); },
+        async transitionApplication(...args) { calls.push(args); }
+    };
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(root.querySelector('[data-action="send-to-migration"]'), null);
+    const revertButton = root.querySelector('[data-action="revert-from-migration"]');
+    assert.ok(revertButton);
+    assert.equal(revertButton.textContent, 'Göçten Geri Al');
+    assert.equal(revertButton.classList.contains('btn') && revertButton.classList.contains('btn-outline'), true);
+    assert.equal(revertButton.getAttribute('aria-label'), `${item.student_number} başvurusunu Göç İdaresinden geri al`);
+
+    revertButton.click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(confirmMessages.length, 1);
+    assert.deepEqual(calls, []);
+
+    confirmResult = true;
+    revertButton.click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(confirmMessages.length, 2);
+    assert.deepEqual(calls, [[item.id, 'approved_for_processing', item.updated_at]]);
+    assert.match(root.textContent, /Başvurunun Göç İdaresine iletildi işareti kaldırıldı\./);
+});
+
 
 test('online queue searches while typing and changes status immediately without losing input focus', async (context) => {
     const { document, root } = createStaffDom();
