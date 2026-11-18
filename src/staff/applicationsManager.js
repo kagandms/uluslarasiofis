@@ -211,7 +211,7 @@ function createMigrationBulkExportAction(document, state, onExport) {
     return wrapper;
 }
 
-function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer, noteOptions = null) {
+function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onRevertFromMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer, noteOptions = null) {
     const table = document.createElement('table');
     table.className = 'staff-applications-table';
     const headers = ['', 'Pasaport No', 'Ad Soyad', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
@@ -343,6 +343,15 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
             send.textContent = 'Göçe İletildi';
             send.addEventListener('click', () => onSendToMigration(item));
             actionCell.append(send);
+        } else if (item.status === 'sent_to_migration') {
+            const revert = document.createElement('button');
+            revert.type = 'button';
+            revert.className = 'btn btn-outline';
+            revert.dataset.action = 'revert-from-migration';
+            revert.textContent = 'Göçten Geri Al';
+            revert.setAttribute('aria-label', `${item.student_number} başvurusunu Göç İdaresinden geri al`);
+            revert.addEventListener('click', () => onRevertFromMigration(item));
+            actionCell.append(revert);
         }
         row.append(actionCell);
         body.append(row);
@@ -472,7 +481,7 @@ function renderQueue(root, state, handlers) {
     } else if (state.result) {
         panel.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
             handlers.onDownloadArchive, handlers.onArchiveApplication, state.archiveApplicationId, handlers.onSendToMigration,
-            handlers.onResetDraftAccess, state.spreadsheetPending, state.spreadsheetErrors, handlers.onSpreadsheetTransfer,
+            handlers.onRevertFromMigration, handlers.onResetDraftAccess, state.spreadsheetPending, state.spreadsheetErrors, handlers.onSpreadsheetTransfer,
             state.gocnetPending, state.gocnetResults, handlers.onGocnetTransfer, {
                 notesById: state.recordNotes,
                 shouldLoad: !state.loading && state.recordNotesResult !== state.result,
@@ -1172,7 +1181,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onSearch: submitSearch, onQueryChange: scheduleSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,
             onDownloadArchive: downloadArchive, onArchiveApplication: archiveApplication,
             onResetDraftAccess: resetDraftAccess,
-            onSendToMigration: sendToMigration, onDismissToast: dismissToast,
+            onSendToMigration: sendToMigration, onRevertFromMigration: revertFromMigration, onDismissToast: dismissToast,
             onSpreadsheetTransfer: transferApplicationToSpreadsheet, onGocnetTransfer: checkGocnetTransfer,
             onBulkMigrationExport: exportMigrationApplications
         });
@@ -1928,6 +1937,28 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         try {
             await api.transitionApplication(item.id, 'sent_to_migration', item.updated_at, null, true);
             state.archiveMessage = 'Başvuru Göç İdaresine iletildi olarak işaretlendi.';
+            state.actionPending = null;
+            await loadQueue();
+        } catch (error) {
+            state.archiveError = error?.message || 'Başvuru durumu güncellenemedi.';
+        } finally {
+            state.actionPending = null;
+            render();
+        }
+    }
+    async function revertFromMigration(item) {
+        if (state.actionPending) return;
+        const confirmed = document.defaultView.confirm(
+            'Bu başvurunun Göç İdaresine iletildi işareti kaldırılacak ve başvuru "İşleme alınmak üzere onaylandı" durumuna dönecek. Devam edilsin mi?'
+        );
+        if (!confirmed) return;
+        state.actionPending = 'revert-from-migration';
+        state.archiveError = null;
+        state.archiveMessage = null;
+        render();
+        try {
+            await api.transitionApplication(item.id, 'approved_for_processing', item.updated_at);
+            state.archiveMessage = 'Başvurunun Göç İdaresine iletildi işareti kaldırıldı.';
             state.actionPending = null;
             await loadQueue();
         } catch (error) {
