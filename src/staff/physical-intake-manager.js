@@ -65,7 +65,7 @@ async function loadQueue(context) {
     }
     const recovered = await recoverPhysicalReceiptRegistration(context);
     if (recovered) context.state.savedIntakeId = recovered.intake.id;
-    context.state.result = await context.api.query(context.state.query);
+    context.state.result = await context.api.query({ ...context.state.query, has_note: context.state.query.has_note || 'all' });
     context.state.view = 'queue';
     context.state.message = recovered ? 'Öğrenci kaydı kurtarıldı. A4 işlemlerine listeden devam edebilirsiniz.' : 'Fiziksel teslimler — son güncellenen kayıtlar önce gösterilir.';
     render(context);
@@ -260,7 +260,7 @@ function createHandlers(context) {
 export function initializePhysicalIntakeManager(root) {
     if (!IS_PHYSICAL_INTAKE_ENABLED) return;
     const context = { root, api: createPhysicalIntakeClient(), isBusy: false, controls: [], handlers: null,
-        state: { view: 'queue', query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }, result: null, detail: null, message: '' } };
+        state: { view: 'queue', query: { q: '', status: 'all', has_note: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }, result: null, detail: null, message: '' } };
     context.handlers = createHandlers(context);
     root.textContent = 'Fiziksel başvuru erişimi kontrol ediliyor…';
     import('../services/physical-receipt-pdf.js')
