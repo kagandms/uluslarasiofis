@@ -8,12 +8,7 @@ import { createApplicationQueueFilters } from './application-queue-filters.js';
 import { PHYSICAL_RECEIPT_TEMPLATE_VERSION } from '../shared/physical-receipt-version.js';
 
 const STATUS_LABELS = PHYSICAL_STATUS_LABELS;
-const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['sent_to_migration', 'Göçe Gönderildi'], ['migration_approved', 'Göç Onayladı'], ['completed', 'Tamamlandı'], ['rejected', 'Reddedildi'], ['deleted', 'Silinen']];
-const NOTE_FILTERS = Object.freeze([
-    ['all', 'Tüm kayıtlar'],
-    ['yes', 'Notu olanlar'],
-    ['no', 'Notu olmayanlar']
-]);
+const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['sent_to_migration', 'Göçe Gönderildi'], ['migration_approved', 'Göç Onayladı'], ['completed', 'Tamamlandı'], ['rejected', 'Reddedildi'], ['deleted', 'Silinen'], ['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']];
 
 
 function text(document, tag, value, className = '') {
@@ -63,9 +58,8 @@ function formatDeliveryDate(document, item) {
 
 function createFilters(document, state, handlers) {
     const form = createApplicationQueueFilters(document, {
-        query: state.query || { q: '', status: 'all', has_note: 'all', from_date: '', to_date: '' },
+        query: state.query || { q: '', status: 'all', from_date: '', to_date: '' },
         statusOptions: FILTERS,
-        noteFilter: { label: 'Not', options: NOTE_FILTERS },
         idPrefix: 'staff-physical',
         disabled: Boolean(state.loading),
         onSubmit: handlers.search
@@ -79,7 +73,6 @@ function createFilters(document, state, handlers) {
         const readQuery = () => ({
             q: search?.value || '',
             status: form.elements.namedItem('status')?.value || 'all',
-            has_note: form.elements.namedItem('has_note')?.value || 'all',
             from_date: form.elements.namedItem('from_date')?.value || '',
             to_date: form.elements.namedItem('to_date')?.value || ''
         });

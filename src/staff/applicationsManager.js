@@ -7,7 +7,7 @@ import { downloadApplicationArchive, createArchiveFilename } from './application
 import { listSentToMigrationApplications, runMigrationBulkExport } from './migrationBulkArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
-import { createApplicationQueueFilters } from './application-queue-filters.js';
+import { createApplicationQueueFilters, splitNoteStatus } from './application-queue-filters.js';
 import { describeGocnetPreparationError, prepareGocnetTransfer } from './gocnet-transfer.js';
 import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
 import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
@@ -27,12 +27,8 @@ const DOCUMENT_STATE_LABELS = Object.freeze({
 const STATUS_FILTERS = Object.freeze([
     ['all', 'Tüm durumlar'], ['draft', 'Taslaklar'], ['under_review', 'İncelemede'],
     ['resubmission_required', 'Yeniden yükleme gerekli'], ['approved', 'Onaylandı'],
-    ['migration', 'Göç İdaresine Gönderildi']
-]);
-const NOTE_FILTERS = Object.freeze([
-    ['all', 'Tüm kayıtlar'],
-    ['yes', 'Notu olanlar'],
-    ['no', 'Notu olmayanlar']
+    ['migration', 'Göç İdaresine Gönderildi'],
+    ['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']
 ]);
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const WORKFLOW_STATUSES = Object.freeze([
@@ -122,7 +118,6 @@ function createSearchForm(document, state, onSubmit, onChange) {
     const form = createApplicationQueueFilters(document, {
         query: state.query,
         statusOptions: STATUS_FILTERS,
-        noteFilter: { label: 'Not', options: NOTE_FILTERS },
         idPrefix: 'staff-application',
         disabled: state.loading,
         onSubmit
@@ -132,7 +127,6 @@ function createSearchForm(document, state, onSubmit, onChange) {
     const readQuery = () => ({
         q: search.value,
         status: form.elements.namedItem('status').value,
-        has_note: form.elements.namedItem('has_note').value,
         from_date: form.elements.namedItem('from_date').value,
         to_date: form.elements.namedItem('to_date').value
     });
@@ -1124,7 +1118,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         spreadsheetPending: new Set(), spreadsheetErrors: {},
         gocnetPending: new Set(), gocnetResults: {},
         recordNotes: new Map(), recordNotesResult: null,
-        query: { q: '', status: 'all', has_note: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
+        query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 }
     };
     let queueRequestId = 0;
     let searchTimer = null;
@@ -1492,7 +1486,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         state.error = false;
         render();
         try {
-            const result = await api.queryApplications({ ...state.query });
+            const result = await api.queryApplications({ ...state.query, ...splitNoteStatus(state.query.status) });
             if (requestId !== queueRequestId) return;
             state.result = result;
             state.recordNotesResult = null;
@@ -1741,12 +1735,11 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             if (state.view === 'queue') void submitSearch(state.query);
         }, 250);
     }
-    async function submitSearch({ q, status, has_note, from_date, to_date }) {
+    async function submitSearch({ q, status, from_date, to_date }) {
         if (searchTimer !== null) document.defaultView.clearTimeout(searchTimer);
         searchTimer = null;
         if (state.actionPending) return;
-        const normalizedHasNote = has_note === 'yes' || has_note === 'no' ? has_note : 'all';
-        state.query = { ...state.query, q, status, has_note: normalizedHasNote, from_date, to_date, page: 1 };
+        state.query = { ...state.query, q, status, from_date, to_date, page: 1 };
         await loadQueue();
     }
     async function changePage(page) {
@@ -1792,7 +1785,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     }
     async function refreshQueueSnapshot() {
         try {
-            state.result = await api.queryApplications({ ...state.query });
+            state.result = await api.queryApplications({ ...state.query, ...splitNoteStatus(state.query.status) });
             state.recordNotesResult = null;
             state.recordNotes.clear();
         } catch {

@@ -208,27 +208,44 @@ test('online application queue uses physical search and date filter layout and s
     assert.ok(form.querySelector('#staff-application-from-date'));
     assert.ok(form.querySelector('#staff-application-to-date'));
 
-    const noteSelect = form.querySelector('select[name="has_note"]');
-    assert.ok(noteSelect);
-    assert.equal(form.querySelector('label[for="staff-application-has-note"]')?.textContent, 'Not');
+    assert.equal(form.querySelector('select[name="has_note"]'), null);
+    assert.equal(form.querySelectorAll('select').length, 1);
+    assert.equal(form.classList.contains('has-note-filter'), false);
+    const statusSelect = form.querySelector('select[name="status"]');
+    assert.ok(statusSelect);
     assert.deepEqual(
-        [...noteSelect.options].map((option) => [option.value, option.textContent]),
-        [['all', 'Tüm kayıtlar'], ['yes', 'Notu olanlar'], ['no', 'Notu olmayanlar']]
+        [...statusSelect.options].slice(-2).map((option) => [option.value, option.textContent]),
+        [['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']]
     );
-    assert.equal(noteSelect.value, 'all');
 
     form.querySelector('input[name="q"]').value = 'Ayşe';
-    form.querySelector('select[name="status"]').value = 'under_review';
-    noteSelect.value = 'yes';
+    statusSelect.value = 'under_review';
     form.querySelector('#staff-application-from-date').value = '2026-10-01';
     form.querySelector('#staff-application-to-date').value = '2026-10-12';
     form.dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise(resolve => setImmediate(resolve));
 
     assert.deepEqual(requests.at(-1), {
-        q: 'Ayşe', status: 'under_review', has_note: 'yes', from_date: '2026-10-01', to_date: '2026-10-12', page: 1, page_size: 25
+        q: 'Ayşe', status: 'under_review', has_note: 'all', from_date: '2026-10-01', to_date: '2026-10-12', page: 1, page_size: 25
     });
-    assert.equal(root.querySelector('select[name="has_note"]')?.value, 'yes');
+
+    root.querySelector('select[name="status"]').value = 'noted';
+    root.querySelector('.staff-applications-filters').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.deepEqual(requests.at(-1), {
+        q: 'Ayşe', status: 'all', has_note: 'yes', from_date: '2026-10-01', to_date: '2026-10-12', page: 1, page_size: 25
+    });
+    assert.equal(root.querySelector('select[name="status"]')?.value, 'noted');
+
+    root.querySelector('select[name="status"]').value = 'not_noted';
+    root.querySelector('.staff-applications-filters').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.deepEqual(requests.at(-1), {
+        q: 'Ayşe', status: 'all', has_note: 'no', from_date: '2026-10-01', to_date: '2026-10-12', page: 1, page_size: 25
+    });
+    assert.equal(root.querySelector('select[name="status"]')?.value, 'not_noted');
 });
 
 test('draft queue offers verified code reset without a cancellation action', async (context) => {
@@ -1329,6 +1346,7 @@ test('online queue searches while typing and changes status immediately without 
     assert.equal(status.querySelector('[value="completed"]'), null);
     assert.equal(status.querySelector('[value="terminal"]'), null);
     assert.equal(status.querySelector('[value="migration"]').textContent, 'Göç İdaresine Gönderildi');
+    assert.equal(root.querySelector('[name="has_note"]'), null);
     assert.deepEqual(
         [...status.options].map((option) => [option.value, option.textContent]),
         [
@@ -1337,7 +1355,9 @@ test('online queue searches while typing and changes status immediately without 
             ['under_review', 'İncelemede'],
             ['resubmission_required', 'Yeniden yükleme gerekli'],
             ['approved', 'Onaylandı'],
-            ['migration', 'Göç İdaresine Gönderildi']
+            ['migration', 'Göç İdaresine Gönderildi'],
+            ['noted', 'Notu olanlar'],
+            ['not_noted', 'Notu olmayanlar']
         ]
     );
     status.value = 'resubmission_required';

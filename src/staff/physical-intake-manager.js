@@ -6,6 +6,7 @@ import { recognizePhysicalApplicationForm } from './physical-form-ocr.js';
 import { IS_PHYSICAL_INTAKE_ENABLED, MAX_PHYSICAL_PDF_BYTES } from '../config/physical-intake-policy.js';
 import { buildPhysicalPdfUrl, createPhysicalIntakeClient } from './physical-intake-client.js';
 import { renderPhysicalIntakes } from './physical-intake-view.js';
+import { splitNoteStatus } from './application-queue-filters.js';
 import { openPdfMergerModal } from '../ui/pdfMergerModal.js';
 import { showToast } from '../ui/toastManager.js';
 import './physical-intake.css';
@@ -37,11 +38,6 @@ function clearSearchTimer(context) {
         context.root.ownerDocument.defaultView?.clearTimeout?.(context.searchTimer);
         context.searchTimer = null;
     }
-}
-
-function normalizeQueryFilter(query) {
-    const normalizedHasNote = query.has_note === 'yes' || query.has_note === 'no' ? query.has_note : 'all';
-    return { ...query, has_note: normalizedHasNote };
 }
 
 async function execute(context, work) {
@@ -91,7 +87,7 @@ async function loadQueue(context) {
     const recovered = await recoverPhysicalReceiptRegistration(context);
     if (recovered) context.state.savedIntakeId = recovered.intake.id;
     const requestId = ++context.queueRequestId;
-    const result = await context.api.query({ ...context.state.query, has_note: context.state.query.has_note || 'all' });
+    const result = await context.api.query({ ...context.state.query, ...splitNoteStatus(context.state.query.status) });
     if (requestId !== context.queueRequestId) return;
     context.state.result = result;
     context.state.recordNotesResult = null;
@@ -116,7 +112,7 @@ async function queryQueue(context) {
     context.state.errorStatus = null;
     render(context);
     try {
-        const result = await context.api.query({ ...context.state.query, has_note: context.state.query.has_note || 'all' });
+        const result = await context.api.query({ ...context.state.query, ...splitNoteStatus(context.state.query.status) });
         if (requestId !== context.queueRequestId) return;
         context.state.result = result;
         context.state.recordNotesResult = null;
@@ -139,7 +135,7 @@ function scheduleSearch(context, query, debounce) {
     if (context.isBusy) return;
     context.queueRequestId += 1;
     clearSearchTimer(context);
-    context.state.query = { ...context.state.query, ...normalizeQueryFilter(query), page: 1 };
+    context.state.query = { ...context.state.query, ...query, page: 1 };
     if (!debounce) {
         void queryQueue(context);
         return;
@@ -319,7 +315,7 @@ function createHandlers(context) {
         open: id => run(() => openDetail(context, id)),
         search: query => {
             clearSearchTimer(context);
-            context.state.query = { ...context.state.query, ...normalizeQueryFilter(query), page: 1 };
+            context.state.query = { ...context.state.query, ...query, page: 1 };
             return queryQueue(context);
         },
         queryChange: (query, debounce) => scheduleSearch(context, query, debounce),
@@ -365,7 +361,7 @@ export function initializePhysicalIntakeManager(root) {
             errorStatus: null,
             recordNotes: new Map(),
             recordNotesResult: null,
-            query: { q: '', status: 'all', has_note: 'all', from_date: '', to_date: '', page: 1, page_size: 25 },
+            query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 },
             result: null,
             detail: null,
             message: ''
