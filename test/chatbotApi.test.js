@@ -2807,3 +2807,79 @@ test('routing harden 6: deterministic document and narrowed missing-facts replie
     assert.equal((await sixtyFirst.json()).error.code, 'RATE_LIMITED');
     assert.equal(fakeAi.callCount, 0);
 });
+
+test('corrective D: list intent vs document how-to routing across examples', async () => {
+    // 1. Without list intent: both examples go to the model with no evidence-first and no missing-facts question.
+    const howToReply = 'Aynı evde kaldığınız kişinin adına kira sözleşmesi veya noter onaylı taahhütname ile adres belgesi düzenlenebilir.';
+    const howToEnv = createEnvironment({ response: howToReply });
+    const howToResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Başka bir öğrenciyle aynı evde kalıyorum, adres belgesi nasıl olmalı?' }],
+            language: 'tr'
+        }), { address: '198.51.106.10' }),
+        howToEnv.environment,
+        {}
+    );
+    const howToPayload = await howToResponse.json();
+    assert.equal(howToResponse.status, 200);
+    assert.equal(howToEnv.fakeAi.callCount, 1);
+    assert.equal(howToPayload.reply, howToReply);
+
+    const uploadErrorReply = 'Belgenizi PDF, JPG, PNG veya WebP formatında ve 10 MB altında olacak şekilde yükleyin.';
+    const uploadErrorEnv = createEnvironment({ response: uploadErrorReply });
+    const uploadErrorResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'belge yüklerken hata alıyorum' }],
+            language: 'tr'
+        }), { address: '198.51.106.11' }),
+        uploadErrorEnv.environment,
+        {}
+    );
+    const uploadErrorPayload = await uploadErrorResponse.json();
+    assert.equal(uploadErrorResponse.status, 200);
+    assert.equal(uploadErrorEnv.fakeAi.callCount, 1);
+    assert.equal(uploadErrorPayload.reply, uploadErrorReply);
+
+    // Even when complete facts are mentioned in a how-to/troubleshooting query, evidence-first must NOT intercept.
+    const completeHowToReply = 'Yurt belgesini PDF olarak tarayıp yeniden yükleyebilirsiniz.';
+    const completeHowToEnv = createEnvironment({ response: completeHowToReply });
+    const completeHowToResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, belge yüklerken hata alıyorum' }],
+            language: 'tr'
+        }), { address: '198.51.106.12' }),
+        completeHowToEnv.environment,
+        {}
+    );
+    const completeHowToPayload = await completeHowToResponse.json();
+    assert.equal(completeHowToResponse.status, 200);
+    assert.equal(completeHowToEnv.fakeAi.callCount, 1);
+    assert.equal(completeHowToPayload.reply, completeHowToReply);
+
+    // 2. With list intent and model returning text without calling the tool -> deterministic missing-facts question.
+    const listIntentCases = [
+        { language: 'en', content: 'I want to know which documents do I need?' },
+        { language: 'ru', content: 'Подскажите, какие документы нужны для подачи?' },
+        { language: 'tk', content: 'Maňa haýsy resminamalar gerek bolýar?' },
+        { language: 'ar', content: 'أريد معرفة ما هي المستندات المطلوبة للتقديم؟' }
+    ];
+    for (let index = 0; index < listIntentCases.length; index += 1) {
+        const testCase = listIntentCases[index];
+        const env = createEnvironment({ response: 'Please share your application details.' });
+        const res = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: testCase.content }],
+                language: testCase.language
+            }), { address: `198.51.106.${20 + index}` }),
+            env.environment,
+            {}
+        );
+        const payload = await res.json();
+        assert.equal(res.status, 200);
+        assert.equal(env.fakeAi.callCount, 1);
+        assert.equal(
+            payload.reply,
+            buildMissingDocumentsQuestion(['application_type', 'is_under_18', 'accommodation_type'], testCase.language)
+        );
+    }
+});

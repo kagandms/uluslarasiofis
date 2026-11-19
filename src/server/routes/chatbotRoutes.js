@@ -1,3 +1,4 @@
+import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from '../../public/i18n/messages.js';
 import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_OPTIONS } from '../../shared/document-conditions.js';
 import { isValidApplicationReference, normalizeApplicationReference } from '../auth/applicationAccessCode.js';
 import * as evidence from '../domain/chatbotEvidence.js';
@@ -12,9 +13,9 @@ import { getChatbotStatusFixedText, renderStatusSummary } from '../domain/chatbo
 import {
     CHATBOT_TOOL_DEFINITIONS,
     CHATBOT_TOOLS,
-    executeChatbotTool,
-    listCatalogDocumentTitles
+    executeChatbotTool
 } from '../domain/chatbotTools.js';
+import { listPublicDocumentOverview } from '../domain/documentPolicy.js';
 import { ApiError } from '../domain/errors.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
@@ -134,6 +135,19 @@ const SHORT_DOCUMENT_EXCLUDE_PATTERNS = Object.freeze([
     /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:صيغه|حجم|رفع|اعاده\s+رفع|صفح[\p{L}\p{N}]*|ميغابايت)(?:[^\p{L}]|$)/u
 ]);
 
+const DOCUMENT_LIST_INTENT_PATTERNS = Object.freeze([
+    // tr
+    /(?:^|[^\p{L}])(?:hangi\s+(?:belge|evrak)[\p{L}\p{N}]*|(?:belge|evrak)[\p{L}\p{N}]*\s+neler|ne(?:ler)?\s+gerek[\p{L}\p{N}]*|gerekli\s+(?:belge|evrak)[\p{L}\p{N}]*|(?:belge|evrak)[\p{L}\p{N}]*\s+listesi|lazim)(?:[^\p{L}]|$)/u,
+    // en
+    /(?:^|[^\p{L}])(?:(?:which|what)\s+(?:[\p{L}\p{N}]+\s+){0,2}(?:documents?|docs)(?!\s+(?:format|size|types?))|required\s+(?:documents?|docs)|(?:documents?|docs)\s+(?:are\s+)?(?:required|needed)|(?:document|documents|doc|docs)\s+list|list\s+(?:of\s+|the\s+)?(?:required\s+)?(?:documents?|docs)|do\s+i\s+need(?!\s+to\s+(?:upload|resubmit|replace|scan|convert|compress|resize)))(?:[^\p{L}]|$)/u,
+    // ru
+    /(?:^|[^\p{L}])(?:какие\s+(?:[\p{L}\p{N}]+\s+){0,2}документ[\p{L}\p{N}]*|список\s+(?:[\p{L}\p{N}]+\s+){0,2}документ[\p{L}\p{N}]*|необходим[\p{L}\p{N}]*\s+документ[\p{L}\p{N}]*|нужн[\p{L}\p{N}]*\s+документ[\p{L}\p{N}]*|документ[\p{L}\p{N}]*\s+(?:[\p{L}\p{N}]+\s+){0,2}нужн[\p{L}\p{N}]*|что\s+нужно)(?:[^\p{L}]|$)/u,
+    // tk
+    /(?:^|[^\p{L}])(?:haysy\s+(?:[\p{L}\p{N}]+\s+){0,2}resminama[\p{L}\p{N}]*|name\s+(?:resminama[\p{L}\p{N}]*\s+)?gerek|gerekli\s+resminama[\p{L}\p{N}]*|resminama[\p{L}\p{N}]*\s+(?:gerek|sanaw[\p{L}\p{N}]*))(?:[^\p{L}]|$)/u,
+    // ar
+    /(?:^|[^\p{L}])(?:ما\s+(?:هي\s+)?(?:المستندات|الوثايق|مستندات|وثايق)|(?:المستندات|الوثايق)\s+المطلوب[\p{L}\p{N}]*|قايمه\s+(?:المستندات|الوثايق))(?:[^\p{L}]|$)/u
+]);
+
 const OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE = Object.freeze({
     tr: Object.freeze({
         otherStudents: Object.freeze([
@@ -244,6 +258,7 @@ export const CHATBOT_ROUTE_NORMALIZED_PATTERNS = Object.freeze({
     FIRST_PERSON_STATUS_PHRASE_PATTERNS,
     DOCUMENT_KEYWORD_PATTERNS,
     SHORT_DOCUMENT_EXCLUDE_PATTERNS,
+    DOCUMENT_LIST_INTENT_PATTERNS,
     OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE,
     EXPLICIT_HANDOFF_PATTERNS,
     OFFICE_HANDOFF_PATTERNS,
@@ -488,6 +503,19 @@ export function isVeryShortDocumentQuestion(messageContent) {
     return words.length >= 1 && words.length <= 3;
 }
 
+/**
+ * Returns true when the user message explicitly asks which documents are needed (list intent),
+ * distinguishing document-list queries from how-to or troubleshooting questions about documents.
+ * @param {string} messageContent Raw user message text.
+ * @returns {boolean} True if user asks for a list of required documents.
+ */
+export function isAskingWhichDocumentsAreNeeded(messageContent) {
+    if (typeof messageContent !== 'string') return false;
+    if (!hasDocumentKeyword(messageContent)) return false;
+    const normalized = evidence.normalizeForEvidence(messageContent);
+    return DOCUMENT_LIST_INTENT_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 export function isStatusQuestionWithoutReference(messageContent) {
     if (typeof messageContent !== 'string') return false;
     if (hasExplicitPersonComplaintUrgentHandoff(messageContent)) {
@@ -512,29 +540,49 @@ export function isStatusQuestionWithoutReference(messageContent) {
     );
 }
 
-function countDistinctCatalogTitlesInReply(normalizedReply, normalizedCatalogTitles) {
-    let remaining = normalizedReply;
-    let count = 0;
-    const sortedTitles = [...normalizedCatalogTitles].sort((a, b) => b.length - a.length);
-    for (const title of sortedTitles) {
-        if (!remaining.includes(title)) continue;
-        count += 1;
-        remaining = remaining.split(title).join(' ');
+function listCatalogDocumentEntries(language) {
+    const messages = {
+        ...(SESSION3_MESSAGES[language] || SESSION3_MESSAGES.tr),
+        ...(PUBLIC_MESSAGES[language] || PUBLIC_MESSAGES.tr)
+    };
+    const entries = [];
+    const seen = new Set();
+    for (const policy of listPublicDocumentOverview()) {
+        const rawTitle = messages[policy.label_key];
+        if (typeof rawTitle !== 'string') continue;
+        const normalizedTitle = evidence.normalizeForEvidence(rawTitle).trim();
+        if (!normalizedTitle || seen.has(normalizedTitle)) continue;
+        seen.add(normalizedTitle);
+        entries.push({
+            title: normalizedTitle,
+            addressType: policy.address_evidence_type || null
+        });
     }
-    return count;
+    return entries.sort((a, b) => b.title.length - a.title.length);
 }
 
 function looksLikeProseDocumentReply(replyText, language) {
     if (typeof replyText !== 'string' || !replyText.trim()) return false;
-    const normalizedCatalogTitles = [...new Set(
-        listCatalogDocumentTitles(language)
-            .map((title) => evidence.normalizeForEvidence(title).trim())
-            .filter(Boolean)
-    )];
-    if (normalizedCatalogTitles.length === 0) return false;
+    const catalogEntries = listCatalogDocumentEntries(language);
+    if (catalogEntries.length === 0) return false;
 
     const normalizedReply = evidence.normalizeForEvidence(replyText);
-    if (countDistinctCatalogTitlesInReply(normalizedReply, normalizedCatalogTitles) >= 2) {
+    let remaining = normalizedReply;
+    let nonAddressCount = 0;
+    const addressTypeCounts = new Map();
+    for (const entry of catalogEntries) {
+        if (!remaining.includes(entry.title)) continue;
+        remaining = remaining.split(entry.title).join(' ');
+        if (!entry.addressType) {
+            nonAddressCount += 1;
+        } else {
+            addressTypeCounts.set(entry.addressType, (addressTypeCounts.get(entry.addressType) || 0) + 1);
+        }
+    }
+    const maxAddressTypeCount = addressTypeCounts.size > 0 ? Math.max(...addressTypeCounts.values()) : 0;
+    // Mutually exclusive address-evidence alternatives (e.g. "kira sözleşmesi veya taahhütname")
+    // alone do not form a required-documents list.
+    if (nonAddressCount + maxAddressTypeCount >= 2) {
         return true;
     }
 
@@ -546,7 +594,7 @@ function looksLikeProseDocumentReply(replyText, language) {
     }
     return bulletLines.some((line) => {
         const normalizedLine = evidence.normalizeForEvidence(line);
-        return normalizedCatalogTitles.some((title) => normalizedLine.includes(title));
+        return catalogEntries.some((entry) => normalizedLine.includes(entry.title));
     });
 }
 
@@ -745,15 +793,19 @@ export async function handlePublicChat(request, environment, requestId) {
         const { facts: supportedFacts, uncertainKeys } = readSupportedDocumentFacts(userTurns, validated.language);
         const allowDeterministicEvidence = !evidenceRisk && uncertainKeys.size === 0;
         const isAnsweringMissingFacts = isAnsweringMissingFactsQuestion(previousAssistantMessage, validated.language);
-        const hasDocumentIntent = hasDocumentKeyword(lastUserMessage) || isAnsweringMissingFacts;
+        const isShortDocumentQuery = isVeryShortDocumentQuestion(lastUserMessage);
+        const hasDocumentListIntent =
+            isAnsweringMissingFacts
+            || isShortDocumentQuery
+            || isAskingWhichDocumentsAreNeeded(lastUserMessage);
 
-        if (allowDeterministicEvidence && isVeryShortDocumentQuestion(lastUserMessage)) {
+        if (allowDeterministicEvidence && isShortDocumentQuery) {
             const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
             outcome = 'ok';
             return renderDocumentToolReply(docOutput, validated.language);
         }
 
-        if (allowDeterministicEvidence && hasDocumentIntent) {
+        if (allowDeterministicEvidence && hasDocumentListIntent) {
             const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
             if ((Array.isArray(docOutput?.labels) && docOutput.labels.length > 0) || isAnsweringMissingFacts) {
                 outcome = 'ok';
@@ -818,7 +870,7 @@ export async function handlePublicChat(request, environment, requestId) {
                     ...(allowTools ? { tools: CHATBOT_TOOL_DEFINITIONS } : {})
                 });
             } catch (error) {
-                if (hasDocumentIntent || uncertainKeys.size > 0) {
+                if (hasDocumentListIntent) {
                     const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
                     outcome = 'ok';
                     return renderDocumentToolReply(
@@ -982,7 +1034,7 @@ export async function handlePublicChat(request, environment, requestId) {
             });
         }
 
-        if (looksLikeProseDocumentReply(trimmedText, validated.language)) {
+        if (looksLikeProseDocumentReply(trimmedText, validated.language) || hasDocumentListIntent) {
             const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
             outcome = 'ok';
             return renderDocumentToolReply(

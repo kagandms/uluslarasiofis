@@ -8,7 +8,7 @@ const COMBINING_MARKS_PATTERN = /\p{M}+/gu;
 const ARABIC_DIACRITICS_PATTERN = /[\u064B-\u065F\u0670\u0640]/gu;
 const APOSTROPHE_VARIANTS_PATTERN = /[\u2018\u2019\u02BC\uFF07]/g;
 
-const CLAUSE_SPLIT_PATTERN = /(?:[!?;,\n\r\u061F\u061B]+|(?<!(?<![\p{L}\p{N}])y)\.(?=\s|$))/u;
+const CLAUSE_SPLIT_PATTERN = /(?:[!?;,\n\r\u061f\u061b\u060c]+|(?<!(?<![\p{L}\p{N}])y)\.(?=\s|$))/u;
 const WORD_TOKEN_PATTERN = /[\p{L}\p{N}']+/gu;
 const NEGATION_WINDOW_WORDS = 4;
 
@@ -151,11 +151,11 @@ const ACCOMMODATION_PATTERNS = Object.freeze({
         /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?فندق[\p{L}\p{N}]*(?![\p{L}\p{N}])/u
     ]),
     undertaking: Object.freeze([
-        /(?<![\p{L}\p{N}])(?:taahhut[\p{L}\p{N}]*|akraba[\p{L}\p{N}]*\s+yan[\p{L}\p{N}]*|tanidig?[\p{L}\p{N}]*\s+yan[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-        /(?<![\p{L}\p{N}])(?:undertaking[\p{L}\p{N}]*|host|relative)(?![\p{L}\p{N}])/u,
-        /(?<![\p{L}\p{N}])(?:обязательств[\p{L}\p{N}]*|поручител[\p{L}\p{N}]*|родственник[\p{L}\p{N}]*|принимающ[\p{L}\p{N}]*\s+лиц[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-        /(?<![\p{L}\p{N}])(?:borcnama[\p{L}\p{N}]*|garyndas[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-        /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:تعهد|التعهد|كفاله|مضيف|مقدم\s+(?:ال)?تعهد)(?![\p{L}\p{N}])/u
+        /(?<![\p{L}\p{N}])(?:taahhut[\p{L}\p{N}]*|akraba[\p{L}\p{N}]*|tanidig[\p{L}\p{N}]*|tanidik[\p{L}\p{N}]*|(?:arkadas|aile)[\p{L}\p{N}]*\s+yan[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])(?:undertaking[\p{L}\p{N}]*|relative|(?:stay|staying|live|living)\s+with\s+(?:a\s+|an\s+|my\s+|our\s+)?(?:host|relative|friend|family|someone))(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])(?:обязательств[\p{L}\p{N}]*|поручител[\p{L}\p{N}]*|родственник[\p{L}\p{N}]*|(?:жив(?:у|ем)|остановил[\p{L}\p{N}]*)\s+у)(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])(?:borcnama[\p{L}\p{N}]*|garyndas[\p{L}\p{N}]*|[\p{L}\p{N}]+\s+yanynda)(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:تعهد|التعهد|كفاله|مقدم\s+(?:ال)?تعهد)|(?:اسكن|اقيم|ساكن|مقيم)\s+(?:مع|عند|لدي))(?![\p{L}\p{N}])/u
     ]),
     residence_certificate: Object.freeze([
         /(?<![\p{L}\p{N}])(?:adres\s+kayd[\p{L}\p{N}]*|yerlesim\s+yeri(?:\s+belge[\p{L}\p{N}]*)?|ikametgah\s+belge[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
@@ -175,35 +175,35 @@ const UNDER_18_PHRASES = Object.freeze([
     /(?<![\p{L}\p{N}])resit\s+degil[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?<!not\s+)(?:under|below|less\s+than|younger\s+than)\s+18(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?<!not\s+(?:a\s+)?)minor(?![\p{L}\p{N}])/u,
-    /(?<![\p{L}\p{N}])(?:(?<!не\s+)младше\s+18|до\s+18\s*(?:лет)?|несовершеннолет[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:(?<!не\s+)(?:младше|меньше)\s+18|до\s+18\s*(?:лет)?|несовершеннолет[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?:18\s*yasdan\s*kici[\p{L}\p{N}]*(?!\s+dal)|kamillik\s*yasyna\s*yetmedik[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-    /(?<![\p{L}\p{N}])(?:(?<!(?:لست|ليس|ليست)\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:اقل|اصغر|دون)\s+(?:من\s+)?18|(?<!(?:لست|ليس|ليست)\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?قاصر)(?![\p{L}\p{N}])/u
+    /(?<![\p{L}\p{N}])(?:(?<!(?:لست|ليس|ليست)\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:اقل|اصغر|دون)\s+(?:من\s+)?18|(?<!(?:لست|ليس|ليست)\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?قاصر[اه]?)(?![\p{L}\p{N}])/u
 ]);
 
 const ADULT_PHRASES = Object.freeze([
-    /(?<![\p{L}\p{N}])18\s*(?:yasindan|yastan|den|dan)?\s*kucuk\s*degil[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])18\s*(?:(?:yasindan|yastan|den|dan)?\s*kucuk|(?:yas)?\s*alti(?:nda)?)\s*degil[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])18\s*(?:yasindan|yastan|den|dan)?\s*buyu[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])18\s*(?:yas\s*)?(?:ve\s*)?uzeri[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?:resitim|yetiskin[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-    /(?<![\p{L}\p{N}])not\s+(?:under\s+18|(?:a\s+)?minor)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])not\s+(?:(?:under|below|less\s+than|younger\s+than)\s+18|(?:a\s+)?minor)(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?:over|above|older\s+than)\s+18(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])18\s*(?:or\s+older|and\s+over|\+)(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])adult(?![\p{L}\p{N}])/u,
-    /(?<![\p{L}\p{N}])(?:не\s+младше\s+18|старше\s+18|больше\s+18|совершеннолет[\p{L}\p{N}]*|взросл[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-    /(?<![\p{L}\p{N}])(?:18\s*yasdan\s*(?:uly|kici\s+dal)|kamillik\s*yasyna\s*yeten[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-    /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:(?:لست|ليس|ليست)\s+(?:اقل|اصغر|دون)\s+(?:من\s+)?18|(?:اكبر|فوق|اعلي)\s+(?:من\s+)?18|بالغ|راشد)(?![\p{L}\p{N}])/u
+    /(?<![\p{L}\p{N}])(?:не\s+(?:младше|меньше)\s+18|старше\s+18|больше\s+18|совершеннолет[\p{L}\p{N}]*|взросл[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:18\s*yasdan\s*(?:uly|kici\s+dal[\p{L}\p{N}]*)|kamillik\s*yasyna\s*yeten[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:(?:و)?(?:لست|ليس|ليست|غير)\s+(?:(?:اقل|اصغر|دون)\s+(?:من\s+)?18|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?قاصر[اه]?)|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:(?:اكبر|فوق|اعلي)\s+(?:من\s+)?18|بالغ|راشد))(?![\p{L}\p{N}])/u
 ]);
 
 // Explicit negation included in adult phrases above (these mean "adult", not uncertainty).
-const EXPLICIT_DOUBLE_NEG_ADULT_PATTERN = /(?<![\p{L}\p{N}])(?:kucuk\s*degil|not\s+(?:under\s+18|(?:a\s+)?minor)|не\s+младше\s+18|kici\s+dal|(?:لست|ليس|ليست)\s+(?:اقل|اصغر|دون)\s+(?:من\s+)?18)(?![\p{L}\p{N}])/u;
+const EXPLICIT_DOUBLE_NEG_ADULT_PATTERN = /(?<![\p{L}\p{N}])(?:(?:kucuk|alti(?:nda)?)\s*degil[\p{L}\p{N}]*|not\s+(?:(?:under|below|less\s+than|younger\s+than)\s+18|(?:a\s+)?minor)|не\s+(?:младше|меньше)\s+18|kici\s+dal[\p{L}\p{N}]*|(?:و)?(?:لست|ليس|ليست|غير)\s+(?:(?:اقل|اصغر|دون)\s+(?:من\s+)?18|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?قاصر[اه]?))(?![\p{L}\p{N}])/u;
 
 const NUMERIC_AGE_PATTERNS = Object.freeze([
     // tr / tk suffix age units
     /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:yasindayim|yasinda|yasimda|yasim|yasymda|yasym)(?![\p{L}\p{N}])/gu,
     // en explicit age units ("years old", "yrs old", "y.o.")
     /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:years?\s+old|yrs?\s+old|y\.?o\.?)(?![\p{L}\p{N}])/gu,
-    // en "I am N" / "I'm N" only at end of clause or followed by "years" or "and"
-    /(?<![\p{L}\p{N}])(?:i\s+am|i'm|im)(?:\s+not)?\s+(1[4-9]|[2-9]\d)(?=(?:\s*(?:years(?=\s*(?:and(?![\p{L}\p{N}])|$))|and(?![\p{L}\p{N}])|$)))/gu,
+    // en "I am N" / "I'm N" only at end of clause (allowing trailing delimiter) or followed by "years" or "and"
+    /(?<![\p{L}\p{N}])(?:i\s+am|i'm|im)(?:\s+not)?\s+(1[4-9]|[2-9]\d)(?=(?:\s*(?:years(?=\s*(?:and(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]*$))|and(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]*$)))/gu,
     // ru explicit age statements ("мне [уже|исполнилось] N лет/года/год" or "N лет/года/год от роду")
     /(?<![\p{L}\p{N}])мне(?:\s+еще)?(?:\s+не)?(?:\s+уже)?(?:\s+исполнилось)?\s+(1[4-9]|[2-9]\d)\s*(?:лет|года|год)(?![\p{L}\p{N}])/gu,
     /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:лет|года|год)\s+от\s+роду(?![\p{L}\p{N}])/gu,
@@ -288,7 +288,7 @@ const FINGERPRINT_NEGATIVE = Object.freeze([
 ]);
 
 const FINGERPRINT_POSITIVE = Object.freeze([
-    /(?<![\p{L}\p{N}])parmak\s+iz[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:var|kayd[\p{L}\p{N}]*\s+var|kayitli|alindi[\p{L}\p{N}]*|alinmis[\p{L}\p{N}]*|verdim|verildi[\p{L}\p{N}]*|yaptirdim|mevcut)(?!\s+degil)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])parmak\s+iz[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:var|kayd[\p{L}\p{N}]*\s+var|kayitli[\p{L}\p{N}]*|alindi[\p{L}\p{N}]*|alinmis[\p{L}\p{N}]*|verdim|verildi[\p{L}\p{N}]*|yaptirdim|mevcut)(?!\s+degil)(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?:kayitli|alinmis[\p{L}\p{N}]*|alindi[\p{L}\p{N}]*|verdim|yaptirdim)(?!\s+degil)\s+(?:[\p{L}\p{N}]+\s+){0,6}parmak\s+iz[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?<!no\s+|not\s+)fingerprints?(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?<!no\s+|not\s+|never\s+)(?:registered|recorded|taken|done|available|exists?)(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?<!not\s+|never\s+|don't\s+|dont\s+|do\s+not\s+|didn't\s+|didnt\s+|did\s+not\s+|haven't\s+|have\s+not\s+)(?:registered|recorded|taken)\s+(?:[\p{L}\p{N}]+\s+){0,6}fingerprints?(?![\p{L}\p{N}])/u,
@@ -301,9 +301,22 @@ const FINGERPRINT_POSITIVE = Object.freeze([
     /(?<![\p{L}\p{N}])(?<!لم\s+|ليس\s+|ليست\s+|غير\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:لدي|عندي|سجلت|مسجل[\p{L}\p{N}]*|تم\s+تسجيل[\p{L}\p{N}]*|تمت)\s+(?:[\p{L}\p{N}]+\s+){0,6}(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?![\p{L}\p{N}])/u
 ]);
 
-const YESNO_QUESTION_PARTICLE_PATTERN = /(?<![\p{L}\p{N}])(?:mi|mu|midir|mudur|miyim|muyum|misin|musun|misen|musan|my|mydyr|ли|هل)(?![\p{L}\p{N}])|[\p{L}]+(?:mi|my)(?=\s*[?\u061f])/u;
+const YESNO_QUESTION_PARTICLES_BY_LANGUAGE = Object.freeze({
+    tr: /(?<![\p{L}\p{N}])(?:mi|mu|midir|mudur|miyim|muyum|misin|musun|misiniz|musunuz|miyiz|muyuz)(?![\p{L}\p{N}])|[\p{L}\p{N}](?:mi|mu)\s*\?/u,
+    tk: /(?<![\p{L}\p{N}])(?:my|mi|mydyr|midir)(?![\p{L}\p{N}])|[\p{L}\p{N}](?:my|mi|mydyr|midir)\s*\?/u,
+    ru: /(?<![\p{L}\p{N}])ли(?![\p{L}\p{N}])/u,
+    ar: /(?<![\p{L}\p{N}])هل(?![\p{L}\p{N}])/u
+});
 const ENGLISH_AUX_QUESTION_PATTERN = /^(?:is|are|am|do|does|did|should|can|could|would|will)(?![\p{L}\p{N}])/u;
-const DOCUMENT_WH_QUESTION_PATTERN = /(?<![\p{L}\p{N}])(?:hangi\s+(?:belge|evrak)|(?:what|which)\s+doc|какие\s+документ|haysy\s+resminama|ما\s+(?:هي\s+)?المستندات)(?![\p{L}\p{N}])/u;
+const WH_WORDS_BY_LANGUAGE = Object.freeze({
+    tr: /(?<![\p{L}\p{N}])(?:ne|neler|nedir|hangi|nasil|nerede|ne\s+zaman|kac(?:ta)?)(?![\p{L}\p{N}])/u,
+    en: /(?<![\p{L}\p{N}])(?:what|which|how|where|when)(?![\p{L}\p{N}])/u,
+    ru: /(?<![\p{L}\p{N}])(?:что|какие|какои|как|где|когда|сколько)(?![\p{L}\p{N}])/u,
+    tk: /(?<![\p{L}\p{N}])(?:name|haysy|nahili|nirede|hacan|nace)(?![\p{L}\p{N}])/u,
+    ar: /(?<![\p{L}\p{N}])(?:ما|ماذا|اي|كيف|اين|متي|كم)(?![\p{L}\p{N}])/u
+});
+const TURKMEN_NON_NAME_WH_PATTERN = /(?<![\p{L}\p{N}])(?:haysy|nahili|nirede|hacan|nace)(?![\p{L}\p{N}])/u;
+const ELLIPTICAL_DOCUMENT_REQUEST_PATTERN = /(?:^(?:belge[\p{L}\p{N}]*|evrak[\p{L}\p{N}]*|documents?|docs?|документ[\p{L}\p{N}]*|resminama[\p{L}\p{N}]*|(?:ال)?(?:مستندات|وثايق))\s+(?:for|icin|ucin|для|ل[\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:belge[\p{L}\p{N}]*|evrak[\p{L}\p{N}]*|documents?|docs?|документ[\p{L}\p{N}]*|resminama[\p{L}\p{N}]*|(?:ال)?(?:مستندات|وثايق))\s*[?\u061f]$)/u;
 
 export const EVIDENCE_PATTERN_LISTS = Object.freeze({
     NEGATION_LEXICON_BY_LANGUAGE,
@@ -328,9 +341,11 @@ export const EVIDENCE_PATTERN_LISTS = Object.freeze({
     HOST_TURKISH_POSITIVE,
     FINGERPRINT_NEGATIVE,
     FINGERPRINT_POSITIVE,
-    YESNO_QUESTION_PARTICLE_PATTERN,
+    YESNO_QUESTION_PARTICLES_BY_LANGUAGE,
     ENGLISH_AUX_QUESTION_PATTERN,
-    DOCUMENT_WH_QUESTION_PATTERN
+    WH_WORDS_BY_LANGUAGE,
+    TURKMEN_NON_NAME_WH_PATTERN,
+    ELLIPTICAL_DOCUMENT_REQUEST_PATTERN
 });
 
 function isNegationToken(cleanToken) {
@@ -364,9 +379,9 @@ function parseClauses(normalizedText) {
     const splitGlobal = new RegExp(CLAUSE_SPLIT_PATTERN.source, 'gu');
     for (const match of normalizedText.matchAll(splitGlobal)) {
         const end = match.index + match[0].length;
-        const segment = normalizedText.slice(cursor, end).trim();
-        if (segment) {
-            clauses.push({ text: segment, tokens: tokenizeClause(segment) });
+        const text = normalizedText.slice(cursor, end).trim();
+        if (text) {
+            clauses.push({ text, tokens: tokenizeClause(text) });
         }
         cursor = end;
     }
@@ -405,16 +420,31 @@ function hasNegationInWindow(clause, matchStart, matchEnd, ignoredSpans = []) {
     return false;
 }
 
-function isYesNoQuestionClause(clauseText) {
-    if (YESNO_QUESTION_PARTICLE_PATTERN.test(clauseText)) return true;
-    return /[?\u061F]/u.test(clauseText) && ENGLISH_AUX_QUESTION_PATTERN.test(clauseText.trim());
+function hasWhQuestionWord(clauseText, language = 'tr') {
+    for (const [lang, pattern] of Object.entries(WH_WORDS_BY_LANGUAGE)) {
+        if (lang === 'tk' && language !== 'tk') {
+            if (TURKMEN_NON_NAME_WH_PATTERN.test(clauseText)) return true;
+            continue;
+        }
+        if (pattern.test(clauseText)) return true;
+    }
+    return false;
 }
 
-function isHostQuestionClause(clauseText) {
-    if (YESNO_QUESTION_PARTICLE_PATTERN.test(clauseText)) return true;
-    if (!/[?\u061F]/u.test(clauseText)) return false;
-    if (ENGLISH_AUX_QUESTION_PATTERN.test(clauseText.trim())) return true;
-    return !DOCUMENT_WH_QUESTION_PATTERN.test(clauseText);
+function isYesNoQuestionClause(clauseText, language = 'tr') {
+    const particlePattern = YESNO_QUESTION_PARTICLES_BY_LANGUAGE[language];
+    if (particlePattern && particlePattern.test(clauseText)) return true;
+    const trimmed = clauseText.trim();
+    return /[?\u061f]$/u.test(trimmed) && ENGLISH_AUX_QUESTION_PATTERN.test(trimmed);
+}
+
+function isQuestionClause(clauseText, language = 'tr') {
+    if (isYesNoQuestionClause(clauseText, language)) return true;
+    const trimmed = clauseText.trim();
+    if (!/[?\u061f]$/u.test(trimmed)) return false;
+    if (hasWhQuestionWord(trimmed, language)) return false;
+    if (ELLIPTICAL_DOCUMENT_REQUEST_PATTERN.test(trimmed)) return false;
+    return true;
 }
 
 function findAllMatches(text, patterns) {
@@ -434,12 +464,12 @@ function findAllMatches(text, patterns) {
     return matches;
 }
 
-function detectApplicationType(clauses) {
+function detectApplicationType(clauses, language) {
     const matchedKeys = new Set();
     let uncertain = false;
 
     for (const clause of clauses) {
-        const isQuestion = isYesNoQuestionClause(clause.text);
+        const isQuestion = isQuestionClause(clause.text, language);
         for (const [key, patterns] of Object.entries(APPLICATION_TYPE_PATTERNS)) {
             const matches = findAllMatches(clause.text, patterns);
             if (key === 'transition' && TRANSITION_PEREVOD_CONTEXT_PATTERN.test(clause.text)) {
@@ -464,12 +494,12 @@ function detectApplicationType(clauses) {
     return { value: undefined, uncertain: false };
 }
 
-function detectAccommodationType(clauses) {
+function detectAccommodationType(clauses, language) {
     const matchedKeys = new Set();
     let uncertain = false;
 
     for (const clause of clauses) {
-        const isQuestion = isYesNoQuestionClause(clause.text);
+        const isQuestion = isQuestionClause(clause.text, language);
         const hostNegSpans = [
             ...findAllMatches(clause.text, HOST_MARRIED_NEGATIVE),
             ...findAllMatches(clause.text, HOST_TURKISH_NEGATIVE)
@@ -518,38 +548,49 @@ function isDurationNumericMatch(clause, matchStart, matchEnd) {
     return false;
 }
 
-function detectUnder18(clauses) {
+function maskSpans(text, spans) {
+    let masked = text;
+    for (const span of spans) {
+        masked = masked.slice(0, span.start) + ' '.repeat(span.end - span.start) + masked.slice(span.end);
+    }
+    return masked;
+}
+
+function detectUnder18(clauses, language) {
     let under18Matched = false;
     let adultMatched = false;
     let uncertain = false;
 
     for (const clause of clauses) {
-        const isQuestion = isYesNoQuestionClause(clause.text);
+        const isQuestion = isQuestionClause(clause.text, language);
 
-        for (const match of findAllMatches(clause.text, UNDER_18_PHRASES)) {
-            const explicitMinor = /(?<![\p{L}\p{N}])(?:resit\s+degil|несовершеннолет)/u.test(match.text);
-            if ((!explicitMinor && hasNegationInWindow(clause, match.start, match.end)) || isQuestion) {
-                uncertain = true;
-            } else {
-                under18Matched = true;
-            }
-        }
-
-        for (const match of findAllMatches(clause.text, ADULT_PHRASES)) {
-            const explicitDoubleNeg = EXPLICIT_DOUBLE_NEG_ADULT_PATTERN.test(match.text);
-            if ((!explicitDoubleNeg && hasNegationInWindow(clause, match.start, match.end)) || isQuestion) {
+        const adultMatches = findAllMatches(clause.text, ADULT_PHRASES);
+        for (const match of adultMatches) {
+            if (hasNegationInWindow(clause, match.start, match.end, [match]) || isQuestion) {
                 uncertain = true;
             } else {
                 adultMatched = true;
             }
         }
 
-        // Mask comparative age-18 phrases so "до 18 лет" or "under 18" is not also parsed as age = 18.
-        let maskedText = clause.text;
-        for (const pattern of [...UNDER_18_PHRASES, ...ADULT_PHRASES]) {
-            const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
-            maskedText = maskedText.replace(globalPattern, (matched) => ' '.repeat(matched.length));
+        // Mask adult phrases before minor/numeric checks so negated-minor phrases (e.g. "not under 18")
+        // are not re-matched as under-18 or age=18.
+        const textWithoutAdult = maskSpans(clause.text, adultMatches);
+
+        const under18Matches = findAllMatches(textWithoutAdult, UNDER_18_PHRASES);
+        const explicitMinorSpans = under18Matches.filter((match) =>
+            /(?<![\p{L}\p{N}])(?:resit\s+degil|несовершеннолет|kamillik\s*yasyna\s*yetmedik)/u.test(match.text)
+        );
+        for (const match of under18Matches) {
+            const isExplicitMinor = explicitMinorSpans.includes(match);
+            if ((!isExplicitMinor && hasNegationInWindow(clause, match.start, match.end, explicitMinorSpans)) || isQuestion) {
+                uncertain = true;
+            } else {
+                under18Matched = true;
+            }
         }
+
+        const maskedText = maskSpans(textWithoutAdult, under18Matches);
 
         for (const match of findAllMatches(maskedText, NUMERIC_AGE_PATTERNS)) {
             const parsed = Number.parseInt(match.group1, 10);
@@ -588,7 +629,14 @@ function isStudentSelfPredicate(clauseText, matchStart, matchText, hostMatches) 
     return !hasInterveningHost;
 }
 
-function detectHostFacts(clauses) {
+function isPositiveMatchCoveredByNegative(match, negMatches) {
+    // Require matching end offset so an embedded positive sub-match (e.g. "kayıtlı" in
+    // "kayıtlı olmayan parmak izim", or "в браке" in "не состоит в браке") is ignored,
+    // while a separate earlier positive statement inside a greedy {0,6} span still conflicts.
+    return negMatches.some((neg) => match.start >= neg.start && match.end === neg.end);
+}
+
+function detectHostFacts(clauses, language) {
     let marriedYes = false;
     let marriedNo = false;
     let marriedUncertain = false;
@@ -600,17 +648,20 @@ function detectHostFacts(clauses) {
         const hostMatches = findAllMatches(clause.text, HOST_CONTEXT_PATTERNS);
         if (hostMatches.length === 0) continue;
 
-        const isQuestion = isHostQuestionClause(clause.text);
+        const isQuestion = isQuestionClause(clause.text, language);
         const marriedNegMatches = findAllMatches(clause.text, HOST_MARRIED_NEGATIVE);
         const turkishNegMatches = findAllMatches(clause.text, HOST_TURKISH_NEGATIVE);
 
+        const activeMarriedNegMatches = [];
         for (const match of marriedNegMatches) {
             if (isStudentSelfPredicate(clause.text, match.start, match.text, hostMatches)) continue;
+            activeMarriedNegMatches.push(match);
             if (isQuestion) marriedUncertain = true;
             else marriedNo = true;
         }
         for (const match of findAllMatches(clause.text, HOST_MARRIED_POSITIVE)) {
             if (isStudentSelfPredicate(clause.text, match.start, match.text, hostMatches)) continue;
+            if (isPositiveMatchCoveredByNegative(match, activeMarriedNegMatches)) continue;
             if (isQuestion || hasNegationInWindow(clause, match.start, match.end, turkishNegMatches)) {
                 marriedUncertain = true;
             } else {
@@ -618,13 +669,16 @@ function detectHostFacts(clauses) {
             }
         }
 
+        const activeTurkishNegMatches = [];
         for (const match of turkishNegMatches) {
             if (isStudentSelfPredicate(clause.text, match.start, match.text, hostMatches)) continue;
+            activeTurkishNegMatches.push(match);
             if (isQuestion) turkishUncertain = true;
             else turkishNo = true;
         }
         for (const match of findAllMatches(clause.text, HOST_TURKISH_POSITIVE)) {
             if (isStudentSelfPredicate(clause.text, match.start, match.text, hostMatches)) continue;
+            if (isPositiveMatchCoveredByNegative(match, activeTurkishNegMatches)) continue;
             if (isQuestion || hasNegationInWindow(clause, match.start, match.end, marriedNegMatches)) {
                 turkishUncertain = true;
             } else {
@@ -646,13 +700,13 @@ function detectHostFacts(clauses) {
     };
 }
 
-function detectFingerprintStatus(clauses) {
+function detectFingerprintStatus(clauses, language) {
     let negativeMatched = false;
     let positiveMatched = false;
     let uncertain = false;
 
     for (const clause of clauses) {
-        const isQuestion = isYesNoQuestionClause(clause.text);
+        const isQuestion = isQuestionClause(clause.text, language);
         const negMatches = findAllMatches(clause.text, FINGERPRINT_NEGATIVE);
         const posMatches = findAllMatches(clause.text, FINGERPRINT_POSITIVE);
 
@@ -661,6 +715,7 @@ function detectFingerprintStatus(clauses) {
             else negativeMatched = true;
         }
         for (const match of posMatches) {
+            if (isPositiveMatchCoveredByNegative(match, negMatches)) continue;
             if (isQuestion) {
                 uncertain = true;
             } else if (hasNegationInWindow(clause, match.start, match.end)) {
@@ -700,7 +755,6 @@ function attachUncertainKey(target, uncertainKeys) {
  */
 export function extractSupportedDocumentFacts(userTurns, language = 'tr') {
     const resolvedLanguage = CHATBOT_LANGUAGES.includes(language) ? language : 'tr';
-    void resolvedLanguage;
     const turns = Array.isArray(userTurns)
         ? userTurns.filter((item) => typeof item === 'string')
         : (typeof userTurns === 'string' ? [userTurns] : []);
@@ -713,26 +767,26 @@ export function extractSupportedDocumentFacts(userTurns, language = 'tr') {
     const supported = {};
     const uncertain = [];
 
-    const applicationType = detectApplicationType(clauses);
+    const applicationType = detectApplicationType(clauses, resolvedLanguage);
     if (applicationType.uncertain) uncertain.push('application_type');
     else if (applicationType.value) supported.application_type = applicationType.value;
 
-    const isUnder18 = detectUnder18(clauses);
+    const isUnder18 = detectUnder18(clauses, resolvedLanguage);
     if (isUnder18.uncertain) uncertain.push('is_under_18');
     else if (typeof isUnder18.value === 'boolean') supported.is_under_18 = isUnder18.value;
 
-    const accommodationType = detectAccommodationType(clauses);
+    const accommodationType = detectAccommodationType(clauses, resolvedLanguage);
     if (accommodationType.uncertain) uncertain.push('accommodation_type');
     else if (accommodationType.value) supported.accommodation_type = accommodationType.value;
 
-    const hostFacts = detectHostFacts(clauses);
+    const hostFacts = detectHostFacts(clauses, resolvedLanguage);
     if (hostFacts.married.uncertain) uncertain.push('host_is_married');
     else if (hostFacts.married.value) supported.host_is_married = hostFacts.married.value;
 
     if (hostFacts.turkish.uncertain) uncertain.push('host_is_turkish');
     else if (hostFacts.turkish.value) supported.host_is_turkish = hostFacts.turkish.value;
 
-    const fingerprintStatus = detectFingerprintStatus(clauses);
+    const fingerprintStatus = detectFingerprintStatus(clauses, resolvedLanguage);
     if (fingerprintStatus.uncertain) uncertain.push('fingerprint_status');
     else if (fingerprintStatus.value) supported.fingerprint_status = fingerprintStatus.value;
 
