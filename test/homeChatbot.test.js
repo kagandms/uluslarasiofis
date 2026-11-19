@@ -548,3 +548,58 @@ test('chatbotOpenTracking link action renders localized label for tr and updates
     assert.equal(linkAction.textContent.trim(), 'عرض طلبي');
     assert.equal(linkAction.textContent.trim(), CHATBOT_MESSAGES.ar.chatbotOpenTracking);
 });
+
+test('resolveSafeHref only renders same-origin path link actions and drops unsafe or external hrefs', async (context) => {
+    const html = await readWorkspaceFile('index.html');
+    let nextActions = [];
+
+    const { dom, doc } = mountChatbotDom(context, html, {
+        locale: 'tr',
+        fetcher: async () => createJsonResponse({
+            reply: 'Yanıt metni.',
+            actions: nextActions
+        }, 200)
+    });
+
+    doc.getElementById('home-chatbot-launcher').click();
+    const panel = doc.getElementById('home-chatbot-panel');
+    const input = doc.getElementById('chatbot-input');
+    const form = panel.querySelector('.chatbot-composer');
+
+    async function sendAndReadLastMessage(actions) {
+        nextActions = actions;
+        input.value = 'Soru';
+        form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+        await flushPromises();
+        const messages = panel.querySelectorAll('.chatbot-message-assistant');
+        return messages[messages.length - 1];
+    }
+
+    const safeMessage = await sendAndReadLastMessage([
+        { type: 'link', href: '/basvurum/', label_key: 'homeTrackAction' }
+    ]);
+    const safeLink = safeMessage.querySelector('.chatbot-action-link');
+    assert.ok(safeLink);
+    assert.equal(safeLink.getAttribute('href'), '/basvurum/');
+    assert.equal(safeLink.getAttribute('target'), null);
+    assert.equal(safeLink.getAttribute('rel'), null);
+
+    const unsafeHrefs = [
+        '/\\evil.example',
+        '//evil.example',
+        'https://evil.example/',
+        'javascript:alert(1)',
+        '/%5Cevil',
+        ' /basvurum/',
+        '/basvurum/\nalert(1)'
+    ];
+
+    for (const unsafeHref of unsafeHrefs) {
+        const msg = await sendAndReadLastMessage([
+            { type: 'link', href: unsafeHref, label_key: 'homeTrackAction' }
+        ]);
+        assert.equal(msg.querySelector('.chatbot-action-link'), null, `Expected no link for ${JSON.stringify(unsafeHref)}`);
+        assert.equal(msg.querySelector('a'), null, `Expected no anchor for ${JSON.stringify(unsafeHref)}`);
+        assert.equal(msg.querySelector('.chatbot-actions'), null, `Expected action row dropped for ${JSON.stringify(unsafeHref)}`);
+    }
+});

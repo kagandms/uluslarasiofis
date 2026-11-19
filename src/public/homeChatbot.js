@@ -32,19 +32,20 @@ function resolveActionLabel(locale, labelKey) {
         ?? key;
 }
 
-function resolveSafeHref(href) {
-    if (typeof href !== 'string') return null;
-    const trimmed = href.trim();
-    if (!trimmed) return null;
-    if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return trimmed;
-    if (trimmed.startsWith('#')) return trimmed;
+const SAFE_ACTION_HREF_PATTERN = /^\/(?![\/\\])[A-Za-z0-9\-._~\/?#=&%]*$/;
+
+function resolveSafeHref(href, origin = globalThis.location?.origin) {
+    if (typeof href !== 'string' || !origin || origin === 'null') return null;
+    if (!SAFE_ACTION_HREF_PATTERN.test(href)) return null;
     try {
-        const parsed = new URL(trimmed);
-        if (parsed.protocol === 'https:') return parsed.toString();
+        const decoded = decodeURIComponent(href);
+        if (decoded.includes('\\') || decoded.startsWith('//')) return null;
+        const url = new URL(href, origin);
+        if (url.origin !== origin || url.pathname.startsWith('//')) return null;
+        return `${url.pathname}${url.search}${url.hash}`;
     } catch {
         return null;
     }
-    return null;
 }
 
 function resolveFetcher(document, customFetcher) {
@@ -278,15 +279,14 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
                     localizedLogBindings.push({ element: button, type: 'message', key: 'inquiryActionButton' });
                     actionRow.append(button);
                 } else if (action.type === 'link') {
-                    const safeHref = resolveSafeHref(action.href);
+                    const safeHref = resolveSafeHref(
+                        action.href,
+                        document.defaultView?.location?.origin || globalThis.location?.origin
+                    );
                     if (!safeHref) continue;
                     const link = document.createElement('a');
                     link.className = 'chatbot-action-link';
                     link.href = safeHref;
-                    if (safeHref.startsWith('https://')) {
-                        link.target = '_blank';
-                        link.rel = 'noopener noreferrer';
-                    }
                     const labelKey = typeof action.label_key === 'string' ? action.label_key : '';
                     link.textContent = resolveActionLabel(activeLocale, labelKey || safeHref);
                     if (labelKey) {

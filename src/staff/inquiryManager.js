@@ -2,6 +2,17 @@ import { formatApplicationTimestamp } from '../shared/application-timestamps.js'
 
 const STAFF_INQUIRIES_URL = '/api/staff/inquiries';
 const INQUIRIES_TITLE = 'Gelen Sorular';
+const EMAIL_PATTERN = /^[^\s@?#&%\/\\:;,<>"'()\[\]]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+
+function buildMailtoHref(email) {
+    if (typeof email !== 'string') return '';
+    const trimmed = email.trim();
+    if (!EMAIL_PATTERN.test(trimmed)) return '';
+    const atIndex = trimmed.indexOf('@');
+    const localPart = trimmed.slice(0, atIndex);
+    const domain = trimmed.slice(atIndex + 1);
+    return `mailto:${encodeURIComponent(localPart)}@${domain}`;
+}
 
 function resolveFetcher(document, customFetcher) {
     if (typeof customFetcher === 'function') return customFetcher;
@@ -171,11 +182,19 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
 
         const emailText = typeof item.email === 'string' ? item.email.trim() : '';
         if (emailText) {
-            const mailLink = document.createElement('a');
-            mailLink.className = 'staff-inquiry-link staff-inquiry-email';
-            mailLink.href = `mailto:${emailText}`;
-            mailLink.textContent = emailText;
-            contacts.append(mailLink);
+            const mailtoHref = buildMailtoHref(emailText);
+            if (mailtoHref) {
+                const mailLink = document.createElement('a');
+                mailLink.className = 'staff-inquiry-link staff-inquiry-email';
+                mailLink.href = mailtoHref;
+                mailLink.textContent = emailText;
+                contacts.append(mailLink);
+            } else {
+                const mailText = document.createElement('span');
+                mailText.className = 'staff-inquiry-email';
+                mailText.textContent = emailText;
+                contacts.append(mailText);
+            }
         }
 
         card.append(header, message, contacts);

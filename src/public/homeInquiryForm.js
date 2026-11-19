@@ -6,7 +6,7 @@ import { OFFICIAL_NOTICE_URL } from './privacyNoticeModal.js';
 import { isValidPhoneNumber } from '../shared/phoneNumber.js';
 
 const INQUIRY_ENDPOINT = '/api/public/inquiries';
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+const EMAIL_PATTERN = /^[^\s@?#&%\/\\:;,<>"'()\[\]]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 const activeControllers = new WeakMap();
 
 function normalizeLocale(locale) {

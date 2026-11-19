@@ -280,3 +280,53 @@ test('Sil button requires confirm step before sending DELETE /api/staff/inquirie
     assert.equal(badge.hidden, true);
     assert.equal(badge.textContent, '0');
 });
+
+test('mailto link encodes valid local-part and renders unsafe emails as plain text without a link', async (context) => {
+    const { root } = createStaffDom(context);
+    const unsafeEmails = [
+        { id: 'inq-inject', email: 'a@b.co?cc=x@y.z&body=hello' },
+        { id: 'inq-q', email: 'a?b@example.edu' },
+        { id: 'inq-amp', email: 'a&b@example.edu' },
+        { id: 'inq-hash', email: 'a#b@example.edu' },
+        { id: 'inq-pct', email: 'a%20b@example.edu' },
+        { id: 'inq-comma', email: 'a,b@example.edu' },
+        { id: 'inq-at', email: 'a@b@example.edu' }
+    ];
+    const items = [
+        {
+            ...NEW_ITEMS[0],
+            id: 'inq-valid',
+            email: 'ayse+test@example.edu'
+        },
+        ...unsafeEmails.map((entry) => ({
+            ...NEW_ITEMS[0],
+            id: entry.id,
+            email: entry.email
+        }))
+    ];
+
+    const controller = mountInquiryManager(root, {
+        fetcher: async () => createJsonResponse({
+            items,
+            counts: { new: items.length, answered: 0 }
+        })
+    });
+    context.after(() => controller?.destroy());
+    await flushPromises();
+
+    const validCard = root.querySelector('.staff-inquiry-card[data-inquiry-id="inq-valid"]');
+    const validLink = validCard?.querySelector('a.staff-inquiry-email');
+    assert.ok(validLink);
+    assert.equal(validLink.getAttribute('href'), 'mailto:ayse%2Btest@example.edu');
+    assert.equal(validLink.textContent, 'ayse+test@example.edu');
+
+    for (const entry of unsafeEmails) {
+        const card = root.querySelector(`.staff-inquiry-card[data-inquiry-id="${entry.id}"]`);
+        assert.ok(card, `Card ${entry.id} must render`);
+        assert.equal(card.querySelector('a[href^="mailto:"]'), null, `No mailto link for ${entry.email}`);
+        assert.equal(card.querySelector('a.staff-inquiry-email'), null, `No email anchor for ${entry.email}`);
+        const plainEmail = card.querySelector('span.staff-inquiry-email');
+        assert.ok(plainEmail, `Plain text email span must render for ${entry.email}`);
+        assert.equal(plainEmail.textContent, entry.email);
+    }
+});
