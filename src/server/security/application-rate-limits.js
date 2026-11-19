@@ -30,10 +30,10 @@ export const CHATBOT_RATE_LIMIT = Object.freeze({
 
 /** Bounds one IP's model calls per day to protect the shared Workers AI allowance. */
 export const CHATBOT_IP_DAILY_LIMIT = Object.freeze({
-    endpoint: 'chatbot-ip-daily', maxRequests: 20, windowSeconds: 86400
+    endpoint: 'chatbot-ip-daily', maxRequests: 100, windowSeconds: 86400
 });
 
-/** Global daily cap across all public chat model calls sized within the free Workers AI neuron budget. */
+/** Global daily cap across all public chat model calls sized for campus NAT usage (~0.2 USD/day worst case). */
 export const CHATBOT_GLOBAL_DAILY_LIMIT = Object.freeze({
-    endpoint: 'chatbot-global-daily', identity: 'global', maxRequests: 50, windowSeconds: 86400
+    endpoint: 'chatbot-global-daily', identity: 'global', maxRequests: 300, windowSeconds: 86400
 });

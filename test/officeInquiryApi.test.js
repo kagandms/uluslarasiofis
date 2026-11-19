@@ -286,6 +286,9 @@ test('invalid inputs return 400 VALIDATION_ERROR and never echo submitted person
     const invalidRequests = [
         validBody({ phone: badPhone, message: secretMessage }),
         validBody({ email: badEmail, message: secretMessage }),
+        validBody({ email: 'a@b.co?cc=x@y.z', message: secretMessage }),
+        validBody({ first_name: 'Zeynep\u202EKaya', message: secretMessage }),
+        validBody({ message: `${secretMessage}\u200B` }),
         validBody({ message: 'kısa' }),
         validBody({ language: 'es', message: secretMessage }),
         { ...validBody({ message: secretMessage }), unknown: 'x' }
@@ -302,7 +305,56 @@ test('invalid inputs return 400 VALIDATION_ERROR and never echo submitted person
         assert.equal(text.includes(secretMessage), false);
         assert.equal(text.includes(badPhone), false);
         assert.equal(text.includes(badEmail), false);
+        assert.equal(text.includes('a@b.co?cc=x@y.z'), false);
+        assert.equal(text.includes('Zeynep\u202EKaya'), false);
     }
 
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM office_inquiries').first().count, 0);
+});
+
+test('POST /api/public/inquiries accepts +/. e-mails and Arabic, Russian, and Turkish text', async () => {
+    const { database, environment } = createEnvironment();
+    const cases = [
+        {
+            address: '198.51.100.91',
+            phone: '+90 555 301 00 01',
+            first_name: 'أحمد',
+            last_name: 'علي',
+            email: 'ahmad.ali+portal@uni.edu.tr',
+            message: 'أريد الاستفسار عن موعد تقديم المستندات.',
+            language: 'ar'
+        },
+        {
+            address: '198.51.100.92',
+            phone: '+90 555 301 00 02',
+            first_name: 'Анна',
+            last_name: 'Иванова',
+            email: 'anna.ivanova+docs@uni.edu.tr',
+            message: 'Здравствуйте, подскажите статус моей заявки.',
+            language: 'ru'
+        },
+        {
+            address: '198.51.100.93',
+            phone: '+90 555 301 00 03',
+            first_name: 'Şükrü',
+            last_name: 'Çağlar',
+            email: 'sukru.caglar+ikamet@uni.edu.tr',
+            message: 'Öğrenci belgesi yüklemesi hakkında bilgi rica ederim.',
+            language: 'tr'
+        }
+    ];
+
+    for (const item of cases) {
+        const response = await worker.fetch(createInquiryRequest(validBody({
+            first_name: item.first_name,
+            last_name: item.last_name,
+            phone: item.phone,
+            email: item.email,
+            message: item.message,
+            language: item.language
+        }), { address: item.address }), environment, {});
+        assert.equal(response.status, 201);
+    }
+
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM office_inquiries').first().count, 3);
 });

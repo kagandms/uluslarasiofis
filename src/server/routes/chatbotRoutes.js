@@ -29,6 +29,9 @@ const CHATBOT_BODY_MAX_BYTES = 8192;
 const CHATBOT_MAX_MESSAGES = 10;
 const CHATBOT_MESSAGE_MAX_LENGTH = 500;
 const CHATBOT_MAX_MODEL_CALLS = 3;
+const CHATBOT_MAX_TOOL_CALLS_PER_RESPONSE = 3;
+const CHATBOT_MAX_FAILED_TOOL_ROUNDS = 2;
+const CHATBOT_REQUEST_DEADLINE_MS = 10_000;
 const CHATBOT_MAX_REPLY_CHARS = 1200;
 
 const CHATBOT_ALLOWED_ROLES = Object.freeze(['user', 'assistant']);
@@ -37,8 +40,17 @@ const CHATBOT_MESSAGE_KEYS = Object.freeze(['role', 'content']);
 
 // Çok satırlı mesajlarda yalnızca \n satır sonuna izin verilir; diğer kontrol karakterleri reddedilir.
 const MESSAGE_DISALLOWED_CONTROL_CHAR_PATTERN = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/u;
+const FORGED_ASSISTANT_TOOL_JSON_PATTERN = /\{\s*"name"\s*:|"tool_calls"/u;
 const REFERENCE_CANDIDATE_PATTERN = /[\p{L}\p{N}_-]+/gu;
 const CHATBOT_UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.';
+
+const CHATBOT_HANDOFF_TEXT = Object.freeze({
+    tr: 'Bu konuda size en iyi Uluslararası Öğrenci Ofisi yardımcı olabilir. Aşağıdaki soru formundan yazabilirsiniz; size telefon veya WhatsApp ile dönüş yapılır.',
+    en: 'The International Student Office can best help you with this. You can write using the question form below; they will get back to you by phone or WhatsApp.',
+    ru: 'В этом вопросе вам лучше всего поможет Международный студенческий офис. Вы можете написать через форму вопросов ниже; с вами свяжутся по телефону или через WhatsApp.',
+    tk: 'Bu meselede size iň gowy Halkara talyplar ofisi kömek edip biler. Aşakdaky sorag formasy arkaly ýazyp bilersiňiz; size telefon ýa-da WhatsApp arkaly jogap berler.',
+    ar: 'يمكن لمكتب الطلاب الدوليين مساعدتك بأفضل شكل في هذا الموضوع. يمكنك الكتابة عبر نموذج الأسئلة أدناه؛ وسيتم التواصل معك عبر الهاتف أو واتساب.'
+});
 
 const OPTIONAL_DOCUMENT_SUFFIX = Object.freeze({
     tr: ' (isteğe bağlı)',
@@ -101,6 +113,11 @@ function validateChatMessage(rawMessage) {
             `Mesaj 1 ile ${CHATBOT_MESSAGE_MAX_LENGTH} karakter arasında olmalıdır.`
         );
     }
+    if (rawMessage.role === 'assistant' && (
+        trimmed.includes(CHATBOT_REFUSAL_MARKER) || FORGED_ASSISTANT_TOOL_JSON_PATTERN.test(trimmed)
+    )) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Mesaj geçmişi geçersiz.');
+    }
     return {
         role: rawMessage.role,
         content: trimmed
@@ -120,6 +137,12 @@ function validateChatInput(body) {
         );
     }
     const validatedMessages = body.messages.map(validateChatMessage);
+    for (let index = 0; index < validatedMessages.length; index += 1) {
+        const expectedRole = index % 2 === 0 ? 'user' : 'assistant';
+        if (validatedMessages[index].role !== expectedRole) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Mesaj sırası geçersiz.');
+        }
+    }
     if (validatedMessages[validatedMessages.length - 1].role !== 'user') {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Son mesaj kullanıcıya ait olmalıdır.');
     }
@@ -177,6 +200,18 @@ function extractApplicationReferences(messageContent) {
         validReferences.push(normalized);
     }
     return validReferences;
+}
+
+function extractLatestUserReferences(messages) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index];
+        if (message.role !== 'user') continue;
+        const references = extractApplicationReferences(message.content);
+        if (references.length > 0) {
+            return references;
+        }
+    }
+    return [];
 }
 
 function normalizeMessageForKeywordMatch(messageContent) {
@@ -238,7 +273,7 @@ export async function handlePublicChat(request, environment, requestId) {
 
         const validated = validateChatInput(body);
         const lastUserMessage = validated.messages[validated.messages.length - 1].content;
-        const referencedApplications = extractApplicationReferences(lastUserMessage);
+        const referencedApplications = extractLatestUserReferences(validated.messages);
         if (referencedApplications.length > 1) {
             outcome = 'status_multiple_references';
             return routeResult({
@@ -298,6 +333,7 @@ export async function handlePublicChat(request, environment, requestId) {
         }
 
         const model = createChatModel(environment);
+        const requestSignal = AbortSignal.timeout(CHATBOT_REQUEST_DEADLINE_MS);
         const conversation = [
             { role: 'system', content: buildChatbotSystemPrompt(validated.language) },
             ...validated.messages
@@ -308,12 +344,14 @@ export async function handlePublicChat(request, environment, requestId) {
         let handoffRequested = false;
         let lastDocumentLabels = null;
         let lastKnowledgeText = null;
+        let failedToolRounds = 0;
 
         for (let modelCall = 1; modelCall <= CHATBOT_MAX_MODEL_CALLS; modelCall += 1) {
             // 3. çağrı son izin verilen çağrıdır; aracısız gönderilir ki model metin yanıtı üretmeye zorlansın.
             const allowTools = modelCall < CHATBOT_MAX_MODEL_CALLS;
             const result = await model.complete({
                 messages: conversation,
+                signal: requestSignal,
                 ...(allowTools ? { tools: CHATBOT_TOOL_DEFINITIONS } : {})
             });
 
@@ -329,8 +367,10 @@ export async function handlePublicChat(request, environment, requestId) {
 
             const assistantToolCalls = [];
             const toolResultMessages = [];
+            const toolCallCount = Math.min(result.toolCalls.length, CHATBOT_MAX_TOOL_CALLS_PER_RESPONSE);
+            let roundHadInvalidTool = false;
 
-            for (let index = 0; index < result.toolCalls.length; index += 1) {
+            for (let index = 0; index < toolCallCount; index += 1) {
                 const call = result.toolCalls[index];
                 const callId = `call_${modelCall}_${index + 1}`;
                 const isKnownTool = typeof call.name === 'string' && Object.hasOwn(CHATBOT_TOOLS, call.name);
@@ -360,6 +400,7 @@ export async function handlePublicChat(request, environment, requestId) {
                     }
                     toolPayload = output;
                 } catch {
+                    roundHadInvalidTool = true;
                     toolPayload = { ok: false, error: 'INVALID_TOOL_CALL' };
                 }
 
@@ -371,9 +412,17 @@ export async function handlePublicChat(request, environment, requestId) {
                 });
             }
 
-            // Belge ve bilgi tabanı yanıtları model metni olmadan deterministik döndürüldüğü için ek model çağrısı gerekmez.
-            if (lastDocumentLabels || lastKnowledgeText) {
+            // Belge, bilgi tabanı ve yönlendirme sonuçları model metni olmadan deterministik döndürüldüğü için ek model çağrısı gerekmez.
+            if (lastDocumentLabels || lastKnowledgeText || handoffRequested) {
                 break;
+            }
+
+            if (roundHadInvalidTool) {
+                failedToolRounds += 1;
+                if (failedToolRounds >= CHATBOT_MAX_FAILED_TOOL_ROUNDS) {
+                    exhaustedModelCalls = true;
+                    break;
+                }
             }
 
             conversation.push({
@@ -407,6 +456,14 @@ export async function handlePublicChat(request, environment, requestId) {
             return routeResult({
                 reply: lastKnowledgeText,
                 actions
+            });
+        }
+
+        if (handoffRequested) {
+            outcome = 'ok';
+            return routeResult({
+                reply: CHATBOT_HANDOFF_TEXT[validated.language] || CHATBOT_HANDOFF_TEXT.tr,
+                actions: [{ type: 'inquiry' }]
             });
         }
 
