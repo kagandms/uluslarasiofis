@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <style>
-        body { font-family: Arial, sans-serif; width: 320px; padding: 12px; color: #172033; }
-        h3 { margin: 0 0 12px; }
+        /* Okul kurumsal renkleri: beyaz kart zemini, ince bordo üst şerit ve bordo butonlar */
+        body { font-family: Arial, sans-serif; width: 320px; margin: 0; padding: 12px; background: #ffffff; color: #172033; border-top: 4px solid #7e1830; box-sizing: border-box; }
+        h3 { margin: 0 0 10px; color: #7e1830; font-size: 15px; }
         p { margin: 0 0 12px; color: #5d687c; font-size: 12px; line-height: 1.4; }
-        button { width: 100%; padding: 11px 12px; margin: 5px 0; cursor: pointer; background: #0056b3; color: white; border: none; border-radius: 5px; font-weight: 600; }
-        button:hover { background: #004494; }
+        button { width: 100%; padding: 11px 12px; margin: 5px 0; cursor: pointer; background: #7e1830; color: #ffffff; border: none; border-radius: 5px; font-weight: 600; }
+        button:hover:not(:disabled) { background: #5a0e27; }
         button:disabled { cursor: wait; opacity: 0.65; }
         .option-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: #172033; cursor: pointer; user-select: none; }
-        .option-row input { margin: 0; cursor: pointer; }
+        .option-row input { margin: 0; cursor: pointer; accent-color: #7e1830; }
         #status-message { min-height: 30px; margin-top: 12px; font-size: 12px; color: #176b3a; font-weight: bold; text-align: center; line-height: 1.35; }
         #status-message[data-status="error"] { color: #a82424; }
         #status-message[data-status="warning"] { color: #8a5a00; }
@@ -24,7 +25,7 @@
     <button id="btn-copy">2. Bilgileri Al ve Pasaport Fotoğrafını Kırp</button>
 
     <label class="option-row" for="chk-yoksis-side-by-side">
-        <input type="checkbox" id="chk-yoksis-side-by-side" checked>
+        <input type="checkbox" id="chk-yoksis-side-by-side">
         <span>YÖKSİS'i portal yanında aç</span>
     </label>
     

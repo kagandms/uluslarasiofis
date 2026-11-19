@@ -27,7 +27,11 @@ export const extensionFiles = [
     'cropper.html',
     'cropper-selection.js',
     'popup.html',
-    'popup.js'
+    'popup.js',
+    'icons/icon-16.png',
+    'icons/icon-32.png',
+    'icons/icon-48.png',
+    'icons/icon-128.png'
 ];
 
 // Manifest içindeki göreli dosya yolunu paket listesiyle karşılaştırmak için normalize eder.

@@ -16,6 +16,13 @@ import {
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const extensionRoot = join(projectRoot, 'ykn_eklenti-main');
+const iconPaths = [
+    'icons/icon-16.png',
+    'icons/icon-32.png',
+    'icons/icon-48.png',
+    'icons/icon-128.png'
+];
+
 // Test için üretilen ZIP arşivinin merkez dizininden dosya adlarını ve açılmış baytlarını okur.
 function readZipEntries(zipBuffer) {
     let eocdOffset = -1;
@@ -63,11 +70,15 @@ function readZipEntries(zipBuffer) {
     return entries;
 }
 
-test('manifest.json içindeki tüm referanslar extensionFiles listesinde bulunur', () => {
+test('manifest.json içindeki tüm referanslar ve ikonlar extensionFiles listesinde bulunur', () => {
     const manifest = readExtensionManifest();
     assert.deepEqual(findMissingManifestReferences(manifest, extensionFiles), []);
     assert.doesNotThrow(() => assertManifestReferencesPackaged(manifest, extensionFiles));
     assert.doesNotThrow(() => assertExtensionFilesExist(extensionFiles));
+
+    for (const iconPath of iconPaths) {
+        assert.ok(extensionFiles.includes(iconPath), `${iconPath} extensionFiles içinde yer almalı`);
+    }
 });
 
 test('findMissingManifestReferences tüm manifest alanlarındaki eksik referansları yakalar', () => {
@@ -101,7 +112,6 @@ test('findMissingManifestReferences tüm manifest alanlarındaki eksik referansl
 
     const missingFiles = findMissingManifestReferences(syntheticManifest, extensionFiles);
     assert.deepEqual(missingFiles, [
-        'icons/icon-16.png',
         'icons/missing-icon.png',
         'missing-popup.html',
         'missing-worker.js',
@@ -139,7 +149,7 @@ test('assertManifestReferencesPackaged eksik dosya olduğunda dosya adını içe
     );
 });
 
-test('packageExtension geçici dizinde tüm paket dosyalarını ZIP arşivine yazar', () => {
+test('packageExtension geçici dizinde alt dizinli ikonları ZIP arşivine ikili olarak yazar', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ykn-extension-package-'));
     try {
         const result = packageExtension({ outputDir: tempDir, silent: true });
@@ -149,9 +159,17 @@ test('packageExtension geçici dizinde tüm paket dosyalarını ZIP arşivine ya
 
         const entries = readZipEntries(archiveBuffer);
         assert.ok(entries.has('ykn_eklenti/'));
+        assert.ok(entries.has('ykn_eklenti/icons/'));
 
         for (const fileName of extensionFiles) {
             assert.ok(entries.has(`ykn_eklenti/${fileName}`), `ZIP içinde ykn_eklenti/${fileName} bulunmalı`);
+        }
+
+        for (const iconPath of iconPaths) {
+            const archivedIcon = entries.get(`ykn_eklenti/${iconPath}`);
+            const sourceIcon = readFileSync(join(extensionRoot, iconPath));
+            assert.ok(Buffer.isBuffer(archivedIcon));
+            assert.equal(Buffer.compare(archivedIcon, sourceIcon), 0, `${iconPath} ikili içeriği bozulmamalı`);
         }
     } finally {
         rmSync(tempDir, { recursive: true, force: true });
