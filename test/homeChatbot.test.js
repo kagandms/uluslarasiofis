@@ -514,3 +514,37 @@ test('Esc closes the panel and restores focus to launcher, and Tab focus trap wr
     assert.equal(launcher.getAttribute('aria-expanded'), 'false');
     assert.equal(doc.activeElement, launcher);
 });
+
+test('chatbotOpenTracking link action renders localized label for tr and updates on public:locale-changed to ar', async (context) => {
+    const html = await readWorkspaceFile('index.html');
+
+    const { dom, doc } = mountChatbotDom(context, html, {
+        locale: 'tr',
+        fetcher: async () => createJsonResponse({
+            reply: 'Başvuru durumunuzu takip sayfasından görebilirsiniz.',
+            actions: [
+                { type: 'link', href: '/basvurum/', label_key: 'chatbotOpenTracking' }
+            ]
+        }, 200)
+    });
+
+    const launcher = doc.getElementById('home-chatbot-launcher');
+    const panel = doc.getElementById('home-chatbot-panel');
+    launcher.click();
+
+    panel.querySelector('.chatbot-chip[data-chip-key="chipStatus"]').click();
+    await flushPromises();
+
+    const linkAction = panel.querySelector('a[href="/basvurum/"]');
+    assert.ok(linkAction);
+    assert.equal(linkAction.getAttribute('href'), '/basvurum/');
+    assert.equal(linkAction.textContent.trim(), 'Başvurumu görüntüle');
+    assert.equal(linkAction.textContent.trim(), CHATBOT_MESSAGES.tr.chatbotOpenTracking);
+
+    doc.documentElement.lang = 'ar';
+    doc.documentElement.dir = 'rtl';
+    doc.dispatchEvent(new dom.window.Event('public:locale-changed'));
+
+    assert.equal(linkAction.textContent.trim(), 'عرض طلبي');
+    assert.equal(linkAction.textContent.trim(), CHATBOT_MESSAGES.ar.chatbotOpenTracking);
+});

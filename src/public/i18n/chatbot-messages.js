@@ -20,6 +20,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
         unavailableMessage: 'Asistan şu anda yanıt veremiyor. Lütfen aşağıdaki soru formunu kullanarak Uluslararası Ofise yazın.',
         badRequestMessage: 'Mesajınız gönderilemedi. Lütfen metni kontrol edin veya soru formunu kullanın.',
         inquiryActionButton: 'Soru formuna git',
+        chatbotOpenTracking: 'Başvurumu görüntüle',
         userRoleLabel: 'Siz',
         assistantRoleLabel: 'Asistan'
     }),
@@ -43,6 +44,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
         unavailableMessage: 'The assistant is currently unavailable. Please use the question form below to contact the International Office.',
         badRequestMessage: 'Your message could not be sent. Please check your text or use the question form.',
         inquiryActionButton: 'Go to question form',
+        chatbotOpenTracking: 'View my application',
         userRoleLabel: 'You',
         assistantRoleLabel: 'Assistant'
     }),
@@ -66,6 +68,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
         unavailableMessage: 'Ассистент сейчас недоступен. Пожалуйста, воспользуйтесь формой вопроса ниже, чтобы связаться с Международным офисом.',
         badRequestMessage: 'Не удалось отправить сообщение. Проверьте текст или воспользуйтесь формой вопроса.',
         inquiryActionButton: 'Перейти к форме вопроса',
+        chatbotOpenTracking: 'Посмотреть мою заявку',
         userRoleLabel: 'Вы',
         assistantRoleLabel: 'Ассистент'
     }),
@@ -89,6 +92,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
         unavailableMessage: 'Kömekçi häzir jogap berip bilmeýär. Halkara ofis bilen habarlaşmak üçin aşakdaky sorag formasyny ulanyň.',
         badRequestMessage: 'Habaryňyz iberilip bilmedi. Teksti barlaň ýa-da sorag formasyny ulanyň.',
         inquiryActionButton: 'Sorag formasyna geç',
+        chatbotOpenTracking: 'Arzamy gör',
         userRoleLabel: 'Siz',
         assistantRoleLabel: 'Kömekçi'
     }),
@@ -112,6 +116,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
         unavailableMessage: 'المساعد غير متاح حالياً. يرجى استخدام نموذج الأسئلة أدناه للتواصل مع المكتب الدولي.',
         badRequestMessage: 'تعذر إرسال رسالتك. يرجى التحقق من النص أو استخدام نموذج الأسئلة.',
         inquiryActionButton: 'الانتقال إلى نموذج الأسئلة',
+        chatbotOpenTracking: 'عرض طلبي',
         userRoleLabel: 'أنت',
         assistantRoleLabel: 'المساعد'
     })
