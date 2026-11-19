@@ -54,6 +54,39 @@ export function renderPublicDocumentOverview(root, locale) {
     root.replaceChildren(list);
 }
 
+export const CHATBOT_PILOT_QUERY_GATE = 'bot';
+
+/**
+ * Returns true only when the pilot query parameter `?bot=1` is present.
+ * @param {string} [search] URL query string (defaults to current window search).
+ * @returns {boolean}
+ */
+export function isChatbotPilotEnabled(search = globalThis.window?.location?.search ?? '') {
+    try {
+        return new URLSearchParams(search).get(CHATBOT_PILOT_QUERY_GATE) === '1';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Lazily imports and mounts the pilot chatbot widget only when `?bot=1` is active.
+ * @param {string} [locale] Active public locale.
+ * @param {{root?: Document, locationSearch?: string, loader?: () => Promise<typeof import('./homeChatbot.js')>, fetcher?: typeof fetch}} [options]
+ * @returns {Promise<ReturnType<typeof import('./homeChatbot.js').initHomeChatbot>|null>}
+ */
+export async function initHomeChatbotGate(
+    locale,
+    { root = document, locationSearch, loader = () => import('./homeChatbot.js'), fetcher } = {}
+) {
+    const search = locationSearch ?? root?.defaultView?.location?.search ?? '';
+    if (!isChatbotPilotEnabled(search)) return null;
+    const mountRoot = root?.getElementById('home-chatbot-root');
+    if (!mountRoot || mountRoot.dataset.chatbotInitialized === 'true') return null;
+    const { initHomeChatbot } = await loader();
+    return initHomeChatbot({ locale, root, mountElement: mountRoot, fetcher });
+}
+
 /**
  * Mounts the public inquiry form on `#questions` once, independent of document overview rendering.
  * @param {string} [locale] Active public locale.
