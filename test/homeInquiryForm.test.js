@@ -307,3 +307,81 @@ test('initHomeQuestions mounts #questions once independently of renderPublicDocu
     assert.equal(doc.getElementById('btn-home-questions').textContent.trim(), INQUIRY_MESSAGES.en.inquiryCta);
     assert.equal(form.querySelector('button[type="submit"]').textContent.trim(), INQUIRY_MESSAGES.en.inquirySubmit);
 });
+
+test('initScrollReveal registers #questions with reveal-from-bottom and scroll-reveal CSS does not hide or block pointer events', async (context) => {
+    const html = await readHomeHtml();
+    const css = await readFile(resolve(process.cwd(), 'src/public/public.css'), 'utf8');
+
+    const revealRules = [...css.matchAll(/([^{}]*\.scroll-reveal-item[^{}]*)\{([^}]*)\}/g)];
+    assert.ok(revealRules.length > 0, 'public.css must define .scroll-reveal-item rules');
+    for (const [, selector, body] of revealRules) {
+        assert.doesNotMatch(
+            body,
+            /visibility\s*:\s*hidden|display\s*:\s*none|pointer-events\s*:\s*none/i,
+            `Reveal CSS for "${selector.trim()}" must not use visibility:hidden, display:none, or pointer-events:none`
+        );
+    }
+
+    async function runMainInDom(querySuffix, { withObserver = true, reducedMotion = false } = {}) {
+        const dom = new JSDOM(html, { url: 'https://portal.test/' });
+        const doc = dom.window.document;
+        context.after(() => dom.window.close());
+
+        doc.getElementById('header-live-clock')?.remove();
+        doc.getElementById('btn-privacy-notice')?.remove();
+        doc.getElementById('access-recovery-panel')?.remove();
+        if (reducedMotion) {
+            dom.window.matchMedia = () => ({ matches: true });
+        }
+
+        const observed = [];
+        const trackedKeys = ['window', 'document', 'location', 'IntersectionObserver', 'fetch'];
+        const savedGlobals = trackedKeys.map((key) => ({
+            key,
+            had: Object.prototype.hasOwnProperty.call(globalThis, key),
+            value: globalThis[key]
+        }));
+
+        globalThis.window = dom.window;
+        globalThis.document = doc;
+        globalThis.location = dom.window.location;
+        globalThis.fetch = async () => createJsonResponse({});
+        if (withObserver) {
+            globalThis.IntersectionObserver = class {
+                observe(el) {
+                    observed.push(el);
+                }
+                unobserve() {}
+            };
+        } else {
+            delete globalThis.IntersectionObserver;
+        }
+
+        try {
+            await import(`../src/public/main.js?${querySuffix}`);
+        } finally {
+            for (const { key, had, value } of savedGlobals) {
+                if (had) globalThis[key] = value;
+                else delete globalThis[key];
+            }
+        }
+
+        return { doc, observed };
+    }
+
+    const { doc, observed } = await runMainInDom('scroll-reveal-observer=1', { withObserver: true });
+    const questions = doc.getElementById('questions');
+    assert.ok(questions);
+    assert.equal(questions.classList.contains('scroll-reveal-item'), true);
+    assert.equal(questions.classList.contains('reveal-from-bottom'), true);
+    assert.equal(observed.at(-1), questions);
+
+    const { doc: fallbackDoc } = await runMainInDom('scroll-reveal-fallback=1', { withObserver: false });
+    const fallbackQuestions = fallbackDoc.getElementById('questions');
+    assert.equal(fallbackQuestions.classList.contains('scroll-reveal-item'), true);
+    assert.equal(fallbackQuestions.classList.contains('is-revealed'), true);
+
+    const { doc: reducedDoc } = await runMainInDom('scroll-reveal-reduced=1', { reducedMotion: true });
+    const reducedQuestions = reducedDoc.getElementById('questions');
+    assert.equal(reducedQuestions.classList.contains('scroll-reveal-item'), false);
+});

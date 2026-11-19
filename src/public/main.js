@@ -206,6 +206,10 @@ function initScrollReveal() {
         document.querySelectorAll('.status-timeline-step').forEach((step) => {
             setupElement(step, 'reveal-from-right');
         });
+
+        // 4. Questions / Inquiry Section
+        const questionsSection = document.getElementById('questions');
+        if (questionsSection) setupElement(questionsSection, 'reveal-from-bottom');
     };
 
     registerElements();
