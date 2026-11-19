@@ -96,43 +96,18 @@ test('POST /api/public/chat answers a normal question using system prompt and re
 });
 
 test('document question calls get_required_documents and renders the exact policy list deterministically', async () => {
-    let observedToolMessages = null;
-    const { fakeAi, environment } = createEnvironment([
+    const cases = [
         {
-            response: '',
-            tool_calls: [
-                {
-                    name: 'get_required_documents',
-                    arguments: {
-                        application_type: 'initial',
-                        is_under_18: false,
-                        accommodation_type: 'rental_contract'
-                    }
-                }
-            ]
+            language: 'tr',
+            question: 'Kira sözleşmesi ile ilk başvuruda hangi belgeler gerekir?',
+            modelProse: 'İlk başvuru için gerekli belgeler: Fake Document X, Pasaport.'
         },
-        (_model, input) => {
-            observedToolMessages = input.messages.filter((message) => message.role === 'tool');
-            return {
-                response: 'İlk başvuru için gerekli belgeler:\n- Modelin uydurduğu sahte belge'
-            };
+        {
+            language: 'ar',
+            question: 'ما المستندات المطلوبة للطلب الأولي بعقد إيجار؟',
+            modelProse: 'المستندات المطلوبة: Fake Document X، جواز السفر.'
         }
-    ]);
-
-    const response = await worker.fetch(
-        createChatRequest(validChatBody({
-            messages: [{ role: 'user', content: 'Kira sözleşmesi ile ilk başvuruda hangi belgeler gerekir?' }],
-            language: 'tr'
-        })),
-        environment,
-        {}
-    );
-    const payload = await response.json();
-
-    assert.equal(response.status, 200);
-    assert.equal(fakeAi.callCount, 2);
-    assert.equal(observedToolMessages.length, 1);
-    assert.equal(observedToolMessages[0].name, 'get_required_documents');
+    ];
 
     const expectedPolicies = listApplicationDocumentPolicies({
         application_type: 'initial',
@@ -145,17 +120,47 @@ test('document question calls get_required_documents and renders the exact polic
         fingerprint_status: null,
         fingerprint_code: null
     });
-    const messages = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
 
-    assert.equal(payload.reply.includes('Modelin uydurduğu sahte belge'), false);
-    assert.ok(payload.reply.startsWith('İlk başvuru için gerekli belgeler:'));
+    for (let index = 0; index < cases.length; index += 1) {
+        const testCase = cases[index];
+        const { fakeAi, environment } = createEnvironment([
+            {
+                response: testCase.modelProse,
+                tool_calls: [
+                    {
+                        name: 'get_required_documents',
+                        arguments: {
+                            application_type: 'initial',
+                            is_under_18: false,
+                            accommodation_type: 'rental_contract'
+                        }
+                    }
+                ]
+            },
+            new Error('A 2nd model call must never execute after get_required_documents.')
+        ]);
 
-    let lastPosition = -1;
-    for (const policy of expectedPolicies) {
-        const expectedTitle = messages[policy.label_key];
-        const position = payload.reply.indexOf(`- ${expectedTitle}`);
-        assert.ok(position > lastPosition, `Missing or out-of-order policy title: ${expectedTitle}`);
-        lastPosition = position;
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: testCase.question }],
+                language: testCase.language
+            }), { address: `198.51.100.${10 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 1);
+        assert.deepEqual(payload.actions, []);
+        assert.equal(payload.reply.includes('Fake Document X'), false);
+
+        const messages = { ...SESSION3_MESSAGES[testCase.language], ...PUBLIC_MESSAGES[testCase.language] };
+        const expectedList = expectedPolicies
+            .map((policy) => `- ${messages[policy.label_key]}`)
+            .join('\n');
+        const expectedReply = `${getChatbotFixedText('documentListIntro', testCase.language)}\n\n${expectedList}\n\n${getChatbotFixedText('documentListClosing', testCase.language)}`;
+        assert.equal(payload.reply, expectedReply);
     }
 });
 
@@ -185,6 +190,8 @@ test('off-topic question returns fixed localized refusal text and inquiry action
         assert.ok(CHATBOT_FIXED_TEXTS.refusal[language]);
         assert.ok(CHATBOT_FIXED_TEXTS.fallback[language]);
         assert.ok(CHATBOT_FIXED_TEXTS.dailyLimit[language]);
+        assert.ok(CHATBOT_FIXED_TEXTS.documentListIntro[language]);
+        assert.ok(CHATBOT_FIXED_TEXTS.documentListClosing[language]);
 
         const { fakeAi, environment } = createEnvironment({ response: CHATBOT_REFUSAL_MARKER });
         const response = await worker.fetch(

@@ -11,7 +11,7 @@ const LANGUAGE_NAMES = Object.freeze({
 });
 
 /**
- * Fixed localized responses for off-topic/injection refusals, model fallbacks, and daily budget limits.
+ * Fixed localized responses for off-topic/injection refusals, model fallbacks, daily budget limits, and deterministic document lists.
  */
 export const CHATBOT_FIXED_TEXTS = Object.freeze({
     refusal: Object.freeze({
@@ -34,6 +34,20 @@ export const CHATBOT_FIXED_TEXTS = Object.freeze({
         ru: 'Ассистент достиг дневного лимита. Пожалуйста, воспользуйтесь формой вопросов на главной странице, чтобы отправить свой вопрос.',
         tk: 'Kömekçi şu günki ulanyş çägine ýetdi. Soragyňyzy ibermek üçin baş sahypadaky sorag formasyny ulanyň.',
         ar: 'لقد وصل المساعد إلى الحد اليومي المسموح به. يرجى استخدام نموذج الأسئلة في الصفحة الرئيسية لإرسال سؤالك.'
+    }),
+    documentListIntro: Object.freeze({
+        tr: 'Belirttiğiniz başvuru bilgilerine göre gerekli belgeler:',
+        en: 'Required documents based on the application details you provided:',
+        ru: 'Необходимые документы согласно указанным вами данным заявки:',
+        tk: 'Görkezen arza maglumatlaryňyza görä gerekli resminamalar:',
+        ar: 'المستندات المطلوبة بناءً على بيانات الطلب التي ذكرتها:'
+    }),
+    documentListClosing: Object.freeze({
+        tr: 'Liste başvuru bilgilerinize göre değişebilir; kesin liste başvuru sırasında gösterilir ve resmî değerlendirme Uluslararası Öğrenci Ofisi tarafından yapılır.',
+        en: 'The list may vary depending on your application details; the final list is shown during the application, and official review is carried out by the International Student Office.',
+        ru: 'Список может меняться в зависимости от данных вашей заявки; окончательный перечень отображается при подаче заявки, а официальную проверку проводит Международный студенческий офис.',
+        tk: 'Sanaw arza maglumatlaryňyza görä üýtgäp biler; gutarnykly sanaw arza tabşyrylýan wagty görkezilýär we resmi barlag Halkara talyplar ofisi tarapyndan geçirilýär.',
+        ar: 'قد تختلف القائمة حسب بيانات طلبك؛ تُعرض القائمة النهائية أثناء التقديم، وتتم المراجعة الرسمية من قِبل مكتب الطلاب الدوليين.'
     })
 });
 
@@ -43,8 +57,8 @@ function resolveLanguage(language) {
 }
 
 /**
- * Returns a fixed localized chatbot message for refusal, fallback, or daily-limit responses.
- * @param {'refusal'|'fallback'|'dailyLimit'} kind Fixed text category.
+ * Returns a fixed localized chatbot message for refusal, fallback, daily-limit, or document-list responses.
+ * @param {'refusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'} kind Fixed text category.
  * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
  * @returns {string} Localized fixed response text.
  */

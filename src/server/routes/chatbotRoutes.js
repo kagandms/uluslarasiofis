@@ -30,7 +30,6 @@ const CHATBOT_MAX_MESSAGES = 10;
 const CHATBOT_MESSAGE_MAX_LENGTH = 500;
 const CHATBOT_MAX_MODEL_CALLS = 3;
 const CHATBOT_MAX_REPLY_CHARS = 1200;
-const CHATBOT_MODEL_INTRO_MAX_CHARS = 280;
 
 const CHATBOT_ALLOWED_ROLES = Object.freeze(['user', 'assistant']);
 const CHATBOT_ROOT_KEYS = Object.freeze(['messages', 'language']);
@@ -38,7 +37,6 @@ const CHATBOT_MESSAGE_KEYS = Object.freeze(['role', 'content']);
 
 // Çok satırlı mesajlarda yalnızca \n satır sonuna izin verilir; diğer kontrol karakterleri reddedilir.
 const MESSAGE_DISALLOWED_CONTROL_CHAR_PATTERN = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/u;
-const LIST_LINE_PATTERN = /^(?:[-*•]|\d+[.)])\s+/;
 const REFERENCE_CANDIDATE_PATTERN = /[\p{L}\p{N}_-]+/gu;
 const CHATBOT_UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.';
 
@@ -137,38 +135,11 @@ function renderDeterministicDocumentList(labels, language) {
         .join('\n');
 }
 
-function extractShortModelIntro(modelText) {
-    const introLines = [];
-    for (const rawLine of modelText.replace(/\r\n/g, '\n').split('\n')) {
-        const line = rawLine.trim();
-        if (!line) {
-            if (introLines.length > 0) break;
-            continue;
-        }
-        // Liste satırlarını ayıkla ki model politika dışı belge adı ekleyemesin.
-        if (LIST_LINE_PATTERN.test(line)) break;
-        introLines.push(line);
-        if ([...introLines.join(' ')].length >= CHATBOT_MODEL_INTRO_MAX_CHARS) break;
-    }
-    const intro = introLines.join(' ').trim();
-    const chars = [...intro];
-    if (chars.length <= CHATBOT_MODEL_INTRO_MAX_CHARS) return intro;
-    return `${chars.slice(0, CHATBOT_MODEL_INTRO_MAX_CHARS - 3).join('').trimEnd()}...`;
-}
-
-function buildDocumentReply(modelText, labels, language) {
+function buildDocumentReply(labels, language) {
+    const intro = getChatbotFixedText('documentListIntro', language);
     const renderedList = renderDeterministicDocumentList(labels, language);
-    if (modelText.includes(renderedList) && [...modelText].length <= CHATBOT_MAX_REPLY_CHARS) {
-        return modelText;
-    }
-    const intro = extractShortModelIntro(modelText);
-    if (intro) {
-        const combined = `${intro}\n\n${renderedList}`;
-        if ([...combined].length <= CHATBOT_MAX_REPLY_CHARS) {
-            return combined;
-        }
-    }
-    return renderedList;
+    const closing = getChatbotFixedText('documentListClosing', language);
+    return `${intro}\n\n${renderedList}\n\n${closing}`;
 }
 
 function extractApplicationReferences(messageContent) {
@@ -346,6 +317,11 @@ export async function handlePublicChat(request, environment, requestId) {
                 });
             }
 
+            // Belge yanıtları model metni olmadan deterministik üretildiği için ek model çağrısı gerekmez.
+            if (lastDocumentLabels) {
+                break;
+            }
+
             conversation.push({
                 role: 'assistant',
                 content: result.text || '',
@@ -359,6 +335,15 @@ export async function handlePublicChat(request, environment, requestId) {
             return routeResult({
                 reply: getChatbotFixedText('fallback', validated.language),
                 actions: [{ type: 'inquiry' }]
+            });
+        }
+
+        if (lastDocumentLabels) {
+            outcome = 'ok';
+            const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
+            return routeResult({
+                reply: buildDocumentReply(lastDocumentLabels, validated.language),
+                actions
             });
         }
 
@@ -380,11 +365,8 @@ export async function handlePublicChat(request, environment, requestId) {
         }
 
         outcome = 'ok';
-        const reply = lastDocumentLabels
-            ? buildDocumentReply(trimmedText, lastDocumentLabels, validated.language)
-            : trimmedText;
         const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
-        return routeResult({ reply, actions });
+        return routeResult({ reply: trimmedText, actions });
     } catch (error) {
         outcome = outcomeForError(error);
         throw error;
