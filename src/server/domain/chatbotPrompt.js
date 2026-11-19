@@ -55,6 +55,65 @@ export const CHATBOT_FIXED_TEXTS = Object.freeze({
         ru: 'Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением.',
         tk: 'Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň.',
         ar: 'لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني.'
+    }),
+    missingDocumentsIntro: Object.freeze({
+        tr: 'Size doğru belge listesini verebilmem için şunları yazar mısınız: ',
+        en: 'To give you the exact document list, could you tell me: ',
+        ru: 'Чтобы я мог назвать точный список документов, укажите, пожалуйста: ',
+        tk: 'Size dogry resminama sanawyny bermek üçin şulary ýazyp bilersiňizmi: ',
+        ar: 'لأتمكن من إعطائك قائمة المستندات الصحيحة، يرجى كتابة: '
+    })
+});
+
+const MISSING_DOCUMENT_FIELD_ORDER = Object.freeze([
+    'application_type',
+    'is_under_18',
+    'accommodation_type',
+    'host_is_married',
+    'host_is_turkish',
+    'fingerprint_status'
+]);
+
+const MISSING_DOCUMENT_FIELD_LABELS = Object.freeze({
+    tr: Object.freeze({
+        application_type: 'başvuru türü (ilk başvuru / uzatma / geçiş)',
+        is_under_18: '18 yaşından küçük müsünüz',
+        accommodation_type: 'nerede kalıyorsunuz (yurt / kiralık ev / kendi eviniz / otel / bir tanıdığın yanında taahhütname ile / adres kaydı)',
+        host_is_married: 'taahhüt veren kişi evli mi (evet / hayır)',
+        host_is_turkish: 'taahhüt veren kişi Türk vatandaşı mı (evet / hayır)',
+        fingerprint_status: 'Göç İdaresinde parmak izi kaydınız var mı (var / yok)'
+    }),
+    en: Object.freeze({
+        application_type: 'application type (initial / renewal / transition)',
+        is_under_18: 'whether you are under 18 (yes / no)',
+        accommodation_type: 'where you are staying (dormitory / rented flat / own home / hotel / with a host via undertaking / registered address)',
+        host_is_married: 'whether the host is married (yes / no)',
+        host_is_turkish: 'whether the host is a Turkish citizen (yes / no)',
+        fingerprint_status: 'whether your fingerprints are registered with the Migration Authority (yes / no)'
+    }),
+    ru: Object.freeze({
+        application_type: 'тип заявки (первичная / продление / переход)',
+        is_under_18: 'меньше ли вам 18 лет (да / нет)',
+        accommodation_type: 'где вы проживаете (общежитие / арендованная квартира / собственное жильё / отель / у принимающего лица по обязательству / регистрация по адресу)',
+        host_is_married: 'состоит ли принимающее лицо в браке (да / нет)',
+        host_is_turkish: 'является ли принимающее лицо гражданином Турции (да / нет)',
+        fingerprint_status: 'зарегистрированы ли ваши отпечатки пальцев в Миграционной службе (да / нет)'
+    }),
+    tk: Object.freeze({
+        application_type: 'arza görnüşi (ilkinji / uzaltma / geçiş)',
+        is_under_18: '18 ýaşdan kiçidigiňizi ýa-da däldigini (hawa / ýok)',
+        accommodation_type: 'nirede ýaşaýandygyňyzy (umumy ýaşaýyş jaýy / kärende öý / öz öýüňiz / myhmanhana / borçnama bilen bir tanyşyň ýanynda / hasaba alnan salgy)',
+        host_is_married: 'borçnama berýän adamyň öýlenendigini ýa-da däldigini (hawa / ýok)',
+        host_is_turkish: 'borçnama berýän adamyň Türkiýäniň raýatydygyny ýa-da däldigini (hawa / ýok)',
+        fingerprint_status: 'Migrasiýa edarasynda barmak yzy hasabyňyzyň bardygyny ýa-da ýokdugyny (bar / ýok)'
+    }),
+    ar: Object.freeze({
+        application_type: 'نوع الطلب (أولي / تمديد / انتقال)',
+        is_under_18: 'هل عمرك أقل من 18 سنة (نعم / لا)',
+        accommodation_type: 'مكان السكن (سكن طلابي / شقة مستأجرة / منزل مملوك / فندق / لدى مضيف بتعهد / عنوان مسجل)',
+        host_is_married: 'هل مقدم التعهد متزوج (نعم / لا)',
+        host_is_turkish: 'هل مقدم التعهد مواطن تركي (نعم / لا)',
+        fingerprint_status: 'هل بصماتك مسجلة لدى إدارة الهجرة (نعم / لا)'
     })
 });
 
@@ -64,8 +123,8 @@ function resolveLanguage(language) {
 }
 
 /**
- * Returns a fixed localized chatbot message for refusal, fallback, daily-limit, document-list, or missing-reference status responses.
- * @param {'refusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'} kind Fixed text category.
+ * Returns a fixed localized chatbot message for refusal, fallback, daily-limit, document-list, missing-facts, or missing-reference status responses.
+ * @param {'refusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'|'missingDocumentsIntro'} kind Fixed text category.
  * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
  * @returns {string} Localized fixed response text.
  */
@@ -75,6 +134,27 @@ export function getChatbotFixedText(kind, language = 'tr') {
         throw new Error(`Unknown chatbot fixed text kind: ${String(kind)}`);
     }
     return entry[resolveLanguage(language)];
+}
+
+/**
+ * Builds the deterministic localized clarifying question asking only for the missing document-policy facts.
+ * @param {string[]} missingFields Missing field names returned by `get_required_documents`.
+ * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
+ * @returns {string} Localized question listing only the missing facts and their plain-word options.
+ */
+export function buildMissingDocumentsQuestion(missingFields, language = 'tr') {
+    const resolvedLanguage = resolveLanguage(language);
+    const labels = MISSING_DOCUMENT_FIELD_LABELS[resolvedLanguage];
+    const requested = new Set(Array.isArray(missingFields) ? missingFields : []);
+    const orderedParts = MISSING_DOCUMENT_FIELD_ORDER
+        .filter((field) => requested.has(field) && labels[field])
+        .map((field) => labels[field]);
+    const parts = orderedParts.length > 0
+        ? orderedParts
+        : [labels.application_type, labels.is_under_18, labels.accommodation_type];
+    const separator = resolvedLanguage === 'ar' ? '، ' : ', ';
+    const questionMark = resolvedLanguage === 'ar' ? '؟' : '?';
+    return `${getChatbotFixedText('missingDocumentsIntro', resolvedLanguage)}${parts.join(separator)}${questionMark}`;
 }
 
 /**
@@ -95,9 +175,9 @@ export function buildChatbotSystemPrompt(language = 'tr') {
         '- Expect and understand typos, missing diacritics, informal phrasing, slang, and mixed-language messages.',
         '- When an on-topic question is ambiguous or missing details, ask ONE short clarifying question in the user’s language instead of giving up.',
         '- Prefer lookup_knowledge whenever a portal or process question matches a curated topic (application_steps, residence_permit_basics, application_types, document_format, document_resubmission, forgot_reference, tracking, address_evidence, fingerprint, privacy, fees_and_appointment, office_hours, student_card, or contact).',
-        '- For any question about required documents, you must call get_required_documents; never list documents from memory. If scenario facts (application_type, under-18 status, accommodation_type, undertaking host_is_married/host_is_turkish, or transition fingerprint_status) are missing, ask ONE short clarifying question for only the missing facts first.',
+        '- For any question about required documents, you must call get_required_documents; never list documents from memory and never guess or invent values for facts the student did not state. Only pass arguments explicitly stated by the student (if any of application_type, under-18 status, accommodation_type, undertaking host_is_married/host_is_turkish, or transition fingerprint_status is missing, omit it or ask ONE short clarifying question for only the missing facts).',
         '- When get_required_documents runs, write only one short introductory sentence; the server appends the authoritative document list.',
-        '- Use handoff_to_office when the student asks to contact the office, needs staff review or case-specific help, or asks about office hours or student ID card procedures. Always keep handoff to the International Student Office available.',
+        `- Always call handoff_to_office (and NEVER refuse with ${CHATBOT_REFUSAL_MARKER}) when the student asks to talk to a person, human, staff member, or the office, submits a complaint, describes a special or urgent personal situation, or needs case-specific help. Also use handoff_to_office when appropriate for office contact or student ID card procedures.`,
         '- For any question about the student’s own application progress (status, whether it was sent/forwarded to the migration authority / Göç İdaresi, approval, appointment, or result), always ask for their reference number (format: ITU-XXXX-XXXX); never guess an application status and never answer it from memory.',
         '',
         'Strict prohibitions:',

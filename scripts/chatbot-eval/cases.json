@@ -1778,5 +1778,200 @@
       { "role": "user", "content": "هل يمكنني رفع صور بدلاً من ملف PDF وما هو الحد الأقصى لحجم الملف؟" }
     ],
     "expect": { "route": "any_non_fallback" }
+  },
+
+  {
+    "id": "tr-e1-clarify-no-accommodation",
+    "language": "tr",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "İkamet için hangi belgeler lazım? İlk başvuru, 20 yaşındayım." }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tr-e1-clarify-undertaking-no-host",
+    "language": "tr",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Taahhütname ile kalıyorum, uzatma, 19 yaşındayım" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "en-e1-clarify-no-accommodation",
+    "language": "en",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "What documents do I need for an initial application? I am 20 years old." }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ru-e1-clarify-transition-no-fp",
+    "language": "ru",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Какие документы нужны для перехода? Мне 21 год, живу в общежитии." }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tk-e1-clarify-undertaking-no-host",
+    "language": "tk",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Uzatma arzasy, 20 ýaşymda, borçnama bilen galýaryn. Haýsy resminamalar gerek?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ar-e1-clarify-one-word",
+    "language": "ar",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "المستندات؟" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ar-e2-multiturn-renewal-docs",
+    "language": "ar",
+    "category": "documents",
+    "messages": [
+      { "role": "user", "content": "ما هي المستندات المطلوبة لتمديد إقامة الطالب؟" },
+      { "role": "assistant", "content": "يرجى توضيح عمرك ومكان سكنك." },
+      { "role": "user", "content": "عمري 21 سنة وأقيم في السكن الطلابي." }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "renewal",
+      "under_18": false,
+      "accommodation": "dormitory"
+    }
+  },
+  {
+    "id": "ar-e2-multiturn-renewal-clarify",
+    "language": "ar",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "ما هي المستندات المطلوبة لتمديد الإقامة؟" },
+      { "role": "assistant", "content": "يرجى توضيح عمرك ومكان سكنك." },
+      { "role": "user", "content": "طلب تمديد وعمري 22 سنة." }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "en-e3-handoff-real-person",
+    "language": "en",
+    "category": "handoff",
+    "messages": [
+      { "role": "user", "content": "I want to talk to a real person" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "en-e3-handoff-staff-help",
+    "language": "en",
+    "category": "handoff",
+    "messages": [
+      { "role": "user", "content": "need help from staff" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "ru-e3-handoff-real-person",
+    "language": "ru",
+    "category": "handoff",
+    "messages": [
+      { "role": "user", "content": "Я хочу поговорить с реальным человеком" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "ar-e3-handoff-complaint",
+    "language": "ar",
+    "category": "handoff",
+    "messages": [
+      { "role": "user", "content": "لدي شكوى وأريد التحدث مع موظف" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "tr-e3-handoff-urgent",
+    "language": "tr",
+    "category": "handoff",
+    "messages": [
+      { "role": "user", "content": "Acil bir sorunum var, insanla görüşmek istiyorum" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "tk-e3-handoff-urgent",
+    "language": "tk",
+    "category": "handoff",
+    "messages": [
+      { "role": "user", "content": "Gyssagly ýagdaýym bar, işgär bilen gürleşmek isleýärin" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "tk-e4-handoff-not-status",
+    "language": "tk",
+    "category": "handoff",
+    "messages": [
+      { "role": "user", "content": "Adam bilen gürleşmek isleýärin, arzam barada" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "tr-e4-handoff-not-status",
+    "language": "tr",
+    "category": "handoff",
+    "messages": [
+      { "role": "user", "content": "Özel durumum için ofise ulaşmak istiyorum" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "tr-e5-history-window-assistant-start",
+    "language": "tr",
+    "category": "documents",
+    "messages": [
+      { "role": "assistant", "content": "Merhaba, öğrenci ikamet izni portalı hakkında size nasıl yardımcı olabilirim?" },
+      { "role": "user", "content": "İlk başvuru yapacağım." },
+      { "role": "assistant", "content": "Anladım, başvuru adımları veya belgeler hakkında sorunuz var mı?" },
+      { "role": "user", "content": "Belgeleri hazırlıyorum, 20 yaşındayım." },
+      { "role": "assistant", "content": "Nerede kalacağınızı da paylaşır mısınız?" },
+      { "role": "user", "content": "Henüz karar vermedim ama portalı inceliyorum." },
+      { "role": "assistant", "content": "Karar verdiğinizde yazabilirsiniz." },
+      { "role": "user", "content": "Şimdi öğrenci yurdunda kalıyorum." },
+      { "role": "assistant", "content": "Başka bir bilginiz var mı?" },
+      { "role": "user", "content": "Bu bilgilere göre gerekli belgeler nelerdir?" }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "initial",
+      "under_18": false,
+      "accommodation": "dormitory"
+    }
+  },
+  {
+    "id": "en-e5-history-window-assistant-start",
+    "language": "en",
+    "category": "knowledge",
+    "messages": [
+      { "role": "assistant", "content": "Hello! How can I assist you with the student residence permit portal?" },
+      { "role": "user", "content": "Hi, I have a few questions about submitting my documents." },
+      { "role": "assistant", "content": "Sure, please go ahead." },
+      { "role": "user", "content": "Can I upload photos?" },
+      { "role": "assistant", "content": "Yes, photos or PDFs up to 10 MB are supported." },
+      { "role": "user", "content": "Great, thank you." },
+      { "role": "assistant", "content": "Do you have any other questions?" },
+      { "role": "user", "content": "Yes, one more thing about visiting the university." },
+      { "role": "assistant", "content": "Please ask." },
+      { "role": "user", "content": "What are the International Student Office hours?" }
+    ],
+    "expect": { "route": "knowledge", "topic": "office_hours" }
   }
 ]

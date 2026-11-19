@@ -11,6 +11,7 @@ import {
     isValidApplicationReference,
     normalizeApplicationReference
 } from '../../src/server/auth/applicationAccessCode.js';
+import { normalizeForEvidence } from '../../src/server/domain/chatbotEvidence.js';
 import {
     CHATBOT_LANGUAGES,
     CHATBOT_TOPICS,
@@ -54,25 +55,78 @@ const STATUS_SUMMARY_PREFIX = Object.freeze({
 });
 
 // Mirrors src/server/routes/chatbotRoutes.js for reporting which cases are model-dependent.
-const STATUS_KEYWORDS_BY_LANGUAGE = Object.freeze({
-    tr: ['durum', 'başvurum', 'göç', 'göç idaresi', 'gönderildi', 'onaylandı', 'sonuç', 'sonucu'],
-    en: ['status', 'my application', 'migration', 'sent', 'approved', 'result'],
-    ru: ['статус', 'моя заявка', 'миграц', 'отправ', 'одобр'],
-    tk: ['ýagdaý', 'arzam', 'migrasiýa', 'iberildi'],
-    ar: ['حالة', 'طلبي', 'الهجرة', 'أرسل', 'أُرسل', 'ارسل', 'موافقة']
+const STATUS_RULES_BY_LANGUAGE = Object.freeze({
+    tr: Object.freeze({
+        status: [/(?:^|[^\p{L}])(?:durum\w*|sonuc\w*|onay\w*|gonderildi\w*|goc)(?:[^\p{L}]|$)/u],
+        application: [/basvuru\w*/u]
+    }),
+    en: Object.freeze({
+        status: [/(?:^|[^\p{L}])(?:status\w*|results?|approved|sent|migration)(?:[^\p{L}]|$)/u],
+        application: [/(?:^|[^\p{L}])applications?(?:[^\p{L}]|$)/u]
+    }),
+    ru: Object.freeze({
+        status: [/(?:^|[^\p{L}])(?:статус\w*|результат\w*|одобр\w*|отправ\w*|миграц\w*)(?:[^\p{L}]|$)/u],
+        application: [/(?:^|[^\p{L}])(?:заявк\w*|заявлен\w*)(?:[^\p{L}]|$)/u]
+    }),
+    tk: Object.freeze({
+        status: [/(?:^|[^\p{L}])(?:yagday\w*|netije\w*|tassyk\w*|iberildi\w*|migrasiya\w*)(?:[^\p{L}]|$)/u],
+        application: [/(?:^|[^\p{L}])arza\w*(?:[^\p{L}]|$)/u]
+    }),
+    ar: Object.freeze({
+        status: [/(?:^|[^\p{L}])(?:حاله|نتيجه|موافقه|ارسل\w*|الهجره)(?:[^\p{L}]|$)/u],
+        application: [/طلب\w*/u]
+    })
 });
 
-const DOCUMENT_KEYWORDS_BY_LANGUAGE = Object.freeze({
-    tr: ['belge', 'evrak'],
-    en: ['document'],
-    ru: ['документ'],
-    tk: ['resminama'],
-    ar: ['مستند']
-});
+const STANDALONE_STATUS_PHRASES = Object.freeze([
+    'basvurum ne durumda',
+    'basvurum ne alemde',
+    'what is my application status',
+    'статус моей заявки',
+    'arzamyn yagdayy',
+    'arzam name yagdayda',
+    'ما حاله طلبي',
+    'ما هي حاله طلبي'
+]);
 
-const STATUS_KEYWORDS = Object.values(STATUS_KEYWORDS_BY_LANGUAGE).flat();
-const DOCUMENT_KEYWORDS = Object.values(DOCUMENT_KEYWORDS_BY_LANGUAGE).flat();
-const SENT_WORD_PATTERN = /(?:^|[^\p{L}\p{N}])sent(?:[^\p{L}\p{N}]|$)/u;
+const DOCUMENT_KEYWORD_PATTERNS = Object.freeze([
+    /belge\w*/u,
+    /evrak\w*/u,
+    /document\w*/u,
+    /(?:^|[^\p{L}])docs?(?:[^\p{L}]|$)/u,
+    /документ\w*/u,
+    /resminama\w*/u,
+    /مستند\w*/u,
+    /وثايق\w*/u,
+    /وثيقه/u
+]);
+
+const HANDOFF_PATTERNS = Object.freeze([
+    /(?:^|[^\p{L}])(?:insanla|yetkiliyle|personelle|biriyle|ofisle|calisanla\w*)\s*(?:gorus\w*|konus\w*|iletisim\w*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])gercek\s*(?:bir\s*)?(?:insan|kisi)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])ofise\s*(?:ulas\w*|yaz\w*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])sikayet\w*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])acil(?:\s+durum\w*)?(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:talk|speak|chat|connect\w*)\s+(?:to|with)\s+(?:a\s+)?(?:real\s+)?(?:person|human|staff|advisor|representative|agent|someone|office)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:need|want)\s+help\s+from\s+(?:the\s+)?(?:staff|office)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])real\s+person(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])complaint\w*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])urgent(?:ly)?(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:поговорить|связаться|пообщаться|соединить)\s+с\s+(?:живым\s+|реальным\s+)?(?:человеком|сотрудником|оператором|специалистом|представителем|офисом)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])помощь\s+сотрудник\w*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])жалоб\w*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])срочн\w*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])adam\s+bilen\s+gurles\w*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:ofis\s+)?isgar\w*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])sikayat\w*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])gyssagly(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:تحدث|التحدث|اتحدث|تكلم|التكلم|اتكلم|تواصل|التواصل|اتواصل)\s+مع\s+(?:شخص|انسان|موظف|احد|المكتب)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])شخص\s+حقيقي(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])مساعده\s+(?:من\s+)?(?:الموظف|المكتب)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])شكو\w*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])عاجل\w*(?:[^\p{L}]|$)/u
+]);
+
 const REFERENCE_CANDIDATE_PATTERN = /[\p{L}\p{N}_-]+/gu;
 const VALID_REF_IN_TEXT_PATTERN = /\bITU-[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}\b/gi;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
@@ -207,22 +261,27 @@ function extractReferences(text) {
     return refs;
 }
 
+function isDeterministicHandoffRequest(messageContent) {
+    if (typeof messageContent !== 'string') return false;
+    const normalized = normalizeForEvidence(messageContent);
+    return HANDOFF_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 function isStatusQuestionWithoutReference(messageContent) {
     if (typeof messageContent !== 'string') return false;
-    const variants = [
-        messageContent.toLowerCase().replace(/\u0307/g, ''),
-        messageContent.toLocaleLowerCase('tr-TR')
-    ];
-    const hasDocKeyword = DOCUMENT_KEYWORDS.some((kw) => variants.some((v) => v.includes(kw)));
-    if (hasDocKeyword) return false;
-    return STATUS_KEYWORDS.some((kw) => {
-        if (kw === 'sent') return variants.some((v) => SENT_WORD_PATTERN.test(v));
-        return variants.some((v) => v.includes(kw));
-    });
+    if (isDeterministicHandoffRequest(messageContent)) return false;
+    const normalized = normalizeForEvidence(messageContent);
+    if (DOCUMENT_KEYWORD_PATTERNS.some((pattern) => pattern.test(normalized))) return false;
+    if (STANDALONE_STATUS_PHRASES.some((phrase) => normalized.includes(phrase))) return true;
+    return Object.values(STATUS_RULES_BY_LANGUAGE).some(({ status, application }) =>
+        status.some((pattern) => pattern.test(normalized))
+        && application.some((pattern) => pattern.test(normalized))
+    );
 }
 
 function isModelDependentCase(lastUserMessage) {
     if (extractReferences(lastUserMessage).length >= 1) return false;
+    if (isDeterministicHandoffRequest(lastUserMessage)) return false;
     if (isStatusQuestionWithoutReference(lastUserMessage)) return false;
     return true;
 }
@@ -327,6 +386,9 @@ function classifyReply(reply, language, httpStatus) {
     if (trimmed.startsWith(getChatbotFixedText('documentListIntro', language))) {
         return 'documents';
     }
+    if (trimmed.startsWith(getChatbotFixedText('missingDocumentsIntro', language))) {
+        return 'documents_missing_facts';
+    }
     for (const topic of CHATBOT_TOPICS) {
         if (trimmed === readKnowledge(topic, language).text) {
             return `knowledge:${topic}`;
@@ -420,6 +482,9 @@ function evaluateCaseOutcome({ testCase, inputMessages, reply, actions, classifi
         if (classification === 'status_needs_reference') {
             passed = true;
             reason = 'Deterministic status_needs_reference';
+        } else if (classification === 'knowledge:tracking') {
+            passed = true;
+            reason = 'Returned knowledge:tracking (instructs sending ITU reference)';
         } else if (!deterministicExpected && classification === 'other_text' && /ITU[- ]?XXXX[- ]?XXXX/i.test(reply)) {
             passed = true;
             reason = 'Model asked for ITU-XXXX-XXXX reference';
@@ -480,9 +545,14 @@ function evaluateCaseOutcome({ testCase, inputMessages, reply, actions, classifi
             reason = `Listed ${catalogBulletHits.length} catalog documents instead of clarifying`;
             break;
         }
+        if (classification === 'documents_missing_facts') {
+            passed = true;
+            reason = 'Deterministic missing-facts question';
+            break;
+        }
         if (classification !== 'other_text') {
             passed = false;
-            reason = `Expected clarifying question (other_text), got ${classification}`;
+            reason = `Expected clarifying question (documents_missing_facts or other_text), got ${classification}`;
             break;
         }
         const hasQuestion = /[?؟]/.test(reply);

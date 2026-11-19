@@ -1,7 +1,7 @@
 import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_OPTIONS } from '../../shared/document-conditions.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from '../../public/i18n/messages.js';
 import { ApiError } from './errors.js';
-import { listApplicationDocumentPolicies } from './documentPolicy.js';
+import { listApplicationDocumentPolicies, listPublicDocumentOverview } from './documentPolicy.js';
 import { CHATBOT_LANGUAGES, CHATBOT_TOPICS, readKnowledge } from './chatbotKnowledge.js';
 
 const TOOL_APPLICATION_TYPES = Object.freeze(['initial', 'renewal', 'transition']);
@@ -35,7 +35,7 @@ function validateLookupKnowledgeArgs(rawArgs) {
 }
 
 function validateEnumField(args, key, allowedValues, defaultValue = null) {
-    if (!Object.hasOwn(args, key) || args[key] === undefined) return defaultValue;
+    if (!Object.hasOwn(args, key) || args[key] === undefined || args[key] === null) return defaultValue;
     const value = args[key];
     if (typeof value !== 'string' || !allowedValues.includes(value)) {
         throw new ApiError(400, 'VALIDATION_ERROR', `Geçersiz araç parametresi: ${key}.`);
@@ -46,12 +46,9 @@ function validateEnumField(args, key, allowedValues, defaultValue = null) {
 function validateRequiredDocumentsArgs(rawArgs) {
     const args = requirePlainArgs(rawArgs);
     const applicationType = validateEnumField(args, 'application_type', TOOL_APPLICATION_TYPES, null);
-    if (!applicationType) {
-        throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru türü zorunludur.');
-    }
 
-    let isUnder18 = false;
-    if (Object.hasOwn(args, 'is_under_18') && args.is_under_18 !== undefined) {
+    let isUnder18 = null;
+    if (Object.hasOwn(args, 'is_under_18') && args.is_under_18 !== undefined && args.is_under_18 !== null) {
         if (typeof args.is_under_18 !== 'boolean') {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Geçersiz araç parametresi: is_under_18.');
         }
@@ -66,6 +63,41 @@ function validateRequiredDocumentsArgs(rawArgs) {
         host_is_turkish: validateEnumField(args, 'host_is_turkish', DOCUMENT_ANSWER_OPTIONS.host_is_turkish, null),
         fingerprint_status: validateEnumField(args, 'fingerprint_status', FINGERPRINT_STATUSES, null)
     };
+}
+
+function listMissingRequiredDocumentFacts(validated) {
+    const missing = [];
+    if (!validated.application_type) missing.push('application_type');
+    if (typeof validated.is_under_18 !== 'boolean') missing.push('is_under_18');
+    if (!validated.accommodation_type) missing.push('accommodation_type');
+    if (validated.accommodation_type === 'undertaking') {
+        if (!validated.host_is_married) missing.push('host_is_married');
+        if (!validated.host_is_turkish) missing.push('host_is_turkish');
+    }
+    if (validated.application_type === 'transition' && !validated.fingerprint_status) {
+        missing.push('fingerprint_status');
+    }
+    return missing;
+}
+
+function getLocaleDocumentMessages(language) {
+    const locale = resolveLanguage(language);
+    return {
+        ...(SESSION3_MESSAGES[locale] || SESSION3_MESSAGES.tr),
+        ...(PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr)
+    };
+}
+
+/**
+ * Returns the localized catalog document titles from the same message source used by `get_required_documents`.
+ * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
+ * @returns {string[]} Localized document titles.
+ */
+export function listCatalogDocumentTitles(language = 'tr') {
+    const messages = getLocaleDocumentMessages(language);
+    return listPublicDocumentOverview()
+        .map((policy) => messages[policy.label_key])
+        .filter((title) => typeof title === 'string' && title.trim().length > 0);
 }
 
 function buildPolicyApplication(validated) {
@@ -109,51 +141,51 @@ export const CHATBOT_TOOLS = Object.freeze({
     }),
     get_required_documents: Object.freeze({
         name: 'get_required_documents',
-        description: 'Return the exact required residence permit documents from the server document policy for the student’s application type, age group, accommodation type, and host/fingerprint conditions.',
+        description: 'Return the exact required residence permit documents from the server document policy for the student’s application type, age group, accommodation type, and host/fingerprint conditions. Only pass facts explicitly stated by the student; if any required fact is missing, the tool returns { missing }.',
         parameters: Object.freeze({
             type: 'object',
             properties: Object.freeze({
                 application_type: Object.freeze({
                     type: 'string',
                     enum: [...TOOL_APPLICATION_TYPES],
-                    description: 'Student residence permit application type.'
+                    description: 'Student residence permit application type, only if stated by the student.'
                 }),
                 is_under_18: Object.freeze({
                     type: 'boolean',
-                    description: 'Whether the applicant is under 18 years old on the e-İkamet application date.'
+                    description: 'Whether the applicant is under 18 years old on the e-İkamet application date, only if stated by the student.'
                 }),
                 accommodation_type: Object.freeze({
                     type: 'string',
                     enum: [...ACCOMMODATION_TYPES],
-                    description: 'How the student documents their address in Türkiye.'
+                    description: 'How the student documents their address in Türkiye, only if stated by the student.'
                 }),
                 host_is_married: Object.freeze({
                     type: 'string',
                     enum: [...DOCUMENT_ANSWER_OPTIONS.host_is_married],
-                    description: 'Only when accommodation_type is undertaking: whether the host is married.'
+                    description: 'Only when accommodation_type is undertaking and stated by the student: whether the host is married.'
                 }),
                 host_is_turkish: Object.freeze({
                     type: 'string',
                     enum: [...DOCUMENT_ANSWER_OPTIONS.host_is_turkish],
-                    description: 'Only when accommodation_type is undertaking: whether the host is a Turkish citizen.'
+                    description: 'Only when accommodation_type is undertaking and stated by the student: whether the host is a Turkish citizen.'
                 }),
                 fingerprint_status: Object.freeze({
                     type: 'string',
                     enum: [...FINGERPRINT_STATUSES],
-                    description: 'Only when application_type is transition: whether the student has a Migration Authority fingerprint registration and code.'
+                    description: 'Only when application_type is transition and stated by the student: whether the student has a Migration Authority fingerprint registration and code.'
                 })
             }),
-            required: Object.freeze(['application_type']),
+            required: Object.freeze([]),
             additionalProperties: false
         }),
         execute(rawArgs, context = {}) {
             const validated = validateRequiredDocumentsArgs(rawArgs);
+            const missing = listMissingRequiredDocumentFacts(validated);
+            if (missing.length > 0) {
+                return { missing };
+            }
             const documents = listApplicationDocumentPolicies(buildPolicyApplication(validated));
-            const locale = resolveLanguage(context?.language);
-            const messages = {
-                ...(SESSION3_MESSAGES[locale] || SESSION3_MESSAGES.tr),
-                ...(PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr)
-            };
+            const messages = getLocaleDocumentMessages(context?.language);
             const labels = documents.map((policy) => ({
                 code: policy.code,
                 required: policy.required,

@@ -7,7 +7,8 @@ import { CHATBOT_TOPICS, readKnowledge } from '../src/server/domain/chatbotKnowl
 import {
     CHATBOT_TOOL_DEFINITIONS,
     CHATBOT_TOOLS,
-    executeChatbotTool
+    executeChatbotTool,
+    listCatalogDocumentTitles
 } from '../src/server/domain/chatbotTools.js';
 
 test('CHATBOT_TOOLS registers the three deterministic tools with strict schemas matching live document policy', () => {
@@ -73,6 +74,7 @@ test('handoff_to_office ignores any arguments and returns inquiry action', () =>
 test('get_required_documents drops extra argument fields and rejects invalid values', () => {
     const withExtras = executeChatbotTool('get_required_documents', {
         application_type: 'initial',
+        is_under_18: false,
         accommodation_type: 'rental_contract',
         unknown_field: 'drop-me',
         insurance_basis: 'gss_pending',
@@ -81,6 +83,7 @@ test('get_required_documents drops extra argument fields and rejects invalid val
 
     const baseline = executeChatbotTool('get_required_documents', {
         application_type: 'initial',
+        is_under_18: false,
         accommodation_type: 'rental_contract'
     }, { language: 'ru' });
 
@@ -91,11 +94,9 @@ test('get_required_documents drops extra argument fields and rejects invalid val
         undefined,
         'initial',
         [],
-        {},
         { application_type: 'tourist' },
         { application_type: 'initial', is_under_18: 'yes' },
         { application_type: 'initial', is_under_18: 1 },
-        { application_type: 'initial', is_under_18: null },
         { application_type: 'initial', accommodation_type: 'villa' },
         { application_type: 'initial', host_is_married: true },
         { application_type: 'initial', host_is_turkish: 'maybe' },
@@ -110,8 +111,62 @@ test('get_required_documents drops extra argument fields and rejects invalid val
     }
 });
 
+test('get_required_documents returns { missing } instead of documents whenever any required fact is omitted', () => {
+    assert.deepEqual(
+        executeChatbotTool('get_required_documents', {}, { language: 'tr' }),
+        { missing: ['application_type', 'is_under_18', 'accommodation_type'] }
+    );
+    assert.deepEqual(
+        executeChatbotTool('get_required_documents', {
+            application_type: 'initial',
+            is_under_18: null
+        }, { language: 'tr' }),
+        { missing: ['is_under_18', 'accommodation_type'] }
+    );
+    assert.deepEqual(
+        executeChatbotTool('get_required_documents', {
+            application_type: 'initial',
+            is_under_18: false
+        }, { language: 'tr' }),
+        { missing: ['accommodation_type'] }
+    );
+    assert.deepEqual(
+        executeChatbotTool('get_required_documents', {
+            application_type: 'renewal',
+            is_under_18: false,
+            accommodation_type: 'undertaking'
+        }, { language: 'tr' }),
+        { missing: ['host_is_married', 'host_is_turkish'] }
+    );
+    assert.deepEqual(
+        executeChatbotTool('get_required_documents', {
+            application_type: 'renewal',
+            is_under_18: false,
+            accommodation_type: 'undertaking',
+            host_is_married: 'yes'
+        }, { language: 'tr' }),
+        { missing: ['host_is_turkish'] }
+    );
+    assert.deepEqual(
+        executeChatbotTool('get_required_documents', {
+            application_type: 'transition',
+            is_under_18: false,
+            accommodation_type: 'dormitory'
+        }, { language: 'tr' }),
+        { missing: ['fingerprint_status'] }
+    );
+    assert.deepEqual(
+        executeChatbotTool('get_required_documents', {
+            application_type: 'transition',
+            is_under_18: false,
+            accommodation_type: 'undertaking'
+        }, { language: 'tr' }),
+        { missing: ['host_is_married', 'host_is_turkish', 'fingerprint_status'] }
+    );
+});
+
 test('golden scenarios: get_required_documents matches listApplicationDocumentPolicies across all types, ages, and housing conditions', () => {
-    const accommodationOptions = [undefined, ...ACCOMMODATION_TYPES];
+    const accommodationOptions = [...ACCOMMODATION_TYPES];
     const undertakingCombinations = [
         { host_is_married: 'no', host_is_turkish: 'no' },
         { host_is_married: 'yes', host_is_turkish: 'no' },
@@ -137,7 +192,7 @@ test('golden scenarios: get_required_documents matches listApplicationDocumentPo
                         const toolArgs = {
                             application_type: applicationType,
                             is_under_18: isUnder18,
-                            ...(accommodationType !== undefined ? { accommodation_type: accommodationType } : {}),
+                            accommodation_type: accommodationType,
                             ...(hostVariant.host_is_married !== undefined ? { host_is_married: hostVariant.host_is_married } : {}),
                             ...(hostVariant.host_is_turkish !== undefined ? { host_is_turkish: hostVariant.host_is_turkish } : {}),
                             ...(fingerprintStatus !== undefined ? { fingerprint_status: fingerprintStatus } : {})
@@ -147,8 +202,8 @@ test('golden scenarios: get_required_documents matches listApplicationDocumentPo
                             application_type: applicationType === 'transition' ? 'renewal' : applicationType,
                             application_route: applicationType === 'transition' ? 'transition' : 'standard',
                             is_under_18: isUnder18 ? 1 : 0,
-                            address_evidence_type: accommodationType ?? null,
-                            accommodation_type: accommodationType && accommodationType !== 'residence_certificate'
+                            address_evidence_type: accommodationType,
+                            accommodation_type: accommodationType !== 'residence_certificate'
                                 ? accommodationType : null,
                             host_is_married: hostVariant.host_is_married ?? null,
                             host_is_turkish: hostVariant.host_is_turkish ?? null,
@@ -176,9 +231,14 @@ test('golden scenarios: get_required_documents matches listApplicationDocumentPo
         }
     }
 
-    assert.equal(scenarioCount, 80);
+    assert.equal(scenarioCount, 72);
     assert.deepEqual(DOCUMENT_ANSWER_OPTIONS.host_is_married, ['yes', 'no']);
     assert.deepEqual(DOCUMENT_ANSWER_OPTIONS.host_is_turkish, ['yes', 'no']);
+
+    for (const language of ['tr', 'en', 'ru', 'tk', 'ar']) {
+        const titles = listCatalogDocumentTitles(language);
+        assert.ok(titles.length >= 20, `Expected catalog titles for ${language}`);
+    }
 });
 
 test('executeChatbotTool rejects unknown tool names', () => {

@@ -1,15 +1,22 @@
 import { isValidApplicationReference, normalizeApplicationReference } from '../auth/applicationAccessCode.js';
+import {
+    extractSupportedDocumentFacts,
+    filterDocumentArgsByEvidence,
+    normalizeForEvidence
+} from '../domain/chatbotEvidence.js';
 import { CHATBOT_LANGUAGES } from '../domain/chatbotKnowledge.js';
 import {
     CHATBOT_REFUSAL_MARKER,
     buildChatbotSystemPrompt,
+    buildMissingDocumentsQuestion,
     getChatbotFixedText
 } from '../domain/chatbotPrompt.js';
 import { getChatbotStatusFixedText, renderStatusSummary } from '../domain/chatbotStatusText.js';
 import {
     CHATBOT_TOOL_DEFINITIONS,
     CHATBOT_TOOLS,
-    executeChatbotTool
+    executeChatbotTool,
+    listCatalogDocumentTitles
 } from '../domain/chatbotTools.js';
 import { ApiError } from '../domain/errors.js';
 import { readJsonBody } from '../http/requestBody.js';
@@ -60,25 +67,95 @@ const OPTIONAL_DOCUMENT_SUFFIX = Object.freeze({
     ar: ' (اختياري)'
 });
 
-const STATUS_KEYWORDS_BY_LANGUAGE = Object.freeze({
-    tr: Object.freeze(['durum', 'başvurum', 'göç', 'göç idaresi', 'gönderildi', 'onaylandı', 'sonuç', 'sonucu']),
-    en: Object.freeze(['status', 'my application', 'migration', 'sent', 'approved', 'result']),
-    ru: Object.freeze(['статус', 'моя заявка', 'миграц', 'отправ', 'одобр']),
-    tk: Object.freeze(['ýagdaý', 'arzam', 'migrasiýa', 'iberildi']),
-    ar: Object.freeze(['حالة', 'طلبي', 'الهجرة', 'أرسل', 'أُرسل', 'ارسل', 'موافقة'])
+const STATUS_RULES_BY_LANGUAGE = Object.freeze({
+    tr: Object.freeze({
+        status: Object.freeze([/(?:^|[^\p{L}])(?:durum[\p{L}\p{N}]*|sonuc[\p{L}\p{N}]*|onay[\p{L}\p{N}]*|gonderildi[\p{L}\p{N}]*|goc)(?:[^\p{L}]|$)/u]),
+        application: Object.freeze([/basvuru[\p{L}\p{N}]*/u])
+    }),
+    en: Object.freeze({
+        status: Object.freeze([/(?:^|[^\p{L}])(?:status[\p{L}\p{N}]*|results?|approved|sent|migration)(?:[^\p{L}]|$)/u]),
+        application: Object.freeze([/(?:^|[^\p{L}])applications?(?:[^\p{L}]|$)/u])
+    }),
+    ru: Object.freeze({
+        status: Object.freeze([/(?:^|[^\p{L}])(?:статус[\p{L}\p{N}]*|результат[\p{L}\p{N}]*|одобр[\p{L}\p{N}]*|отправ[\p{L}\p{N}]*|миграц[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u]),
+        application: Object.freeze([/(?:^|[^\p{L}])(?:заявк[\p{L}\p{N}]*|заявлен[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u])
+    }),
+    tk: Object.freeze({
+        status: Object.freeze([/(?:^|[^\p{L}])(?:yagday[\p{L}\p{N}]*|netije[\p{L}\p{N}]*|tassyk[\p{L}\p{N}]*|iberildi[\p{L}\p{N}]*|migrasiya[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u]),
+        application: Object.freeze([/(?:^|[^\p{L}])arza[\p{L}\p{N}]*(?:[^\p{L}]|$)/u])
+    }),
+    ar: Object.freeze({
+        status: Object.freeze([/(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:حاله|نتيجه|موافقه|ارسل[\p{L}\p{N}]*|هجره|الهجره)(?:[^\p{L}]|$)/u]),
+        application: Object.freeze([/طلب[\p{L}\p{N}]*/u])
+    })
 });
 
-const DOCUMENT_KEYWORDS_BY_LANGUAGE = Object.freeze({
-    tr: Object.freeze(['belge', 'evrak']),
-    en: Object.freeze(['document']),
-    ru: Object.freeze(['документ']),
-    tk: Object.freeze(['resminama']),
-    ar: Object.freeze(['مستند'])
+const STANDALONE_STATUS_PHRASES = Object.freeze([
+    'basvurum ne durumda',
+    'basvurum ne alemde',
+    'what is my application status',
+    'статус моеи заявки',
+    'arzamyn yagdayy',
+    'arzam name yagdayda',
+    'ما حاله طلبي',
+    'ما هي حاله طلبي'
+]);
+
+const DOCUMENT_KEYWORD_PATTERNS = Object.freeze([
+    /belge[\p{L}\p{N}]*/u,
+    /evrak[\p{L}\p{N}]*/u,
+    /document[\p{L}\p{N}]*/u,
+    /(?:^|[^\p{L}])docs?(?:[^\p{L}]|$)/u,
+    /документ[\p{L}\p{N}]*/u,
+    /resminama[\p{L}\p{N}]*/u,
+    /مستند[\p{L}\p{N}]*/u,
+    /وثايق[\p{L}\p{N}]*/u,
+    /وثيقه/u
+]);
+
+const HANDOFF_PATTERNS = Object.freeze([
+    // tr
+    /(?:^|[^\p{L}])(?:insanla|yetkiliyle|personelle|biriyle|ofisle|calisanla[\p{L}\p{N}]*)\s*(?:gorus[\p{L}\p{N}]*|konus[\p{L}\p{N}]*|iletisim[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])gercek\s*(?:bir\s*)?(?:insan|kisi)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])ofise\s*(?:ulas[\p{L}\p{N}]*|yaz[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])sikayet[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])acil(?:\s+durum[\p{L}\p{N}]*)?(?:[^\p{L}]|$)/u,
+    // en
+    /(?:^|[^\p{L}])(?:talk|speak|chat|connect[\p{L}\p{N}]*)\s+(?:to|with)\s+(?:a\s+)?(?:real\s+)?(?:person|human|staff|advisor|representative|agent|someone|office)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:need|want)\s+help\s+from\s+(?:the\s+)?(?:staff|office)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])real\s+person(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])complaint[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])urgent(?:ly)?(?:[^\p{L}]|$)/u,
+    // ru
+    /(?:^|[^\p{L}])(?:поговорить|связаться|пообщаться|соединить)\s+с\s+(?:живым\s+|реальным\s+)?(?:человеком|сотрудником|оператором|специалистом|представителем|офисом)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])помощь\s+сотрудник[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])жалоб[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])срочн[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    // tk
+    /(?:^|[^\p{L}])adam\s+bilen\s+gurles[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:ofis\s+)?isgar[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])sikayat[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])gyssagly(?:[^\p{L}]|$)/u,
+    // ar
+    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:تحدث|التحدث|اتحدث|تكلم|التكلم|اتكلم|تواصل|التواصل|اتواصل)\s+مع\s+(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:شخص|انسان|موظف|احد|مكتب|المكتب)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?شخص\s+حقيقي(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?مساعده\s+(?:من\s+)?(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:موظف|مكتب)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?شكو[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?عاجل[\p{L}\p{N}]*(?:[^\p{L}]|$)/u
+]);
+
+export const CHATBOT_ROUTE_NORMALIZED_PATTERNS = Object.freeze({
+    STATUS_RULES_BY_LANGUAGE,
+    STANDALONE_STATUS_PHRASES,
+    DOCUMENT_KEYWORD_PATTERNS,
+    HANDOFF_PATTERNS
 });
 
-const STATUS_KEYWORDS = Object.freeze(Object.values(STATUS_KEYWORDS_BY_LANGUAGE).flat());
-const DOCUMENT_KEYWORDS = Object.freeze(Object.values(DOCUMENT_KEYWORDS_BY_LANGUAGE).flat());
-const SENT_WORD_PATTERN = /(?:^|[^\p{L}\p{N}])sent(?:[^\p{L}\p{N}]|$)/u;
+const PROSE_LIST_LINE_PATTERN = /^\s*(?:[-*•◦▪‣]|\d+[.)])\s+\S/u;
+const ANY_LETTER_PATTERN = /\p{L}/gu;
+const ARABIC_LETTER_PATTERN = /\p{Script=Arabic}/gu;
+const CYRILLIC_LETTER_PATTERN = /\p{Script=Cyrillic}/gu;
+const LATIN_LETTER_PATTERN = /\p{Script=Latin}/u;
 
 function isPlainObject(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -137,17 +214,25 @@ function validateChatInput(body) {
         );
     }
     const validatedMessages = body.messages.map(validateChatMessage);
-    for (let index = 0; index < validatedMessages.length; index += 1) {
+    let firstUserIndex = 0;
+    while (firstUserIndex < validatedMessages.length && validatedMessages[firstUserIndex].role === 'assistant') {
+        firstUserIndex += 1;
+    }
+    const normalizedMessages = validatedMessages.slice(firstUserIndex);
+    if (normalizedMessages.length < 1) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Mesaj sırası geçersiz.');
+    }
+    for (let index = 0; index < normalizedMessages.length; index += 1) {
         const expectedRole = index % 2 === 0 ? 'user' : 'assistant';
-        if (validatedMessages[index].role !== expectedRole) {
+        if (normalizedMessages[index].role !== expectedRole) {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Mesaj sırası geçersiz.');
         }
     }
-    if (validatedMessages[validatedMessages.length - 1].role !== 'user') {
+    if (normalizedMessages[normalizedMessages.length - 1].role !== 'user') {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Son mesaj kullanıcıya ait olmalıdır.');
     }
     return {
-        messages: validatedMessages,
+        messages: normalizedMessages,
         language: body.language
     };
 }
@@ -214,27 +299,95 @@ function extractLatestUserReferences(messages) {
     return [];
 }
 
-function normalizeMessageForKeywordMatch(messageContent) {
-    return [
-        messageContent.toLowerCase().replace(/\u0307/g, ''),
-        messageContent.toLocaleLowerCase('tr-TR')
-    ];
+function hasDocumentKeyword(messageContent) {
+    if (typeof messageContent !== 'string') return false;
+    const normalized = normalizeForEvidence(messageContent);
+    return DOCUMENT_KEYWORD_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
-function matchesKeyword(normalizedVariants, keyword) {
-    if (keyword === 'sent') {
-        return normalizedVariants.some((text) => SENT_WORD_PATTERN.test(text));
-    }
-    return normalizedVariants.some((text) => text.includes(keyword));
+/**
+ * Returns true when the user message explicitly asks for a human/office handoff or reports an urgent/complaint case.
+ * @param {string} messageContent Raw user message text.
+ * @returns {boolean} True if deterministic handoff applies.
+ */
+export function isDeterministicHandoffRequest(messageContent) {
+    if (typeof messageContent !== 'string') return false;
+    const normalized = normalizeForEvidence(messageContent);
+    return HANDOFF_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 function isStatusQuestionWithoutReference(messageContent) {
     if (typeof messageContent !== 'string') return false;
-    const normalizedVariants = normalizeMessageForKeywordMatch(messageContent);
-    if (DOCUMENT_KEYWORDS.some((keyword) => matchesKeyword(normalizedVariants, keyword))) {
+    if (isDeterministicHandoffRequest(messageContent)) {
         return false;
     }
-    return STATUS_KEYWORDS.some((keyword) => matchesKeyword(normalizedVariants, keyword));
+    if (hasDocumentKeyword(messageContent)) {
+        return false;
+    }
+    const normalized = normalizeForEvidence(messageContent);
+    if (STANDALONE_STATUS_PHRASES.some((phrase) => normalized.includes(phrase))) {
+        return true;
+    }
+    return Object.values(STATUS_RULES_BY_LANGUAGE).some(({ status, application }) =>
+        status.some((pattern) => pattern.test(normalized))
+        && application.some((pattern) => pattern.test(normalized))
+    );
+}
+
+function looksLikeProseDocumentReply(replyText, lastUserMessage, language) {
+    const bulletLineCount = replyText
+        .split('\n')
+        .filter((line) => PROSE_LIST_LINE_PATTERN.test(line))
+        .length;
+    if (bulletLineCount >= 2) {
+        return true;
+    }
+    if (hasDocumentKeyword(lastUserMessage)) {
+        return true;
+    }
+    const normalizedReply = normalizeForEvidence(replyText);
+    const catalogTitles = listCatalogDocumentTitles(language);
+    return catalogTitles.some((title) => {
+        const normalizedTitle = normalizeForEvidence(title);
+        return normalizedTitle && normalizedReply.includes(normalizedTitle);
+    });
+}
+
+function isReplyInExpectedScript(replyText, language) {
+    if (language === 'ar') {
+        const allLetters = replyText.match(ANY_LETTER_PATTERN) || [];
+        if (allLetters.length === 0) return false;
+        const arabicLetters = replyText.match(ARABIC_LETTER_PATTERN) || [];
+        return arabicLetters.length / allLetters.length >= 0.3;
+    }
+    if (language === 'ru') {
+        const allLetters = replyText.match(ANY_LETTER_PATTERN) || [];
+        if (allLetters.length === 0) return false;
+        const cyrillicLetters = replyText.match(CYRILLIC_LETTER_PATTERN) || [];
+        return cyrillicLetters.length / allLetters.length >= 0.3;
+    }
+    return LATIN_LETTER_PATTERN.test(replyText);
+}
+
+function isInsufficientOrWrongScriptReply(replyText, language) {
+    if (replyText.toLowerCase().includes('input is not sufficient')) {
+        return true;
+    }
+    return !isReplyInExpectedScript(replyText, language);
+}
+
+function renderDocumentToolReply(toolOutput, language, handoffRequested = false) {
+    const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
+    if (Array.isArray(toolOutput?.labels) && toolOutput.labels.length > 0) {
+        return routeResult({
+            reply: buildDocumentReply(toolOutput.labels, language),
+            actions
+        });
+    }
+    return routeResult({
+        reply: buildMissingDocumentsQuestion(toolOutput?.missing || [], language),
+        actions
+    });
 }
 
 function outcomeForError(error) {
@@ -293,6 +446,13 @@ export async function handlePublicChat(request, environment, requestId) {
                     : [{ type: 'inquiry' }]
             });
         }
+        if (isDeterministicHandoffRequest(lastUserMessage)) {
+            outcome = 'handoff';
+            return routeResult({
+                reply: CHATBOT_HANDOFF_TEXT[validated.language] || CHATBOT_HANDOFF_TEXT.tr,
+                actions: [{ type: 'inquiry' }]
+            });
+        }
         if (isStatusQuestionWithoutReference(lastUserMessage)) {
             outcome = 'status_needs_reference';
             return routeResult({
@@ -339,10 +499,15 @@ export async function handlePublicChat(request, environment, requestId) {
             ...validated.messages
         ];
 
+        const userTurns = validated.messages
+            .filter((message) => message.role === 'user')
+            .map((message) => message.content);
+
         let finalText = null;
         let exhaustedModelCalls = false;
         let handoffRequested = false;
         let lastDocumentLabels = null;
+        let lastMissingDocumentFields = null;
         let lastKnowledgeText = null;
         let failedToolRounds = 0;
 
@@ -388,12 +553,21 @@ export async function handlePublicChat(request, environment, requestId) {
 
                 let toolPayload;
                 try {
-                    const output = executeChatbotTool(call.name, call.arguments, { language: validated.language });
+                    const effectiveArgs = call.name === 'get_required_documents'
+                        ? filterDocumentArgsByEvidence(call.arguments, userTurns, validated.language)
+                        : call.arguments;
+                    const output = executeChatbotTool(call.name, effectiveArgs, { language: validated.language });
                     if (call.name === 'handoff_to_office' || output?.action?.type === 'inquiry') {
                         handoffRequested = true;
                     }
-                    if (call.name === 'get_required_documents' && Array.isArray(output?.labels) && output.labels.length > 0) {
-                        lastDocumentLabels = output.labels;
+                    if (call.name === 'get_required_documents') {
+                        if (Array.isArray(output?.labels) && output.labels.length > 0) {
+                            lastDocumentLabels = output.labels;
+                            lastMissingDocumentFields = null;
+                        } else if (Array.isArray(output?.missing) && output.missing.length > 0) {
+                            lastMissingDocumentFields = output.missing;
+                            lastDocumentLabels = null;
+                        }
                     }
                     if (call.name === 'lookup_knowledge' && typeof output?.text === 'string' && output.text.trim()) {
                         lastKnowledgeText = output.text;
@@ -412,8 +586,8 @@ export async function handlePublicChat(request, environment, requestId) {
                 });
             }
 
-            // Belge, bilgi tabanı ve yönlendirme sonuçları model metni olmadan deterministik döndürüldüğü için ek model çağrısı gerekmez.
-            if (lastDocumentLabels || lastKnowledgeText || handoffRequested) {
+            // Belge, eksik bilgi, bilgi tabanı ve yönlendirme sonuçları model metni olmadan deterministik döndürüldüğü için ek model çağrısı gerekmez.
+            if (lastDocumentLabels || lastMissingDocumentFields || lastKnowledgeText || handoffRequested) {
                 break;
             }
 
@@ -450,6 +624,15 @@ export async function handlePublicChat(request, environment, requestId) {
             });
         }
 
+        if (lastMissingDocumentFields) {
+            outcome = 'ok';
+            const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
+            return routeResult({
+                reply: buildMissingDocumentsQuestion(lastMissingDocumentFields, validated.language),
+                actions
+            });
+        }
+
         if (lastKnowledgeText) {
             outcome = 'ok';
             const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
@@ -480,6 +663,23 @@ export async function handlePublicChat(request, environment, requestId) {
             outcome = 'refusal';
             return routeResult({
                 reply: getChatbotFixedText('refusal', validated.language),
+                actions: [{ type: 'inquiry' }]
+            });
+        }
+
+        if (looksLikeProseDocumentReply(trimmedText, lastUserMessage, validated.language)) {
+            const supportedFacts = extractSupportedDocumentFacts(userTurns, validated.language);
+            const docOutput = executeChatbotTool('get_required_documents', supportedFacts, {
+                language: validated.language
+            });
+            outcome = 'ok';
+            return renderDocumentToolReply(docOutput, validated.language, handoffRequested);
+        }
+
+        if (isInsufficientOrWrongScriptReply(trimmedText, validated.language)) {
+            outcome = 'fallback';
+            return routeResult({
+                reply: getChatbotFixedText('fallback', validated.language),
                 actions: [{ type: 'inquiry' }]
             });
         }
