@@ -1,9 +1,6 @@
+import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_OPTIONS } from '../../shared/document-conditions.js';
 import { isValidApplicationReference, normalizeApplicationReference } from '../auth/applicationAccessCode.js';
-import {
-    extractSupportedDocumentFacts,
-    filterDocumentArgsByEvidence,
-    normalizeForEvidence
-} from '../domain/chatbotEvidence.js';
+import * as evidence from '../domain/chatbotEvidence.js';
 import { CHATBOT_LANGUAGES } from '../domain/chatbotKnowledge.js';
 import {
     CHATBOT_REFUSAL_MARKER,
@@ -101,6 +98,22 @@ const STANDALONE_STATUS_PHRASES = Object.freeze([
     'ما هي حاله طلبي'
 ]);
 
+const HOW_TO_OR_WHAT_IS_PATTERNS = Object.freeze([
+    /(?:^|[^\p{L}])(?:nasil|nedir|ne\s+zaman|kac(?:ta)?)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:how|what\s+(?:is|are)|when|size)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:как|что\s+такое|когда|сколько)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:nahili|name|hacan)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:كيف|ما\s+هو|ما\s+هي|متي|كم)(?:[^\p{L}]|$)/u
+]);
+
+const FIRST_PERSON_STATUS_PHRASE_PATTERNS = Object.freeze([
+    /(?:^|[^\p{L}])(?:basvurum[\p{L}\p{N}]*|dosyam[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])my\s+(?:applications?|file(?!\s+size)s?)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:мо(?:я|еи|ю)\s+заявк[\p{L}\p{N}]*|мо(?:е|его|ему|им|ем)\s+(?:дел(?:о|а|у|ом|е)|заявлен[\p{L}\p{N}]*))(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])arzam[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:و|ف|ب|ل)?(?:طلبي|ملفي)(?:[^\p{L}]|$)/u
+]);
+
 const DOCUMENT_KEYWORD_PATTERNS = Object.freeze([
     /belge[\p{L}\p{N}]*/u,
     /evrak[\p{L}\p{N}]*/u,
@@ -128,6 +141,9 @@ const OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE = Object.freeze({
         ]),
         personalData: Object.freeze([
             /(?:^|[^\p{L}])(?:liste[\p{L}\p{N}]*|telefon[\p{L}\p{N}]*|numara[\p{L}\p{N}]*|bilgi[\p{L}\p{N}]*|adres[\p{L}\p{N}]*|isim[\p{L}\p{N}]*|ism[\p{L}\p{N}]*|adlar[\p{L}\p{N}]*|adini|veriler[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u
+        ]),
+        requestVerb: Object.freeze([
+            /(?:^|[^\p{L}])(?:ver(?:ir|ebilir|in|iniz|sene|senize)?|goster(?:ir|ebilir|in|iniz)?|listele(?:r|yebilir|yin|yiniz)?|gonder(?:ir|ebilir|in|iniz)?)(?:[^\p{L}]|$)/u
         ])
     }),
     en: Object.freeze({
@@ -136,6 +152,9 @@ const OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE = Object.freeze({
         ]),
         personalData: Object.freeze([
             /(?:^|[^\p{L}])(?:lists?|data|phones?|numbers?|address(?:es)?|names?)(?:[^\p{L}]|$)/u
+        ]),
+        requestVerb: Object.freeze([
+            /(?:^|[^\p{L}])(?:give|show|list|send)(?:[^\p{L}]|$)/u
         ])
     }),
     ru: Object.freeze({
@@ -144,6 +163,9 @@ const OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE = Object.freeze({
         ]),
         personalData: Object.freeze([
             /(?:^|[^\p{L}])(?:спис(?:ок|ки|ка|ке|ком|ков)|данн[\p{L}\p{N}]*|телефон[\p{L}\p{N}]*|номер[\p{L}\p{N}]*|адрес[\p{L}\p{N}]*|имя|имен[\p{L}\p{N}]*|фамили[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u
+        ]),
+        requestVerb: Object.freeze([
+            /(?:^|[^\p{L}])(?:даи(?:те)?|покажи(?:те)?|пришли(?:те)?|список)(?:[^\p{L}]|$)/u
         ])
     }),
     tk: Object.freeze({
@@ -152,6 +174,9 @@ const OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE = Object.freeze({
         ]),
         personalData: Object.freeze([
             /(?:^|[^\p{L}])(?:sanaw[\p{L}\p{N}]*|telefon[\p{L}\p{N}]*|belgi[\p{L}\p{N}]*|nomer[\p{L}\p{N}]*|maglumat[\p{L}\p{N}]*|salgy[\p{L}\p{N}]*|atlar[\p{L}\p{N}]*|adyny)(?:[^\p{L}]|$)/u
+        ]),
+        requestVerb: Object.freeze([
+            /(?:^|[^\p{L}])(?:ber(?:in)?|gorkez(?:in)?)(?:[^\p{L}]|$)/u
         ])
     }),
     ar: Object.freeze({
@@ -160,6 +185,9 @@ const OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE = Object.freeze({
         ]),
         personalData: Object.freeze([
             /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:قايمه|قوايم|بيانات|معلومات|هاتف|هواتف|تليفون|جوال|موبايل|رقم|ارقام|عنوان|عناوين|اسم|اسماء)[\p{L}\p{N}]*(?:[^\p{L}]|$)/u
+        ]),
+        requestVerb: Object.freeze([
+            /(?:^|[^\p{L}])(?:و|ف)?(?:اعطني|اعطيني|اعطونا|ارني|اريني|ارسل(?:ي|وا)?)(?:[^\p{L}]|$)/u
         ])
     })
 });
@@ -212,12 +240,32 @@ const HANDOFF_PATTERNS = Object.freeze([
 export const CHATBOT_ROUTE_NORMALIZED_PATTERNS = Object.freeze({
     STATUS_RULES_BY_LANGUAGE,
     STANDALONE_STATUS_PHRASES,
+    HOW_TO_OR_WHAT_IS_PATTERNS,
+    FIRST_PERSON_STATUS_PHRASE_PATTERNS,
     DOCUMENT_KEYWORD_PATTERNS,
     SHORT_DOCUMENT_EXCLUDE_PATTERNS,
     OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE,
     EXPLICIT_HANDOFF_PATTERNS,
     OFFICE_HANDOFF_PATTERNS,
     HANDOFF_PATTERNS
+});
+
+const DOCUMENT_FACT_KEYS = Object.freeze([
+    'application_type',
+    'is_under_18',
+    'accommodation_type',
+    'host_is_married',
+    'host_is_turkish',
+    'fingerprint_status'
+]);
+
+const VALID_DOCUMENT_FACT_CHECKS = Object.freeze({
+    application_type: (value) => typeof value === 'string' && ['initial', 'renewal', 'transition'].includes(value),
+    is_under_18: (value) => typeof value === 'boolean',
+    accommodation_type: (value) => typeof value === 'string' && ACCOMMODATION_TYPES.includes(value),
+    host_is_married: (value) => typeof value === 'string' && DOCUMENT_ANSWER_OPTIONS.host_is_married.includes(value),
+    host_is_turkish: (value) => typeof value === 'string' && DOCUMENT_ANSWER_OPTIONS.host_is_turkish.includes(value),
+    fingerprint_status: (value) => typeof value === 'string' && ['registered', 'not_registered'].includes(value)
 });
 
 const PROSE_LIST_LINE_PATTERN = /^\s*(?:[-*•◦▪‣]|\d+[.)])\s+\S/u;
@@ -356,13 +404,23 @@ function extractApplicationReferences(messageContent) {
     return validReferences;
 }
 
-function extractLatestUserReferences(messages) {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
+function extractScopedUserReferences(messages, lastUserMessage) {
+    const lastTurnReferences = extractApplicationReferences(lastUserMessage);
+    if (lastTurnReferences.length > 0) {
+        return lastTurnReferences;
+    }
+    if (!isStatusQuestionWithoutReference(lastUserMessage)) {
+        return [];
+    }
+    for (let index = messages.length - 2; index >= 0; index -= 1) {
         const message = messages[index];
         if (message.role !== 'user') continue;
         const references = extractApplicationReferences(message.content);
-        if (references.length > 0) {
+        if (references.length === 1) {
             return references;
+        }
+        if (references.length > 1) {
+            return [];
         }
     }
     return [];
@@ -370,14 +428,11 @@ function extractLatestUserReferences(messages) {
 
 function hasDocumentKeyword(messageContent) {
     if (typeof messageContent !== 'string') return false;
-    const normalized = normalizeForEvidence(messageContent);
+    const normalized = evidence.normalizeForEvidence(messageContent);
     return DOCUMENT_KEYWORD_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
-function hasCurrentDocumentIntent(lastUserMessage, previousAssistantMessage, language) {
-    if (hasDocumentKeyword(lastUserMessage)) {
-        return true;
-    }
+function isAnsweringMissingFactsQuestion(previousAssistantMessage, language) {
     if (previousAssistantMessage?.role !== 'assistant' || typeof previousAssistantMessage.content !== 'string') {
         return false;
     }
@@ -387,7 +442,7 @@ function hasCurrentDocumentIntent(lastUserMessage, previousAssistantMessage, lan
 
 function hasExplicitPersonComplaintUrgentHandoff(messageContent) {
     if (typeof messageContent !== 'string') return false;
-    const normalized = normalizeForEvidence(messageContent);
+    const normalized = evidence.normalizeForEvidence(messageContent);
     return EXPLICIT_HANDOFF_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
@@ -398,21 +453,22 @@ function hasExplicitPersonComplaintUrgentHandoff(messageContent) {
  */
 export function isDeterministicHandoffRequest(messageContent) {
     if (typeof messageContent !== 'string') return false;
-    const normalized = normalizeForEvidence(messageContent);
+    const normalized = evidence.normalizeForEvidence(messageContent);
     return HANDOFF_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 /**
- * Returns true when the user message asks for another student's list or personal data.
+ * Returns true when the user message explicitly requests to receive other students' lists or personal data.
  * @param {string} messageContent Raw user message text.
  * @returns {boolean} True if deterministic refusal applies.
  */
 export function isOtherStudentsDataRequest(messageContent) {
     if (typeof messageContent !== 'string') return false;
-    const normalized = normalizeForEvidence(messageContent);
-    return Object.values(OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE).some(({ otherStudents, personalData }) =>
+    const normalized = evidence.normalizeForEvidence(messageContent);
+    return Object.values(OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE).some(({ otherStudents, personalData, requestVerb }) =>
         otherStudents.some((pattern) => pattern.test(normalized))
         && personalData.some((pattern) => pattern.test(normalized))
+        && requestVerb.some((pattern) => pattern.test(normalized))
     );
 }
 
@@ -424,7 +480,7 @@ export function isOtherStudentsDataRequest(messageContent) {
 export function isVeryShortDocumentQuestion(messageContent) {
     if (typeof messageContent !== 'string') return false;
     if (!hasDocumentKeyword(messageContent)) return false;
-    const normalized = normalizeForEvidence(messageContent);
+    const normalized = evidence.normalizeForEvidence(messageContent);
     if (SHORT_DOCUMENT_EXCLUDE_PATTERNS.some((pattern) => pattern.test(normalized))) {
         return false;
     }
@@ -440,7 +496,13 @@ export function isStatusQuestionWithoutReference(messageContent) {
     if (hasDocumentKeyword(messageContent)) {
         return false;
     }
-    const normalized = normalizeForEvidence(messageContent);
+    const normalized = evidence.normalizeForEvidence(messageContent);
+    if (
+        HOW_TO_OR_WHAT_IS_PATTERNS.some((pattern) => pattern.test(normalized))
+        && !FIRST_PERSON_STATUS_PHRASE_PATTERNS.some((pattern) => pattern.test(normalized))
+    ) {
+        return false;
+    }
     if (STANDALONE_STATUS_PHRASES.some((phrase) => normalized.includes(phrase))) {
         return true;
     }
@@ -450,22 +512,41 @@ export function isStatusQuestionWithoutReference(messageContent) {
     );
 }
 
-function looksLikeProseDocumentReply(replyText, lastUserMessage, language) {
-    const bulletLineCount = replyText
+function countDistinctCatalogTitlesInReply(normalizedReply, normalizedCatalogTitles) {
+    let remaining = normalizedReply;
+    let count = 0;
+    const sortedTitles = [...normalizedCatalogTitles].sort((a, b) => b.length - a.length);
+    for (const title of sortedTitles) {
+        if (!remaining.includes(title)) continue;
+        count += 1;
+        remaining = remaining.split(title).join(' ');
+    }
+    return count;
+}
+
+function looksLikeProseDocumentReply(replyText, language) {
+    if (typeof replyText !== 'string' || !replyText.trim()) return false;
+    const normalizedCatalogTitles = [...new Set(
+        listCatalogDocumentTitles(language)
+            .map((title) => evidence.normalizeForEvidence(title).trim())
+            .filter(Boolean)
+    )];
+    if (normalizedCatalogTitles.length === 0) return false;
+
+    const normalizedReply = evidence.normalizeForEvidence(replyText);
+    if (countDistinctCatalogTitlesInReply(normalizedReply, normalizedCatalogTitles) >= 2) {
+        return true;
+    }
+
+    const bulletLines = replyText
         .split('\n')
-        .filter((line) => PROSE_LIST_LINE_PATTERN.test(line))
-        .length;
-    if (bulletLineCount >= 2) {
-        return true;
+        .filter((line) => PROSE_LIST_LINE_PATTERN.test(line));
+    if (bulletLines.length < 2) {
+        return false;
     }
-    if (hasDocumentKeyword(lastUserMessage)) {
-        return true;
-    }
-    const normalizedReply = normalizeForEvidence(replyText);
-    const catalogTitles = listCatalogDocumentTitles(language);
-    return catalogTitles.some((title) => {
-        const normalizedTitle = normalizeForEvidence(title);
-        return normalizedTitle && normalizedReply.includes(normalizedTitle);
+    return bulletLines.some((line) => {
+        const normalizedLine = evidence.normalizeForEvidence(line);
+        return normalizedCatalogTitles.some((title) => normalizedLine.includes(title));
     });
 }
 
@@ -492,14 +573,72 @@ function isInsufficientOrWrongScriptReply(replyText, language) {
     return !isReplyInExpectedScript(replyText, language);
 }
 
-function resolveDocumentToolOutputFromEvidence(userTurns, language) {
-    const supportedFacts = extractSupportedDocumentFacts(userTurns, language);
+function hasEvidenceRiskSafe(userTurns, language) {
+    return typeof evidence.hasEvidenceRisk === 'function'
+        ? Boolean(evidence.hasEvidenceRisk(userTurns, language))
+        : false;
+}
+
+function readSupportedDocumentFacts(userTurns, language) {
+    const rawFacts = evidence.extractSupportedDocumentFacts(userTurns, language);
+    const uncertainKeys = new Set(
+        Array.isArray(rawFacts?.__uncertain)
+            ? rawFacts.__uncertain.filter((key) => typeof key === 'string')
+            : []
+    );
+    const facts = {};
+    if (rawFacts && typeof rawFacts === 'object') {
+        for (const key of DOCUMENT_FACT_KEYS) {
+            if (!Object.hasOwn(rawFacts, key) || uncertainKeys.has(key)) continue;
+            if (rawFacts[key] !== undefined && rawFacts[key] !== null) {
+                facts[key] = rawFacts[key];
+            }
+        }
+    }
+    return { facts, uncertainKeys };
+}
+
+function resolveToolDocumentArgs(rawArgs, userTurns, language, { evidenceRisk, supportedFacts, uncertainKeys }) {
+    if (!isPlainObject(rawArgs)) return rawArgs;
+
+    const baseArgs = typeof evidence.filterDocumentArgsByEvidence === 'function'
+        ? evidence.filterDocumentArgsByEvidence(rawArgs, userTurns, language)
+        : { ...rawArgs };
+    if (!isPlainObject(baseArgs)) return baseArgs;
+
+    const resolved = {};
+    for (const key of DOCUMENT_FACT_KEYS) {
+        const hasRawValue = Object.hasOwn(rawArgs, key) && rawArgs[key] !== undefined && rawArgs[key] !== null;
+        if (hasRawValue && !VALID_DOCUMENT_FACT_CHECKS[key](rawArgs[key])) {
+            resolved[key] = rawArgs[key];
+            continue;
+        }
+        if (uncertainKeys.has(key)) continue;
+
+        if (evidenceRisk) {
+            if (hasRawValue && Object.hasOwn(supportedFacts, key) && rawArgs[key] === supportedFacts[key]) {
+                resolved[key] = supportedFacts[key];
+            }
+            continue;
+        }
+
+        const hasBaseValue = Object.hasOwn(baseArgs, key) && baseArgs[key] !== undefined && baseArgs[key] !== null;
+        if (Object.hasOwn(supportedFacts, key) && (!hasRawValue || rawArgs[key] === supportedFacts[key])) {
+            resolved[key] = supportedFacts[key];
+        } else if (hasBaseValue && baseArgs[key] === supportedFacts[key]) {
+            resolved[key] = supportedFacts[key];
+        }
+    }
+    return resolved;
+}
+
+function resolveEvidenceDocumentOutput(supportedFacts, language) {
     return executeChatbotTool('get_required_documents', supportedFacts, { language });
 }
 
-function renderDocumentToolReply(toolOutput, language, handoffRequested = false) {
+function renderDocumentToolReply(toolOutput, language, handoffRequested = false, allowList = true) {
     const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
-    if (Array.isArray(toolOutput?.labels) && toolOutput.labels.length > 0) {
+    if (allowList && Array.isArray(toolOutput?.labels) && toolOutput.labels.length > 0) {
         return routeResult({
             reply: buildDocumentReply(toolOutput.labels, language),
             actions
@@ -524,7 +663,7 @@ function outcomeForError(error) {
 
 /**
  * Durumsuz ana sayfa sohbet uç noktası (`POST /api/public/chat`).
- * Kontrol sırası: yöntem -> aynı köken -> 8 KB boyut sınırı -> hız sınırları -> doğrulama -> başvuru numarasıyla durum sorgusu -> günlük bütçe -> model/araç döngüsü.
+ * Kontrol sırası: yöntem -> aynı köken -> 8 KB boyut sınırı -> hız sınırları -> doğrulama -> başvuru numarasıyla durum sorgusu -> deterministik belge/eksik bilgi yanıtı -> günlük bütçe -> model/araç döngüsü.
  * Kişisel veri, başvuru numarası, durum içeriği, mesaj içeriği, araç argümanları ve model çıktısı hiçbir zaman günlüğe yazılmaz veya saklanmaz.
  * @param {Request} request Worker isteği.
  * @param {object} environment Worker bağlamları (`DB`, `AI`, isteğe bağlı `CHATBOT_MODEL`).
@@ -553,7 +692,7 @@ export async function handlePublicChat(request, environment, requestId) {
         const userTurns = validated.messages
             .filter((message) => message.role === 'user')
             .map((message) => message.content);
-        const referencedApplications = extractLatestUserReferences(validated.messages);
+        const referencedApplications = extractScopedUserReferences(validated.messages, lastUserMessage);
         if (referencedApplications.length > 1) {
             outcome = 'status_multiple_references';
             return routeResult({
@@ -601,10 +740,25 @@ export async function handlePublicChat(request, environment, requestId) {
                 actions: [{ type: 'inquiry' }]
             });
         }
-        if (isVeryShortDocumentQuestion(lastUserMessage)) {
-            const docOutput = resolveDocumentToolOutputFromEvidence(userTurns, validated.language);
+
+        const evidenceRisk = hasEvidenceRiskSafe(userTurns, validated.language);
+        const { facts: supportedFacts, uncertainKeys } = readSupportedDocumentFacts(userTurns, validated.language);
+        const allowDeterministicEvidence = !evidenceRisk && uncertainKeys.size === 0;
+        const isAnsweringMissingFacts = isAnsweringMissingFactsQuestion(previousAssistantMessage, validated.language);
+        const hasDocumentIntent = hasDocumentKeyword(lastUserMessage) || isAnsweringMissingFacts;
+
+        if (allowDeterministicEvidence && isVeryShortDocumentQuestion(lastUserMessage)) {
+            const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
             outcome = 'ok';
             return renderDocumentToolReply(docOutput, validated.language);
+        }
+
+        if (allowDeterministicEvidence && hasDocumentIntent) {
+            const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
+            if ((Array.isArray(docOutput?.labels) && docOutput.labels.length > 0) || isAnsweringMissingFacts) {
+                outcome = 'ok';
+                return renderDocumentToolReply(docOutput, validated.language);
+            }
         }
 
         const clientAddress = request.headers.get('CF-Connecting-IP') || 'unknown-client';
@@ -638,19 +792,6 @@ export async function handlePublicChat(request, environment, requestId) {
             });
         }
 
-        const hasDocumentIntent = hasCurrentDocumentIntent(
-            lastUserMessage,
-            previousAssistantMessage,
-            validated.language
-        );
-        if (hasDocumentIntent) {
-            const docOutput = resolveDocumentToolOutputFromEvidence(userTurns, validated.language);
-            if (Array.isArray(docOutput?.labels) && docOutput.labels.length > 0) {
-                outcome = 'ok';
-                return renderDocumentToolReply(docOutput, validated.language);
-            }
-        }
-
         const model = createChatModel(environment);
         const requestSignal = AbortSignal.timeout(CHATBOT_REQUEST_DEADLINE_MS);
         const conversation = [
@@ -677,10 +818,15 @@ export async function handlePublicChat(request, environment, requestId) {
                     ...(allowTools ? { tools: CHATBOT_TOOL_DEFINITIONS } : {})
                 });
             } catch (error) {
-                if (hasDocumentIntent) {
-                    const docOutput = resolveDocumentToolOutputFromEvidence(userTurns, validated.language);
+                if (hasDocumentIntent || uncertainKeys.size > 0) {
+                    const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
                     outcome = 'ok';
-                    return renderDocumentToolReply(docOutput, validated.language, handoffRequested);
+                    return renderDocumentToolReply(
+                        docOutput,
+                        validated.language,
+                        handoffRequested,
+                        allowDeterministicEvidence
+                    );
                 }
                 throw error;
             }
@@ -719,7 +865,11 @@ export async function handlePublicChat(request, environment, requestId) {
                 let toolPayload;
                 try {
                     const effectiveArgs = call.name === 'get_required_documents'
-                        ? filterDocumentArgsByEvidence(call.arguments, userTurns, validated.language)
+                        ? resolveToolDocumentArgs(call.arguments, userTurns, validated.language, {
+                            evidenceRisk,
+                            supportedFacts,
+                            uncertainKeys
+                        })
                         : call.arguments;
                     const output = executeChatbotTool(call.name, effectiveArgs, { language: validated.language });
                     if (call.name === 'handoff_to_office' || output?.action?.type === 'inquiry') {
@@ -832,10 +982,15 @@ export async function handlePublicChat(request, environment, requestId) {
             });
         }
 
-        if (looksLikeProseDocumentReply(trimmedText, lastUserMessage, validated.language)) {
-            const docOutput = resolveDocumentToolOutputFromEvidence(userTurns, validated.language);
+        if (looksLikeProseDocumentReply(trimmedText, validated.language)) {
+            const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
             outcome = 'ok';
-            return renderDocumentToolReply(docOutput, validated.language, handoffRequested);
+            return renderDocumentToolReply(
+                docOutput,
+                validated.language,
+                handoffRequested,
+                allowDeterministicEvidence
+            );
         }
 
         if (isInsufficientOrWrongScriptReply(trimmedText, validated.language)) {
