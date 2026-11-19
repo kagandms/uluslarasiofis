@@ -1,5 +1,6 @@
 import { SESSION3_MESSAGES, PUBLIC_MESSAGES } from './i18n/messages.js';
 import { listPublicDocumentOverview } from '../server/domain/documentPolicy.js';
+import { initHomeInquiryForm } from './homeInquiryForm.js';
 
 function readMessages(locale) {
     return { ...(SESSION3_MESSAGES[locale] || SESSION3_MESSAGES.tr), ...(PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr) };
@@ -51,6 +52,19 @@ export function renderPublicDocumentOverview(root, locale) {
     if (addressPolicies.length) list.append(createAddressEvidenceCard(document, messages, addressPolicies));
 
     root.replaceChildren(list);
+}
+
+/**
+ * Mounts the public inquiry form on `#questions` once, independent of document overview rendering.
+ * @param {string} [locale] Active public locale.
+ * @param {{root?: Document, fetcher?: typeof fetch}} [options] Optional document and fetch overrides.
+ * @returns {ReturnType<typeof initHomeInquiryForm>} Controller handle or null when missing/already mounted.
+ */
+export function initHomeQuestions(locale, { root = document, fetcher } = {}) {
+    const questionsSection = root?.getElementById('questions');
+    if (!questionsSection || questionsSection.dataset.inquiryInitialized === 'true') return null;
+    questionsSection.dataset.inquiryInitialized = 'true';
+    return initHomeInquiryForm(questionsSection, { locale, fetcher });
 }
 
 function createAddressEvidenceCard(document, messages, policies) {

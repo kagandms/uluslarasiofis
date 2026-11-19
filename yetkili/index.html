@@ -27,6 +27,7 @@
     <link rel="stylesheet" href="/src/staff/home.css">
     <link rel="stylesheet" href="/src/shared/rating-stars.css">
     <link rel="stylesheet" href="/src/staff/application-ratings.css">
+    <link rel="stylesheet" href="/src/staff/inquiries.css">
 
     <!-- CDNs -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
@@ -177,6 +178,10 @@
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 4 4M8 10h6M8 13h4"></path></svg></span>
                         <span class="home-action-content"><strong>YÖKSİS Eksik Evrak (Beta)</strong><small>Kayıt listesini doğrulayarak kontrol et</small></span>
                     </button>
+                    <button type="button" class="home-action" data-workspace-view="inquiries" aria-controls="view-inquiries">
+                        <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
+                        <span class="home-action-content"><span class="home-action-heading-row"><strong>Gelen Sorular</strong><span id="staff-inquiries-home-badge" class="staff-inquiries-home-badge" data-inquiries-badge hidden>0</span></span><small>Ana sayfa üzerinden gelen öğrenci soruları</small></span>
+                    </button>
                 </div>
             </section>
 
@@ -196,6 +201,7 @@
                     <button type="button" data-workspace-view="print" aria-controls="view-print">Yazdırma</button>
                     <button type="button" data-workspace-view="work-hours" aria-controls="view-work-hours">Çalışma Saatleri</button>
                     <button type="button" data-workspace-view="yoksis-audit" aria-controls="view-yoksis-audit">YÖKSİS Eksik Evrak</button>
+                    <button type="button" data-workspace-view="inquiries" aria-controls="view-inquiries">Gelen Sorular</button>
                 </nav>
 
                 <section id="view-intake" class="view-panel" hidden aria-labelledby="intake-title">
@@ -231,6 +237,11 @@
                 <section id="view-archive" class="view-panel" hidden aria-labelledby="archive-title">
                     <h3 id="archive-title" class="sr-only" tabindex="-1">Arşiv</h3>
                     <div id="staff-archive-manager"></div>
+                </section>
+
+                <section id="view-inquiries" class="view-panel" hidden aria-labelledby="inquiries-title">
+                    <h3 id="inquiries-title" class="sr-only" tabindex="-1">Gelen Sorular</h3>
+                    <div id="staff-inquiries-manager"></div>
                 </section>
 
                 <section id="view-yoksis-audit" class="view-panel yoksis-audit-workspace" hidden aria-labelledby="yoksis-audit-title">

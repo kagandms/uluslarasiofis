@@ -3,7 +3,7 @@ import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/me
 import { initializeApplicationWizard } from './applicationWizard.js';
 import { initializeApplicationTracking } from './applicationTracking.js';
 import * as applicationApi from './applicationApi.js';
-import { renderPublicDocumentOverview } from './home.js';
+import { initHomeQuestions, renderPublicDocumentOverview } from './home.js';
 import { initHomeResumeForm } from './homeResumeForm.js';
 import { initHomeRecoveryForm } from './homeRecoveryForm.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
@@ -118,6 +118,7 @@ function initPublicPortal() {
     if (document.body.dataset.page === 'home') {
         initScrollReveal();
         initializePrivacyNoticeModal();
+        initHomeQuestions(document.documentElement.lang);
         initHomeRecoveryForm({
             root: document,
             api: applicationApi,
