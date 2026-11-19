@@ -23,6 +23,7 @@
 
 ## Plans, evidence, and drafts
 
+- [Home page question form and AI chatbot plan (2026-11-18)](2026-11-18-home-question-form-and-chatbot-plan.md) is an unimplemented, unvalidated plan against `fdcb930`; re-verify it before executing.
 - [Cloudflare usage card](cloudflare-usage-card.md) documents the staff home usage card, its limits and credentials.
 - [`superpowers/plans/`](superpowers/plans/) and [`superpowers/specs/`](superpowers/specs/) contain scoped plans/specifications; their presence does not mean implementation or external activation occurred.
 - Dated root documents, [`notes/`](notes/), and [`audits/`](audits/) are historical or point-in-time analysis. Check their stated date, source SHA and validation status against current code before treating a claim as current. [`notes/2026-11-05-application-document-requirements-draft.md`](notes/2026-11-05-application-document-requirements-draft.md) is explicitly a draft.
