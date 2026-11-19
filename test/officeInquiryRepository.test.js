@@ -75,6 +75,36 @@ test('validateInquiryInput canonicalizes phones to E.164, accepts missing email,
 
     const crlfMessage = validateInquiryInput(validInput({ message: '  Satır 1\r\nSatır 2  ' }));
     assert.equal(crlfMessage.message, 'Satır 1\nSatır 2');
+
+    const plusDotEmail = validateInquiryInput(validInput({ email: 'mert.kaya+basvuru@uni.edu.tr' }));
+    assert.equal(plusDotEmail.email, 'mert.kaya+basvuru@uni.edu.tr');
+
+    const multilingualCases = [
+        {
+            first_name: 'أحمد',
+            last_name: 'محمد',
+            message: 'أحتاج مساعدة بخصوص إقامة الطالب.',
+            language: 'ar'
+        },
+        {
+            first_name: 'Иван',
+            last_name: 'Петров',
+            message: 'Подскажите порядок подачи документов на ВНЖ.',
+            language: 'ru'
+        },
+        {
+            first_name: 'Çağrı Şükrü',
+            last_name: 'Öztürk İzzet',
+            message: 'Öğrenci belgesi ve ikamet izni hakkında bilgi alabilir miyim?',
+            language: 'tr'
+        }
+    ];
+    for (const item of multilingualCases) {
+        const accepted = validateInquiryInput(validInput(item));
+        assert.equal(accepted.first_name, item.first_name);
+        assert.equal(accepted.last_name, item.last_name);
+        assert.equal(accepted.message, item.message);
+    }
 });
 
 test('validateInquiryInput rejects invalid phone, malformed email, short message, and bad inputs without echoing values', () => {
@@ -88,14 +118,24 @@ test('validateInquiryInput rejects invalid phone, malformed email, short message
         validInput({ phone: '1'.repeat(41) }),
         validInput({ email: 'not-an-email' }),
         validInput({ email: 'a@b' }),
+        validInput({ email: 'a@b.co?cc=x@y.z' }),
+        validInput({ email: 'mert@example.com/admin' }),
+        validInput({ email: 'mert@example.com#frag' }),
         validInput({ email: `${'a'.repeat(250)}@b.com` }),
+        validInput({ email: 'mert\u200B@example.edu' }),
         validInput({ first_name: '' }),
         validInput({ first_name: 'x'.repeat(61) }),
+        validInput({ first_name: 'Mert\u202EKaya' }),
+        validInput({ first_name: 'Mert\u200BKaya' }),
         validInput({ last_name: '   ' }),
+        validInput({ last_name: 'Kaya\u2066Test' }),
         validInput({ message: 'abcd' }),
         validInput({ message: '   ab   ' }),
         validInput({ message: 'a'.repeat(1001) }),
         validInput({ message: 'gizli\tmesaj' }),
+        validInput({ message: 'Normal metin\u202Egizli' }),
+        validInput({ message: 'Normal metin\u200Bdevam' }),
+        validInput({ message: 'Normal metin\uFEFFdevam' }),
         validInput({ language: 'fr' }),
         validInput({ website: 'https://spam.example' }),
         { ...validInput(), extra_field: 'unexpected' }

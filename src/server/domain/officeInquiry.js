@@ -25,10 +25,10 @@ const INQUIRY_ALLOWED_KEYS = Object.freeze([
     'website'
 ]);
 const STATUS_UPDATE_ALLOWED_KEYS = Object.freeze(['status']);
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
-const SINGLE_LINE_CONTROL_CHAR_PATTERN = /[\u0000-\u001F\u007F-\u009F]/u;
-// Çok satırlı mesajlarda yalnızca \n satır sonuna izin verilir; diğer kontrol karakterleri reddedilir.
-const MESSAGE_DISALLOWED_CONTROL_CHAR_PATTERN = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/u;
+const EMAIL_PATTERN = /^[^\s@?#&%\/\\:;,<>"'()\[\]]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u;
+const SINGLE_LINE_CONTROL_CHAR_PATTERN = /[\u0000-\u001F\u007F-\u009F\u061C\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/u;
+// Çok satırlı mesajlarda yalnızca \n satır sonuna izin verilir; diğer kontrol, bidi ve sıfır genişlikli karakterler reddedilir.
+const MESSAGE_DISALLOWED_CONTROL_CHAR_PATTERN = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u061C\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/u;
 const ID_DISALLOWED_CHAR_PATTERN = /[\u0000-\u001F\u007F-\u009F\s]/u;
 
 function isPlainObject(value) {
