@@ -1973,5 +1973,297 @@
       { "role": "user", "content": "What are the International Student Office hours?" }
     ],
     "expect": { "route": "knowledge", "topic": "office_hours" }
+  },
+
+  {
+    "id": "tr-adv-01-negated-dorm",
+    "language": "tr",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "İlk başvuru, 20 yaşındayım, yurtta kalmıyorum, hangi belgeler lazım?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tr-adv-02-negated-app",
+    "language": "tr",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "İlk başvuru değil, 21 yaşındayım, öğrenci yurdunda kalıyorum, hangi belgeler gerekli?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tr-adv-03-negated-age",
+    "language": "tr",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "İlk başvuru, 18 yaşında değilim, öğrenci yurdunda kalıyorum. Hangi belgeler lazım?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tr-adv-04-duration-not-age",
+    "language": "tr",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "İlk başvuru, 15 yıldır yurtta kalıyorum, hangi belgeler gerekli?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tr-adv-05-self-vs-host",
+    "language": "tr",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "İlk başvuru, 20 yaşındayım. Ben bekarım, yabancı vatandaşım, akrabamın yanında taahhütname ile kalıyorum. Belgeler neler?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tr-adv-06-host-question",
+    "language": "tr",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Uzatma başvurusu, 22 yaşındayım, taahhütname ile kalıyorum. Taahhüt veren kişi Türk vatandaşı mı?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+
+  {
+    "id": "en-adv-01-negated-dorm",
+    "language": "en",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Initial application, I am 20 years old, I do not live in a dorm. Which documents are required?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "en-adv-02-negated-app",
+    "language": "en",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Not an initial application, I am 21 years old, staying in a dorm. What documents do I need?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "en-adv-03-duration-not-age",
+    "language": "en",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Initial application, I live in a dorm for 1 year, what documents are needed?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "en-adv-04-days-not-age",
+    "language": "en",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Initial application, staying at a hotel, I am 2 days late, which documents do I need?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "en-adv-05-curly-apostrophe-host",
+    "language": "en",
+    "category": "documents",
+    "messages": [
+      { "role": "user", "content": "Initial application, I am 20 years old, staying with a host via undertaking. The host isn’t married and isn’t Turkish. Which documents are required?" }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "initial",
+      "under_18": false,
+      "accommodation": "undertaking",
+      "host_is_married": "no",
+      "host_is_turkish": "no"
+    }
+  },
+  {
+    "id": "en-adv-06-curly-apostrophe-fp",
+    "language": "en",
+    "category": "documents",
+    "messages": [
+      { "role": "user", "content": "Transition to student permit, I am 22 years old, staying in a dorm, and I don’t have fingerprints. Which documents do I need?" }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "transition",
+      "under_18": false,
+      "accommodation": "dormitory",
+      "fingerprint_status": "not_registered"
+    }
+  },
+
+  {
+    "id": "ru-adv-01-negated-dorm",
+    "language": "ru",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Первичная подача, мне 20 лет, не живу в общежитии. Какие документы нужны?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ru-adv-02-negated-app",
+    "language": "ru",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Не первичная подача, мне 21 год, живу в общежитии. Какие документы нужны?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ru-adv-03-duration-not-age",
+    "language": "ru",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Первичная подача, живу в общежитии 2 года. Какие документы нужны?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ru-adv-04-negated-age",
+    "language": "ru",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Первичная подача, мне не 18 лет, живу в общежитии. Какие документы нужны?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ru-adv-05-homograph-perevod",
+    "language": "ru",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Перевод документов для подачи, мне 20 лет, живу в общежитии. Какие документы нужны?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ru-adv-06-self-vs-host",
+    "language": "ru",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Первичная подача, мне 21 год. Я холост и не гражданин Турции, живу у родственника по обязательству. Какие документы нужны?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ru-adv-07-positive-perevod-vnj",
+    "language": "ru",
+    "category": "documents",
+    "messages": [
+      { "role": "user", "content": "Перевод ВНЖ на студенческий, мне 20 лет, живу в общежитии, отпечатки пальцев уже зарегистрированы. Какие документы нужны?" }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "transition",
+      "under_18": false,
+      "accommodation": "dormitory",
+      "fingerprint_status": "registered"
+    }
+  },
+
+  {
+    "id": "tk-adv-01-negated-dorm",
+    "language": "tk",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Ilkinji arza, 20 ýaşymda, umumy ýaşaýyş jaýynda ýaşamok. Haýsy resminamalar gerek?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tk-adv-02-negated-app",
+    "language": "tk",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Ilkinji arza däl, 21 ýaşymda, umumy ýaşaýyş jaýynda galýaryn. Haýsy resminamalar gerek?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tk-adv-03-duration-not-age",
+    "language": "tk",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Ilkinji arza, umumy ýaşaýyş jaýynda 2 ýyl ýaşaýaryn. Haýsy resminamalar gerek?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tk-adv-04-self-vs-host",
+    "language": "tk",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Ilkinji arza, 20 ýaşymda. Men öýlenmedik, daşary ýurtly, garyndaşymyň öýünde borçnama bilen galýaryn. Resminamalar näme?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "tk-adv-05-host-question",
+    "language": "tk",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "Uzatma arzasy, 22 ýaşymda, borçnama bilen galýaryn. Hojaýyn öýlenen mi?" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+
+  {
+    "id": "ar-adv-01-negated-dorm",
+    "language": "ar",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "طلب أولي، عمري 20 سنة، لا أسكن في السكن الطلابي. ما المستندات المطلوبة؟" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ar-adv-02-duration-not-age",
+    "language": "ar",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "طلب أولي، أقيم في سكن طلابي لمدة 4 سنوات. ما المستندات المطلوبة؟" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ar-adv-03-homograph-qarib",
+    "language": "ar",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "طلب أولي، عمري 20 سنة، سأقدم قريباً. ما المستندات المطلوبة؟" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ar-adv-04-self-vs-host",
+    "language": "ar",
+    "category": "documents_clarify",
+    "messages": [
+      { "role": "user", "content": "طلب أولي، عمري 20 سنة. أنا أعزب وأسكن عند قريبي بتعهد. ما المستندات المطلوبة؟" }
+    ],
+    "expect": { "route": "documents_clarify" }
+  },
+  {
+    "id": "ar-adv-05-positive-undertaking",
+    "language": "ar",
+    "category": "documents",
+    "messages": [
+      { "role": "user", "content": "طلب أولي، عمري 21 سنة، أسكن عند قريبي بتعهد. المضيف غير متزوج ومواطن تركي. ما المستندات المطلوبة؟" }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "initial",
+      "under_18": false,
+      "accommodation": "undertaking",
+      "host_is_married": "no",
+      "host_is_turkish": "yes"
+    }
   }
 ]
