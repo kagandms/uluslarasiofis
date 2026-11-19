@@ -55,18 +55,12 @@ const KNOWLEDGE_ENTRIES = Object.freeze({
     }),
     office_hours: Object.freeze({
         sources: Object.freeze(['index.html']),
-        // DRAFT: needs office approval
         text: Object.freeze({
-            // DRAFT: needs office approval
-            tr: 'Uluslararası Öğrenci Ofisinin çalışma ve görüşme saatleri bu portalda belirtilmemektedir. Güncel çalışma saatlerini öğrenmek için ana sayfadaki soru formunu kullanarak ofise soru gönderebilirsiniz.',
-            // DRAFT: needs office approval
-            en: 'The International Student Office’s working and visiting hours are not listed on this portal. To ask about current office hours, please send a message using the question form on the home page.',
-            // DRAFT: needs office approval
-            ru: 'Часы работы и приёма Международного студенческого офиса на этом портале не указаны. Чтобы уточнить актуальное расписание, отправьте вопрос через форму вопросов на главной странице.',
-            // DRAFT: needs office approval
-            tk: 'Halkara talyplar ofisiniň iş we kabul ediş sagatlary bu portalda görkezilmeýär. Häzirki iş sagatlaryny soramak üçin baş sahypadaky sorag formasy arkaly ofise habar iberip bilersiňiz.',
-            // DRAFT: needs office approval
-            ar: 'ساعات عمل واستقبال مكتب الطلاب الدوليين غير مذكورة في هذه البوابة. للاستفسار عن ساعات العمل الحالية، يرجى إرسال سؤالك عبر نموذج الأسئلة في الصفحة الرئيسية.'
+            tr: 'Uluslararası Öğrenci Ofisi hafta içi 09:00–18:00 saatleri arasında açıktır. Sorularınızı ana sayfadaki soru formundan da iletebilirsiniz.',
+            en: 'The International Student Office is open on weekdays, 09:00–18:00. You can also send your questions using the question form on the home page.',
+            ru: 'Международный студенческий офис открыт по будням 09:00–18:00. Вы также можете отправить свои вопросы через форму вопросов на главной странице.',
+            tk: 'Halkara talyplar ofisi hepde içi 09:00–18:00 sagatlar aralygynda açykdyr. Soraglaryňyzy baş sahypadaky sorag formasy arkaly hem iberip bilersiňiz.',
+            ar: 'مكتب الطلاب الدوليين مفتوح أيام الأسبوع من الساعة 09:00–18:00. كما يمكنك إرسال أسئلتك عبر نموذج الأسئلة في الصفحة الرئيسية.'
         })
     }),
     student_card: Object.freeze({

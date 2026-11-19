@@ -48,6 +48,26 @@ const OPTIONAL_DOCUMENT_SUFFIX = Object.freeze({
     ar: ' (اختياري)'
 });
 
+const STATUS_KEYWORDS_BY_LANGUAGE = Object.freeze({
+    tr: Object.freeze(['durum', 'başvurum', 'göç', 'göç idaresi', 'gönderildi', 'onaylandı', 'sonuç', 'sonucu']),
+    en: Object.freeze(['status', 'my application', 'migration', 'sent', 'approved', 'result']),
+    ru: Object.freeze(['статус', 'моя заявка', 'миграц', 'отправ', 'одобр']),
+    tk: Object.freeze(['ýagdaý', 'arzam', 'migrasiýa', 'iberildi']),
+    ar: Object.freeze(['حالة', 'طلبي', 'الهجرة', 'أرسل', 'أُرسل', 'ارسل', 'موافقة'])
+});
+
+const DOCUMENT_KEYWORDS_BY_LANGUAGE = Object.freeze({
+    tr: Object.freeze(['belge', 'evrak']),
+    en: Object.freeze(['document']),
+    ru: Object.freeze(['документ']),
+    tk: Object.freeze(['resminama']),
+    ar: Object.freeze(['مستند'])
+});
+
+const STATUS_KEYWORDS = Object.freeze(Object.values(STATUS_KEYWORDS_BY_LANGUAGE).flat());
+const DOCUMENT_KEYWORDS = Object.freeze(Object.values(DOCUMENT_KEYWORDS_BY_LANGUAGE).flat());
+const SENT_WORD_PATTERN = /(?:^|[^\p{L}\p{N}])sent(?:[^\p{L}\p{N}]|$)/u;
+
 function isPlainObject(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
     const prototype = Object.getPrototypeOf(value);
@@ -159,6 +179,29 @@ function extractApplicationReferences(messageContent) {
     return validReferences;
 }
 
+function normalizeMessageForKeywordMatch(messageContent) {
+    return [
+        messageContent.toLowerCase().replace(/\u0307/g, ''),
+        messageContent.toLocaleLowerCase('tr-TR')
+    ];
+}
+
+function matchesKeyword(normalizedVariants, keyword) {
+    if (keyword === 'sent') {
+        return normalizedVariants.some((text) => SENT_WORD_PATTERN.test(text));
+    }
+    return normalizedVariants.some((text) => text.includes(keyword));
+}
+
+function isStatusQuestionWithoutReference(messageContent) {
+    if (typeof messageContent !== 'string') return false;
+    const normalizedVariants = normalizeMessageForKeywordMatch(messageContent);
+    if (DOCUMENT_KEYWORDS.some((keyword) => matchesKeyword(normalizedVariants, keyword))) {
+        return false;
+    }
+    return STATUS_KEYWORDS.some((keyword) => matchesKeyword(normalizedVariants, keyword));
+}
+
 function outcomeForError(error) {
     if (!(error instanceof ApiError)) return 'error';
     if (error.status === 405) return 'method_not_allowed';
@@ -215,6 +258,13 @@ export async function handlePublicChat(request, environment, requestId) {
                     : [{ type: 'inquiry' }]
             });
         }
+        if (isStatusQuestionWithoutReference(lastUserMessage)) {
+            outcome = 'status_needs_reference';
+            return routeResult({
+                reply: getChatbotFixedText('statusNeedsReference', validated.language),
+                actions: []
+            });
+        }
 
         const clientAddress = request.headers.get('CF-Connecting-IP') || 'unknown-client';
         const nowSeconds = Math.floor(Date.now() / 1000);
@@ -257,6 +307,7 @@ export async function handlePublicChat(request, environment, requestId) {
         let exhaustedModelCalls = false;
         let handoffRequested = false;
         let lastDocumentLabels = null;
+        let lastKnowledgeText = null;
 
         for (let modelCall = 1; modelCall <= CHATBOT_MAX_MODEL_CALLS; modelCall += 1) {
             // 3. çağrı son izin verilen çağrıdır; aracısız gönderilir ki model metin yanıtı üretmeye zorlansın.
@@ -304,6 +355,9 @@ export async function handlePublicChat(request, environment, requestId) {
                     if (call.name === 'get_required_documents' && Array.isArray(output?.labels) && output.labels.length > 0) {
                         lastDocumentLabels = output.labels;
                     }
+                    if (call.name === 'lookup_knowledge' && typeof output?.text === 'string' && output.text.trim()) {
+                        lastKnowledgeText = output.text;
+                    }
                     toolPayload = output;
                 } catch {
                     toolPayload = { ok: false, error: 'INVALID_TOOL_CALL' };
@@ -317,8 +371,8 @@ export async function handlePublicChat(request, environment, requestId) {
                 });
             }
 
-            // Belge yanıtları model metni olmadan deterministik üretildiği için ek model çağrısı gerekmez.
-            if (lastDocumentLabels) {
+            // Belge ve bilgi tabanı yanıtları model metni olmadan deterministik döndürüldüğü için ek model çağrısı gerekmez.
+            if (lastDocumentLabels || lastKnowledgeText) {
                 break;
             }
 
@@ -343,6 +397,15 @@ export async function handlePublicChat(request, environment, requestId) {
             const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
             return routeResult({
                 reply: buildDocumentReply(lastDocumentLabels, validated.language),
+                actions
+            });
+        }
+
+        if (lastKnowledgeText) {
+            outcome = 'ok';
+            const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
+            return routeResult({
+                reply: lastKnowledgeText,
                 actions
             });
         }

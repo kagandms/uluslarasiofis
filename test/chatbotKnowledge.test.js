@@ -50,10 +50,21 @@ test('readKnowledge falls back to Turkish when language is omitted or unsupporte
     assert.deepEqual(readKnowledge('application_steps', null), turkish);
 });
 
-test('draft knowledge texts do not invent office hours, phone numbers, or staff credentials', () => {
+test('office_hours states confirmed 09:00-18:00 hours and draft contact does not invent phone numbers or staff credentials', () => {
+    const trOfficeHours = readKnowledge('office_hours', 'tr');
+    assert.equal(
+        trOfficeHours.text,
+        'Uluslararası Öğrenci Ofisi hafta içi 09:00–18:00 saatleri arasında açıktır. Sorularınızı ana sayfadaki soru formundan da iletebilirsiniz.'
+    );
+
     for (const language of CHATBOT_LANGUAGES) {
         const officeHours = readKnowledge('office_hours', language);
-        assert.equal(/\b\d{1,2}[:.]\d{2}\b/.test(officeHours.text), false, `${language} office_hours must not invent clock hours`);
+        assert.ok(officeHours.text.includes('09:00–18:00'), `${language} office_hours must include 09:00–18:00`);
+        assert.deepEqual(
+            officeHours.text.match(/\b\d{1,2}[:.]\d{2}\b/g),
+            ['09:00', '18:00'],
+            `${language} office_hours must contain only 09:00 and 18:00`
+        );
 
         const contact = readKnowledge('contact', language);
         assert.equal(/(\+90|0\s*5\d{2}|\d{3}[-\s]\d{3})/.test(contact.text), false, `${language} contact must not invent phone numbers`);
@@ -61,14 +72,19 @@ test('draft knowledge texts do not invent office hours, phone numbers, or staff 
     }
 });
 
-test('every draft topic entry in chatbotKnowledge.js carries the office-approval DRAFT comment', () => {
+test('every remaining draft topic entry in chatbotKnowledge.js carries the office-approval DRAFT comment and office_hours does not', () => {
     const source = fs.readFileSync(
         new URL('../src/server/domain/chatbotKnowledge.js', import.meta.url),
         'utf8'
     );
+    const draftTopics = CHATBOT_TOPICS.filter((topic) => topic !== 'office_hours');
     const draftCommentCount = source.match(/\/\/ DRAFT: needs office approval/g)?.length || 0;
     assert.ok(
-        draftCommentCount >= CHATBOT_TOPICS.length * CHATBOT_LANGUAGES.length,
-        'Expected every topic and language draft entry to carry // DRAFT: needs office approval'
+        draftCommentCount >= draftTopics.length * CHATBOT_LANGUAGES.length,
+        'Expected every remaining draft topic and language entry to carry // DRAFT: needs office approval'
     );
+
+    const officeHoursBlock = source.match(/office_hours:\s*Object\.freeze\(\{[\s\S]*?\n\s*\}\),/)?.[0] || '';
+    assert.ok(officeHoursBlock.length > 0, 'Expected to locate office_hours block in chatbotKnowledge.js');
+    assert.equal(officeHoursBlock.includes('DRAFT: needs office approval'), false);
 });

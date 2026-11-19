@@ -22,11 +22,11 @@ export const CHATBOT_FIXED_TEXTS = Object.freeze({
         ar: 'يمكنني الإجابة فقط عن الأسئلة المتعلقة بهذه البوابة وإجراءات تصريح إقامة الطالب في تركيا. للموضوعات الأخرى أو لحالتك الخاصة، يرجى التواصل مع مكتب الطلاب الدوليين عبر نموذج الأسئلة في الصفحة الرئيسية.'
     }),
     fallback: Object.freeze({
-        tr: 'Sorunuzu şu anda yanıtlayamıyorum. Ana sayfadaki soru formunu kullanarak doğrudan Uluslararası Öğrenci Ofisine ulaşabilirsiniz.',
-        en: 'I cannot answer your question right now. You can reach the International Student Office directly using the question form on the home page.',
-        ru: 'Сейчас я не могу ответить на ваш вопрос. Вы можете напрямую обратиться в Международный студенческий офис через форму вопросов на главной странице.',
-        tk: 'Häzir soragyňyza jogap berip bilmeýärin. Baş sahypadaky sorag formasy arkaly göni Halkara talyplar ofisine ýüz tutup bilersiňiz.',
-        ar: 'لا أستطيع الإجابة عن سؤالك في الوقت الحالي. يمكنك التواصل مباشرة مع مكتب الطلاب الدوليين عبر نموذج الأسئلة في الصفحة الرئيسية.'
+        tr: 'Bu soruya güvenilir bir yanıt veremiyorum. Lütfen aşağıdaki soru formuyla Uluslararası Öğrenci Ofisine sorun.',
+        en: 'I cannot provide a reliable answer to this question. Please ask the International Student Office using the question form below.',
+        ru: 'Я не могу дать надёжный ответ на этот вопрос. Пожалуйста, задайте его Международному студенческому офису через форму вопросов ниже.',
+        tk: 'Bu soraga ygtybarly jogap berip bilmeýärin. Aşakdaky sorag formasy arkaly Halkara talyplar ofisinden soraň.',
+        ar: 'لا يمكنني تقديم إجابة موثوقة على هذا السؤال. يرجى طرح سؤالك على مكتب الطلاب الدوليين عبر نموذج الأسئلة أدناه.'
     }),
     dailyLimit: Object.freeze({
         tr: 'Asistan bugünkü kullanım sınırına ulaştı. Sorunuzu iletmek için lütfen ana sayfadaki soru formunu kullanın.',
@@ -48,6 +48,13 @@ export const CHATBOT_FIXED_TEXTS = Object.freeze({
         ru: 'Список может меняться в зависимости от данных вашей заявки; окончательный перечень отображается при подаче заявки, а официальную проверку проводит Международный студенческий офис.',
         tk: 'Sanaw arza maglumatlaryňyza görä üýtgäp biler; gutarnykly sanaw arza tabşyrylýan wagty görkezilýär we resmi barlag Halkara talyplar ofisi tarapyndan geçirilýär.',
         ar: 'قد تختلف القائمة حسب بيانات طلبك؛ تُعرض القائمة النهائية أثناء التقديم، وتتم المراجعة الرسمية من قِبل مكتب الطلاب الدوليين.'
+    }),
+    statusNeedsReference: Object.freeze({
+        tr: 'Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın.',
+        en: 'To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail.',
+        ru: 'Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением.',
+        tk: 'Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň.',
+        ar: 'لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني.'
     })
 });
 
@@ -57,8 +64,8 @@ function resolveLanguage(language) {
 }
 
 /**
- * Returns a fixed localized chatbot message for refusal, fallback, daily-limit, or document-list responses.
- * @param {'refusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'} kind Fixed text category.
+ * Returns a fixed localized chatbot message for refusal, fallback, daily-limit, document-list, or missing-reference status responses.
+ * @param {'refusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'} kind Fixed text category.
  * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
  * @returns {string} Localized fixed response text.
  */
@@ -89,7 +96,7 @@ export function buildChatbotSystemPrompt(language = 'tr') {
         '- Use get_required_documents whenever a student asks which documents are required. Never list documents from memory. If required conditions (such as application_type, under-18 status, accommodation_type, undertaking host details, or transition fingerprint_status) are not yet known, ask only the missing questions first before calling get_required_documents.',
         '- When get_required_documents runs, write only one short introductory sentence; the server appends the authoritative document list.',
         '- Use handoff_to_office when the student asks to contact the office, needs staff review or case-specific help, or asks about office hours or student ID card procedures. Always keep handoff to the International Student Office available.',
-        '- If the student asks about their application status without providing a valid reference number, ask them to paste the reference number from their confirmation (format: ITU-XXXX-XXXX) and never guess an application status.',
+        '- For any question about the student’s own application progress (status, whether it was sent/forwarded to the migration authority / Göç İdaresi, approval, appointment, or result), always ask for their reference number (format: ITU-XXXX-XXXX); never guess an application status and never answer it from memory.',
         '',
         'Strict prohibitions:',
         '- Never promise or guarantee residence permit approval by Göç İdaresi (Migration Authority) or the university.',

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from '../src/public/i18n/messages.js';
-import { CHATBOT_LANGUAGES } from '../src/server/domain/chatbotKnowledge.js';
+import { CHATBOT_LANGUAGES, readKnowledge } from '../src/server/domain/chatbotKnowledge.js';
 import {
     CHATBOT_FIXED_TEXTS,
     CHATBOT_REFUSAL_MARKER,
@@ -164,6 +164,114 @@ test('document question calls get_required_documents and renders the exact polic
     }
 });
 
+test('lookup_knowledge returns exact readKnowledge text with 1 model call and never includes model text (tr and ar)', async () => {
+    const cases = [
+        {
+            language: 'tr',
+            topic: 'application_steps',
+            question: 'Başvuru nasıl yapılıyor?',
+            modelProse: 'STRAY-MODEL-TEXT tr'
+        },
+        {
+            language: 'ar',
+            topic: 'office_hours',
+            question: 'ما هي ساعات عمل المكتب؟',
+            modelProse: 'STRAY-MODEL-TEXT ar'
+        }
+    ];
+
+    for (let index = 0; index < cases.length; index += 1) {
+        const testCase = cases[index];
+        const { fakeAi, environment } = createEnvironment([
+            {
+                response: testCase.modelProse,
+                tool_calls: [
+                    {
+                        name: 'lookup_knowledge',
+                        arguments: { topic: testCase.topic }
+                    }
+                ]
+            },
+            new Error('A 2nd model call must never execute after lookup_knowledge.')
+        ]);
+
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: testCase.question }],
+                language: testCase.language
+            }), { address: `198.51.100.${180 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 1);
+        assert.deepEqual(payload.actions, []);
+        assert.equal(payload.reply.includes('STRAY-MODEL-TEXT'), false);
+        assert.equal(payload.reply, readKnowledge(testCase.topic, testCase.language).text);
+    }
+});
+
+test('get_required_documents wins over lookup_knowledge in the same response and handoff_to_office preserves inquiry action', async () => {
+    const docsOverKnowledgeEnv = createEnvironment([
+        {
+            response: 'STRAY-MODEL-TEXT',
+            tool_calls: [
+                { name: 'lookup_knowledge', arguments: { topic: 'application_steps' } },
+                {
+                    name: 'get_required_documents',
+                    arguments: {
+                        application_type: 'initial',
+                        is_under_18: false,
+                        accommodation_type: 'rental_contract'
+                    }
+                }
+            ]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+
+    const docsResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Belgeler ve adımlar nedir?' }],
+            language: 'tr'
+        }), { address: '198.51.100.185' }),
+        docsOverKnowledgeEnv.environment,
+        {}
+    );
+    const docsPayload = await docsResponse.json();
+    assert.equal(docsResponse.status, 200);
+    assert.equal(docsOverKnowledgeEnv.fakeAi.callCount, 1);
+    assert.ok(docsPayload.reply.startsWith(getChatbotFixedText('documentListIntro', 'tr')));
+    assert.equal(docsPayload.reply.includes('STRAY-MODEL-TEXT'), false);
+
+    const knowledgeWithHandoffEnv = createEnvironment([
+        {
+            response: 'STRAY-MODEL-TEXT',
+            tool_calls: [
+                { name: 'lookup_knowledge', arguments: { topic: 'contact' } },
+                { name: 'handoff_to_office', arguments: {} }
+            ]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+
+    const handoffResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Ofise nasıl ulaşırım?' }],
+            language: 'tr'
+        }), { address: '198.51.100.186' }),
+        knowledgeWithHandoffEnv.environment,
+        {}
+    );
+    const handoffPayload = await handoffResponse.json();
+    assert.equal(handoffResponse.status, 200);
+    assert.equal(knowledgeWithHandoffEnv.fakeAi.callCount, 1);
+    assert.equal(handoffPayload.reply, readKnowledge('contact', 'tr').text);
+    assert.deepEqual(handoffPayload.actions, [{ type: 'inquiry' }]);
+});
+
 test('handoff_to_office tool call includes inquiry action in the reply', async () => {
     const { fakeAi, environment } = createEnvironment([
         {
@@ -192,6 +300,7 @@ test('off-topic question returns fixed localized refusal text and inquiry action
         assert.ok(CHATBOT_FIXED_TEXTS.dailyLimit[language]);
         assert.ok(CHATBOT_FIXED_TEXTS.documentListIntro[language]);
         assert.ok(CHATBOT_FIXED_TEXTS.documentListClosing[language]);
+        assert.ok(CHATBOT_FIXED_TEXTS.statusNeedsReference[language]);
 
         const { fakeAi, environment } = createEnvironment({ response: CHATBOT_REFUSAL_MARKER });
         const response = await worker.fetch(
@@ -495,9 +604,9 @@ test('model failure returns 503 CHATBOT_UNAVAILABLE', async () => {
 
 test('4th tool round never happens, 3rd call receives no tools, and empty or over-1200-char model outputs return fixed fallback', async () => {
     const infiniteToolEnv = createEnvironment([
-        { response: '', tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'application_steps' } }] },
-        { response: '', tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'residence_permit_basics' } }] },
-        { response: '', tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'contact' } }] },
+        { response: '', tool_calls: [{ name: 'handoff_to_office', arguments: {} }] },
+        { response: '', tool_calls: [{ name: 'handoff_to_office', arguments: {} }] },
+        { response: '', tool_calls: [{ name: 'handoff_to_office', arguments: {} }] },
         new Error('A 4th model call must never execute.')
     ]);
 
@@ -517,8 +626,8 @@ test('4th tool round never happens, 3rd call receives no tools, and empty or ove
     assert.deepEqual(cappedPayload.actions, [{ type: 'inquiry' }]);
 
     const thirdCallSynthesisEnv = createEnvironment([
-        { response: '', tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'application_steps' } }] },
-        { response: '', tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'contact' } }] },
+        { response: '', tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'invalid_topic_1' } }] },
+        { response: '', tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'invalid_topic_2' } }] },
         { response: 'Başvuru ve iletişim bilgilerini özetledim.' },
         new Error('A 4th model call must never execute.')
     ]);
@@ -947,7 +1056,7 @@ test('status lookup via chatbot shares the 300-per-15-min tracking rate limit wi
     assert.equal(fakeAi.callCount, 0);
 });
 
-test('malformed references, status questions without references, and earlier-turn references use the normal model path', async () => {
+test('malformed references and earlier-turn references use the normal model path', async () => {
     const { database, fakeAi, environment } = createEnvironment({
         response: 'Lütfen onay ekranındaki ITU-XXXX-XXXX kodunuzu paylaşın.'
     });
@@ -962,7 +1071,6 @@ test('malformed references, status questions without references, and earlier-tur
         [{ role: 'user', content: 'ITU7K9M4X2P' }],
         [{ role: 'user', content: 'ITU-7K9M-4X2PX' }],
         [{ role: 'user', content: 'ITU-7K9M-4X2' }],
-        [{ role: 'user', content: 'Başvurum ne durumda?' }],
         [
             { role: 'user', content: validReference },
             { role: 'assistant', content: 'Başvuru durumu özetlendi.' },
@@ -1055,4 +1163,82 @@ test('prompt injection text around one valid reference still returns only that s
     assert.equal(payload.reply.includes(APPLICATION_STATUS_LABELS.en.completed), false);
     assert.equal(payload.reply.includes('SECOND-STUDENT-SECRET'), false);
     assert.deepEqual(payload.actions, [{ type: 'link', href: '/basvurum/', label_key: 'chatbotOpenTracking' }]);
+});
+
+test('status keywords without a valid reference return statusNeedsReference with 0 model calls in tr and en', async () => {
+    const { fakeAi, environment } = createEnvironment(
+        new Error('Model must not be called for status questions without a reference.')
+    );
+
+    const cases = [
+        { language: 'tr', content: 'Başvurum ne durumda?' },
+        { language: 'tr', content: 'Başvurum Göç İdaresine gönderildi mi?' },
+        { language: 'en', content: 'did they send my application to migration department' },
+        { language: 'en', content: 'What is my application status?' }
+    ];
+
+    for (let index = 0; index < cases.length; index += 1) {
+        const testCase = cases[index];
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: testCase.content }],
+                language: testCase.language
+            }), { address: `198.51.100.${190 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(payload.reply, getChatbotFixedText('statusNeedsReference', testCase.language));
+        assert.deepEqual(payload.actions, []);
+    }
+
+    assert.equal(fakeAi.callCount, 0);
+});
+
+test('documents question containing "durum" is not intercepted and uses the normal model path', async () => {
+    const { fakeAi, environment } = createEnvironment({
+        response: 'Lütfen başvuru bilgilerinizi paylaşın.'
+    });
+
+    const response = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Parmak izi durumuma göre hangi belgeler gerekir?' }],
+            language: 'tr'
+        }), { address: '198.51.100.200' }),
+        environment,
+        {}
+    );
+    const payload = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(fakeAi.callCount, 1);
+    assert.equal(payload.reply, 'Lütfen başvuru bilgilerinizi paylaşın.');
+});
+
+test('reworded fallback is returned across all five languages without implying a service outage', async () => {
+    const outagePhrases = ['şu anda', 'right now', 'сейчас', 'häzir', 'في الوقت الحالي'];
+
+    for (let index = 0; index < CHATBOT_LANGUAGES.length; index += 1) {
+        const language = CHATBOT_LANGUAGES[index];
+        const { fakeAi, environment } = createEnvironment({ response: '   ' });
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: 'Genel bir soru soruyorum.' }],
+                language
+            }), { address: `198.51.100.${210 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 1);
+        assert.equal(payload.reply, getChatbotFixedText('fallback', language));
+        assert.deepEqual(payload.actions, [{ type: 'inquiry' }]);
+        for (const phrase of outagePhrases) {
+            assert.equal(payload.reply.toLowerCase().includes(phrase), false, `${language} fallback must not contain "${phrase}"`);
+        }
+    }
 });
