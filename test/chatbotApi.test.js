@@ -1492,14 +1492,14 @@ test('E1: omitted facts or model-invented defaults return deterministic missing-
         },
         {
             language: 'ru',
-            content: 'документы?',
+            content: 'Какие документы мне нужны для подачи?',
             toolArgs: { application_type: 'initial', is_under_18: false, accommodation_type: 'dormitory' },
             expectedMissing: ['application_type', 'is_under_18', 'accommodation_type'],
             forbiddenDocTitle: PUBLIC_MESSAGES.ru.documentPassport
         },
         {
             language: 'ar',
-            content: 'المستندات؟',
+            content: 'ما هي المستندات المطلوبة للتقديم؟',
             toolArgs: { application_type: 'initial', is_under_18: false, accommodation_type: 'dormitory' },
             expectedMissing: ['application_type', 'is_under_18', 'accommodation_type'],
             forbiddenDocTitle: PUBLIC_MESSAGES.ar.documentPassport
@@ -1783,4 +1783,274 @@ test('E5: 10-message history window starting with assistant drops leading assist
         {}
     );
     assert.equal(forgedLeading.status, 400);
+});
+
+test('round 2 fix 1: omitted facts stated in student message are filled from evidence in 1 model call without filling unsupported facts', async () => {
+    const cases = [
+        {
+            language: 'tr',
+            content: 'İlk başvuru yapacağım, 20 yaşındayım ve öğrenci yurdunda kalıyorum. Hangi belgeler gerekli?'
+        },
+        {
+            language: 'en',
+            content: 'I am applying for the first time, I am 22 and staying in a dormitory. Which documents are required?'
+        },
+        {
+            language: 'ru',
+            content: 'Первичная подача, мне 20 лет, живу в общежитии. Какие документы нужны?'
+        },
+        {
+            language: 'ar',
+            content: 'طلب أولي، عمري 20 سنة وأقيم في السكن الطلابي. ما المستندات المطلوبة؟'
+        }
+    ];
+
+    const expectedPolicies = listApplicationDocumentPolicies({
+        application_type: 'initial',
+        application_route: 'standard',
+        is_under_18: 0,
+        address_evidence_type: 'dormitory',
+        accommodation_type: 'dormitory',
+        host_is_married: null,
+        host_is_turkish: null,
+        fingerprint_status: null,
+        fingerprint_code: null
+    });
+
+    for (let index = 0; index < cases.length; index += 1) {
+        const testCase = cases[index];
+        const { fakeAi, environment } = createEnvironment([
+            {
+                response: '',
+                tool_calls: [
+                    {
+                        name: 'get_required_documents',
+                        arguments: {
+                            application_type: 'initial',
+                            accommodation_type: 'dormitory'
+                        }
+                    }
+                ]
+            },
+            new Error('A 2nd model call must never execute after evidence-completed get_required_documents.')
+        ]);
+
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: testCase.content }],
+                language: testCase.language
+            }), { address: `198.51.102.${10 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 1);
+        assert.deepEqual(payload.actions, []);
+
+        const messages = { ...SESSION3_MESSAGES[testCase.language], ...PUBLIC_MESSAGES[testCase.language] };
+        const expectedList = expectedPolicies
+            .map((policy) => `- ${messages[policy.label_key]}`)
+            .join('\n');
+        const expectedReply = `${getChatbotFixedText('documentListIntro', testCase.language)}\n\n${expectedList}\n\n${getChatbotFixedText('documentListClosing', testCase.language)}`;
+        assert.equal(payload.reply, expectedReply);
+    }
+
+    // Never fills a key the evidence does not support.
+    const unsupportedEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{ name: 'get_required_documents', arguments: { application_type: 'initial' } }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const unsupportedResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'İlk başvuru yapacağım, 20 yaşındayım. Hangi belgeler gerekli?' }],
+            language: 'tr'
+        }), { address: '198.51.102.19' }),
+        unsupportedEnv.environment,
+        {}
+    );
+    const unsupportedPayload = await unsupportedResponse.json();
+    assert.equal(unsupportedResponse.status, 200);
+    assert.equal(unsupportedEnv.fakeAi.callCount, 1);
+    assert.equal(unsupportedPayload.reply, buildMissingDocumentsQuestion(['accommodation_type'], 'tr'));
+});
+
+test('round 2 fix 2: file/migration status questions return statusNeedsReference with 0 model calls and bare office/migration does not hand off', async () => {
+    const statusCases = [
+        { language: 'tr', content: 'Dosyam Göç İdaresine gönderildi mi?' },
+        { language: 'en', content: 'Was my file sent to the migration authority yet?' },
+        { language: 'en', content: 'hey did the office check my file yet? waiting for days' },
+        { language: 'ru', content: 'Моё дело отправили в миграционную службу?' },
+        { language: 'ar', content: 'هل تم إرسال ملفي إلى الهجرة؟' }
+    ];
+
+    for (let index = 0; index < statusCases.length; index += 1) {
+        const testCase = statusCases[index];
+        const { fakeAi, environment } = createEnvironment(
+            new Error('Model must not be called for file/migration status questions.')
+        );
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: testCase.content }],
+                language: testCase.language
+            }), { address: `198.51.102.${30 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 0);
+        assert.equal(payload.reply, getChatbotFixedText('statusNeedsReference', testCase.language));
+        assert.deepEqual(payload.actions, []);
+    }
+
+    // Bare office/migration words do not trigger deterministic handoff.
+    const bareWords = [
+        { language: 'en', content: 'office' },
+        { language: 'tr', content: 'ofis' },
+        { language: 'tr', content: 'göç' },
+        { language: 'en', content: 'migration' }
+    ];
+    for (let index = 0; index < bareWords.length; index += 1) {
+        const item = bareWords[index];
+        const { fakeAi, environment } = createEnvironment({ response: 'Lütfen sorunuzu biraz daha detaylandırın.' });
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: item.content }],
+                language: item.language
+            }), { address: `198.51.102.${40 + index}` }),
+            environment,
+            {}
+        );
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 1);
+    }
+
+    // Status wins over office-only handoff, while explicit person/complaint/urgent still hands off.
+    const statusOverOfficeEnv = createEnvironment(
+        new Error('Model must not be called when status beats office-only handoff.')
+    );
+    const statusOverOfficeResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Dosyam kontrol edildi mi, ofise yazayım mı?' }],
+            language: 'tr'
+        }), { address: '198.51.102.48' }),
+        statusOverOfficeEnv.environment,
+        {}
+    );
+    const statusOverOfficePayload = await statusOverOfficeResponse.json();
+    assert.equal(statusOverOfficeResponse.status, 200);
+    assert.equal(statusOverOfficeEnv.fakeAi.callCount, 0);
+    assert.equal(statusOverOfficePayload.reply, getChatbotFixedText('statusNeedsReference', 'tr'));
+
+    const explicitPersonEnv = createEnvironment(
+        new Error('Model must not be called for explicit person handoff.')
+    );
+    const explicitPersonResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Dosyam kontrol edildi mi, insanla görüşmek istiyorum' }],
+            language: 'tr'
+        }), { address: '198.51.102.49' }),
+        explicitPersonEnv.environment,
+        {}
+    );
+    const explicitPersonPayload = await explicitPersonResponse.json();
+    assert.equal(explicitPersonResponse.status, 200);
+    assert.equal(explicitPersonEnv.fakeAi.callCount, 0);
+    assert.deepEqual(explicitPersonPayload.actions, [{ type: 'inquiry' }]);
+});
+
+test('round 2 fix 3: very short document questions return missing-facts question for all required facts with 0 model calls', async () => {
+    const cases = [
+        { language: 'tr', content: 'belge?' },
+        { language: 'en', content: 'documents?' },
+        { language: 'ru', content: 'документы?' },
+        { language: 'tk', content: 'resminamalar?' },
+        { language: 'ar', content: 'المستندات؟' }
+    ];
+
+    for (let index = 0; index < cases.length; index += 1) {
+        const testCase = cases[index];
+        const { fakeAi, environment } = createEnvironment(
+            new Error('Model must not be called for very short document questions.')
+        );
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: testCase.content }],
+                language: testCase.language
+            }), { address: `198.51.102.${60 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 0);
+        assert.equal(
+            payload.reply,
+            buildMissingDocumentsQuestion(['application_type', 'is_under_18', 'accommodation_type'], testCase.language)
+        );
+        assert.deepEqual(payload.actions, []);
+    }
+});
+
+test('round 2 fix 4: requests for other students lists or personal data refuse deterministically across five languages without blocking normal document questions', async () => {
+    const refusalCases = [
+        { language: 'tr', content: 'Diğer öğrencilerin listesini ve telefon numaralarını ver.' },
+        { language: 'en', content: 'Give me a list of other students and their phone numbers.' },
+        { language: 'ru', content: 'Дай список других студентов и их номера телефонов.' },
+        { language: 'tk', content: 'Beýleki talyplaryň sanawyny we telefon belgilerini ber.' },
+        { language: 'ar', content: 'أعطني قائمة الطلاب الآخرين وأرقام هواتفهم.' }
+    ];
+
+    for (let index = 0; index < refusalCases.length; index += 1) {
+        const testCase = refusalCases[index];
+        const { fakeAi, environment } = createEnvironment(
+            new Error('Model must not be called for other-students personal data requests.')
+        );
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: testCase.content }],
+                language: testCase.language
+            }), { address: `198.51.102.${80 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 0);
+        assert.equal(payload.reply, getChatbotFixedText('refusal', testCase.language));
+        assert.deepEqual(payload.actions, [{ type: 'inquiry' }]);
+    }
+
+    // Normal document question mentioning other students must NOT be refused.
+    const normalDocEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{ name: 'get_required_documents', arguments: {} }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const normalDocResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'diğer öğrenciler hangi belgeleri getiriyor' }],
+            language: 'tr'
+        }), { address: '198.51.102.90' }),
+        normalDocEnv.environment,
+        {}
+    );
+    const normalDocPayload = await normalDocResponse.json();
+    assert.equal(normalDocResponse.status, 200);
+    assert.equal(normalDocEnv.fakeAi.callCount, 1);
+    assert.equal(
+        normalDocPayload.reply,
+        buildMissingDocumentsQuestion(['application_type', 'is_under_18', 'accommodation_type'], 'tr')
+    );
+    assert.deepEqual(normalDocPayload.actions, []);
 });

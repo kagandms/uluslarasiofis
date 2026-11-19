@@ -318,12 +318,13 @@ function isPlainObject(value) {
 }
 
 /**
- * Keeps model-supplied `get_required_documents` facts only when supported by the student's own words.
+ * Keeps model-supplied `get_required_documents` facts only when supported by the student's own words,
+ * and fills any omitted facts that are clearly supported by the student's words.
  * Invalid non-null field values are preserved so `executeChatbotTool` still rejects them with VALIDATION_ERROR.
  * @param {unknown} rawArgs Untrusted arguments produced by the model.
  * @param {string[]|string} userTurns All user turns in the conversation.
  * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
- * @returns {unknown} Filtered arguments safe to pass to `executeChatbotTool`.
+ * @returns {unknown} Filtered and evidence-completed arguments safe to pass to `executeChatbotTool`.
  */
 export function filterDocumentArgsByEvidence(rawArgs, userTurns, language = 'tr') {
     if (!isPlainObject(rawArgs)) return rawArgs;
@@ -348,6 +349,12 @@ export function filterDocumentArgsByEvidence(rawArgs, userTurns, language = 'tr'
         }
         if (supported[key] !== filtered[key]) {
             delete filtered[key];
+        }
+    }
+
+    for (const [key, value] of Object.entries(supported)) {
+        if (!Object.hasOwn(filtered, key) || filtered[key] === undefined || filtered[key] === null) {
+            filtered[key] = value;
         }
     }
 

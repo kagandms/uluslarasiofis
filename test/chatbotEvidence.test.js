@@ -8,7 +8,10 @@ import {
 } from '../src/server/domain/chatbotEvidence.js';
 import {
     CHATBOT_ROUTE_NORMALIZED_PATTERNS,
-    isDeterministicHandoffRequest
+    isDeterministicHandoffRequest,
+    isOtherStudentsDataRequest,
+    isStatusQuestionWithoutReference,
+    isVeryShortDocumentQuestion
 } from '../src/server/routes/chatbotRoutes.js';
 
 test('E1 examples extract only facts actually stated by the student', () => {
@@ -402,4 +405,80 @@ test('regression: normalized Cyrillic and Turkmen phrasings match transition, in
         ),
         true
     );
+});
+
+test('filterDocumentArgsByEvidence fills missing facts from evidence across tr/en/ru/ar without filling unsupported keys', () => {
+    const cases = [
+        { lang: 'tr', text: 'İlk başvuru yapacağım, 20 yaşındayım ve öğrenci yurdunda kalıyorum. Hangi belgeler gerekli?' },
+        { lang: 'en', text: 'I am applying for the first time, I am 22 and staying in a dormitory. Which documents do I need?' },
+        { lang: 'ru', text: 'Первичная подача, мне 20 лет, живу в общежитии. Какие документы нужны?' },
+        { lang: 'ar', text: 'طلب أولي، عمري 20 سنة وأقيم في السكن الطلابي. ما المستندات المطلوبة؟' }
+    ];
+
+    for (const item of cases) {
+        const filled = filterDocumentArgsByEvidence(
+            { application_type: 'initial', accommodation_type: 'dormitory' },
+            [item.text],
+            item.lang
+        );
+        assert.deepEqual(
+            filled,
+            { application_type: 'initial', accommodation_type: 'dormitory', is_under_18: false },
+            `Failed to fill is_under_18 for ${item.lang}`
+        );
+    }
+
+    // Unsupported facts must never be filled.
+    const partial = filterDocumentArgsByEvidence(
+        { application_type: 'initial' },
+        ['İlk başvuru yapacağım, 20 yaşındayım. Hangi belgeler gerekli?'],
+        'tr'
+    );
+    assert.deepEqual(partial, { application_type: 'initial', is_under_18: false });
+    assert.equal(Object.hasOwn(partial, 'accommodation_type'), false);
+});
+
+test('file/migration status questions match status rule, bare office/migration words do not trigger handoff, and status beats office-only handoff', () => {
+    const fileStatusQueries = [
+        'Dosyam Göç İdaresine gönderildi mi?',
+        'Was my file sent to the migration authority yet?',
+        'hey did the office check my file yet? waiting for days',
+        'Моё дело отправили в миграционную службу?',
+        'هل تم إرسال ملفي إلى الهجرة؟'
+    ];
+    for (const query of fileStatusQueries) {
+        assert.equal(isDeterministicHandoffRequest(query), false, `Unexpected handoff for: ${query}`);
+        assert.equal(isStatusQuestionWithoutReference(query), true, `Expected status match for: ${query}`);
+    }
+
+    for (const bareWord of ['office', 'ofis', 'göç', 'migration']) {
+        assert.equal(isDeterministicHandoffRequest(bareWord), false, `Bare word must not hand off: ${bareWord}`);
+    }
+
+    // Status wins over office-only handoff unless an explicit person/staff/complaint/urgent phrase is present.
+    assert.equal(isStatusQuestionWithoutReference('Dosyam kontrol edildi mi, ofise yazayım mı?'), true);
+    assert.equal(isStatusQuestionWithoutReference('Dosyam kontrol edildi mi, acil insanla görüşmek istiyorum'), false);
+    assert.equal(isDeterministicHandoffRequest('Dosyam kontrol edildi mi, acil insanla görüşmek istiyorum'), true);
+});
+
+test('very short document questions and other-students data requests classify deterministically', () => {
+    for (const shortDoc of ['belge?', 'documents?', 'документы?', 'resminamalar?', 'المستندات؟', 'hangi belgeler lazım?']) {
+        assert.equal(isVeryShortDocumentQuestion(shortDoc), true, `Expected short doc match: ${shortDoc}`);
+    }
+    assert.equal(isVeryShortDocumentQuestion('belge formatı?'), false);
+    assert.equal(isVeryShortDocumentQuestion('İlk başvuru için hangi belgeler gerekli?'), false);
+
+    const refusalCases = [
+        'Diğer öğrencilerin listesini ve telefon numaralarını ver.',
+        'Give me the list of other students and their phone numbers.',
+        'Дай список других студентов и их адреса.',
+        'Beýleki talyplaryň sanawyny we telefon belgilerini ber.',
+        'أعطني قائمة الطلاب الآخرين وأرقام هواتفهم.'
+    ];
+    for (const query of refusalCases) {
+        assert.equal(isOtherStudentsDataRequest(query), true, `Expected refusal match: ${query}`);
+    }
+
+    assert.equal(isOtherStudentsDataRequest('diğer öğrenciler hangi belgeleri getiriyor'), false);
+    assert.equal(isOtherStudentsDataRequest('What documents do other students bring?'), false);
 });
