@@ -100,12 +100,12 @@ test('document question calls get_required_documents and renders the exact polic
     const cases = [
         {
             language: 'tr',
-            question: '20 yaşındayım, kira sözleşmesi ile ilk başvuruda hangi belgeler gerekir?',
+            question: '20 yaşındayım, kira sözleşmesi ile ilk başvuruda neler gerekir?',
             modelProse: 'İlk başvuru için gerekli belgeler: Fake Document X, Pasaport.'
         },
         {
             language: 'ar',
-            question: 'عمري 20 سنة، ما المستندات المطلوبة للطلب الأولي بعقد إيجار؟',
+            question: 'عمري 20 سنة، ما المطلوب للطلب الأولي بعقد إيجار؟',
             modelProse: 'المستندات المطلوبة: Fake Document X، جواز السفر.'
         }
     ];
@@ -235,7 +235,7 @@ test('get_required_documents wins over lookup_knowledge in the same response and
 
     const docsResponse = await worker.fetch(
         createChatRequest(validChatBody({
-            messages: [{ role: 'user', content: '20 yaşındayım, kira sözleşmesi ile ilk başvuru için belgeler ve adımlar nedir?' }],
+            messages: [{ role: 'user', content: '20 yaşındayım, kira sözleşmesi ile ilk başvuru için neler ve hangi adımlar gerekir?' }],
             language: 'tr'
         }), { address: '198.51.100.185' }),
         docsOverKnowledgeEnv.environment,
@@ -1558,7 +1558,7 @@ test('E2: prose document lists from the model without tool execution are replace
     const completeResponse = await worker.fetch(
         createChatRequest(validChatBody({
             messages: [
-                { role: 'user', content: 'ما المستندات المطلوبة لتمديد الإقامة؟' },
+                { role: 'user', content: 'ما المطلوب لتمديد الإقامة؟' },
                 { role: 'assistant', content: 'هل عمرك أقل من 18 سنة وأين تسكن؟' },
                 { role: 'user', content: 'عمري 21 سنة وأقيم في السكن الطلابي' }
             ],
@@ -1819,21 +1819,9 @@ test('round 2 fix 1: omitted facts stated in student message are filled from evi
 
     for (let index = 0; index < cases.length; index += 1) {
         const testCase = cases[index];
-        const { fakeAi, environment } = createEnvironment([
-            {
-                response: '',
-                tool_calls: [
-                    {
-                        name: 'get_required_documents',
-                        arguments: {
-                            application_type: 'initial',
-                            accommodation_type: 'dormitory'
-                        }
-                    }
-                ]
-            },
-            new Error('A 2nd model call must never execute after evidence-completed get_required_documents.')
-        ]);
+        const { fakeAi, environment } = createEnvironment(
+            new Error('Complete document-keyword queries must return deterministically with 0 model calls.')
+        );
 
         const response = await worker.fetch(
             createChatRequest(validChatBody({
@@ -1846,7 +1834,7 @@ test('round 2 fix 1: omitted facts stated in student message are filled from evi
         const payload = await response.json();
 
         assert.equal(response.status, 200);
-        assert.equal(fakeAi.callCount, 1);
+        assert.equal(fakeAi.callCount, 0);
         assert.deepEqual(payload.actions, []);
 
         const messages = { ...SESSION3_MESSAGES[testCase.language], ...PUBLIC_MESSAGES[testCase.language] };
@@ -1856,6 +1844,40 @@ test('round 2 fix 1: omitted facts stated in student message are filled from evi
         const expectedReply = `${getChatbotFixedText('documentListIntro', testCase.language)}\n\n${expectedList}\n\n${getChatbotFixedText('documentListClosing', testCase.language)}`;
         assert.equal(payload.reply, expectedReply);
     }
+
+    // Without a document keyword, omitted evidence-supported facts are still filled in 1 model call.
+    const nonKeywordEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [
+                {
+                    name: 'get_required_documents',
+                    arguments: {
+                        application_type: 'initial',
+                        accommodation_type: 'dormitory'
+                    }
+                }
+            ]
+        },
+        new Error('A 2nd model call must never execute after evidence-completed get_required_documents.')
+    ]);
+    const nonKeywordResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'İlk başvuru yapacağım, 20 yaşındayım ve öğrenci yurdunda kalıyorum. Neler getirmeliyim?' }],
+            language: 'tr'
+        }), { address: '198.51.102.18' }),
+        nonKeywordEnv.environment,
+        {}
+    );
+    const nonKeywordPayload = await nonKeywordResponse.json();
+    assert.equal(nonKeywordResponse.status, 200);
+    assert.equal(nonKeywordEnv.fakeAi.callCount, 1);
+    const trMessages = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
+    const trExpectedList = expectedPolicies.map((policy) => `- ${trMessages[policy.label_key]}`).join('\n');
+    assert.equal(
+        nonKeywordPayload.reply,
+        `${getChatbotFixedText('documentListIntro', 'tr')}\n\n${trExpectedList}\n\n${getChatbotFixedText('documentListClosing', 'tr')}`
+    );
 
     // Never fills a key the evidence does not support.
     const unsupportedEnv = createEnvironment([
@@ -2053,4 +2075,363 @@ test('round 2 fix 4: requests for other students lists or personal data refuse d
         buildMissingDocumentsQuestion(['application_type', 'is_under_18', 'accommodation_type'], 'tr')
     );
     assert.deepEqual(normalDocPayload.actions, []);
+});
+
+test('round 3 fix 1: complete document-keyword questions return deterministic list with 0 model calls and still consume daily budget', async () => {
+    const messages = { ...SESSION3_MESSAGES.en, ...PUBLIC_MESSAGES.en };
+    const buildExpectedEnglishListReply = (policyInput) => {
+        const policies = listApplicationDocumentPolicies(policyInput);
+        const listText = policies
+            .map((policy) => `- ${messages[policy.label_key]}${policy.required === false ? ' (optional)' : ''}`)
+            .join('\n');
+        return `${getChatbotFixedText('documentListIntro', 'en')}\n\n${listText}\n\n${getChatbotFixedText('documentListClosing', 'en')}`;
+    };
+
+    const cases = [
+        {
+            content: 'I am 20 years old, applying for an initial student residence permit, and staying in a student dormitory. Which documents are required?',
+            policyInput: {
+                application_type: 'initial',
+                application_route: 'standard',
+                is_under_18: 0,
+                address_evidence_type: 'dormitory',
+                accommodation_type: 'dormitory',
+                host_is_married: null,
+                host_is_turkish: null,
+                fingerprint_status: null,
+                fingerprint_code: null
+            }
+        },
+        {
+            content: 'I am 22 years old, applying for a transition to a student residence permit, living with a rental contract, and my fingerprints are registered. Which documents are required?',
+            policyInput: {
+                application_type: 'renewal',
+                application_route: 'transition',
+                is_under_18: 0,
+                address_evidence_type: 'rental_contract',
+                accommodation_type: 'rental_contract',
+                host_is_married: null,
+                host_is_turkish: null,
+                fingerprint_status: 'registered',
+                fingerprint_code: 'registered'
+            }
+        },
+        {
+            content: 'Extension application, I am 17 (under 18) and living in my own home with a title deed. Please list the required documents.',
+            policyInput: {
+                application_type: 'renewal',
+                application_route: 'standard',
+                is_under_18: 1,
+                address_evidence_type: 'own_home',
+                accommodation_type: 'own_home',
+                host_is_married: null,
+                host_is_turkish: null,
+                fingerprint_status: null,
+                fingerprint_code: null
+            }
+        }
+    ];
+
+    for (let index = 0; index < cases.length; index += 1) {
+        const testCase = cases[index];
+        const clientIp = `198.51.103.${10 + index}`;
+        const { database, fakeAi, environment } = createEnvironment(() => {
+            throw new Error('Model must not be called for complete document-keyword questions.');
+        });
+
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: testCase.content }],
+                language: 'en'
+            }), { address: clientIp }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 0);
+        assert.deepEqual(payload.actions, []);
+        assert.equal(payload.reply, buildExpectedEnglishListReply(testCase.policyInput));
+
+        const ipHash = await hashRateLimitIdentity(clientIp);
+        const globalHash = await hashRateLimitIdentity(CHATBOT_GLOBAL_DAILY_LIMIT.identity);
+        const ipRow = database.prepare(`
+            SELECT request_count FROM public_rate_limits WHERE endpoint = ? AND request_key_hash = ?
+        `).bind(CHATBOT_IP_DAILY_LIMIT.endpoint, ipHash).first();
+        const globalRow = database.prepare(`
+            SELECT request_count FROM public_rate_limits WHERE endpoint = ? AND request_key_hash = ?
+        `).bind(CHATBOT_GLOBAL_DAILY_LIMIT.endpoint, globalHash).first();
+        assert.equal(ipRow.request_count, 1);
+        assert.equal(globalRow.request_count, 1);
+    }
+
+    // Document question with missing facts still calls the model.
+    const missingFactsEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{ name: 'get_required_documents', arguments: { application_type: 'initial', is_under_18: false } }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const missingFactsResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'I am 20 years old, applying for an initial student residence permit. Which documents are required?' }],
+            language: 'en'
+        }), { address: '198.51.103.20' }),
+        missingFactsEnv.environment,
+        {}
+    );
+    const missingFactsPayload = await missingFactsResponse.json();
+    assert.equal(missingFactsResponse.status, 200);
+    assert.equal(missingFactsEnv.fakeAi.callCount, 1);
+    assert.equal(missingFactsPayload.reply, buildMissingDocumentsQuestion(['accommodation_type'], 'en'));
+});
+
+test('round 3 fix 1: model timeout returns list (200) for complete document evidence, missing-facts question (200) for incomplete document evidence, and 503 for general questions', async (t) => {
+    let activeController = new AbortController();
+    t.mock.method(AbortSignal, 'timeout', () => activeController.signal);
+    const createTimeoutEnvironment = () => {
+        activeController = new AbortController();
+        const controller = activeController;
+        return createEnvironment((_model, _input, options) => new Promise((_resolve, reject) => {
+            const timer = setTimeout(() => {
+                controller.abort(new DOMException('Chatbot model request timed out.', 'TimeoutError'));
+            }, 15);
+            options.signal.addEventListener('abort', () => {
+                clearTimeout(timer);
+                reject(options.signal.reason || new DOMException('Aborted', 'AbortError'));
+            }, { once: true });
+        }));
+    };
+
+    // 1. Complete document evidence -> deterministic list (200) with 0 model calls even if model would time out.
+    const completeTimeoutEnv = createTimeoutEnvironment();
+    const completeResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'I am 20 years old, applying for an initial student residence permit, and staying in a student dormitory. Which documents are required?'
+            }],
+            language: 'en'
+        }), { address: '198.51.103.30' }),
+        completeTimeoutEnv.environment,
+        {}
+    );
+    const completePayload = await completeResponse.json();
+    assert.equal(completeResponse.status, 200);
+    assert.equal(completeTimeoutEnv.fakeAi.callCount, 0);
+    assert.ok(completePayload.reply.startsWith(getChatbotFixedText('documentListIntro', 'en')));
+
+    // 2. Missing document evidence + model timeout -> fixed missing-facts question (200), not 503.
+    const missingTimeoutEnv = createTimeoutEnvironment();
+    const missingResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'I am 20 years old, applying for an initial student residence permit. Which documents are required?'
+            }],
+            language: 'en'
+        }), { address: '198.51.103.31' }),
+        missingTimeoutEnv.environment,
+        {}
+    );
+    const missingPayload = await missingResponse.json();
+    assert.equal(missingResponse.status, 200);
+    assert.equal(missingTimeoutEnv.fakeAi.callCount, 1);
+    assert.equal(missingPayload.reply, buildMissingDocumentsQuestion(['accommodation_type'], 'en'));
+    assert.deepEqual(missingPayload.actions, []);
+
+    // 3. General non-document question + model timeout -> 503 CHATBOT_UNAVAILABLE as before.
+    const generalTimeoutEnv = createTimeoutEnvironment();
+    const generalResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'How long does application review take?' }],
+            language: 'en'
+        }), { address: '198.51.103.32' }),
+        generalTimeoutEnv.environment,
+        {}
+    );
+    const generalPayload = await generalResponse.json();
+    assert.equal(generalResponse.status, 503);
+    assert.equal(generalTimeoutEnv.fakeAi.callCount, 1);
+    assert.equal(generalPayload.error.code, 'CHATBOT_UNAVAILABLE');
+    assert.equal(generalPayload.error.retryable, true);
+});
+
+test('document intent is scoped to last user turn or answering missing-facts question across tr, en, and ar', async () => {
+    const expectedPolicies = listApplicationDocumentPolicies({
+        application_type: 'initial',
+        application_route: 'standard',
+        is_under_18: 0,
+        address_evidence_type: 'dormitory',
+        accommodation_type: 'dormitory',
+        host_is_married: null,
+        host_is_turkish: null,
+        fingerprint_status: null,
+        fingerprint_code: null
+    });
+    const optionalSuffix = {
+        tr: ' (isteğe bağlı)',
+        en: ' (optional)',
+        ar: ' (اختياري)'
+    };
+    const buildExpectedListReply = (language) => {
+        const messages = { ...SESSION3_MESSAGES[language], ...PUBLIC_MESSAGES[language] };
+        const listText = expectedPolicies
+            .map((policy) => `- ${messages[policy.label_key]}${policy.required === false ? optionalSuffix[language] : ''}`)
+            .join('\n');
+        return `${getChatbotFixedText('documentListIntro', language)}\n\n${listText}\n\n${getChatbotFixedText('documentListClosing', language)}`;
+    };
+
+    const cases = [
+        {
+            language: 'tr',
+            docTurn: 'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, hangi belgeler?',
+            followUpTurn: 'Ofis saat kaçta açık?',
+            shortDocTurn: 'belge?',
+            missingFactsAnswerTurn: 'ilk başvuru, 20 yaşındayım, yurtta kalıyorum',
+            partialDocTurn: 'İlk başvuru için belge?',
+            partialAnswerTurn: '20 yaşındayım, yurtta kalıyorum'
+        },
+        {
+            language: 'en',
+            docTurn: 'Initial application, I am 20 years old, staying in a dormitory, which documents?',
+            followUpTurn: 'What are the office hours?',
+            shortDocTurn: 'documents?',
+            missingFactsAnswerTurn: 'initial application, I am 20 years old, staying in a dormitory',
+            partialDocTurn: 'Documents for an initial application?',
+            partialAnswerTurn: 'I am 20 years old, staying in a dormitory'
+        },
+        {
+            language: 'ar',
+            docTurn: 'طلب أولي، عمري 20 سنة، أقيم في السكن الطلابي، ما هي المستندات؟',
+            followUpTurn: 'ما هي ساعات عمل المكتب؟',
+            shortDocTurn: 'المستندات؟',
+            missingFactsAnswerTurn: 'طلب أولي، عمري 20 سنة، أقيم في السكن الطلابي',
+            partialDocTurn: 'ما هي المستندات لطلب أولي؟',
+            partialAnswerTurn: 'عمري 20 سنة، أقيم في السكن الطلابي'
+        }
+    ];
+
+    for (let index = 0; index < cases.length; index += 1) {
+        const testCase = cases[index];
+        const expectedListReply = buildExpectedListReply(testCase.language);
+
+        // 1. Follow-up after deterministic document list must call the model, not repeat the document list.
+        const followUpEnv = createEnvironment([
+            {
+                response: '',
+                tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'office_hours' } }]
+            },
+            new Error('A 2nd model call must never execute after lookup_knowledge.')
+        ]);
+        const followUpResponse = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [
+                    { role: 'user', content: testCase.docTurn },
+                    { role: 'assistant', content: expectedListReply },
+                    { role: 'user', content: testCase.followUpTurn }
+                ],
+                language: testCase.language
+            }), { address: `198.51.104.${10 + index}` }),
+            followUpEnv.environment,
+            {}
+        );
+        const followUpPayload = await followUpResponse.json();
+        assert.equal(followUpResponse.status, 200);
+        assert.equal(followUpEnv.fakeAi.callCount, 1);
+        assert.equal(followUpPayload.reply, readKnowledge('office_hours', testCase.language).text);
+        assert.equal(followUpPayload.reply.startsWith(getChatbotFixedText('documentListIntro', testCase.language)), false);
+
+        // 2. Model failure on non-document follow-up after a document turn returns 503, not the document list.
+        const followUpFailureEnv = createEnvironment(() => {
+            throw new Error('Model service unavailable');
+        });
+        const followUpFailureResponse = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [
+                    { role: 'user', content: testCase.docTurn },
+                    { role: 'assistant', content: expectedListReply },
+                    { role: 'user', content: testCase.followUpTurn }
+                ],
+                language: testCase.language
+            }), { address: `198.51.104.${20 + index}` }),
+            followUpFailureEnv.environment,
+            {}
+        );
+        const followUpFailurePayload = await followUpFailureResponse.json();
+        assert.equal(followUpFailureResponse.status, 503);
+        assert.equal(followUpFailureEnv.fakeAi.callCount, 1);
+        assert.equal(followUpFailurePayload.error.code, 'CHATBOT_UNAVAILABLE');
+
+        // 3. Answering the fixed missing-facts question returns the deterministic list with 0 model calls.
+        const missingFactsQuestion = buildMissingDocumentsQuestion(
+            ['application_type', 'is_under_18', 'accommodation_type'],
+            testCase.language
+        );
+        const answerMissingEnv = createEnvironment(() => {
+            throw new Error('Model must not be called when answering the missing-facts question with complete facts.');
+        });
+        const answerMissingResponse = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [
+                    { role: 'user', content: testCase.shortDocTurn },
+                    { role: 'assistant', content: missingFactsQuestion },
+                    { role: 'user', content: testCase.missingFactsAnswerTurn }
+                ],
+                language: testCase.language
+            }), { address: `198.51.104.${30 + index}` }),
+            answerMissingEnv.environment,
+            {}
+        );
+        const answerMissingPayload = await answerMissingResponse.json();
+        assert.equal(answerMissingResponse.status, 200);
+        assert.equal(answerMissingEnv.fakeAi.callCount, 0);
+        assert.equal(answerMissingPayload.reply, expectedListReply);
+        assert.deepEqual(answerMissingPayload.actions, []);
+
+        // 4. Evidence is still extracted across all user turns when answering the missing-facts question.
+        const multiTurnEvidenceEnv = createEnvironment(() => {
+            throw new Error('Model must not be called when combined user turns provide all required document facts.');
+        });
+        const multiTurnEvidenceResponse = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [
+                    { role: 'user', content: testCase.partialDocTurn },
+                    { role: 'assistant', content: buildMissingDocumentsQuestion(['is_under_18', 'accommodation_type'], testCase.language) },
+                    { role: 'user', content: testCase.partialAnswerTurn }
+                ],
+                language: testCase.language
+            }), { address: `198.51.104.${40 + index}` }),
+            multiTurnEvidenceEnv.environment,
+            {}
+        );
+        const multiTurnEvidencePayload = await multiTurnEvidenceResponse.json();
+        assert.equal(multiTurnEvidenceResponse.status, 200);
+        assert.equal(multiTurnEvidenceEnv.fakeAi.callCount, 0);
+        assert.equal(multiTurnEvidencePayload.reply, expectedListReply);
+    }
+
+    // 5. Partial answer to the missing-facts question still triggers document fallback on model failure.
+    const partialFallbackEnv = createEnvironment(() => {
+        throw new Error('Model service unavailable');
+    });
+    const partialFallbackResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'belge?' },
+                { role: 'assistant', content: buildMissingDocumentsQuestion(['application_type', 'is_under_18', 'accommodation_type'], 'tr') },
+                { role: 'user', content: 'ilk başvuru, 20 yaşındayım' }
+            ],
+            language: 'tr'
+        }), { address: '198.51.104.50' }),
+        partialFallbackEnv.environment,
+        {}
+    );
+    const partialFallbackPayload = await partialFallbackResponse.json();
+    assert.equal(partialFallbackResponse.status, 200);
+    assert.equal(partialFallbackEnv.fakeAi.callCount, 1);
+    assert.equal(partialFallbackPayload.reply, buildMissingDocumentsQuestion(['accommodation_type'], 'tr'));
+    assert.deepEqual(partialFallbackPayload.actions, []);
 });

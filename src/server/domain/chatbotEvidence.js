@@ -180,25 +180,31 @@ const HOST_TURKISH_POSITIVE = Object.freeze([
 ]);
 
 const FINGERPRINT_NEGATIVE = Object.freeze([
-    /(?:^|[^\p{L}])parmak\s+izi[\p{L}\p{N}]*(?:\s+[\p{L}\p{N}]+){0,4}\s+(?:yok|kaydim\s+yok|kayitli\s+degil|alinmadi|vermedim|yaptirmadim|bulunmuyor)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?:no|not|never|dont|don't|haven't|have\s+not)\s+(?:[\p{L}\p{N}]+\s+){0,4}fingerprints?(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])fingerprints?(?:\s+[\p{L}\p{N}]+){0,4}\s+(?:not\s+registered|not\s+recorded|unregistered|missing|not\s+yet|not\s+taken)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])отпечат[\p{L}\p{N}]*(?:\s+[\p{L}\p{N}]+){0,4}\s+(?:не\s+зарегистрирован[\p{L}\p{N}]*|нет|отсутств[\p{L}\p{N}]*|не\s+сда[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?:нет|не\s+сдава[\p{L}\p{N}]*)\s+(?:[\p{L}\p{N}]+\s+){0,3}отпечат[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])barmak\s+yz[\p{L}\p{N}]*(?:\s+[\p{L}\p{N}]+){0,4}\s+(?:yok|hasaba\s+alynmadyk|hasaba\s+alnan\s+dal|tapsyrmadym)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?:\s+[\p{L}\p{N}]+){0,4}\s+(?:غير\s+مسجل[\p{L}\p{N}]*|ليست\s+مسجل[\p{L}\p{N}]*|لا\s+يوجد|لا\s+توجد)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:لا\s+يوجد|ليس\s+لدي|لم\s+اسجل)\s+(?:[\p{L}\p{N}]+\s+){0,3}(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?:[^\p{L}]|$)/u
+    /(?:^|[^\p{L}])parmak\s+iz[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:yok|kayd[\p{L}\p{N}]*\s+yok|kayitli\s+degil[\p{L}\p{N}]*|alinmadi[\p{L}\p{N}]*|vermedim|verilmedi[\p{L}\p{N}]*|yaptirmadim|yaptirilmadi[\p{L}\p{N}]*|bulunmuyor[\p{L}\p{N}]*|bulunmamakta[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:kayd[\p{L}\p{N}]*\s+yok|kayitli\s+olmayan|kayitli\s+degil[\p{L}\p{N}]*|alinmadi[\p{L}\p{N}]*|alinmamis[\p{L}\p{N}]*|vermedim|verilmedi[\p{L}\p{N}]*|yaptirmadim|bulunmayan)\s+(?:[\p{L}\p{N}]+\s+){0,6}parmak\s+iz[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:no|not|never|dont|don't|haven't|have\s+not|hasn't|has\s+not|unregistered|missing)\s+(?:[\p{L}\p{N}]+\s+){0,6}fingerprints?(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])fingerprints?(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:not\s+registered|not\s+recorded|not\s+taken|unregistered|missing|not\s+yet|not\s+available|unavailable)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])fingerprints?(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:not|never|haven't|have\s+not|hasn't|has\s+not|aren't|arent|isn't|isnt|wasn't|wasnt|weren't|werent)(?:\s+[\p{L}\p{N}]+){0,3}\s+(?:registered|recorded|taken|done|available|found)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])отпечат[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:не\s+(?:[\p{L}\p{N}]+\s+){0,2}(?:зарегистрирован[\p{L}\p{N}]*|сда[\p{L}\p{N}]*|внесен[\p{L}\p{N}]*|брал[\p{L}\p{N}]*|взят[\p{L}\p{N}]*|имеются|есть)|нет|отсутств[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:нет|отсутств[\p{L}\p{N}]*|не\s+(?:[\p{L}\p{N}]+\s+){0,2}(?:зарегистрирован[\p{L}\p{N}]*|сдава[\p{L}\p{N}]*|сдал[\p{L}\p{N}]*|сданы|внесен[\p{L}\p{N}]*|брал[\p{L}\p{N}]*|имеются|есть))\s+(?:[\p{L}\p{N}]+\s+){0,6}отпечат[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])barmak\s+yz[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:yok|hasab[\p{L}\p{N}]*\s+yok|hasaba\s+alyn?mady[\p{L}\p{N}]*|hasaba\s+alyn?anok|hasaba\s+alyn?an\s+dal[\p{L}\p{N}]*|tapsyrmadym|tapsyrylmady[\p{L}\p{N}]*|alynmady[\p{L}\p{N}]*|alnan\s+dal[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:hasab[\p{L}\p{N}]*\s+yok|hasaba\s+alyn?mady[\p{L}\p{N}]*|hasaba\s+alyn?anok|hasaba\s+alyn?an\s+dal[\p{L}\p{N}]*|tapsyrmadym|tapsyrylmady[\p{L}\p{N}]*|alynmady[\p{L}\p{N}]*)\s+(?:[\p{L}\p{N}]+\s+){0,6}barmak\s+yz[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:غير\s+مسجل[\p{L}\p{N}]*|ليست\s+مسجل[\p{L}\p{N}]*|ليس\s+مسجل[\p{L}\p{N}]*|لم\s+(?:تسجل|اسجل|يتم\s+تسجيل[\p{L}\p{N}]*)|لا\s+يوجد|لا\s+توجد|غير\s+موجود[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:غير\s+مسجل[\p{L}\p{N}]*|ليست\s+مسجل[\p{L}\p{N}]*|ليس\s+مسجل[\p{L}\p{N}]*|لا\s+يوجد|لا\s+توجد|ليس\s+لدي|لم\s+(?:تسجل|اسجل|يتم\s+تسجيل[\p{L}\p{N}]*))\s+(?:[\p{L}\p{N}]+\s+){0,6}(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?:[^\p{L}]|$)/u
 ]);
 
 const FINGERPRINT_POSITIVE = Object.freeze([
-    /(?:^|[^\p{L}])parmak\s+izi[\p{L}\p{N}]*(?:\s+[\p{L}\p{N}]+){0,4}\s+(?:var|kaydim\s+var|kayitli|alindi|verdim|yaptirdim|mevcut)(?!\s+degil)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?<!no\s+|not\s+)fingerprints?(?:\s+[\p{L}\p{N}]+){0,4}\s+(?<!no\s+|not\s+|never\s+)(?:registered|recorded|taken|done|available|exists?)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?<!not\s+|never\s+|don't\s+|dont\s+|do\s+not\s+)(?:have|has|got)\s+(?:[\p{L}\p{N}]+\s+){0,3}fingerprints?(?:\s+(?:registered|recorded|taken))?(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?<!не\s+)отпечат[\p{L}\p{N}]*(?:\s+[\p{L}\p{N}]+){0,4}\s+(?<!не\s+)(?:зарегистрирован[\p{L}\p{N}]*|сданы|сдал[\p{L}\p{N}]*|есть|имеются|внесены)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?<!не\s+)(?:есть|имеются|сдал[\p{L}\p{N}]*)\s+(?:[\p{L}\p{N}]+\s+){0,3}отпечат[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])barmak\s+yz[\p{L}\p{N}]*(?:\s+[\p{L}\p{N}]+){0,4}\s+(?:bar|hasaba\s+alnan|tapsyrdym|alnan)(?!\s+dal)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?<!غير\s+|ليست\s+|ليس\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?:\s+[\p{L}\p{N}]+){0,4}\s+(?<!غير\s+|ليست\s+|ليس\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:مسجل[\p{L}\p{N}]*|موجود[\p{L}\p{N}]*|تمت)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?<!لم\s+|ليس\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:لدي|عندي|سجلت)\s+(?:[\p{L}\p{N}]+\s+){0,3}(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?:[^\p{L}]|$)/u
+    /(?:^|[^\p{L}])parmak\s+iz[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:var|kayd[\p{L}\p{N}]*\s+var|kayitli|alindi[\p{L}\p{N}]*|alinmis[\p{L}\p{N}]*|verdim|verildi[\p{L}\p{N}]*|yaptirdim|mevcut)(?!\s+(?:degil|mi(?![\p{L}\p{N}])))(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:kayitli|alinmis[\p{L}\p{N}]*|alindi[\p{L}\p{N}]*|verdim|yaptirdim)(?!\s+(?:degil|mi(?![\p{L}\p{N}])))\s+(?:[\p{L}\p{N}]+\s+){0,6}parmak\s+iz[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?<!no\s+|not\s+)fingerprints?(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?<!no\s+|not\s+|never\s+)(?:registered|recorded|taken|done|available|exists?)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?<!not\s+|never\s+|don't\s+|dont\s+|do\s+not\s+|haven't\s+|have\s+not\s+)(?:registered|recorded|taken)\s+(?:[\p{L}\p{N}]+\s+){0,6}fingerprints?(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?<!not\s+|never\s+|don't\s+|dont\s+|do\s+not\s+|haven't\s+|have\s+not\s+)(?:have|has|got)\s+(?!to\s+)(?:[\p{L}\p{N}]+\s+){0,2}fingerprints?(?:\s+(?:registered|recorded|taken))?(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?<!не\s+)отпечат[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?<!не\s+)(?:зарегистрирован[\p{L}\p{N}]*|сданы|сдал[\p{L}\p{N}]*|сдавал[\p{L}\p{N}]*|есть|имеются|внесены|взяты)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?<!не\s+)(?:есть|имеются|зарегистрирован[\p{L}\p{N}]*|сдал[\p{L}\p{N}]*|сданы|внесены|взяты)\s+(?:[\p{L}\p{N}]+\s+){0,6}отпечат[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])barmak\s+yz[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:bar|hasab[\p{L}\p{N}]*\s+bar|hasaba\s+alyn?(?:an|dy[\p{L}\p{N}]*)|tapsyrdym|tapsyryldy|alyn?(?:an|dy[\p{L}\p{N}]*))(?!\s+dal)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:hasaba\s+alyn?(?:an|dy[\p{L}\p{N}]*)|tapsyrdym|tapsyryldy|alyn?(?:an|dy[\p{L}\p{N}]*))(?!\s+dal)\s+(?:[\p{L}\p{N}]+\s+){0,6}barmak\s+yz[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?<!غير\s+|ليست\s+|ليس\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?<!غير\s+|ليست\s+|ليس\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:مسجل[\p{L}\p{N}]*|موجود[\p{L}\p{N}]*|تمت|تم\s+تسجيل[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?<!لم\s+|ليس\s+|ليست\s+|غير\s+)(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:لدي|عندي|سجلت|مسجل[\p{L}\p{N}]*|تم\s+تسجيل[\p{L}\p{N}]*|تمت)\s+(?:[\p{L}\p{N}]+\s+){0,6}(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?:[^\p{L}]|$)/u
 ]);
 
 export const EVIDENCE_PATTERN_LISTS = Object.freeze({
@@ -264,10 +270,8 @@ function detectYesNo(text, positivePatterns, negativePatterns) {
 }
 
 function detectFingerprintStatus(text) {
-    const isNotRegistered = matchesAny(text, FINGERPRINT_NEGATIVE);
-    const isRegistered = matchesAny(text, FINGERPRINT_POSITIVE);
-    if (isNotRegistered && !isRegistered) return 'not_registered';
-    if (isRegistered && !isNotRegistered) return 'registered';
+    if (matchesAny(text, FINGERPRINT_NEGATIVE)) return 'not_registered';
+    if (matchesAny(text, FINGERPRINT_POSITIVE)) return 'registered';
     return undefined;
 }
 

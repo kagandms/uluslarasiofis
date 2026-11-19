@@ -374,6 +374,17 @@ function hasDocumentKeyword(messageContent) {
     return DOCUMENT_KEYWORD_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
+function hasCurrentDocumentIntent(lastUserMessage, previousAssistantMessage, language) {
+    if (hasDocumentKeyword(lastUserMessage)) {
+        return true;
+    }
+    if (previousAssistantMessage?.role !== 'assistant' || typeof previousAssistantMessage.content !== 'string') {
+        return false;
+    }
+    const missingFactsPrefix = getChatbotFixedText('missingDocumentsIntro', language);
+    return previousAssistantMessage.content.startsWith(missingFactsPrefix);
+}
+
 function hasExplicitPersonComplaintUrgentHandoff(messageContent) {
     if (typeof messageContent !== 'string') return false;
     const normalized = normalizeForEvidence(messageContent);
@@ -481,6 +492,11 @@ function isInsufficientOrWrongScriptReply(replyText, language) {
     return !isReplyInExpectedScript(replyText, language);
 }
 
+function resolveDocumentToolOutputFromEvidence(userTurns, language) {
+    const supportedFacts = extractSupportedDocumentFacts(userTurns, language);
+    return executeChatbotTool('get_required_documents', supportedFacts, { language });
+}
+
 function renderDocumentToolReply(toolOutput, language, handoffRequested = false) {
     const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
     if (Array.isArray(toolOutput?.labels) && toolOutput.labels.length > 0) {
@@ -531,6 +547,9 @@ export async function handlePublicChat(request, environment, requestId) {
 
         const validated = validateChatInput(body);
         const lastUserMessage = validated.messages[validated.messages.length - 1].content;
+        const previousAssistantMessage = validated.messages.length >= 2
+            ? validated.messages[validated.messages.length - 2]
+            : null;
         const userTurns = validated.messages
             .filter((message) => message.role === 'user')
             .map((message) => message.content);
@@ -583,10 +602,7 @@ export async function handlePublicChat(request, environment, requestId) {
             });
         }
         if (isVeryShortDocumentQuestion(lastUserMessage)) {
-            const supportedFacts = extractSupportedDocumentFacts(userTurns, validated.language);
-            const docOutput = executeChatbotTool('get_required_documents', supportedFacts, {
-                language: validated.language
-            });
+            const docOutput = resolveDocumentToolOutputFromEvidence(userTurns, validated.language);
             outcome = 'ok';
             return renderDocumentToolReply(docOutput, validated.language);
         }
@@ -622,6 +638,19 @@ export async function handlePublicChat(request, environment, requestId) {
             });
         }
 
+        const hasDocumentIntent = hasCurrentDocumentIntent(
+            lastUserMessage,
+            previousAssistantMessage,
+            validated.language
+        );
+        if (hasDocumentIntent) {
+            const docOutput = resolveDocumentToolOutputFromEvidence(userTurns, validated.language);
+            if (Array.isArray(docOutput?.labels) && docOutput.labels.length > 0) {
+                outcome = 'ok';
+                return renderDocumentToolReply(docOutput, validated.language);
+            }
+        }
+
         const model = createChatModel(environment);
         const requestSignal = AbortSignal.timeout(CHATBOT_REQUEST_DEADLINE_MS);
         const conversation = [
@@ -640,11 +669,21 @@ export async function handlePublicChat(request, environment, requestId) {
         for (let modelCall = 1; modelCall <= CHATBOT_MAX_MODEL_CALLS; modelCall += 1) {
             // 3. çağrı son izin verilen çağrıdır; aracısız gönderilir ki model metin yanıtı üretmeye zorlansın.
             const allowTools = modelCall < CHATBOT_MAX_MODEL_CALLS;
-            const result = await model.complete({
-                messages: conversation,
-                signal: requestSignal,
-                ...(allowTools ? { tools: CHATBOT_TOOL_DEFINITIONS } : {})
-            });
+            let result;
+            try {
+                result = await model.complete({
+                    messages: conversation,
+                    signal: requestSignal,
+                    ...(allowTools ? { tools: CHATBOT_TOOL_DEFINITIONS } : {})
+                });
+            } catch (error) {
+                if (hasDocumentIntent) {
+                    const docOutput = resolveDocumentToolOutputFromEvidence(userTurns, validated.language);
+                    outcome = 'ok';
+                    return renderDocumentToolReply(docOutput, validated.language, handoffRequested);
+                }
+                throw error;
+            }
 
             if (!result.toolCalls || result.toolCalls.length === 0) {
                 finalText = result.text;
@@ -794,10 +833,7 @@ export async function handlePublicChat(request, environment, requestId) {
         }
 
         if (looksLikeProseDocumentReply(trimmedText, lastUserMessage, validated.language)) {
-            const supportedFacts = extractSupportedDocumentFacts(userTurns, validated.language);
-            const docOutput = executeChatbotTool('get_required_documents', supportedFacts, {
-                language: validated.language
-            });
+            const docOutput = resolveDocumentToolOutputFromEvidence(userTurns, validated.language);
             outcome = 'ok';
             return renderDocumentToolReply(docOutput, validated.language, handoffRequested);
         }

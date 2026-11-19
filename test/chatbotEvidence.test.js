@@ -482,3 +482,55 @@ test('very short document questions and other-students data requests classify de
     assert.equal(isOtherStudentsDataRequest('diğer öğrenciler hangi belgeleri getiriyor'), false);
     assert.equal(isOtherStudentsDataRequest('What documents do other students bring?'), false);
 });
+
+test('round 3 fix 2: fingerprint_status handles up to 6 intervening words in both orders and negation wins across all five languages', () => {
+    const positiveCases = [
+        // tr (both orders)
+        { lang: 'tr', text: 'parmak izim göç idaresinde sistemde zaten kayıtlı', expected: 'registered' },
+        { lang: 'tr', text: 'kayıtlı olan önceki parmak izim', expected: 'registered' },
+        // en (both orders)
+        { lang: 'en', text: 'my fingerprints in the migration system are already registered', expected: 'registered' },
+        { lang: 'en', text: 'already registered at the migration office my fingerprints', expected: 'registered' },
+        // ru (both orders, including exact round 3 sentence)
+        { lang: 'ru', text: 'отпечатки пальцев в миграционной службе уже зарегистрированы', expected: 'registered' },
+        { lang: 'ru', text: 'зарегистрированы в миграционной службе мои отпечатки пальцев', expected: 'registered' },
+        // tk (both orders)
+        { lang: 'tk', text: 'barmak yzym migrasiýa gullugynyň ulgamynda eýýäm hasaba alyndy', expected: 'registered' },
+        { lang: 'tk', text: 'hasaba alynan öňki barmak yzym', expected: 'registered' },
+        // ar (both orders)
+        { lang: 'ar', text: 'بصماتي في نظام إدارة الهجرة مسجلة', expected: 'registered' },
+        { lang: 'ar', text: 'مسجلة في إدارة الهجرة بصماتي', expected: 'registered' }
+    ];
+
+    for (const item of positiveCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.equal(result.fingerprint_status, item.expected, `Positive failed for ${item.lang}: ${item.text}`);
+    }
+
+    const negatedCases = [
+        // tr
+        { lang: 'tr', text: 'parmak izim göç idaresinde henüz kayıtlı değil', expected: 'not_registered' },
+        { lang: 'tr', text: 'kayıtlı olmayan parmak izim', expected: 'not_registered' },
+        // en
+        { lang: 'en', text: 'my fingerprints in the migration system are not yet registered', expected: 'not_registered' },
+        { lang: 'en', text: 'not registered at the office my fingerprints', expected: 'not_registered' },
+        // ru
+        { lang: 'ru', text: 'отпечатки пальцев в миграционной службе не зарегистрированы', expected: 'not_registered' },
+        { lang: 'ru', text: 'не были зарегистрированы в службе отпечатки пальцев', expected: 'not_registered' },
+        // tk
+        { lang: 'tk', text: 'barmak yzym migrasiýa gullugynda entek hasaba alynmady', expected: 'not_registered' },
+        { lang: 'tk', text: 'hasaba alynan däl barmak yzym', expected: 'not_registered' },
+        // ar
+        { lang: 'ar', text: 'بصماتي في إدارة الهجرة غير مسجلة', expected: 'not_registered' },
+        { lang: 'ar', text: 'لم يتم تسجيل بصماتي بعد', expected: 'not_registered' }
+    ];
+
+    for (const item of negatedCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.equal(result.fingerprint_status, item.expected, `Negation failed for ${item.lang}: ${item.text}`);
+    }
+
+    // Question asking whether fingerprints are needed must not trigger registered.
+    assert.equal(extractSupportedDocumentFacts(['Do I have to give fingerprints?'], 'en').fingerprint_status, undefined);
+    assert.equal(extractSupportedDocumentFacts(['Parmak izim kayıtlı mı?'], 'tr').fingerprint_status, undefined);
+});
