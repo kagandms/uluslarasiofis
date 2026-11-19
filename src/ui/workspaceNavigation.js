@@ -11,7 +11,8 @@ const VIEW_TITLES = {
     documents: 'Belgeler',
     print: 'Yazdırma',
     'work-hours': 'Çalışma Saatleri',
-    'yoksis-audit': 'YÖKSİS Eksik Evrak'
+    'yoksis-audit': 'YÖKSİS Eksik Evrak',
+    inquiries: 'Gelen Sorular'
 };
 
 function getWorkspaceElements() {
