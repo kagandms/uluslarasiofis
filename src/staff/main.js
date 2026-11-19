@@ -24,6 +24,7 @@ import { initializeConnectivityStatus } from './connectivity-status.js';
 import { initCloudflareUsageCard } from '../ui/cloudflare-usage-card.js';
 import { initWorkHours } from './work-hours.js';
 import { initializeYoksisDocumentAuditManager } from '../managers/yoksisDocumentAuditManager.js';
+import { mountInquiryManager } from './inquiryManager.js';
 
 const staffAuthReady = document.readyState === 'loading'
     ? new Promise((resolve) => {
@@ -113,6 +114,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     const physicalRoot = document.getElementById('staff-physical-manager');
     if (physicalRoot) initializePhysicalIntakeManager(physicalRoot);
+    try {
+        const inquiriesRoot = document.getElementById('staff-inquiries-manager');
+        if (inquiriesRoot) mountInquiryManager(inquiriesRoot);
+    } catch (error) {
+        console.error('Inquiries workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
     try { initDocumentsManager(); } catch (error) {
         console.error('Documents workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }

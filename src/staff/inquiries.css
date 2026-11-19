@@ -1,0 +1,306 @@
+/* Staff "Gelen Sorular" card badge and inbox workspace styles */
+.home-action-heading-row {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.staff-inquiries-home-badge {
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.45rem;
+    height: 1.45rem;
+    padding-inline: 0.42rem;
+    border-radius: 999px;
+    background: var(--accent, #7e1830);
+    color: #fff;
+    font-size: 0.74rem;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.staff-inquiries-home-badge[hidden] {
+    display: none !important;
+}
+
+#home-screen .home-action:hover .staff-inquiries-home-badge,
+#home-screen .home-action:focus-visible .staff-inquiries-home-badge {
+    background: #fff;
+    color: var(--staff-home-card-foreground, #7e1830);
+}
+
+.staff-inquiries-panel {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.staff-inquiries-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    padding: 1rem 1.15rem;
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    background: var(--card-bg);
+}
+
+.staff-inquiries-heading {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.staff-inquiries-heading h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.2rem;
+}
+
+.staff-inquiries-heading p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.staff-inquiries-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.staff-inquiries-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.6rem;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.staff-inquiries-tab.is-active,
+.staff-inquiries-tab[aria-selected="true"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+.staff-inquiries-tab:focus-visible,
+.staff-inquiry-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.staff-inquiries-tab-count {
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.staff-inquiries-error {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    border: 1px solid #f5b7b1;
+    border-radius: 12px;
+    background: #fdf2f2;
+    color: #9b1c1c;
+    font-weight: 600;
+}
+
+body.dark-mode .staff-inquiries-error {
+    border-color: #70404c;
+    background: #3d222a;
+    color: #f2bac5;
+}
+
+.staff-inquiries-status {
+    margin: 0;
+    padding: 0.65rem 0.95rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--card-border));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--card-bg));
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.staff-inquiries-empty {
+    margin: 0;
+    padding: 1.5rem 1rem;
+    border: 1px dashed var(--card-border);
+    border-radius: 14px;
+    background: var(--card-bg);
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.staff-inquiries-list {
+    display: grid;
+    gap: 0.85rem;
+    min-width: 0;
+}
+
+.staff-inquiry-card {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 1rem 1.15rem;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+}
+
+.staff-inquiry-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.4rem 0.85rem;
+}
+
+.staff-inquiry-identity {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.staff-inquiry-name {
+    margin: 0;
+    font-size: 1.02rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.staff-inquiry-lang {
+    padding: 0.12rem 0.45rem;
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.staff-inquiry-time {
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.staff-inquiry-message {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.staff-inquiry-contacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.staff-inquiry-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.35rem;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    background: var(--bg-color);
+    color: var(--text-primary);
+    font-size: 0.86rem;
+    font-weight: 650;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+.staff-inquiry-whatsapp {
+    border-color: #1c7c45;
+    background: #eff9f3;
+    color: #145a32;
+}
+
+body.dark-mode .staff-inquiry-whatsapp {
+    border-color: #2d6544;
+    background: #173326;
+    color: #b7e4c7;
+}
+
+.staff-inquiry-handled {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.staff-inquiry-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--card-border);
+}
+
+.staff-inquiry-delete-btn {
+    color: #9b1c1c;
+    border-color: #e8b4b4;
+}
+
+body.dark-mode .staff-inquiry-delete-btn {
+    color: #f2bac5;
+    border-color: #70404c;
+}
+
+.staff-inquiry-delete-confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.staff-inquiry-confirm-text {
+    color: var(--text-primary);
+    font-size: 0.88rem;
+    font-weight: 650;
+}
+
+.btn-danger {
+    background: #b42318;
+    border-color: #8a1c13;
+    color: #fff;
+}
+
+@media (max-width: 560px) {
+    .staff-inquiries-topbar,
+    .staff-inquiry-card {
+        padding: 0.85rem;
+    }
+
+    .staff-inquiry-actions {
+        align-items: stretch;
+    }
+
+    .staff-inquiry-actions > button {
+        flex: 1 1 auto;
+    }
+}

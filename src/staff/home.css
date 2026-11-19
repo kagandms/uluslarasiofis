@@ -150,6 +150,9 @@ body.dark-mode::after { opacity: 1; }
 }
 
 #home-screen .home-actions:not(:has(.home-action:nth-child(8))) .home-action:nth-child(7) { grid-column: 2; }
+@media (min-width: 901px) {
+    #home-screen .home-actions:has(.home-action:nth-child(10)):not(:has(.home-action:nth-child(11))) .home-action:nth-child(10) { grid-column: 2; }
+}
 
 #home-screen .home-action-laser {
     position: absolute;
@@ -290,6 +293,7 @@ body.dark-mode #home-screen .home-action:focus-visible {
 #home-screen.is-entering .home-action:nth-child(7) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 460ms both; }
 #home-screen.is-entering .home-action:nth-child(8) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 525ms both; }
 #home-screen.is-entering .home-action:nth-child(9) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 590ms both; }
+#home-screen.is-entering .home-action:nth-child(10) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 655ms both; }
 
 .workspace-content.is-entering {
     animation: staff-home-content-enter 320ms cubic-bezier(0.18, 0.8, 0.25, 1) both;
@@ -622,6 +626,19 @@ body:has(#app-content:not([hidden]) #home-screen:not([hidden])) #home-screen .ho
 body:has(#app-content:not([hidden]) #home-screen:not([hidden])) #home-screen .home-action {
     height: 100%;
     min-height: 4.5rem;
+}
+
+/* 10. kart eklendiğinde 3×3 düzeni bozmadan sabit yüksekliğe 4. satırı sığdırır */
+@media (min-width: 901px) {
+    body:has(#app-content:not([hidden]) #home-screen:not([hidden])) #home-screen .home-actions:has(.home-action:nth-child(10)) {
+        --staff-home-grid-gap: clamp(0.55rem, 1.1vh, 0.9rem);
+        grid-template-rows: repeat(4, minmax(0, 1fr));
+    }
+
+    body:has(#app-content:not([hidden]) #home-screen:not([hidden])) #home-screen .home-actions:has(.home-action:nth-child(10)) .home-action {
+        min-height: 0;
+        padding-block: clamp(0.55rem, 1.1vh, 0.85rem);
+    }
 }
 
 @media (max-width: 900px) {
