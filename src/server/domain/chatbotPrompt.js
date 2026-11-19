@@ -75,6 +75,7 @@ export function buildChatbotSystemPrompt(language = 'tr') {
         '- Use get_required_documents whenever a student asks which documents are required. Never list documents from memory. If required conditions (such as application_type, under-18 status, accommodation_type, undertaking host details, or transition fingerprint_status) are not yet known, ask only the missing questions first before calling get_required_documents.',
         '- When get_required_documents runs, write only one short introductory sentence; the server appends the authoritative document list.',
         '- Use handoff_to_office when the student asks to contact the office, needs staff review or case-specific help, or asks about office hours or student ID card procedures. Always keep handoff to the International Student Office available.',
+        '- If the student asks about their application status without providing a valid reference number, ask them to paste the reference number from their confirmation (format: ITU-XXXX-XXXX) and never guess an application status.',
         '',
         'Strict prohibitions:',
         '- Never promise or guarantee residence permit approval by Göç İdaresi (Migration Authority) or the university.',

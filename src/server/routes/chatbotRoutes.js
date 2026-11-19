@@ -1,9 +1,11 @@
+import { isValidApplicationReference, normalizeApplicationReference } from '../auth/applicationAccessCode.js';
 import { CHATBOT_LANGUAGES } from '../domain/chatbotKnowledge.js';
 import {
     CHATBOT_REFUSAL_MARKER,
     buildChatbotSystemPrompt,
     getChatbotFixedText
 } from '../domain/chatbotPrompt.js';
+import { getChatbotStatusFixedText, renderStatusSummary } from '../domain/chatbotStatusText.js';
 import {
     CHATBOT_TOOL_DEFINITIONS,
     CHATBOT_TOOLS,
@@ -13,12 +15,14 @@ import { ApiError } from '../domain/errors.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
 import {
+    APPLICATION_TRACKING_RATE_LIMIT,
     CHATBOT_GLOBAL_DAILY_LIMIT,
     CHATBOT_IP_DAILY_LIMIT,
     CHATBOT_RATE_LIMIT
 } from '../security/application-rate-limits.js';
 import { consumePublicRateLimit } from '../security/requestRateLimit.js';
 import { createChatModel } from '../services/chatbotModel.js';
+import { readPublicTrackingByReference } from './applicationTrackingRoutes.js';
 import { createRepositories, enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
 
 const CHATBOT_BODY_MAX_BYTES = 8192;
@@ -35,6 +39,7 @@ const CHATBOT_MESSAGE_KEYS = Object.freeze(['role', 'content']);
 // Çok satırlı mesajlarda yalnızca \n satır sonuna izin verilir; diğer kontrol karakterleri reddedilir.
 const MESSAGE_DISALLOWED_CONTROL_CHAR_PATTERN = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/u;
 const LIST_LINE_PATTERN = /^(?:[-*•]|\d+[.)])\s+/;
+const REFERENCE_CANDIDATE_PATTERN = /[\p{L}\p{N}_-]+/gu;
 const CHATBOT_UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.';
 
 const OPTIONAL_DOCUMENT_SUFFIX = Object.freeze({
@@ -166,6 +171,23 @@ function buildDocumentReply(modelText, labels, language) {
     return renderedList;
 }
 
+function extractApplicationReferences(messageContent) {
+    if (typeof messageContent !== 'string') return [];
+    const matches = messageContent.match(REFERENCE_CANDIDATE_PATTERN);
+    if (!matches) return [];
+    const validReferences = [];
+    const seen = new Set();
+    for (const token of matches) {
+        const candidate = token.replace(/^[_-]+|[_-]+$/g, '');
+        if (!candidate) continue;
+        const normalized = normalizeApplicationReference(candidate);
+        if (!isValidApplicationReference(normalized) || seen.has(normalized)) continue;
+        seen.add(normalized);
+        validReferences.push(normalized);
+    }
+    return validReferences;
+}
+
 function outcomeForError(error) {
     if (!(error instanceof ApiError)) return 'error';
     if (error.status === 405) return 'method_not_allowed';
@@ -179,8 +201,8 @@ function outcomeForError(error) {
 
 /**
  * Durumsuz ana sayfa sohbet uç noktası (`POST /api/public/chat`).
- * Kontrol sırası: yöntem -> aynı köken -> 8 KB boyut sınırı -> hız sınırları -> doğrulama -> günlük bütçe -> model/araç döngüsü.
- * Kişisel veri, mesaj içeriği, araç argümanları ve model çıktısı hiçbir zaman günlüğe yazılmaz veya saklanmaz.
+ * Kontrol sırası: yöntem -> aynı köken -> 8 KB boyut sınırı -> hız sınırları -> doğrulama -> başvuru numarasıyla durum sorgusu -> günlük bütçe -> model/araç döngüsü.
+ * Kişisel veri, başvuru numarası, durum içeriği, mesaj içeriği, araç argümanları ve model çıktısı hiçbir zaman günlüğe yazılmaz veya saklanmaz.
  * @param {Request} request Worker isteği.
  * @param {object} environment Worker bağlamları (`DB`, `AI`, isteğe bağlı `CHATBOT_MODEL`).
  * @param {string} requestId İstek izleme kimliği.
@@ -201,6 +223,28 @@ export async function handlePublicChat(request, environment, requestId) {
         await runFailClosedRateLimit(() => enforceRateLimit(repositories, request, CHATBOT_RATE_LIMIT));
 
         const validated = validateChatInput(body);
+        const lastUserMessage = validated.messages[validated.messages.length - 1].content;
+        const referencedApplications = extractApplicationReferences(lastUserMessage);
+        if (referencedApplications.length > 1) {
+            outcome = 'status_multiple_references';
+            return routeResult({
+                reply: getChatbotStatusFixedText('multipleReferences', validated.language),
+                actions: []
+            });
+        }
+        if (referencedApplications.length === 1) {
+            // Başvuru durumu sorguları modeli ve günlük bütçeyi kullanmaz; herkese açık takip sayacıyla sınırlanır.
+            await runFailClosedRateLimit(() => enforceRateLimit(repositories, request, APPLICATION_TRACKING_RATE_LIMIT));
+            const trackingResult = await readPublicTrackingByReference(repositories, referencedApplications[0]);
+            outcome = 'status_lookup';
+            return routeResult({
+                reply: renderStatusSummary(trackingResult, validated.language),
+                actions: trackingResult.found
+                    ? [{ type: 'link', href: '/basvurum/', label_key: 'chatbotOpenTracking' }]
+                    : [{ type: 'inquiry' }]
+            });
+        }
+
         const clientAddress = request.headers.get('CF-Connecting-IP') || 'unknown-client';
         const nowSeconds = Math.floor(Date.now() / 1000);
 
