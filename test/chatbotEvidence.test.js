@@ -4,10 +4,12 @@ import {
     EVIDENCE_PATTERN_LISTS,
     extractSupportedDocumentFacts,
     filterDocumentArgsByEvidence,
+    hasEvidenceRisk,
     normalizeForEvidence
 } from '../src/server/domain/chatbotEvidence.js';
 import {
     CHATBOT_ROUTE_NORMALIZED_PATTERNS,
+    isAskingWhichDocumentsAreNeeded,
     isDeterministicHandoffRequest,
     isOtherStudentsDataRequest,
     isStatusQuestionWithoutReference,
@@ -199,25 +201,37 @@ test('host_is_married and host_is_turkish lexicons recognize affirmative and neg
     const cases = [
         // tr
         { lang: 'tr', text: 'Taahhüt veren kişi evli ve Türk vatandaşı', married: 'yes', turkish: 'yes' },
-        { lang: 'tr', text: 'evli değil, Türk vatandaşı değil', married: 'no', turkish: 'no' },
+        { lang: 'tr', text: 'Taahhüt veren kişi evli değil ve Türk vatandaşı değil', married: 'no', turkish: 'no' },
         // en
         { lang: 'en', text: 'My host is married and is a Turkish citizen', married: 'yes', turkish: 'yes' },
         { lang: 'en', text: 'host is not married and not a Turkish citizen', married: 'no', turkish: 'no' },
         // ru
         { lang: 'ru', text: 'Принимающее лицо состоит в браке и является гражданином Турции', married: 'yes', turkish: 'yes' },
-        { lang: 'ru', text: 'не женат и не гражданин Турции', married: 'no', turkish: 'no' },
+        { lang: 'ru', text: 'Принимающее лицо не женат и не гражданин Турции', married: 'no', turkish: 'no' },
         // tk
         { lang: 'tk', text: 'Borçnama berýän adam öýlenen we Türkiýäniň raýaty', married: 'yes', turkish: 'yes' },
-        { lang: 'tk', text: 'öýlenmedik, Türkiýäniň raýaty däl', married: 'no', turkish: 'no' },
+        { lang: 'tk', text: 'Borçnama berýän adam öýlenmedik we Türkiýäniň raýaty däl', married: 'no', turkish: 'no' },
         // ar
         { lang: 'ar', text: 'مقدم التعهد متزوج ومواطن تركي', married: 'yes', turkish: 'yes' },
-        { lang: 'ar', text: 'غير متزوج وليس مواطن تركي', married: 'no', turkish: 'no' }
+        { lang: 'ar', text: 'مقدم التعهد غير متزوج وليس مواطن تركي', married: 'no', turkish: 'no' }
     ];
 
     for (const item of cases) {
         const result = extractSupportedDocumentFacts([item.text], item.lang);
         assert.equal(result.host_is_married, item.married, `Married failed for ${item.lang}: ${item.text}`);
         assert.equal(result.host_is_turkish, item.turkish, `Turkish failed for ${item.lang}: ${item.text}`);
+    }
+
+    // Bare married/nationality phrases without host context must not produce host facts.
+    for (const item of [
+        { lang: 'tr', text: 'evli değil, Türk vatandaşı değil' },
+        { lang: 'ru', text: 'не женат и не гражданин Турции' },
+        { lang: 'tk', text: 'öýlenmedik, Türkiýäniň raýaty däl' },
+        { lang: 'ar', text: 'غير متزوج وليس مواطن تركي' }
+    ]) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.equal(result.host_is_married, undefined, `Expected no host_is_married without host context: ${item.text}`);
+        assert.equal(result.host_is_turkish, undefined, `Expected no host_is_turkish without host context: ${item.text}`);
     }
 
     // "Turkish residence permit" must not falsely imply host_is_turkish.
@@ -532,5 +546,448 @@ test('round 3 fix 2: fingerprint_status handles up to 6 intervening words in bot
 
     // Question asking whether fingerprints are needed must not trigger registered.
     assert.equal(extractSupportedDocumentFacts(['Do I have to give fingerprints?'], 'en').fingerprint_status, undefined);
-    assert.equal(extractSupportedDocumentFacts(['Parmak izim kayıtlı mı?'], 'tr').fingerprint_status, undefined);
+    const trFpQuestion = extractSupportedDocumentFacts(['Parmak izim kayıtlı mı?'], 'tr');
+    assert.equal(trFpQuestion.fingerprint_status, undefined);
+    assert.ok(trFpQuestion.__uncertain.includes('fingerprint_status'));
+});
+
+test('normalizeForEvidence maps U+2018, U+2019, U+02BC, and U+FF07 apostrophe variants to ASCII', () => {
+    const raw = 'host isn\u2019t married, don\u2018t have, I\u02BCm 20, didn\uFF07t';
+    assert.equal(normalizeForEvidence(raw), "host isn't married, don't have, i'm 20, didn't");
+});
+
+test('__uncertain is non-enumerable and omitted keys are never returned as facts', () => {
+    const clean = extractSupportedDocumentFacts(['İlk başvuru, 20 yaşındayım, yurtta kalıyorum'], 'tr');
+    assert.deepEqual(clean, {
+        application_type: 'initial',
+        is_under_18: false,
+        accommodation_type: 'dormitory'
+    });
+    assert.deepEqual(Object.keys(clean), ['application_type', 'is_under_18', 'accommodation_type']);
+    assert.deepEqual(clean.__uncertain, []);
+    assert.equal(hasEvidenceRisk(['İlk başvuru, 20 yaşındayım, yurtta kalıyorum'], 'tr'), false);
+
+    const empty = extractSupportedDocumentFacts([], 'tr');
+    assert.deepEqual(empty, {});
+    assert.deepEqual(empty.__uncertain, []);
+    assert.equal(hasEvidenceRisk([], 'tr'), false);
+});
+
+test('hardening: negated accommodation and application_type go to __uncertain and never become facts', () => {
+    const dormPartial = extractSupportedDocumentFacts(
+        ['İlk başvuru, 20 yaşındayım, yurtta kalmıyorum, hangi belgeler lazım?'],
+        'tr'
+    );
+    assert.deepEqual(dormPartial, { application_type: 'initial', is_under_18: false });
+    assert.deepEqual(dormPartial.__uncertain, ['accommodation_type']);
+    assert.equal(hasEvidenceRisk(['İlk başvuru, 20 yaşındayım, yurtta kalmıyorum, hangi belgeler lazım?'], 'tr'), true);
+
+    const negatedAccomCases = [
+        { lang: 'ru', text: 'не живу в общежитии' },
+        { lang: 'en', text: 'I do not live in a dorm' },
+        { lang: 'tr', text: 'kira sözleşmem yok' },
+        { lang: 'tr', text: 'otelde kalmıyorum' },
+        { lang: 'tr', text: 'taahhütnamem yok' },
+        { lang: 'tr', text: 'adres kaydım yok' },
+        { lang: 'tk', text: 'umumy ýaşaýyş jaýynda ýaşamok' },
+        { lang: 'tk', text: 'borçnama bilen galmaýaryn' },
+        { lang: 'ar', text: 'لا أسكن في السكن الطلابي' }
+    ];
+    for (const item of negatedAccomCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.equal(result.accommodation_type, undefined, `Expected no accommodation_type for: ${item.text}`);
+        assert.ok(result.__uncertain.includes('accommodation_type'), `Expected __uncertain accommodation_type for: ${item.text}`);
+        assert.equal(hasEvidenceRisk([item.text], item.lang), true, `Expected hasEvidenceRisk true for: ${item.text}`);
+    }
+
+    const negatedAppCases = [
+        { lang: 'tr', text: 'İlk başvuru değil…' },
+        { lang: 'tr', text: 'İlk başvuru değil, hangi belgeler lazım?' },
+        { lang: 'en', text: 'Not an initial application…' },
+        { lang: 'ru', text: 'Не первичная подача…' },
+        { lang: 'tk', text: 'Ilkinji arza däl' },
+        { lang: 'ar', text: 'ليس طلباً أولياً' }
+    ];
+    for (const item of negatedAppCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.equal(result.application_type, undefined, `Expected no application_type for: ${item.text}`);
+        assert.ok(result.__uncertain.includes('application_type'), `Expected __uncertain application_type for: ${item.text}`);
+        assert.equal(hasEvidenceRisk([item.text], item.lang), true, `Expected hasEvidenceRisk true for: ${item.text}`);
+    }
+});
+
+test('hardening: durations and non-age numbers never trigger is_under_18, and negated ages go to __uncertain', () => {
+    const durationCases = [
+        {
+            lang: 'en',
+            text: 'Initial application, I live in a dorm for 1 year',
+            expected: { application_type: 'initial', accommodation_type: 'dormitory' }
+        },
+        {
+            lang: 'ru',
+            text: 'живу в общежитии 2 года',
+            expected: { accommodation_type: 'dormitory' }
+        },
+        {
+            lang: 'ar',
+            text: 'سكن طلابي لمدة 4 سنوات',
+            expected: { accommodation_type: 'dormitory' }
+        },
+        { lang: 'en', text: 'I am 2 days late', expected: {} },
+        { lang: 'ru', text: 'мне 1 документ нужно заменить', expected: {} },
+        {
+            lang: 'tr',
+            text: '15 yıldır yurtta kalıyorum',
+            expected: { accommodation_type: 'dormitory' }
+        },
+        {
+            lang: 'en',
+            text: 'I have lived in a dorm for 15 years',
+            expected: { accommodation_type: 'dormitory' }
+        },
+        {
+            lang: 'ru',
+            text: 'живу в общежитии 15 лет',
+            expected: { accommodation_type: 'dormitory' }
+        },
+        {
+            lang: 'ar',
+            text: 'سكن طلابي لمدة 15 سنة',
+            expected: { accommodation_type: 'dormitory' }
+        }
+    ];
+    for (const item of durationCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.deepEqual(result, item.expected, `Duration leaked into age for ${item.lang}: ${item.text}`);
+        assert.equal(result.is_under_18, undefined);
+    }
+
+    const negatedAgeCases = [
+        { lang: 'tr', text: '18 yaşında değilim' },
+        { lang: 'en', text: 'I am not 18' },
+        { lang: 'ru', text: 'Мне не 18 лет' },
+        { lang: 'en', text: 'I am not an adult' },
+        { lang: 'tr', text: 'yetişkin değilim' }
+    ];
+    for (const item of negatedAgeCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.equal(result.is_under_18, undefined, `Expected no is_under_18 for negated age: ${item.text}`);
+        assert.ok(result.__uncertain.includes('is_under_18'), `Expected __uncertain is_under_18 for: ${item.text}`);
+        assert.equal(hasEvidenceRisk([item.text], item.lang), true);
+    }
+
+    // Explicit Russian and English age variants continue to work when unambiguous.
+    assert.equal(extractSupportedDocumentFacts(['мне уже 17 лет'], 'ru').is_under_18, true);
+    assert.equal(extractSupportedDocumentFacts(['мне исполнилось 18 лет'], 'ru').is_under_18, false);
+    assert.equal(extractSupportedDocumentFacts(['19 лет от роду'], 'ru').is_under_18, false);
+    assert.equal(extractSupportedDocumentFacts(['I am 20 years'], 'en').is_under_18, false);
+    assert.equal(extractSupportedDocumentFacts(['I am 17 y.o.'], 'en').is_under_18, true);
+});
+
+test('hardening: apostrophe normalization, host-only context, host questions, and fingerprint conflicts', () => {
+    const curlyHost = extractSupportedDocumentFacts(['the host isn\u2019t married and isn\u2019t Turkish'], 'en');
+    assert.deepEqual(curlyHost, {
+        host_is_married: 'no',
+        host_is_turkish: 'no'
+    });
+    assert.equal(curlyHost.accommodation_type, undefined);
+    assert.deepEqual(curlyHost.__uncertain, []);
+    assert.equal(hasEvidenceRisk(['the host isn\u2019t married and isn\u2019t Turkish'], 'en'), true);
+
+    const curlyFp1 = extractSupportedDocumentFacts(['I don\u2019t have fingerprints'], 'en');
+    assert.deepEqual(curlyFp1, { fingerprint_status: 'not_registered' });
+    assert.deepEqual(curlyFp1.__uncertain, []);
+    assert.equal(hasEvidenceRisk(['I don\u2019t have fingerprints'], 'en'), true);
+
+    const curlyFp2 = extractSupportedDocumentFacts(["I didn't have fingerprints taken"], 'en');
+    assert.deepEqual(curlyFp2, { fingerprint_status: 'not_registered' });
+    assert.deepEqual(curlyFp2.__uncertain, []);
+    assert.equal(hasEvidenceRisk(["I didn't have fingerprints taken"], 'en'), true);
+
+    const hostQuestion = extractSupportedDocumentFacts(['Taahhüt veren kişi Türk vatandaşı mı?'], 'tr');
+    assert.equal(hostQuestion.host_is_turkish, undefined);
+    assert.ok(hostQuestion.__uncertain.includes('host_is_turkish'));
+    assert.equal(hasEvidenceRisk(['Taahhüt veren kişi Türk vatandaşı mı?'], 'tr'), true);
+
+    const hostQuestionRu = extractSupportedDocumentFacts(['Хозяин женат ли?'], 'ru');
+    assert.equal(hostQuestionRu.host_is_married, undefined);
+    assert.ok(hostQuestionRu.__uncertain.includes('host_is_married'));
+
+    const selfDesc = extractSupportedDocumentFacts(
+        ['Ben bekarım, yabancı vatandaşım, … akrabamın yanında taahhütname ile kalıyorum'],
+        'tr'
+    );
+    assert.deepEqual(selfDesc, { accommodation_type: 'undertaking' });
+    assert.equal(selfDesc.host_is_married, undefined);
+    assert.equal(selfDesc.host_is_turkish, undefined);
+    assert.deepEqual(selfDesc.__uncertain, []);
+
+    const selfDescSingleClause = extractSupportedDocumentFacts(
+        ['I am single and not Turkish and staying with a relative'],
+        'en'
+    );
+    assert.equal(selfDescSingleClause.accommodation_type, 'undertaking');
+    assert.equal(selfDescSingleClause.host_is_married, undefined);
+    assert.equal(selfDescSingleClause.host_is_turkish, undefined);
+
+    const fpConflict = extractSupportedDocumentFacts(
+        ['parmak izim kayıtlı ama parmak izi kaydım yok'],
+        'tr'
+    );
+    assert.equal(fpConflict.fingerprint_status, undefined);
+    assert.ok(fpConflict.__uncertain.includes('fingerprint_status'));
+    assert.equal(hasEvidenceRisk(['parmak izim kayıtlı ama parmak izi kaydım yok'], 'tr'), true);
+
+    const fpConflictEn = extractSupportedDocumentFacts(
+        ["my fingerprints are registered, wait I didn't have fingerprints taken"],
+        'en'
+    );
+    assert.equal(fpConflictEn.fingerprint_status, undefined);
+    assert.ok(fpConflictEn.__uncertain.includes('fingerprint_status'));
+});
+
+test('hardening: tightened homographs and conflicting values', () => {
+    assert.deepEqual(extractSupportedDocumentFacts(['перевод документов'], 'ru'), {});
+    assert.deepEqual(
+        extractSupportedDocumentFacts(['перевод ВНЖ на студенческий'], 'ru'),
+        { application_type: 'transition' }
+    );
+
+    assert.deepEqual(extractSupportedDocumentFacts(['قريب'], 'ar'), {});
+    assert.deepEqual(extractSupportedDocumentFacts(['سأقدم قريباً'], 'ar'), {});
+    assert.deepEqual(
+        extractSupportedDocumentFacts(['أسكن عند قريبي'], 'ar'),
+        { accommodation_type: 'undertaking' }
+    );
+
+    assert.deepEqual(extractSupportedDocumentFacts(['ilk olarak ne yapmalıyım'], 'tr'), {});
+    assert.deepEqual(extractSupportedDocumentFacts(['first page of passport'], 'en'), {});
+    assert.deepEqual(
+        extractSupportedDocumentFacts(['ilk kere başvuru'], 'tr'),
+        { application_type: 'initial' }
+    );
+
+    const appConflict = extractSupportedDocumentFacts(['İlk başvuru mu uzatma mı için belge lazım?'], 'tr');
+    assert.equal(appConflict.application_type, undefined);
+    assert.ok(appConflict.__uncertain.includes('application_type'));
+    assert.equal(hasEvidenceRisk(['İlk başvuru mu uzatma mı için belge lazım?'], 'tr'), true);
+
+    // filterDocumentArgsByEvidence strips model-supplied values when fact is uncertain.
+    const filteredUncertain = filterDocumentArgsByEvidence(
+        { application_type: 'initial', is_under_18: false, accommodation_type: 'dormitory' },
+        ['İlk başvuru, 20 yaşındayım, yurtta kalmıyorum, hangi belgeler lazım?'],
+        'tr'
+    );
+    assert.deepEqual(filteredUncertain, { application_type: 'initial', is_under_18: false });
+});
+
+test('corrective A: question particles are language-specific so English "my" extracts facts while Turkmen "my" remains a question', () => {
+    const enExtend = extractSupportedDocumentFacts(['I want to extend my residence'], 'en');
+    assert.deepEqual(enExtend, { application_type: 'renewal' });
+    assert.deepEqual(enExtend.__uncertain, []);
+
+    const enOwnHome = extractSupportedDocumentFacts(['living in my own home'], 'en');
+    assert.deepEqual(enOwnHome, { accommodation_type: 'own_home' });
+    assert.deepEqual(enOwnHome.__uncertain, []);
+
+    const enHost = extractSupportedDocumentFacts(['My host is married and is a Turkish citizen'], 'en');
+    assert.deepEqual(enHost, { host_is_married: 'yes', host_is_turkish: 'yes' });
+    assert.deepEqual(enHost.__uncertain, []);
+
+    const enFingerprint = extractSupportedDocumentFacts(['my fingerprints are registered with migration'], 'en');
+    assert.deepEqual(enFingerprint, { fingerprint_status: 'registered' });
+    assert.deepEqual(enFingerprint.__uncertain, []);
+
+    const tkQuestionApp = extractSupportedDocumentFacts(['Uzatma my?'], 'tk');
+    assert.equal(tkQuestionApp.application_type, undefined);
+    assert.ok(tkQuestionApp.__uncertain.includes('application_type'));
+
+    const tkQuestionAccom = extractSupportedDocumentFacts(['Umumy ýaşaýyş jaýynda galýar my?'], 'tk');
+    assert.equal(tkQuestionAccom.accommodation_type, undefined);
+    assert.ok(tkQuestionAccom.__uncertain.includes('accommodation_type'));
+
+    const tkQuestionFp = extractSupportedDocumentFacts(['Barmak yzy hasaby bar my?'], 'tk');
+    assert.equal(tkQuestionFp.fingerprint_status, undefined);
+    assert.ok(tkQuestionFp.__uncertain.includes('fingerprint_status'));
+
+    const enAuxQuestion = extractSupportedDocumentFacts(['Is my host married?'], 'en');
+    assert.equal(enAuxQuestion.host_is_married, undefined);
+    assert.ok(enAuxQuestion.__uncertain.includes('host_is_married'));
+});
+
+test('corrective B: negated minor phrases resolve to is_under_18=false across all five languages without uncertainty', () => {
+    const combinedTr = extractSupportedDocumentFacts(['18 yaşından küçük değilim, uzatma, yurtta kalıyorum'], 'tr');
+    assert.deepEqual(combinedTr, {
+        application_type: 'renewal',
+        is_under_18: false,
+        accommodation_type: 'dormitory'
+    });
+    assert.deepEqual(combinedTr.__uncertain, []);
+
+    const cases = [
+        { lang: 'tr', text: '18 yaşından küçük değilim' },
+        { lang: 'en', text: 'I am not under 18' },
+        { lang: 'ru', text: 'мне не меньше 18' },
+        { lang: 'tk', text: '18 ýaşdan kiçi däl' },
+        { lang: 'ar', text: 'لست قاصراً' }
+    ];
+    for (const item of cases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.equal(result.is_under_18, false, `Expected is_under_18=false for ${item.lang}: ${item.text}`);
+        assert.deepEqual(result.__uncertain, [], `Expected no __uncertain for ${item.lang}: ${item.text}`);
+    }
+});
+
+test('corrective C: bare host words give host context only, while undertaking/stay-with words produce undertaking', () => {
+    const bareHostCases = [
+        { lang: 'tr', text: 'ev sahibi evli ve Türk vatandaşı', married: 'yes', turkish: 'yes' },
+        { lang: 'en', text: 'My host is married and is a Turkish citizen', married: 'yes', turkish: 'yes' },
+        { lang: 'ru', text: 'Принимающее лицо не женат и не гражданин Турции', married: 'no', turkish: 'no' },
+        { lang: 'tk', text: 'Hojaýyn öýlenen we Türkiýäniň raýaty', married: 'yes', turkish: 'yes' },
+        { lang: 'ar', text: 'المضيف متزوج ومواطن تركي', married: 'yes', turkish: 'yes' }
+    ];
+    for (const item of bareHostCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.equal(result.accommodation_type, undefined, `Bare host must not set undertaking for ${item.lang}: ${item.text}`);
+        assert.equal(result.host_is_married, item.married);
+        assert.equal(result.host_is_turkish, item.turkish);
+    }
+
+    const undertakingCases = [
+        { lang: 'tr', text: 'tanıdık yanında kalıyorum' },
+        { lang: 'en', text: 'staying with a host' },
+        { lang: 'en', text: 'living with a friend' },
+        { lang: 'ru', text: 'живу у друга' },
+        { lang: 'tk', text: 'tanyşyň ýanynda ýaşaýaryn' },
+        { lang: 'ar', text: 'أسكن مع صديق' }
+    ];
+    for (const item of undertakingCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.equal(result.accommodation_type, 'undertaking', `Expected undertaking for ${item.lang}: ${item.text}`);
+    }
+});
+
+test('corrective D: isAskingWhichDocumentsAreNeeded separates list intent from how-to/troubleshooting questions', () => {
+    const listQueries = [
+        'Parmak izi durumuma göre hangi belgeler gerekir?',
+        'İkamet için belgeler neler, gerekli belgeler veya belge listesi lazım',
+        'Which documents do I need for renewal?',
+        'Please send the required documents list',
+        'Какие документы нужны? Список документов, что нужно?',
+        'Haýsy resminamalar gerek? Resminamalar sanawy näme?',
+        'ما المستندات المطلوبة؟ قائمة المستندات ما الوثائق؟'
+    ];
+    for (const query of listQueries) {
+        assert.equal(isAskingWhichDocumentsAreNeeded(query), true, `Expected list intent for: ${query}`);
+    }
+
+    const nonListQueries = [
+        'Başka bir öğrenciyle aynı evde kalıyorum, adres belgesi nasıl olmalı?',
+        'belge yüklerken hata alıyorum',
+        'belge formatı nedir?',
+        'What document format should I upload?',
+        '20 yaşındayım, kira sözleşmesi ile ilk başvuruda neler gerekir?'
+    ];
+    for (const query of nonListQueries) {
+        assert.equal(isAskingWhichDocumentsAreNeeded(query), false, `Expected non-list intent for: ${query}`);
+    }
+});
+
+test('corrective E: yes/no question marks route facts to __uncertain while WH-questions preserve presupposed facts', () => {
+    const ruFpQuestion = extractSupportedDocumentFacts(['Мои отпечатки пальцев зарегистрированы?'], 'ru');
+    assert.deepEqual(ruFpQuestion, {});
+    assert.deepEqual(ruFpQuestion.__uncertain, ['fingerprint_status']);
+
+    const tkFpQuestion = extractSupportedDocumentFacts(['Barmak yzym hasaba alyndymy?'], 'tk');
+    assert.deepEqual(tkFpQuestion, {});
+    assert.deepEqual(tkFpQuestion.__uncertain, ['fingerprint_status']);
+
+    const trAttachedNoFpWord = extractSupportedDocumentFacts(['Yurtta kalıyorum, kayıtlımı?'], 'tr');
+    assert.deepEqual(trAttachedNoFpWord, { accommodation_type: 'dormitory' });
+    assert.deepEqual(trAttachedNoFpWord.__uncertain, []);
+
+    const trAttachedWithFpWord = extractSupportedDocumentFacts(['Yurtta kalıyorum, parmak izim kayıtlımı?'], 'tr');
+    assert.deepEqual(trAttachedWithFpWord, { accommodation_type: 'dormitory' });
+    assert.deepEqual(trAttachedWithFpWord.__uncertain, ['fingerprint_status']);
+
+    const arPresupposedWh = extractSupportedDocumentFacts(
+        ['عمري 20 سنة، ما المطلوب للطلب الأولي بعقد إيجار؟'],
+        'ar'
+    );
+    assert.deepEqual(arPresupposedWh, {
+        application_type: 'initial',
+        is_under_18: false,
+        accommodation_type: 'rental_contract'
+    });
+    assert.deepEqual(arPresupposedWh.__uncertain, []);
+
+    const whQuestionCases = [
+        { lang: 'tr', text: 'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekli?' },
+        { lang: 'tr', text: 'İlk başvuru 20 yaşındayım yurtta kalıyorum hangi belgeler gerekli?' },
+        { lang: 'en', text: 'I am 20, initial application, I live in a dorm, which documents do I need?' },
+        { lang: 'ru', text: 'Первичная подача, мне 20 лет, живу в общежитии, какие документы нужны?' },
+        { lang: 'tk', text: 'Ilkinji arza, 20 ýaşymda, umumy ýaşaýyş jaýynda galýaryn, haýsy resminamalar gerek?' },
+        { lang: 'ar', text: 'طلب أولي، عمري 20 سنة، أسكن في السكن الطلابي، ما المستندات المطلوبة؟' }
+    ];
+    for (const item of whQuestionCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.deepEqual(
+            result,
+            {
+                application_type: 'initial',
+                is_under_18: false,
+                accommodation_type: 'dormitory'
+            },
+            `Unexpected facts for ${item.lang}: ${item.text}`
+        );
+        assert.deepEqual(result.__uncertain, [], `Expected empty __uncertain for ${item.lang}: ${item.text}`);
+    }
+
+    const whInsideSingleClauseCases = [
+        {
+            lang: 'en',
+            text: 'What documents do I need for an initial application with a rental contract?',
+            expected: { application_type: 'initial', accommodation_type: 'rental_contract' }
+        },
+        {
+            lang: 'ru',
+            text: 'Какие документы нужны для продления в общежитии?',
+            expected: { application_type: 'renewal', accommodation_type: 'dormitory' }
+        },
+        {
+            lang: 'tk',
+            text: 'Ilkinji arza üçin näme resminama gerek?',
+            expected: { application_type: 'initial' }
+        },
+        {
+            lang: 'ar',
+            text: 'ما المطلوب للطلب الأولي بعقد إيجار؟',
+            expected: { application_type: 'initial', accommodation_type: 'rental_contract' }
+        }
+    ];
+    for (const item of whInsideSingleClauseCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.deepEqual(result, item.expected, `Unexpected single-clause WH facts for ${item.lang}: ${item.text}`);
+        assert.deepEqual(result.__uncertain, [], `Expected empty __uncertain for ${item.lang}: ${item.text}`);
+    }
+
+    const ellipticalDocCases = [
+        { lang: 'tr', text: 'İlk başvuru için belge?', expected: { application_type: 'initial' } },
+        { lang: 'en', text: 'Documents for an initial application?', expected: { application_type: 'initial' } }
+    ];
+    for (const item of ellipticalDocCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.deepEqual(result, item.expected, `Unexpected elliptical doc facts for ${item.lang}: ${item.text}`);
+        assert.deepEqual(result.__uncertain, [], `Expected empty __uncertain for ${item.lang}: ${item.text}`);
+    }
+
+    const yesNoWithoutParticleCases = [
+        { lang: 'en', text: 'Initial application?', uncertainKey: 'application_type' },
+        { lang: 'ru', text: 'В общежитии?', uncertainKey: 'accommodation_type' }
+    ];
+    for (const item of yesNoWithoutParticleCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.deepEqual(result, {});
+        assert.deepEqual(result.__uncertain, [item.uncertainKey]);
+    }
 });
