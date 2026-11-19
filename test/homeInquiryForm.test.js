@@ -385,3 +385,57 @@ test('initScrollReveal registers #questions with reveal-from-bottom and scroll-r
     const reducedQuestions = reducedDoc.getElementById('questions');
     assert.equal(reducedQuestions.classList.contains('scroll-reveal-item'), false);
 });
+
+test('client email validation rejects header-injection and delimiter characters without calling fetch', async (context) => {
+    const html = await readHomeHtml();
+    const calls = [];
+
+    const { dom, doc, section } = mountHomeDom(context, html, {
+        locale: 'en',
+        fetcher: async (url, options) => {
+            calls.push({ url, options });
+            return createJsonResponse({ received: true }, 201);
+        }
+    });
+
+    const form = section.querySelector('#home-inquiry-form');
+    const firstName = form.querySelector('[name="first_name"]');
+    const lastName = form.querySelector('[name="last_name"]');
+    const phoneVisible = form.querySelector('[data-phone-visible]');
+    const email = form.querySelector('[name="email"]');
+    const message = form.querySelector('[name="message"]');
+    const feedback = doc.getElementById('inquiry-feedback');
+
+    firstName.value = 'Jane';
+    lastName.value = 'Doe';
+    phoneVisible.value = '+905051112233';
+    phoneVisible.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    message.value = 'Valid question text.';
+
+    const invalidEmails = [
+        'a@b.co?cc=x@y.z&body=hello',
+        'a?b@example.edu',
+        'a&b@example.edu',
+        'a#b@example.edu',
+        'a%20b@example.edu',
+        'a,b@example.edu',
+        'a@b@example.edu'
+    ];
+
+    for (const candidate of invalidEmails) {
+        email.value = candidate;
+        form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+        assert.equal(calls.length, 0, `Expected fetch not called for ${candidate}`);
+        assert.equal(feedback.hidden, false);
+        assert.equal(feedback.dataset.feedbackType, 'error');
+        assert.equal(feedback.textContent.trim(), INQUIRY_MESSAGES.en.inquiryEmailInvalid);
+        assert.equal(doc.activeElement, email);
+    }
+
+    email.value = 'ayse+test@example.edu';
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
+    assert.equal(calls.length, 1);
+    assert.equal(JSON.parse(calls[0].options.body).email, 'ayse+test@example.edu');
+    assert.equal(feedback.dataset.feedbackType, 'success');
+});
