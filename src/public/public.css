@@ -1603,7 +1603,7 @@ button.home-cta { font-family: inherit; font-size: 1.02rem; font-weight: 700; li
 
 /* Ana sayfa "Sorunuz mu var?" iletişim formu */
 .inquiry-section {
-    margin-block-end: 1rem;
+    margin-block-start: 1rem;
 }
 
 .inquiry-form {

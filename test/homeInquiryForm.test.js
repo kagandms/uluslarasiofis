@@ -50,12 +50,21 @@ test('home markup has the CTA in nav.home-actions and #questions section after t
         assert.equal(cta.classList.contains('home-cta'), true);
         assert.equal(cta.classList.contains('home-cta-secondary'), true);
 
+        const main = doc.querySelector('main.public-main');
+        const footer = doc.querySelector('footer.public-footer');
         const hero = doc.querySelector('.public-hero');
         const questions = doc.getElementById('questions');
+        assert.ok(main);
+        assert.ok(footer);
         assert.ok(hero);
         assert.ok(questions);
         assert.equal(questions.tagName, 'SECTION');
+        assert.equal(main.contains(questions), true);
+        assert.equal(main.lastElementChild, questions);
+        const publicSections = [...main.querySelectorAll('.public-section')];
+        assert.equal(publicSections.at(-1), questions);
         assert.equal(Boolean(hero.compareDocumentPosition(questions) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING), true);
+        assert.equal(Boolean(questions.compareDocumentPosition(footer) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING), true);
     } finally {
         dom.window.close();
     }
