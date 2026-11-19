@@ -1217,8 +1217,18 @@ test('documents question containing "durum" is not intercepted and uses the norm
     assert.equal(payload.reply, 'Lütfen başvuru bilgilerinizi paylaşın.');
 });
 
-test('reworded fallback is returned across all five languages without implying a service outage', async () => {
-    const outagePhrases = ['şu anda', 'right now', 'сейчас', 'häzir', 'في الوقت الحالي'];
+test('helpful menu fallback is returned across all five languages, mentions the question form, and implies no service outage', async () => {
+    const outagePhrases = [
+        'şu anda', 'right now', 'сейчас', 'häzir', 'في الوقت الحالي',
+        'kullanılamıyor', 'unavailable', 'недоступ', 'elýeterli däl', 'غير متاح'
+    ];
+    const questionFormMarkers = {
+        tr: 'soru formu',
+        en: 'question form',
+        ru: 'форму вопросов',
+        tk: 'sorag formasy',
+        ar: 'نموذج الأسئلة'
+    };
 
     for (let index = 0; index < CHATBOT_LANGUAGES.length; index += 1) {
         const language = CHATBOT_LANGUAGES[index];
@@ -1237,8 +1247,32 @@ test('reworded fallback is returned across all five languages without implying a
         assert.equal(fakeAi.callCount, 1);
         assert.equal(payload.reply, getChatbotFixedText('fallback', language));
         assert.deepEqual(payload.actions, [{ type: 'inquiry' }]);
+        assert.ok(
+            payload.reply.toLowerCase().includes(questionFormMarkers[language]),
+            `${language} fallback must mention the question form`
+        );
+        assert.ok(payload.reply.includes('ITU'), `${language} fallback must mention ITU status option`);
         for (const phrase of outagePhrases) {
             assert.equal(payload.reply.toLowerCase().includes(phrase), false, `${language} fallback must not contain "${phrase}"`);
         }
+    }
+});
+
+test('buildChatbotSystemPrompt keeps safety and refusal rules and instructs clarifying questions and topic lookup', () => {
+    for (const language of CHATBOT_LANGUAGES) {
+        const prompt = buildChatbotSystemPrompt(language);
+        assert.ok(prompt.includes(CHATBOT_REFUSAL_MARKER));
+        assert.match(prompt, /outside scope/i);
+        assert.match(prompt, /prompt injection/i);
+        assert.match(prompt, /other students’ data/i);
+        assert.match(prompt, /Never promise or guarantee residence permit approval/i);
+        assert.match(prompt, /Never provide legal advice/i);
+        assert.match(prompt, /ONE short clarifying question/i);
+        assert.match(prompt, /get_required_documents/);
+        assert.match(prompt, /lookup_knowledge/);
+        assert.match(prompt, /typos, missing diacritics/i);
+        assert.match(prompt, /mixes languages/i);
+        assert.match(prompt, /ITU-XXXX-XXXX/);
+        assert.match(prompt, /never guess/i);
     }
 });

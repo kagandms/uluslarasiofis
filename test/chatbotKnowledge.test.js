@@ -8,10 +8,31 @@ import {
     readKnowledge
 } from '../src/server/domain/chatbotKnowledge.js';
 
-test('CHATBOT_TOPICS exposes the fixed five-topic enum and all five portal languages', () => {
+const NEW_TOPICS = [
+    'application_types',
+    'document_format',
+    'document_resubmission',
+    'forgot_reference',
+    'tracking',
+    'address_evidence',
+    'fingerprint',
+    'privacy',
+    'fees_and_appointment'
+];
+
+test('CHATBOT_TOPICS exposes the fixed fourteen-topic enum and all five portal languages', () => {
     assert.deepEqual(CHATBOT_TOPICS, [
         'application_steps',
         'residence_permit_basics',
+        'application_types',
+        'document_format',
+        'document_resubmission',
+        'forgot_reference',
+        'tracking',
+        'address_evidence',
+        'fingerprint',
+        'privacy',
+        'fees_and_appointment',
         'office_hours',
         'student_card',
         'contact'
@@ -25,6 +46,10 @@ test('readKnowledge returns non-empty curated text and sources for every topic i
             const entry = readKnowledge(topic, language);
             assert.equal(typeof entry.text, 'string', `${topic}/${language} must return string text`);
             assert.ok(entry.text.trim().length > 20, `${topic}/${language} text must not be empty`);
+            assert.ok([...entry.text].length <= 1200, `${topic}/${language} must fit within 1200 chars`);
+            if (NEW_TOPICS.includes(topic)) {
+                assert.ok([...entry.text].length <= 700, `${topic}/${language} new topic must stay within 700 chars`);
+            }
             assert.ok(Array.isArray(entry.sources) && entry.sources.length > 0, `${topic}/${language} must cite sources`);
             for (const source of entry.sources) {
                 assert.equal(typeof source, 'string');
@@ -84,7 +109,39 @@ test('every remaining draft topic entry in chatbotKnowledge.js carries the offic
         'Expected every remaining draft topic and language entry to carry // DRAFT: needs office approval'
     );
 
+    for (const topic of draftTopics) {
+        const blockMatch = source.match(new RegExp(`    ${topic}: Object\\.freeze\\(\\{[\\s\\S]*?\\n    \\}\\)`));
+        assert.ok(blockMatch, `Expected to locate ${topic} block in chatbotKnowledge.js`);
+        const blockDraftCount = blockMatch[0].match(/\/\/ DRAFT: needs office approval/g)?.length || 0;
+        assert.ok(
+            blockDraftCount >= CHATBOT_LANGUAGES.length,
+            `${topic} must carry // DRAFT: needs office approval for every language`
+        );
+    }
+
     const officeHoursBlock = source.match(/office_hours:\s*Object\.freeze\(\{[\s\S]*?\n\s*\}\),/)?.[0] || '';
     assert.ok(officeHoursBlock.length > 0, 'Expected to locate office_hours block in chatbotKnowledge.js');
     assert.equal(officeHoursBlock.includes('DRAFT: needs office approval'), false);
+});
+
+test('knowledge texts contain no phone numbers, e-mail addresses other than KVKK address, currency amounts, or dates', () => {
+    const kvkkEmail = 'kisiselverilerim@topkapi.edu.tr';
+    const phonePattern = /(\+90|0\s*5\d{2}|\d{3}[-\s]\d{3,4})/;
+    const emailPattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+    const currencyPattern = /(\d[\d.,]*\s*(?:TL|TRY|USD|EUR|Lira)|[₺$€]\s*\d|\d\s*[₺$€])/i;
+    const datePattern = /(\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b|\b20\d{2}\b)/;
+
+    for (const topic of CHATBOT_TOPICS) {
+        for (const language of CHATBOT_LANGUAGES) {
+            const { text } = readKnowledge(topic, language);
+            assert.equal(phonePattern.test(text), false, `${topic}/${language} must not contain phone numbers`);
+            assert.equal(currencyPattern.test(text), false, `${topic}/${language} must not contain currency amounts`);
+            assert.equal(datePattern.test(text), false, `${topic}/${language} must not contain calendar dates`);
+
+            const emails = text.match(emailPattern) || [];
+            for (const email of emails) {
+                assert.equal(email, kvkkEmail, `${topic}/${language} must only use the KVKK address, found ${email}`);
+            }
+        }
+    }
 });
