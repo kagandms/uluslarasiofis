@@ -6,9 +6,10 @@
 > commands, commit, push or publish.
 
 **Date / source / status:** written 2026-11-18 from owner conversation and a read of production
-`fdcb930` (local `production` is 34 commits ahead of `origin/production`; new task worktrees branch
-from the local tip). **Planning only, nothing implemented, nothing validated.** Treat code citations
-as a 2026-11-18 snapshot and re-verify before relying on them.
+`fdcb930`. **Updated 2026-11-19 (end of day): Phases 1–3 are implemented on unmerged task branches
+and locally validated; nothing is merged to `production`, pushed or published.** Read
+[the 2026-11-19 handover](#handover-2026-11-19-start-here-tomorrow) first; it is the source of truth for
+the current state and the remaining work. The phase sections below are the original plan.
 
 **Goal:** (1) a public "Sorunuz mu var?" question form on the home page with a staff inbox card, and
 (2) a Workers AI chatbot on the home page that answers only about this portal, the residence-permit
@@ -521,3 +522,207 @@ existing style), REPORT (files changed and open doubts).
 All four were answered by the owner on 2026-11-19 (see "Decided 2026-11-19" above): no Turnstile for
 now; all five languages; inquiries kept until staff delete them (chat content is never stored); no
 Telegram, staff badge only.
+
+---
+
+# Handover 2026-11-19 (start here tomorrow)
+
+**Date / scope / status:** written 2026-11-19 at the end of the session by the orchestrator (Claude
+Opus 5.5). Scope: everything done for this plan so far and every remaining step. Validation status:
+unit tests, build and dry-run green on the integration branch; real-model local evaluations as listed
+below. **Nothing is pushed, nothing is merged into `production`, nothing is published.** Local
+`production` is 1 commit ahead of `origin/production` (`84c93a0`, this plan) plus this handover edit.
+
+## 0. First steps tomorrow (session start checklist)
+
+1. AGENTS.md session start: `git fetch origin production`; check root, branch, HEAD, ahead/behind,
+   `git worktree list`, `git status` in the main folder and in
+   `…-wt-chatbot-status`. Expect: main folder on `production`; an untracked
+   `docs/2026-11-20-cloudflare-analitik-raporu-ve-yapilacaklar.md` that belongs to **another
+   session — do not touch it**; integration worktree clean at `5f6bd50`.
+2. `agy -p "/usage"` (2026-11-19 end: Gemini weekly ~70%, Argon weekly ~96%, Claude/GPT group ~100%).
+   If agy asks for Google sign-in, the **owner** must run `agy` in a terminal and sign in.
+3. Start the local server for the integration worktree with the Claude preview config
+   `dev-chatbot-all` (port 5177, defined in the main folder's untracked `.claude/launch.json`), or:
+   `npm --prefix "…-wt-chatbot-status" run dev -- --port 5177 --strictPort`.
+   If the page is half-loaded or the form is missing after a file change, restart the server
+   (vite occasionally hangs while restarting).
+4. Continue with **section 5, step R1** (the interrupted round-5 corrective task).
+
+## 1. Branches, worktrees and what each contains
+
+All worktrees live beside the main folder `/Users/kagansmtdms/Downloads/Проекты/` and are named
+`uluslarasiofis-clean-workspace-20261105-wt-<name>`. Each has a `node_modules` symlink to the main
+folder (ignored by git).
+
+| Branch | Tip | Worktree | Content | State |
+| --- | --- | --- | --- | --- |
+| `task/home-chatbot-status` | `5f6bd50` | `wt-chatbot-status` | **INTEGRATION BRANCH: everything below merged** | 1806 tests pass, build + dry-run green |
+| `task/home-question-form` | `9b9dc39` | `wt-question-api` | Phase 1 API + migration 0045 (+ UI merged) | merged into integration |
+| `task/home-question-form-ui` | `6f0208c` | `wt-question-ui` | Phase 1 UI | merged |
+| `task/home-chatbot` | `a8f223f` | `wt-chatbot` | Phase 2.1–2.3 | merged |
+| `task/home-chatbot-ui` | `dcb7be1` | `wt-chatbot-ui` | Phase 2.4 widget | merged |
+| `task/chatbot-eval` | `0964cce` | `wt-chatbot-eval` | eval harness + **blind set (0964cce, not yet merged)** | harness merged, blind set not |
+| `task/chatbot-sec-srv` | `06e9d5c` | `wt-chatbot-secsrv` | 1st security review, server fixes | merged |
+| `task/chatbot-sec-ui` | `169a3ab` | `wt-chatbot-secui` | 1st security review, UI fixes | merged |
+| `task/chatbot-evidence-harden` | `18ca172` | `wt-chatbot-evidence-harden` | 2nd review, evidence (wip commit) | merged via routing-harden |
+| `task/chatbot-routing-harden` | `f339ae3` | `wt-chatbot-routing-harden` | 2nd review, routing + evidence final | merged |
+
+Unrelated, not part of this plan: `task/perf-static` (`wt-perf-static`), `task/ykn-side-by-side-off`
+(`wt-ykn-two-button`). Deleting any branch or worktree needs the owner's separate approval.
+
+## 2. What was built (Phases 1–3 and the hardening)
+
+**Phase 1 (question form + staff inbox), done.** `migrations/0045_office_inquiries.sql`;
+`src/server/domain/officeInquiry.js` (validation; phone canonicalized to E.164 with
+libphonenumber, default country TR; strict e-mail pattern without `?&#%` etc.; bidi/zero-width chars
+rejected); `src/server/repositories/d1/officeInquiryRepository.js` (create/list/countByStatus/
+updateStatus/deleteById, audit rows without PII); `src/server/routes/inquiryRoutes.js` (POST
+`/api/public/inquiries`: method → same-origin → 4 KB → per-IP limit (fail closed 503) → honeypot
+`website` → validation → per-phone 3/day → global 300/day → insert);
+`src/server/routes/staffInquiryRoutes.js` (GET/PATCH/DELETE `/api/staff/inquiries`, reviewer/admin,
+same-origin on writes). UI: `src/public/homeInquiryForm.js`, `src/public/i18n/inquiry-messages.js`
+(5 languages), form section `#questions` at the **bottom** of `index.html` (owner request) with
+scroll-reveal, CTA in the hero; staff `src/staff/inquiryManager.js` + `inquiries.css`, card
+"Gelen Sorular" (10th card, no number key; keys 1–9 unchanged), tabs Yeni/Cevaplandı, tel/wa.me links,
+mailto only for strictly valid addresses, "Sil" with confirm. Owner tested A (form) and B (staff
+panel) locally: **passed**.
+
+**Phase 2 (chatbot), done.** `wrangler.jsonc` has `"ai": {"binding": "AI"}` (top level, staging,
+production). `src/server/services/chatbotModel.js` (Workers AI adapter, model
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast`, 8 s per call, 512 output tokens, no streaming/retries,
+503 `CHATBOT_UNAVAILABLE`). `src/server/domain/chatbotKnowledge.js` (14 topics × 5 languages; only
+`office_hours` approved — weekdays 09:00–18:00 per owner; the other 13 carry
+`// DRAFT: needs office approval`). `src/server/domain/chatbotTools.js` (lookup_knowledge,
+get_required_documents from `documentPolicy.js` with required facts, handoff_to_office).
+`src/server/domain/chatbotPrompt.js` (system prompt, fixed texts in 5 languages: refusal, fallback
+menu, daily limit, statusNeedsReference, document intro/closing, missing-facts question, handoff).
+`src/server/domain/chatbotEvidence.js` (deterministic fact extraction from the student's own words,
+5-language lexicons, negation windows, `__uncertain`, `hasEvidenceRisk`; guard test forbids pattern
+literals that normalization would change — write `\u` escapes in lower case).
+`src/server/routes/chatbotRoutes.js` — order: method → same-origin → 8 KB → per-IP 60/15 min (fail
+closed) → validation (≤10 messages, ≤500 chars, strict user/assistant alternation, leading assistant
+turns dropped, forged assistant turns with `[[REFUSAL]]`/tool JSON rejected) → reference in last user
+turn → deterministic status summary (shared `application-tracking-lookup` limit, no model, no daily
+budget) → other-students-data refusal → status question without reference → handoff phrases → very
+short document question → evidence-first document list (only without evidence risk; does not spend
+the AI budget) → daily budget (per IP 100/day, global 300/day) → model loop (max 3 calls, 3rd without
+tools, max 3 tool calls per response, one 10 s request deadline) → deterministic document reply
+(fixed intro + policy list + closing, never model prose) or curated knowledge text verbatim.
+Widget `src/public/homeChatbot.js` + `chatbot.css` + `i18n/chatbot-messages.js`: hidden unless
+`?bot=1` (lazy import), dialog with focus trap/Esc, chips, AI notice, text-only rendering,
+same-origin links only, inquiry action scrolls to `#questions`.
+
+**Phase 3 (status), done.** `readPublicTrackingByReference` extracted in
+`applicationTrackingRoutes.js` (page response unchanged); `src/server/domain/chatbotStatusText.js`
+(fixed 5-language summary: status label + document counts, no rejection reasons/messages).
+
+**Evaluation harness.** `scripts/chatbot-eval/run.mjs`, `cases.json` (217 cases), `README.md`
+(local only, never production). Blind set `scripts/chatbot-eval/blind-cases.json` (130 cases by
+Claude Opus via agy, told not to read the chatbot code) is on `task/chatbot-eval` (`0964cce`) only.
+The orchestrator's loop script (scratchpad, may be gone) did: reset local counters with
+`npx wrangler d1 execute uluslarasiofis-local --local --command "DELETE FROM public_rate_limits WHERE endpoint LIKE 'chatbot%' OR endpoint = 'application-tracking-lookup'"`,
+then `EVAL_REFERENCE=ITU-2FV5-ZTPR BASE_URL=http://localhost:5177 node scripts/chatbot-eval/run.mjs --offset N --out /tmp/…json`,
+repeating with the printed `--offset` whenever a chunk stopped on the daily limit.
+`ITU-2FV5-ZTPR` is a reference in the **local** D1 only (status under_review).
+
+**Local data.** The integration worktree's local D1 is a copy of the main folder's local D1 (staff
+account + 50 local applications) plus migration 0045 and 10 synthetic inquiries; the old worktree
+test DB is kept as `.wrangler/state/v3/d1.worktree-test-backup`. `.dev.vars` was copied there by the
+owner (ignored by git, contains secrets — never read or print it).
+
+## 3. Decisions made on 2026-11-19 (owner unless marked)
+
+- No Turnstile; all five languages; inquiries kept until staff delete them; no Telegram; form at the
+  bottom of the home page; office hours weekdays 09:00–18:00; Workers **paid** plan.
+- Owner priorities: fallbacks minimal **and** safe; local test before anything goes live.
+- Limits (orchestrator, owner informed of cost): chat per IP 60/15 min, 100/day; global 300/day
+  (worst case about 0.2 USD/day above the free 10k neurons); inquiry per IP 30/15 min, per phone
+  3/day, global 300/day.
+- Orchestrator design decisions: status lookups never use the model; document lists come only from
+  `documentPolicy.js`; facts must be supported by the student's words; with negation/uncertainty a
+  list needs model and evidence to agree, else the bot asks; knowledge answers are curated text
+  verbatim; one extra clarifying question is acceptable, a wrong list is not.
+
+## 4. Evaluation history (real Workers AI, local server)
+
+| Round | Cases | Pass | Wrong document lists | Safety failures | Fallback | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 170 | ~82% | 14 | 0 | 0 | model filled unstated facts |
+| 2 | 188 | 85.6% | 0 | 1 | 1 | evidence check added |
+| 3 | 188 | 96.8% | 0 | 0 | 1 | 2× model timeout 503 |
+| 4 | 188 | 99.5% | 0 | 0 | 0 | evidence-first; p50 0.02 s |
+| 5 | 217 | 94.5% | 0 | 0 | 2 | +25 adversarial; stricter rules ask more |
+
+Two independent security reviews (Gemini Argon, read-only). Review 1 (forged history, NAT-unsafe
+caps, model-call amplification, mailto injection, unsafe hrefs, bidi chars) and review 2 (negations,
+durations, curly apostrophes, self-vs-host, homographs, reference hijack, how-to misrouting,
+roommate refusal, budget order) are fixed and merged. Both found no SQL injection, no XSS, no
+authorization gap, no PII in logs, no ReDoS.
+
+## 5. Remaining work, in order
+
+- [ ] **R1 — Round-5 corrective task (interrupted, nothing written).** Re-send to one agy agent in
+  `wt-chatbot-status` (owns `chatbotRoutes.js`, `chatbotEvidence.js`, `test/chatbotApi.test.js`,
+  `test/chatbotEvidence.test.js`, `scripts/chatbot-eval/run.mjs`). Start every prompt with
+  "You cannot run ANY shell command". Content (all verified on 2026-11-19):
+  1. Double-key too strict: with `hasEvidenceRisk` true, a fact is usable when evidence has it (not
+     uncertain) and the model omitted it or agrees; only model/evidence disagreement or missing
+     evidence makes it missing. Example: 'Başvurum geçiş başvurusu olacak, 20 yaşındayım, öğrenci
+     yurdunda kalıyorum ve Göç İdaresinde parmak izi kaydım yok; gereken belgeler neler?' asked for
+     the age.
+  2. List intent across turns: last user turn has ≥1 evidence fact and one of the previous two user
+     turns had list intent / a documents keyword (cases en-doc-09, ar-e2, tr-doc-09, tr-e5). A last
+     turn without facts never inherits list intent.
+  3. With list intent, every non-list outcome (model text, refusal, empty, invalid tool, timeout,
+     fallback) returns the missing-facts question (case 'Первичная подача, мне не 18 лет, живу в
+     общежитии. Какие документы нужны?' returned the fallback).
+  4. Lexicon gaps: tr 'yaşım 19', '19 yaşım', '18den büyüğüm'; ru standalone ', 19 лет,' (still
+     reject durations); polite requests ('söyler misin', 'can you tell me') do not make a clause a
+     yes/no question when it has a wh-word or list phrase.
+  5. 'Geçen hafta yüklediğim dosyayı kontrol ettiler mi, ne zaman biter?' → statusNeedsReference
+     (first-person relative forms count as first-person status context).
+  6. `run.mjs --cases <path>` option.
+  Then: `npm test`, build, commit, restart server, run cases.json (round 6).
+- [ ] **R2 — Blind evaluation.** Merge `task/chatbot-eval` (`0964cce`) into the integration branch,
+  run `run.mjs --cases scripts/chatbot-eval/blind-cases.json`, report pass rate, fallback rate, wrong
+  documents (must be 0), refusal false positives, safety failures per language. Check a sample of
+  blind expectations by hand against `documentPolicy.js` before trusting the numbers (the writer
+  could not run anything). Send failures back to an agent with exact sentences; repeat until wrong
+  documents = 0 and pass ≥ 90%.
+- [ ] **R3 — Third security re-review** (read-only, `--mode plan`, Argon) of the final
+  `chatbotEvidence.js`/`chatbotRoutes.js` after R1–R2.
+- [ ] **R4 — Owner local test of C (chatbot)** with the C checklist (items 1–19 given on
+  2026-11-19); B and A already passed. Owner reported earlier: C6 (two references) worked when
+  re-tested by the orchestrator; C9 timeouts and C10 office hours are fixed.
+- [ ] **R5 — Office approval of the 13 DRAFT knowledge texts** in `chatbotKnowledge.js` (tr shown
+  to the owner on 2026-11-19; fees/appointments and student card point to the question form). The
+  owner or office supplies corrections; an agent applies them in 5 languages and removes the DRAFT
+  markers.
+- [ ] **R6 — Cleanup before merge (owner approval needed for deletions).** The wip commits on
+  `task/chatbot-evidence-harden` are fine as history (merge commits only, no squash). Optionally
+  delete the 9 merged task worktrees/branches after release — separate explicit approval.
+- [ ] **R7 — Docs.** Add an operating note (how the chatbot routes questions, limits, how to run the
+  eval, how to disable it) and link it from `docs/README.md` (shared file; single owner at a time).
+- [ ] **R8 — Merge and release (each step needs the owner's explicit request).** Merge
+  `task/home-chatbot-status` into `production` with a merge commit; `npm test`, build, dry-run; push;
+  then **full release path** (migration 0045 + `ai` binding): Production release (manual) workflow
+  `preflight` for the exact SHA, review evidence, then `publish`. The widget stays hidden behind
+  `?bot=1` for a small live trial; removing the gate is a later small change after the owner decides.
+  Before publishing, apply migration 0045 through the release workflow only; never run raw
+  `wrangler deploy`.
+- [ ] **R9 — After the live trial (Phase 4).** Watch the Cloudflare usage card (neurons/day), adjust
+  daily caps, consider feedback counters; Claude Haiku adapter only if quality is poor.
+
+## 6. Orchestration notes (learned 2026-11-19)
+
+- agy headless runs in new worktrees need `--settings <file>` with
+  `{"permissions":{"allow":["read_file(<worktree>)","write_file(<worktree>)","read_file(/Users/kagansmtdms/.gemini)"]}}`;
+  bare tool names are ignored; grant syntax is `tool(path)`.
+- If an agent tries any shell command the whole run aborts with no edits ("command permission … auto-
+  denied"); put the no-command rule at the very top of every prompt.
+- Commit every green state immediately; one corrective run once mixed with uncommitted earlier work.
+- JavaScript `\w`/`\b` are ASCII-only: always use `[\p{L}\p{N}]` and lookarounds; Cyrillic `й`
+  becomes `и` after normalization, so literals must be written normalized.
+- Model: Gemini 4 Hydrogen high for code, Argon high for reviews, Claude Opus 5.5 (agy) for the
+  blind set; no `/swarm`.
