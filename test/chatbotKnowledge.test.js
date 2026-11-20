@@ -237,6 +237,40 @@ test('fingerprint topic directs students without fingerprint registration to the
     }
 });
 
+test('student_card topic states it is not handled by the International Student Office, directs to Bilgi İşlem Daire Başkanlığı, and does not recommend the question form across all five languages', () => {
+    const officeNotHandledMarkers = {
+        tr: 'Uluslararası Öğrenci Ofisi tarafından yapılmaz',
+        en: 'not handled by the International Student Office',
+        ru: 'не выполняются Международным студенческим офисом',
+        tk: 'Halkara talyplar ofisi tarapyndan ýerine ýetirilmeýär',
+        ar: 'لا تتم إجراءات بطاقة الطالب الجامعية (الطباعة، الفقدان، التجديد) من قِبل مكتب الطلاب الدوليين'
+    };
+    const questionFormPatterns = {
+        tr: /soru formu/i,
+        en: /question form/i,
+        ru: /(?<![\p{L}\p{N}])форм[аеуы]/iu,
+        tk: /sorag formas/i,
+        ar: /نموذج الأسئلة/
+    };
+
+    for (const language of CHATBOT_LANGUAGES) {
+        const { text } = readKnowledge('student_card', language);
+        assert.ok(
+            text.includes('Bilgi İşlem Daire Başkanlığı'),
+            `${language} student_card topic must direct to Bilgi İşlem Daire Başkanlığı`
+        );
+        assert.ok(
+            text.includes(officeNotHandledMarkers[language]),
+            `${language} student_card topic must state it is not handled by the International Student Office`
+        );
+        assert.equal(
+            questionFormPatterns[language].test(text),
+            false,
+            `${language} student_card topic must not recommend the question form`
+        );
+    }
+});
+
 test('application_types states no required documents and contains no catalog document titles in any language', () => {
     const legacyDocumentKeys = [
         'documentVisa',

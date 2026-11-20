@@ -266,15 +266,15 @@ const KNOWLEDGE_ENTRIES = Object.freeze({
         // DRAFT: needs office approval
         text: Object.freeze({
             // DRAFT: needs office approval
-            tr: 'Bu portal yalnızca öğrenci ikamet izni belgelerinin iletilmesi ve başvuru takibi içindir; üniversite öğrenci kimlik kartı işlemleri bu portalda yer almamaktadır. Öğrenci kartınızla ilgili bilgi ve yönlendirme için ana sayfadaki soru formundan Uluslararası Öğrenci Ofisine ulaşabilirsiniz.',
+            tr: 'Üniversite öğrenci kimlik kartı işlemleri (basım, kayıp, yenileme) Uluslararası Öğrenci Ofisi tarafından yapılmaz; bu konuda üniversitenin Bilgi İşlem Daire Başkanlığına başvurmanız gerekir. Bu portal yalnızca öğrenci ikamet izni belgelerinin iletilmesi ve başvuru takibi içindir.',
             // DRAFT: needs office approval
-            en: 'This portal only handles student residence permit document submissions and tracking; university student ID card procedures are not listed here. Please use the question form on the home page to ask the International Student Office for guidance on your student card.',
+            en: 'University student ID card procedures (printing, loss, renewal) are not handled by the International Student Office; for this matter, you need to apply to the university’s IT Department (Bilgi İşlem Daire Başkanlığı). This portal is only for submitting student residence permit documents and tracking applications.',
             // DRAFT: needs office approval
-            ru: 'Этот портал предназначен только для подачи и отслеживания документов на студенческий ВНЖ; порядок оформления студенческого билета университета здесь не указан. Чтобы получить разъяснение или направление по студенческой карте, задайте вопрос через форму на главной странице.',
+            ru: 'Операции с университетской студенческой картой (печать, утеря, перевыпуск) не выполняются Международным студенческим офисом; по этому вопросу вам необходимо обратиться в Управление информационных технологий университета (Bilgi İşlem Daire Başkanlığı). Этот портал предназначен только для передачи документов на студенческий ВНЖ и отслеживания заявок.',
             // DRAFT: needs office approval
-            tk: 'Bu portal diňe talyp ýaşaýyş rugsady resminamalaryny tabşyrmak we yzarlamak üçindir; uniwersitet talyp şahadatnama kartynyň işleri bu ýerde görkezilmeýär. Talyp kartyňyz barada maglumat we ugrukdyrma almak üçin baş sahypadaky sorag formasyndan peýdalanyň.',
+            tk: 'Uniwersitet talyp şahadatnama kartynyň işleri (çap etmek, ýitirmek, täzelemek) Halkara talyplar ofisi tarapyndan ýerine ýetirilmeýär; bu meselede uniwersitetiň Maglumat tehnologiýalary müdirligine (Bilgi İşlem Daire Başkanlığı) ýüz tutmagyňyz gerek. Bu portal diňe talyp ýaşaýyş rugsady resminamalaryny ibermek we arzany yzarlamak üçindir.',
             // DRAFT: needs office approval
-            ar: 'هذه البوابة مخصصة فقط لتقديم مستندات تصريح إقامة الطالب ومتابعة الطلب، ولا تتضمن إجراءات بطاقة الطالب الجامعية. للحصول على توجيه بشأن بطاقة الطالب، يرجى استخدام نموذج الأسئلة في الصفحة الرئيسية للتواصل مع مكتب الطلاب الدوليين.'
+            ar: 'لا تتم إجراءات بطاقة الطالب الجامعية (الطباعة، الفقدان، التجديد) من قِبل مكتب الطلاب الدوليين؛ ويجب مراجعة إدارة تقنية المعلومات بالجامعة (Bilgi İşlem Daire Başkanlığı) بهذا الخصوص. هذه البوابة مخصصة فقط لإرسال مستندات تصريح إقامة الطالب ومتابعة الطلب.'
         })
     }),
     contact: Object.freeze({
