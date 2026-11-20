@@ -890,6 +890,34 @@ function outcomeForError(error) {
     return 'error';
 }
 
+function isUntrustedUserTurn(messageContent) {
+    return (
+        isOtherStudentsDataRequest(messageContent)
+        || hasPromptOverrideMarker(messageContent)
+        || isOtherPersonApplicationStatusRequest(messageContent)
+    );
+}
+
+function stripUntrustedHistoryTurns(messages) {
+    if (!Array.isArray(messages) || messages.length <= 1) {
+        return Array.isArray(messages) ? [...messages] : [];
+    }
+    const sanitized = [];
+    const lastIndex = messages.length - 1;
+    for (let index = 0; index < lastIndex; index += 1) {
+        const message = messages[index];
+        if (message.role === 'user' && isUntrustedUserTurn(message.content)) {
+            if (index + 1 < lastIndex && messages[index + 1].role === 'assistant') {
+                index += 1;
+            }
+            continue;
+        }
+        sanitized.push(message);
+    }
+    sanitized.push(messages[lastIndex]);
+    return sanitized;
+}
+
 /**
  * Durumsuz ana sayfa sohbet uç noktası (`POST /api/public/chat`).
  * Kontrol sırası: yöntem -> aynı köken -> 8 KB boyut sınırı -> hız sınırları -> doğrulama -> başvuru numarasıyla durum sorgusu -> deterministik belge/eksik bilgi yanıtı -> günlük bütçe -> model/araç döngüsü.
@@ -914,14 +942,15 @@ export async function handlePublicChat(request, environment, requestId) {
         await runFailClosedRateLimit(() => enforceRateLimit(repositories, request, CHATBOT_RATE_LIMIT));
 
         const validated = validateChatInput(body);
-        const lastUserMessage = validated.messages[validated.messages.length - 1].content;
-        const previousAssistantMessage = validated.messages.length >= 2
-            ? validated.messages[validated.messages.length - 2]
+        const sanitizedMessages = stripUntrustedHistoryTurns(validated.messages);
+        const lastUserMessage = sanitizedMessages[sanitizedMessages.length - 1].content;
+        const previousAssistantMessage = sanitizedMessages.length >= 2
+            ? sanitizedMessages[sanitizedMessages.length - 2]
             : null;
-        const userTurns = validated.messages
+        const userTurns = sanitizedMessages
             .filter((message) => message.role === 'user')
             .map((message) => message.content);
-        const referencedApplications = extractScopedUserReferences(validated.messages, lastUserMessage);
+        const referencedApplications = extractScopedUserReferences(sanitizedMessages, lastUserMessage);
         if (referencedApplications.length > 1) {
             outcome = 'status_multiple_references';
             return routeResult({
@@ -941,14 +970,14 @@ export async function handlePublicChat(request, environment, requestId) {
                     : [{ type: 'inquiry' }]
             });
         }
-        if (userTurns.some((turn) => isOtherStudentsDataRequest(turn) || hasPromptOverrideMarker(turn))) {
+        if (isOtherStudentsDataRequest(lastUserMessage) || hasPromptOverrideMarker(lastUserMessage)) {
             outcome = 'refusal';
             return routeResult({
                 reply: getChatbotFixedText('refusal', validated.language),
                 actions: [{ type: 'inquiry' }]
             });
         }
-        if (userTurns.some((turn) => isOtherPersonApplicationStatusRequest(turn))) {
+        if (isOtherPersonApplicationStatusRequest(lastUserMessage)) {
             outcome = 'refusal';
             return routeResult({
                 reply: `${getChatbotFixedText('refusal', validated.language)} ${getChatbotFixedText('otherPersonStatusNote', validated.language)}`,
@@ -1058,7 +1087,7 @@ export async function handlePublicChat(request, environment, requestId) {
             const requestSignal = AbortSignal.timeout(CHATBOT_REQUEST_DEADLINE_MS);
             const conversation = [
                 { role: 'system', content: buildChatbotSystemPrompt(validated.language) },
-                ...validated.messages
+                ...sanitizedMessages
             ];
 
             let finalText = null;
@@ -1243,7 +1272,7 @@ export async function handlePublicChat(request, environment, requestId) {
             }
 
             if (trimmedText === CHATBOT_REFUSAL_MARKER || trimmedText.includes(CHATBOT_REFUSAL_MARKER)) {
-                if (hasDocumentListIntent && !userTurns.some((turn) => hasPromptOverrideMarker(turn))) {
+                if (hasDocumentListIntent && !hasPromptOverrideMarker(lastUserMessage)) {
                     outcome = 'ok';
                     return renderListIntentFallbackReply(
                         supportedFacts,
