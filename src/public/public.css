@@ -969,6 +969,24 @@ html[dir="rtl"] .application-credentials-card { text-align: right; }
     .tracking-owner-access-link { width: 100%; }
 }
 /* Scroll-driven reveal animation system: left, right, yoktan yavaşça yüklenme (fade-grow), bottom */
+/* Clip horizontal overflow on the non-root .public-main wrapper (not body/html, whose
+   overflow propagates to the viewport and still widens the mobile layout viewport).
+   All scroll-reveal items live inside .public-main, while fixed UI (chatbot root and
+   modals) mounts directly on body outside .public-main. The 0.75rem inline padding
+   with compensated width preserves the exact content box (336px at left 12px on 360px)
+   and leaves 12px unclipped on both sides for focus outlines and section box-shadows. */
+body[data-page="home"] .public-main {
+    overflow-x: clip;
+    padding-inline: 0.75rem;
+    width: min(calc(1120px + 1.5rem), calc(100% - 1rem));
+}
+
+@media (max-width: 420px) {
+    body[data-page="home"] .public-main {
+        width: 100%;
+    }
+}
+
 body[data-page="home"] .scroll-reveal-item {
     opacity: 0;
     transform: translate3d(0, 32px, 0);
