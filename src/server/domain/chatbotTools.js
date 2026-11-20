@@ -6,6 +6,15 @@ import { CHATBOT_LANGUAGES, CHATBOT_TOPICS, readKnowledge } from './chatbotKnowl
 
 const TOOL_APPLICATION_TYPES = Object.freeze(['initial', 'renewal', 'transition']);
 const FINGERPRINT_STATUSES = Object.freeze(['registered', 'not_registered']);
+export const DOCUMENT_FACT_KEYS = Object.freeze([
+    'application_type',
+    'is_under_18',
+    'accommodation_type',
+    'host_is_married',
+    'host_is_turkish',
+    'fingerprint_status'
+]);
+export const DOCUMENT_QUOTE_MAX_LENGTH = 160;
 
 function isPlainObject(value) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -43,6 +52,20 @@ function validateEnumField(args, key, allowedValues, defaultValue = null) {
     return value;
 }
 
+export function sanitizeDocumentQuotes(rawQuotes) {
+    if (!isPlainObject(rawQuotes)) return {};
+    const quotes = {};
+    for (const key of DOCUMENT_FACT_KEYS) {
+        if (!Object.hasOwn(rawQuotes, key)) continue;
+        const quote = rawQuotes[key];
+        if (typeof quote !== 'string') continue;
+        const trimmed = quote.trim();
+        if (!trimmed || [...quote].length > DOCUMENT_QUOTE_MAX_LENGTH) continue;
+        quotes[key] = trimmed;
+    }
+    return quotes;
+}
+
 function validateRequiredDocumentsArgs(rawArgs) {
     const args = requirePlainArgs(rawArgs);
     const applicationType = validateEnumField(args, 'application_type', TOOL_APPLICATION_TYPES, null);
@@ -61,7 +84,8 @@ function validateRequiredDocumentsArgs(rawArgs) {
         accommodation_type: validateEnumField(args, 'accommodation_type', ACCOMMODATION_TYPES, null),
         host_is_married: validateEnumField(args, 'host_is_married', DOCUMENT_ANSWER_OPTIONS.host_is_married, null),
         host_is_turkish: validateEnumField(args, 'host_is_turkish', DOCUMENT_ANSWER_OPTIONS.host_is_turkish, null),
-        fingerprint_status: validateEnumField(args, 'fingerprint_status', FINGERPRINT_STATUSES, null)
+        fingerprint_status: validateEnumField(args, 'fingerprint_status', FINGERPRINT_STATUSES, null),
+        quotes: sanitizeDocumentQuotes(args.quotes)
     };
 }
 
@@ -141,38 +165,76 @@ export const CHATBOT_TOOLS = Object.freeze({
     }),
     get_required_documents: Object.freeze({
         name: 'get_required_documents',
-        description: 'Return the exact required residence permit documents from the server document policy for the student’s application type, age group, accommodation type, and host/fingerprint conditions. Only pass facts explicitly stated by the student; if any required fact is missing, the tool returns { missing }.',
+        description: 'Return the exact required residence permit documents from the server document policy for the student’s application type, age group, accommodation type, and host/fingerprint conditions. Only pass a fact the student explicitly stated, always with its verbatim quote in `quotes`; never infer or default; omit unknown facts. If any required fact is missing, the tool returns { missing }.',
         parameters: Object.freeze({
             type: 'object',
             properties: Object.freeze({
                 application_type: Object.freeze({
                     type: 'string',
                     enum: [...TOOL_APPLICATION_TYPES],
-                    description: 'Student residence permit application type, only if stated by the student.'
+                    description: 'Student residence permit application type. Only pass a fact the student explicitly stated, always with its verbatim quote in quotes; never infer or default; omit unknown facts.'
                 }),
                 is_under_18: Object.freeze({
                     type: 'boolean',
-                    description: 'Whether the applicant is under 18 years old on the e-İkamet application date, only if stated by the student.'
+                    description: 'Whether the applicant is under 18 years old on the e-İkamet application date. Only pass a fact the student explicitly stated, always with its verbatim quote in quotes; never infer or default; omit unknown facts.'
                 }),
                 accommodation_type: Object.freeze({
                     type: 'string',
                     enum: [...ACCOMMODATION_TYPES],
-                    description: 'How the student documents their address in Türkiye, only if stated by the student.'
+                    description: 'How the student documents their address in Türkiye. Only pass a fact the student explicitly stated, always with its verbatim quote in quotes; never infer or default; omit unknown facts.'
                 }),
                 host_is_married: Object.freeze({
                     type: 'string',
                     enum: [...DOCUMENT_ANSWER_OPTIONS.host_is_married],
-                    description: 'Only when accommodation_type is undertaking and stated by the student: whether the host is married.'
+                    description: 'Only when accommodation_type is undertaking and explicitly stated by the student: whether the host is married. Always include its verbatim quote in quotes; never infer or default; omit unknown facts.'
                 }),
                 host_is_turkish: Object.freeze({
                     type: 'string',
                     enum: [...DOCUMENT_ANSWER_OPTIONS.host_is_turkish],
-                    description: 'Only when accommodation_type is undertaking and stated by the student: whether the host is a Turkish citizen.'
+                    description: 'Only when accommodation_type is undertaking and explicitly stated by the student: whether the host is a Turkish citizen. Always include its verbatim quote in quotes; never infer or default; omit unknown facts.'
                 }),
                 fingerprint_status: Object.freeze({
                     type: 'string',
                     enum: [...FINGERPRINT_STATUSES],
-                    description: 'Only when application_type is transition and stated by the student: whether the student has a Migration Authority fingerprint registration and code.'
+                    description: 'Only when application_type is transition and explicitly stated by the student: whether the student has a Migration Authority fingerprint registration and code. Always include its verbatim quote in quotes; never infer or default; omit unknown facts.'
+                }),
+                quotes: Object.freeze({
+                    type: 'object',
+                    description: 'Required whenever any fact is passed: object mapping each passed fact name to the EXACT verbatim substring copied from the student’s own messages that states that fact (max 160 chars each). Only pass a fact the student explicitly stated, always with its verbatim quote; never infer or default; omit unknown facts.',
+                    properties: Object.freeze({
+                        application_type: Object.freeze({
+                            type: 'string',
+                            maxLength: DOCUMENT_QUOTE_MAX_LENGTH,
+                            description: 'Exact substring copied verbatim from the student’s own messages that states application_type (max 160 chars).'
+                        }),
+                        is_under_18: Object.freeze({
+                            type: 'string',
+                            maxLength: DOCUMENT_QUOTE_MAX_LENGTH,
+                            description: 'Exact substring copied verbatim from the student’s own messages that states is_under_18 (max 160 chars).'
+                        }),
+                        accommodation_type: Object.freeze({
+                            type: 'string',
+                            maxLength: DOCUMENT_QUOTE_MAX_LENGTH,
+                            description: 'Exact substring copied verbatim from the student’s own messages that states accommodation_type (max 160 chars).'
+                        }),
+                        host_is_married: Object.freeze({
+                            type: 'string',
+                            maxLength: DOCUMENT_QUOTE_MAX_LENGTH,
+                            description: 'Exact substring copied verbatim from the student’s own messages that states host_is_married (max 160 chars).'
+                        }),
+                        host_is_turkish: Object.freeze({
+                            type: 'string',
+                            maxLength: DOCUMENT_QUOTE_MAX_LENGTH,
+                            description: 'Exact substring copied verbatim from the student’s own messages that states host_is_turkish (max 160 chars).'
+                        }),
+                        fingerprint_status: Object.freeze({
+                            type: 'string',
+                            maxLength: DOCUMENT_QUOTE_MAX_LENGTH,
+                            description: 'Exact substring copied verbatim from the student’s own messages that states fingerprint_status (max 160 chars).'
+                        })
+                    }),
+                    required: Object.freeze([]),
+                    additionalProperties: false
                 })
             }),
             required: Object.freeze([]),

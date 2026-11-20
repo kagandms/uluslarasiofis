@@ -6,7 +6,8 @@ import {
     extractSupportedDocumentFacts,
     filterDocumentArgsByEvidence,
     hasEvidenceRisk,
-    normalizeForEvidence
+    normalizeForEvidence,
+    verifyQuotedFact
 } from '../src/server/domain/chatbotEvidence.js';
 import {
     CHATBOT_ROUTE_NORMALIZED_PATTERNS,
@@ -1132,4 +1133,187 @@ test('document-keyword questions with typos or no WH-word preserve facts as stat
     const ruFpQuestion = extractSupportedDocumentFacts(['Мои отпечатки пальцев зарегистрированы?'], 'ru');
     assert.deepEqual(ruFpQuestion, {});
     assert.deepEqual(ruFpQuestion.__uncertain, ['fingerprint_status']);
+});
+
+test('Arabic dialect negation (ما/مش/مو + verb) routes negated facts to __uncertain while keeping ما + noun as WH-question and supporting dialect living verbs', () => {
+    const levantineBlind = extractSupportedDocumentFacts(
+        ['ما بسكن بالسكن الطلابي، أول مرة بقدم، عمري 20'],
+        'ar'
+    );
+    assert.deepEqual(levantineBlind, {
+        application_type: 'initial',
+        is_under_18: false
+    });
+    assert.deepEqual(levantineBlind.__uncertain, ['accommodation_type']);
+    assert.equal(hasEvidenceRisk(['ما بسكن بالسكن الطلابي، أول مرة بقدم، عمري 20'], 'ar'), true);
+
+    const dialectNegatedAccomCases = [
+        'ما بسكن بالسكن الطلابي',
+        'مش ساكن بالسكن الطلابي',
+        'مش ساكنة في السكن الجامعي',
+        'مو عايش بالسكن الطلابي',
+        'ما أسكن في السكن الطلابي',
+        'ما بعيش في فندق',
+        'ما تسكن في السكن الطلابي',
+        'ما يسكن في السكن الطلابي',
+        'ما نسكن في السكن الطلابي'
+    ];
+    for (const text of dialectNegatedAccomCases) {
+        const result = extractSupportedDocumentFacts([text], 'ar');
+        assert.equal(result.accommodation_type, undefined, `Expected no accommodation_type for: ${text}`);
+        assert.ok(result.__uncertain.includes('accommodation_type'), `Expected __uncertain accommodation_type for: ${text}`);
+        assert.equal(hasEvidenceRisk([text], 'ar'), true, `Expected evidence risk for: ${text}`);
+    }
+
+    // 'ما' followed by a noun/question word stays a WH-word and does not trigger negation risk.
+    const whCases = [
+        {
+            text: 'ما هي المستندات المطلوبة لتمديد الإقامة؟ عمري 21 سنة وأقيم في السكن الطلابي',
+            expected: { application_type: 'renewal', is_under_18: false, accommodation_type: 'dormitory' }
+        },
+        {
+            text: 'ما المستندات المطلوبة للطلب الأولي بعقد إيجار؟ عمري 20 سنة',
+            expected: { application_type: 'initial', is_under_18: false, accommodation_type: 'rental_contract' }
+        }
+    ];
+    for (const item of whCases) {
+        const result = extractSupportedDocumentFacts([item.text], 'ar');
+        assert.deepEqual(result, item.expected);
+        assert.deepEqual(result.__uncertain, []);
+        assert.equal(hasEvidenceRisk([item.text], 'ar'), false);
+    }
+
+    // Dialect living verbs ('ساكن/ساكنة/بسكن/عايش') in undertaking and host context.
+    for (const text of [
+        'ساكن مع صديق',
+        'ساكنة عند صديقتي',
+        'بسكن عند قريبي',
+        'عايش مع صديق',
+        'عايشة عند قريبي'
+    ]) {
+        const result = extractSupportedDocumentFacts([text], 'ar');
+        assert.equal(result.accommodation_type, 'undertaking', `Expected undertaking for: ${text}`);
+    }
+});
+
+test('verifyQuotedFact verifies the three blind evaluation examples, substring bounds, negation window, age rules, lexicon veto, and yes/no questions', () => {
+    // 1. Blind example 1 (English with "first residence permit application")
+    const blindEn = ['hi im doing my first residence permit application, im 19 and i live in the uni dorm'];
+    assert.equal(verifyQuotedFact('application_type', 'initial', 'first residence permit application', blindEn, 'en'), true);
+    assert.equal(verifyQuotedFact('is_under_18', false, 'im 19', blindEn, 'en'), true);
+    assert.equal(verifyQuotedFact('accommodation_type', 'dormitory', 'i live in the uni dorm', blindEn, 'en'), true);
+
+    // 2. Blind example 2 (Latin-script Russian)
+    const blindRuLat = ['privet, mne nado prodlit ikamet, mne 22, snimayu kvartiru, dogovor arendy zaverennyi u notariusa est'];
+    assert.equal(verifyQuotedFact('application_type', 'renewal', 'prodlit ikamet', blindRuLat, 'ru'), true);
+    assert.equal(verifyQuotedFact('is_under_18', false, 'mne 22', blindRuLat, 'ru'), true);
+    assert.equal(verifyQuotedFact('accommodation_type', 'rental_contract', 'snimayu kvartiru, dogovor arendy', blindRuLat, 'ru'), true);
+
+    // 3. Blind example 3 (Turkmen)
+    const blindTk = ['ikamet uzaltjak 21 yasym kireyde yasayan notariusda tassyklanan kira sertnamasy bar'];
+    assert.equal(verifyQuotedFact('application_type', 'renewal', 'ikamet uzaltjak', blindTk, 'tk'), true);
+    assert.equal(verifyQuotedFact('is_under_18', false, '21 yasym', blindTk, 'tk'), true);
+    assert.equal(
+        verifyQuotedFact(
+            'accommodation_type',
+            'rental_contract',
+            'kireyde yasayan notariusda tassyklanan kira sertnamasy bar',
+            blindTk,
+            'tk'
+        ),
+        true
+    );
+
+    // Rule a: quote not present in userTurns, too short (<2 chars), or >160 chars -> false
+    assert.equal(verifyQuotedFact('accommodation_type', 'dormitory', 'not in message', blindRuLat, 'ru'), false);
+    assert.equal(verifyQuotedFact('application_type', 'renewal', 'p', blindRuLat, 'ru'), false);
+    assert.equal(verifyQuotedFact('application_type', 'renewal', 'a'.repeat(161), ['a'.repeat(200)], 'en'), false);
+
+    // Rule b: negation window rejects positive-valued facts and allows negative-valued facts
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'dormitory', 'بالسكن الطلابي', ['ما بسكن بالسكن الطلابي، أول مرة بقدم، عمري 20'], 'ar'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'dormitory', 'ما بسكن بالسكن الطلابي', ['ما بسكن بالسكن الطلابي'], 'ar'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('application_type', 'initial', 'first residence permit', ['not my first residence permit'], 'en'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('fingerprint_status', 'registered', 'barmak yzy', ['barmak yzy yok'], 'tk'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('fingerprint_status', 'not_registered', 'ne sdaval otpechatki', ['ya ne sdaval otpechatki'], 'ru'),
+        true
+    );
+    assert.equal(
+        verifyQuotedFact('host_is_married', 'no', 'not married', ['the person i stay with is not married'], 'en'),
+        true
+    );
+    assert.equal(
+        verifyQuotedFact('host_is_turkish', 'no', 'not turkish', ['the person i stay with is not turkish'], 'en'),
+        true
+    );
+    assert.equal(
+        verifyQuotedFact('is_under_18', false, 'no, im 20', ['no, im 20'], 'en'),
+        true
+    );
+
+    // Rule c: is_under_18 requires digit age 1-99 consistent with value or lexicon minor/adult phrase, and rejects duration words
+    assert.equal(
+        verifyQuotedFact('is_under_18', false, 'im a university student', ['im a university student in istanbul'], 'en'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('is_under_18', true, 'im 19', blindEn, 'en'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('is_under_18', false, 'im 16', ['im 16 and in a dorm'], 'en'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('is_under_18', true, 'im 16', ['im 16 and in a dorm'], 'en'),
+        true
+    );
+    assert.equal(
+        verifyQuotedFact('is_under_18', true, 'for 15 years', ['i lived here for 15 years'], 'en'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('is_under_18', true, '15 years', ['i lived here for 15 years'], 'en'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('is_under_18', true, '15 yıldır', ['15 yıldır yurtta kalıyorum'], 'tr'),
+        false
+    );
+
+    // Rule d: lexicon veto when lexicon has a different value or __uncertain
+    assert.equal(
+        verifyQuotedFact('application_type', 'renewal', 'İlk başvuru yapacağım', ['İlk başvuru yapacağım'], 'tr'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'dormitory', 'Yurt', ['Yurt veya kiralık ev için'], 'tr'),
+        false
+    );
+
+    // Rule e: quote inside a yes/no question clause -> false
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'dormitory', 'v obshchezhitii', ['mne 22. v obshchezhitii li?'], 'ru'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'dormitory', 'uni dorm', ['is uni dorm accepted?'], 'en'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('application_type', 'initial', 'ilk basvuru', ['ilk basvuru mu?'], 'tr'),
+        false
+    );
 });

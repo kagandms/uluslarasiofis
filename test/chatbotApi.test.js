@@ -3204,3 +3204,356 @@ test('round 5 fix 5: first-person relative uploaded-file status question returns
     assert.equal(payload.reply, getChatbotFixedText('statusNeedsReference', 'tr'));
     assert.deepEqual(payload.actions, []);
 });
+
+test('quote-grounded extraction: three blind evaluation examples return deterministic document list with verified quotes', async () => {
+    const optionalSuffix = {
+        tr: ' (isteğe bağlı)',
+        en: ' (optional)',
+        ru: ' (необязательно)',
+        tk: ' (hökmany däl)',
+        ar: ' (اختياري)'
+    };
+    const buildExpectedListReply = (language, policyInput) => {
+        const messages = { ...SESSION3_MESSAGES[language], ...PUBLIC_MESSAGES[language] };
+        const list = listApplicationDocumentPolicies(policyInput)
+            .map((policy) => `- ${messages[policy.label_key]}${policy.required === false ? optionalSuffix[language] : ''}`)
+            .join('\n');
+        return `${getChatbotFixedText('documentListIntro', language)}\n\n${list}\n\n${getChatbotFixedText('documentListClosing', language)}`;
+    };
+
+    const blindCases = [
+        {
+            language: 'en',
+            content: 'hi im doing my first residence permit application, im 19 and i live in the uni dorm',
+            toolArgs: {
+                application_type: 'initial',
+                is_under_18: false,
+                accommodation_type: 'dormitory',
+                quotes: {
+                    application_type: 'first residence permit application',
+                    is_under_18: 'im 19',
+                    accommodation_type: 'i live in the uni dorm'
+                }
+            },
+            policyInput: {
+                application_type: 'initial',
+                application_route: 'standard',
+                is_under_18: 0,
+                address_evidence_type: 'dormitory',
+                accommodation_type: 'dormitory',
+                host_is_married: null,
+                host_is_turkish: null,
+                fingerprint_status: null,
+                fingerprint_code: null
+            }
+        },
+        {
+            language: 'ru',
+            content: 'privet, mne nado prodlit ikamet, mne 22, snimayu kvartiru, dogovor arendy zaverennyi u notariusa est',
+            toolArgs: {
+                application_type: 'renewal',
+                is_under_18: false,
+                accommodation_type: 'rental_contract',
+                quotes: {
+                    application_type: 'prodlit ikamet',
+                    is_under_18: 'mne 22',
+                    accommodation_type: 'snimayu kvartiru, dogovor arendy'
+                }
+            },
+            policyInput: {
+                application_type: 'renewal',
+                application_route: 'standard',
+                is_under_18: 0,
+                address_evidence_type: 'rental_contract',
+                accommodation_type: 'rental_contract',
+                host_is_married: null,
+                host_is_turkish: null,
+                fingerprint_status: null,
+                fingerprint_code: null
+            }
+        },
+        {
+            language: 'tk',
+            content: 'ikamet uzaltjak 21 yasym kireyde yasayan notariusda tassyklanan kira sertnamasy bar',
+            toolArgs: {
+                application_type: 'renewal',
+                is_under_18: false,
+                accommodation_type: 'rental_contract',
+                quotes: {
+                    application_type: 'ikamet uzaltjak',
+                    is_under_18: '21 yasym',
+                    accommodation_type: 'kireyde yasayan notariusda tassyklanan kira sertnamasy bar'
+                }
+            },
+            policyInput: {
+                application_type: 'renewal',
+                application_route: 'standard',
+                is_under_18: 0,
+                address_evidence_type: 'rental_contract',
+                accommodation_type: 'rental_contract',
+                host_is_married: null,
+                host_is_turkish: null,
+                fingerprint_status: null,
+                fingerprint_code: null
+            }
+        }
+    ];
+
+    for (let index = 0; index < blindCases.length; index += 1) {
+        const testCase = blindCases[index];
+        const { fakeAi, environment } = createEnvironment([
+            {
+                response: '',
+                tool_calls: [{ name: 'get_required_documents', arguments: testCase.toolArgs }]
+            },
+            new Error('A 2nd model call must never execute after verified get_required_documents.')
+        ]);
+
+        const res = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: testCase.content }],
+                language: testCase.language
+            }), { address: `198.51.108.${10 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await res.json();
+
+        assert.equal(res.status, 200);
+        assert.equal(fakeAi.callCount, 1);
+        assert.equal(payload.reply, buildExpectedListReply(testCase.language, testCase.policyInput));
+        assert.deepEqual(payload.actions, []);
+    }
+});
+
+test('quote-grounded verification rejects missing/assistant/negated/numberless-age/conflicting/yes-no-question quotes and never logs quotes', async (t) => {
+    const capturedConsole = [];
+    for (const method of ['log', 'info', 'warn', 'error']) {
+        t.mock.method(console, method, (...args) => {
+            capturedConsole.push({ method, args });
+        });
+    }
+
+    // 1. Quote not present in the user text -> fact missing
+    const missingQuoteText = 'GIZLI-ALINTI-YOK-901';
+    const notInUserEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'renewal',
+                    is_under_18: false,
+                    accommodation_type: 'rental_contract',
+                    quotes: {
+                        application_type: 'prodlit ikamet',
+                        is_under_18: 'mne 22',
+                        accommodation_type: missingQuoteText
+                    }
+                }
+            }]
+        }
+    ]);
+    const notInUserRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'privet, mne nado prodlit ikamet, mne 22' }],
+            language: 'ru'
+        }), { address: '198.51.108.30' }),
+        notInUserEnv.environment,
+        {}
+    );
+    const notInUserPayload = await notInUserRes.json();
+    assert.equal(notInUserRes.status, 200);
+    assert.equal(notInUserPayload.reply, buildMissingDocumentsQuestion(['accommodation_type'], 'ru'));
+
+    // 2. Quote taken from an assistant turn -> missing
+    const assistantQuoteText = 'living in the campus dorm';
+    const assistantQuoteEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'renewal',
+                    is_under_18: false,
+                    accommodation_type: 'dormitory',
+                    quotes: {
+                        application_type: 'prodlit ikamet',
+                        is_under_18: 'mne 22',
+                        accommodation_type: assistantQuoteText
+                    }
+                }
+            }]
+        }
+    ]);
+    const assistantQuoteRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'privet, mne nado prodlit ikamet, mne 22' },
+                { role: 'assistant', content: `Are you ${assistantQuoteText}?` },
+                { role: 'user', content: 'podskazhite spisok' }
+            ],
+            language: 'ru'
+        }), { address: '198.51.108.31' }),
+        assistantQuoteEnv.environment,
+        {}
+    );
+    const assistantQuotePayload = await assistantQuoteRes.json();
+    assert.equal(assistantQuoteRes.status, 200);
+    assert.equal(assistantQuotePayload.reply, buildMissingDocumentsQuestion(['accommodation_type'], 'ru'));
+
+    // 3. 'ما بسكن بالسكن الطلابي' with model accommodation 'dormitory' -> missing (no list)
+    for (const [idx, arContent, expectedMissing] of [
+        [0, 'ما بسكن بالسكن الطلابي، أول مرة بقدم، عمري 20', ['accommodation_type']],
+        [1, 'ما بسكن بالسكن الطلابي', ['application_type', 'is_under_18', 'accommodation_type']]
+    ]) {
+        const arNegEnv = createEnvironment([
+            {
+                response: '',
+                tool_calls: [{
+                    name: 'get_required_documents',
+                    arguments: {
+                        application_type: 'initial',
+                        is_under_18: false,
+                        accommodation_type: 'dormitory',
+                        quotes: {
+                            application_type: 'أول مرة بقدم',
+                            is_under_18: 'عمري 20',
+                            accommodation_type: 'ما بسكن بالسكن الطلابي'
+                        }
+                    }
+                }]
+            }
+        ]);
+        const arNegRes = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: arContent }],
+                language: 'ar'
+            }), { address: `198.51.108.${32 + idx}` }),
+            arNegEnv.environment,
+            {}
+        );
+        const arNegPayload = await arNegRes.json();
+        assert.equal(arNegRes.status, 200);
+        assert.equal(arNegPayload.reply, buildMissingDocumentsQuestion(expectedMissing, 'ar'));
+        assert.equal(arNegPayload.reply.includes(getChatbotFixedText('documentListIntro', 'ar')), false);
+        assert.equal(arNegPayload.reply.includes(PUBLIC_MESSAGES.ar.documentAddressDormitory), false);
+    }
+
+    // 4. Age quote without a number -> missing
+    const noNumberAgeEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'renewal',
+                    is_under_18: false,
+                    accommodation_type: 'rental_contract',
+                    quotes: {
+                        application_type: 'prodlit ikamet',
+                        is_under_18: 'student v stambule',
+                        accommodation_type: 'snimayu kvartiru, dogovor arendy'
+                    }
+                }
+            }]
+        }
+    ]);
+    const noNumberAgeRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'privet, mne nado prodlit ikamet, ya student v stambule, snimayu kvartiru, dogovor arendy'
+            }],
+            language: 'ru'
+        }), { address: '198.51.108.34' }),
+        noNumberAgeEnv.environment,
+        {}
+    );
+    const noNumberAgePayload = await noNumberAgeRes.json();
+    assert.equal(noNumberAgeRes.status, 200);
+    assert.equal(noNumberAgePayload.reply, buildMissingDocumentsQuestion(['is_under_18'], 'ru'));
+
+    // 5. Lexicon value disagreeing with the model -> missing
+    const disagreeEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'renewal',
+                    is_under_18: false,
+                    accommodation_type: 'dormitory',
+                    quotes: {
+                        application_type: 'İlk başvuru yapacağım',
+                        is_under_18: '20 yaşındayım',
+                        accommodation_type: 'öğrenci yurdunda kalıyorum'
+                    }
+                }
+            }]
+        }
+    ]);
+    const disagreeRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'İlk başvuru yapacağım, 20 yaşındayım ve öğrenci yurdunda kalıyorum, neler getirmeliyim?'
+            }],
+            language: 'tr'
+        }), { address: '198.51.108.35' }),
+        disagreeEnv.environment,
+        {}
+    );
+    const disagreePayload = await disagreeRes.json();
+    assert.equal(disagreeRes.status, 200);
+    assert.equal(disagreePayload.reply, buildMissingDocumentsQuestion(['application_type'], 'tr'));
+
+    // 6. Quote inside a yes/no question -> missing
+    const yesNoQuoteEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'renewal',
+                    is_under_18: false,
+                    accommodation_type: 'rental_contract',
+                    quotes: {
+                        application_type: 'prodlit ikamet',
+                        is_under_18: 'mne 22',
+                        accommodation_type: 'dogovor arendy'
+                    }
+                }
+            }]
+        }
+    ]);
+    const yesNoQuoteRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'privet, mne nado prodlit ikamet, mne 22. dogovor arendy li?'
+            }],
+            language: 'ru'
+        }), { address: '198.51.108.36' }),
+        yesNoQuoteEnv.environment,
+        {}
+    );
+    const yesNoQuotePayload = await yesNoQuoteRes.json();
+    assert.equal(yesNoQuoteRes.status, 200);
+    assert.equal(yesNoQuotePayload.reply, buildMissingDocumentsQuestion(['accommodation_type'], 'ru'));
+
+    // 7. Quotes are absent from captured logs
+    const serializedLogs = JSON.stringify(capturedConsole);
+    for (const secretQuote of [
+        missingQuoteText,
+        assistantQuoteText,
+        'prodlit ikamet',
+        'mne 22',
+        'ما بسكن بالسكن الطلابي',
+        'student v stambule',
+        'İlk başvuru yapacağım',
+        'dogovor arendy'
+    ]) {
+        assert.equal(serializedLogs.includes(secretQuote), false, `Console logs leaked quote: ${secretQuote}`);
+    }
+});

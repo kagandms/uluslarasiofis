@@ -7,8 +7,11 @@ import { CHATBOT_TOPICS, readKnowledge } from '../src/server/domain/chatbotKnowl
 import {
     CHATBOT_TOOL_DEFINITIONS,
     CHATBOT_TOOLS,
+    DOCUMENT_FACT_KEYS,
+    DOCUMENT_QUOTE_MAX_LENGTH,
     executeChatbotTool,
-    listCatalogDocumentTitles
+    listCatalogDocumentTitles,
+    sanitizeDocumentQuotes
 } from '../src/server/domain/chatbotTools.js';
 
 test('CHATBOT_TOOLS registers the three deterministic tools with strict schemas matching live document policy', () => {
@@ -32,9 +35,23 @@ test('CHATBOT_TOOLS registers the three deterministic tools with strict schemas 
             'accommodation_type',
             'host_is_married',
             'host_is_turkish',
-            'fingerprint_status'
+            'fingerprint_status',
+            'quotes'
         ]
     );
+
+    const quotesSchema = CHATBOT_TOOLS.get_required_documents.parameters.properties.quotes;
+    assert.equal(quotesSchema.type, 'object');
+    assert.equal(quotesSchema.additionalProperties, false);
+    assert.deepEqual(Object.keys(quotesSchema.properties), [...DOCUMENT_FACT_KEYS]);
+    for (const key of DOCUMENT_FACT_KEYS) {
+        assert.equal(quotesSchema.properties[key].type, 'string');
+        assert.equal(quotesSchema.properties[key].maxLength, 160);
+    }
+    assert.equal(DOCUMENT_QUOTE_MAX_LENGTH, 160);
+    assert.match(CHATBOT_TOOLS.get_required_documents.description, /verbatim quote/i);
+    assert.match(CHATBOT_TOOLS.get_required_documents.description, /never infer or default/i);
+    assert.match(CHATBOT_TOOLS.get_required_documents.description, /omit unknown facts/i);
 });
 
 test('lookup_knowledge drops unknown argument fields, uses request language, and rejects invalid topics', () => {
@@ -88,6 +105,22 @@ test('get_required_documents drops extra argument fields and rejects invalid val
     }, { language: 'ru' });
 
     assert.deepEqual(withExtras, baseline);
+
+    assert.deepEqual(
+        sanitizeDocumentQuotes({
+            application_type: 'prodlit ikamet',
+            is_under_18: 22,
+            accommodation_type: null,
+            host_is_married: ['no'],
+            host_is_turkish: { value: 'yes' },
+            fingerprint_status: 'x'.repeat(161),
+            unknown_key: 'drop-me'
+        }),
+        { application_type: 'prodlit ikamet' }
+    );
+    assert.deepEqual(sanitizeDocumentQuotes(null), {});
+    assert.deepEqual(sanitizeDocumentQuotes('not-an-object'), {});
+    assert.deepEqual(sanitizeDocumentQuotes(['array']), {});
 
     const invalidCases = [
         null,

@@ -671,9 +671,10 @@ function readSupportedDocumentFacts(userTurns, language) {
     return { facts, uncertainKeys };
 }
 
-function resolveToolDocumentArgs(rawArgs, { supportedFacts, uncertainKeys }) {
+function resolveToolDocumentArgs(rawArgs, { supportedFacts, uncertainKeys, userTurns, language }) {
     if (!isPlainObject(rawArgs)) return rawArgs;
 
+    const rawQuotes = isPlainObject(rawArgs.quotes) ? rawArgs.quotes : {};
     const resolved = {};
     for (const key of DOCUMENT_FACT_KEYS) {
         const hasRawValue = Object.hasOwn(rawArgs, key) && rawArgs[key] !== undefined && rawArgs[key] !== null;
@@ -683,8 +684,21 @@ function resolveToolDocumentArgs(rawArgs, { supportedFacts, uncertainKeys }) {
         }
         if (uncertainKeys.has(key)) continue;
 
-        if (Object.hasOwn(supportedFacts, key) && (!hasRawValue || rawArgs[key] === supportedFacts[key])) {
-            resolved[key] = supportedFacts[key];
+        const hasLexiconValue = Object.hasOwn(supportedFacts, key);
+        if (hasLexiconValue) {
+            if (!hasRawValue || rawArgs[key] === supportedFacts[key]) {
+                resolved[key] = supportedFacts[key];
+            }
+            continue;
+        }
+
+        if (
+            hasRawValue
+            && typeof rawQuotes[key] === 'string'
+            && typeof evidence.verifyQuotedFact === 'function'
+            && evidence.verifyQuotedFact(key, rawArgs[key], rawQuotes[key], userTurns, language)
+        ) {
+            resolved[key] = rawArgs[key];
         }
     }
     return resolved;
@@ -950,7 +964,9 @@ export async function handlePublicChat(request, environment, requestId) {
                     const effectiveArgs = call.name === 'get_required_documents'
                         ? resolveToolDocumentArgs(call.arguments, {
                             supportedFacts,
-                            uncertainKeys
+                            uncertainKeys,
+                            userTurns,
+                            language: validated.language
                         })
                         : call.arguments;
                     const output = executeChatbotTool(call.name, effectiveArgs, { language: validated.language });
