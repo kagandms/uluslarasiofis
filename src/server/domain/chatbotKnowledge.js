@@ -254,11 +254,11 @@ const KNOWLEDGE_ENTRIES = Object.freeze({
     office_hours: Object.freeze({
         sources: Object.freeze(['index.html']),
         text: Object.freeze({
-            tr: 'Uluslararası Öğrenci Ofisi hafta içi 09:00–18:00 saatleri arasında açıktır. Sorularınızı ana sayfadaki soru formundan da iletebilirsiniz.',
-            en: 'The International Student Office is open on weekdays, 09:00–18:00. You can also send your questions using the question form on the home page.',
-            ru: 'Международный студенческий офис открыт по будням 09:00–18:00. Вы также можете отправить свои вопросы через форму вопросов на главной странице.',
-            tk: 'Halkara talyplar ofisi hepde içi 09:00–18:00 sagatlar aralygynda açykdyr. Soraglaryňyzy baş sahypadaky sorag formasy arkaly hem iberip bilersiňiz.',
-            ar: 'مكتب الطلاب الدوليين مفتوح أيام الأسبوع من الساعة 09:00–18:00. كما يمكنك إرسال أسئلتك عبر نموذج الأسئلة في الصفحة الرئيسية.'
+            tr: 'Uluslararası Öğrenci Ofisi hafta içi 09:00–18:00 saatleri arasında açıktır. Sorularınızı ana sayfadaki soru formundan da iletebilirsiniz. Bu saatler dışında da WhatsApp veya e-posta üzerinden yazabilirsiniz.',
+            en: 'The International Student Office is open on weekdays, 09:00–18:00. You can also send your questions using the question form on the home page. Outside these hours, you can still write via WhatsApp or e-mail.',
+            ru: 'Международный студенческий офис открыт по будням 09:00–18:00. Вы также можете отправить свои вопросы через форму вопросов на главной странице. Вне этих часов вы также можете написать в WhatsApp или на e-mail.',
+            tk: 'Halkara talyplar ofisi hepde içi 09:00–18:00 sagatlar aralygynda açykdyr. Soraglaryňyzy baş sahypadaky sorag formasy arkaly hem iberip bilersiňiz. Bu sagatlardan daşary hem WhatsApp ýa-da e-poçta arkaly ýazyp bilersiňiz.',
+            ar: 'مكتب الطلاب الدوليين مفتوح أيام الأسبوع من الساعة 09:00–18:00. كما يمكنك إرسال أسئلتك عبر نموذج الأسئلة في الصفحة الرئيسية. وخارج هذه الساعات يمكنك أيضاً المراسلة عبر WhatsApp أو البريد الإلكتروني.'
         })
     }),
     student_card: Object.freeze({
@@ -282,15 +282,15 @@ const KNOWLEDGE_ENTRIES = Object.freeze({
         // DRAFT: needs office approval
         text: Object.freeze({
             // DRAFT: needs office approval
-            tr: 'Uluslararası Öğrenci Ofisinin genel telefon numarası veya genel iletişim e-postası bu portalda yayımlanmamaktadır. Sorularınız için ana sayfadaki soru formunu doldurup telefon numaranızı bırakarak ofisin size dönüş yapmasını isteyebilirsiniz. Yalnızca KVKK kapsamındaki kişisel veri talepleri için kisiselverilerim@topkapi.edu.tr adresi paylaşılmıştır.',
+            tr: 'Genel sorularınız için öncelikle ana sayfadaki soru formunu kullanabilirsiniz. Uluslararası Öğrenci Ofisine hafta içi 09:00–18:00 saatleri arasında WhatsApp üzerinden 0535 455 94 09 (+90 535 455 94 09) numarasına yalnızca mesaj yazarak (aramayın, sesli arama yapılmaz) veya goc.topkapiuni@gmail.com e-posta adresinden ulaşabilirsiniz. Yalnızca KVKK kapsamındaki kişisel veri talepleri için kisiselverilerim@topkapi.edu.tr adresi kullanılır.',
             // DRAFT: needs office approval
-            en: 'A general phone number or general e-mail address for the International Student Office is not published on this portal. To reach the office with your questions, please use the question form on the home page and leave your phone number so staff can reply. For personal data protection (KVKK) requests only, kisiselverilerim@topkapi.edu.tr is listed in the privacy notice.',
+            en: 'For general questions, the question form on the home page remains the preferred channel to reach the office. You can also contact the International Student Office (weekdays 09:00–18:00) by WhatsApp message only at +90 535 455 94 09 (please write on WhatsApp, do not call) or by e-mail at goc.topkapiuni@gmail.com. For personal data protection (KVKK) requests only, write to kisiselverilerim@topkapi.edu.tr.',
             // DRAFT: needs office approval
-            ru: 'Общий телефон и общий адрес электронной почты Международного студенческого офиса на этом портале не опубликованы. Чтобы задать вопрос, заполните форму вопросов на главной странице и укажите свой номер телефона для обратной связи. Только для обращений по защите персональных данных (KVKK) в уведомлении указан адрес kisiselverilerim@topkapi.edu.tr.',
+            ru: 'По общим вопросам предпочтительно использовать форму вопросов на главной странице — она также передаёт обращение в офис. Кроме того, связаться с Международным студенческим офисом (по будням 09:00–18:00) можно только сообщением в WhatsApp на номер +90 535 455 94 09 (пишите в WhatsApp, не звоните) или по e-mail goc.topkapiuni@gmail.com. Только для обращений по защите персональных данных (KVKK) предназначен адрес kisiselverilerim@topkapi.edu.tr.',
             // DRAFT: needs office approval
-            tk: 'Halkara talyplar ofisiniň umumy telefon belgisi ýa-da umumy e-poçta salgysy bu portalda berilmeýär. Soraglaryňyz üçin baş sahypadaky sorag formasyny dolduryp telefon belgiňizi goýup bilersiňiz. Diňe şahsy maglumatlary goramak (KVKK) baradaky ýüz tutmalar üçin gizlinlik bildirişinde kisiselverilerim@topkapi.edu.tr salgysy görkezilendir.',
+            tk: 'Umumy soraglar üçin ilki bilen baş sahypadaky sorag formasyny ulanmak maslahat berilýär; ol hem ofise ýetýär. Halkara talyplar ofisi bilen (hepde içi 09:00–18:00) WhatsApp arkaly +90 535 455 94 09 belgisine diňe hat ýazyp (jaň etmäň, bu belgi jaň üçin däldir) ýa-da goc.topkapiuni@gmail.com e-poçtasy arkaly habarlaşyp bilersiňiz. Diňe şahsy maglumatlary goramak (KVKK) ýüz tutmalary üçin kisiselverilerim@topkapi.edu.tr salgysy niýetlenendir.',
             // DRAFT: needs office approval
-            ar: 'لا ينشر هذا الموقع رقم هاتف عاماً أو بريداً إلكترونياً عاماً لمكتب الطلاب الدوليين. لطرح أسئلتك، يمكنك تعبئة نموذج الأسئلة في الصفحة الرئيسية وترك رقم هاتفك ليتواصل معك المكتب. ولطلبات حماية البيانات الشخصية (KVKK) فقط، يرد البريد kisiselverilerim@topkapi.edu.tr في إشعار الخصوصية.'
+            ar: 'للأسئلة العامة، يظل نموذج الأسئلة في الصفحة الرئيسية القناة المفضلة للتواصل مع المكتب. كما يمكنكم التواصل مع مكتب الطلاب الدوليين (أيام الأسبوع 09:00–18:00) عبر رسالة WhatsApp فقط على الرقم +90 535 455 94 09 (يرجى الكتابة عبر WhatsApp وعدم الاتصال هاتفياً) أو عبر البريد الإلكتروني goc.topkapiuni@gmail.com. ولطلبات حماية البيانات الشخصية (KVKK) فقط، يُستخدم البريد kisiselverilerim@topkapi.edu.tr.'
         })
     })
 });

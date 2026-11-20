@@ -79,11 +79,12 @@ test('readKnowledge falls back to Turkish when language is omitted or unsupporte
     assert.deepEqual(readKnowledge('application_steps', null), turkish);
 });
 
-test('office_hours states confirmed 09:00-18:00 hours and draft contact does not invent phone numbers or staff credentials', () => {
+test('office_hours states confirmed 09:00-18:00 hours and contact uses only owner-supplied office channels', () => {
+    const allowedWhatsappPattern = /(?<!\d)(?:\+90 535 455 94 09|0535 455 94 09)(?!\d)/g;
     const trOfficeHours = readKnowledge('office_hours', 'tr');
     assert.equal(
         trOfficeHours.text,
-        'Uluslararası Öğrenci Ofisi hafta içi 09:00–18:00 saatleri arasında açıktır. Sorularınızı ana sayfadaki soru formundan da iletebilirsiniz.'
+        'Uluslararası Öğrenci Ofisi hafta içi 09:00–18:00 saatleri arasında açıktır. Sorularınızı ana sayfadaki soru formundan da iletebilirsiniz. Bu saatler dışında da WhatsApp veya e-posta üzerinden yazabilirsiniz.'
     );
 
     for (const language of CHATBOT_LANGUAGES) {
@@ -94,10 +95,71 @@ test('office_hours states confirmed 09:00-18:00 hours and draft contact does not
             ['09:00', '18:00'],
             `${language} office_hours must contain only 09:00 and 18:00`
         );
+        assert.ok(officeHours.text.includes('WhatsApp'), `${language} office_hours must mention WhatsApp`);
+        assert.equal(officeHours.text.includes('0535 455 94 09'), false, `${language} office_hours must not repeat phone numbers`);
+        assert.equal(officeHours.text.includes('goc.topkapiuni@gmail.com'), false, `${language} office_hours must not repeat e-mail`);
 
         const contact = readKnowledge('contact', language);
-        assert.equal(/(\+90|0\s*5\d{2}|\d{3}[-\s]\d{3})/.test(contact.text), false, `${language} contact must not invent phone numbers`);
+        const contactWithoutAllowedPhone = contact.text.replace(allowedWhatsappPattern, ' ');
+        assert.equal(
+            /(\+90|0\s*5\d{2}|\d{3}[-\s]\d{3})/.test(contactWithoutAllowedPhone),
+            false,
+            `${language} contact must not invent phone numbers`
+        );
         assert.equal(contact.text.includes('international.office.topkapi@topkapi.edu.tr'), false);
+    }
+});
+
+test('contact in every language provides the WhatsApp number with a message-only note, the office e-mail, office hours, and does not offer phone calls', () => {
+    const whatsappNextToNumber = /(?:WhatsApp[^.\n]{0,45}(?:\+90 535 455 94 09|0535 455 94 09)|(?:\+90 535 455 94 09|0535 455 94 09)[^.\n]{0,45}WhatsApp)/;
+    const whatsappOnlyNotes = {
+        tr: /yalnızca mesaj.*aramayın/i,
+        en: /WhatsApp message only.*do not call/i,
+        ru: /только сообщением в WhatsApp.*не звоните/i,
+        tk: /diňe hat ýazyp.*jaň etmäň/i,
+        ar: /رسالة WhatsApp فقط.*عدم الاتصال/
+    };
+    const callOfferedPatterns = {
+        tr: /(?:bizi )?arayabilirsiniz|telefonla arayın/i,
+        en: /\bcall us\b|\bplease call\b|\byou can call\b|\bby phone\b/i,
+        ru: /позвоните|можете позвонить|по телефону/i,
+        tk: /jaň ediň|jaň edip bilersiňiz/i,
+        ar: /اتصلوا|يمكنكم الاتصال/
+    };
+
+    for (const language of CHATBOT_LANGUAGES) {
+        const { text } = readKnowledge('contact', language);
+        assert.ok([...text].length <= 600, `${language} contact must stay within 600 chars`);
+        assert.ok(
+            text.includes('0535 455 94 09') || text.includes('+90 535 455 94 09'),
+            `${language} contact must include the WhatsApp number`
+        );
+        assert.ok(
+            whatsappNextToNumber.test(text),
+            `${language} contact must mention WhatsApp next to the number`
+        );
+        assert.ok(
+            text.includes('goc.topkapiuni@gmail.com'),
+            `${language} contact must include goc.topkapiuni@gmail.com`
+        );
+        assert.ok(
+            text.includes('kisiselverilerim@topkapi.edu.tr'),
+            `${language} contact must include kisiselverilerim@topkapi.edu.tr`
+        );
+        assert.ok(
+            text.includes('09:00–18:00'),
+            `${language} contact must include 09:00–18:00 office hours`
+        );
+        assert.match(
+            text,
+            whatsappOnlyNotes[language],
+            `${language} contact must include a WhatsApp message-only / do-not-call note`
+        );
+        assert.equal(
+            callOfferedPatterns[language].test(text),
+            false,
+            `${language} contact must not offer phone calls as an option`
+        );
     }
 });
 
@@ -128,23 +190,33 @@ test('every remaining draft topic entry in chatbotKnowledge.js carries the offic
     assert.equal(officeHoursBlock.includes('DRAFT: needs office approval'), false);
 });
 
-test('knowledge texts contain no phone numbers, e-mail addresses other than KVKK address, currency amounts, or dates', () => {
+test('knowledge texts allow only the approved office and KVKK contact values and forbid other phone numbers, e-mails, URLs, currency amounts, or dates', () => {
     const kvkkEmail = 'kisiselverilerim@topkapi.edu.tr';
+    const officeEmail = 'goc.topkapiuni@gmail.com';
+    const allowedWhatsappPattern = /(?<!\d)(?:\+90 535 455 94 09|0535 455 94 09)(?!\d)/g;
     const phonePattern = /(\+90|0\s*5\d{2}|\d{3}[-\s]\d{3,4})/;
     const emailPattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+    const urlPattern = /(?:https?:\/\/|www\.)\S+/i;
+    const domainPattern = /\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|edu|gov|tr|info|io|ru|tm|ae)(?:\.[a-z]{2})?\b/i;
     const currencyPattern = /(\d[\d.,]*\s*(?:TL|TRY|USD|EUR|Lira)|[₺$€]\s*\d|\d\s*[₺$€])/i;
     const datePattern = /(\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b|\b20\d{2}\b)/;
 
     for (const topic of CHATBOT_TOPICS) {
+        const allowedEmails = topic === 'contact' ? new Set([kvkkEmail, officeEmail]) : new Set([kvkkEmail]);
         for (const language of CHATBOT_LANGUAGES) {
             const { text } = readKnowledge(topic, language);
-            assert.equal(phonePattern.test(text), false, `${topic}/${language} must not contain phone numbers`);
+            const textForPhoneCheck = topic === 'contact' ? text.replace(allowedWhatsappPattern, ' ') : text;
+            const textWithoutAllowedEmails = text.replaceAll(kvkkEmail, ' ').replaceAll(officeEmail, ' ');
+
+            assert.equal(phonePattern.test(textForPhoneCheck), false, `${topic}/${language} must not contain unapproved phone numbers`);
+            assert.equal(urlPattern.test(textWithoutAllowedEmails), false, `${topic}/${language} must not contain URLs`);
+            assert.equal(domainPattern.test(textWithoutAllowedEmails), false, `${topic}/${language} must not contain domain names`);
             assert.equal(currencyPattern.test(text), false, `${topic}/${language} must not contain currency amounts`);
             assert.equal(datePattern.test(text), false, `${topic}/${language} must not contain calendar dates`);
 
             const emails = text.match(emailPattern) || [];
             for (const email of emails) {
-                assert.equal(email, kvkkEmail, `${topic}/${language} must only use the KVKK address, found ${email}`);
+                assert.ok(allowedEmails.has(email), `${topic}/${language} must only use allowed e-mail addresses, found ${email}`);
             }
         }
     }
