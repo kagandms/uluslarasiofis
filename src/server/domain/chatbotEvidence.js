@@ -206,10 +206,10 @@ const NUMERIC_AGE_PATTERNS = Object.freeze([
     /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:yasindayim|yasinda|yasimda|yasim|yasymda|yasym)(?![\p{L}\p{N}])/gu,
     // en explicit age units ("years old", "yrs old", "y.o.")
     /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:years?\s+old|yrs?\s+old|y\.?o\.?)(?![\p{L}\p{N}])/gu,
-    // en "I am N" / "I'm N" only at end of clause (allowing trailing delimiter) or followed by "years" or "and"
-    /(?<![\p{L}\p{N}])(?:i\s+am|i'm|im)(?:\s+not)?\s+(1[4-9]|[2-9]\d)(?=(?:\s*(?:years(?=\s*(?:and(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]*$))|and(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]*$)))/gu,
-    // ru explicit age statements ("мне [уже|исполнилось] N лет/года/год" or "N лет/года/год от роду")
-    /(?<![\p{L}\p{N}])мне(?:\s+еще)?(?:\s+не)?(?:\s+уже)?(?:\s+исполнилось)?\s+(1[4-9]|[2-9]\d)\s*(?:лет|года|год)(?![\p{L}\p{N}])/gu,
+    // en "I am N" / "I'm N" only at end of clause (allowing trailing delimiter/comma) or followed by "years" or "and"
+    /(?<![\p{L}\p{N}])(?:i\s+am|i'm|im)(?:\s+not)?\s+(1[4-9]|[2-9]\d)(?=(?:\s*(?:years(?=\s*(?:and(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]|$))|and(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]|$)))/gu,
+    // ru explicit age statements ("мне [уже|исполнилось] N [лет/года/год]" or "N лет/года/год от роду")
+    /(?<![\p{L}\p{N}])(?:мне|mne)(?:\s+еще)?(?:\s+(?:не|ne))?(?:\s+(?:уже|uzhe))?(?:\s+исполнилось)?\s+(1[4-9]|[2-9]\d)(?:\s*(?:лет|года|год|let|goda|god)(?![\p{L}\p{N}])|(?=\s*(?:(?:и|а|i|a)(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]|$)))/gu,
     /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:лет|года|год)\s+от\s+роду(?![\p{L}\p{N}])/gu,
     // ru standalone age phrase between clause delimiters (e.g. ", 19 лет,")
     /^\s*(?:не\s+)?(1[4-9]|[2-9]\d)\s*(?:лет|года|год)\s*[!?;,.\n\r\u061f\u061b\u060c]*$/gu,
@@ -231,15 +231,15 @@ const DURATION_SUFFIX_WORDS = Object.freeze([
 
 const HOST_CONTEXT_PATTERNS = Object.freeze([
     // tr
-    /(?<![\p{L}\p{N}])(?:ev\s+sahib[\p{L}\p{N}]*|taahhut(?:name)?\s+veren[\p{L}\p{N}]*|yaninda\s+kaldig[\p{L}\p{N}]*|akraba[\p{L}\p{N}]*|teyze[\p{L}\p{N}]*|amca[\p{L}\p{N}]*|dayi[\p{L}\p{N}]*|halam[\p{L}\p{N}]*|arkadasim[\p{L}\p{N}]*|tanidig[\p{L}\p{N}]*\s+yan[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:ev\s+sahib[\p{L}\p{N}]*|taahhut(?:name)?\s+veren[\p{L}\p{N}]*|yaninda\s+kaldig[\p{L}\p{N}]*|akraba[\p{L}\p{N}]*|teyze[\p{L}\p{N}]*|amca[\p{L}\p{N}]*|dayi[\p{L}\p{N}]*|halam[\p{L}\p{N}]*|arkadasim[\p{L}\p{N}]*|(?:arkadas|aile|tanidik|tanidig)[\p{L}\p{N}]*\s+yan[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
     // en
-    /(?<![\p{L}\p{N}])(?:host[\p{L}\p{N}]*|landlord[\p{L}\p{N}]*|(?:relatives?|uncles?|aunts?)(?:'s)?|(?:the\s+)?person\s+(?:i\s+)?stay\s+with)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:host[\p{L}\p{N}]*|landlord[\p{L}\p{N}]*|(?:relatives?|uncles?|aunts?)(?:'s)?|(?:the\s+)?person\s+(?:i\s+)?stay\s+with|(?:stay|staying|live|living)\s+with\s+(?:a\s+|an\s+|my\s+|our\s+)?(?:host|relative|friend|family|someone))(?![\p{L}\p{N}])/u,
     // ru
-    /(?<![\p{L}\p{N}])(?:хозяин[\p{L}\p{N}]*|хозяик[\p{L}\p{N}]*|принимающ[\p{L}\p{N}]*|родственни(?:к|ц)[\p{L}\p{N}]*|тет(?:я|и|е|еи|ю|ин[\p{L}\p{N}]*)|дяд[\p{L}\p{N}]*|у\s+(?:кого|которого|которои)\s+живу)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:хозяин[\p{L}\p{N}]*|хозяик[\p{L}\p{N}]*|принимающ[\p{L}\p{N}]*|родственни(?:к|ц)[\p{L}\p{N}]*|тет(?:я|и|е|еи|ю|ин[\p{L}\p{N}]*)|дяд[\p{L}\p{N}]*|у\s+(?:кого|которого|которои)\s+живу|(?:жив(?:у|ем)|остановил[\p{L}\p{N}]*)\s+у\s+(?:[\p{L}\p{N}]+\s+)?(?:друг[\p{L}\p{N}]*|подруг[\p{L}\p{N}]*|знаком[\p{L}\p{N}]*))(?![\p{L}\p{N}])/u,
     // tk
-    /(?<![\p{L}\p{N}])(?:hojayyn[\p{L}\p{N}]*|garyndas[\p{L}\p{N}]*|dayza[\p{L}\p{N}]*|dayy[\p{L}\p{N}]*|borcnama\s+beryan[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:hojayyn[\p{L}\p{N}]*|garyndas[\p{L}\p{N}]*|dayza[\p{L}\p{N}]*|dayy[\p{L}\p{N}]*|borcnama\s+beryan[\p{L}\p{N}]*|(?:dost|tanys|adam)[\p{L}\p{N}]*\s+(?:yanynda|oyunde))(?![\p{L}\p{N}])/u,
     // ar
-    /(?<![\p{L}\p{N}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?مضيف[\p{L}\p{N}]*|صاحب\s+(?:ال)?سكن|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?قريب(?:ي|ه|ها|نا)?|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:خال|عم)(?:ي|ه|ها|نا|تي|ته|تها|تنا)?|(?:الشخص\s+)?(?:الذي|اللي)\s+(?:اسكن|بسكن|اقيم|بقيم|ساكن[\p{L}\p{N}]*|مقيم[\p{L}\p{N}]*|عايش[\p{L}\p{N}]*|اعيش|بعيش)\s+(?:عنده|عندها|معه|معها|لديه|لديها)|مقدم\s+(?:ال)?تعهد)(?![\p{L}\p{N}])/u
+    /(?<![\p{L}\p{N}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?مضيف[\p{L}\p{N}]*|صاحب\s+(?:ال)?سكن|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?قريب(?:ي|ه|ها|نا)?|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:خال|عم)(?:ي|ه|ها|نا|تي|ته|تها|تنا)?|(?:الشخص\s+)?(?:الذي|اللي)\s+(?:اسكن|بسكن|اقيم|بقيم|ساكن[\p{L}\p{N}]*|مقيم[\p{L}\p{N}]*|عايش[\p{L}\p{N}]*|اعيش|بعيش)\s+(?:عنده|عندها|معه|معها|لديه|لديها)|(?:اسكن|بسكن|تسكن|يسكن|نسكن|اقيم|بقيم|تقيم|يقيم|نقيم|ساكن[\p{L}\p{N}]*|مقيم[\p{L}\p{N}]*|عايش[\p{L}\p{N}]*|اعيش|بعيش|تعيش|يعيش|نعيش|قاعد[\p{L}\p{N}]*)\s+(?:مع|عند|لدي)\s+(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:صديق|شخص)[\p{L}\p{N}]*|مقدم\s+(?:ال)?تعهد)(?![\p{L}\p{N}])/u
 ]);
 
 const HOST_THIRD_PERSON_PRONOUN_PATTERN = /(?<![\p{L}\p{N}])(?:o|onun|he(?:'s)?|she(?:'s)?|his|her|он|она|его|ее|ol|(?:و|ف)?(?:هو|هي))(?![\p{L}\p{N}])/gu;
@@ -291,8 +291,8 @@ const FINGERPRINT_NEGATIVE = Object.freeze([
     /(?<![\p{L}\p{N}])fingerprints?(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:not|never|haven't|have\s+not|hasn't|has\s+not|aren't|arent|isn't|isnt|wasn't|wasnt|weren't|werent)(?:\s+[\p{L}\p{N}]+){0,3}\s+(?:registered|recorded|taken|done|available|found)(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])отпечат[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:не\s+(?:[\p{L}\p{N}]+\s+){0,2}(?:зарегистрирован[\p{L}\p{N}]*|сда[\p{L}\p{N}]*|внесен[\p{L}\p{N}]*|брал[\p{L}\p{N}]*|взят[\p{L}\p{N}]*|имеются|есть)|нет|отсутств[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?:нет|отсутств[\p{L}\p{N}]*|не\s+(?:[\p{L}\p{N}]+\s+){0,2}(?:зарегистрирован[\p{L}\p{N}]*|сдава[\p{L}\p{N}]*|сдал[\p{L}\p{N}]*|сданы|внесен[\p{L}\p{N}]*|брал[\p{L}\p{N}]*|имеются|есть))\s+(?:[\p{L}\p{N}]+\s+){0,6}отпечат[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
-    /(?<![\p{L}\p{N}])barmak\s+yz[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:yok|hasab[\p{L}\p{N}]*\s+yok|hasaba\s+alyn?mady[\p{L}\p{N}]*|hasaba\s+alyn?anok|hasaba\s+alyn?an\s+dal[\p{L}\p{N}]*|tapsyrmadym|tapsyrylmady[\p{L}\p{N}]*|alynmady[\p{L}\p{N}]*|alnan\s+dal[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-    /(?<![\p{L}\p{N}])(?:hasab[\p{L}\p{N}]*\s+yok|hasaba\s+alyn?mady[\p{L}\p{N}]*|hasaba\s+alyn?anok|hasaba\s+alyn?an\s+dal[\p{L}\p{N}]*|tapsyrmadym|tapsyrylmady[\p{L}\p{N}]*|alynmady[\p{L}\p{N}]*)\s+(?:[\p{L}\p{N}]+\s+){0,6}barmak\s+yz[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])barmak\s+yz[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:yok|hasapda\s+yok|hasab[\p{L}\p{N}]*\s+yok|hasap[\p{L}\p{N}]*\s+yok|hasaba\s+alynmadyk|hasaba\s+alyn?mady[\p{L}\p{N}]*|hasaba\s+alyn?anok|hasaba\s+alyn?an\s+dal[\p{L}\p{N}]*|bermedim|bermedik|berilmedi[\p{L}\p{N}]*|tabsyrmad[\p{L}\p{N}]*|tabsyrmady[\p{L}\p{N}]*|tabsyrman[\p{L}\p{N}]*|tabsyrylmady[\p{L}\p{N}]*|tapsyrmadym|tapsyrmadyk|tapsyrylmady[\p{L}\p{N}]*|alynmady[\p{L}\p{N}]*|alnan\s+dal[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:hasapda\s+yok|hasab[\p{L}\p{N}]*\s+yok|hasap[\p{L}\p{N}]*\s+yok|hasaba\s+alynmadyk|hasaba\s+alyn?mady[\p{L}\p{N}]*|hasaba\s+alyn?anok|hasaba\s+alyn?an\s+dal[\p{L}\p{N}]*|bermedim|bermedik|berilmedi[\p{L}\p{N}]*|tabsyrmad[\p{L}\p{N}]*|tabsyrmady[\p{L}\p{N}]*|tabsyrman[\p{L}\p{N}]*|tabsyrylmady[\p{L}\p{N}]*|tapsyrmadym|tapsyrmadyk|tapsyrylmady[\p{L}\p{N}]*|alynmady[\p{L}\p{N}]*)\s+(?:[\p{L}\p{N}]+\s+){0,6}barmak\s+yz[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?:,?\s+[\p{L}\p{N}]+){0,6},?\s+(?:غير\s+مسجل[\p{L}\p{N}]*|ليست\s+مسجل[\p{L}\p{N}]*|ليس\s+مسجل[\p{L}\p{N}]*|لم\s+(?:تسجل|اسجل|يتم\s+تسجيل[\p{L}\p{N}]*)|لا\s+يوجد|لا\s+توجد|غير\s+موجود[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:غير\s+مسجل[\p{L}\p{N}]*|ليست\s+مسجل[\p{L}\p{N}]*|ليس\s+مسجل[\p{L}\p{N}]*|لا\s+يوجد|لا\s+توجد|ليس\s+لدي|لم\s+(?:تسجل|اسجل|يتم\s+تسجيل[\p{L}\p{N}]*))\s+(?:[\p{L}\p{N}]+\s+){0,6}(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:بصم|بصمات)[\p{L}\p{N}]*(?![\p{L}\p{N}])/u
 ]);
@@ -850,8 +850,9 @@ function findAllMatches(text, patterns) {
 }
 
 function detectApplicationType(clauses, language) {
-    const matchedKeys = new Set();
-    let uncertain = false;
+    const positiveKeys = new Set();
+    const negatedKeys = new Set();
+    let questioned = false;
 
     for (const clause of clauses) {
         const isQuestion = isQuestionClause(clause.text, language);
@@ -861,27 +862,34 @@ function detectApplicationType(clauses, language) {
                 matches.push(...findAllMatches(clause.text, [TRANSITION_PEREVOD_PATTERN]));
             }
             for (const match of matches) {
-                if (hasNegationInWindow(clause, match.start, match.end) || isQuestion) {
-                    uncertain = true;
+                if (isQuestion) {
+                    questioned = true;
+                } else if (hasNegationInWindow(clause, match.start, match.end)) {
+                    negatedKeys.add(key);
                 } else {
-                    matchedKeys.add(key);
+                    positiveKeys.add(key);
                 }
             }
         }
     }
 
-    if (uncertain || matchedKeys.size > 1) {
+    if (questioned) {
         return { value: undefined, uncertain: true };
     }
-    if (matchedKeys.size === 1) {
-        return { value: [...matchedKeys][0], uncertain: false };
+    const effectivePositiveKeys = [...positiveKeys].filter((key) => !negatedKeys.has(key));
+    if (effectivePositiveKeys.length === 1) {
+        return { value: effectivePositiveKeys[0], uncertain: false };
+    }
+    if (effectivePositiveKeys.length > 1 || negatedKeys.size > 0) {
+        return { value: undefined, uncertain: true };
     }
     return { value: undefined, uncertain: false };
 }
 
 function detectAccommodationType(clauses, language) {
-    const matchedKeys = new Set();
-    let uncertain = false;
+    const positiveKeys = new Set();
+    const negatedKeys = new Set();
+    let questioned = false;
 
     for (const clause of clauses) {
         const isQuestion = isQuestionClause(clause.text, language);
@@ -897,20 +905,26 @@ function detectAccommodationType(clauses, language) {
             }
             for (const match of matches) {
                 const ignoredSpans = key === 'undertaking' ? hostNegSpans : [];
-                if (hasNegationInWindow(clause, match.start, match.end, ignoredSpans) || isQuestion) {
-                    uncertain = true;
+                if (isQuestion) {
+                    questioned = true;
+                } else if (hasNegationInWindow(clause, match.start, match.end, ignoredSpans)) {
+                    negatedKeys.add(key);
                 } else {
-                    matchedKeys.add(key);
+                    positiveKeys.add(key);
                 }
             }
         }
     }
 
-    if (uncertain || matchedKeys.size > 1) {
+    if (questioned) {
         return { value: undefined, uncertain: true };
     }
-    if (matchedKeys.size === 1) {
-        return { value: [...matchedKeys][0], uncertain: false };
+    const effectivePositiveKeys = [...positiveKeys].filter((key) => !negatedKeys.has(key));
+    if (effectivePositiveKeys.length === 1) {
+        return { value: effectivePositiveKeys[0], uncertain: false };
+    }
+    if (effectivePositiveKeys.length > 1 || negatedKeys.size > 0) {
+        return { value: undefined, uncertain: true };
     }
     return { value: undefined, uncertain: false };
 }
@@ -1008,8 +1022,8 @@ function detectUnder18(clauses, language) {
     return { value: undefined, uncertain: false };
 }
 
-function annotateTurnHostContext(turnClauses) {
-    let seenDirectHostInTurn = false;
+function annotateTurnHostContext(turnClauses, prevTurnHasDirectHost = false) {
+    let seenDirectHostInTurn = prevTurnHasDirectHost;
     for (let i = 0; i < turnClauses.length; i += 1) {
         const clause = turnClauses[i];
         const directHostMatches = findAllMatches(clause.text, HOST_CONTEXT_PATTERNS);
@@ -1019,23 +1033,35 @@ function annotateTurnHostContext(turnClauses) {
         );
         clause.directHostMatches = directHostMatches;
         clause.hostMatches = [...directHostMatches, ...validPronounMatches].sort((a, b) => a.start - b.start);
-        clause.prevClauseHasHostContext = i > 0 && turnClauses[i - 1].hostMatches.length > 0;
         if (directHostMatches.length > 0) {
             seenDirectHostInTurn = true;
         }
+    }
+    const turnAnchorMatch = turnClauses.find((c) => c.hostMatches.length > 0)?.hostMatches[0] || null;
+    if (prevTurnHasDirectHost && turnAnchorMatch) {
+        for (const clause of turnClauses) {
+            if (clause.hostMatches.length === 0 && !isStudentSelfDescriptionClause(clause)) {
+                clause.hostMatches = [{ ...turnAnchorMatch, start: -1, end: -1 }];
+            }
+        }
+    }
+    for (let i = 0; i < turnClauses.length; i += 1) {
+        turnClauses[i].prevClauseHasHostContext = i > 0 && turnClauses[i - 1].hostMatches.length > 0;
     }
     return turnClauses;
 }
 
 function parseTurnsIntoClauses(turns) {
     const allClauses = [];
+    let prevTurnHasDirectHost = false;
     for (let turnIndex = 0; turnIndex < turns.length; turnIndex += 1) {
         const normalizedTurn = normalizeForEvidence(turns[turnIndex]);
-        const turnClauses = annotateTurnHostContext(parseClauses(normalizedTurn));
+        const turnClauses = annotateTurnHostContext(parseClauses(normalizedTurn), prevTurnHasDirectHost);
         for (const clause of turnClauses) {
             clause.turnIndex = turnIndex;
             allClauses.push(clause);
         }
+        prevTurnHasDirectHost = turnClauses.some((clause) => clause.directHostMatches.length > 0);
     }
     return allClauses;
 }
@@ -1408,13 +1434,19 @@ export function verifyQuotedFact(fact, value, quote, userTurns, language = 'tr')
     const isPositiveValued = POSITIVE_VALUED_DOCUMENT_FACTS[fact](value);
     const isHostFact = fact === 'host_is_married' || fact === 'host_is_turkish';
 
+    const normalizedTurns = turns.map(normalizeForEvidence);
+    const turnHasDirectHostFlags = normalizedTurns.map(
+        (normalizedTurn) => findAllMatches(normalizedTurn, HOST_CONTEXT_PATTERNS).length > 0
+    );
+
     // Rule a, b, c (clause duration), e (yes/no question), g (host context & student self-description):
     // quote must occur in normalized user turns and pass clause checks.
-    for (const turn of turns) {
-        const normalizedTurn = normalizeForEvidence(turn);
+    for (let turnIndex = 0; turnIndex < normalizedTurns.length; turnIndex += 1) {
+        const normalizedTurn = normalizedTurns[turnIndex];
         if (!normalizedTurn.includes(normalizedQuote)) continue;
 
-        const clauses = annotateTurnHostContext(parseClauses(normalizedTurn));
+        const prevTurnHasDirectHost = turnIndex > 0 && turnHasDirectHostFlags[turnIndex - 1];
+        const clauses = annotateTurnHostContext(parseClauses(normalizedTurn), prevTurnHasDirectHost);
         let searchFrom = 0;
         while (searchFrom <= normalizedTurn.length - normalizedQuote.length) {
             const quoteStart = normalizedTurn.indexOf(normalizedQuote, searchFrom);

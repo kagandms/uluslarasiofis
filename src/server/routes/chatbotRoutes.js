@@ -36,7 +36,7 @@ const CHATBOT_MESSAGE_MAX_LENGTH = 500;
 const CHATBOT_MAX_MODEL_CALLS = 3;
 const CHATBOT_MAX_TOOL_CALLS_PER_RESPONSE = 3;
 const CHATBOT_MAX_FAILED_TOOL_ROUNDS = 2;
-const CHATBOT_REQUEST_DEADLINE_MS = 10_000;
+const CHATBOT_REQUEST_DEADLINE_MS = 15_000;
 const CHATBOT_MAX_REPLY_CHARS = 1200;
 
 const CHATBOT_ALLOWED_ROLES = Object.freeze(['user', 'assistant']);
@@ -67,29 +67,37 @@ const OPTIONAL_DOCUMENT_SUFFIX = Object.freeze({
 
 const STATUS_RULES_BY_LANGUAGE = Object.freeze({
     tr: Object.freeze({
-        status: Object.freeze([/(?:^|[^\p{L}])(?:durum[\p{L}\p{N}]*|sonuc[\p{L}\p{N}]*|onay[\p{L}\p{N}]*|gonderildi[\p{L}\p{N}]*|goc|kontrol[\p{L}\p{N}]*|incele[\p{L}\p{N}]*|(?:hangi\s+)?asama(?:da[\p{L}\p{N}]*|si[\p{L}\p{N}]*|sina)?|kabul(?:\s+edil[\p{L}\p{N}]*)?)(?:[^\p{L}]|$)/u]),
+        status: Object.freeze([/(?:^|[^\p{L}])(?:durum[\p{L}\p{N}]*|sonuc[\p{L}\p{N}]*|onay[\p{L}\p{N}]*|gonderildi[\p{L}\p{N}]*|goc|kontrol[\p{L}\p{N}]*|incele[\p{L}\p{N}]*|kabul(?:\s+edil[\p{L}\p{N}]*)?)(?:[^\p{L}]|$)/u]),
         application: Object.freeze([/(?:basvuru[\p{L}\p{N}]*|(?:^|[^\p{L}])dosya[\p{L}\p{N}]*(?:[^\p{L}]|$))/u])
     }),
     en: Object.freeze({
-        status: Object.freeze([/(?:^|[^\p{L}])(?:status[\p{L}\p{N}]*|results?|accepted|approved|sent|migration|check(?:ed|ing)?|stage[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u]),
+        status: Object.freeze([/(?:^|[^\p{L}])(?:status[\p{L}\p{N}]*|results?|accepted|approved|sent|migration|check(?:ed|ing)?)(?:[^\p{L}]|$)/u]),
         application: Object.freeze([/(?:^|[^\p{L}])(?:applications?|files?)(?:[^\p{L}]|$)/u])
     }),
     ru: Object.freeze({
-        status: Object.freeze([/(?:^|[^\p{L}])(?:статус[\p{L}\p{N}]*|результат[\p{L}\p{N}]*|одобр[\p{L}\p{N}]*|принят[\p{L}\p{N}]*|отправ[\p{L}\p{N}]*|миграц[\p{L}\p{N}]*|провер[\p{L}\p{N}]*|этап[\p{L}\p{N}]*|status[\p{L}\p{N}]*|etap[\p{L}\p{N}]*|prinyat[\p{L}\p{N}]*|odobren[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u]),
+        status: Object.freeze([/(?:^|[^\p{L}])(?:статус[\p{L}\p{N}]*|результат[\p{L}\p{N}]*|одобр[\p{L}\p{N}]*|принят[\p{L}\p{N}]*|отправ[\p{L}\p{N}]*|миграц[\p{L}\p{N}]*|провер[\p{L}\p{N}]*|status[\p{L}\p{N}]*|prinyat[\p{L}\p{N}]*|odobren[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u]),
         application: Object.freeze([/(?:^|[^\p{L}])(?:заявк[\p{L}\p{N}]*|заявлен[\p{L}\p{N}]*|дел(?:о|а|у|ом|е)|досье|zayavk[\p{L}\p{N}]*|zayavl[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u])
     }),
     tk: Object.freeze({
-        status: Object.freeze([/(?:^|[^\p{L}])(?:yagday[\p{L}\p{N}]*|netije[\p{L}\p{N}]*|tassyk[\p{L}\p{N}]*|iberildi[\p{L}\p{N}]*|migrasiya[\p{L}\p{N}]*|barla[\p{L}\p{N}]*|tapgyr[\p{L}\p{N}]*|etap[\p{L}\p{N}]*|kabul(?:\s+edil[\p{L}\p{N}]*)?)(?:[^\p{L}]|$)/u]),
+        status: Object.freeze([/(?:^|[^\p{L}])(?:yagday[\p{L}\p{N}]*|netije[\p{L}\p{N}]*|tassyk[\p{L}\p{N}]*|iberildi[\p{L}\p{N}]*|migrasiya[\p{L}\p{N}]*|barla[\p{L}\p{N}]*|kabul(?:\s+edil[\p{L}\p{N}]*)?)(?:[^\p{L}]|$)/u]),
         application: Object.freeze([/(?:^|[^\p{L}])(?:arza[\p{L}\p{N}]*|fayl[\p{L}\p{N}]*|dosye[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u])
     }),
     ar: Object.freeze({
         status: Object.freeze([
-            /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:حاله|نتيجه|موافقه|قبول[\p{L}\p{N}]*|مقبول[\p{L}\p{N}]*|مرحل[\p{L}\p{N}]*|ارسل[\p{L}\p{N}]*|ارسال[\p{L}\p{N}]*|هجره|الهجره|راجع[\p{L}\p{N}]*|مراجع[\p{L}\p{N}]*|تراجع[\p{L}\p{N}]*|يراجع[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
-            /(?:^|[^\p{L}])(?:natij[\p{L}\p{N}]*|marhal[\p{L}\p{N}]*|ma2bul[\p{L}\p{N}]*|qabul[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u
+            /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:حاله|نتيجه|موافقه|قبول[\p{L}\p{N}]*|مقبول[\p{L}\p{N}]*|ارسل[\p{L}\p{N}]*|ارسال[\p{L}\p{N}]*|هجره|الهجره|راجع[\p{L}\p{N}]*|مراجع[\p{L}\p{N}]*|تراجع[\p{L}\p{N}]*|يراجع[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+            /(?:^|[^\p{L}])(?:natij[\p{L}\p{N}]*|ma2bul[\p{L}\p{N}]*|qabul[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u
         ]),
         application: Object.freeze([/(?:طلب[\p{L}\p{N}]*|(?:^|[^\p{L}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?ملف[\p{L}\p{N}]*|talab[\p{L}\p{N}]*)(?:[^\p{L}]|$))/u])
     })
 });
+
+const STAGE_STATUS_PATTERNS = Object.freeze([
+    /(?:^|[^\p{L}])(?:hangi\s+)?asama(?:da[\p{L}\p{N}]*|si[\p{L}\p{N}]*|sina|lar[\p{L}\p{N}]*)?(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])stages?(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:этап[\p{L}\p{N}]*|etap[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])tapgyr[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:مرحل|مراحل)[\p{L}\p{N}]*|marhal[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u
+]);
 
 const STANDALONE_STATUS_PHRASES = Object.freeze([
     'basvurum ne durumda',
@@ -117,7 +125,7 @@ const FIRST_PERSON_STATUS_PHRASE_PATTERNS = Object.freeze([
     /(?:^|[^\p{L}])(?:yukledigim|gonderdigim|verdigim|ekledigim|ilettigim)\s+(?:[\p{L}\p{N}]+\s+){0,2}(?:dosya|belge|evrak|basvuru)[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])my\s+(?:applications?|file(?!\s+size)s?)(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:the\s+|my\s+)?(?:files?|applications?|documents?|docs)\s+(?:that\s+|which\s+)?i\s+(?:uploaded|sent|submitted)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?:мо(?:я|еи|ю)\s+заявк[\p{L}\p{N}]*|мо(?:е|его|ему|им|ем)\s+(?:дел(?:о|а|у|ом|е)|заявлен[\p{L}\p{N}]*))(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:мо(?:я|еи|ю)\s+заявк[\p{L}\p{N}]*|мо(?:е|его|ему|им|ем)\s+(?:дел(?:о|а|у|ом|е)|заявлен[\p{L}\p{N}]*)|на\s+каком\s+этапе\s+мо(?:я|еи|ю|е))(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])mo(?:ya|ey|yey|yu)\s+zayavk[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:документ[\p{L}\p{N}]*|фаил[\p{L}\p{N}]*|дел[\p{L}\p{N}]*|заявк[\p{L}\p{N}]*|заявлен[\p{L}\p{N}]*),?\s+котор(?:ыи|ую|ое|ые)\s+я\s+(?:отправил[\p{L}\p{N}]*|загрузил[\p{L}\p{N}]*|подал[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])arzam[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
@@ -321,6 +329,7 @@ const UNHELPFUL_MODEL_REPLY_PATTERNS = Object.freeze([
 
 export const CHATBOT_ROUTE_NORMALIZED_PATTERNS = Object.freeze({
     STATUS_RULES_BY_LANGUAGE,
+    STAGE_STATUS_PATTERNS,
     STANDALONE_STATUS_PHRASES,
     HOW_TO_OR_WHAT_IS_PATTERNS,
     FIRST_PERSON_STATUS_PHRASE_PATTERNS,
@@ -639,9 +648,10 @@ export function isStatusQuestionWithoutReference(messageContent) {
         return false;
     }
     const hasIdentifierOrPartialRef = STATUS_IDENTIFIER_OR_PARTIAL_REF_PATTERNS.some((pattern) => pattern.test(normalized));
+    const hasStageWord = STAGE_STATUS_PATTERNS.some((pattern) => pattern.test(normalized));
     const hasStatusWord = Object.values(STATUS_RULES_BY_LANGUAGE).some(({ status }) =>
         status.some((pattern) => pattern.test(normalized))
-    );
+    ) || (hasStageWord && hasFirstPersonStatusContext);
     if (
         HOW_TO_OR_WHAT_IS_PATTERNS.some((pattern) => pattern.test(normalized))
         && !hasFirstPersonStatusContext
@@ -653,6 +663,9 @@ export function isStatusQuestionWithoutReference(messageContent) {
         return true;
     }
     if (STANDALONE_STATUS_PHRASES.some((phrase) => normalized.includes(phrase))) {
+        return true;
+    }
+    if (hasStageWord && hasFirstPersonStatusContext) {
         return true;
     }
     return Object.values(STATUS_RULES_BY_LANGUAGE).some(({ status, application }) =>
@@ -775,22 +788,19 @@ function resolveToolDocumentArgs(rawArgs, { supportedFacts, uncertainKeys, userT
     const resolved = {};
     for (const key of DOCUMENT_FACT_KEYS) {
         const hasRawValue = Object.hasOwn(rawArgs, key) && rawArgs[key] !== undefined && rawArgs[key] !== null;
-        if (hasRawValue && !VALID_DOCUMENT_FACT_CHECKS[key](rawArgs[key])) {
-            resolved[key] = rawArgs[key];
-            continue;
-        }
+        const hasValidRawValue = hasRawValue && VALID_DOCUMENT_FACT_CHECKS[key](rawArgs[key]);
         if (uncertainKeys.has(key)) continue;
 
         const hasLexiconValue = Object.hasOwn(supportedFacts, key);
         if (hasLexiconValue) {
-            if (!hasRawValue || rawArgs[key] === supportedFacts[key]) {
+            if (!hasValidRawValue || rawArgs[key] === supportedFacts[key]) {
                 resolved[key] = supportedFacts[key];
             }
             continue;
         }
 
         if (
-            hasRawValue
+            hasValidRawValue
             && typeof rawQuotes[key] === 'string'
             && typeof evidence.verifyQuotedFact === 'function'
             && evidence.verifyQuotedFact(key, rawArgs[key], rawQuotes[key], userTurns, language)
@@ -930,6 +940,7 @@ export async function handlePublicChat(request, environment, requestId) {
         const evidenceRisk = hasEvidenceRiskSafe(userTurns, validated.language);
         const { facts: supportedFacts, uncertainKeys } = readSupportedDocumentFacts(userTurns, validated.language);
         const allowDeterministicEvidence = !evidenceRisk && uncertainKeys.size === 0;
+        const allowLexiconListFallback = uncertainKeys.size === 0;
         const isAnsweringMissingFacts = isAnsweringMissingFactsQuestion(previousAssistantMessage, validated.language);
         const isShortDocumentQuery = isVeryShortDocumentQuestion(lastUserMessage);
         const { facts: lastTurnFacts, uncertainKeys: lastTurnUncertainKeys } = readSupportedDocumentFacts(
@@ -937,17 +948,32 @@ export async function handlePublicChat(request, environment, requestId) {
             validated.language
         );
         const lastTurnHasDocumentFact = Object.keys(lastTurnFacts).length > 0 || lastTurnUncertainKeys.size > 0;
-        const previousTwoUserTurns = userTurns.slice(0, -1).slice(-2);
-        const previousTurnHadDocumentIntent = previousTwoUserTurns.some((turn) =>
-            isVeryShortDocumentQuestion(turn)
-            || isAskingWhichDocumentsAreNeeded(turn)
-            || hasDocumentKeyword(turn)
+        const normalizedLastUserMessage = evidence.normalizeForEvidence(lastUserMessage);
+        const lastTurnHasListIntentPhrase = DOCUMENT_LIST_INTENT_PATTERNS.some((pattern) =>
+            pattern.test(normalizedLastUserMessage)
         );
+        const previousUserTurns = userTurns.slice(0, -1);
+        const assistantTurns = validated.messages
+            .filter((message) => message.role === 'assistant')
+            .map((message) => message.content);
+        const previousTurnHadDocumentIntent =
+            previousUserTurns.some((turn) => {
+                if (
+                    isVeryShortDocumentQuestion(turn)
+                    || isAskingWhichDocumentsAreNeeded(turn)
+                    || hasDocumentKeyword(turn)
+                ) {
+                    return true;
+                }
+                const { facts, uncertainKeys: turnUncertain } = readSupportedDocumentFacts([turn], validated.language);
+                return Object.keys(facts).length > 0 || turnUncertain.size > 0;
+            })
+            || assistantTurns.some((content) => hasDocumentKeyword(content));
         const hasDocumentListIntent =
             isAnsweringMissingFacts
             || isShortDocumentQuery
             || isAskingWhichDocumentsAreNeeded(lastUserMessage)
-            || (lastTurnHasDocumentFact && previousTurnHadDocumentIntent);
+            || ((lastTurnHasDocumentFact || lastTurnHasListIntentPhrase) && previousTurnHadDocumentIntent);
 
         if (allowDeterministicEvidence && isShortDocumentQuery) {
             const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
@@ -1118,7 +1144,7 @@ export async function handlePublicChat(request, environment, requestId) {
                         supportedFacts,
                         validated.language,
                         handoffRequested,
-                        allowDeterministicEvidence
+                        allowLexiconListFallback
                     );
                 }
                 outcome = 'fallback';
@@ -1146,7 +1172,7 @@ export async function handlePublicChat(request, environment, requestId) {
                 });
             }
 
-            if (lastKnowledgeText) {
+            if (lastKnowledgeText && !hasDocumentListIntent) {
                 outcome = 'ok';
                 const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
                 return routeResult({
@@ -1171,7 +1197,7 @@ export async function handlePublicChat(request, environment, requestId) {
                         supportedFacts,
                         validated.language,
                         handoffRequested,
-                        allowDeterministicEvidence
+                        allowLexiconListFallback
                     );
                 }
                 outcome = 'fallback';
@@ -1188,7 +1214,7 @@ export async function handlePublicChat(request, environment, requestId) {
                         supportedFacts,
                         validated.language,
                         handoffRequested,
-                        allowDeterministicEvidence
+                        allowLexiconListFallback
                     );
                 }
                 outcome = 'refusal';
@@ -1204,7 +1230,7 @@ export async function handlePublicChat(request, environment, requestId) {
                     supportedFacts,
                     validated.language,
                     handoffRequested,
-                    allowDeterministicEvidence
+                    allowLexiconListFallback
                 );
             }
 
@@ -1226,7 +1252,7 @@ export async function handlePublicChat(request, environment, requestId) {
                     supportedFacts,
                     validated.language,
                     handoffRequested,
-                    allowDeterministicEvidence
+                    allowLexiconListFallback
                 );
             }
             throw error;

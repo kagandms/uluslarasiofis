@@ -1624,3 +1624,170 @@ test('host context and student self-description guard: wrong-list self-descripti
         false
     );
 });
+
+test('round 8 fix 2: stage words count as status only with first-person application context, never in plural or how-to questions', () => {
+    const nonStatusStageQuestions = [
+        'Какие этапы нужно пройти на портале для подачи заявки?',
+        'этапы подачи',
+        'başvuru aşamaları nelerdir',
+        'what are the stages',
+        'What are the application stages on the portal?',
+        'Arza tapgyrlary nähili?',
+        'ما هي مراحل تقديم الطلب؟'
+    ];
+    for (const query of nonStatusStageQuestions) {
+        assert.equal(
+            isStatusQuestionWithoutReference(query),
+            false,
+            `Expected stage how-to/plural question not to match statusNeedsReference: ${query}`
+        );
+    }
+
+    const firstPersonStageQuestions = [
+        'На каком этапе моя заявка?',
+        'на каком этапе моя',
+        'başvurum hangi aşamada',
+        'Öğrenci numaram 2201045, başvurum hangi aşamada?',
+        'What stage is my application in?',
+        'Arzam haýsy tapgyrda?',
+        'في أي مرحلة طلبي؟'
+    ];
+    for (const query of firstPersonStageQuestions) {
+        assert.equal(
+            isStatusQuestionWithoutReference(query),
+            true,
+            `Expected first-person stage question to match statusNeedsReference: ${query}`
+        );
+    }
+});
+
+test('round 8 fix 3: negated value plus a different positive value resolves to the positive value while genuine double positives stay uncertain', () => {
+    const multiTurnCorrection = extractSupportedDocumentFacts(
+        [
+            'ilk başvuru yapacağım, 20 yaşındayım',
+            'pardon yanlış yazdım ilk başvuru değil, kısa dönem ikametten öğrenci ikametine geçiş yapacağım',
+            'öğrenci yurdunda kalıyorum, Göç İdaresinde parmak izi kaydım var'
+        ],
+        'tr'
+    );
+    assert.deepEqual(multiTurnCorrection, {
+        application_type: 'transition',
+        is_under_18: false,
+        accommodation_type: 'dormitory',
+        fingerprint_status: 'registered'
+    });
+    assert.deepEqual(multiTurnCorrection.__uncertain, []);
+
+    const singleTurnCorrections = [
+        {
+            lang: 'tr',
+            turns: ['pardon yanlış yazdım ilk başvuru değil, kısa dönem ikametten öğrenci ikametine geçiş yapacağım'],
+            expected: { application_type: 'transition' }
+        },
+        {
+            lang: 'en',
+            turns: ['Not an initial application, I am applying for a renewal'],
+            expected: { application_type: 'renewal' }
+        },
+        {
+            lang: 'ru',
+            turns: ['Не первичная подача, а продление студенческого ВНЖ'],
+            expected: { application_type: 'renewal' }
+        },
+        {
+            lang: 'tk',
+            turns: ['Ilkinji arza däl, uzatma arzasy'],
+            expected: { application_type: 'renewal' }
+        },
+        {
+            lang: 'ar',
+            turns: ['ليس طلباً أولياً، بل طلب تمديد'],
+            expected: { application_type: 'renewal' }
+        },
+        {
+            lang: 'tr',
+            turns: ['Yurtta kalmıyorum, kira sözleşmesi ile kalıyorum'],
+            expected: { accommodation_type: 'rental_contract' }
+        }
+    ];
+    for (const item of singleTurnCorrections) {
+        const result = extractSupportedDocumentFacts(item.turns, item.lang);
+        assert.deepEqual(result, item.expected, `Correction failed for ${item.lang}: ${item.turns[0]}`);
+        assert.deepEqual(result.__uncertain, []);
+    }
+
+    // Genuine double positives without negation stay uncertain
+    const doublePositiveApp = extractSupportedDocumentFacts(['İlk başvuru ve uzatma başvurusu için belgeler'], 'tr');
+    assert.equal(doublePositiveApp.application_type, undefined);
+    assert.ok(doublePositiveApp.__uncertain.includes('application_type'));
+
+    const doublePositiveAccom = extractSupportedDocumentFacts(['Yurt veya kiralık ev için, 20 yaşındayım'], 'tr');
+    assert.equal(doublePositiveAccom.accommodation_type, undefined);
+    assert.ok(doublePositiveAccom.__uncertain.includes('accommodation_type'));
+});
+
+test('round 8 fix 4: comma-terminated age phrases, cross-turn host context, and Turkmen negative fingerprint verbs extract cleanly', () => {
+    // 1. Comma after age number for мне N / I am N / im N
+    assert.deepEqual(
+        extractSupportedDocumentFacts(['мне 21, живу у друга'], 'ru'),
+        { is_under_18: false, accommodation_type: 'undertaking' }
+    );
+    assert.deepEqual(
+        extractSupportedDocumentFacts(['I am 21, living with a friend'], 'en'),
+        { is_under_18: false, accommodation_type: 'undertaking' }
+    );
+    assert.deepEqual(
+        extractSupportedDocumentFacts(['im 17, staying in a dorm'], 'en'),
+        { is_under_18: true, accommodation_type: 'dormitory' }
+    );
+
+    // 2. Host context across turns: host word in previous user turn makes pronouns in current turn host context
+    const ruCrossTurnHost = extractSupportedDocumentFacts(
+        [
+            'первичная подача, мне 21, живу у друга',
+            'нет не женат, и он не турок'
+        ],
+        'ru'
+    );
+    assert.deepEqual(ruCrossTurnHost, {
+        application_type: 'initial',
+        is_under_18: false,
+        accommodation_type: 'undertaking',
+        host_is_married: 'no',
+        host_is_turkish: 'no'
+    });
+    assert.deepEqual(ruCrossTurnHost.__uncertain, []);
+    assert.equal(
+        verifyQuotedFact(
+            'host_is_married',
+            'no',
+            'не женат',
+            ['первичная подача, мне 21, живу у друга', 'нет не женат, и он не турок'],
+            'ru'
+        ),
+        true
+    );
+    assert.equal(
+        verifyQuotedFact(
+            'host_is_turkish',
+            'no',
+            'он не турок',
+            ['первичная подача, мне 21, живу у друга', 'нет не женат, и он не турок'],
+            'ru'
+        ),
+        true
+    );
+
+    // 3. Turkmen fingerprint negative phrasings (bermedim / bermedik / tabşyrmadym / hasapda ýok)
+    const tkFpCases = [
+        'Barmak yzymy entek bermedim, hasapda ýok',
+        'Barmak yzymy bermedik',
+        'Barmak yzymy tabşyrmadym',
+        'Barmak yzym hasapda ýok'
+    ];
+    for (const text of tkFpCases) {
+        const result = extractSupportedDocumentFacts([text], 'tk');
+        assert.equal(result.fingerprint_status, 'not_registered', `Expected not_registered for: ${text}`);
+        assert.deepEqual(result.__uncertain, []);
+    }
+});

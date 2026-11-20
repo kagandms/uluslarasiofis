@@ -804,7 +804,7 @@ test('request deadline aborts slow multi-call model loops with 503 CHATBOT_UNAVA
     );
     const payload = await response.json();
 
-    assert.deepEqual(timeoutArgs, [10_000]);
+    assert.deepEqual(timeoutArgs, [15_000]);
     assert.equal(fakeAi.callCount, 2);
     assert.equal(response.status, 503);
     assert.equal(payload.error.code, 'CHATBOT_UNAVAILABLE');
@@ -1594,7 +1594,7 @@ test('E2: prose document lists from the model without tool execution are replace
     );
     const completePayload = await completeResponse.json();
     assert.equal(completeResponse.status, 200);
-    assert.equal(completeEnv.fakeAi.callCount, 1);
+    assert.equal(completeEnv.fakeAi.callCount, 0);
     assert.ok(completePayload.reply.startsWith(getChatbotFixedText('documentListIntro', 'ar')));
     assert.equal(completePayload.reply.includes('بطاقة الطالب'), false);
 
@@ -4049,4 +4049,223 @@ test('blind eval 6: unhelpful model replies across all 5 languages are replaced 
     assert.equal(listRes.status, 200);
     assert.equal(listPayload.reply, buildMissingDocumentsQuestion(['application_type', 'is_under_18', 'accommodation_type'], 'en'));
     assert.deepEqual(listPayload.actions, []);
+});
+
+test('round 8 fix 1: complete Turkmen undertaking sentence on risk path uses lexicon facts when model omits facts or calls tool with none, and blocks only on contradiction', async () => {
+    const tkSentence = 'Uzatma arzasy, 21 ýaşymda, borçnama bilen bir adamyň öýünde galýaryn. Borçnama berýän adam öýlenmedik we Türkiýäniň raýaty. Haýsy resminamalar gerek?';
+    const expectedPolicies = listApplicationDocumentPolicies({
+        application_type: 'renewal',
+        application_route: 'standard',
+        is_under_18: 0,
+        address_evidence_type: 'undertaking',
+        accommodation_type: 'undertaking',
+        host_is_married: 'no',
+        host_is_turkish: 'yes',
+        fingerprint_status: null,
+        fingerprint_code: null
+    });
+    const tkMessages = { ...SESSION3_MESSAGES.tk, ...PUBLIC_MESSAGES.tk };
+    const expectedList = expectedPolicies
+        .map((policy) => `- ${tkMessages[policy.label_key]}${policy.required === false ? ' (hökmany däl)' : ''}`)
+        .join('\n');
+    const expectedReply = `${getChatbotFixedText('documentListIntro', 'tk')}\n\n${expectedList}\n\n${getChatbotFixedText('documentListClosing', 'tk')}`;
+
+    // 1. Fake model calls get_required_documents with only some facts (omitting application_type and is_under_18, no quotes)
+    const partialToolEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    accommodation_type: 'undertaking',
+                    host_is_married: 'no',
+                    host_is_turkish: 'yes'
+                }
+            }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const partialRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: tkSentence }],
+            language: 'tk'
+        }), { address: '198.51.110.10' }),
+        partialToolEnv.environment,
+        {}
+    );
+    const partialPayload = await partialRes.json();
+    assert.equal(partialRes.status, 200);
+    assert.equal(partialToolEnv.fakeAi.callCount, 1);
+    assert.equal(partialPayload.reply, expectedReply);
+
+    // 2. Fake model calls get_required_documents with no facts ({})
+    const emptyToolEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {}
+            }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const emptyToolRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: tkSentence }],
+            language: 'tk'
+        }), { address: '198.51.110.11' }),
+        emptyToolEnv.environment,
+        {}
+    );
+    const emptyToolPayload = await emptyToolRes.json();
+    assert.equal(emptyToolRes.status, 200);
+    assert.equal(emptyToolEnv.fakeAi.callCount, 1);
+    assert.equal(emptyToolPayload.reply, expectedReply);
+
+    // 3. Fake model returns prose without calling the tool at all -> still returns full deterministic document list
+    const noToolEnv = createEnvironment({
+        response: 'Arza görnüşiňizi we ýaşyňyzy ýazyň.'
+    });
+    const noToolRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: tkSentence }],
+            language: 'tk'
+        }), { address: '198.51.110.12' }),
+        noToolEnv.environment,
+        {}
+    );
+    const noToolPayload = await noToolRes.json();
+    assert.equal(noToolRes.status, 200);
+    assert.equal(noToolEnv.fakeAi.callCount, 1);
+    assert.equal(noToolPayload.reply, expectedReply);
+
+    // 4. Fake model passes a contradicting valid value (application_type: 'initial' vs lexicon 'renewal') -> blocks only application_type
+    const contradictEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'initial',
+                    accommodation_type: 'undertaking'
+                }
+            }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const contradictRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: tkSentence }],
+            language: 'tk'
+        }), { address: '198.51.110.13' }),
+        contradictEnv.environment,
+        {}
+    );
+    const contradictPayload = await contradictRes.json();
+    assert.equal(contradictRes.status, 200);
+    assert.equal(contradictEnv.fakeAi.callCount, 1);
+    assert.equal(contradictPayload.reply, buildMissingDocumentsQuestion(['application_type'], 'tk'));
+});
+
+test('round 8 fix 2: Russian stage how-to question goes to model/knowledge while first-person stage question returns statusNeedsReference', async () => {
+    const stepsEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'application_steps' } }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const stepsRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Какие этапы нужно пройти на портале для подачи заявки?' }],
+            language: 'ru'
+        }), { address: '198.51.110.20' }),
+        stepsEnv.environment,
+        {}
+    );
+    const stepsPayload = await stepsRes.json();
+    assert.equal(stepsRes.status, 200);
+    assert.equal(stepsEnv.fakeAi.callCount, 1);
+    assert.equal(stepsPayload.reply, readKnowledge('application_steps', 'ru').text);
+    assert.notEqual(stepsPayload.reply, getChatbotFixedText('statusNeedsReference', 'ru'));
+
+    const firstPersonEnv = createEnvironment(() => {
+        throw new Error('Model must not be called for first-person stage status question.');
+    });
+    const firstPersonRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'На каком этапе моя заявка?' }],
+            language: 'ru'
+        }), { address: '198.51.110.21' }),
+        firstPersonEnv.environment,
+        {}
+    );
+    const firstPersonPayload = await firstPersonRes.json();
+    assert.equal(firstPersonRes.status, 200);
+    assert.equal(firstPersonEnv.fakeAi.callCount, 0);
+    assert.equal(firstPersonPayload.reply, getChatbotFixedText('statusNeedsReference', 'ru'));
+});
+
+test('round 8 fix 3 & 5: multi-turn correction conversation with a fake binding rejecting with ApiError 503 returns deterministic list or missing-facts question instead of 503', async () => {
+    const trMessages = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
+    const expectedTransitionPolicies = listApplicationDocumentPolicies({
+        application_type: 'renewal',
+        application_route: 'transition',
+        is_under_18: 0,
+        address_evidence_type: 'dormitory',
+        accommodation_type: 'dormitory',
+        host_is_married: null,
+        host_is_turkish: null,
+        fingerprint_status: 'registered',
+        fingerprint_code: 'registered'
+    });
+    const expectedTransitionList = expectedTransitionPolicies
+        .map((policy) => `- ${trMessages[policy.label_key]}${policy.required === false ? ' (isteğe bağlı)' : ''}`)
+        .join('\n');
+    const expectedTransitionReply = `${getChatbotFixedText('documentListIntro', 'tr')}\n\n${expectedTransitionList}\n\n${getChatbotFixedText('documentListClosing', 'tr')}`;
+
+    // 1. Multi-turn correction with incomplete facts (missing accommodation_type & fingerprint_status) when model rejects with ApiError 503
+    const partial503Env = createEnvironment(() => {
+        throw new ApiError(503, 'CHATBOT_UNAVAILABLE', 'Upstream model timeout', true);
+    });
+    const partial503Res = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'ilk başvuru yapacağım, 20 yaşındayım' },
+                { role: 'assistant', content: 'Nerede kalıyorsunuz?' },
+                { role: 'user', content: 'pardon yanlış yazdım ilk başvuru değil, kısa dönem ikametten öğrenci ikametine geçiş yapacağım' }
+            ],
+            language: 'tr'
+        }), { address: '198.51.110.30' }),
+        partial503Env.environment,
+        {}
+    );
+    const partial503Payload = await partial503Res.json();
+    assert.equal(partial503Res.status, 200);
+    assert.equal(
+        partial503Payload.reply,
+        buildMissingDocumentsQuestion(['accommodation_type', 'fingerprint_status'], 'tr')
+    );
+
+    // 2. Multi-turn correction with complete facts when model rejects with ApiError 503 -> returns deterministic transition document list
+    const complete503Env = createEnvironment(() => {
+        throw new ApiError(503, 'CHATBOT_UNAVAILABLE', 'Upstream model timeout', true);
+    });
+    const complete503Res = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'ilk başvuru yapacağım, 20 yaşındayım' },
+                { role: 'assistant', content: 'Nerede kalıyorsunuz?' },
+                { role: 'user', content: 'pardon yanlış yazdım ilk başvuru değil, kısa dönem ikametten öğrenci ikametine geçiş yapacağım' },
+                { role: 'assistant', content: 'Konaklama türünüzü ve parmak izi kaydınızı yazar mısınız?' },
+                { role: 'user', content: 'öğrenci yurdunda kalıyorum ve Göç İdaresinde parmak izi kaydım var' }
+            ],
+            language: 'tr'
+        }), { address: '198.51.110.31' }),
+        complete503Env.environment,
+        {}
+    );
+    const complete503Payload = await complete503Res.json();
+    assert.equal(complete503Res.status, 200);
+    assert.equal(complete503Payload.reply, expectedTransitionReply);
 });

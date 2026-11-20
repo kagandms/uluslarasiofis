@@ -2,7 +2,7 @@ import { ApiError } from '../domain/errors.js';
 
 // @cf/meta/llama-3.3-70b-instruct-fp8-fast: checked 2026-11-19, unverified against the live Cloudflare catalog.
 export const CHATBOT_MODEL_DEFAULT = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-export const CHATBOT_MODEL_TIMEOUT_MS = 8_000;
+export const CHATBOT_MODEL_TIMEOUT_MS = 12_000;
 export const CHATBOT_MODEL_MAX_OUTPUT_TOKENS = 512;
 
 const GENERIC_UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.';

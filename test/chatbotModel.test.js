@@ -154,8 +154,8 @@ test('missing AI binding or malformed model response throws 503 CHATBOT_UNAVAILA
     );
 });
 
-test('8-second default timeout aborts a hanging AI binding call without retries', async (t) => {
-    assert.equal(CHATBOT_MODEL_TIMEOUT_MS, 8000);
+test('12-second default timeout aborts a hanging AI binding call without retries', async (t) => {
+    assert.equal(CHATBOT_MODEL_TIMEOUT_MS, 12000);
     t.mock.timers.enable({ apis: ['setTimeout'] });
 
     let observedSignal = null;
