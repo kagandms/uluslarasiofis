@@ -660,6 +660,25 @@ durations, curly apostrophes, self-vs-host, homographs, reference hijack, how-to
 roommate refusal, budget order) are fixed and merged. Both found no SQL injection, no XSS, no
 authorization gap, no PII in logs, no ReDoS.
 
+## 4b. Progress on 2026-11-20 (interim; update at end of day)
+
+- R1 done (`fac0469`): evidence facts usable in the risk path, list intent across turns, no fallback
+  for list requests, lexicon gaps, `run.mjs --cases`. Blind set merged (`f41e873`); the
+  orchestrator's relabel of `blind-en-documents-04` was wrong and reverted (`0f47ec9`).
+- Blind run 1: 101/130 (77.7%) — lexicon-only extraction did not generalize. **Owner approved an
+  architecture change:** quote-grounded model extraction verified by the server (`ca461bf`, `4d9be36`:
+  `verifyQuotedFact`, relevance stems), host-context fix (`2ca347f`), blind-eval routing fixes
+  (`64f834e`), round-8 fixes incl. 12 s model timeout / 15 s deadline (`f332f82`).
+- Results at `f332f82`: blind 123/130 (94.6%), full 212/217 (97.7%), 0 HTTP errors; one blind wrong
+  list remained ('yurtta kalıyorum ama aslında çıktım …').
+- R3 security re-review (Argon, read-only) found 7 confirmed issues (substring stems, bare numbers as
+  ages, WH-questions treated as statements, zero-width characters, sticky list intent, injection
+  false positives / last-turn-only checks, self-vs-host edge cases). Fixes running on
+  `task/chatbot-r3-evidence` (Argon) and `task/chatbot-r3-routing` (Hydrogen), plus a new safety
+  net: every document list starts with an "Anladığım bilgiler: …" line the student can correct.
+- Owner notes 2026-11-20: use Neon/Argon (not agy Claude) for escalation; add an office mascot
+  before going live (R7b below).
+
 ## 5. Remaining work, in order
 
 - [ ] **R1 — Round-5 corrective task (interrupted, nothing written).** Re-send to one agy agent in
