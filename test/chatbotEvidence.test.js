@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
     EVIDENCE_PATTERN_LISTS,
+    QUOTED_FACT_VALUE_STEMS,
     extractSupportedDocumentFacts,
     filterDocumentArgsByEvidence,
     hasEvidenceRisk,
@@ -367,9 +368,18 @@ function collectNormalizedPatternSources(value, path, out = []) {
 }
 
 test('guard: all evidence and route pattern literals are already in normalizeForEvidence form', () => {
+    assert.equal(Object.isFrozen(QUOTED_FACT_VALUE_STEMS), true);
+    for (const stemsByValue of Object.values(QUOTED_FACT_VALUE_STEMS)) {
+        assert.equal(Object.isFrozen(stemsByValue), true);
+        for (const stemList of Object.values(stemsByValue)) {
+            assert.equal(Object.isFrozen(stemList), true);
+        }
+    }
+
     const unnormalizedCharPattern = /[йёýňäüžşçğöıİأإآٱةىؤئ\u064B-\u065F\u0670\u0640]/u;
     const entries = [
         ...collectNormalizedPatternSources(EVIDENCE_PATTERN_LISTS, 'EVIDENCE_PATTERN_LISTS'),
+        ...collectNormalizedPatternSources(QUOTED_FACT_VALUE_STEMS, 'QUOTED_FACT_VALUE_STEMS'),
         ...collectNormalizedPatternSources(CHATBOT_ROUTE_NORMALIZED_PATTERNS, 'CHATBOT_ROUTE_NORMALIZED_PATTERNS')
     ];
 
@@ -1314,6 +1324,78 @@ test('verifyQuotedFact verifies the three blind evaluation examples, substring b
     );
     assert.equal(
         verifyQuotedFact('application_type', 'initial', 'ilk basvuru', ['ilk basvuru mu?'], 'tr'),
+        false
+    );
+
+    // Rule f: quote relevance stem check for application_type, accommodation_type, host_is_married, host_is_turkish, fingerprint_status
+    const auntTurns = ['İlk başvuru, 20 yaşındayım, teyzemde kalıyorum, hangi belgeler?'];
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'dormitory', 'teyzemde kalıyorum', auntTurns, 'tr'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'undertaking', 'teyzemde kalıyorum', auntTurns, 'tr'),
+        true
+    );
+    const auntFiltered = filterDocumentArgsByEvidence(
+        {
+            application_type: 'initial',
+            is_under_18: false,
+            accommodation_type: 'dormitory',
+            quotes: {
+                application_type: 'İlk başvuru',
+                is_under_18: '20 yaşındayım',
+                accommodation_type: 'teyzemde kalıyorum'
+            }
+        },
+        auntTurns,
+        'tr'
+    );
+    assert.deepEqual(auntFiltered, {
+        application_type: 'initial',
+        is_under_18: false,
+        quotes: {
+            application_type: 'İlk başvuru',
+            is_under_18: '20 yaşındayım',
+            accommodation_type: 'teyzemde kalıyorum'
+        }
+    });
+    assert.equal(Object.hasOwn(auntFiltered, 'accommodation_type'), false);
+
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'rental_contract', 'snimayu kvartiru', ['snimayu kvartiru'], 'ru'),
+        true
+    );
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'dormitory', 'kyk yurdunda kaliyorum', ['kyk yurdunda kaliyorum'], 'tr'),
+        true
+    );
+
+    // A quote with no relevant stem for application_type is rejected
+    assert.equal(
+        verifyQuotedFact('application_type', 'initial', 'istanbulda ogrenciyim', ['istanbulda ogrenciyim'], 'tr'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('application_type', 'renewal', 'istanbulda ogrenciyim', ['istanbulda ogrenciyim'], 'tr'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('application_type', 'transition', 'istanbulda ogrenciyim', ['istanbulda ogrenciyim'], 'tr'),
+        false
+    );
+
+    // Quotes with no relevant stem for host_is_married, host_is_turkish, and fingerprint_status are rejected
+    assert.equal(
+        verifyQuotedFact('host_is_married', 'yes', 'teyzemde kaliyorum', ['teyzemde kaliyorum'], 'tr'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('host_is_turkish', 'yes', 'teyzemde kaliyorum', ['teyzemde kaliyorum'], 'tr'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('fingerprint_status', 'registered', 'teyzemde kaliyorum', ['teyzemde kaliyorum'], 'tr'),
         false
     );
 });

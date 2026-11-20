@@ -3542,7 +3542,147 @@ test('quote-grounded verification rejects missing/assistant/negated/numberless-a
     assert.equal(yesNoQuoteRes.status, 200);
     assert.equal(yesNoQuotePayload.reply, buildMissingDocumentsQuestion(['accommodation_type'], 'ru'));
 
-    // 7. Quotes are absent from captured logs
+    // 7. Irrelevant quote for accommodation_type ('teyzemde kalıyorum' claimed as 'dormitory') -> accommodation missing (asked), no list
+    const auntAsDormEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'initial',
+                    is_under_18: false,
+                    accommodation_type: 'dormitory',
+                    quotes: {
+                        application_type: 'İlk başvuru',
+                        is_under_18: '20 yaşındayım',
+                        accommodation_type: 'teyzemde kalıyorum'
+                    }
+                }
+            }]
+        }
+    ]);
+    const auntAsDormRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'İlk başvuru, 20 yaşındayım, teyzemde kalıyorum, hangi belgeler?'
+            }],
+            language: 'tr'
+        }), { address: '198.51.108.37' }),
+        auntAsDormEnv.environment,
+        {}
+    );
+    const auntAsDormPayload = await auntAsDormRes.json();
+    assert.equal(auntAsDormRes.status, 200);
+    assert.equal(auntAsDormPayload.reply, buildMissingDocumentsQuestion(['accommodation_type'], 'tr'));
+    assert.equal(auntAsDormPayload.reply.includes(getChatbotFixedText('documentListIntro', 'tr')), false);
+    assert.equal(auntAsDormPayload.reply.includes(PUBLIC_MESSAGES.tr.documentAddressDormitory), false);
+
+    // 8. Irrelevant quote for application_type (no stem for 'initial') -> application_type missing (asked), no list
+    const noStemAppEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'initial',
+                    is_under_18: false,
+                    accommodation_type: 'dormitory',
+                    quotes: {
+                        application_type: 'istanbulda ogrenciyim',
+                        is_under_18: '20 yasindayim',
+                        accommodation_type: 'kyk yurdunda kaliyorum'
+                    }
+                }
+            }]
+        }
+    ]);
+    const noStemAppRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'istanbulda ogrenciyim, 20 yasindayim, kyk yurdunda kaliyorum, hangi belgeler?'
+            }],
+            language: 'tr'
+        }), { address: '198.51.108.38' }),
+        noStemAppEnv.environment,
+        {}
+    );
+    const noStemAppPayload = await noStemAppRes.json();
+    assert.equal(noStemAppRes.status, 200);
+    assert.equal(noStemAppPayload.reply, buildMissingDocumentsQuestion(['application_type'], 'tr'));
+    assert.equal(noStemAppPayload.reply.includes(getChatbotFixedText('documentListIntro', 'tr')), false);
+
+    // 9. Relevant stem quotes ('snimayu kvartiru' -> rental_contract, 'kyk yurdunda kaliyorum' -> dormitory) produce deterministic lists
+    const snimayuEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'renewal',
+                    is_under_18: false,
+                    accommodation_type: 'rental_contract',
+                    quotes: {
+                        application_type: 'prodlit',
+                        is_under_18: 'mne 22',
+                        accommodation_type: 'snimayu kvartiru'
+                    }
+                }
+            }]
+        }
+    ]);
+    const snimayuRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'mne nado prodlit, mne 22, snimayu kvartiru'
+            }],
+            language: 'ru'
+        }), { address: '198.51.108.39' }),
+        snimayuEnv.environment,
+        {}
+    );
+    const snimayuPayload = await snimayuRes.json();
+    assert.equal(snimayuRes.status, 200);
+    assert.equal(snimayuPayload.reply.startsWith(getChatbotFixedText('documentListIntro', 'ru')), true);
+    assert.equal(snimayuPayload.reply.includes(PUBLIC_MESSAGES.ru.documentAddressRentalContract), true);
+
+    const kykEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'initial',
+                    is_under_18: false,
+                    accommodation_type: 'dormitory',
+                    quotes: {
+                        application_type: 'ilk basvuru',
+                        is_under_18: '20 yasindayim',
+                        accommodation_type: 'kyk yurdunda kaliyorum'
+                    }
+                }
+            }]
+        }
+    ]);
+    const kykRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'ilk basvuru, 20 yasindayim, kyk yurdunda kaliyorum'
+            }],
+            language: 'tr'
+        }), { address: '198.51.108.40' }),
+        kykEnv.environment,
+        {}
+    );
+    const kykPayload = await kykRes.json();
+    assert.equal(kykRes.status, 200);
+    assert.equal(kykPayload.reply.startsWith(getChatbotFixedText('documentListIntro', 'tr')), true);
+    assert.equal(kykPayload.reply.includes(PUBLIC_MESSAGES.tr.documentAddressDormitory), true);
+
+    // 10. Quotes are absent from captured logs
     const serializedLogs = JSON.stringify(capturedConsole);
     for (const secretQuote of [
         missingQuoteText,
@@ -3552,7 +3692,11 @@ test('quote-grounded verification rejects missing/assistant/negated/numberless-a
         'ما بسكن بالسكن الطلابي',
         'student v stambule',
         'İlk başvuru yapacağım',
-        'dogovor arendy'
+        'dogovor arendy',
+        'teyzemde kalıyorum',
+        'istanbulda ogrenciyim',
+        'snimayu kvartiru',
+        'kyk yurdunda kaliyorum'
     ]) {
         assert.equal(serializedLogs.includes(secretQuote), false, `Console logs leaked quote: ${secretQuote}`);
     }

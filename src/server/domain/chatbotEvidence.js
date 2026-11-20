@@ -344,6 +344,305 @@ const LIST_INTENT_PHRASE_PATTERNS = Object.freeze([
     /(?<![\p{L}\p{N}])(?:ما\s+(?:هي\s+)?(?:المستندات|الوثايق|مستندات|وثايق)|(?:المستندات|الوثايق)\s+المطلوب[\p{L}\p{N}]*|قايمه\s+(?:المستندات|الوثايق))(?![\p{L}\p{N}])/u
 ]);
 
+const HOST_MARRIED_VALUE_STEMS = Object.freeze([
+    'evli',
+    'bekar',
+    'married',
+    'single',
+    'wife',
+    'husband',
+    'spouse',
+    'жена',
+    'женат',
+    'замуж',
+    'брак',
+    'холост',
+    'holost',
+    'kholost',
+    'zhena',
+    'zamuzh',
+    'brak',
+    'oylen',
+    'durmus',
+    'متزوج',
+    'زوج',
+    'اعزب',
+    'عزباء',
+    'mutazawwij',
+    'azab'
+]);
+
+const HOST_TURKISH_VALUE_STEMS = Object.freeze([
+    'turk',
+    'tc',
+    'турц',
+    'турок',
+    'турец',
+    'turts',
+    'turok',
+    'turets',
+    'turk rayat',
+    'ترك',
+    'تركي',
+    'citizen',
+    'vatandas',
+    'yabanci',
+    'граждан',
+    'гражданин',
+    'grazhdan',
+    'rayat',
+    'مواطن',
+    'muwatin'
+]);
+
+const FINGERPRINT_VALUE_STEMS = Object.freeze([
+    'parmak',
+    'finger',
+    'отпечат',
+    'otpechat',
+    'barmak',
+    'بصم',
+    'basma',
+    'biometr',
+    'biyometr',
+    'биометр'
+]);
+
+export const QUOTED_FACT_VALUE_STEMS = Object.freeze({
+    application_type: Object.freeze({
+        initial: Object.freeze([
+            'ilk',
+            'first',
+            'initial',
+            'perv',
+            'vperv',
+            'перв',
+            'вперв',
+            'ilkinji',
+            'ilkinj',
+            'اول',
+            'awal',
+            'awwal',
+            '1st'
+        ]),
+        renewal: Object.freeze([
+            'uzat',
+            'yenile',
+            'renew',
+            'exten',
+            'prodl',
+            'продл',
+            'uzalt',
+            'tazele',
+            'تمديد',
+            'تجديد',
+            'امدد',
+            'اجدد',
+            'jadd',
+            'tamdid',
+            'tajdid'
+        ]),
+        transition: Object.freeze([
+            'gecis',
+            'gecish',
+            'tur degis',
+            'uytget',
+            'transit',
+            'switch',
+            'change to student',
+            'transfer',
+            'perehod',
+            'perekhod',
+            'переход',
+            'perei',
+            'perey',
+            'переи',
+            'perevod',
+            'perevod на',
+            'перевод',
+            'perevest',
+            'перевест',
+            'сменить вид',
+            'смена вид',
+            'ziyaret',
+            'تحويل',
+            'انتقال',
+            'احول',
+            'انقل',
+            'tahwil',
+            'intiqal'
+        ])
+    }),
+    accommodation_type: Object.freeze({
+        dormitory: Object.freeze([
+            'yurt',
+            'yurd',
+            'dorm',
+            'kyk',
+            'hostel',
+            'хостел',
+            'obshag',
+            'общаг',
+            'общеж',
+            'obshezh',
+            'obshchezh',
+            'umumy yasayys',
+            'yasayys jay',
+            'سكن طلاب',
+            'سكن الطلاب',
+            'سكن جامع',
+            'سكن الجامع',
+            'السكن الجامعي',
+            'sakan jami',
+            'sakan tullab'
+        ]),
+        rental_contract: Object.freeze([
+            'kira',
+            'kiral',
+            'kirey',
+            'rent',
+            'lease',
+            'arend',
+            'аренд',
+            'snim',
+            'сним',
+            'kvartir',
+            'квартир',
+            'договор наима',
+            'dogovor naima',
+            'dogovor nayma',
+            'karende',
+            'karend',
+            'ijar',
+            'ايجار',
+            'اجار',
+            'مستاجر',
+            'استاجر'
+        ]),
+        own_home: Object.freeze([
+            'kendi ev',
+            'ev benim',
+            'own home',
+            'own house',
+            'own flat',
+            'own apartment',
+            'own place',
+            'my house',
+            'tapu',
+            'тапу',
+            'title deed',
+            'sobstven',
+            'собствен',
+            'svoei kvartir',
+            'svoey kvartir',
+            'своеи квартир',
+            'своя квартир',
+            'свое жил',
+            'свои дом',
+            'своем дом',
+            'oz oy',
+            'eyecilik',
+            'ملك',
+            'ملكي',
+            'طابو',
+            'tabu'
+        ]),
+        hotel: Object.freeze([
+            'otel',
+            'pansiyon',
+            'hotel',
+            'гостиниц',
+            'gostinits',
+            'gostinic',
+            'отел',
+            'myhmanhana',
+            'فندق',
+            'fundu'
+        ]),
+        undertaking: Object.freeze([
+            'taahhut',
+            'undertaking',
+            'host',
+            'relative',
+            'uncle',
+            'aunt',
+            'friend',
+            'akraba',
+            'teyze',
+            'hala',
+            'amca',
+            'dayi',
+            'arkadas',
+            'tanidik',
+            'tanidig',
+            'aile yan',
+            'родствен',
+            'rodstven',
+            'тет',
+            'дяд',
+            'друг',
+            'подруг',
+            'drug',
+            'podrug',
+            'tyot',
+            'dyad',
+            'обязательств',
+            'obyazatelstv',
+            'поручител',
+            'poruchitel',
+            'borcnama',
+            'garyndas',
+            'dayza',
+            'kakam',
+            'yanynda',
+            'تعهد',
+            'كفاله',
+            'عند',
+            'قريب',
+            'خال',
+            'عم',
+            'صديق',
+            'taahhud'
+        ]),
+        residence_certificate: Object.freeze([
+            'adres kayd',
+            'yerlesim',
+            'ikametgah',
+            'residence certificate',
+            'registered address',
+            'address registration',
+            'e-devlet',
+            'edevlet',
+            'справк',
+            'spravk',
+            'регистрац',
+            'registrats',
+            'адрес',
+            'adres',
+            'salgy',
+            'sahadatnama',
+            'شهاده اقامه',
+            'شهاده الاقامه',
+            'شهاده محل',
+            'عنوان',
+            'نفوس',
+            'nufus'
+        ])
+    }),
+    host_is_married: Object.freeze({
+        yes: HOST_MARRIED_VALUE_STEMS,
+        no: HOST_MARRIED_VALUE_STEMS
+    }),
+    host_is_turkish: Object.freeze({
+        yes: HOST_TURKISH_VALUE_STEMS,
+        no: HOST_TURKISH_VALUE_STEMS
+    }),
+    fingerprint_status: Object.freeze({
+        registered: FINGERPRINT_VALUE_STEMS,
+        not_registered: FINGERPRINT_VALUE_STEMS
+    })
+});
+
 export const EVIDENCE_PATTERN_LISTS = Object.freeze({
     NEGATION_LEXICON_BY_LANGUAGE,
     ARABIC_DIALECT_NEGATION_PARTICLE_PATTERN,
@@ -378,7 +677,8 @@ export const EVIDENCE_PATTERN_LISTS = Object.freeze({
     ELLIPTICAL_DOCUMENT_REQUEST_PATTERN,
     DOCUMENT_KEYWORD_PATTERNS,
     POLITE_REQUEST_PATTERNS_BY_LANGUAGE,
-    LIST_INTENT_PHRASE_PATTERNS
+    LIST_INTENT_PHRASE_PATTERNS,
+    QUOTED_FACT_VALUE_STEMS
 });
 
 function isNegationToken(cleanToken) {
@@ -970,6 +1270,14 @@ function verifyUnder18QuoteContent(normalizedQuote, quoteTokens, value) {
     return value === true ? hasMinorSignal : hasAdultSignal;
 }
 
+function hasRelevantQuoteStem(fact, value, normalizedQuote) {
+    if (!Object.hasOwn(QUOTED_FACT_VALUE_STEMS, fact)) return true;
+    const stemsByValue = QUOTED_FACT_VALUE_STEMS[fact];
+    const stems = stemsByValue?.[value];
+    if (!Array.isArray(stems) || stems.length === 0) return false;
+    return stems.some((stem) => normalizedQuote.includes(stem));
+}
+
 function getQuoteNegationIgnoredSpans(fact, value, clauseText) {
     if (fact === 'accommodation_type' && value === 'undertaking') {
         return [
@@ -1024,6 +1332,11 @@ export function verifyQuotedFact(fact, value, quote, userTurns, language = 'tr')
 
     // Rule c: is_under_18 must contain an age number 1-99 consistent with value or a lexicon minor/adult phrase, and no duration words.
     if (fact === 'is_under_18' && !verifyUnder18QuoteContent(normalizedQuote, quoteTokens, value)) {
+        return false;
+    }
+
+    // Rule f: for non-age facts, the normalized quote must contain at least one loose stem associated with the claimed value.
+    if (fact !== 'is_under_18' && !hasRelevantQuoteStem(fact, value, normalizedQuote)) {
         return false;
     }
 
