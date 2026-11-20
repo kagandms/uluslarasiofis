@@ -231,19 +231,21 @@ const DURATION_SUFFIX_WORDS = Object.freeze([
 
 const HOST_CONTEXT_PATTERNS = Object.freeze([
     // tr
-    /(?<![\p{L}\p{N}])(?:ev\s+sahib[\p{L}\p{N}]*|taahhut(?:name)?\s+veren[\p{L}\p{N}]*|yaninda\s+kaldig[\p{L}\p{N}]*|akrabam[\p{L}\p{N}]*|arkadasim[\p{L}\p{N}]*|tanidig[\p{L}\p{N}]*\s+yan[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:ev\s+sahib[\p{L}\p{N}]*|taahhut(?:name)?\s+veren[\p{L}\p{N}]*|yaninda\s+kaldig[\p{L}\p{N}]*|akraba[\p{L}\p{N}]*|teyze[\p{L}\p{N}]*|amca[\p{L}\p{N}]*|dayi[\p{L}\p{N}]*|halam[\p{L}\p{N}]*|arkadasim[\p{L}\p{N}]*|tanidig[\p{L}\p{N}]*\s+yan[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
     // en
-    /(?<![\p{L}\p{N}])(?:host[\p{L}\p{N}]*|landlord[\p{L}\p{N}]*|relatives?|(?:the\s+)?person\s+(?:i\s+)?stay\s+with)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:host[\p{L}\p{N}]*|landlord[\p{L}\p{N}]*|(?:relatives?|uncles?|aunts?)(?:'s)?|(?:the\s+)?person\s+(?:i\s+)?stay\s+with)(?![\p{L}\p{N}])/u,
     // ru
-    /(?<![\p{L}\p{N}])(?:хозяин[\p{L}\p{N}]*|хозяик[\p{L}\p{N}]*|принимающ[\p{L}\p{N}]*|родственни(?:к|ц)[\p{L}\p{N}]*|у\s+(?:кого|которого|которои)\s+живу)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:хозяин[\p{L}\p{N}]*|хозяик[\p{L}\p{N}]*|принимающ[\p{L}\p{N}]*|родственни(?:к|ц)[\p{L}\p{N}]*|тет(?:я|и|е|еи|ю|ин[\p{L}\p{N}]*)|дяд[\p{L}\p{N}]*|у\s+(?:кого|которого|которои)\s+живу)(?![\p{L}\p{N}])/u,
     // tk
-    /(?<![\p{L}\p{N}])(?:hojayyn[\p{L}\p{N}]*|garyndas[\p{L}\p{N}]*|borcnama\s+beryan[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:hojayyn[\p{L}\p{N}]*|garyndas[\p{L}\p{N}]*|dayza[\p{L}\p{N}]*|dayy[\p{L}\p{N}]*|borcnama\s+beryan[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
     // ar
-    /(?<![\p{L}\p{N}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?مضيف[\p{L}\p{N}]*|صاحب\s+(?:ال)?سكن|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?قريب(?:ي|ه|ها|نا)?|(?:الشخص\s+)?(?:الذي|اللي)\s+(?:اسكن|بسكن|اقيم|بقيم|ساكن[\p{L}\p{N}]*|مقيم[\p{L}\p{N}]*|عايش[\p{L}\p{N}]*|اعيش|بعيش)\s+(?:عنده|عندها|معه|معها|لديه|لديها)|مقدم\s+(?:ال)?تعهد)(?![\p{L}\p{N}])/u
+    /(?<![\p{L}\p{N}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?مضيف[\p{L}\p{N}]*|صاحب\s+(?:ال)?سكن|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?قريب(?:ي|ه|ها|نا)?|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:خال|عم)(?:ي|ه|ها|نا|تي|ته|تها|تنا)?|(?:الشخص\s+)?(?:الذي|اللي)\s+(?:اسكن|بسكن|اقيم|بقيم|ساكن[\p{L}\p{N}]*|مقيم[\p{L}\p{N}]*|عايش[\p{L}\p{N}]*|اعيش|بعيش)\s+(?:عنده|عندها|معه|معها|لديه|لديها)|مقدم\s+(?:ال)?تعهد)(?![\p{L}\p{N}])/u
 ]);
 
-const STUDENT_SUBJECT_PATTERN = /(?<![\p{L}\p{N}])(?:ben|i\s+am|i'm|im|я|men|انا)(?![\p{L}\p{N}])/gu;
-const FIRST_PERSON_TURKISH_PREDICATE_PATTERN = /^(?:evliyim|bekarim|vatandasim|turkum)$/u;
+const HOST_THIRD_PERSON_PRONOUN_PATTERN = /(?<![\p{L}\p{N}])(?:o|onun|he(?:'s)?|she(?:'s)?|his|her|он|она|его|ее|ol|(?:و|ف)?(?:هو|هي))(?![\p{L}\p{N}])/gu;
+const STUDENT_SUBJECT_PATTERN = /(?<![\p{L}\p{N}])(?:ben(?:im)?|i\s+am|i'm|im|i|my|я|мне|у\s+меня|men(?:in)?|(?:و)?(?:انا|لست))(?![\p{L}\p{N}])/gu;
+const FIRST_PERSON_TURKISH_PREDICATE_PATTERN = /^(?:evliyim|bekarim|vatandasim|vatandasiyim|turkum|yabanciyim|uyrukluyum|degilim|bosandim|dulum|ogrenciyim|yasindayim|yasimdayim|resitim|kucugum|buyugum)$/u;
+const FIRST_PERSON_TURKISH_VERB_PATTERN = /^[\p{L}]{2,}(?:iyorum|uyorum|miyorum|muyorum|madim|medim|acagim|ecegim)$/u;
 
 const HOST_MARRIED_NEGATIVE = Object.freeze([
     /(?<![\p{L}\p{N}])evli\s+degil[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
@@ -662,8 +664,10 @@ export const EVIDENCE_PATTERN_LISTS = Object.freeze({
     DURATION_PREFIX_WORDS,
     DURATION_SUFFIX_WORDS,
     HOST_CONTEXT_PATTERNS,
+    HOST_THIRD_PERSON_PRONOUN_PATTERN,
     STUDENT_SUBJECT_PATTERN,
     FIRST_PERSON_TURKISH_PREDICATE_PATTERN,
+    FIRST_PERSON_TURKISH_VERB_PATTERN,
     HOST_MARRIED_NEGATIVE,
     HOST_MARRIED_POSITIVE,
     HOST_TURKISH_NEGATIVE,
@@ -1004,17 +1008,79 @@ function detectUnder18(clauses, language) {
     return { value: undefined, uncertain: false };
 }
 
-function isStudentSelfPredicate(clauseText, matchStart, matchText, hostMatches) {
+function annotateTurnHostContext(turnClauses) {
+    let seenDirectHostInTurn = false;
+    for (let i = 0; i < turnClauses.length; i += 1) {
+        const clause = turnClauses[i];
+        const directHostMatches = findAllMatches(clause.text, HOST_CONTEXT_PATTERNS);
+        const pronounMatches = findAllMatches(clause.text, [HOST_THIRD_PERSON_PRONOUN_PATTERN]);
+        const validPronounMatches = pronounMatches.filter(
+            (m) => seenDirectHostInTurn || (directHostMatches.length > 0 && m.start > directHostMatches[0].start)
+        );
+        clause.directHostMatches = directHostMatches;
+        clause.hostMatches = [...directHostMatches, ...validPronounMatches].sort((a, b) => a.start - b.start);
+        clause.prevClauseHasHostContext = i > 0 && turnClauses[i - 1].hostMatches.length > 0;
+        if (directHostMatches.length > 0) {
+            seenDirectHostInTurn = true;
+        }
+    }
+    return turnClauses;
+}
+
+function parseTurnsIntoClauses(turns) {
+    const allClauses = [];
+    for (let turnIndex = 0; turnIndex < turns.length; turnIndex += 1) {
+        const normalizedTurn = normalizeForEvidence(turns[turnIndex]);
+        const turnClauses = annotateTurnHostContext(parseClauses(normalizedTurn));
+        for (const clause of turnClauses) {
+            clause.turnIndex = turnIndex;
+            allClauses.push(clause);
+        }
+    }
+    return allClauses;
+}
+
+function isStudentSelfDescriptionClause(clause) {
+    if (Array.isArray(clause.hostMatches) && clause.hostMatches.length > 0) {
+        return false;
+    }
+    if (findAllMatches(clause.text, [STUDENT_SUBJECT_PATTERN]).length > 0) {
+        return true;
+    }
+    return clause.tokens.some(
+        (t) => FIRST_PERSON_TURKISH_PREDICATE_PATTERN.test(t.clean)
+            || FIRST_PERSON_TURKISH_VERB_PATTERN.test(t.clean)
+    );
+}
+
+function isStudentSelfPredicate(clause, matchStart, matchEnd, matchText, hostMatches = clause.hostMatches || []) {
     const tokensInMatch = tokenizeClause(matchText);
     if (tokensInMatch.some((t) => FIRST_PERSON_TURKISH_PREDICATE_PATTERN.test(t.clean))) {
         return true;
     }
-    const studentMatches = findAllMatches(clauseText, [STUDENT_SUBJECT_PATTERN])
-        .filter((m) => m.start < matchStart);
+    const { firstIdx, lastIdx } = findOverlappingTokenRange(clause.tokens, matchStart, matchEnd);
+    if (firstIdx !== -1) {
+        const checkTo = Math.min(clause.tokens.length - 1, lastIdx + 1);
+        for (let i = firstIdx; i <= checkTo; i += 1) {
+            const clean = clause.tokens[i].clean;
+            if (i <= lastIdx && FIRST_PERSON_TURKISH_PREDICATE_PATTERN.test(clean)) {
+                return true;
+            }
+            if (i === lastIdx + 1 && clean === 'degilim') {
+                return true;
+            }
+        }
+    }
+    if (hostMatches.length === 0 && isStudentSelfDescriptionClause(clause)) {
+        return true;
+    }
+    const studentMatches = findAllMatches(clause.text, [STUDENT_SUBJECT_PATTERN])
+        .filter((s) => !hostMatches.some((h) => s.start >= h.start && s.end <= h.end))
+        .filter((s) => s.start < matchEnd);
     if (studentMatches.length === 0) return false;
     const latestStudent = studentMatches[studentMatches.length - 1];
     const hasInterveningHost = hostMatches.some(
-        (h) => h.start > latestStudent.start && h.start < matchStart
+        (h) => h.end > latestStudent.start && h.start < matchEnd
     );
     return !hasInterveningHost;
 }
@@ -1035,7 +1101,7 @@ function detectHostFacts(clauses, language) {
     let turkishUncertain = false;
 
     for (const clause of clauses) {
-        const hostMatches = findAllMatches(clause.text, HOST_CONTEXT_PATTERNS);
+        const hostMatches = clause.hostMatches ?? findAllMatches(clause.text, HOST_CONTEXT_PATTERNS);
         if (hostMatches.length === 0) continue;
 
         const isQuestion = isQuestionClause(clause.text, language);
@@ -1044,13 +1110,13 @@ function detectHostFacts(clauses, language) {
 
         const activeMarriedNegMatches = [];
         for (const match of marriedNegMatches) {
-            if (isStudentSelfPredicate(clause.text, match.start, match.text, hostMatches)) continue;
+            if (isStudentSelfPredicate(clause, match.start, match.end, match.text, hostMatches)) continue;
             activeMarriedNegMatches.push(match);
             if (isQuestion) marriedUncertain = true;
             else marriedNo = true;
         }
         for (const match of findAllMatches(clause.text, HOST_MARRIED_POSITIVE)) {
-            if (isStudentSelfPredicate(clause.text, match.start, match.text, hostMatches)) continue;
+            if (isStudentSelfPredicate(clause, match.start, match.end, match.text, hostMatches)) continue;
             if (isPositiveMatchCoveredByNegative(match, activeMarriedNegMatches)) continue;
             if (isQuestion || hasNegationInWindow(clause, match.start, match.end, turkishNegMatches)) {
                 marriedUncertain = true;
@@ -1061,13 +1127,13 @@ function detectHostFacts(clauses, language) {
 
         const activeTurkishNegMatches = [];
         for (const match of turkishNegMatches) {
-            if (isStudentSelfPredicate(clause.text, match.start, match.text, hostMatches)) continue;
+            if (isStudentSelfPredicate(clause, match.start, match.end, match.text, hostMatches)) continue;
             activeTurkishNegMatches.push(match);
             if (isQuestion) turkishUncertain = true;
             else turkishNo = true;
         }
         for (const match of findAllMatches(clause.text, HOST_TURKISH_POSITIVE)) {
-            if (isStudentSelfPredicate(clause.text, match.start, match.text, hostMatches)) continue;
+            if (isStudentSelfPredicate(clause, match.start, match.end, match.text, hostMatches)) continue;
             if (isPositiveMatchCoveredByNegative(match, activeTurkishNegMatches)) continue;
             if (isQuestion || hasNegationInWindow(clause, match.start, match.end, marriedNegMatches)) {
                 turkishUncertain = true;
@@ -1150,9 +1216,8 @@ export function extractSupportedDocumentFacts(userTurns, language = 'tr') {
         : (typeof userTurns === 'string' ? [userTurns] : []);
     if (turns.length === 0) return attachUncertainKey({}, []);
 
-    // Join turns with newlines so adjacency rules never bridge across separate turns.
-    const normalizedText = turns.map(normalizeForEvidence).join('\n');
-    const clauses = parseClauses(normalizedText);
+    // Parse clauses per turn so adjacency and pronoun-host-context rules never bridge across separate turns.
+    const clauses = parseTurnsIntoClauses(turns);
 
     const supported = {};
     const uncertain = [];
@@ -1341,13 +1406,15 @@ export function verifyQuotedFact(fact, value, quote, userTurns, language = 'tr')
     }
 
     const isPositiveValued = POSITIVE_VALUED_DOCUMENT_FACTS[fact](value);
+    const isHostFact = fact === 'host_is_married' || fact === 'host_is_turkish';
 
-    // Rule a, b, c (clause duration), e (yes/no question): quote must occur in normalized user turns and pass clause checks.
+    // Rule a, b, c (clause duration), e (yes/no question), g (host context & student self-description):
+    // quote must occur in normalized user turns and pass clause checks.
     for (const turn of turns) {
         const normalizedTurn = normalizeForEvidence(turn);
         if (!normalizedTurn.includes(normalizedQuote)) continue;
 
-        const clauses = parseClauses(normalizedTurn);
+        const clauses = annotateTurnHostContext(parseClauses(normalizedTurn));
         let searchFrom = 0;
         while (searchFrom <= normalizedTurn.length - normalizedQuote.length) {
             const quoteStart = normalizedTurn.indexOf(normalizedQuote, searchFrom);
@@ -1361,6 +1428,7 @@ export function verifyQuotedFact(fact, value, quote, userTurns, language = 'tr')
             if (overlappingClauses.length === 0) continue;
 
             let tokenClauseCount = 0;
+            let hostStemClauseCount = 0;
             let occurrenceValid = true;
 
             for (const clause of overlappingClauses) {
@@ -1390,9 +1458,26 @@ export function verifyQuotedFact(fact, value, quote, userTurns, language = 'tr')
                     occurrenceValid = false;
                     break;
                 }
+
+                // Rule g: for host_is_married and host_is_turkish, require host context in the quote's clause
+                // (or immediately preceding clause in the same user turn) and reject student self-description.
+                if (isHostFact) {
+                    const clauseSlice = clause.text.slice(localStart, localEnd);
+                    if (hasRelevantQuoteStem(fact, value, clauseSlice)) {
+                        hostStemClauseCount += 1;
+                        const hasHostContext = clause.hostMatches.length > 0 || clause.prevClauseHasHostContext;
+                        if (
+                            !hasHostContext
+                            || isStudentSelfPredicate(clause, localStart, localEnd, clauseSlice, clause.hostMatches)
+                        ) {
+                            occurrenceValid = false;
+                            break;
+                        }
+                    }
+                }
             }
 
-            if (occurrenceValid && tokenClauseCount > 0) {
+            if (occurrenceValid && tokenClauseCount > 0 && (!isHostFact || hostStemClauseCount > 0)) {
                 return true;
             }
         }
