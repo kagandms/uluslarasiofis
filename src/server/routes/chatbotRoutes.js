@@ -855,6 +855,12 @@ function resolveEvidenceDocumentOutput(supportedFacts, language) {
 }
 
 function renderDocumentToolReply(toolOutput, language, handoffRequested = false, allowList = true, facts = null) {
+    if (facts?.fingerprint_status === 'not_registered') {
+        return routeResult({
+            reply: getChatbotFixedText('fingerprintNeeded', language),
+            actions: [{ type: 'inquiry' }]
+        });
+    }
     const actions = handoffRequested ? [{ type: 'inquiry' }] : [];
     if (allowList && Array.isArray(toolOutput?.labels) && toolOutput.labels.length > 0) {
         return routeResult({
@@ -1036,6 +1042,14 @@ export async function handlePublicChat(request, environment, requestId) {
             || isAskingWhichDocumentsAreNeeded(lastUserMessage)
             || (previousUserAskedForDocuments && lastTurnProvidesFactsOnly);
 
+        if (hasDocumentListIntent && supportedFacts.fingerprint_status === 'not_registered') {
+            outcome = 'handoff';
+            return routeResult({
+                reply: getChatbotFixedText('fingerprintNeeded', validated.language),
+                actions: [{ type: 'inquiry' }]
+            });
+        }
+
         if (allowDeterministicEvidence && isShortDocumentQuery) {
             const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
             outcome = 'ok';
@@ -1092,6 +1106,7 @@ export async function handlePublicChat(request, environment, requestId) {
 
             let finalText = null;
             let exhaustedModelCalls = false;
+            let fingerprintNotRegistered = false;
             let lastDocumentLabels = null;
             let lastDocumentFacts = null;
             let lastMissingDocumentFields = null;
@@ -1153,7 +1168,12 @@ export async function handlePublicChat(request, environment, requestId) {
                             handoffRequested = true;
                         }
                         if (call.name === 'get_required_documents') {
-                            if (Array.isArray(output?.labels) && output.labels.length > 0) {
+                            if (effectiveArgs?.fingerprint_status === 'not_registered') {
+                                fingerprintNotRegistered = true;
+                                lastDocumentLabels = null;
+                                lastDocumentFacts = null;
+                                lastMissingDocumentFields = null;
+                            } else if (Array.isArray(output?.labels) && output.labels.length > 0) {
                                 lastDocumentLabels = output.labels;
                                 lastDocumentFacts = effectiveArgs;
                                 lastMissingDocumentFields = null;
@@ -1181,7 +1201,7 @@ export async function handlePublicChat(request, environment, requestId) {
                 }
 
                 // Belge, eksik bilgi, bilgi tabanı ve yönlendirme sonuçları model metni olmadan deterministik döndürüldüğü için ek model çağrısı gerekmez.
-                if (lastDocumentLabels || lastMissingDocumentFields || lastKnowledgeText || handoffRequested) {
+                if (fingerprintNotRegistered || lastDocumentLabels || lastMissingDocumentFields || lastKnowledgeText || handoffRequested) {
                     break;
                 }
 
@@ -1214,6 +1234,14 @@ export async function handlePublicChat(request, environment, requestId) {
                 outcome = 'fallback';
                 return routeResult({
                     reply: getChatbotFixedText('fallback', validated.language),
+                    actions: [{ type: 'inquiry' }]
+                });
+            }
+
+            if (fingerprintNotRegistered) {
+                outcome = 'handoff';
+                return routeResult({
+                    reply: getChatbotFixedText('fingerprintNeeded', validated.language),
                     actions: [{ type: 'inquiry' }]
                 });
             }

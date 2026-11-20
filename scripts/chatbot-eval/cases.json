@@ -504,17 +504,12 @@
   {
     "id": "tr-doc-08-transition-fp-not-registered-status-kw",
     "language": "tr",
-    "category": "documents",
+    "category": "handoff",
+    "note": "2026-11-20 decision: fingerprint_status=not_registered with document list intent returns fixed CHATBOT_FIXED_TEXTS.fingerprintNeeded.tr ('Göç İdaresi sisteminde parmak izi kaydınız yoksa başvurunuza devam etmeden önce parmak izi işleminizi tamamlamanız gerekir. Lütfen üniversitedeki Uluslararası Öğrenci Ofisine uğrayın; parmak izi işleminiz için sizi yönlendirecektir. İşlem tamamlandıktan sonra gerekli belge listesini bu sohbetten tekrar sorabilirsiniz.') plus {type:'inquiry'} and no document list.",
     "messages": [
       { "role": "user", "content": "Başvurum geçiş başvurusu olacak, 20 yaşındayım, öğrenci yurdunda kalıyorum ve Göç İdaresinde parmak izi kaydım yok; gereken belgeler neler?" }
     ],
-    "expect": {
-      "route": "documents",
-      "application_type": "transition",
-      "under_18": false,
-      "accommodation": "dormitory",
-      "fingerprint_status": "not_registered"
-    }
+    "expect": { "route": "handoff" }
   },
   {
     "id": "tr-doc-09-multiturn-mixed",
@@ -667,19 +662,14 @@
   {
     "id": "en-doc-09-transition-fp-not-registered-multiturn",
     "language": "en",
-    "category": "documents",
+    "category": "handoff",
+    "note": "2026-11-20 decision: fingerprint_status=not_registered with document list intent returns fixed CHATBOT_FIXED_TEXTS.fingerprintNeeded.en ('If your fingerprints are not registered in the Migration Authority system, you must complete your fingerprint procedure before continuing with your application. Please visit the International Student Office at the university; they will guide you on your fingerprint procedure. Once the procedure is completed, you can ask for the required document list again in this chat.') plus {type:'inquiry'} and no document list.",
     "messages": [
       { "role": "user", "content": "I am switching to a student residence permit (transition) and I am 20." },
       { "role": "assistant", "content": "To give you the exact document list, could you let me know your accommodation type and whether your fingerprints are registered with the Migration Authority?" },
       { "role": "user", "content": "I stay in a student dormitory and my fingerprints are not registered yet." }
     ],
-    "expect": {
-      "route": "documents",
-      "application_type": "transition",
-      "under_18": false,
-      "accommodation": "dormitory",
-      "fingerprint_status": "not_registered"
-    }
+    "expect": { "route": "handoff" }
   },
   {
     "id": "en-doc-10-slang-statement",
@@ -861,17 +851,12 @@
   {
     "id": "tk-doc-05-transition-fp-not-registered-status-kw",
     "language": "tk",
-    "category": "documents",
+    "category": "handoff",
+    "note": "2026-11-20 decision: fingerprint_status=not_registered with document list intent returns fixed CHATBOT_FIXED_TEXTS.fingerprintNeeded.tk ('Migrasiýa edarasynyň ulgamynda barmak yzy hasabyňyz ýok bolsa, arzaňyzy dowam etdirmezden ozal barmak yzy amalyny tamamlamagyňyz gerek. Haýyş edýäris, uniwersitetdäki Halkara talyplar ofisine baryň; barmak yzy amaly üçin sizi ugrukdyrar. Amal tamamlanandan soň gerekli resminama sanawyny bu söhbetden täzeden sorap bilersiňiz.') plus {type:'inquiry'} and no document list.",
     "messages": [
       { "role": "user", "content": "Arzam geçiş arzasy, 23 ýaşymda, öz öýümde ýaşaýaryn, migrasiýa edarasynda barmak yzy hasabym ýok; haýsy resminamalar gerek?" }
     ],
-    "expect": {
-      "route": "documents",
-      "application_type": "transition",
-      "under_18": false,
-      "accommodation": "own_home",
-      "fingerprint_status": "not_registered"
-    }
+    "expect": { "route": "handoff" }
   },
   {
     "id": "tk-doc-06-renewal-rescert-multiturn",
@@ -2085,17 +2070,12 @@
   {
     "id": "en-adv-06-curly-apostrophe-fp",
     "language": "en",
-    "category": "documents",
+    "category": "handoff",
+    "note": "2026-11-20 decision: fingerprint_status=not_registered with document list intent returns fixed CHATBOT_FIXED_TEXTS.fingerprintNeeded.en ('If your fingerprints are not registered in the Migration Authority system, you must complete your fingerprint procedure before continuing with your application. Please visit the International Student Office at the university; they will guide you on your fingerprint procedure. Once the procedure is completed, you can ask for the required document list again in this chat.') plus {type:'inquiry'} and no document list.",
     "messages": [
       { "role": "user", "content": "Transition to student permit, I am 22 years old, staying in a dorm, and I don’t have fingerprints. Which documents do I need?" }
     ],
-    "expect": {
-      "route": "documents",
-      "application_type": "transition",
-      "under_18": false,
-      "accommodation": "dormitory",
-      "fingerprint_status": "not_registered"
-    }
+    "expect": { "route": "handoff" }
   },
 
   {
@@ -2265,5 +2245,68 @@
       "host_is_married": "no",
       "host_is_turkish": "yes"
     }
+  },
+
+  {
+    "id": "tr-fp-needed-01-initial",
+    "language": "tr",
+    "category": "handoff",
+    "note": "Expects exact fixed text CHATBOT_FIXED_TEXTS.fingerprintNeeded.tr ('Göç İdaresi sisteminde parmak izi kaydınız yoksa başvurunuza devam etmeden önce parmak izi işleminizi tamamlamanız gerekir. Lütfen üniversitedeki Uluslararası Öğrenci Ofisine uğrayın; parmak izi işleminiz için sizi yönlendirecektir. İşlem tamamlandıktan sonra gerekli belge listesini bu sohbetten tekrar sorabilirsiniz.') plus {type:'inquiry'} action and 0 document items.",
+    "messages": [
+      { "role": "user", "content": "İlk başvuru yapacağım, 20 yaşındayım, yurtta kalıyorum ama parmak izi kaydım yok. Hangi belgeler gerekli?" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "en-fp-needed-01-renewal",
+    "language": "en",
+    "category": "handoff",
+    "note": "Expects exact fixed text CHATBOT_FIXED_TEXTS.fingerprintNeeded.en ('If your fingerprints are not registered in the Migration Authority system, you must complete your fingerprint procedure before continuing with your application. Please visit the International Student Office at the university; they will guide you on your fingerprint procedure. Once the procedure is completed, you can ask for the required document list again in this chat.') plus {type:'inquiry'} action and 0 document items.",
+    "messages": [
+      { "role": "user", "content": "I am 21, renewing my residence permit, renting a flat, and my fingerprints are not registered with the Migration Authority. What documents do I need?" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "ru-fp-needed-01-transition",
+    "language": "ru",
+    "category": "handoff",
+    "note": "Expects exact fixed text CHATBOT_FIXED_TEXTS.fingerprintNeeded.ru ('Если ваши отпечатки пальцев не зарегистрированы в системе Миграционной службы, перед продолжением заявки необходимо завершить процедуру сдачи отпечатков пальцев. Пожалуйста, подойдите в Международный студенческий офис в университете; вас сориентируют по процедуре сдачи отпечатков пальцев. После завершения процедуры вы сможете снова запросить список необходимых документов в этом чате.') plus {type:'inquiry'} action and 0 document items.",
+    "messages": [
+      { "role": "user", "content": "Переход на студенческий ВНЖ, мне 22 года, живу в общежитии, отпечатки пальцев не зарегистрированы. Какие документы нужны?" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "tk-fp-needed-01-initial",
+    "language": "tk",
+    "category": "handoff",
+    "note": "Expects exact fixed text CHATBOT_FIXED_TEXTS.fingerprintNeeded.tk ('Migrasiýa edarasynyň ulgamynda barmak yzy hasabyňyz ýok bolsa, arzaňyzy dowam etdirmezden ozal barmak yzy amalyny tamamlamagyňyz gerek. Haýyş edýäris, uniwersitetdäki Halkara talyplar ofisine baryň; barmak yzy amaly üçin sizi ugrukdyrar. Amal tamamlanandan soň gerekli resminama sanawyny bu söhbetden täzeden sorap bilersiňiz.') plus {type:'inquiry'} action and 0 document items.",
+    "messages": [
+      { "role": "user", "content": "Ilkinji arza berjek, 20 ýaşymda, umumy ýaşaýyş jaýynda galýaryn, barmak yzy hasabym ýok. Haýsy resminamalar gerek?" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "ar-fp-needed-01-transition",
+    "language": "ar",
+    "category": "handoff",
+    "note": "Expects exact fixed text CHATBOT_FIXED_TEXTS.fingerprintNeeded.ar ('إذا لم تكن بصماتك مسجلة في نظام إدارة الهجرة، فيجب إتمام إجراء البصمة قبل متابعة طلبك. يرجى مراجعة مكتب الطلاب الدوليين في الجامعة؛ سيوجهك بشأن إجراء البصمة. وبعد إتمام الإجراء يمكنك طلب قائمة المستندات المطلوبة مجدداً في هذه المحادثة.') plus {type:'inquiry'} action and 0 document items.",
+    "messages": [
+      { "role": "user", "content": "أقدم طلب انتقال إلى إقامة الطالب، عمري 21 سنة وأقيم في السكن الطلابي، وبصماتي غير مسجلة لدى إدارة الهجرة. ما هي المستندات المطلوبة؟" }
+    ],
+    "expect": { "route": "handoff" }
+  },
+  {
+    "id": "tr-fp-needed-02-multiturn-recency",
+    "language": "tr",
+    "category": "handoff",
+    "note": "Multi-turn recency: expects exact fixed text CHATBOT_FIXED_TEXTS.fingerprintNeeded.tr plus {type:'inquiry'} action and 0 document items when fingerprint_status=not_registered was stated in turn 1 and document list requested in turn 3.",
+    "messages": [
+      { "role": "user", "content": "Göç İdaresinde parmak izi kaydım yok." },
+      { "role": "assistant", "content": "Anladım, size nasıl yardımcı olabilirim?" },
+      { "role": "user", "content": "İlk başvuru, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekli?" }
+    ],
+    "expect": { "route": "handoff" }
   }
 ]

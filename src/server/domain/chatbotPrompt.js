@@ -69,6 +69,13 @@ export const CHATBOT_FIXED_TEXTS = Object.freeze({
         ru: 'Каждый студент может проверить статус только своей заявки по собственному номеру ITU-XXXX-XXXX на странице /basvurum/.',
         tk: 'Her talyp diňe öz ITU-XXXX-XXXX arza belgisi bilen /basvurum/ sahypasyndan öz arzasynyň ýagdaýyny barlap biler.',
         ar: 'يمكن لكل طالب التحقق من حالة طلبه فقط باستخدام رقم ITU-XXXX-XXXX الخاص به عبر صفحة /basvurum/.'
+    }),
+    fingerprintNeeded: Object.freeze({
+        tr: 'Göç İdaresi sisteminde parmak izi kaydınız yoksa başvurunuza devam etmeden önce parmak izi işleminizi tamamlamanız gerekir. Lütfen üniversitedeki Uluslararası Öğrenci Ofisine uğrayın; parmak izi işleminiz için sizi yönlendirecektir. İşlem tamamlandıktan sonra gerekli belge listesini bu sohbetten tekrar sorabilirsiniz.',
+        en: 'If your fingerprints are not registered in the Migration Authority system, you must complete your fingerprint procedure before continuing with your application. Please visit the International Student Office at the university; they will guide you on your fingerprint procedure. Once the procedure is completed, you can ask for the required document list again in this chat.',
+        ru: 'Если ваши отпечатки пальцев не зарегистрированы в системе Миграционной службы, перед продолжением заявки необходимо завершить процедуру сдачи отпечатков пальцев. Пожалуйста, подойдите в Международный студенческий офис в университете; вас сориентируют по процедуре сдачи отпечатков пальцев. После завершения процедуры вы сможете снова запросить список необходимых документов в этом чате.',
+        tk: 'Migrasiýa edarasynyň ulgamynda barmak yzy hasabyňyz ýok bolsa, arzaňyzy dowam etdirmezden ozal barmak yzy amalyny tamamlamagyňyz gerek. Haýyş edýäris, uniwersitetdäki Halkara talyplar ofisine baryň; barmak yzy amaly üçin sizi ugrukdyrar. Amal tamamlanandan soň gerekli resminama sanawyny bu söhbetden täzeden sorap bilersiňiz.',
+        ar: 'إذا لم تكن بصماتك مسجلة في نظام إدارة الهجرة، فيجب إتمام إجراء البصمة قبل متابعة طلبك. يرجى مراجعة مكتب الطلاب الدوليين في الجامعة؛ سيوجهك بشأن إجراء البصمة. وبعد إتمام الإجراء يمكنك طلب قائمة المستندات المطلوبة مجدداً في هذه المحادثة.'
     })
 });
 
@@ -316,8 +323,8 @@ function resolveLanguage(language) {
 }
 
 /**
- * Returns a fixed localized chatbot message for refusal, fallback, daily-limit, document-list, missing-facts, missing-reference status, or third-party status refusal responses.
- * @param {'refusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'|'missingDocumentsIntro'|'otherPersonStatusNote'} kind Fixed text category.
+ * Returns a fixed localized chatbot message for refusal, fallback, daily-limit, document-list, missing-facts, missing-reference status, third-party status refusal, or fingerprint-needed responses.
+ * @param {'refusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'|'missingDocumentsIntro'|'otherPersonStatusNote'|'fingerprintNeeded'} kind Fixed text category.
  * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
  * @returns {string} Localized fixed response text.
  */
