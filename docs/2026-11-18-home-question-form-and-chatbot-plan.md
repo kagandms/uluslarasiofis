@@ -662,7 +662,7 @@ authorization gap, no PII in logs, no ReDoS.
 
 ## 4b. Progress on 2026-11-20 (end of day — START HERE NEXT TIME)
 
-**Integration branch `task/home-chatbot-status` is at `3dd7119`** (worktree `…-wt-chatbot-status`):
+**Integration branch `task/home-chatbot-status` is at `4c6ffe6`** (worktree `…-wt-chatbot-status`):
 1846 tests pass, build green. Nothing merged to `production`, nothing pushed or published.
 
 What happened today (all implemented by agy, reviewed by the orchestrator):
@@ -730,6 +730,31 @@ Later on 2026-11-20 (owner away; orchestrator continued):
   of student fields on `claude/staff-edit-student-fields-c052d7` (`618d1a8` server, `13cbabe` UI;
   online applications only; physical intakes not done; 1677 tests green; owner decisions listed in
   that session). Neither is merged or pushed.
+
+Owner decisions later on 2026-11-20 (all implemented by agy, merged into the integration branch):
+- **Document policy is the single source of truth** ("what is valid for us is the current required
+  list"): renewal / foreign-host / under-18 lists stay as the policy says; the `application_types`
+  knowledge text no longer names documents and `address_evidence` was audited against the policy.
+- **No fingerprint record -> go to the school:** a student who states fingerprints are NOT registered
+  gets the fixed `fingerprintNeeded` text (visit the university International Student Office; ask for
+  the list again afterwards) instead of a document list, because the wizard blocks them. Wording
+  deliberately does not promise that migration officers are on campus (owner said it "seems so").
+- **Office contact in the `contact` topic:** WhatsApp **message only** 0535 455 94 09
+  (+90 535 455 94 09, no calls) and e-mail goc.topkapiuni@gmail.com; office hours unchanged
+  (weekdays 09:00-18:00); KVKK e-mail stays for personal-data requests only. The knowledge tests
+  allow exactly these values; the eval runner allows them too.
+- **Staff pencil edit:** application type is NOT editable, no automatic merge of clashing student
+  numbers, physical intakes not in scope (matches the other session's branch).
+- **Name and mascot (undecided):** owner's name candidates Topi / Göççük / Göçbot — orchestrator
+  recommends **Topi** (Göççük = cave-in in Turkish, Göçbot suggests the Migration Authority);
+  mascot round 1 on `task/chatbot-mascot` (`design/mascot/`): owl Puhu, folder Dosya, face Nokta;
+  round 2 (swallow/stork, Istanbul cat, "Kapı" gate) being drafted in `design/mascot/round2/`;
+  caveat: owl can read as a bad omen in Turkish folk belief. See memory note
+  `project-chatbot-mascot-and-name`.
+- Integration tip after these merges: `task/home-chatbot-status` at `4c6ffe6` (1851 tests, build
+  green). Eval at `52f03df`: blind 119/130 before the harness fix (4 'leaks' were the approved
+  e-mail, 2 cases expected a list instead of the fingerprint redirect); knowledge category back to
+  22/23 and 0 safety failures after the fix; wrong lists 0.
 
 Owner notes 2026-11-20: escalate agy work to Gemini Neon/Argon (not agy Claude); add an office
 mascot before going live (R7b).
