@@ -4782,3 +4782,228 @@ test('safety net: deterministic document-list replies start with localized under
     assert.ok(toolPathPayload.reply.startsWith(`${expectedTransitionLine}\n\n${getChatbotFixedText('documentListIntro', 'tr')}\n\n`));
     assert.ok(toolPathPayload.reply.endsWith(`\n\n${getChatbotFixedText('documentListClosing', 'tr')}`));
 });
+
+test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated, quote-verified, and never leaked as JSON', async () => {
+    const expectedPolicies = listApplicationDocumentPolicies({
+        application_type: 'renewal',
+        application_route: 'transition',
+        is_under_18: 0,
+        address_evidence_type: 'dormitory',
+        accommodation_type: 'dormitory',
+        host_is_married: null,
+        host_is_turkish: null,
+        fingerprint_status: 'not_registered',
+        fingerprint_code: null
+    });
+    const trMessages = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
+    const expectedList = expectedPolicies
+        .map((policy) => `- ${trMessages[policy.label_key]}${policy.required === false ? ' (isteğe bağlı)' : ''}`)
+        .join('\n');
+    const expectedUnderstood = buildUnderstoodFactsLine({
+        application_type: 'transition',
+        is_under_18: false,
+        accommodation_type: 'dormitory',
+        fingerprint_status: 'not_registered'
+    }, 'tr');
+    const expectedListReply = `${expectedUnderstood}\n\n${getChatbotFixedText('documentListIntro', 'tr')}\n\n${expectedList}\n\n${getChatbotFixedText('documentListClosing', 'tr')}`;
+
+    const exactToolText = JSON.stringify({
+        type: 'function',
+        name: 'get_required_documents',
+        parameters: {
+            application_type: 'transition',
+            is_under_18: 'false',
+            accommodation_type: 'dormitory',
+            fingerprint_status: 'not_registered',
+            quotes: {
+                application_type: 'Geçiş başvurusu',
+                is_under_18: '20 yaşındayım',
+                accommodation_type: 'yurtta kalıyorum',
+                fingerprint_status: 'Parmak izim yok'
+            }
+        }
+    });
+
+    // 1. Exact JSON text, fenced variant, and <|python_tag|> variant return deterministic list (never JSON).
+    const variants = [
+        exactToolText,
+        `\`\`\`json\n${exactToolText}\n\`\`\``,
+        `<|python_tag|>${exactToolText}`
+    ];
+    for (let index = 0; index < variants.length; index += 1) {
+        const { fakeAi, environment } = createEnvironment([
+            { response: variants[index] },
+            new Error('A 2nd model call must never execute after converted get_required_documents.')
+        ]);
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [
+                    { role: 'user', content: 'Geçiş başvurusu yapacağım, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekli?' },
+                    { role: 'assistant', content: buildMissingDocumentsQuestion(['fingerprint_status'], 'tr') },
+                    { role: 'user', content: 'Parmak izim yok.' }
+                ],
+                language: 'tr'
+            }), { address: `198.51.112.${10 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 1);
+        assert.equal(payload.reply, expectedListReply);
+        assert.equal(payload.reply.includes('{'), false);
+        assert.equal(payload.reply.includes('get_required_documents'), false);
+        assert.deepEqual(payload.actions, []);
+    }
+
+    // 2. Multi-turn Turkish correction case returns deterministic missing-facts question, never JSON.
+    const correctionToolText = JSON.stringify({
+        type: 'function',
+        name: 'get_required_documents',
+        parameters: {
+            application_type: 'transition',
+            is_under_18: 'false',
+            accommodation_type: 'dormitory',
+            fingerprint_status: 'not_registered',
+            quotes: {
+                application_type: 'geçiş başvurusu olacak',
+                is_under_18: '20 yaşındayım',
+                accommodation_type: 'yurtta kalıyorum',
+                fingerprint_status: 'parmak izim kayıtlı değil'
+            }
+        }
+    });
+    const correctionEnv = createEnvironment([
+        { response: correctionToolText },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const correctionRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekli?' },
+                { role: 'assistant', content: 'Anladığım bilgiler: ilk başvuru · 18 yaşından büyük · yurtta kalıyor. Yanlışsa lütfen düzeltin.' },
+                { role: 'user', content: 'Pardon, geçiş başvurusu olacak ve parmak izim kayıtlı değil.' }
+            ],
+            language: 'tr'
+        }), { address: '198.51.112.20' }),
+        correctionEnv.environment,
+        {}
+    );
+    const correctionPayload = await correctionRes.json();
+    assert.equal(correctionRes.status, 200);
+    assert.equal(correctionEnv.fakeAi.callCount, 1);
+    assert.equal(correctionPayload.reply, buildMissingDocumentsQuestion(['application_type'], 'tr'));
+    assert.equal(correctionPayload.reply.includes('{'), false);
+    assert.equal(correctionPayload.reply.includes('get_required_documents'), false);
+
+    // 3. Converted tool call goes through quote verification (hallucinated quote is rejected -> asks missing fact).
+    const unverifiedQuoteEnv = createEnvironment([
+        {
+            response: JSON.stringify({
+                type: 'function',
+                name: 'get_required_documents',
+                parameters: {
+                    application_type: 'transition',
+                    is_under_18: 'false',
+                    accommodation_type: 'dormitory',
+                    fingerprint_status: 'not_registered',
+                    quotes: {
+                        application_type: 'Geçiş başvurusu',
+                        is_under_18: '20 yaşındayım',
+                        accommodation_type: 'yurtta kalıyorum',
+                        fingerprint_status: 'parmak izim yok'
+                    }
+                }
+            })
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const unverifiedQuoteRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Geçiş başvurusu, yurtta kalıyorum, parmak izim yok, hangi belgeler?' }],
+            language: 'tr'
+        }), { address: '198.51.112.21' }),
+        unverifiedQuoteEnv.environment,
+        {}
+    );
+    const unverifiedQuotePayload = await unverifiedQuoteRes.json();
+    assert.equal(unverifiedQuoteRes.status, 200);
+    assert.equal(unverifiedQuoteEnv.fakeAi.callCount, 1);
+    assert.equal(unverifiedQuotePayload.reply, buildMissingDocumentsQuestion(['is_under_18'], 'tr'));
+
+    // 4. Unknown tool name in JSON text -> dropped, no JSON in reply (fallback or missing-facts).
+    const unknownGeneralEnv = createEnvironment({
+        response: JSON.stringify({ type: 'function', name: 'unknown_tool', parameters: { foo: 'bar' } })
+    });
+    const unknownGeneralRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Başvuru adımları nelerdir?' }],
+            language: 'tr'
+        }), { address: '198.51.112.22' }),
+        unknownGeneralEnv.environment,
+        {}
+    );
+    const unknownGeneralPayload = await unknownGeneralRes.json();
+    assert.equal(unknownGeneralRes.status, 200);
+    assert.equal(unknownGeneralPayload.reply, getChatbotFixedText('fallback', 'tr'));
+    assert.deepEqual(unknownGeneralPayload.actions, [{ type: 'inquiry' }]);
+
+    const unknownListEnv = createEnvironment({
+        response: JSON.stringify({ type: 'function', name: 'unknown_tool', parameters: {} })
+    });
+    const unknownListRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Hangi belgeler gerekli?' }],
+            language: 'tr'
+        }), { address: '198.51.112.23' }),
+        unknownListEnv.environment,
+        {}
+    );
+    const unknownListPayload = await unknownListRes.json();
+    assert.equal(unknownListRes.status, 200);
+    assert.equal(
+        unknownListPayload.reply,
+        buildMissingDocumentsQuestion(['application_type', 'is_under_18', 'accommodation_type'], 'tr')
+    );
+
+    // 5. Non-tool-call JSON text or model text containing a registered tool name -> fallback menu (or missing-facts for list intent), never shown.
+    const unsafeNonListReplies = [
+        '{"status":"ok","message":"not a tool call"}',
+        '[{"item":"not a tool call"}]',
+        '```json\n{"status":"ok"}\n```',
+        'Lütfen get_required_documents aracını kullanın.'
+    ];
+    for (let index = 0; index < unsafeNonListReplies.length; index += 1) {
+        const { environment } = createEnvironment({ response: unsafeNonListReplies[index] });
+        const res = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: 'Başvuru adımları nelerdir?' }],
+                language: 'tr'
+            }), { address: `198.51.112.${30 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await res.json();
+        assert.equal(res.status, 200);
+        assert.equal(payload.reply, getChatbotFixedText('fallback', 'tr'));
+        assert.deepEqual(payload.actions, [{ type: 'inquiry' }]);
+    }
+
+    const unsafeListEnv = createEnvironment({
+        response: '{"status":"ok","message":"not a tool call"}'
+    });
+    const unsafeListRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Hangi belgeler gerekli?' }],
+            language: 'tr'
+        }), { address: '198.51.112.40' }),
+        unsafeListEnv.environment,
+        {}
+    );
+    const unsafeListPayload = await unsafeListRes.json();
+    assert.equal(unsafeListRes.status, 200);
+    assert.equal(
+        unsafeListPayload.reply,
+        buildMissingDocumentsQuestion(['application_type', 'is_under_18', 'accommodation_type'], 'tr')
+    );
+});

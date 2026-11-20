@@ -202,3 +202,132 @@ test('pre-aborted caller signal fails immediately without calling AI binding', a
     );
     assert.equal(fakeAi.callCount, 0);
 });
+
+test('createChatModel converts plain, fenced, <|python_tag|>, and array JSON text tool calls and coerces string booleans for is_under_18', async () => {
+    const rawToolCall = {
+        type: 'function',
+        name: 'get_required_documents',
+        parameters: {
+            application_type: 'transition',
+            is_under_18: 'false',
+            accommodation_type: 'dormitory',
+            fingerprint_status: 'not_registered',
+            quotes: {
+                application_type: 'geçiş başvurusu',
+                is_under_18: '20 yaşındayım',
+                accommodation_type: 'yurtta kalıyorum',
+                fingerprint_status: 'parmak izim yok'
+            }
+        }
+    };
+    const serialized = JSON.stringify(rawToolCall);
+    const fakeAi = createFakeAiBinding([
+        { response: serialized },
+        { response: `\`\`\`json\n${serialized}\n\`\`\`` },
+        { response: `<|python_tag|>${serialized}` },
+        {
+            choices: [{
+                message: {
+                    content: JSON.stringify([
+                        {
+                            name: 'get_required_documents',
+                            arguments: { application_type: 'initial', is_under_18: 'true' }
+                        },
+                        {
+                            type: 'function',
+                            name: 'handoff_to_office',
+                            parameters: {}
+                        }
+                    ])
+                }
+            }]
+        },
+        {
+            response: JSON.stringify({
+                name: 'get_required_documents',
+                parameters: { is_under_18: 'maybe' }
+            })
+        }
+    ]);
+    const model = createChatModel({ AI: fakeAi });
+    const expectedArguments = {
+        application_type: 'transition',
+        is_under_18: false,
+        accommodation_type: 'dormitory',
+        fingerprint_status: 'not_registered',
+        quotes: {
+            application_type: 'geçiş başvurusu',
+            is_under_18: '20 yaşındayım',
+            accommodation_type: 'yurtta kalıyorum',
+            fingerprint_status: 'parmak izim yok'
+        }
+    };
+
+    for (let index = 0; index < 3; index += 1) {
+        const result = await model.complete({
+            messages: [{ role: 'user', content: 'Hangi belgeler gerekli?' }]
+        });
+        assert.equal(result.text, null);
+        assert.deepEqual(result.toolCalls, [{
+            name: 'get_required_documents',
+            arguments: expectedArguments
+        }]);
+        assert.strictEqual(result.toolCalls[0].arguments.is_under_18, false);
+    }
+
+    const arrayResult = await model.complete({
+        messages: [{ role: 'user', content: 'Belgeler?' }]
+    });
+    assert.deepEqual(arrayResult, {
+        text: null,
+        toolCalls: [
+            {
+                name: 'get_required_documents',
+                arguments: { application_type: 'initial', is_under_18: true }
+            },
+            {
+                name: 'handoff_to_office',
+                arguments: {}
+            }
+        ]
+    });
+    assert.strictEqual(arrayResult.toolCalls[0].arguments.is_under_18, true);
+
+    const nonBooleanResult = await model.complete({
+        messages: [{ role: 'user', content: 'Belgeler?' }]
+    });
+    assert.deepEqual(nonBooleanResult, {
+        text: null,
+        toolCalls: [{
+            name: 'get_required_documents',
+            arguments: { is_under_18: 'maybe' }
+        }]
+    });
+});
+
+test('createChatModel drops unknown tool names from text JSON and preserves non-tool JSON text', async () => {
+    const nonToolJson = '{"status":"ok","message":"not a tool call"}';
+    const fakeAi = createFakeAiBinding([
+        { response: JSON.stringify({ type: 'function', name: 'unknown_tool', parameters: { foo: 'bar' } }) },
+        {
+            response: JSON.stringify([
+                { type: 'function', name: 'unknown_tool', parameters: {} },
+                { type: 'function', name: 'lookup_knowledge', parameters: { topic: 'office_hours' } }
+            ])
+        },
+        { response: nonToolJson }
+    ]);
+    const model = createChatModel({ AI: fakeAi });
+
+    const unknownOnly = await model.complete({ messages: [{ role: 'user', content: 'Merhaba' }] });
+    assert.deepEqual(unknownOnly, { text: null, toolCalls: [] });
+
+    const mixed = await model.complete({ messages: [{ role: 'user', content: 'Ofis saatleri?' }] });
+    assert.deepEqual(mixed, {
+        text: null,
+        toolCalls: [{ name: 'lookup_knowledge', arguments: { topic: 'office_hours' } }]
+    });
+
+    const plainJson = await model.complete({ messages: [{ role: 'user', content: 'Merhaba' }] });
+    assert.deepEqual(plainJson, { text: nonToolJson, toolCalls: [] });
+});

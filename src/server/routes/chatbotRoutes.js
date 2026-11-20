@@ -772,6 +772,29 @@ function isInsufficientOrWrongScriptReply(replyText, language) {
     return !isReplyInExpectedScript(replyText, language);
 }
 
+function isUnsafeModelReplyText(trimmedText) {
+    if (Object.keys(CHATBOT_TOOLS).some((toolName) => trimmedText.includes(toolName))) {
+        return true;
+    }
+    if (trimmedText.startsWith('<|python_tag|>')) {
+        return true;
+    }
+    let jsonCandidate = trimmedText;
+    const fenceMatch = jsonCandidate.match(/^```(?:[a-zA-Z0-9_-]+(?=\s))?\s*([\s\S]*?)\s*```$/);
+    if (fenceMatch) {
+        jsonCandidate = fenceMatch[1].trim();
+    }
+    if (jsonCandidate.startsWith('{') || jsonCandidate.startsWith('[')) {
+        try {
+            JSON.parse(jsonCandidate);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+    return false;
+}
+
 function hasEvidenceRiskSafe(userTurns, language) {
     return typeof evidence.hasEvidenceRisk === 'function'
         ? Boolean(evidence.hasEvidenceRisk(userTurns, language))
@@ -1232,6 +1255,23 @@ export async function handlePublicChat(request, environment, requestId) {
                 outcome = 'refusal';
                 return routeResult({
                     reply: getChatbotFixedText('refusal', validated.language),
+                    actions: [{ type: 'inquiry' }]
+                });
+            }
+
+            if (isUnsafeModelReplyText(trimmedText)) {
+                if (hasDocumentListIntent) {
+                    outcome = 'ok';
+                    return renderListIntentFallbackReply(
+                        supportedFacts,
+                        validated.language,
+                        handoffRequested,
+                        allowLexiconListFallback
+                    );
+                }
+                outcome = 'fallback';
+                return routeResult({
+                    reply: getChatbotFixedText('fallback', validated.language),
                     actions: [{ type: 'inquiry' }]
                 });
             }

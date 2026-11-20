@@ -1,3 +1,4 @@
+import { CHATBOT_TOOLS } from '../domain/chatbotTools.js';
 import { ApiError } from '../domain/errors.js';
 
 // @cf/meta/llama-3.3-70b-instruct-fp8-fast: checked 2026-11-19, unverified against the live Cloudflare catalog.
@@ -6,6 +7,8 @@ export const CHATBOT_MODEL_TIMEOUT_MS = 12_000;
 export const CHATBOT_MODEL_MAX_OUTPUT_TOKENS = 512;
 
 const GENERIC_UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.';
+const REGISTERED_TOOL_NAMES = Object.freeze(new Set(Object.keys(CHATBOT_TOOLS)));
+const PYTHON_TAG_PREFIX = '<|python_tag|>';
 
 function isPlainObject(value) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -59,22 +62,112 @@ function parseToolArguments(rawArguments) {
     throw new Error('Unsupported tool arguments value.');
 }
 
+function buildRegisteredToolNameSet(tools) {
+    if (!Array.isArray(tools) || tools.length === 0) return REGISTERED_TOOL_NAMES;
+    const names = new Set(REGISTERED_TOOL_NAMES);
+    for (const tool of tools) {
+        if (typeof tool?.name === 'string' && tool.name.trim()) {
+            names.add(tool.name.trim());
+        }
+    }
+    return names;
+}
+
+function coerceToolCallArguments(args) {
+    if (!isPlainObject(args)) return args;
+    if (!Object.hasOwn(args, 'is_under_18') || typeof args.is_under_18 !== 'string') {
+        return args;
+    }
+    const normalized = args.is_under_18.trim().toLowerCase();
+    if (normalized === 'true') {
+        return { ...args, is_under_18: true };
+    }
+    if (normalized === 'false') {
+        return { ...args, is_under_18: false };
+    }
+    return args;
+}
+
+function extractRawToolArguments(rawCall) {
+    if (Object.hasOwn(rawCall || {}, 'arguments')) return rawCall.arguments;
+    if (Object.hasOwn(rawCall || {}, 'parameters')) return rawCall.parameters;
+    if (Object.hasOwn(rawCall?.function || {}, 'arguments')) return rawCall.function.arguments;
+    if (Object.hasOwn(rawCall?.function || {}, 'parameters')) return rawCall.function.parameters;
+    return undefined;
+}
+
 function normalizeToolCall(rawCall) {
     const name = typeof rawCall?.name === 'string' && rawCall.name.trim()
         ? rawCall.name.trim()
         : (typeof rawCall?.function?.name === 'string' && rawCall.function.name.trim()
             ? rawCall.function.name.trim() : null);
     if (!name) throw new Error('Tool call is missing a valid function name.');
-    const rawArguments = Object.hasOwn(rawCall || {}, 'arguments')
-        ? rawCall.arguments
-        : rawCall?.function?.arguments;
+    const rawArguments = extractRawToolArguments(rawCall);
     return {
         name,
-        arguments: parseToolArguments(rawArguments)
+        arguments: coerceToolCallArguments(parseToolArguments(rawArguments))
     };
 }
 
-function normalizeModelResponse(raw) {
+function stripTextToolCallWrappers(text) {
+    let candidate = text.trim();
+    if (candidate.startsWith(PYTHON_TAG_PREFIX)) {
+        candidate = candidate.slice(PYTHON_TAG_PREFIX.length).trim();
+    }
+    const fenceMatch = candidate.match(/^```(?:[a-zA-Z0-9_-]+(?=\s))?\s*([\s\S]*?)\s*```$/);
+    if (fenceMatch) {
+        candidate = fenceMatch[1].trim();
+        if (candidate.startsWith(PYTHON_TAG_PREFIX)) {
+            candidate = candidate.slice(PYTHON_TAG_PREFIX.length).trim();
+        }
+    }
+    return candidate;
+}
+
+function isTextToolCallShape(item) {
+    if (!isPlainObject(item)) return false;
+    if (typeof item.name !== 'string' || !item.name.trim()) return false;
+    const hasToolType = item.type === 'function';
+    if (Object.hasOwn(item, 'type') && item.type !== undefined && !hasToolType) {
+        return false;
+    }
+    return Object.hasOwn(item, 'parameters') || Object.hasOwn(item, 'arguments') || hasToolType;
+}
+
+function tryParseTextToolCalls(text, registeredToolNames) {
+    const candidate = stripTextToolCallWrappers(text);
+    if (!candidate.startsWith('{') && !candidate.startsWith('[')) {
+        return null;
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(candidate);
+    } catch {
+        return null;
+    }
+    const items = Array.isArray(parsed) ? parsed : [parsed];
+    if (items.length === 0 || !items.every(isTextToolCallShape)) {
+        return null;
+    }
+    const toolCalls = [];
+    for (const item of items) {
+        const name = item.name.trim();
+        if (!registeredToolNames.has(name)) {
+            continue;
+        }
+        try {
+            toolCalls.push(normalizeToolCall(item));
+        } catch {
+            // Drop malformed text tool arguments while still clearing the raw JSON text.
+        }
+    }
+    return {
+        text: null,
+        toolCalls
+    };
+}
+
+function normalizeModelResponse(raw, registeredToolNames = REGISTERED_TOOL_NAMES) {
     if (!isPlainObject(raw)) throw new Error('Model response must be an object.');
     const choiceMessage = raw.choices?.[0]?.message;
     const rawText = raw.response ?? choiceMessage?.content ?? null;
@@ -82,9 +175,21 @@ function normalizeModelResponse(raw) {
     const rawToolCalls = Array.isArray(raw.tool_calls)
         ? raw.tool_calls
         : (Array.isArray(choiceMessage?.tool_calls) ? choiceMessage.tool_calls : []);
+    if (rawToolCalls.length > 0) {
+        return {
+            text,
+            toolCalls: rawToolCalls.map(normalizeToolCall)
+        };
+    }
+    if (text !== null) {
+        const parsedFromText = tryParseTextToolCalls(text, registeredToolNames);
+        if (parsedFromText) {
+            return parsedFromText;
+        }
+    }
     return {
         text,
-        toolCalls: rawToolCalls.map(normalizeToolCall)
+        toolCalls: []
     };
 }
 
@@ -115,6 +220,7 @@ export function createChatModel(environment, options = {}) {
                 throw createUnavailableError();
             }
 
+            const registeredToolNames = buildRegisteredToolNameSet(tools);
             const formattedTools = formatTools(tools);
             const payload = {
                 messages: normalizedMessages,
@@ -145,7 +251,7 @@ export function createChatModel(environment, options = {}) {
                     environment.AI.run(model, payload, { signal: controller.signal }),
                     abortPromise
                 ]);
-                return normalizeModelResponse(rawResponse);
+                return normalizeModelResponse(rawResponse, registeredToolNames);
             } catch {
                 // Binding errors, timeouts, and malformed provider responses are mapped without retries or content logging.
                 throw createUnavailableError();
