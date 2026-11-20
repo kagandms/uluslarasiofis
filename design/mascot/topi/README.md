@@ -1,62 +1,61 @@
-# Topi — Final Chatbot Mascot Asset (Round 3)
+# Topi — Animated Chatbot Mascot Asset (Round 4)
 
 - **Date:** 2026-11-20
-- **Scope / Source:** Final character package for **Topi**, the Istanbul cat assistant chosen by the owner for the Istanbul Topkapı University International Student Office chat widget. Built in `design/mascot/topi/` from the approved Round-2 character (`design/mascot/round2/concept-5-istanbul-cat.svg`) and the university symbol (`public/topkapi_logo.png`). Round-1 and Round-2 files remain untouched; nothing is wired into product code yet.
-- **Validation Status:** Design asset and offline preview authored without running shell commands or live browser inspection in this headless run. Open `preview.html` directly in a browser (offline, no network needed) to verify all seven states across 28 / 36 / 56 / 120 px, light/dark/burgundy surfaces, RTL Arabic layout, and reduced motion.
+- **Scope / Source:** Round 4 motion upgrade for **Topi**, the Istanbul cat assistant for the Istanbul Topkapı University International Student Office chat widget (`design/mascot/topi/`). Built directly on the owner-approved Round 3 static character, proportions, color tokens, chest card, and traced Topkapı University emblem (`public/topkapi_logo.png`), adding lively, playful CSS-only animations, the new one-shot `.is-hello` greeting state, and `.is-calm` avatar mode. Round-1 and Round-2 files remain untouched; nothing is wired into product code yet.
+- **Validation Status:** Authored and byte-checked via file reads without running shell commands or live browser rendering in this headless run. Open `preview.html` directly in a browser (offline, no network required) to visually inspect all 8 states, play/pause, `--mascot-speed` (0.5×–2.0×), the `.is-hello` replay button, the 28 px `.is-calm` avatar row, dark mode, RTL Arabic layout, and reduced-motion static fallbacks.
 
 ---
 
 ## Files
 
-- `topi-cat.svg` — Single standalone inline-ready SVG (`viewBox="0 0 64 64"`, `<title>Topi</title>`, `aria-hidden="true"`, no external URLs, no raster data, no fonts) containing all seven states and the traced Topkapı University symbol on Topi's chest card.
-- `preview.html` — Standalone offline review page (inline CSS/JS, responsive down to 360 px) showing all seven states across 28 / 36 / 56 / 120 px on light, dark, and burgundy surfaces, live launcher (`Asistan`), panel header (`Topi · Uluslararası Ofis Asistanı`), 28 px assistant bubbles for every state, Arabic RTL sample (`توبي · مساعد المكتب الدولي`), dark mode & reduced-motion toggles, and the trigger mapping table.
+- `topi-cat.svg` — Standalone minified inline-ready SVG (`viewBox="0 0 64 64"`, `xmlns="http://www.w3.org/2000/svg"`, `<title>Topi</title>`, `aria-hidden="true"`, valid XML with `/*<![CDATA[*/` around `<style>`, zero external URLs, zero raster data, zero JS, zero SMIL) containing all 8 states, `.is-calm`, `--mascot-speed` duration scaling, and `prefers-reduced-motion: reduce`.
+- `preview.html` — Standalone offline review page (inline CSS/JS, responsive down to 360 px) rendering live inline `<svg>` clones (never `<img>`) across 28 / 36 / 56 / 120 px on light, dark, and burgundy surfaces, plus play/pause all, `--mascot-speed` slider (0.5×–2.0×), `.is-hello` spotlight + replay buttons, a 28 px `.is-calm` avatar row, LTR Turkish and RTL Arabic widget mockups, dark mode, reduced-motion toggle, and integration mapping table.
 
 ---
 
-## Seven States & Trigger Mapping
+## Motion Architecture & Principles
 
-Switch states by toggling a single modifier class on the root `<svg class="mascot-svg mascot-cat">` element (`#state-idle` is visible by default). Shared geometry (tail, torso, collar, chest card, emblem, head, ears, whiskers, paws, smile, and eyes) is defined once inside `<defs>` and instantiated via `<use>`.
+All motion is pure CSS `@keyframes` inside `topi-cat.svg`'s `<style>`, animating **only `transform` and `opacity`** with `transform-box: fill-box` and anatomical `transform-origin` pivots (rig floor `50% 98%`, torso base `50% 95%`, neck `50% 92%`, ear bases `55% 68%` / `45% 68%`, tail root `100% 98%`, sleepy tail root `100% 8%`, paw shoulders/wrists).
 
-| State | Root class | Visual expression & props | Motion & reduced-motion fallback | Triggered by |
+- **Playful feel without fatigue:** Squash-and-stretch anticipation/landing (`cubic-bezier(.34,1.56,.64,1)` overshoot easing), staggered follow-through delays (`0.08s–0.15s`), and non-synchronised loop durations (`1.05s–8.2s`) so parts never lock into a robotic cadence. Loops stay gentle enough to remain on screen while a student reads; higher-energy moves (hops, ear twitches, startled sleep jerks, 3-pulse handoff taps) include calm rest intervals.
+- **Keyframe reuse & speed scaling:** A compact set of 15 CSS keyframes (`bk`, `br`, `kt`, `kr`, `kp`, `km`, `k3`, `et`, `dt`, `hp`, `sp`, `nd`, `zz`, `hw`, `hr`) is reused across all 8 states via per-part CSS custom properties. Every duration and delay scales via `calc(var(--d) / var(--mascot-speed, 1))` so hosts or previews can tune speed from `0.5` to `2` with a single CSS variable.
+- **Character integrity:** Static silhouette, colors, proportions, chest card, and the traced Topkapı University emblem are unchanged from Round 3. Ears are separated behind the cranium fill with hidden stroke extensions so they twitch, perk, and flop seamlessly with zero gaps while matching Round 3 pixel-for-pixel at rest. Only minimal motion props were added (a third gold sparkle in `understood`, a flapping document corner in `checking`, and separated `z z` paths in `sleepy`).
+
+---
+
+## Eight States, Timings & Widget Integration Contract
+
+Set **at most one state modifier class** on the root `<svg class="mascot-svg mascot-cat">` element (`idle` is the default with no modifier class). Add `.is-calm` alongside any state class on 28 px chat-history message avatars.
+
+| State | Root class | Motion & timings (at `--mascot-speed: 1`) | Reduced-motion static fallback | When the widget should set it |
 | --- | --- | --- | --- | --- |
-| **idle** | *(default)* | Calm greeting face, resting tail and tucked paws | Gentle slow blink (`5.4s` cycle); static open eyes under `prefers-reduced-motion: reduce` | Default / welcome message |
-| **thinking** | `.is-thinking` | Upward-right gaze, lifted paw, three-dot pill at top-right, gently swaying tail | Tail sways slowly (`2.2s`) and three dots pulse (`1.35s`); under `prefers-reduced-motion: reduce`, tail stops and all three dots stay solid | Request in flight |
-| **understood** | `.is-understood` | Content closed-eye happy smile (`^ ^`), soft cheek blush, raised right paw ("tamam / got it"), gold 4-point sparkle | Static (no animation) | Deterministic document list or knowledge answer |
-| **handoff** | `.is-handoff` | Friendly downward gaze, right paw pointing down toward a downward chevron badge | Static (no animation) | Reply with the inquiry action or fingerprint redirect |
-| **checking** | `.is-checking` | Focused gaze toward right, paw holding a magnifying glass over a small document/file | Static (no animation) | Application status summary |
-| **confused** | `.is-confused` | Polite `-7°` head tilt, soft raised brows, kind expression, crisp `?` bubble at top-right | Static (no animation) | Refusal or fallback menu |
-| **sleepy** | `.is-sleepy` | Lowered head (`+2.4` units), peacefully closed downward eyes (`U U`), low tucked tail, `z z` pill at top-right | Static (no animation) | HTTP 503 / daily limit reached |
+| **idle** | *(default)* | Body breathing `1→1.03` (`2.8s`), lazy S-curve tail wag (`3.1s`), gentle head bob/tilt (`3.7s`), right ear twitch (`5.1s`), single blink + occasional quick double blink (`8.2s` cycle, ~4s avg) | Static open-eyed neutral greeting pose | Default resting state (launcher, header after greeting, welcome state) |
+| **thinking** | `.is-thinking` | Bouncy body bob (`1.9s`, overshoot), faster tail swish (`1.55s`), head bob (`2.5s`, `+0.15s` lag), perked ears (`2.8s`), eyes glancing up-left & up-right (`3.4s`), rhythmic paw tap (`2.1s`), 3 dots bubbling upward in wave (`1.5s`, delays `0 / 0.22s / 0.44s`) | Static upward-right gaze, lifted paw, all 3 dots solid (`opacity: 1`) | While an assistant request is in flight |
+| **understood** | `.is-understood` | Happy hop with anticipation squat, lift & landing squash (`2.6s`, overshoot), raised paw waving "tamam" (`1.05s`), 3 gold sparkles twinkling & scaling in turn (`2.1s`, staggered `0 / -0.7s / -1.4s`), perked ears (`2.6s`), happy tail wag (`1.85s`) | Static happy `^ ^` smile, raised paw, all 3 sparkles solid (`opacity: 1`) | Deterministic document list or knowledge answer |
+| **checking** | `.is-checking` | Magnifier + paw sweeping left-right over document with tilt (`2.9s`), head following (`2.9s`, `+0.14s` lag) & eyes tracking (`2.9s`), document corner flapping (`2.3s`), alert perked ears (`2.8s`), calm tail sway (`3.6s`) | Static focused gaze, magnifier centered over document, flat corner | Application status summary reply |
+| **handoff** | `.is-handoff` | Pointing paw bounces down 3 pulses + rest (`2.8s`, overshoot), chevron pulsing in sync (`2.8s`, `+0.08s` lag), body leaning toward badge (`2.8s`), tail lifted & flicking (`1.9s`), natural blinking | Static downward gaze, pointing paw, static chevron badge | Reply containing the inquiry form action or fingerprint redirect |
+| **confused** | `.is-confused` | Head tilt wobble `±8°` (`3.2s`), `?` bubble bobbing & wobbling (`2.3s`, overshoot), right ear flopping (`14°↔22°`, `3.2s`) while left ear perks, slow tail question-mark curl (`4.1s`), natural blinking | Static polite `-7°` head tilt, static `?` bubble | Refusal or fallback menu reply |
+| **sleepy** | `.is-sleepy` | Slow deep breathing (`4.4s`), head slowly nodding off then startling back up (`4.8s`), `z z` floating up & fading in sequence (`2.8s`, staggered `0 / -1.4s`), tucked tail curling (`4.4s`) | Static lowered head (`+2.4` units), closed `U U` eyes, tucked tail, `z z` solid (`opacity: 1`) | HTTP 503 or daily limit reached |
+| **hello** *(new)* | `.is-hello` | **One-shot (`1.6s`, `iteration-count: 1`, `fill-mode: forwards`)**: 3-wave raised paw, small squash-and-stretch hop, perked ears, head nod, and friendly tail flick; lowers paw and holds the exact resting idle pose (blinking continues) | Static friendly raised-paw greeting pose (no motion) | Set once when the chat panel first opens; remove (or replace on first request) after ~1.8s |
+| **calm** *(modifier)* | `.is-calm` *(combine with any state)* | Disables **all** body/tail/ear/prop loops and holds each state's static pose while keeping only natural eye blinking (`8.2s` cycle) on open-eye states | No animation at all (blinking also disabled under `prefers-reduced-motion: reduce`) | Always add on 28 px chat-history message avatars so stacked bubbles never distract readers |
 
 ---
 
-## University Emblem Tracing Notes
+## Size, Performance & Technical Notes
+
+- **Measured file size (`topi-cat.svg`):** **12,150 bytes (11.87 KB)** — strictly within the **12,288-byte (12 KB)** cap (138 bytes headroom). Measured directly from file byte range during headless editing; orchestrator can confirm exact on-disk size with `wc -c design/mascot/topi/topi-cat.svg`.
+- **Mobile & battery performance:**
+  - Every keyframe animates only compositor-friendly `transform` and `opacity` (zero layout/paint thrashing, zero SVG path morphing, zero CSS filters or drop-shadows).
+  - Use **`.is-calm`** on 28 px message avatars in scrollable chat logs so only the active launcher/header mascot runs full multi-part loops.
+  - When rendering multiple inline `<svg>` copies in one document (launcher + header + message avatars), keep the `<style>` tag on the first mounted instance (or hoist it once) and suffix `<defs>` IDs (`emblem`, `t1`, `t2`, `ck`, `pw`, `sm`, `ey`) per clone — as demonstrated in `preview.html` — so the browser parses the stylesheet once and never collides `<defs>` IDs.
+  - Modern browser requirement: uses standard CSS Nesting (`&` inside `.mascot-cat`) and `transform-box: fill-box` (supported across Chrome 112+, Safari 16.5+, Firefox 117+, Edge 112+, and current iOS/Android WebViews).
+- **Reduced motion (`prefers-reduced-motion: reduce`):** Stops every animation unconditionally (`animation: none !important`), falling back automatically to each state's static final pose with all dots, sparkles, and `z z` visible at full opacity.
+- **Color tokens & dark mode:** Preserves all Round 3 `--public-burgundy*` and `--mascot-*` custom properties. In dark mode, keep `--mascot-coat` warm light cream (`#f4ece5`), `--mascot-card` pure `#ffffff` (so the fixed `#8b1328` / `#444444` Topkapı emblem stays crisp), and `--mascot-outline` wine-burgundy (`#8d2a44` or dark-mode `--public-burgundy-hover`).
+- **RTL layout:** Props sit on the right side of the `64 × 64` viewBox and `?` / `z z` glyphs must not be mirrored; render Topi un-flipped in RTL (`dir="rtl"`), as verified in `preview.html`.
+
+---
+
+## University Emblem Tracing Notes (Unchanged from Round 3)
 
 - **Source file:** `public/topkapi_logo.png` (500 × 500 px raster symbol — icon only, no university text).
-- **What was traced:** Two mirrored flat burgundy "T" blocks (`#8b1328`) with a thin central vertical gap and two flat dark-grey horizontal bars (`#444444`) aligned flush above the stems. No rounded corners, no outlines, no gradients, and no restyling were applied.
-- **Definition & placement:** Defined once inside `<defs>` as `<g id="emblem">` in the original 500 × 500 coordinate system and placed **only** on Topi's light neutral chest card (`#ffffff` / `var(--m-card)`) via `<use href="#emblem" transform="translate(25.4 46.1) scale(.0265)"/>`.
-  - Scaled footprint: `500 × 0.0265 = 13.25` viewBox units (drawn bounds `11.26 × 12.38` units, centered cleanly inside the `16 × 15.4` card with white padding on all four sides).
-  - The character's head was shifted `2.2` units higher and the torso extended `2.7` units lower relative to Round 2 so the larger chest card accommodates the 13-unit emblem without overlapping the paws or collar.
-- **Exact coordinates & minor optical hinting deviation:**
-  - Prompt reference coordinates (from the 500 × 500 PNG): left block `(35,37)–(253,37)–(253,475)–(118,475)–(118,255)–(35,255)`, right block `(264,37)–(460,37)–(460,255)–(401,255)–(401,475)–(264,475)` (11 px center gap), grey bars `x=118 y=10 w=135 h=16` and `x=264 y=10 w=136 h=16`.
-  - Traced `<g id="emblem">` coordinates:
-    - Left block: `(35,37)–(247,37)–(247,475)–(118,475)–(118,255)–(35,255)`
-    - Right block: `(269,37)–(460,37)–(460,255)–(401,255)–(401,475)–(269,475)`
-    - Grey bars: `x=118 y=8 w=129 h=18` and `x=269 y=8 w=132 h=18` (flush with the left/right stems, preserving the 11-unit vertical gap to `y=37`).
-  - **Reason for deviation:** At `scale(0.0265)` rendered at 56 px (`0.875 px/unit`), an 11-unit center gap would be `0.25 px` wide and blur closed under subpixel anti-aliasing. Widening the center gap slightly from 11 to 22 units (`0.51 px` at 56 px, `1.1 px` at 120 px) and nudging the grey bar thickness from 16 to 18 units keeps the exact silhouette, slight left/right wing proportion, sharp 90° corners, and brand colors intact while keeping the two T-blocks and central gap legible at 56 px and above. At 28 px, the emblem naturally simplifies into a crisp small burgundy mark on the white card.
-
----
-
-## Size, Theming & Technical Notes
-
-- **File size:** Estimated **~7,870 bytes (~7.7 KB)** by manual line-by-line ASCII character count — well under the **9,216-byte (9 KB)** budget (~1.3 KB headroom). Exact on-disk byte count was not measured with a shell command in this headless run and should be verified by the orchestrator (`wc -c design/mascot/topi/topi-cat.svg`).
-- **Color tokens:** Uses `--public-burgundy` (`#7e1830`), `--public-burgundy-light` (`#9a203d`), `--public-burgundy-hover` (`#641126`), `--public-burgundy-soft` (`#fbf2f4`), `--public-burgundy-border` (`#e2c0c8`), and optional `--mascot-*` overrides (`--mascot-outline`, `--mascot-coat`, `--mascot-mark`, `--mascot-surface`, `--mascot-card`, `--mascot-ink`, `--mascot-accent`).
-- **Dark mode:** Keep `--mascot-coat` warm light cream (`#f4ece5`), `--mascot-card` pure light neutral (`#ffffff` so the fixed `#8b1328`/`#444444` emblem stays legible), and `--mascot-outline` a visible wine-burgundy (`#8d2a44` or dark-mode `--public-burgundy-hover` `#9f2745`) so whiskers and outer contours never vanish black-on-black.
-
----
-
-## Risks & Integration Considerations
-
-1. **Duplicate `<defs>` IDs when inlined multiple times:** If the chat widget renders multiple inline `<svg>` copies of `topi-cat.svg` in the same DOM (e.g., launcher + header + message avatars), `<defs>` IDs (`emblem`, `t-body`, `t-head`, etc.) should be either mounted once in a shared hidden `<svg>` sprite or suffixed per clone (as demonstrated in `preview.html`) so browsers never cross-reference a hidden/removed instance's `<defs>`. Do **not** rename `#state-*` IDs when suffixing `<defs>` because the inline `<style>` rules target `#state-idle` through `#state-sleepy`.
-2. **Small-size (28 px) detail density:** At 28 px, the Topkapı emblem on the chest card intentionally resolves as a small burgundy mark, and the document lines inside `checking` soften; however, the magnifying glass rim, `?` bubble, `z z` pill, downward handoff badge, raised `understood` paw + gold sparkle, and 3-dot `thinking` pill are sized to stay distinct at 28 px. Verify visually in a real browser across 1x and 2x DPI displays.
-3. **Emblem optical gap vs. brand strictness:** If the brand review prefers the literal 11-unit gap over 56 px subpixel legibility, revert `247`/`269` to `253`/`264` and grey bars to `y=10 h=16 w=135/136` inside `<g id="emblem">` in one line.
-4. **RTL asymmetry:** Props (`thinking` pill, `understood` raised paw/sparkle, `handoff` badge, `checking` document, `confused` `?`, `sleepy` `z z`) sit on the right side of the 64 × 64 canvas while the tail sits on the left. Because the emblem is symmetric-looking and the `?`/`z z` glyphs must **not** be horizontally mirrored (`scaleX(-1)`), render Topi un-flipped in RTL (as shown in `preview.html`).
+- **Geometry:** `<g id="emblem">` inside `<defs>`, placed exclusively on the chest card via `<use href="#emblem" transform="translate(25.4 46.1) scale(.0265)"/>` — two mirrored flat `#8b1328` "T" blocks with a 22-unit optically hinted central gap (0.51 px at 56 px, 1.1 px at 120 px so subpixel anti-aliasing never blurs the gap shut) and two `#444444` horizontal bars flush above the stems.

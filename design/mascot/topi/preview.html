@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Topi — Uluslararası Ofis Asistanı (Mascot Preview)</title>
+  <title>Topi — Uluslararası Ofis Asistanı (Round 4 Motion Preview)</title>
   <style>
     :root {
       --public-burgundy: #7e1830;
@@ -30,6 +30,7 @@
       --mascot-card: #ffffff;
       --mascot-ink: #241b22;
       --mascot-accent: #d89b27;
+      --mascot-speed: 1;
 
       color-scheme: light;
       font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
@@ -75,14 +76,14 @@
       -webkit-font-smoothing: antialiased;
     }
 
+    body.is-paused svg * {
+      animation-play-state: paused !important;
+    }
+
     body.is-reduced-motion *,
     body.is-reduced-motion svg * {
       animation: none !important;
       transition: none !important;
-    }
-
-    body.is-reduced-motion svg .td {
-      opacity: 1 !important;
     }
 
     .topbar {
@@ -134,6 +135,33 @@
       gap: 0.18rem;
     }
 
+    .speed-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      min-height: 2rem;
+      padding: 0.2rem 0.6rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.45rem;
+      background: var(--page-surface-alt);
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--page-text);
+    }
+
+    .speed-control input[type="range"] {
+      width: 84px;
+      accent-color: var(--public-burgundy);
+      cursor: pointer;
+    }
+
+    .speed-control output {
+      min-width: 2.5rem;
+      text-align: right;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: var(--public-burgundy);
+    }
+
     .btn {
       display: inline-flex;
       align-items: center;
@@ -151,6 +179,12 @@
       cursor: pointer;
     }
 
+    .btn-sm {
+      min-height: 1.65rem;
+      padding: 0.16rem 0.5rem;
+      font-size: 0.72rem;
+    }
+
     .control-group .btn {
       border-color: transparent;
       background: transparent;
@@ -163,7 +197,20 @@
       color: #ffffff;
     }
 
-    .btn:focus-visible {
+    .btn-accent {
+      border-color: var(--public-burgundy-border);
+      background: var(--public-burgundy-soft);
+      color: var(--public-burgundy);
+    }
+
+    .btn-accent:hover {
+      border-color: var(--public-burgundy);
+      background: var(--public-burgundy);
+      color: #ffffff;
+    }
+
+    .btn:focus-visible,
+    .speed-control input:focus-visible {
       outline: 2px solid var(--public-burgundy);
       outline-offset: 2px;
     }
@@ -200,6 +247,13 @@
       margin: 0;
       font-size: 1.16rem;
       color: var(--public-burgundy);
+    }
+
+    .head-actions {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem;
     }
 
     .pill-tag {
@@ -298,6 +352,7 @@
 
     .surface-title {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
       gap: 0.5rem;
@@ -321,7 +376,7 @@
     .state-row-head {
       display: flex;
       flex-wrap: wrap;
-      align-items: baseline;
+      align-items: center;
       justify-content: space-between;
       gap: 0.25rem 0.6rem;
     }
@@ -377,6 +432,61 @@
       font-size: 0.7rem;
       font-weight: 600;
       opacity: 0.92;
+    }
+
+    /* Hello spotlight + 28px Calm Avatar row */
+    .spotlight-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+      gap: 1rem;
+    }
+
+    .hello-stage {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.95rem;
+      border: 1px solid var(--public-burgundy-border);
+      border-radius: 0.85rem;
+      background: var(--public-burgundy-soft);
+    }
+
+    .hello-sizes {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.85rem;
+    }
+
+    .calm-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.7rem 0.95rem;
+      padding: 0.9rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      background: var(--page-surface-alt);
+    }
+
+    .calm-item {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+      min-width: 58px;
+      padding: 0.42rem 0.48rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.6rem;
+      background: var(--page-surface);
+    }
+
+    .calm-item span {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--page-muted);
     }
 
     .mascot-slot {
@@ -623,7 +733,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 560px;
+      min-width: 600px;
       font-size: 0.84rem;
     }
 
@@ -657,6 +767,7 @@
 
     @media (max-width: 860px) {
       .surface-grid,
+      .spotlight-grid,
       .widget-grid,
       .rtl-grid {
         grid-template-columns: minmax(0, 1fr);
@@ -683,18 +794,25 @@
     <div class="topbar-inner">
       <div class="brand-head">
         <h1>Topi · Uluslararası Ofis Asistanı</h1>
-        <p>Round 3 final character preview (2026-11-20) · 7 states · Topkapı emblem card · Offline</p>
+        <p>Round 4 lively motion preview (2026-11-20) · 8 states + .is-calm · Inline CSS-only SVG · Offline</p>
       </div>
       <div class="controls">
         <div class="control-group" role="group" aria-label="Live preview state">
           <button type="button" class="btn" data-state-btn="idle" aria-pressed="true">Idle</button>
           <button type="button" class="btn" data-state-btn="thinking" aria-pressed="false">Thinking</button>
           <button type="button" class="btn" data-state-btn="understood" aria-pressed="false">Understood</button>
-          <button type="button" class="btn" data-state-btn="handoff" aria-pressed="false">Handoff</button>
           <button type="button" class="btn" data-state-btn="checking" aria-pressed="false">Checking</button>
+          <button type="button" class="btn" data-state-btn="handoff" aria-pressed="false">Handoff</button>
           <button type="button" class="btn" data-state-btn="confused" aria-pressed="false">Confused</button>
           <button type="button" class="btn" data-state-btn="sleepy" aria-pressed="false">Sleepy</button>
+          <button type="button" class="btn" data-state-btn="hello" aria-pressed="false">Hello</button>
         </div>
+        <button type="button" class="btn" id="toggle-play" aria-pressed="false">Pause all</button>
+        <label class="speed-control" for="speed-slider">
+          <span>Speed</span>
+          <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1">
+          <output id="speed-output" for="speed-slider">1.0x</output>
+        </label>
         <button type="button" class="btn" id="toggle-dark" aria-pressed="false">Dark mode</button>
         <button type="button" class="btn" id="toggle-motion" aria-pressed="false">Reduced motion</button>
       </div>
@@ -702,12 +820,39 @@
   </header>
 
   <main>
-    <!-- 1. All 7 States x 4 Sizes on Light / Dark / Burgundy -->
+    <!-- 0. Hello One-Shot & 28 px Calm Avatar Row -->
     <section class="card">
       <div class="card-head">
-        <h2>All 7 States at 28 / 36 / 56 / 120 px</h2>
+        <h2>New One-Shot <code>.is-hello</code> &amp; 28 px Calm Avatars (<code>.is-calm</code>)</h2>
+        <div class="head-actions">
+          <button type="button" class="btn btn-accent btn-sm" id="replay-all-hello">↻ Replay hello</button>
+          <span class="pill-tag">--mascot-speed · 1.6s one-shot</span>
+        </div>
+        <p class="card-caption"><code>.is-hello</code> plays a single ~1.6 s greeting (raised-paw wave, small hop, perked ears) and settles smoothly into the idle pose. <code>.is-calm</code> disables all loops except natural blinking so 28 px message avatars stay peaceful while users read.</p>
+      </div>
+
+      <div class="spotlight-grid">
+        <div>
+          <div class="section-label">One-shot greeting (.is-hello) — click Replay to watch again</div>
+          <div class="hello-stage" id="hello-spotlight">
+            <div class="hello-sizes" id="hello-sizes"></div>
+            <button type="button" class="btn btn-accent" id="replay-stage-hello">↻ Replay 1.6s wave</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-label">28 px calm-avatar row (.is-calm — blink only, no distracting loops)</div>
+          <div class="calm-strip" id="calm-avatar-row"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1. All 8 States x 4 Sizes on Light / Dark / Burgundy -->
+    <section class="card">
+      <div class="card-head">
+        <h2>All 8 States at 28 / 36 / 56 / 120 px (Inline SVG Loops)</h2>
         <span class="pill-tag">topi-cat.svg</span>
-        <p class="card-caption">Inspect legibility at avatar (28 px), header (36 px), launcher (56 px), and zoomed detail (120 px). Verify the two mirrored burgundy T-blocks and center gap on the chest card at 56 px and 120 px.</p>
+        <p class="card-caption">Every instance is an inline <code>&lt;svg&gt;</code> so all CSS keyframe loops run live. Use the top bar to pause all, scale <code>--mascot-speed</code> from 0.5x to 2.0x, toggle dark mode, or test <code>prefers-reduced-motion</code> static fallbacks.</p>
       </div>
 
       <div class="surface-grid">
@@ -738,8 +883,11 @@
     <section class="card">
       <div class="card-head">
         <h2>Widget Context (LTR — Turkish)</h2>
-        <span class="pill-tag">Launcher + Panel Header + All 7 Bubbles</span>
-        <p class="card-caption">The launcher buttons and panel header switch live with the top state bar. Inside the mock chat log, every state is shown with its 28 px message avatar beside a realistic reply.</p>
+        <div class="head-actions">
+          <button type="button" class="btn btn-accent btn-sm" id="simulate-open">Simulate panel open (.is-hello)</button>
+          <span class="pill-tag">Launcher + Panel Header + Calm 28px Bubbles</span>
+        </div>
+        <p class="card-caption">Launcher buttons and the panel header run full lively motion and switch with the top state bar (click "Simulate panel open" to see <code>.is-hello</code> settle into idle). Inside the chat log, 28 px message avatars use <code>.is-calm</code> so replies stay easy to read.</p>
       </div>
 
       <div class="widget-grid">
@@ -771,7 +919,7 @@
       <div class="card-head">
         <h2>RTL Sample (Arabic · dir="rtl")</h2>
         <span class="pill-tag">توبي · مساعد المكتب الدولي</span>
-        <p class="card-caption">Verifies character orientation, emblem badge, and layout spacing inside right-to-left Arabic UI. Launcher and header respond to the top state bar.</p>
+        <p class="card-caption">Verifies motion, orientation, emblem badge, and layout spacing inside right-to-left Arabic UI. Launcher and header respond to the top state bar; chat avatars use <code>.is-calm</code>.</p>
       </div>
 
       <div class="rtl-box">
@@ -793,7 +941,7 @@
       <div class="card-head">
         <h2>Which Reply Triggers Which State</h2>
         <span class="pill-tag">Widget Integration Contract</span>
-        <p class="card-caption">Deterministic mapping from assistant response state to root SVG modifier class on <code>&lt;svg class="mascot-svg mascot-cat"&gt;</code>.</p>
+        <p class="card-caption">Deterministic mapping from widget/reply event to root SVG modifier class on <code>&lt;svg class="mascot-svg mascot-cat"&gt;</code>. Add <code>.is-calm</code> on 28 px message avatars.</p>
       </div>
 
       <div class="table-wrap">
@@ -803,7 +951,7 @@
               <th>Preview</th>
               <th>State</th>
               <th>Root class</th>
-              <th>Visual cue</th>
+              <th>Motion &amp; visual cue</th>
               <th>Triggered by</th>
             </tr>
           </thead>
@@ -815,29 +963,7 @@
 
   <!-- Inline SVG template (verbatim copy of topi-cat.svg) -->
   <template id="tpl-topi">
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="mascot-svg mascot-cat" aria-hidden="true" focusable="false">
-<title>Topi</title>
-<style>.mascot-cat{--p:var(--public-burgundy,#7e1830);--pl:var(--public-burgundy-light,#9a203d);--o:var(--mascot-outline,var(--public-burgundy-hover,#641126));--s:var(--public-burgundy-soft,#fbf2f4);--b:var(--public-burgundy-border,#e2c0c8);--c:var(--mascot-coat,#f6efe9);--m:var(--mascot-mark,#c7bec2);--sf:var(--mascot-surface,#fffbf8);--cd:var(--mascot-card,#fff);--i:var(--mascot-ink,#241b22);--a:var(--mascot-accent,#d89b27)}.mascot-cat .st{display:none}.mascot-cat #state-idle,.mascot-cat.is-thinking #state-thinking,.mascot-cat.is-understood #state-understood,.mascot-cat.is-handoff #state-handoff,.mascot-cat.is-checking #state-checking,.mascot-cat.is-confused #state-confused,.mascot-cat.is-sleepy #state-sleepy,.mascot-cat.is-sleepy .t-ts{display:inline}.mascot-cat.is-thinking #state-idle,.mascot-cat.is-understood #state-idle,.mascot-cat.is-handoff #state-idle,.mascot-cat.is-checking #state-idle,.mascot-cat.is-confused #state-idle,.mascot-cat.is-sleepy #state-idle,.mascot-cat.is-confused .t-hs,.mascot-cat.is-sleepy .t-hs,.mascot-cat.is-sleepy .t-tl{display:none}.mascot-cat .so{fill:var(--sf);stroke:var(--o);stroke-width:2;stroke-linejoin:round}.mascot-cat .cp{fill:var(--cd);stroke:var(--p);stroke-width:1.7}.mascot-cat .ik{fill:none;stroke:var(--i);stroke-linecap:round;stroke-linejoin:round}.mascot-cat .ps{fill:none;stroke:var(--p);stroke-linecap:round;stroke-linejoin:round}.mascot-cat .tb{transform-origin:32px 27px;animation:tBlink 5.4s ease-in-out infinite}.mascot-cat.is-thinking .t-tl{transform-origin:17.5px 52.5px;animation:tSway 2.2s ease-in-out infinite}.mascot-cat .td{animation:tDot 1.35s ease-in-out infinite}.mascot-cat .td2{animation-delay:.2s}.mascot-cat .td3{animation-delay:.4s}@keyframes tBlink{0%,91%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}@keyframes tSway{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(9deg)}}@keyframes tDot{0%,80%,100%{opacity:.3}40%{opacity:1}}@media(prefers-reduced-motion:reduce){.mascot-cat .tb,.mascot-cat.is-thinking .t-tl,.mascot-cat .td{animation:none}.mascot-cat .td{opacity:1}}</style>
-<defs>
-<g id="emblem"><path fill="#444444" d="M118 8h129v18H118zm151 0h132v18H269z"/><path fill="#8b1328" d="M35 37H247V475H118V255H35ZM269 37H460V255H401V475H269Z"/></g>
-<path id="t-t1" d="M17.5 52.5C9.5 53 7.5 46.5 10.5 42.5" fill="none" stroke-linecap="round"/>
-<path id="t-t2" d="M17.5 53.8C9.8 53.8 8.2 58.6 13.5 59.2" fill="none" stroke-linecap="round"/>
-<g id="t-tail"><use href="#t-t1" stroke="var(--o)" stroke-width="6.4"/><use href="#t-t1" stroke="var(--c)" stroke-width="2.6"/></g>
-<g id="t-body"><path d="M16.5 40C14.5 48.5 16.5 59.2 23 59.2H41C47.5 59.2 49.5 48.5 47.5 40Z" fill="var(--c)" stroke="var(--o)" stroke-width="2.3" stroke-linejoin="round"/><ellipse cx="32" cy="50" rx="10.4" ry="7.2" fill="var(--sf)"/><path d="M19.5 41.2Q32 45.2 44.5 41.2" fill="none" stroke="var(--p)" stroke-width="3.2" stroke-linecap="round"/><circle cx="32" cy="44.1" r="1.3" fill="var(--a)" stroke="var(--o)" stroke-width=".9"/><rect x="24" y="44.8" width="16" height="15.4" rx="2" fill="var(--cd)" stroke="var(--p)" stroke-width="1.4"/><use href="#emblem" transform="translate(25.4 46.1) scale(.0265)"/></g>
-<g id="t-head"><path d="M14.8 23.3L14.4 12.2C14.3 9.8 17 8.9 19.1 10.4L25.6 15C29.6 14.1 34.4 14.1 38.4 15L44.9 10.4C47 8.9 49.7 9.8 49.6 12.2L49.2 23.3C52 26.4 52.5 31.2 50.2 35.2 47.2 40.2 40.4 42.4 32 42.4 23.6 42.4 16.8 40.2 13.8 35.2 11.5 31.2 12 26.4 14.8 23.3Z" fill="var(--c)" stroke="var(--o)" stroke-width="2.3" stroke-linejoin="round"/><path d="M17.2 19.6L17.1 13 22.2 16.6ZM46.8 19.6L46.9 13 41.8 16.6Z" fill="var(--b)"/><rect x="30.6" y="15" width="2.8" height="5" rx="1.4" fill="var(--m)"/><rect x="26.2" y="15.6" width="2.4" height="3.8" rx="1.2" fill="var(--m)"/><rect x="35.4" y="15.6" width="2.4" height="3.8" rx="1.2" fill="var(--m)"/><path d="M10.2 30.6L16.4 31.3M11.2 34.6L16.8 33.9M53.8 30.6L47.6 31.3M52.8 34.6L47.2 33.9" stroke="var(--o)" stroke-width="1.6" stroke-linecap="round"/><ellipse cx="32" cy="33.8" rx="7.6" ry="4.6" fill="var(--sf)"/><path d="M30.1 31Q32 30.2 33.9 31L32 33.2Z" fill="var(--pl)"/></g>
-<ellipse id="t-paw" rx="4" ry="2.6" fill="var(--sf)" stroke="var(--o)" stroke-width="2"/>
-<path id="t-smile" d="M28.4 34.8Q30.2 36.8 32 34.8 33.8 36.8 35.6 34.8" fill="none" stroke="var(--i)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-<g id="t-eyes"><circle cx="23.5" cy="27" r="2.8" fill="var(--i)"/><circle cx="40.5" cy="27" r="2.8" fill="var(--i)"/><circle cx="24.4" cy="26.1" r=".9" fill="#fff"/><circle cx="41.4" cy="26.1" r=".9" fill="#fff"/></g>
-</defs>
-<g class="t-base"><g class="t-tl"><use href="#t-tail"/></g><g class="t-ts st"><use href="#t-t2" stroke="var(--o)" stroke-width="5.8"/><use href="#t-t2" stroke="var(--c)" stroke-width="2.4"/></g><use href="#t-body"/><use href="#t-head" class="t-hs"/></g>
-<g id="state-idle"><g class="tb"><use href="#t-eyes"/></g><use href="#t-smile"/><use href="#t-paw" x="18.5" y="58.2"/><use href="#t-paw" x="45.5" y="58.2"/></g>
-<g id="state-thinking" class="st"><use href="#t-eyes" x=".9" y="-1.2"/><path d="M29.8 35.6Q32 34.8 34.2 35.6" class="ik" stroke-width="1.7"/><use href="#t-paw" x="18.5" y="58.2"/><path d="M42.8 48.2C46.6 45.2 51 46.8 49.8 51.2 48.6 54.4 43.4 54.5 42.2 51.4Z" class="so"/><rect x="42.5" y="1.4" width="19.8" height="8.8" rx="4.4" class="cp"/><circle class="td" cx="47.7" cy="5.8" r="1.4" fill="var(--p)"/><circle class="td td2" cx="52.4" cy="5.8" r="1.4" fill="var(--p)"/><circle class="td td3" cx="57.1" cy="5.8" r="1.4" fill="var(--p)"/></g>
-<g id="state-understood" class="st"><path d="M20.4 27.6Q23.5 23.4 26.6 27.6M37.4 27.6Q40.5 23.4 43.6 27.6" class="ik" stroke-width="2.2"/><circle cx="18.2" cy="31" r="2" fill="var(--b)" opacity=".85"/><circle cx="45.8" cy="31" r="2" fill="var(--b)" opacity=".85"/><use href="#t-smile"/><use href="#t-paw" x="18.5" y="58.2"/><path d="M45.8 51.5C49.8 50.8 55.6 47.4 56.2 42.8 56.6 39.8 53.6 38.4 51.3 40.2 49.4 41.8 47.8 45.4 45.6 48.2Z" class="so"/><circle cx="53.1" cy="42.8" r="1.3" fill="var(--b)"/><path d="M55.8 7.4L57.2 11 60.8 12.4 57.2 13.8 55.8 17.4 54.4 13.8 50.8 12.4 54.4 11Z" fill="var(--a)" stroke="var(--o)" stroke-width="1.2" stroke-linejoin="round"/><circle cx="60.4" cy="7.2" r="1.2" fill="var(--a)"/></g>
-<g id="state-handoff" class="st"><use href="#t-eyes" y="1.2"/><use href="#t-smile"/><use href="#t-paw" x="18.5" y="58.2"/><path d="M43.5 49.5C48.8 48.5 52.2 52 50 56 48.4 58.6 44 57.5 43.2 53.8Z" class="so"/><circle cx="54.2" cy="56.2" r="5.8" class="cp"/><path d="M51.4 55L54.2 58.2 57 55" class="ps" stroke-width="2.3"/></g>
-<g id="state-checking" class="st"><use href="#t-eyes" x=".8" y=".8"/><path d="M29.4 35.2Q32 36.4 34.6 35.2" class="ik" stroke-width="1.7"/><use href="#t-paw" x="18.5" y="58.2"/><rect x="47.5" y="42.2" width="13.6" height="16.8" rx="1.8" fill="var(--cd)" stroke="var(--o)" stroke-width="1.8"/><path d="M50.5 46.6H58.1M50.5 50.4H56.5M50.5 54.2H54.9" stroke="var(--b)" stroke-width="1.6" stroke-linecap="round"/><path d="M49.6 51.8L45.2 56.8" stroke="var(--o)" stroke-width="2.9" stroke-linecap="round"/><circle cx="53" cy="48.2" r="5" fill="var(--s)" fill-opacity=".75" stroke="var(--p)" stroke-width="2.1"/><path d="M50.7 46.4A3.2 3.2 0 0 1 53.2 45" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><ellipse cx="45.8" cy="56.6" rx="3.7" ry="2.5" class="so"/></g>
-<g id="state-confused" class="st"><g transform="rotate(-7 32 30)"><use href="#t-head"/><use href="#t-eyes" y=".2"/><path d="M20.2 22.8Q23.5 21.4 26.2 22.8M37.8 22.8Q40.5 21.4 43.8 22.8" fill="none" stroke="var(--o)" stroke-width="1.5" stroke-linecap="round"/><path d="M29.6 35.6Q32 34.4 34.4 35.6" class="ik" stroke-width="1.7"/></g><use href="#t-paw" x="18.5" y="58.2"/><use href="#t-paw" x="45.5" y="58.2"/><circle cx="55.5" cy="9.2" r="6.8" class="cp"/><path d="M53.4 7.5C53.4 5.9 54.7 5.1 55.8 5.2 57.1 5.3 57.8 6.2 57.7 7.3 57.6 8.5 55.8 8.8 55.7 10" class="ps" stroke-width="2"/><circle cx="55.7" cy="12.6" r="1.1" fill="var(--p)"/></g>
-<g id="state-sleepy" class="st"><g transform="translate(0 2.4)"><use href="#t-head"/><path d="M20.4 27Q23.5 30 26.6 27M37.4 27Q40.5 30 43.6 27" class="ik" stroke-width="2.1"/><path d="M30.4 35.4Q32 36.2 33.6 35.4" class="ik" stroke-width="1.5"/></g><use href="#t-paw" x="18.8" y="58.4"/><use href="#t-paw" x="45.2" y="58.4"/><rect x="45.6" y="1.2" width="16.8" height="10.4" rx="5.2" class="cp"/><path d="M48.8 6H52.2L48.8 9.2H52.2M54.2 3.7H59L54.2 8.5H59" class="ps" stroke-width="1.7"/></g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="mascot-svg mascot-cat" aria-hidden="true" focusable="false"><title>Topi</title><style>/*<![CDATA[*/.mascot-cat{--p:var(--public-burgundy,#7e1830);--pl:var(--public-burgundy-light,#9a203d);--o:var(--mascot-outline,var(--public-burgundy-hover,#641126));--s:var(--public-burgundy-soft,#fbf2f4);--b:var(--public-burgundy-border,#e2c0c8);--c:var(--mascot-coat,#f6efe9);--m:var(--mascot-mark,#c7bec2);--sf:var(--mascot-surface,#fffbf8);--cd:var(--mascot-card,#fff);--i:var(--mascot-ink,#241b22);--a:var(--mascot-accent,#d89b27);--sp:var(--mascot-speed,1);--e:cubic-bezier(.34,1.56,.64,1);& path{stroke-linejoin:round}.h{display:none}.c{fill:var(--c);stroke:var(--o);stroke-width:2.3}.s{fill:var(--sf);stroke:var(--o);stroke-width:2}.p{fill:var(--cd);stroke:var(--p);stroke-width:1.7}.r,.k,.b{fill:none;stroke-linecap:round}.k,.b{stroke-width:1.7}.k{stroke:var(--i)}.b{stroke:var(--p)}.o{stroke:var(--o)}.a{--n:none;--d:2.8s;--t:ease-in-out;--l:0s;--r:infinite;--u:0deg;--v:0deg;--w:0deg;--f:0;--x:0;--y:0;--z:0;--q:0;transform-box:fill-box;animation:var(--n) calc(var(--d)/var(--sp)) var(--t) calc(var(--l)/var(--sp)) var(--r) forwards}.g{transform-origin:50% 98%}.d{transform-origin:50% 95%;--n:br}.f{transform-origin:50% 92%;--n:km;--d:3.7s;--y:-.9px;--v:2.2deg;--q:.4px;--w:-1.8deg}.l{transform-origin:55% 68%}.u{transform-origin:45% 68%;--n:et;--d:5.1s}.t{transform-origin:100% 98%;--n:kt;--d:3.1s;--v:9deg;--w:-7deg;--f:3deg;--x:-5deg}.q{transform-origin:100% 8%}:is(.i,.td,.sp,.tz,.ch,.dc){transform-origin:50%}.i{--n:bk;--d:8.2s}.tp{transform-origin:15% 65%}.w{transform-origin:12% 85%}.hp{transform-origin:15% 30%}.mg{transform-origin:20% 85%}.qm{transform-origin:50% 60%}:is(.td,.sp,.qm,.tp,.hp,.ch){--t:var(--e)}.td{--n:dt;--d:1.5s}.d2{--l:.22s}.d3{--l:.44s}.sp{--n:sp;--d:2.1s}.s2{--l:-.7s}.s3,.z2{--l:-1.4s}.tz{--n:zz}&:is(.is-thinking,.is-understood,.is-checking,.is-handoff,.is-confused,.is-sleepy) .fi,&:is(.is-thinking,.is-understood,.is-checking,.is-handoff) .pr,&.is-sleepy .t{display:none}&:is(.is-thinking,.is-understood,.is-checking,.is-confused,.is-hello) .l{--n:kp;--v:8deg}&:is(.is-thinking,.is-understood,.is-checking,.is-handoff,.is-hello) .u{--n:kp;--v:-8deg}&.is-thinking{:is(.ft,.tp,.pt){display:inline}.d{--d:1.9s;--t:var(--e);--y:-1.1px}.t{--d:1.55s}.f{--d:2.5s;--l:.15s}.eg{--n:km;--d:3.4s;--x:-2.2px;--y:-.3px;--z:.8px}.tp{--n:k3;--d:2.1s;--y:-1.6px;--v:-14deg;--w:4deg}}&.is-understood{:is(.fo,.w,.po){display:inline}.g{--n:hp;--d:2.6s;--t:var(--e)}.t{--d:1.85s}:is(.l,.u){--d:2.6s;--t:var(--e)}.w{--n:kr;--d:1.05s;--u:-9deg;--v:14deg}}&.is-checking{:is(.fk,.pk){display:inline}.t{--d:3.6s}.f{--n:km;--d:2.9s;--l:.14s;--u:-2deg;--x:1.2px;--y:-.6px;--v:5deg;--z:.7px;--q:.5px;--w:2deg}.ec{--n:km;--d:2.9s;--x:.9px;--y:-.5px;--z:-.7px;--q:.5px}.mg{--n:km;--d:2.9s;--f:-1px;--u:-6deg;--x:2.4px;--y:-1.5px;--v:9deg;--z:1.5px;--q:1.8px;--w:4deg}.dc{--n:km;--d:2.3s;--y:-.3px;--v:-15deg;--w:5deg}}&.is-handoff{:is(.fa,.hp,.pa){display:inline}.g{--n:km;--x:1.2px;--y:.3px;--v:4deg;--z:.8px;--w:2deg}.t{--d:1.9s;--t:var(--e);--u:12deg;--v:23deg;--w:10deg;--f:0deg;--x:-6deg}.hp{--n:k3;--x:1.2px;--y:2.2px;--v:12deg;--w:-3deg}.ch{--n:k3;--l:.08s;--y:1.7px}}&.is-confused{:is(.fc,.pc){display:inline}.f{transform:rotate(-7deg);--n:kr;--d:3.2s;--u:-8deg;--v:8deg}.u{--n:kr;--d:3.2s;--u:14deg;--v:22deg}.t{--d:4.1s;--u:1deg;--v:16deg;--w:5deg;--f:3deg;--x:-8deg}.qm{--n:km;--d:2.3s;--u:-7deg;--y:-2.5px;--v:9deg;--q:-.5px;--w:-4deg}}&.is-sleepy{:is(.fs,.ps,.q){display:inline}.d{--d:4.4s}.f{transform:translateY(2.4px);--n:nd;--d:4.8s}.u{--n:none}.q{--n:kr;--d:4.4s;--v:-7deg}}&.is-hello{.w{display:inline}.a{--d:1.6s;--r:1}.i{--d:8.2s;--r:infinite}.g{--n:hp;--t:var(--e)}.d{--n:none}:is(.f,.l,.u){--t:var(--e)}.t{--v:14deg;--w:-6deg}.w{--n:hw;--t:var(--e)}.pr{opacity:0;--n:hr}}&.mascot-cat.is-calm{.a{--n:none}.i{--n:bk;--d:8.2s;--r:infinite}}}@keyframes bk{0%,43%,47%,88%,92%,96%,100%{transform:none}45%,90%,94%{transform:scaleY(.08)}}@keyframes br{0%,100%{transform:none}50%{transform:translateY(var(--y)) scale(1.028,1.036)}}@keyframes kt{0%,100%{transform:rotate(var(--u))}35%{transform:rotate(var(--v)) skewX(var(--x))}70%{transform:rotate(var(--w)) skewX(var(--f))}}@keyframes kr{0%,100%{transform:rotate(var(--u))}50%{transform:rotate(var(--v))}}@keyframes kp{0%,100%{transform:none}25%,65%{transform:rotate(var(--v)) translateY(-.8px)}}@keyframes km{0%,100%{transform:translate(var(--f),0) rotate(var(--u))}35%{transform:translate(var(--x),var(--y)) rotate(var(--v))}70%{transform:translate(var(--z),var(--q)) rotate(var(--w))}}@keyframes k3{0%,76%,100%{transform:none}12%,36%,60%{transform:translate(var(--x),var(--y)) rotate(var(--v))}24%,48%{transform:translateY(-.4px) rotate(var(--w))}}@keyframes et{0%,82%,94%,100%{transform:none}85%{transform:rotate(13deg)}88%{transform:rotate(-4deg)}91%{transform:rotate(8deg)}}@keyframes dt{0%,65%,100%{transform:scale(.85);opacity:.45}30%{transform:translateY(-2.4px) scale(1.18);opacity:1}}@keyframes hp{0%,66%,100%{transform:none}11%{transform:translateY(.7px) scale(1.06,.92)}25%{transform:translateY(-4.4px) scale(.95,1.06)}39%{transform:translateY(.8px) scale(1.07,.91)}51%{transform:translateY(-.8px) scale(.99,1.02)}}@keyframes sp{0%,100%{transform:scale(.62);opacity:.38}38%{transform:scale(1.22) rotate(18deg);opacity:1}70%{transform:scale(.88) rotate(-8deg);opacity:.82}}@keyframes nd{0%,100%{transform:translateY(2.2px) rotate(-1deg)}70%{transform:translateY(4.8px) rotate(-8deg)}79%{transform:translateY(1px) rotate(2deg)}89%{transform:translateY(2.4px) rotate(-1.5deg)}}@keyframes zz{0%{transform:translate(-.6px,1.8px) scale(.82);opacity:0}22%,60%{transform:none;opacity:1}100%{transform:translate(1.1px,-2.8px) scale(1.08);opacity:0}}@keyframes hw{0%{transform:rotate(-15deg);opacity:0}12%,42%,70%{transform:rotate(14deg);opacity:1}27%,56%{transform:rotate(-12deg);opacity:1}86%{transform:rotate(-14deg);opacity:.8}100%{transform:rotate(-18deg);opacity:0}}@keyframes hr{0%,84%{opacity:0}94%,100%{opacity:1}}@media(prefers-reduced-motion:reduce){.mascot-cat *{animation:none!important}}/*]]>*/</style><defs><g id="emblem"><path fill="#444444" d="M118 8h129v18H118zm151 0h132v18H269z"/><path fill="#8b1328" d="M35 37H247V475H118V255H35ZM269 37H460V255H401V475H269Z"/></g><path id="t1" d="M17.5 52.5C9.5 53 7.5 46.5 10.5 42.5" class="r"/><path id="t2" d="M17.5 53.8C9.8 53.8 8.2 58.6 13.5 59.2" class="r"/><path id="ck" d="M49.2 23.3C52 26.4 52.5 31.2 50.2 35.2 47.2 40.2 40.4 42.4 32 42.4 23.6 42.4 16.8 40.2 13.8 35.2 11.5 31.2 12 26.4 14.8 23.3"/><ellipse id="pw" rx="4" ry="2.6" class="s"/><path id="sm" d="M28.4 34.8Q30.2 36.8 32 34.8 33.8 36.8 35.6 34.8" class="k"/><g id="ey" fill="var(--i)"><circle cx="23.5" cy="27" r="2.8"/><circle cx="40.5" cy="27" r="2.8"/><g fill="#fff"><circle cx="24.4" cy="26.1" r=".9"/><circle cx="41.4" cy="26.1" r=".9"/></g></g></defs><g class="a g"><g class="a t"><use href="#t1" class="o" stroke-width="6.4"/><use href="#t1" stroke="var(--c)" stroke-width="2.6"/></g><g class="a q h"><use href="#t2" class="o" stroke-width="5.8"/><use href="#t2" stroke="var(--c)" stroke-width="2.4"/></g><g class="a d"><path d="M16.5 40C14.5 48.5 16.5 59.2 23 59.2H41C47.5 59.2 49.5 48.5 47.5 40Z" class="c"/><ellipse cx="32" cy="50" rx="10.4" ry="7.2" fill="var(--sf)"/><path d="M19.5 41.2Q32 45.2 44.5 41.2" class="r" stroke="var(--p)" stroke-width="3.2"/><circle cx="32" cy="44.1" r="1.3" fill="var(--a)" class="o" stroke-width=".9"/><rect x="24" y="44.8" width="16" height="15.4" rx="2" fill="var(--cd)" stroke="var(--p)" stroke-width="1.4"/><use href="#emblem" transform="translate(25.4 46.1) scale(.0265)"/></g><g class="a f"><g class="a l"><path d="M15.8 25.5L14.8 23.3 14.4 12.2C14.3 9.8 17 8.9 19.1 10.4L25.6 15 27.6 17Z" class="c"/><path d="M17.2 19.6L17.1 13 22.2 16.6Z" fill="var(--b)"/></g><g class="a u"><path d="M36.4 17L38.4 15 44.9 10.4C47 8.9 49.7 9.8 49.6 12.2L49.2 23.3 48.2 25.5Z" class="c"/><path d="M46.8 19.6L46.9 13 41.8 16.6Z" fill="var(--b)"/></g><use href="#ck" fill="var(--c)"/><path d="M14.8 25V23.3Q20.5 21 25.6 15C29.6 14.1 34.4 14.1 38.4 15Q43.5 21 49.2 23.3V25Z" fill="var(--c)"/><use href="#ck" class="r o" stroke-width="2.3"/><path d="M25.6 15C29.6 14.1 34.4 14.1 38.4 15" class="r o" stroke-width="2.3"/><g fill="var(--m)"><rect x="30.6" y="15" width="2.8" height="5" rx="1.4"/><rect x="26.2" y="15.6" width="2.4" height="3.8" rx="1.2"/><rect x="35.4" y="15.6" width="2.4" height="3.8" rx="1.2"/></g><path d="M10.2 30.6L16.4 31.3M11.2 34.6L16.8 33.9M53.8 30.6L47.6 31.3M52.8 34.6L47.2 33.9" class="r o" stroke-width="1.6"/><ellipse cx="32" cy="33.8" rx="7.6" ry="4.6" fill="var(--sf)"/><path d="M30.1 31Q32 30.2 33.9 31L32 33.2Z" fill="var(--pl)"/><g class="fi"><g class="a i"><use href="#ey"/></g><use href="#sm"/></g><g class="ft h"><g class="a i"><g class="a eg"><use href="#ey" x=".9" y="-1.2"/></g></g><path d="M29.8 35.6Q32 34.8 34.2 35.6" class="k"/></g><g class="fo h"><path d="M20.4 27.6Q23.5 23.4 26.6 27.6M37.4 27.6Q40.5 23.4 43.6 27.6" class="k" stroke-width="2.2"/><g fill="var(--b)" opacity=".85"><circle cx="18.2" cy="31" r="2"/><circle cx="45.8" cy="31" r="2"/></g><use href="#sm"/></g><g class="fa h"><g class="a i"><use href="#ey" y="1.2"/></g><use href="#sm"/></g><g class="fk h"><g class="a i"><g class="a ec"><use href="#ey" x=".8" y=".8"/></g></g><path d="M29.4 35.2Q32 36.4 34.6 35.2" class="k"/></g><g class="fc h"><g class="a i"><use href="#ey" y=".2"/></g><path d="M20.2 22.8Q23.5 21.4 26.2 22.8M37.8 22.8Q40.5 21.4 43.8 22.8" class="r o" stroke-width="1.5"/><path d="M29.6 35.6Q32 34.4 34.4 35.6" class="k"/></g><g class="fs h"><path d="M20.4 27Q23.5 30 26.6 27M37.4 27Q40.5 30 43.6 27" class="k" stroke-width="2.1"/><path d="M30.4 35.4Q32 36.2 33.6 35.4" class="k" stroke-width="1.5"/></g></g><use href="#pw" x="18.5" y="58.2"/><use href="#pw" class="a pr" x="45.5" y="58.2"/><path class="a tp s h" d="M42.8 48.2C46.6 45.2 51 46.8 49.8 51.2 48.6 54.4 43.4 54.5 42.2 51.4Z"/><g class="a w h"><path d="M45.8 51.5C49.8 50.8 55.6 47.4 56.2 42.8 56.6 39.8 53.6 38.4 51.3 40.2 49.4 41.8 47.8 45.4 45.6 48.2Z" class="s"/><circle cx="53.1" cy="42.8" r="1.3" fill="var(--b)"/></g><path class="a hp s h" d="M43.5 49.5C48.8 48.5 52.2 52 50 56 48.4 58.6 44 57.5 43.2 53.8Z"/></g><g class="pt h" fill="var(--p)"><rect x="42.5" y="1.4" width="19.8" height="8.8" rx="4.4" class="p"/><circle class="a td" cx="47.7" cy="5.8" r="1.4"/><circle class="a td d2" cx="52.4" cy="5.8" r="1.4"/><circle class="a td d3" cx="57.1" cy="5.8" r="1.4"/></g><g class="po h" fill="var(--a)"><path class="a sp o" d="M55.8 7.4L57.2 11 60.8 12.4 57.2 13.8 55.8 17.4 54.4 13.8 50.8 12.4 54.4 11Z" stroke-width="1.2"/><circle class="a sp s2" cx="60.4" cy="7.2" r="1.2"/><path class="a sp s3 o" d="M50.2 3.8L51 5.6 52.8 6.4 51 7.2 50.2 9 49.4 7.2 47.6 6.4 49.4 5.6Z" stroke-width=".9"/></g><g class="pa h"><circle cx="54.2" cy="56.2" r="5.8" class="p"/><path class="a b ch" d="M51.4 55L54.2 58.2 57 55" stroke-width="2.3"/></g><g class="pk h"><rect x="47.5" y="42.2" width="13.6" height="16.8" rx="1.8" fill="var(--cd)" class="o" stroke-width="1.8"/><path d="M50.5 46.6H58.1M50.5 50.4H56.5M50.5 54.2H54.9" class="r" stroke="var(--b)" stroke-width="1.6"/><path class="a dc o" d="M57.6 42.2L61.1 45.7 57.6 45.7Z" fill="var(--s)" stroke-width="1.2"/><g class="a mg"><path d="M49.6 51.8L45.2 56.8" class="r o" stroke-width="2.9"/><circle cx="53" cy="48.2" r="5" fill="var(--s)" fill-opacity=".75" stroke="var(--p)" stroke-width="2.1"/><path d="M50.7 46.4A3.2 3.2 0 0 1 53.2 45" class="r" stroke="#fff" stroke-width="1.3"/><ellipse cx="45.8" cy="56.6" rx="3.7" ry="2.5" class="s"/></g></g><g class="pc h"><g class="a qm"><circle cx="55.5" cy="9.2" r="6.8" class="p"/><path d="M53.4 7.5C53.4 5.9 54.7 5.1 55.8 5.2 57.1 5.3 57.8 6.2 57.7 7.3 57.6 8.5 55.8 8.8 55.7 10" class="b" stroke-width="2"/><circle cx="55.7" cy="12.6" r="1.1" fill="var(--p)"/></g></g><g class="ps h"><rect x="45.6" y="1.2" width="16.8" height="10.4" rx="5.2" class="p"/><path class="a b tz" d="M48.8 6H52.2L48.8 9.2H52.2"/><path class="a b tz z2" d="M54.2 3.7H59L54.2 8.5H59"/></g></svg>
   </template>
 
   <script>
@@ -848,15 +974,15 @@
           key: 'idle',
           cls: '(default)',
           label: '1 · Idle',
-          cue: 'Calm greeting face, slow eye blink (disabled under reduced motion)',
-          trigger: 'Default / welcome message',
+          cue: 'Breathing (2.8s), lazy S-curve tail wag (3.1s), gentle head bob (3.7s), ear twitch (~5.1s), blink + occasional double blink (~4s avg)',
+          trigger: 'Default / welcome & resting state',
           bubbleTr: 'Merhaba! Ben Topi. Başvuru süreci, gerekli belgeler veya başvuru durumunuz hakkında soru sorabilirsiniz.'
         },
         {
           key: 'thinking',
           cls: '.is-thinking',
           label: '2 · Thinking',
-          cue: 'Tail sways slowly, three pulsing dots pill (static dots under reduced motion)',
+          cue: 'Bouncy body bob (1.9s), brisk tail swish (1.55s), rhythmic paw tap (2.1s), 3 bubbling dots wave (1.5s), eyes glancing up-left & up-right (3.4s)',
           trigger: 'Request in flight',
           bubbleTr: 'Yanıtınız hazırlanıyor…'
         },
@@ -864,32 +990,32 @@
           key: 'understood',
           cls: '.is-understood',
           label: '3 · Understood',
-          cue: 'Content closed-eye smile, raised paw ("tamam / got it"), static gold sparkle',
+          cue: 'Happy hop with anticipation squat & landing squash (2.6s), raised paw waving "tamam" (1.05s), 3 twinkling sparkles in turn (2.1s), perked ears',
           trigger: 'Deterministic document list or knowledge answer',
           bubbleTr: 'İkamet izni için gerekli belgeler: pasaport fotokopisi, öğrenci belgesi, sağlık sigortası ve 4 biyometrik fotoğraf.'
         },
         {
-          key: 'handoff',
-          cls: '.is-handoff',
-          label: '4 · Handoff',
-          cue: 'Friendly downward gaze, paw pointing down toward chevron badge',
-          trigger: 'Reply with the inquiry action or fingerprint redirect',
-          bubbleTr: 'Bu konu için ekibimizin dosyanızı doğrudan incelemesi gerekiyor. Aşağıdaki soru formundan bize yazabilirsiniz.',
-          actionTr: 'Soru formuna git'
-        },
-        {
           key: 'checking',
           cls: '.is-checking',
-          label: '5 · Checking',
-          cue: 'Focused gaze, magnifying glass held over a small document/file',
+          label: '4 · Checking',
+          cue: 'Magnifier sweeping left-right over document with tilt (2.9s), head & eyes following, document corner flapping (2.3s), alert ears',
           trigger: 'Application status summary',
           bubbleTr: 'Başvuru özeti: Belgeleriniz Uluslararası Ofis tarafından inceleniyor. Şu an eksik belge görünmüyor.'
+        },
+        {
+          key: 'handoff',
+          cls: '.is-handoff',
+          label: '5 · Handoff',
+          cue: 'Pointing paw bounces down 3 pulses + rest (2.8s), chevron pulsing in sync, body leaning toward badge, tail lifted & flicking (1.9s)',
+          trigger: 'Reply with inquiry action or fingerprint redirect',
+          bubbleTr: 'Bu konu için ekibimizin dosyanızı doğrudan incelemesi gerekiyor. Aşağıdaki soru formundan bize yazabilirsiniz.',
+          actionTr: 'Soru formuna git'
         },
         {
           key: 'confused',
           cls: '.is-confused',
           label: '6 · Confused',
-          cue: 'Polite -7° head tilt, kind eyes, small "?" bubble',
+          cue: 'Head tilt wobble ±8° (3.2s), "?" bobbing & wobbling (2.3s), right ear flopping, slow question-mark tail curl (4.1s)',
           trigger: 'Refusal or fallback menu',
           bubbleTr: 'Bu konuda resmi yönlendirme yapamıyorum. Aşağıdaki konu başlıklarından birini seçebilir veya ofisimize yazabilirsiniz.'
         },
@@ -897,9 +1023,17 @@
           key: 'sleepy',
           cls: '.is-sleepy',
           label: '7 · Sleepy',
-          cue: 'Lowered head, peacefully closed eyes, tucked tail, "z z" bubble',
+          cue: 'Slow deep breathing (4.4s), head nodding off & startled jerk back (4.8s), "z z" floating up & fading in sequence (2.8s), tucked tail curling',
           trigger: 'HTTP 503 / daily limit reached',
           bubbleTr: 'Günlük yanıt sınırına ulaşıldı veya servis şu an kullanılamıyor. Lütfen biraz sonra tekrar deneyin.'
+        },
+        {
+          key: 'hello',
+          cls: '.is-hello',
+          label: '8 · Hello (one-shot)',
+          cue: '1.6s one-shot (1 forwards): 3-wave raised paw, small hop, perked ears & tail flick, then settles smoothly into idle pose',
+          trigger: 'Once when the chat panel first opens',
+          bubbleTr: 'Hoş geldiniz! Size nasıl yardımcı olabilirim?'
         }
       ];
 
@@ -907,14 +1041,21 @@
       const tpl = document.getElementById('tpl-topi');
       let cloneSeq = 0;
 
-      function createTopi(sizePx, stateKey, isLive = false) {
+      function createTopi(sizePx, stateKey, { isLive = false, isCalm = false } = {}) {
         const slot = document.createElement('span');
         slot.className = 'mascot-slot';
         slot.style.width = `${sizePx}px`;
         slot.style.height = `${sizePx}px`;
 
         const svg = tpl.content.firstElementChild.cloneNode(true);
-        const suffix = `-n${++cloneSeq}`;
+        const seq = ++cloneSeq;
+        const suffix = `-n${seq}`;
+
+        // Keep inline <style> on the first mounted SVG only to avoid 80x duplicate stylesheet parsing
+        if (seq > 1) {
+          const styleEl = svg.querySelector('style');
+          if (styleEl) styleEl.remove();
+        }
 
         // Namespace <defs> IDs per inline instance so multiple copies share zero duplicate IDs in DOM
         const idMap = new Map();
@@ -930,10 +1071,43 @@
         }
 
         if (stateKey !== 'idle') svg.classList.add(`is-${stateKey}`);
+        if (isCalm) svg.classList.add('is-calm');
         if (isLive) svg.dataset.liveMascot = 'true';
 
         slot.append(svg);
         return slot;
+      }
+
+      function replayHello(scope = document) {
+        const nodes = scope.querySelectorAll('svg.mascot-cat.is-hello');
+        for (const svg of nodes) {
+          svg.classList.remove('is-hello');
+          void svg.getBoundingClientRect();
+          svg.classList.add('is-hello');
+        }
+      }
+
+      // 0. Hello spotlight & 28px Calm Avatar Row
+      const helloSizes = document.getElementById('hello-sizes');
+      for (const sz of [36, 56, 120]) {
+        const cell = document.createElement('div');
+        cell.className = 'size-cell';
+        cell.append(createTopi(sz, 'hello'));
+        const tag = document.createElement('code');
+        tag.textContent = `${sz}px`;
+        cell.append(tag);
+        helloSizes.append(cell);
+      }
+
+      const calmRow = document.getElementById('calm-avatar-row');
+      for (const st of STATES) {
+        const item = document.createElement('div');
+        item.className = 'calm-item';
+        item.append(createTopi(28, st.key, { isCalm: true }));
+        const cap = document.createElement('span');
+        cap.textContent = st.key;
+        item.append(cap);
+        calmRow.append(item);
       }
 
       // 1. Light & Dark matrices
@@ -948,17 +1122,28 @@
           const lbl = document.createElement('span');
           lbl.className = 'state-row-label';
           lbl.textContent = `${st.label} (${st.cls})`;
-          const note = document.createElement('span');
-          note.className = 'state-row-note';
-          note.textContent = st.trigger;
-          head.append(lbl, note);
+          head.append(lbl);
+
+          if (st.key === 'hello') {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-accent btn-sm';
+            btn.textContent = '↻ Replay';
+            btn.addEventListener('click', () => replayHello(row));
+            head.append(btn);
+          } else {
+            const note = document.createElement('span');
+            note.className = 'state-row-note';
+            note.textContent = st.trigger;
+            head.append(note);
+          }
 
           const strip = document.createElement('div');
           strip.className = 'size-strip';
           for (const sz of SIZES) {
             const cell = document.createElement('div');
             cell.className = 'size-cell';
-            cell.append(createTopi(sz, st.key, false));
+            cell.append(createTopi(sz, st.key));
             const tag = document.createElement('code');
             tag.textContent = `${sz}px`;
             cell.append(tag);
@@ -978,7 +1163,7 @@
       for (const st of STATES) {
         const item = document.createElement('div');
         item.className = 'burgundy-item';
-        item.append(createTopi(56, st.key, false), createTopi(36, st.key, false));
+        item.append(createTopi(56, st.key), createTopi(36, st.key));
         const cap = document.createElement('span');
         cap.textContent = st.key;
         item.append(cap);
@@ -987,38 +1172,38 @@
 
       // 2. LTR Widget Mockups
       const launcherSm = document.getElementById('launcher-pill-sm');
-      launcherSm.append(createTopi(36, 'idle', true));
+      launcherSm.append(createTopi(36, 'idle', { isLive: true }));
       const smTxt = document.createElement('span');
       smTxt.textContent = 'Asistan';
       launcherSm.append(smTxt);
 
       const launcherLg = document.getElementById('launcher-pill-lg');
-      launcherLg.append(createTopi(56, 'idle', true));
+      launcherLg.append(createTopi(56, 'idle', { isLive: true }));
       const lgTxt = document.createElement('span');
       lgTxt.textContent = 'Asistan';
       launcherLg.append(lgTxt);
 
-      document.getElementById('launcher-orb').append(createTopi(56, 'idle', true));
+      document.getElementById('launcher-orb').append(createTopi(56, 'idle', { isLive: true }));
 
       const panelBrand = document.getElementById('panel-header-brand');
-      panelBrand.append(createTopi(36, 'idle', true));
+      panelBrand.append(createTopi(36, 'idle', { isLive: true }));
       const panelTitle = document.createElement('h3');
       panelTitle.className = 'mock-header-title';
       panelTitle.textContent = 'Topi · Uluslararası Ofis Asistanı';
       panelBrand.append(panelTitle);
 
       const chatLog = document.getElementById('mock-chat-log');
-      for (const st of STATES) {
+      for (const st of STATES.filter((s) => s.key !== 'hello')) {
         const row = document.createElement('div');
         row.className = 'mock-msg-row';
-        row.append(createTopi(28, st.key, false));
+        row.append(createTopi(28, st.key, { isCalm: true }));
 
         const body = document.createElement('div');
         body.className = 'mock-msg-body';
 
         const badge = document.createElement('span');
         badge.className = 'mock-state-badge';
-        badge.textContent = `${st.key} · ${st.cls}`;
+        badge.textContent = `${st.key} · ${st.cls} + .is-calm`;
 
         const bubble = document.createElement('p');
         bubble.className = 'mock-bubble';
@@ -1038,13 +1223,13 @@
 
       // 3. RTL Arabic Sample
       const rtlLauncher = document.getElementById('rtl-launcher');
-      rtlLauncher.append(createTopi(36, 'idle', true));
+      rtlLauncher.append(createTopi(36, 'idle', { isLive: true }));
       const rtlLauncherTxt = document.createElement('span');
       rtlLauncherTxt.textContent = 'المساعد';
       rtlLauncher.append(rtlLauncherTxt);
 
       const rtlBrand = document.getElementById('rtl-header-brand');
-      rtlBrand.append(createTopi(36, 'idle', true));
+      rtlBrand.append(createTopi(36, 'idle', { isLive: true }));
       const rtlTitle = document.createElement('h3');
       rtlTitle.className = 'mock-header-title';
       rtlTitle.textContent = 'توبي · مساعد المكتب الدولي';
@@ -1070,7 +1255,7 @@
       for (const msg of rtlMessages) {
         const row = document.createElement('div');
         row.className = 'mock-msg-row';
-        row.append(createTopi(28, msg.state, false));
+        row.append(createTopi(28, msg.state, { isCalm: true }));
         const body = document.createElement('div');
         body.className = 'mock-msg-body';
         const bubble = document.createElement('p');
@@ -1092,7 +1277,7 @@
       for (const st of STATES) {
         const tr = document.createElement('tr');
         const tdIcon = document.createElement('td');
-        tdIcon.append(createTopi(36, st.key, false));
+        tdIcon.append(createTopi(36, st.key));
 
         const tdName = document.createElement('td');
         tdName.innerHTML = `<strong>${st.key}</strong>`;
@@ -1118,12 +1303,31 @@
         }
         for (const svg of document.querySelectorAll('svg[data-live-mascot="true"]')) {
           for (const cls of STATE_CLASSES) svg.classList.remove(cls);
-          if (nextState !== 'idle') svg.classList.add(`is-${nextState}`);
+          if (nextState !== 'idle') {
+            if (nextState === 'hello') void svg.getBoundingClientRect();
+            svg.classList.add(`is-${nextState}`);
+          }
         }
       }
       for (const btn of stateButtons) {
         btn.addEventListener('click', () => setLiveState(btn.dataset.stateBtn));
       }
+
+      const playBtn = document.getElementById('toggle-play');
+      playBtn.addEventListener('click', () => {
+        const nextPaused = !document.body.classList.contains('is-paused');
+        document.body.classList.toggle('is-paused', nextPaused);
+        playBtn.setAttribute('aria-pressed', String(nextPaused));
+        playBtn.textContent = nextPaused ? 'Play all' : 'Pause all';
+      });
+
+      const speedSlider = document.getElementById('speed-slider');
+      const speedOutput = document.getElementById('speed-output');
+      speedSlider.addEventListener('input', () => {
+        const val = Number(speedSlider.value);
+        document.documentElement.style.setProperty('--mascot-speed', String(val));
+        speedOutput.textContent = `${val.toFixed(1)}x`;
+      });
 
       const darkBtn = document.getElementById('toggle-dark');
       darkBtn.addEventListener('click', () => {
@@ -1138,6 +1342,10 @@
         document.body.classList.toggle('is-reduced-motion', next);
         motionBtn.setAttribute('aria-pressed', String(next));
       });
+
+      document.getElementById('replay-all-hello').addEventListener('click', () => replayHello(document));
+      document.getElementById('replay-stage-hello').addEventListener('click', () => replayHello(document.getElementById('hello-spotlight')));
+      document.getElementById('simulate-open').addEventListener('click', () => setLiveState('hello'));
     })();
   </script>
 </body>
