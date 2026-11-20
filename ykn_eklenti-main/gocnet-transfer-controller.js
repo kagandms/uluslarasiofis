@@ -9,7 +9,9 @@ const QUERY_RESULT_MESSAGES = Object.freeze({
     existing_record: ['sorgulama başarılı (db kaydı yüklendi)', 'başvuru sorgulama başarılı.',
         'öğrenci demografik bilgileri ve daha önceden kaydedilmiş veriler veritabanından forma yüklendi.'],
     student_data_filled: ['sorgulama başarılı (yöksis verileri dolduruldu)',
-        'başvuru sorgulama başarılı.', 'yöksis veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.']
+        'başvuru sorgulama başarılı.',
+        'yöksis veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form',
+        'otomatik dolduruldu.']
 });
 let queryInProgress = false;
 const transferContexts = new Map();

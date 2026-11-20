@@ -59,7 +59,7 @@ test('acknowledges only the exact active-learning success dialog and keeps trans
     let acknowledged = 0;
     dom.window.document.querySelector('button').addEventListener('click', () => {
         dom.window.document.body.insertAdjacentHTML('beforeend', `<div role="dialog"><h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
-            <p>Başvuru sorgulama başarılı.</p><p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.</p>
+            <p>Başvuru sorgulama başarılı.</p><p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</p>
             <button>Tamam</button></div>`);
         dom.window.document.querySelector('[role="dialog"] button').addEventListener('click', () => {
             acknowledged += 1;
@@ -164,7 +164,7 @@ test('YÖKSİS query handler never leaks a stale history reason into a subsequen
     nextFormResponse = {
         result: { success: true, freshResponse: true },
         insertDialog: `<div role="dialog"><h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
-            <p>Başvuru sorgulama başarılı.</p><p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.</p></div>`
+            <p>Başvuru sorgulama başarılı.</p><p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</p></div>`
     };
     const ackFailedResult = await sendQueryMessage(listener, {
         action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'form-ack-fail', portalTabId: 4,
@@ -188,7 +188,7 @@ test('YÖKSİS form query uses 55 s waiter timeout, settles recognized dialog af
                     dom.window.document.body.insertAdjacentHTML('beforeend', `<div role="dialog">
                         <h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
                         <p>Başvuru sorgulama başarılı.</p>
-                        <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.</p>
+                        <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</p>
                         <button>Tamam</button></div>`);
                     dom.window.document.querySelector('[role="dialog"] button').addEventListener('click', () => {
                         acknowledged += 1;

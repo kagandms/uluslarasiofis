@@ -25,6 +25,28 @@ test('recognizes the explicit database-loaded response as an existing record', (
     dom.window.close();
 });
 
+test('recognizes both real and legacy student_data_filled wording and rejects mismatched DB Kaydı Yüklendi title', () => {
+    const dom = new JSDOM(queryFixture);
+    const { document } = dom.window;
+    document.querySelector('section input').value = '2099-12-99999999';
+
+    document.body.insertAdjacentHTML('beforeend', `<div role="dialog">
+        <h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
+        <p>Başvuru sorgulama başarılı.</p>
+        <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</p>
+        <button>Tamam</button></div>`);
+    assert.equal(readGocnetQueryResult(document, '2099-12-99999999'), 'student_data_filled');
+
+    document.querySelector('[role="dialog"] p:last-of-type').textContent =
+        'YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.';
+    assert.equal(readGocnetQueryResult(document, '2099-12-99999999'), 'student_data_filled');
+
+    document.querySelector('[role="dialog"] h2').textContent = 'Sorgulama Başarılı (DB Kaydı Yüklendi)';
+    assert.equal(readGocnetQueryResult(document, '2099-12-99999999'), 'unknown');
+
+    dom.window.close();
+});
+
 test('classifies GöçNet history only after a fresh unfiltered exact-number result and visible empty state', () => {
     const evidenceHtml = readFileSync(new URL('../test/fixtures/gocnet-transfer/dom-contract.html', import.meta.url), 'utf8');
     const dom = new JSDOM(evidenceHtml);
@@ -189,7 +211,7 @@ test('queryGocnetRegistration uses MAIN-world queryGocnetForm when chrome.runtim
                     dom.window.document.body.insertAdjacentHTML('beforeend', `<div role="dialog">
                         <h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
                         <p>Başvuru sorgulama başarılı.</p>
-                        <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.</p>
+                        <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</p>
                         <button>Tamam</button></div>`);
                     return { success: true, freshResponse: true };
                 }
@@ -352,7 +374,7 @@ test('queryGocnetRegistration lets dialog waiter finish after form_click_no_resp
                     dom.window.document.body.insertAdjacentHTML('beforeend', `<div role="dialog">
                         <h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
                         <p>Başvuru sorgulama başarılı.</p>
-                        <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.</p>
+                        <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</p>
                         <button>Tamam</button></div>`);
                 }, 15));
                 return { success: false, error: 'form_click_no_response' };
