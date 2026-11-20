@@ -704,6 +704,29 @@ authorization gap, no PII in logs, no ReDoS.
   delete the 9 merged task worktrees/branches after release — separate explicit approval.
 - [ ] **R7 — Docs.** Add an operating note (how the chatbot routes questions, limits, how to run the
   eval, how to disable it) and link it from `docs/README.md` (shared file; single owner at a time).
+- [ ] **R7b — Office mascot for the assistant (owner request 2026-11-20, before going live).** The
+  widget looks plain; add a small, friendly office mascot. Orchestrator assessment: good idea — it
+  makes the assistant approachable and recognizable for international students, as long as it stays
+  light and professional. Requirements:
+  1. Original design only (no existing characters, no university logo alteration); inline SVG
+     (no image requests, a few KB), colors from the existing bordeaux palette, works in light and
+     dark mode and in RTL (`ar`).
+  2. Where: on the floating launcher (small face/bust instead of the plain button), in the panel
+     header next to "Uluslararası Ofis Asistanı", and optionally a small avatar beside assistant
+     messages. The fixed AI notice ("Yapay zekâ hata yapabilir…") stays clearly visible; the mascot
+     must not imply an official person or decision.
+  3. A few states without heavy animation: idle, thinking (while a request is in flight), and
+     "handoff" (pointing to the question form). Respect `prefers-reduced-motion` (no animation then).
+  4. Accessibility: decorative SVG `aria-hidden="true"`; the launcher keeps its text label for
+     screen readers; contrast and focus ring unchanged; 320 px phones and the full-screen sheet must
+     still fit.
+  5. A name for the mascot is optional and decided by the owner (shown only if chosen); all labels
+     in five languages.
+  6. Process: an agy agent (Hydrogen or Neon/Argon high, frontend-developer skill) drafts 2–3
+     concepts as standalone SVGs in the chatbot UI files only; the orchestrator renders them in the
+     local preview and shows screenshots; the owner picks one; then it is wired into
+     `homeChatbot.js`/`chatbot.css` with tests (gate `?bot=1` unchanged) and checked at 320 px, `ar`,
+     dark mode and reduced motion.
 - [ ] **R8 — Merge and release (each step needs the owner's explicit request).** Merge
   `task/home-chatbot-status` into `production` with a merge commit; `npm test`, build, dry-run; push;
   then **full release path** (migration 0045 + `ai` binding): Production release (manual) workflow
@@ -725,4 +748,5 @@ authorization gap, no PII in logs, no ReDoS.
 - JavaScript `\w`/`\b` are ASCII-only: always use `[\p{L}\p{N}]` and lookarounds; Cyrillic `й`
   becomes `и` after normalization, so literals must be written normalized.
 - Model: Gemini 4 Hydrogen high for code, Argon high for reviews, Claude Opus 5.5 (agy) for the
-  blind set; no `/swarm`.
+  blind set; no `/swarm`. **Owner 2026-11-20: do not use agy's Claude Opus/Sonnet any more (very low
+  limits); escalate to Gemini 4 Neon or Argon at medium/high thinking instead.**
