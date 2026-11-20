@@ -11,6 +11,11 @@ import { createApplicationQueueFilters, splitNoteStatus } from './application-qu
 import { describeGocnetPreparationError, prepareGocnetTransfer } from './gocnet-transfer.js';
 import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
 import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
+import {
+    appendEditableDetailItem,
+    createApplicationFieldEditController,
+    isApplicationFieldEditingAllowed
+} from './application-field-edit.js';
 
 const STATUS_LABELS = Object.freeze({
     draft: 'Taslak',
@@ -534,25 +539,29 @@ function shouldShowResidenceDates(application) {
     return isMinor && isPlausibleBirthDate(application.date_of_birth);
 }
 
-function createApplicationSummary(document, application) {
+function createApplicationSummary(document, application, state = {}, handlers = {}) {
     const section = document.createElement('section');
     const details = document.createElement('dl');
     const fields = [
         ['Başvuru Referansı', application.reference_number || '-'],
-        ['Öğrenci No', application.student_number],
+        ['Öğrenci No', application.student_number, 'student_number'],
         ['Durum', readStatusLabel(application.status)],
         ['Başvuru türü', application.application_type === 'transition' ? 'Geçiş başvurusu' : application.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'],
-        ['Ad', application.first_name], ['Soyad', application.last_name], ['E-posta', application.email],
-        ['Telefon', application.phone], ['Pasaport No', application.passport_number], ['Uyruk', application.nationality],
-        ['Doğum tarihi', application.date_of_birth],
+        ['Ad', application.first_name, 'first_name'],
+        ['Soyad', application.last_name, 'last_name'],
+        ['E-posta', application.email, 'email'],
+        ['Telefon', application.phone, 'phone'],
+        ['Pasaport No', application.passport_number, 'passport_number'],
+        ['Uyruk', application.nationality, 'nationality'],
+        ['Doğum tarihi', application.date_of_birth, 'date_of_birth'],
         ...(shouldShowResidenceDates(application) ? [
-            ['e-İkamet başvuru tarihi', application.residence_application_date],
+            ['e-İkamet başvuru tarihi', application.residence_application_date, 'residence_application_date'],
             ['Akademik yıl başlangıç tarihi', application.academic_year_start_date]
         ] : []),
         ...(application.application_type === 'transition' ? [
-            ['Yabancı kimlik no', application.transition_foreign_id],
-            ['Mevcut kart seri no', application.transition_card_serial],
-            ['Mevcut kart no', application.transition_card_number],
+            ['Yabancı kimlik no', application.transition_foreign_id, 'transition_foreign_id'],
+            ['Mevcut kart seri no', application.transition_card_serial, 'transition_card_serial'],
+            ['Mevcut kart no', application.transition_card_number, 'transition_card_number'],
             ['İkamet ili değişikliği', application.transition_change_province],
             ['Tercih edilen iletişim', application.transition_contact_preference]
         ] : []),
@@ -571,8 +580,37 @@ function createApplicationSummary(document, application) {
         applicationPdfReady: 'Kapak PDF’i indirildi. Yazdırabilir veya cihazınızda saklayabilirsiniz.',
         applicationPdfFailed: 'PDF oluşturulamadı. Lütfen yeniden deneyin.'
     }, 'staff-application-pdf-control'));
+    if (state.fieldEditNotice) {
+        const notice = createText(document, 'p', 'staff-application-notice staff-field-edit-notice', state.fieldEditNotice);
+        notice.setAttribute('role', 'status');
+        notice.setAttribute('aria-live', 'polite');
+        section.append(notice);
+    }
+    if (state.fieldEditBannerError) {
+        const error = createText(document, 'p', 'staff-application-notice staff-field-edit-banner-error', state.fieldEditBannerError);
+        error.setAttribute('role', 'alert');
+        section.append(error);
+    }
     details.className = 'staff-application-details-grid';
-    fields.forEach(([label, value]) => appendDetail(document, details, label, value));
+    const allowFieldEdit = isApplicationFieldEditingAllowed(application) && Boolean(handlers.onBeginFieldEdit);
+    fields.forEach(([label, value, fieldKey]) => {
+        if (fieldKey && allowFieldEdit) {
+            appendEditableDetailItem(document, details, {
+                label,
+                value,
+                fieldKey,
+                fieldEdit: state.fieldEdit || null,
+                disabled: Boolean(state.actionPending),
+                displayValue,
+                onBeginEdit: handlers.onBeginFieldEdit,
+                onUpdateDraft: handlers.onUpdateFieldDraft,
+                onSaveEdit: handlers.onSaveFieldEdit,
+                onCancelEdit: handlers.onCancelFieldEdit
+            });
+            return;
+        }
+        appendDetail(document, details, label, value);
+    });
     section.append(details);
     return section;
 }
@@ -987,7 +1025,7 @@ function renderDetail(root, state, handlers) {
         panel.append(
             createApplicationArchiveAction(document, state.detail.application.id, state,
                 handlers.onDownloadArchive, handlers.onPrepareYoksisPdf),
-            createApplicationSummary(document, state.detail.application),
+            createApplicationSummary(document, state.detail.application, state, handlers),
             createApplicationWorkflow(document, state.detail.application, state.detail, state, handlers),
             createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers)
         );
@@ -1029,6 +1067,13 @@ function createStaffApplicationsApi() {
         },
         readApplicationDetail(applicationId, signal) {
             return request(`/api/staff/applications/${encodeURIComponent(applicationId)}`, { signal });
+        },
+        updateApplicationFields(applicationId, lockVersion, fields) {
+            return request(`/api/staff/applications/${encodeURIComponent(applicationId)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lock_version: lockVersion, fields })
+            });
         },
         createGocnetAttempt(applicationId, body) {
             return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/gocnet-attempts`, body);
@@ -1117,6 +1162,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
         actionPending: null, actionError: null, actionNotice: null, scanQueuedCode: null, resubmissionDocument: null,
+        fieldEdit: null, fieldEditNotice: null, fieldEditBannerError: null,
         rejectionTarget: null, rejectionReason: '',
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
         combinedPdfApplicationId: null, combinedPdfController: null, bulkExportController: null, bulkExportReport: null,
@@ -1173,7 +1219,11 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onCancelRejection: cancelApplicationRejection,
             onDownloadArchive: downloadArchive,
             onPrepareYoksisPdf: prepareYoksisPdf,
-            onDismissToast: dismissToast
+            onDismissToast: dismissToast,
+            onBeginFieldEdit: fieldEditController.beginEdit,
+            onUpdateFieldDraft: fieldEditController.updateDraftValue,
+            onSaveFieldEdit: fieldEditController.saveEdit,
+            onCancelFieldEdit: fieldEditController.cancelEdit
         });
         else renderQueue(root, state, {
             onSearch: submitSearch, onQueryChange: scheduleSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,
@@ -1195,6 +1245,14 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             // View change event is best effort for UI layout syncing
         }
     };
+    const fieldEditController = createApplicationFieldEditController({
+        root,
+        state,
+        api,
+        render,
+        refreshDetail,
+        refreshQueueSnapshot
+    });
     function discardPreview() {
         previewRequestId += 1;
         clearPreviewTimer();
@@ -1373,6 +1431,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             .find((button) => button.dataset.documentCode === documentCode)?.focus();
     }
     function closePreviewOnWorkspaceExit() {
+        fieldEditController.reset();
         discardPreview();
         render();
     }
@@ -1757,7 +1816,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         await loadQueue();
     }
     async function openDetail(applicationId) {
-        if (state.actionPending) return;
+        if (state.actionPending || state.fieldEdit?.pending) return;
+        fieldEditController.reset();
         discardPreview();
         state.rejectionTarget = null;
         state.rejectionReason = '';
@@ -1791,6 +1851,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         if (scrollY > 0) document.defaultView?.scrollTo?.({ top: scrollY, behavior: 'instant' });
     }
     async function refreshQueueSnapshot() {
+        if (typeof api.queryApplications !== 'function') return;
         try {
             state.result = await api.queryApplications({ ...state.query, ...splitNoteStatus(state.query.status) });
             state.recordNotesResult = null;
@@ -1809,10 +1870,11 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         return 'İşlem tamamlanamadı. Güncel durumu kontrol edip tekrar deneyin.';
     }
     async function completeAction(actionKey, operation) {
-        if (state.actionPending) return;
+        if (state.actionPending || state.fieldEdit?.pending) return;
         const scrollY = document.defaultView?.scrollY ?? 0;
         state.actionPending = actionKey;
         state.actionError = null;
+        fieldEditController.reset();
         render();
         try {
             await operation();
@@ -1990,8 +2052,9 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         render();
     }
     function returnToQueue() {
-        if (state.actionPending) return;
+        if (state.actionPending || state.fieldEdit?.pending) return;
         clearScanPoll();
+        fieldEditController.reset();
         discardPreview();
         state.rejectionTarget = null;
         state.rejectionReason = '';
@@ -2003,9 +2066,11 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     document.addEventListener('workspace:view-changed', (event) => {
         if (event.detail?.viewName !== 'applications') {
             clearScanPoll();
+            fieldEditController.reset();
             closePreviewOnWorkspaceExit();
             return;
         }
+        fieldEditController.reset();
         discardPreview();
         state.view = 'queue';
         void loadQueue();
