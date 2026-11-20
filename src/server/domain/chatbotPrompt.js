@@ -62,6 +62,13 @@ export const CHATBOT_FIXED_TEXTS = Object.freeze({
         ru: 'Чтобы я мог назвать точный список документов, укажите, пожалуйста: ',
         tk: 'Size dogry resminama sanawyny bermek üçin şulary ýazyp bilersiňizmi: ',
         ar: 'لأتمكن من إعطائك قائمة المستندات الصحيحة، يرجى كتابة: '
+    }),
+    otherPersonStatusNote: Object.freeze({
+        tr: 'Her öğrenci yalnızca kendi ITU-XXXX-XXXX başvuru numarasıyla /basvurum/ sayfasından kendi başvuru durumunu kontrol edebilir.',
+        en: 'Each student can check only their own application status using their own ITU-XXXX-XXXX reference number on /basvurum/.',
+        ru: 'Каждый студент может проверить статус только своей заявки по собственному номеру ITU-XXXX-XXXX на странице /basvurum/.',
+        tk: 'Her talyp diňe öz ITU-XXXX-XXXX arza belgisi bilen /basvurum/ sahypasyndan öz arzasynyň ýagdaýyny barlap biler.',
+        ar: 'يمكن لكل طالب التحقق من حالة طلبه فقط باستخدام رقم ITU-XXXX-XXXX الخاص به عبر صفحة /basvurum/.'
     })
 });
 
@@ -123,8 +130,8 @@ function resolveLanguage(language) {
 }
 
 /**
- * Returns a fixed localized chatbot message for refusal, fallback, daily-limit, document-list, missing-facts, or missing-reference status responses.
- * @param {'refusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'|'missingDocumentsIntro'} kind Fixed text category.
+ * Returns a fixed localized chatbot message for refusal, fallback, daily-limit, document-list, missing-facts, missing-reference status, or third-party status refusal responses.
+ * @param {'refusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'|'missingDocumentsIntro'|'otherPersonStatusNote'} kind Fixed text category.
  * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
  * @returns {string} Localized fixed response text.
  */
