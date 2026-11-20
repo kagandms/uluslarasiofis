@@ -539,7 +539,7 @@ below. **Nothing is pushed, nothing is merged into `production`, nothing is publ
    `git worktree list`, `git status` in the main folder and in
    `…-wt-chatbot-status`. Expect: main folder on `production`; an untracked
    `docs/2026-11-20-cloudflare-analitik-raporu-ve-yapilacaklar.md` that belongs to **another
-   session — do not touch it**; integration worktree clean at `61295ee` (as of 2026-11-20).
+   session — do not touch it**; integration worktree clean at `3dd7119` (as of 2026-11-20).
 2. `agy -p "/usage"` (2026-11-19 end: Gemini weekly ~70%, Argon weekly ~96%, Claude/GPT group ~100%).
    If agy asks for Google sign-in, the **owner** must run `agy` in a terminal and sign in.
 3. Start the local server for the integration worktree with the Claude preview config
@@ -662,8 +662,8 @@ authorization gap, no PII in logs, no ReDoS.
 
 ## 4b. Progress on 2026-11-20 (end of day — START HERE NEXT TIME)
 
-**Integration branch `task/home-chatbot-status` is at `61295ee`** (worktree `…-wt-chatbot-status`):
-1843 tests pass, build green. Nothing merged to `production`, nothing pushed or published.
+**Integration branch `task/home-chatbot-status` is at `3dd7119`** (worktree `…-wt-chatbot-status`):
+1846 tests pass, build green. Nothing merged to `production`, nothing pushed or published.
 
 What happened today (all implemented by agy, reviewed by the orchestrator):
 - R1 done (`fac0469`). Blind set merged (`f41e873`); the orchestrator's relabel of
@@ -700,6 +700,36 @@ Arabizi status question routed to handoff. No wrong list, no data leak.
 **Separate task (other session, 2026-11-20): GöçNet `controller_unknown` fix** on branch
 `task/gocnet-form-query`, commit `0be0542`, extension 1.2.134 — not merged, not pushed, not yet tried
 on the real YÖKSİS page. Its own session holds the details.
+
+Later on 2026-11-20 (owner away; orchestrator continued):
+- Browser UI test of the widget on the integration branch (desktop, 375 px phone, Arabic RTL,
+  keyboard): all C-checklist items passed except two real bugs found only in the browser —
+  (1) a student who changes the scenario inside one chat looped on missing-facts questions (facts
+  were aggregated over all turns; now **the newest turn that states a fact wins**), (2) one earlier
+  injection sentence made every later normal question refuse (the R3 fix checked all turns; now only
+  the **last** user turn is checked and older matching turns plus the reply after them are dropped
+  from the history). Fixed by agy Gemini Neon (`c96ad5d`, merged `3dd7119`). **Argon's weekly agy
+  limit is 0% (resets 2026-11-26)** — use Neon/Hydrogen until then.
+- Final evaluation at `3dd7119`: blind 122/130 (93.8%), full 211/217 (97.2%), wrong lists 0, HTTP
+  errors 0. Two cases flip between runs (model variance, not a regression): `tr-doc-08` fails about
+  1 in 6, `blind-tr-documents-08` (a 3-turn chat where the student never asks for documents) falls
+  back to the menu about 1 in 2 — harmless.
+- Owner review file for the office: generated from code by `build-review.mjs` (scratchpad, may be
+  gone; it reads document policy, knowledge texts, fixed texts and eval replies and writes a
+  checklist HTML). Orchestrator's list of suspicious content points for the office (owner decisions
+  needed): (1) the wizard BLOCKS students without a fingerprint record (`fingerprintProgressBlocked`)
+  but the bot gives them a transition list — bot should say "complete fingerprint at the Migration
+  office first" (also the form asks it for every application type, the bot only for transition);
+  (2) renewal list vs the `application_types` knowledge text disagree (text says residence card,
+  UETS, current residence certificate and bill; policy adds only UETS); (3) foreign host: no
+  document for the host's own permit/ID; (4) under-18: only a notarized consent letter (no parent
+  passport/birth certificate); (5) contact text says no phone/e-mail is published — add one if the
+  office wants; (6) student-card text should point to IT.
+- Separate sessions started today: GöçNet `controller_unknown` fix on `task/gocnet-form-query`
+  (`5440398`: 45 s wait + result dialog; not tried on the live YÖKSİS page) and staff "pencil edit"
+  of student fields on `claude/staff-edit-student-fields-c052d7` (`618d1a8` server, `13cbabe` UI;
+  online applications only; physical intakes not done; 1677 tests green; owner decisions listed in
+  that session). Neither is merged or pushed.
 
 Owner notes 2026-11-20: escalate agy work to Gemini Neon/Argon (not agy Claude); add an office
 mascot before going live (R7b).
