@@ -479,18 +479,33 @@
         };
     }
 
-    function waitForResponse(observer) {
-        const deadline = Date.now() + 8_000;
+    function waitForResponse(
+        observer,
+        timeoutMs = 8_000,
+        errorMessage = 'YÖKSİS seçimi sunucu yanıtıyla doğrulanamadı.'
+    ) {
+        if (observer.hasResponse()) return Promise.resolve();
+        const deadline = Date.now() + timeoutMs;
         return new Promise((resolve, reject) => {
-            const timer = setInterval(() => {
+            let settled = false;
+            let timer = null;
+            let unsubscribe = null;
+            const finish = (callback) => {
+                if (settled) return;
+                settled = true;
+                if (timer !== null) clearInterval(timer);
+                unsubscribe?.();
+                callback();
+            };
+            const check = () => {
                 if (observer.hasResponse()) {
-                    clearInterval(timer);
-                    resolve();
+                    finish(resolve);
                 } else if (Date.now() >= deadline) {
-                    clearInterval(timer);
-                    reject(new Error('YÖKSİS seçimi sunucu yanıtıyla doğrulanamadı.'));
+                    finish(() => reject(new Error(errorMessage)));
                 }
-            }, 25);
+            };
+            timer = setInterval(check, 25);
+            unsubscribe = observer.subscribe?.(check) || null;
         });
     }
 
@@ -663,6 +678,11 @@
         return { targets, totalInputs: seenScopeInputs.size, totalButtons };
     }
 
+    function hasVisibleFormDialog(targetDocument) {
+        return Array.from(targetDocument?.querySelectorAll?.('[role="dialog"], .z-window-modal') || [])
+            .some(isElementVisible);
+    }
+
     async function queryGocnetForm(options) {
         if (!/^20\d{2}-\d{2}-\d{5,8}$/.test(options.applicationNumber || '')
             || typeof options.requestId !== 'string' || options.requestId.length < 1 || options.requestId.length > 128) {
@@ -670,9 +690,7 @@
         }
         await waitForIdle();
         const documents = collectDocuments();
-        const hasOpenDialog = documents.some((targetDocument) =>
-            Array.from(targetDocument.querySelectorAll('[role="dialog"], .z-window-modal')).some(isElementVisible));
-        if (hasOpenDialog) {
+        if (documents.some(hasVisibleFormDialog)) {
             throw new Error('form_dialog_already_open');
         }
         const { targets, totalInputs, totalButtons } = findGocnetFormTargets(documents);
@@ -699,19 +717,49 @@
             inputWidget.setValue(options.applicationNumber);
             inputWidget.fire('onChange', { value: options.applicationNumber }, { toServer: true });
             flushDeferredSelections(targetWindow);
-            await waitForResponse(valueObserver);
+            await waitForResponse(valueObserver, 8_000, 'form_value_no_response');
             await waitForIdle();
         } finally { valueObserver.dispose(); }
         if (target.input.value !== options.applicationNumber || inputWidget.getValue?.() !== options.applicationNumber) {
             throw new Error('form_value_not_retained');
         }
         const queryObserver = observeResponse(targetWindow);
+        let dialogObserver = null;
+        let dialogAppeared = false;
+        let notifyWaiter = null;
+        const hasClickServerSignal = () => {
+            if (!dialogAppeared && hasVisibleFormDialog(target.targetDocument)) dialogAppeared = true;
+            return queryObserver.hasResponse() || dialogAppeared;
+        };
         try {
+            const Observer = targetWindow.MutationObserver;
+            if (Observer && target.targetDocument?.documentElement) {
+                dialogObserver = new Observer(() => {
+                    if (hasVisibleFormDialog(target.targetDocument)) {
+                        dialogAppeared = true;
+                        notifyWaiter?.();
+                    }
+                });
+                dialogObserver.observe(target.targetDocument.documentElement, {
+                    childList: true, subtree: true, attributes: true
+                });
+            }
             buttonWidget.fire('onClick', null, { toServer: true });
-            await waitForResponse(queryObserver);
+            if (hasVisibleFormDialog(target.targetDocument)) dialogAppeared = true;
+            await waitForResponse({
+                hasResponse: hasClickServerSignal,
+                subscribe: (onChange) => {
+                    notifyWaiter = onChange;
+                    return () => { notifyWaiter = null; };
+                }
+            }, 45_000, 'form_click_no_response');
             await waitForIdle();
-        } finally { queryObserver.dispose(); }
-        return { success: true, freshResponse: queryObserver.hasResponse() };
+        } finally {
+            notifyWaiter = null;
+            dialogObserver?.disconnect();
+            queryObserver.dispose();
+        }
+        return { success: true, freshResponse: queryObserver.hasResponse() || dialogAppeared };
     }
 
     function isSelectionRetained(target) {

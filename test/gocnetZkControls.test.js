@@ -84,12 +84,17 @@ function createFormHarness({
     </section>`,
     retainValue = true,
     hasInputWidget = true,
-    hasButtonWidget = true
+    hasButtonWidget = true,
+    respondOnChange = true,
+    respondOnClick = true
 } = {}) {
     const dom = new JSDOM(html, { runScripts: 'outside-only' });
     const { window } = dom;
     const observers = new Set();
     const calls = [];
+    const triggerResponse = () => {
+        for (const watcher of [...observers]) watcher.onResponse();
+    };
     const widgetFor = (element) => {
         const kind = element?.getAttribute?.('data-widget');
         if (kind === 'form-number' && hasInputWidget) {
@@ -105,8 +110,8 @@ function createFormHarness({
                 getValue() { return this.value; },
                 fire(name, data, opts) {
                     calls.push(['input.fire', name, data, opts]);
-                    if (name === 'onChange') {
-                        for (const watcher of [...observers]) watcher.onResponse();
+                    if (name === 'onChange' && respondOnChange) {
+                        triggerResponse();
                     }
                 }
             };
@@ -115,8 +120,8 @@ function createFormHarness({
             return {
                 fire(name, data, opts) {
                     calls.push(['button.fire', name, data, opts]);
-                    if (name === 'onClick') {
-                        for (const watcher of [...observers]) watcher.onResponse();
+                    if (name === 'onClick' && respondOnClick) {
+                        triggerResponse();
                     }
                 }
             };
@@ -130,7 +135,52 @@ function createFormHarness({
         unlisten({ onResponse }) { observers.delete(onResponse); }
     };
     vm.runInContext(source, dom.getInternalVMContext());
-    return { dom, calls, observerCount: () => observers.size };
+    return { dom, calls, triggerResponse, observerCount: () => observers.size };
+}
+
+function installFakeClock(window) {
+    let now = 1_000_000;
+    let nextId = 1;
+    const intervals = new Map();
+    const originalDateNow = window.Date.now;
+    const originalSetInterval = window.setInterval;
+    const originalClearInterval = window.clearInterval;
+    window.Date.now = () => now;
+    window.setInterval = (callback, delay = 25) => {
+        const id = nextId++;
+        const step = Math.max(1, Number(delay) || 25);
+        intervals.set(id, { callback, delay: step, nextRun: now + step });
+        return id;
+    };
+    window.clearInterval = (id) => {
+        intervals.delete(id);
+    };
+    const flushMicrotasks = () => new Promise((resolve) => setImmediate(resolve));
+    const tickTo = async (targetNow) => {
+        while (true) {
+            let earliest = null;
+            for (const entry of intervals.values()) {
+                if (entry.nextRun <= targetNow && (!earliest || entry.nextRun < earliest.nextRun)) {
+                    earliest = entry;
+                }
+            }
+            if (!earliest) break;
+            now = earliest.nextRun;
+            earliest.nextRun = now + earliest.delay;
+            earliest.callback();
+            await flushMicrotasks();
+        }
+        now = Math.max(now, targetNow);
+    };
+    return {
+        advanceBy: (ms) => tickTo(now + ms),
+        activeIntervals: () => intervals.size,
+        restore() {
+            window.Date.now = originalDateNow;
+            window.setInterval = originalSetInterval;
+            window.clearInterval = originalClearInterval;
+        }
+    };
 }
 
 test('queryGocnetForm sets the value via ZK widget, fires onChange then onClick toServer, and returns freshResponse true', async () => {
@@ -315,4 +365,118 @@ test('queryGocnetForm fails with form_controls_ambiguous when two separate Başv
     assert.equal(result.error, 'form_controls_ambiguous (targets: 2)');
     assert.equal(duplicateHarness.calls.length, 0);
     duplicateHarness.dom.window.close();
+});
+
+test('queryGocnetForm rejects with form_value_no_response at 8 s without clicking query', async () => {
+    const harness = createFormHarness({ respondOnChange: false, respondOnClick: false });
+    const clock = installFakeClock(harness.dom.window);
+    try {
+        let settled = false;
+        const promise = harness.dom.window.YknZkForm.execute({
+            action: 'queryGocnetForm', applicationNumber, requestId: 'form-val-timeout'
+        }).then((value) => {
+            settled = true;
+            return value;
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(clock.activeIntervals(), 1);
+        await clock.advanceBy(7_975);
+        assert.equal(settled, false);
+        await clock.advanceBy(25);
+        assert.equal(settled, true);
+        const result = await promise;
+        assert.equal(result.success, false);
+        assert.equal(result.error, 'form_value_no_response');
+        assert.equal(harness.calls.some(([entry]) => entry === 'button.fire'), false);
+        assert.equal(clock.activeIntervals(), 0);
+        assert.equal(harness.observerCount(), 0);
+    } finally {
+        clock.restore();
+        harness.dom.window.close();
+    }
+});
+
+test('queryGocnetForm succeeds when click response arrives after 8 s and before 45 s', async () => {
+    const harness = createFormHarness({ respondOnChange: true, respondOnClick: false });
+    const clock = installFakeClock(harness.dom.window);
+    try {
+        let settled = false;
+        const promise = harness.dom.window.YknZkForm.execute({
+            action: 'queryGocnetForm', applicationNumber, requestId: 'form-click-slow-ok'
+        }).then((value) => {
+            settled = true;
+            return value;
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(harness.calls.some(([entry]) => entry === 'button.fire'), true);
+        await clock.advanceBy(12_000);
+        assert.equal(settled, false);
+        harness.triggerResponse();
+        await clock.advanceBy(25);
+        const result = await promise;
+        assert.equal(settled, true);
+        assert.deepEqual(JSON.parse(JSON.stringify(result)), { success: true, freshResponse: true });
+        assert.equal(clock.activeIntervals(), 0);
+        assert.equal(harness.observerCount(), 0);
+    } finally {
+        clock.restore();
+        harness.dom.window.close();
+    }
+});
+
+test('queryGocnetForm succeeds as soon as a visible dialog appears after click without ZK onResponse', async () => {
+    const harness = createFormHarness({ respondOnChange: true, respondOnClick: false });
+    const clock = installFakeClock(harness.dom.window);
+    try {
+        let settled = false;
+        const promise = harness.dom.window.YknZkForm.execute({
+            action: 'queryGocnetForm', applicationNumber, requestId: 'form-click-dialog-ok'
+        }).then((value) => {
+            settled = true;
+            return value;
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+        await clock.advanceBy(10_000);
+        assert.equal(settled, false);
+        harness.dom.window.document.body.insertAdjacentHTML('beforeend', '<div class="z-window-modal" style="display: none"><h2>Gizli</h2></div>');
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(settled, false);
+        harness.dom.window.document.querySelector('.z-window-modal').style.display = 'block';
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(settled, true);
+        const result = await promise;
+        assert.deepEqual(JSON.parse(JSON.stringify(result)), { success: true, freshResponse: true });
+        assert.equal(clock.activeIntervals(), 0);
+        assert.equal(harness.observerCount(), 0);
+    } finally {
+        clock.restore();
+        harness.dom.window.close();
+    }
+});
+
+test('queryGocnetForm rejects with form_click_no_response at 45 s when neither response nor dialog arrives', async () => {
+    const harness = createFormHarness({ respondOnChange: true, respondOnClick: false });
+    const clock = installFakeClock(harness.dom.window);
+    try {
+        let settled = false;
+        const promise = harness.dom.window.YknZkForm.execute({
+            action: 'queryGocnetForm', applicationNumber, requestId: 'form-click-timeout'
+        }).then((value) => {
+            settled = true;
+            return value;
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+        await clock.advanceBy(44_975);
+        assert.equal(settled, false);
+        await clock.advanceBy(25);
+        assert.equal(settled, true);
+        const result = await promise;
+        assert.equal(result.success, false);
+        assert.equal(result.error, 'form_click_no_response');
+        assert.equal(clock.activeIntervals(), 0);
+        assert.equal(harness.observerCount(), 0);
+    } finally {
+        clock.restore();
+        harness.dom.window.close();
+    }
 });

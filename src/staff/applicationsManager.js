@@ -1620,7 +1620,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             await event('querying', null, prepared.pdfSha256);
             const check = (phase) => requestGocnetAction('CHECK_GOCNET_TRANSFER', {
                 applicationNumber: prepared.applicationNumber, phase, attemptId
-            });
+            }, phase === 'form' ? 75_000 : 45_000);
             const result = await check('history');
             if (result.state === 'existing_record') {
                 await event('existing_record');

@@ -175,3 +175,54 @@ test('YÖKSİS query handler never leaks a stale history reason into a subsequen
     });
     dom.window.close();
 });
+
+test('YÖKSİS form query uses 55 s waiter timeout, settles recognized dialog after form_click_no_response, and reports form_value_no_response', async () => {
+    const waitTimeouts = [];
+    const timers = [];
+    let acknowledged = 0;
+    const { dom, listener } = createHarness({
+        sendMessage: async (message) => {
+            if (message?.command?.requestId === 'form-click-late-ok') {
+                dom.window.document.querySelector('input').value = message.command.applicationNumber;
+                timers.push(setTimeout(() => {
+                    dom.window.document.body.insertAdjacentHTML('beforeend', `<div role="dialog">
+                        <h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
+                        <p>Başvuru sorgulama başarılı.</p>
+                        <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.</p>
+                        <button>Tamam</button></div>`);
+                    dom.window.document.querySelector('[role="dialog"] button').addEventListener('click', () => {
+                        acknowledged += 1;
+                        dom.window.document.querySelector('[role="dialog"]').remove();
+                    });
+                }, 15));
+                return { success: false, error: 'form_click_no_response' };
+            }
+            return { success: false, error: 'form_value_no_response' };
+        }
+    });
+    const originalSetTimeout = dom.window.setTimeout.bind(dom.window);
+    dom.window.setTimeout = (fn, delay, ...args) => {
+        waitTimeouts.push(delay);
+        return originalSetTimeout(fn, delay, ...args);
+    };
+    try {
+        const lateDialogResult = await sendQueryMessage(listener, {
+            action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'form-click-late-ok', portalTabId: 4,
+            attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
+        });
+        assert.equal(waitTimeouts.includes(55_000), true);
+        assert.deepEqual(lateDialogResult.response, { requestId: 'form-click-late-ok', state: 'student_data_filled' });
+        assert.equal(acknowledged, 1);
+
+        const valueTimeoutResult = await sendQueryMessage(listener, {
+            action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'form-val-fail', portalTabId: 4,
+            attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
+        });
+        assert.deepEqual(valueTimeoutResult.response, {
+            requestId: 'form-val-fail', state: 'unknown', reason: 'form_value_no_response'
+        });
+    } finally {
+        for (const timer of timers) clearTimeout(timer);
+        dom.window.close();
+    }
+});

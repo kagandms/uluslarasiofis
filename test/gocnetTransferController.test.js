@@ -339,3 +339,62 @@ test('readGocnetQueryResult and queryGocnetRegistration work with richer ZK grou
     assert.equal(readGocnetQueryResult(duplicateDom.window.document, '2099-12-99999999'), 'unknown');
     duplicateDom.window.close();
 });
+
+test('queryGocnetRegistration lets dialog waiter finish after form_click_no_response and keeps specific reasons', async () => {
+    const dom = new JSDOM(queryFixture, { pretendToBeVisual: true });
+    const previousChrome = globalThis.chrome;
+    const timers = [];
+    globalThis.chrome = {
+        runtime: {
+            sendMessage: async (message) => {
+                dom.window.document.querySelector('input').value = message.command.applicationNumber;
+                timers.push(setTimeout(() => {
+                    dom.window.document.body.insertAdjacentHTML('beforeend', `<div role="dialog">
+                        <h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
+                        <p>Başvuru sorgulama başarılı.</p>
+                        <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.</p>
+                        <button>Tamam</button></div>`);
+                }, 15));
+                return { success: false, error: 'form_click_no_response' };
+            }
+        }
+    };
+    try {
+        assert.equal(await queryGocnetRegistration(dom.window.document, '2099-12-99999999', {
+            timeoutMs: 250, requestId: 'form-click-late-recognized'
+        }), 'student_data_filled');
+        assert.equal(getLastReason(), '');
+
+        dom.window.document.querySelector('[role="dialog"]').remove();
+        globalThis.chrome.runtime.sendMessage = async (message) => {
+            dom.window.document.querySelector('input').value = message.command.applicationNumber;
+            timers.push(setTimeout(() => {
+                dom.window.document.body.insertAdjacentHTML('beforeend',
+                    '<div role="dialog"><h2>Beklenmeyen Hata</h2><p>Detay</p></div>');
+            }, 15));
+            return { success: false, error: 'form_click_no_response' };
+        };
+        assert.equal(await queryGocnetRegistration(dom.window.document, '2099-12-99999999', {
+            timeoutMs: 250, requestId: 'form-click-late-unrecognized'
+        }), 'unknown');
+        assert.equal(getLastReason(), 'form_result_unrecognized: beklenmeyen hata');
+
+        dom.window.document.querySelector('[role="dialog"]').remove();
+        globalThis.chrome.runtime.sendMessage = async () => ({ success: false, error: 'form_click_no_response' });
+        assert.equal(await queryGocnetRegistration(dom.window.document, '2099-12-99999999', {
+            timeoutMs: 30, requestId: 'form-click-no-dialog'
+        }), 'unknown');
+        assert.equal(getLastReason(), 'form_click_no_response');
+
+        globalThis.chrome.runtime.sendMessage = async () => ({ success: false, error: 'form_value_no_response' });
+        assert.equal(await queryGocnetRegistration(dom.window.document, '2099-12-99999999', {
+            timeoutMs: 100, requestId: 'form-value-timeout'
+        }), 'unknown');
+        assert.equal(getLastReason(), 'form_value_no_response');
+    } finally {
+        for (const timer of timers) clearTimeout(timer);
+        if (previousChrome === undefined) delete globalThis.chrome;
+        else globalThis.chrome = previousChrome;
+        dom.window.close();
+    }
+});

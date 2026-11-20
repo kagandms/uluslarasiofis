@@ -408,7 +408,7 @@ function readGocnetRecordListResult(rootDocument, { applicationNumber, freshResp
 // Form komutu neden kodlarını ilk sırada koruyarak portalın hata kaynağını ayırmasını sağlar.
 function formatFormCommandFailureReason(error) {
     const text = String(error || '').slice(0, 110);
-    return /^(?:bad_input|form_dialog_already_open|form_controls_missing|form_controls_ambiguous|form_controls_disabled|form_zk_widget_missing|form_value_not_retained)\b/.test(text)
+    return /^(?:bad_input|form_dialog_already_open|form_controls_missing|form_controls_ambiguous|form_controls_disabled|form_zk_widget_missing|form_value_not_retained|form_value_no_response|form_click_no_response)\b/.test(text)
         ? text
         : (text ? `form_command_failed: ${text}` : 'form_command_failed');
 }
@@ -442,11 +442,18 @@ async function queryGocnetRegistration(rootDocument, applicationNumber, { signal
                 return noteReason('form_result_aborted');
             }
             if (response?.success !== true || response.freshResponse !== true) {
+                const reason = response?.success === true
+                    ? 'form_command_stale'
+                    : formatFormCommandFailureReason(response?.error);
+                if (response?.success !== true && /^form_click_no_response\b/.test(reason)) {
+                    const waited = await resultPromise;
+                    if (waited !== 'unknown') return waited;
+                    const waiterReason = lastReason && lastReason !== 'form_result_timeout' ? lastReason : '';
+                    return noteReason(waiterReason || reason);
+                }
                 waitController?.abort();
                 await resultPromise.catch(() => {});
-                return noteReason(response?.success === true
-                    ? 'form_command_stale'
-                    : formatFormCommandFailureReason(response?.error));
+                return noteReason(reason);
             }
             return await resultPromise;
         } catch {
@@ -587,7 +594,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
             lastReason = '';
             const query = request.phase === 'history'
                 ? queryGocnetRecordList(document, request.applicationNumber, request.requestId)
-                : queryGocnetRegistration(document, request.applicationNumber, { requestId: request.requestId });
+                : queryGocnetRegistration(document, request.applicationNumber, { requestId: request.requestId, timeoutMs: 55_000 });
             void query
                 .then((state) => {
                     if (state === 'student_data_filled' && acknowledgeGocnetQuery(document, request.applicationNumber)) {
