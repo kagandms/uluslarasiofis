@@ -15,6 +15,7 @@ import {
     getChatbotStatusFixedText,
     renderStatusSummary
 } from '../src/server/domain/chatbotStatusText.js';
+import { listCatalogDocumentTitles } from '../src/server/domain/chatbotTools.js';
 import { listApplicationDocumentPolicies } from '../src/server/domain/documentPolicy.js';
 import { ApiError } from '../src/server/domain/errors.js';
 import { createD1Repositories } from '../src/server/repositories/d1/index.js';
@@ -2944,17 +2945,41 @@ test('corrective D: list intent vs document how-to routing across examples', asy
     }
 });
 
-test('round 5 fix 1: risk path accepts evidence facts when model omits them, rejects only disagreements or unsupported facts', async () => {
-    const question = 'Başvurum geçiş başvurusu olacak, 20 yaşındayım, öğrenci yurdunda kalıyorum ve Göç İdaresinde parmak izi kaydım yok; gereken belgeler neler?';
+test('round 5 fix 1: risk path accepts evidence facts when model omits them, rejects only disagreements or unsupported facts, and not_registered redirects to office', async () => {
+    // 0. Transition + not_registered + list intent (with or without is_under_18) now returns fingerprintNeeded + inquiry with 0 model calls.
+    for (const [idx, fpQuestion] of [
+        'Başvurum geçiş başvurusu olacak, 20 yaşındayım, öğrenci yurdunda kalıyorum ve Göç İdaresinde parmak izi kaydım yok; gereken belgeler neler?',
+        'Başvurum geçiş başvurusu olacak, öğrenci yurdunda kalıyorum ve Göç İdaresinde parmak izi kaydım yok; gereken belgeler neler?'
+    ].entries()) {
+        const fpEnv = createEnvironment(() => {
+            throw new Error('Model must not be called for deterministic fingerprintNeeded redirect.');
+        });
+        const fpRes = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: fpQuestion }],
+                language: 'tr'
+            }), { address: `198.51.107.${5 + idx}` }),
+            fpEnv.environment,
+            {}
+        );
+        const fpPayload = await fpRes.json();
+        assert.equal(fpRes.status, 200);
+        assert.equal(fpEnv.fakeAi.callCount, 0);
+        assert.equal(fpPayload.reply, getChatbotFixedText('fingerprintNeeded', 'tr'));
+        assert.deepEqual(fpPayload.actions, [{ type: 'inquiry' }]);
+        assert.equal(fpPayload.reply.includes(getChatbotFixedText('documentListIntro', 'tr')), false);
+    }
+
+    const question = 'Başvurum uzatma başvurusu olacak, 20 yaşındayım, taahhütname ile kalıyorum, taahhüt veren evli değil ve Türk vatandaşı değil; gereken belgeler neler?';
     const expectedPolicies = listApplicationDocumentPolicies({
         application_type: 'renewal',
-        application_route: 'transition',
+        application_route: 'standard',
         is_under_18: 0,
-        address_evidence_type: 'dormitory',
-        accommodation_type: 'dormitory',
-        host_is_married: null,
-        host_is_turkish: null,
-        fingerprint_status: 'not_registered',
+        address_evidence_type: 'undertaking',
+        accommodation_type: 'undertaking',
+        host_is_married: 'no',
+        host_is_turkish: 'no',
+        fingerprint_status: null,
         fingerprint_code: null
     });
     const trMessages = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
@@ -2962,10 +2987,11 @@ test('round 5 fix 1: risk path accepts evidence facts when model omits them, rej
         .map((policy) => `- ${trMessages[policy.label_key]}${policy.required === false ? ' (isteğe bağlı)' : ''}`)
         .join('\n');
     const understoodLine = buildUnderstoodFactsLine({
-        application_type: 'transition',
+        application_type: 'renewal',
         is_under_18: false,
-        accommodation_type: 'dormitory',
-        fingerprint_status: 'not_registered'
+        accommodation_type: 'undertaking',
+        host_is_married: 'no',
+        host_is_turkish: 'no'
     }, 'tr');
     const expectedReply = `${understoodLine}\n\n${getChatbotFixedText('documentListIntro', 'tr')}\n\n${expectedList}\n\n${getChatbotFixedText('documentListClosing', 'tr')}`;
 
@@ -2976,9 +3002,10 @@ test('round 5 fix 1: risk path accepts evidence facts when model omits them, rej
             tool_calls: [{
                 name: 'get_required_documents',
                 arguments: {
-                    application_type: 'transition',
-                    accommodation_type: 'dormitory',
-                    fingerprint_status: 'not_registered'
+                    application_type: 'renewal',
+                    accommodation_type: 'undertaking',
+                    host_is_married: 'no',
+                    host_is_turkish: 'no'
                 }
             }]
         },
@@ -3004,10 +3031,11 @@ test('round 5 fix 1: risk path accepts evidence facts when model omits them, rej
             tool_calls: [{
                 name: 'get_required_documents',
                 arguments: {
-                    application_type: 'transition',
+                    application_type: 'renewal',
                     is_under_18: true,
-                    accommodation_type: 'dormitory',
-                    fingerprint_status: 'not_registered'
+                    accommodation_type: 'undertaking',
+                    host_is_married: 'no',
+                    host_is_turkish: 'no'
                 }
             }]
         },
@@ -3033,10 +3061,11 @@ test('round 5 fix 1: risk path accepts evidence facts when model omits them, rej
             tool_calls: [{
                 name: 'get_required_documents',
                 arguments: {
-                    application_type: 'transition',
+                    application_type: 'renewal',
                     is_under_18: false,
-                    accommodation_type: 'dormitory',
-                    fingerprint_status: 'not_registered'
+                    accommodation_type: 'undertaking',
+                    host_is_married: 'no',
+                    host_is_turkish: 'no'
                 }
             }]
         },
@@ -3044,7 +3073,7 @@ test('round 5 fix 1: risk path accepts evidence facts when model omits them, rej
     ]);
     const noEvidenceResponse = await worker.fetch(
         createChatRequest(validChatBody({
-            messages: [{ role: 'user', content: 'Başvurum geçiş başvurusu olacak, öğrenci yurdunda kalıyorum ve Göç İdaresinde parmak izi kaydım yok; gereken belgeler neler?' }],
+            messages: [{ role: 'user', content: 'Başvurum uzatma başvurusu olacak, taahhütname ile kalıyorum, taahhüt veren evli değil ve Türk vatandaşı değil; gereken belgeler neler?' }],
             language: 'tr'
         }), { address: '198.51.107.12' }),
         noEvidenceEnv.environment,
@@ -3137,7 +3166,7 @@ test('round 5 fix 2: list intent carries across model-written assistant question
         fingerprint_code: null
     }));
 
-    // 3. English multi-turn transition + model-written assistant question + omitted turn-1 facts in tool call.
+    // 3. English multi-turn transition + model-written assistant question + not_registered -> returns fingerprintNeeded + inquiry action (no document list).
     const enEnv = createEnvironment([
         {
             response: '',
@@ -3166,17 +3195,10 @@ test('round 5 fix 2: list intent carries across model-written assistant question
     const enPayload = await enRes.json();
     assert.equal(enRes.status, 200);
     assert.equal(enEnv.fakeAi.callCount, 1);
-    assert.equal(enPayload.reply, buildList('en', {
-        application_type: 'renewal',
-        application_route: 'transition',
-        is_under_18: 0,
-        address_evidence_type: 'dormitory',
-        accommodation_type: 'dormitory',
-        host_is_married: null,
-        host_is_turkish: null,
-        fingerprint_status: 'not_registered',
-        fingerprint_code: null
-    }));
+    assert.equal(enPayload.reply, getChatbotFixedText('fingerprintNeeded', 'en'));
+    assert.deepEqual(enPayload.actions, [{ type: 'inquiry' }]);
+    assert.equal(enPayload.reply.includes(getChatbotFixedText('documentListIntro', 'en')), false);
+    assert.equal(enPayload.reply.includes(PUBLIC_MESSAGES.en.documentPassport), false);
 
     // 4. Last turn with no document fact ('Ofis saat kaçta açık?') never inherits list intent.
     const hoursEnv = createEnvironment([
@@ -4739,8 +4761,47 @@ test('safety net: deterministic document-list replies start with localized under
         assert.ok(payload.reply.endsWith(`\n\n${getChatbotFixedText('documentListClosing', item.language)}`));
     }
 
-    // 1-call tool path (get_required_documents) also prepends the understood-facts line from the verified facts used.
-    const toolPathEnv = createEnvironment([
+    // 1-call tool path (get_required_documents) with fingerprint_status: 'registered' prepends the understood-facts line from the verified facts used,
+    // while fingerprint_status: 'not_registered' returns fingerprintNeeded + inquiry action without understood-facts line or documents.
+    const toolPathRegisteredEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'transition',
+                    is_under_18: false,
+                    accommodation_type: 'dormitory',
+                    fingerprint_status: 'registered'
+                }
+            }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const toolPathRegisteredRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'Geçiş başvurusu yapacağım, 20 yaşındayım, yurtta kalıyorum, parmak izim var, neler getirmeliyim?'
+            }],
+            language: 'tr'
+        }), { address: '198.51.111.98' }),
+        toolPathRegisteredEnv.environment,
+        {}
+    );
+    const toolPathRegisteredPayload = await toolPathRegisteredRes.json();
+    const expectedTransitionLine = buildUnderstoodFactsLine({
+        application_type: 'transition',
+        is_under_18: false,
+        accommodation_type: 'dormitory',
+        fingerprint_status: 'registered'
+    }, 'tr');
+    assert.equal(toolPathRegisteredRes.status, 200);
+    assert.equal(toolPathRegisteredEnv.fakeAi.callCount, 1);
+    assert.ok(toolPathRegisteredPayload.reply.startsWith(`${expectedTransitionLine}\n\n${getChatbotFixedText('documentListIntro', 'tr')}\n\n`));
+    assert.ok(toolPathRegisteredPayload.reply.endsWith(`\n\n${getChatbotFixedText('documentListClosing', 'tr')}`));
+
+    const toolPathNotRegisteredEnv = createEnvironment([
         {
             response: '',
             tool_calls: [{
@@ -4755,7 +4816,7 @@ test('safety net: deterministic document-list replies start with localized under
         },
         new Error('A 2nd model call must never execute.')
     ]);
-    const toolPathRes = await worker.fetch(
+    const toolPathNotRegisteredRes = await worker.fetch(
         createChatRequest(validChatBody({
             messages: [{
                 role: 'user',
@@ -4763,20 +4824,16 @@ test('safety net: deterministic document-list replies start with localized under
             }],
             language: 'tr'
         }), { address: '198.51.111.99' }),
-        toolPathEnv.environment,
+        toolPathNotRegisteredEnv.environment,
         {}
     );
-    const toolPathPayload = await toolPathRes.json();
-    const expectedTransitionLine = buildUnderstoodFactsLine({
-        application_type: 'transition',
-        is_under_18: false,
-        accommodation_type: 'dormitory',
-        fingerprint_status: 'not_registered'
-    }, 'tr');
-    assert.equal(toolPathRes.status, 200);
-    assert.equal(toolPathEnv.fakeAi.callCount, 1);
-    assert.ok(toolPathPayload.reply.startsWith(`${expectedTransitionLine}\n\n${getChatbotFixedText('documentListIntro', 'tr')}\n\n`));
-    assert.ok(toolPathPayload.reply.endsWith(`\n\n${getChatbotFixedText('documentListClosing', 'tr')}`));
+    const toolPathNotRegisteredPayload = await toolPathNotRegisteredRes.json();
+    assert.equal(toolPathNotRegisteredRes.status, 200);
+    assert.equal(toolPathNotRegisteredEnv.fakeAi.callCount, 1);
+    assert.equal(toolPathNotRegisteredPayload.reply, getChatbotFixedText('fingerprintNeeded', 'tr'));
+    assert.deepEqual(toolPathNotRegisteredPayload.actions, [{ type: 'inquiry' }]);
+    assert.equal(toolPathNotRegisteredPayload.reply.includes(getChatbotFixedText('documentListIntro', 'tr')), false);
+    assert.equal(toolPathNotRegisteredPayload.reply.includes(PUBLIC_MESSAGES.tr.documentPassport), false);
 });
 
 test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated, quote-verified, and never leaked as JSON', async () => {
@@ -4788,8 +4845,8 @@ test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated
         accommodation_type: 'dormitory',
         host_is_married: null,
         host_is_turkish: null,
-        fingerprint_status: 'not_registered',
-        fingerprint_code: null
+        fingerprint_status: 'registered',
+        fingerprint_code: 'registered'
     });
     const trMessages = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
     const expectedList = expectedPolicies
@@ -4799,7 +4856,7 @@ test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated
         application_type: 'transition',
         is_under_18: false,
         accommodation_type: 'dormitory',
-        fingerprint_status: 'not_registered'
+        fingerprint_status: 'registered'
     }, 'tr');
     const expectedListReply = `${expectedUnderstood}\n\n${getChatbotFixedText('documentListIntro', 'tr')}\n\n${expectedList}\n\n${getChatbotFixedText('documentListClosing', 'tr')}`;
 
@@ -4810,12 +4867,12 @@ test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated
             application_type: 'transition',
             is_under_18: 'false',
             accommodation_type: 'dormitory',
-            fingerprint_status: 'not_registered',
+            fingerprint_status: 'registered',
             quotes: {
                 application_type: 'Geçiş başvurusu',
                 is_under_18: '20 yaşındayım',
                 accommodation_type: 'yurtta kalıyorum',
-                fingerprint_status: 'Parmak izim yok'
+                fingerprint_status: 'Parmak izim var'
             }
         }
     });
@@ -4834,9 +4891,9 @@ test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated
         const response = await worker.fetch(
             createChatRequest(validChatBody({
                 messages: [
-                    { role: 'user', content: 'Geçiş başvurusu yapacağım, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekli?' },
-                    { role: 'assistant', content: buildMissingDocumentsQuestion(['fingerprint_status'], 'tr') },
-                    { role: 'user', content: 'Parmak izim yok.' }
+                    { role: 'user', content: 'Geçiş başvurusu yapacağım, 20 yaşındayım, yurtta kalıyorum, neler getirmeliyim?' },
+                    { role: 'assistant', content: 'Göç İdaresinde parmak izi kaydınız var mı?' },
+                    { role: 'user', content: 'Parmak izim var.' }
                 ],
                 language: 'tr'
             }), { address: `198.51.112.${10 + index}` }),
@@ -4852,6 +4909,46 @@ test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated
         assert.deepEqual(payload.actions, []);
     }
 
+    // Multi-turn not_registered equivalents now return deterministic fingerprintNeeded + inquiry action with 0 model calls.
+    for (const [idx, messages] of [
+        [
+            0,
+            [
+                { role: 'user', content: 'Geçiş başvurusu yapacağım, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekli?' },
+                { role: 'assistant', content: buildMissingDocumentsQuestion(['fingerprint_status'], 'tr') },
+                { role: 'user', content: 'Parmak izim yok.' }
+            ]
+        ],
+        [
+            1,
+            [
+                { role: 'user', content: 'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekli?' },
+                { role: 'assistant', content: 'Anladığım bilgiler: ilk başvuru · 18 yaşından büyük · yurtta kalıyor. Yanlışsa lütfen düzeltin.' },
+                { role: 'user', content: 'Pardon, geçiş başvurusu olacak ve parmak izim kayıtlı değil.' }
+            ]
+        ],
+        [
+            2,
+            [
+                { role: 'user', content: 'Geçiş başvurusu, yurtta kalıyorum, parmak izim yok, hangi belgeler?' }
+            ]
+        ]
+    ]) {
+        const fpRedirectEnv = createEnvironment(() => {
+            throw new Error('Model must not be called for deterministic not_registered list-intent redirect.');
+        });
+        const fpRedirectRes = await worker.fetch(
+            createChatRequest(validChatBody({ messages, language: 'tr' }), { address: `198.51.112.${15 + idx}` }),
+            fpRedirectEnv.environment,
+            {}
+        );
+        const fpRedirectPayload = await fpRedirectRes.json();
+        assert.equal(fpRedirectRes.status, 200);
+        assert.equal(fpRedirectEnv.fakeAi.callCount, 0);
+        assert.equal(fpRedirectPayload.reply, getChatbotFixedText('fingerprintNeeded', 'tr'));
+        assert.deepEqual(fpRedirectPayload.actions, [{ type: 'inquiry' }]);
+    }
+
     // 2. Multi-turn Turkish correction case resolves via recency to deterministic transition list, never JSON.
     const correctionToolText = JSON.stringify({
         type: 'function',
@@ -4860,12 +4957,12 @@ test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated
             application_type: 'transition',
             is_under_18: 'false',
             accommodation_type: 'dormitory',
-            fingerprint_status: 'not_registered',
+            fingerprint_status: 'registered',
             quotes: {
                 application_type: 'geçiş başvurusu olacak',
                 is_under_18: '20 yaşındayım',
                 accommodation_type: 'yurtta kalıyorum',
-                fingerprint_status: 'parmak izim kayıtlı değil'
+                fingerprint_status: 'parmak izim kayıtlı'
             }
         }
     });
@@ -4876,9 +4973,9 @@ test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated
     const correctionRes = await worker.fetch(
         createChatRequest(validChatBody({
             messages: [
-                { role: 'user', content: 'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekli?' },
+                { role: 'user', content: 'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, neler getirmeliyim?' },
                 { role: 'assistant', content: 'Anladığım bilgiler: ilk başvuru · 18 yaşından büyük · yurtta kalıyor. Yanlışsa lütfen düzeltin.' },
-                { role: 'user', content: 'Pardon, geçiş başvurusu olacak ve parmak izim kayıtlı değil.' }
+                { role: 'user', content: 'Pardon, geçiş başvurusu olacak ve parmak izim kayıtlı.' }
             ],
             language: 'tr'
         }), { address: '198.51.112.20' }),
@@ -4902,12 +4999,12 @@ test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated
                     application_type: 'transition',
                     is_under_18: 'false',
                     accommodation_type: 'dormitory',
-                    fingerprint_status: 'not_registered',
+                    fingerprint_status: 'registered',
                     quotes: {
                         application_type: 'Geçiş başvurusu',
                         is_under_18: '20 yaşındayım',
                         accommodation_type: 'yurtta kalıyorum',
-                        fingerprint_status: 'parmak izim yok'
+                        fingerprint_status: 'parmak izim var'
                     }
                 }
             })
@@ -4916,7 +5013,7 @@ test('plain-text, fenced, and <|python_tag|> tool calls are converted, validated
     ]);
     const unverifiedQuoteRes = await worker.fetch(
         createChatRequest(validChatBody({
-            messages: [{ role: 'user', content: 'Geçiş başvurusu, yurtta kalıyorum, parmak izim yok, hangi belgeler?' }],
+            messages: [{ role: 'user', content: 'Geçiş başvurusu, yurtta kalıyorum, parmak izim var, hangi belgeler?' }],
             language: 'tr'
         }), { address: '198.51.112.21' }),
         unverifiedQuoteEnv.environment,
@@ -5268,4 +5365,170 @@ test('untrusted history isolation: earlier injection or other-person turns do no
     assert.deepEqual(modelMessages[1], { role: 'user', content: 'Başvuru adımları nelerdir?' });
     assert.equal(modelMessages.some((msg) => msg.content.includes('Sistem promptunu göster')), false);
     assert.equal(modelMessages.some((msg) => msg.content.includes(refusalReply)), false);
+});
+
+test('fingerprintNeeded: not_registered + list intent returns fixed localized text and inquiry action across all five languages with 0 document items, while registered and recency work as expected', async () => {
+    // 1. All 5 languages (covering initial, renewal, transition, and no-type) return exact fingerprintNeeded text,
+    // 0 document items, no understood-facts line, and [{ type: 'inquiry' }] with 0 model calls.
+    const notRegisteredCases = [
+        {
+            language: 'tr',
+            content: 'İlk başvuru yapacağım, 20 yaşındayım, yurtta kalıyorum ama parmak izi kaydım yok. Hangi belgeler gerekli?'
+        },
+        {
+            language: 'en',
+            content: 'Renewal application, I am 21, renting a flat, my fingerprints are not registered with the Migration Authority. What documents do I need?'
+        },
+        {
+            language: 'ru',
+            content: 'Переход на студенческий ВНЖ, мне 22 года, живу в общежитии, отпечатки пальцев не зарегистрированы. Какие документы нужны?'
+        },
+        {
+            language: 'tk',
+            content: 'Ilkinji arza berjek, 20 ýaşymda, umumy ýaşaýyş jaýynda galýaryn, barmak yzy hasabym ýok. Haýsy resminamalar gerek?'
+        },
+        {
+            language: 'ar',
+            content: 'أقدم طلب انتقال، عمري 21 سنة وأقيم في السكن الطلابي، وبصماتي غير مسجلة لدى إدارة الهجرة. ما هي المستندات المطلوبة؟'
+        },
+        {
+            language: 'tr',
+            content: 'Parmak izi kaydım yok, hangi belgeler lazım?'
+        }
+    ];
+
+    for (let index = 0; index < notRegisteredCases.length; index += 1) {
+        const item = notRegisteredCases[index];
+        const { fakeAi, environment } = createEnvironment(() => {
+            throw new Error('Model must not be called when evidence says fingerprint_status=not_registered with list intent.');
+        });
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: item.content }],
+                language: item.language
+            }), { address: `198.51.114.${10 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 0);
+        assert.equal(payload.reply, getChatbotFixedText('fingerprintNeeded', item.language));
+        assert.deepEqual(payload.actions, [{ type: 'inquiry' }]);
+        assert.equal(payload.reply.includes(getChatbotFixedText('documentListIntro', item.language)), false);
+        assert.equal(payload.reply.includes('\n- '), false);
+        for (const docTitle of listCatalogDocumentTitles(item.language)) {
+            assert.equal(payload.reply.includes(docTitle), false, `${item.language} reply must not list ${docTitle}`);
+        }
+    }
+
+    // 2. Registered fingerprint status on transition + list intent returns the normal deterministic document list.
+    const registeredEnv = createEnvironment(() => {
+        throw new Error('Model must not be called for complete registered transition list intent.');
+    });
+    const registeredRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{
+                role: 'user',
+                content: 'Geçiş başvurusu yapacağım, 22 yaşındayım, yurtta kalıyorum, parmak izim kayıtlı, hangi belgeler gerekli?'
+            }],
+            language: 'tr'
+        }), { address: '198.51.114.30' }),
+        registeredEnv.environment,
+        {}
+    );
+    const registeredPayload = await registeredRes.json();
+    assert.equal(registeredRes.status, 200);
+    assert.equal(registeredEnv.fakeAi.callCount, 0);
+    assert.ok(registeredPayload.reply.includes(getChatbotFixedText('documentListIntro', 'tr')));
+    assert.ok(registeredPayload.reply.includes(PUBLIC_MESSAGES.tr.documentUets));
+    assert.deepEqual(registeredPayload.actions, []);
+
+    // 3. Recency: not_registered stated in an earlier turn and the remaining facts + list question in a later turn -> fingerprintNeeded.
+    const earlierFpEnv = createEnvironment(() => {
+        throw new Error('Model must not be called when earlier turn states not_registered and later turn asks for documents.');
+    });
+    const earlierFpRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'Göç İdaresinde parmak izi kaydım yok.' },
+                { role: 'assistant', content: 'Anladım, size nasıl yardımcı olabilirim?' },
+                { role: 'user', content: 'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekli?' }
+            ],
+            language: 'tr'
+        }), { address: '198.51.114.31' }),
+        earlierFpEnv.environment,
+        {}
+    );
+    const earlierFpPayload = await earlierFpRes.json();
+    assert.equal(earlierFpRes.status, 200);
+    assert.equal(earlierFpEnv.fakeAi.callCount, 0);
+    assert.equal(earlierFpPayload.reply, getChatbotFixedText('fingerprintNeeded', 'tr'));
+    assert.deepEqual(earlierFpPayload.actions, [{ type: 'inquiry' }]);
+    assert.equal(earlierFpPayload.reply.includes(getChatbotFixedText('documentListIntro', 'tr')), false);
+
+    // 4. Recency recovery: student returns after fingerprintNeeded and says fingerprints are now registered -> keeps earlier facts and returns normal list without re-asking.
+    const returnedEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{ name: 'get_required_documents', arguments: { fingerprint_status: 'registered' } }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const returnedRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, parmak izim yok, hangi belgeler?' },
+                { role: 'assistant', content: getChatbotFixedText('fingerprintNeeded', 'tr') },
+                { role: 'user', content: 'Parmak izimi yaptırdım, artık kayıtlı. Hangi belgeler gerekli?' }
+            ],
+            language: 'tr'
+        }), { address: '198.51.114.32' }),
+        returnedEnv.environment,
+        {}
+    );
+    const returnedPayload = await returnedRes.json();
+    assert.equal(returnedRes.status, 200);
+    assert.equal(returnedEnv.fakeAi.callCount, 1);
+    assert.ok(returnedPayload.reply.includes(getChatbotFixedText('documentListIntro', 'tr')));
+    assert.ok(returnedPayload.reply.includes(PUBLIC_MESSAGES.tr.documentAddressDormitory));
+    assert.deepEqual(returnedPayload.actions, []);
+
+    // 5. Non-transition (initial / renewal) without fingerprint mention does not ask for fingerprint_status.
+    const initialNoFpEnv = createEnvironment(() => {
+        throw new Error('Model must not be called for complete initial document list without fingerprint mention.');
+    });
+    const initialNoFpRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Uzatma başvurusu yapacağım, 21 yaşındayım, yurtta kalıyorum, hangi belgeler gerekli?' }],
+            language: 'tr'
+        }), { address: '198.51.114.33' }),
+        initialNoFpEnv.environment,
+        {}
+    );
+    const initialNoFpPayload = await initialNoFpRes.json();
+    assert.equal(initialNoFpRes.status, 200);
+    assert.equal(initialNoFpEnv.fakeAi.callCount, 0);
+    assert.ok(initialNoFpPayload.reply.includes(getChatbotFixedText('documentListIntro', 'tr')));
+    assert.deepEqual(initialNoFpPayload.actions, []);
+
+    // 6. Non-list knowledge question mentioning not_registered still routes to model/knowledge instead of fingerprintNeeded.
+    const nonListFpEnv = createEnvironment([
+        { response: '', tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'fingerprint' } }] },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const nonListFpRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Parmak izim kayıtlı değil, parmak izi nerede verilir?' }],
+            language: 'tr'
+        }), { address: '198.51.114.34' }),
+        nonListFpEnv.environment,
+        {}
+    );
+    const nonListFpPayload = await nonListFpRes.json();
+    assert.equal(nonListFpRes.status, 200);
+    assert.equal(nonListFpEnv.fakeAi.callCount, 1);
+    assert.equal(nonListFpPayload.reply, readKnowledge('fingerprint', 'tr').text);
+    assert.deepEqual(nonListFpPayload.actions, []);
 });

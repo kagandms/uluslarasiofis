@@ -145,3 +145,18 @@ test('knowledge texts contain no phone numbers, e-mail addresses other than KVKK
         }
     }
 });
+
+test('fingerprint topic directs students without fingerprint registration to the university International Student Office across all five languages', () => {
+    const officeMarkers = {
+        tr: 'Uluslararası Öğrenci Ofisine',
+        en: 'International Student Office at the university',
+        ru: 'Международный студенческий офис в университете',
+        tk: 'Halkara talyplar ofisine',
+        ar: 'مكتب الطلاب الدوليين في الجامعة'
+    };
+
+    for (const language of CHATBOT_LANGUAGES) {
+        const { text } = readKnowledge('fingerprint', language);
+        assert.ok(text.includes(officeMarkers[language]), `${language} fingerprint topic must direct to ${officeMarkers[language]}`);
+    }
+});
