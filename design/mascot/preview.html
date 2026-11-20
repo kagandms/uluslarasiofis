@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Uluslararası Ofis Asistanı — Mascot Concept Preview</title>
+  <style>
+    :root {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --public-burgundy-shadow: rgba(126, 24, 48, 0.24);
+
+      --page-bg: #f6f7f9;
+      --page-surface: #ffffff;
+      --page-surface-alt: #f8f9fb;
+      --page-border: #e2e6ee;
+      --page-text: #20232a;
+      --page-muted: #59616d;
+      --chat-log-bg: #fcfcfd;
+      --notice-bg: #f8f9fb;
+      --notice-text: #4a5260;
+
+      --mascot-outline: #641126;
+      --mascot-feather: #ead8de;
+      --mascot-wing: #d7bcc5;
+      --mascot-surface: #fff9fa;
+      --mascot-card: #ffffff;
+      --mascot-ink: #241b22;
+      --mascot-accent: #d89b27;
+
+      color-scheme: light;
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body.is-dark {
+      --public-burgundy: #b52c4d;
+      --public-burgundy-hover: #96223e;
+      --public-burgundy-light: #cf3d60;
+      --public-burgundy-soft: #2e1921;
+      --public-burgundy-border: #6c3645;
+      --public-burgundy-shadow: rgba(0, 0, 0, 0.45);
+
+      --page-bg: #11141b;
+      --page-surface: #1a1f2a;
+      --page-surface-alt: #212736;
+      --page-border: #2f3748;
+      --page-text: #eef1f6;
+      --page-muted: #a6b0c2;
+      --chat-log-bg: #161a24;
+      --notice-bg: #1f2432;
+      --notice-text: #b8c2d4;
+
+      --mascot-outline: #4a1524;
+      --mascot-feather: #e5d2d9;
+      --mascot-wing: #cfb3be;
+      --mascot-surface: #f7eef1;
+      --mascot-card: #ffffff;
+      --mascot-ink: #1d151b;
+      --mascot-accent: #e0a532;
+
+      color-scheme: dark;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--page-bg);
+      color: var(--page-text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body.is-reduced-motion *,
+    body.is-reduced-motion svg * {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      border-bottom: 1px solid var(--page-border);
+      background: var(--page-surface);
+    }
+
+    .topbar-inner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem 1rem;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0.85rem 1rem;
+    }
+
+    .brand-head h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      line-height: 1.25;
+      color: var(--public-burgundy);
+    }
+
+    .brand-head p {
+      margin: 0.15rem 0 0;
+      font-size: 0.8rem;
+      color: var(--page-muted);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .control-group {
+      display: inline-flex;
+      padding: 0.2rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.6rem;
+      background: var(--page-surface-alt);
+      gap: 0.2rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      min-height: 2.15rem;
+      padding: 0.35rem 0.75rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.5rem;
+      background: var(--page-surface);
+      color: var(--page-text);
+      font: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .control-group .btn {
+      border-color: transparent;
+      background: transparent;
+    }
+
+    .btn[aria-pressed="true"],
+    .control-group .btn[aria-pressed="true"] {
+      border-color: var(--public-burgundy);
+      background: var(--public-burgundy);
+      color: #ffffff;
+    }
+
+    .btn:focus-visible {
+      outline: 2px solid var(--public-burgundy);
+      outline-offset: 2px;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 1.25rem 1rem 3rem;
+      display: grid;
+      gap: 1.75rem;
+    }
+
+    .concept-card {
+      border: 1px solid var(--page-border);
+      border-top: 4px solid var(--public-burgundy);
+      border-radius: 1rem;
+      background: var(--page-surface);
+      padding: 1.25rem;
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    .concept-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.4rem 1rem;
+      border-bottom: 1px solid var(--page-border);
+      padding-bottom: 0.85rem;
+    }
+
+    .concept-head h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      color: var(--public-burgundy);
+    }
+
+    .concept-file {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      padding: 0.18rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid var(--public-burgundy-border);
+      background: var(--public-burgundy-soft);
+      color: var(--public-burgundy);
+    }
+
+    .concept-caption {
+      margin: 0.35rem 0 0;
+      color: var(--page-muted);
+      font-size: 0.92rem;
+      flex-basis: 100%;
+    }
+
+    .section-label {
+      margin: 0 0 0.6rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--page-muted);
+    }
+
+    /* Light & Dark Surface Matrix */
+    .surface-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .surface-panel {
+      border-radius: 0.85rem;
+      padding: 0.95rem;
+      display: grid;
+      gap: 0.75rem;
+      min-width: 0;
+    }
+
+    .surface-light {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #641126;
+      --mascot-feather: #ead8de;
+      --mascot-wing: #d7bcc5;
+      --mascot-surface: #fff9fa;
+      --mascot-card: #ffffff;
+      --mascot-ink: #241b22;
+      --mascot-accent: #d89b27;
+      background: #ffffff;
+      color: #20232a;
+      border: 1px solid #d9dde5;
+    }
+
+    .surface-dark {
+      --public-burgundy: #c6395c;
+      --public-burgundy-hover: #9f2745;
+      --public-burgundy-light: #dc5073;
+      --public-burgundy-soft: #311a23;
+      --public-burgundy-border: #783c4d;
+      --mascot-outline: #431320;
+      --mascot-feather: #e8d6dc;
+      --mascot-wing: #d3b8c2;
+      --mascot-surface: #f8eff2;
+      --mascot-card: #ffffff;
+      --mascot-ink: #1e161c;
+      --mascot-accent: #e5a934;
+      background: #161922;
+      color: #eef1f6;
+      border: 1px solid #2f3748;
+    }
+
+    .surface-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .surface-title span:last-child {
+      font-weight: 500;
+      opacity: 0.72;
+      font-size: 0.75rem;
+    }
+
+    .state-row {
+      display: grid;
+      gap: 0.45rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid currentColor;
+      border-top-color: rgba(128, 136, 154, 0.22);
+    }
+
+    .state-row-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      opacity: 0.8;
+    }
+
+    .size-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.75rem 1rem;
+    }
+
+    .size-cell {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .size-cell code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.7rem;
+      opacity: 0.72;
+    }
+
+    .mascot-slot {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .mascot-slot svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Real Widget Context Mockups */
+    .widget-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .mock-box {
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      background: var(--page-surface-alt);
+      padding: 0.95rem;
+      display: grid;
+      gap: 0.85rem;
+      min-width: 0;
+    }
+
+    .launcher-samples {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.9rem;
+    }
+
+    .mock-launcher {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      min-height: 3.25rem;
+      padding: 0.45rem 1.15rem 0.45rem 0.65rem;
+      border: 1px solid #7e1830;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #7e1830 0%, #9a203d 100%);
+      color: #ffffff;
+      font: inherit;
+      font-size: 0.94rem;
+      font-weight: 700;
+      box-shadow: 0 8px 24px rgba(126, 24, 48, 0.28);
+    }
+
+    .mock-launcher-badge {
+      padding: 0.4rem 1.15rem 0.4rem 0.5rem;
+      min-height: 4.1rem;
+    }
+
+    .mock-launcher-circle {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .mock-launcher-orb {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: 1px solid #7e1830;
+      background: linear-gradient(135deg, #7e1830 0%, #9a203d 100%);
+      box-shadow: 0 8px 24px rgba(126, 24, 48, 0.28);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mock-launcher-circle span {
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--page-muted);
+    }
+
+    /* Mock Chat Panel (Header + Notice + Bubble) */
+    .mock-panel {
+      border: 1px solid var(--page-border);
+      border-radius: 1rem;
+      background: var(--page-surface);
+      overflow: hidden;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+    }
+
+    .mock-header {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.65rem;
+      padding: 0.7rem 0.9rem;
+      background: #7e1830;
+      color: #ffffff;
+    }
+
+    .mock-header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      min-width: 0;
+    }
+
+    .mock-header-title {
+      margin: 0;
+      font-size: 0.96rem;
+      font-weight: 700;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .mock-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 0.5rem;
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+      font-size: 0.95rem;
+      flex-shrink: 0;
+    }
+
+    .mock-notice {
+      margin: 0;
+      padding: 0.45rem 0.85rem;
+      border-bottom: 1px solid var(--page-border);
+      background: var(--notice-bg);
+      color: var(--notice-text);
+      font-size: 0.74rem;
+    }
+
+    .mock-log {
+      padding: 0.85rem;
+      background: var(--chat-log-bg);
+      display: grid;
+      gap: 0.65rem;
+    }
+
+    .mock-msg-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.5rem;
+      min-width: 0;
+    }
+
+    .mock-msg-body {
+      display: grid;
+      gap: 0.4rem;
+      min-width: 0;
+      max-width: 90%;
+    }
+
+    .mock-bubble {
+      margin: 0;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      border-end-start-radius: 0.25rem;
+      background: var(--page-surface);
+      color: var(--page-text);
+      font-size: 0.86rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .mock-action-btn {
+      width: fit-content;
+      padding: 0.32rem 0.7rem;
+      border: 1px solid var(--public-burgundy);
+      border-radius: 0.5rem;
+      background: var(--page-surface);
+      color: var(--public-burgundy);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    /* RTL Row */
+    .rtl-box {
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      background: var(--page-surface-alt);
+      padding: 0.95rem;
+      display: grid;
+      gap: 0.85rem;
+    }
+
+    .rtl-grid {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 0.9rem;
+      align-items: start;
+    }
+
+    .rtl-box [dir="rtl"] .mock-launcher {
+      padding: 0.45rem 0.65rem 0.45rem 1.15rem;
+    }
+
+    @media (max-width: 860px) {
+      .surface-grid,
+      .widget-grid,
+      .rtl-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .concept-card {
+        padding: 0.9rem;
+      }
+      .surface-panel,
+      .mock-box,
+      .rtl-box {
+        padding: 0.75rem;
+      }
+      .size-strip {
+        gap: 0.65rem 0.7rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-head">
+        <h1>Uluslararası Ofis Asistanı — Mascot Concepts</h1>
+        <p>Design draft review (2026-11-20) · Standalone offline preview · 3 states &amp; 4 sizes</p>
+      </div>
+      <div class="controls">
+        <div class="control-group" role="group" aria-label="Widget preview state">
+          <button type="button" class="btn" data-state-btn="idle" aria-pressed="true">Idle</button>
+          <button type="button" class="btn" data-state-btn="thinking" aria-pressed="false">Thinking</button>
+          <button type="button" class="btn" data-state-btn="handoff" aria-pressed="false">Handoff</button>
+        </div>
+        <button type="button" class="btn" id="toggle-dark" aria-pressed="false">Dark mode</button>
+        <button type="button" class="btn" id="toggle-motion" aria-pressed="false">Reduced motion</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="preview-root"></main>
+
+  <!-- Inline SVG templates (identical to concept-1-lanyard-owl.svg, concept-2-doc-folder.svg, concept-3-geo-guide.svg) -->
+  <template id="tpl-concept-1">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="mascot-svg mascot-owl" aria-hidden="true" focusable="false">
+      <title>Puhu — Lanyard Owl Office Mascot</title>
+      <style>
+        .mascot-owl {
+          --m-primary: var(--public-burgundy, #7e1830);
+          --m-primary-light: var(--public-burgundy-light, #9a203d);
+          --m-outline: var(--mascot-outline, var(--public-burgundy-hover, #641126));
+          --m-soft: var(--public-burgundy-soft, #fbf2f4);
+          --m-border: var(--public-burgundy-border, #e2c0c8);
+          --m-feather: var(--mascot-feather, #ead8de);
+          --m-wing: var(--mascot-wing, #d7bcc5);
+          --m-surface: var(--mascot-surface, #fff9fa);
+          --m-card: var(--mascot-card, #ffffff);
+          --m-ink: var(--mascot-ink, #241b22);
+          --m-accent: var(--mascot-accent, #d89b27);
+        }
+        .mascot-owl #state-thinking,
+        .mascot-owl #state-handoff { display: none; }
+        .mascot-owl.is-thinking #state-idle,
+        .mascot-owl.is-thinking #state-handoff { display: none; }
+        .mascot-owl.is-thinking #state-thinking { display: inline; }
+        .mascot-owl.is-handoff #state-idle,
+        .mascot-owl.is-handoff #state-thinking { display: none; }
+        .mascot-owl.is-handoff #state-handoff { display: inline; }
+        .mascot-owl .owl-dot { animation: owlDotPulse 1.35s ease-in-out infinite; }
+        .mascot-owl .owl-dot-2 { animation-delay: 0.2s; }
+        .mascot-owl .owl-dot-3 { animation-delay: 0.4s; }
+        @keyframes owlDotPulse {
+          0%, 80%, 100% { opacity: 0.3; }
+          40% { opacity: 1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .mascot-owl .owl-dot { animation: none; opacity: 1; }
+        }
+      </style>
+      <g class="owl-base">
+        <ellipse cx="25" cy="56" rx="3.1" ry="1.8" fill="var(--m-accent)" stroke="var(--m-outline)" stroke-width="1.6"/>
+        <ellipse cx="39" cy="56" rx="3.1" ry="1.8" fill="var(--m-accent)" stroke="var(--m-outline)" stroke-width="1.6"/>
+        <path d="M18.5 16.5 C15.8 11.2, 20.8 9.2, 24.8 13 C28.2 11.4, 35.8 11.4, 39.2 13 C43.2 9.2, 48.2 11.2, 45.5 16.5 C49.2 20.5, 51 27.5, 51 35 C51 47.2, 43 55.2, 32 55.2 C21 55.2, 13 47.2, 13 35 C13 27.5, 14.8 20.5, 18.5 16.5 Z" fill="var(--m-feather)" stroke="var(--m-outline)" stroke-width="2.4" stroke-linejoin="round"/>
+        <ellipse cx="32" cy="44" rx="11.8" ry="8.8" fill="var(--m-surface)"/>
+        <circle cx="25.2" cy="26.8" r="7.4" fill="var(--m-surface)"/>
+        <circle cx="38.8" cy="26.8" r="7.4" fill="var(--m-surface)"/>
+        <path d="M23.5 19.8 Q32 23.8 40.5 19.8" fill="none" stroke="var(--m-outline)" stroke-width="1.9" stroke-linecap="round"/>
+        <path d="M29.2 29.6 Q32 28.1 34.8 29.6 L32 33.6 Z" fill="var(--m-accent)" stroke="var(--m-outline)" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M21.2 35.6 L32 42.6 L42.8 35.6" fill="none" stroke="var(--m-primary)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="30.2" y="41.2" width="3.6" height="2.6" rx="1" fill="var(--m-outline)"/>
+        <rect x="25.2" y="43.6" width="13.6" height="9.2" rx="2" fill="var(--m-card)" stroke="var(--m-primary)" stroke-width="1.8"/>
+        <rect x="26.5" y="44.8" width="11" height="2.4" rx="0.8" fill="var(--m-primary)"/>
+        <line x1="27.5" y1="49.2" x2="36.5" y2="49.2" stroke="var(--m-border)" stroke-width="1.4" stroke-linecap="round"/>
+        <line x1="27.5" y1="51.2" x2="33.5" y2="51.2" stroke="var(--m-border)" stroke-width="1.4" stroke-linecap="round"/>
+      </g>
+      <g id="state-idle">
+        <path d="M14 31.2 C9.2 34.8, 9.8 44, 15.8 46.8 C16.6 41.8, 16.3 35.8, 14 31.2 Z" fill="var(--m-wing)" stroke="var(--m-outline)" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M50 31.2 C54.8 34.8, 54.2 44, 48.2 46.8 C47.4 41.8, 47.7 35.8, 50 31.2 Z" fill="var(--m-wing)" stroke="var(--m-outline)" stroke-width="2.2" stroke-linejoin="round"/>
+        <circle cx="25.2" cy="26.8" r="2.8" fill="var(--m-ink)"/>
+        <circle cx="38.8" cy="26.8" r="2.8" fill="var(--m-ink)"/>
+        <circle cx="26.2" cy="25.8" r="0.95" fill="#ffffff"/>
+        <circle cx="39.8" cy="25.8" r="0.95" fill="#ffffff"/>
+      </g>
+      <g id="state-thinking">
+        <path d="M14 31.2 C9.2 34.8, 9.8 44, 15.8 46.8 C16.6 41.8, 16.3 35.8, 14 31.2 Z" fill="var(--m-wing)" stroke="var(--m-outline)" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M49.8 31.5 C55.2 33, 55.6 39.2, 49.4 42.8 C46.4 44.4, 43.8 42, 45.8 39 C47.2 36.8, 48.5 34.2, 49.8 31.5 Z" fill="var(--m-wing)" stroke="var(--m-outline)" stroke-width="2.2" stroke-linejoin="round"/>
+        <circle cx="26.1" cy="25.5" r="2.7" fill="var(--m-ink)"/>
+        <circle cx="39.7" cy="25.5" r="2.7" fill="var(--m-ink)"/>
+        <circle cx="27" cy="24.6" r="0.9" fill="#ffffff"/>
+        <circle cx="40.6" cy="24.6" r="0.9" fill="#ffffff"/>
+        <rect x="41.5" y="3" width="19" height="9.6" rx="4.8" fill="var(--m-card)" stroke="var(--m-primary)" stroke-width="1.8"/>
+        <circle class="owl-dot owl-dot-1" cx="46.6" cy="7.8" r="1.5" fill="var(--m-primary)"/>
+        <circle class="owl-dot owl-dot-2" cx="51" cy="7.8" r="1.5" fill="var(--m-primary)"/>
+        <circle class="owl-dot owl-dot-3" cx="55.4" cy="7.8" r="1.5" fill="var(--m-primary)"/>
+      </g>
+      <g id="state-handoff">
+        <path d="M14 31.2 C9.2 34.8, 9.8 44, 15.8 46.8 C16.6 41.8, 16.3 35.8, 14 31.2 Z" fill="var(--m-wing)" stroke="var(--m-outline)" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M49.4 32 C55.6 35.4, 57.8 43.2, 54.4 51.2 L51.4 54.2 L48.4 49.8 C49.4 45.2, 49 40, 47.4 36 Z" fill="var(--m-wing)" stroke="var(--m-outline)" stroke-width="2.2" stroke-linejoin="round"/>
+        <circle cx="51.6" cy="56.2" r="5.4" fill="var(--m-card)" stroke="var(--m-primary)" stroke-width="1.8"/>
+        <path d="M49.1 55.1 L51.6 57.9 L54.1 55.1" fill="none" stroke="var(--m-primary)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="25.2" cy="28.2" r="2.7" fill="var(--m-ink)"/>
+        <circle cx="38.8" cy="28.2" r="2.7" fill="var(--m-ink)"/>
+        <circle cx="26.1" cy="27.3" r="0.9" fill="#ffffff"/>
+        <circle cx="39.7" cy="27.3" r="0.9" fill="#ffffff"/>
+      </g>
+    </svg>
+  </template>
+
+  <template id="tpl-concept-2">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="mascot-svg mascot-folder" aria-hidden="true" focusable="false">
+      <title>Dosya — Office Document Folder Mascot</title>
+      <style>
+        .mascot-folder {
+          --m-primary: var(--public-burgundy, #7e1830);
+          --m-primary-light: var(--public-burgundy-light, #9a203d);
+          --m-outline: var(--mascot-outline, var(--public-burgundy-hover, #641126));
+          --m-soft: var(--public-burgundy-soft, #fbf2f4);
+          --m-border: var(--public-burgundy-border, #e2c0c8);
+          --m-surface: var(--mascot-surface, #fdf4f6);
+          --m-card: var(--mascot-card, #ffffff);
+          --m-ink: var(--mascot-ink, #241b22);
+        }
+        .mascot-folder #state-thinking,
+        .mascot-folder #state-handoff { display: none; }
+        .mascot-folder.is-thinking #state-idle,
+        .mascot-folder.is-thinking #state-handoff { display: none; }
+        .mascot-folder.is-thinking #state-thinking { display: inline; }
+        .mascot-folder.is-handoff #state-idle,
+        .mascot-folder.is-handoff #state-thinking { display: none; }
+        .mascot-folder.is-handoff #state-handoff { display: inline; }
+        .mascot-folder .fld-dot { animation: fldDotPulse 1.35s ease-in-out infinite; }
+        .mascot-folder .fld-dot-2 { animation-delay: 0.2s; }
+        .mascot-folder .fld-dot-3 { animation-delay: 0.4s; }
+        @keyframes fldDotPulse {
+          0%, 80%, 100% { opacity: 0.3; }
+          40% { opacity: 1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .mascot-folder .fld-dot { animation: none; opacity: 1; }
+        }
+      </style>
+      <g class="folder-base">
+        <path d="M10.5 16 C10.5 13.4, 12.4 11.6, 15 11.6 L23.5 11.6 C25.1 11.6, 26.4 12.5, 27.3 14 L29 17.2 L49.5 17.2 C52 17.2, 53.5 18.8, 53.5 21.3 L53.5 48 C53.5 51, 51 53.5, 48 53.5 L16 53.5 C13 53.5, 10.5 51, 10.5 48 Z" fill="var(--m-primary)" stroke="var(--m-outline)" stroke-width="2.2" stroke-linejoin="round"/>
+        <line x1="14.5" y1="14.6" x2="23.5" y2="14.6" stroke="var(--m-border)" stroke-width="1.5" stroke-linecap="round"/>
+        <rect x="24.5" y="14.2" width="25.5" height="14.5" rx="2.4" fill="var(--m-card)" stroke="var(--m-outline)" stroke-width="2"/>
+        <line x1="28.5" y1="18.6" x2="39.5" y2="18.6" stroke="var(--m-border)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="28.5" y1="22.1" x2="36" y2="22.1" stroke="var(--m-border)" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="44.8" cy="19.6" r="2.2" fill="var(--m-primary-light)"/>
+        <path d="M9 28.2 C9 25.8, 11 24.2, 13.5 24.2 L50.5 24.2 C53 24.2, 55 25.8, 55 28.2 L53.4 49.2 C53.1 51.9, 50.9 53.8, 48.2 53.8 L15.8 53.8 C13.1 53.8, 10.9 51.9, 10.6 49.2 Z" fill="var(--m-surface)" stroke="var(--m-primary)" stroke-width="2.4" stroke-linejoin="round"/>
+        <line x1="14" y1="27.4" x2="50" y2="27.4" stroke="var(--m-border)" stroke-width="1.2" stroke-linecap="round"/>
+        <circle cx="24" cy="37.4" r="5.6" fill="var(--m-card)" stroke="var(--m-primary)" stroke-width="2.1"/>
+        <circle cx="40" cy="37.4" r="5.6" fill="var(--m-card)" stroke="var(--m-primary)" stroke-width="2.1"/>
+        <path d="M29.6 37.4 Q32 35.6 34.4 37.4" fill="none" stroke="var(--m-primary)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="15.8" y1="36.7" x2="18.4" y2="37.3" stroke="var(--m-primary)" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="48.2" y1="36.7" x2="45.6" y2="37.3" stroke="var(--m-primary)" stroke-width="1.8" stroke-linecap="round"/>
+      </g>
+      <g id="state-idle">
+        <circle cx="24" cy="37.4" r="2.2" fill="var(--m-ink)"/>
+        <circle cx="40" cy="37.4" r="2.2" fill="var(--m-ink)"/>
+        <circle cx="24.8" cy="36.6" r="0.75" fill="#ffffff"/>
+        <circle cx="40.8" cy="36.6" r="0.75" fill="#ffffff"/>
+        <path d="M28 46.2 Q32 49.4 36 46.2" fill="none" stroke="var(--m-ink)" stroke-width="2.1" stroke-linecap="round"/>
+      </g>
+      <g id="state-thinking">
+        <circle cx="25" cy="36.1" r="2.1" fill="var(--m-ink)"/>
+        <circle cx="41" cy="36.1" r="2.1" fill="var(--m-ink)"/>
+        <circle cx="25.8" cy="35.3" r="0.7" fill="#ffffff"/>
+        <circle cx="41.8" cy="35.3" r="0.7" fill="#ffffff"/>
+        <path d="M29.2 46.8 Q32 46 34.8 46.8" fill="none" stroke="var(--m-ink)" stroke-width="2" stroke-linecap="round"/>
+        <rect x="38.5" y="2.8" width="19.5" height="9.4" rx="4.7" fill="var(--m-card)" stroke="var(--m-primary)" stroke-width="1.8"/>
+        <circle class="fld-dot fld-dot-1" cx="43.8" cy="7.5" r="1.45" fill="var(--m-primary)"/>
+        <circle class="fld-dot fld-dot-2" cx="48.25" cy="7.5" r="1.45" fill="var(--m-primary)"/>
+        <circle class="fld-dot fld-dot-3" cx="52.7" cy="7.5" r="1.45" fill="var(--m-primary)"/>
+      </g>
+      <g id="state-handoff">
+        <circle cx="24" cy="38.8" r="2.2" fill="var(--m-ink)"/>
+        <circle cx="40" cy="38.8" r="2.2" fill="var(--m-ink)"/>
+        <circle cx="24.8" cy="38" r="0.75" fill="#ffffff"/>
+        <circle cx="40.8" cy="38" r="0.75" fill="#ffffff"/>
+        <path d="M28.2 45.8 Q32 48.6 35.8 45.8" fill="none" stroke="var(--m-ink)" stroke-width="2.1" stroke-linecap="round"/>
+        <path d="M53.5 36.2 C59.4 38.6, 60.2 47.4, 56 54.4 C54.8 56.2, 52.5 55.2, 52.9 53 C54.8 48, 54.4 42.6, 52.4 40 Z" fill="var(--m-surface)" stroke="var(--m-primary)" stroke-width="2.1" stroke-linejoin="round"/>
+        <path d="M23.5 53.6 L32 61.2 L40.5 53.6 Z" fill="var(--m-card)" stroke="var(--m-primary)" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M28.8 55.4 L32 58.6 L35.2 55.4" fill="none" stroke="var(--m-primary)" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </svg>
+  </template>
+
+  <template id="tpl-concept-3">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="mascot-svg mascot-geo" aria-hidden="true" focusable="false">
+      <title>Nokta — Minimal Geometric Helper Mascot</title>
+      <style>
+        .mascot-geo {
+          --m-primary: var(--public-burgundy, #7e1830);
+          --m-primary-light: var(--public-burgundy-light, #9a203d);
+          --m-outline: var(--mascot-outline, var(--public-burgundy-hover, #641126));
+          --m-soft: var(--public-burgundy-soft, #fbf2f4);
+          --m-border: var(--public-burgundy-border, #e2c0c8);
+          --m-surface: var(--mascot-surface, #ffffff);
+          --m-ink: var(--mascot-ink, #241b22);
+        }
+        .mascot-geo #state-thinking,
+        .mascot-geo #state-handoff { display: none; }
+        .mascot-geo.is-thinking #state-idle,
+        .mascot-geo.is-thinking #state-handoff { display: none; }
+        .mascot-geo.is-thinking #state-thinking { display: inline; }
+        .mascot-geo.is-handoff #state-idle,
+        .mascot-geo.is-handoff #state-thinking { display: none; }
+        .mascot-geo.is-handoff #state-handoff { display: inline; }
+        .mascot-geo .geo-dot {
+          transform-box: fill-box;
+          transform-origin: center;
+          animation: geoDotBob 1.35s ease-in-out infinite;
+        }
+        .mascot-geo .geo-dot-2 { animation-delay: 0.2s; }
+        .mascot-geo .geo-dot-3 { animation-delay: 0.4s; }
+        @keyframes geoDotBob {
+          0%, 80%, 100% { opacity: 0.35; transform: translateY(0); }
+          40% { opacity: 1; transform: translateY(-2px); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .mascot-geo .geo-dot { animation: none; opacity: 1; transform: none; }
+        }
+      </style>
+      <g class="geo-base">
+        <rect x="6" y="25.5" width="5.5" height="11" rx="2.75" fill="var(--m-soft)" stroke="var(--m-primary)" stroke-width="2.4"/>
+        <rect x="52.5" y="25.5" width="5.5" height="11" rx="2.75" fill="var(--m-soft)" stroke="var(--m-primary)" stroke-width="2.4"/>
+        <rect x="11" y="10.5" width="42" height="40.5" rx="16" fill="var(--m-surface)" stroke="var(--m-primary)" stroke-width="3.2"/>
+        <rect x="24" y="15.5" width="16" height="3.6" rx="1.8" fill="var(--m-border)"/>
+        <circle cx="18.6" cy="35.6" r="2.6" fill="var(--m-border)" opacity="0.55"/>
+        <circle cx="45.4" cy="35.6" r="2.6" fill="var(--m-border)" opacity="0.55"/>
+      </g>
+      <g id="state-idle">
+        <rect x="21.4" y="24.2" width="5.4" height="8.4" rx="2.7" fill="var(--m-ink)"/>
+        <rect x="37.2" y="24.2" width="5.4" height="8.4" rx="2.7" fill="var(--m-ink)"/>
+        <circle cx="24.8" cy="26.5" r="1.15" fill="#ffffff"/>
+        <circle cx="40.6" cy="26.5" r="1.15" fill="#ffffff"/>
+        <path d="M25.4 38.6 Q32 44.2 38.6 38.6" fill="none" stroke="var(--m-primary)" stroke-width="3" stroke-linecap="round"/>
+      </g>
+      <g id="state-thinking">
+        <rect x="22.4" y="22.6" width="5.2" height="6.8" rx="2.6" fill="var(--m-ink)"/>
+        <rect x="38.2" y="22.6" width="5.2" height="6.8" rx="2.6" fill="var(--m-ink)"/>
+        <circle cx="25.6" cy="24.7" r="1" fill="#ffffff"/>
+        <circle cx="41.4" cy="24.7" r="1" fill="#ffffff"/>
+        <circle class="geo-dot geo-dot-1" cx="23.5" cy="39.8" r="2.4" fill="var(--m-primary)"/>
+        <circle class="geo-dot geo-dot-2" cx="32" cy="39.8" r="2.4" fill="var(--m-primary)"/>
+        <circle class="geo-dot geo-dot-3" cx="40.5" cy="39.8" r="2.4" fill="var(--m-primary)"/>
+      </g>
+      <g id="state-handoff">
+        <rect x="21.4" y="26.6" width="5.4" height="7.4" rx="2.7" fill="var(--m-ink)"/>
+        <rect x="37.2" y="26.6" width="5.4" height="7.4" rx="2.7" fill="var(--m-ink)"/>
+        <circle cx="24.8" cy="28.7" r="1.05" fill="#ffffff"/>
+        <circle cx="40.6" cy="28.7" r="1.05" fill="#ffffff"/>
+        <path d="M26.5 39.2 Q32 43.2 37.5 39.2" fill="none" stroke="var(--m-primary)" stroke-width="2.8" stroke-linecap="round"/>
+        <path d="M22.5 51 L32 61 L41.5 51 Z" fill="var(--m-surface)" stroke="var(--m-primary)" stroke-width="2.6" stroke-linejoin="round"/>
+        <path d="M28 53.2 L32 57.2 L36 53.2" fill="none" stroke="var(--m-primary)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </svg>
+  </template>
+
+  <script>
+    (() => {
+      const CONCEPTS = [
+        {
+          id: 'concept-1',
+          file: 'concept-1-lanyard-owl.svg',
+          title: 'Concept 1 — Puhu (Lanyard Owl)',
+          caption: 'A calm, approachable desk owl wearing a burgundy office lanyard and blank ID badge — no graduation cap, no official seal.'
+        },
+        {
+          id: 'concept-2',
+          file: 'concept-2-doc-folder.svg',
+          title: 'Concept 2 — Dosya (Office Document Folder)',
+          caption: 'A tidy residence-permit document folder with a peeking checklist sheet, slim burgundy glasses, and a helpful expression.'
+        },
+        {
+          id: 'concept-3',
+          file: 'concept-3-geo-guide.svg',
+          title: 'Concept 3 — Nokta (Minimal Geometric Helper)',
+          caption: 'A symmetric geometric face badge built from circles and a rounded square, engineered for crisp legibility down to 24–28 px.'
+        }
+      ];
+
+      const SIZES = [28, 36, 56, 120];
+      const STATES = [
+        { key: 'idle', label: 'Idle (default)' },
+        { key: 'thinking', label: 'Thinking (.is-thinking)' },
+        { key: 'handoff', label: 'Handoff (.is-handoff)' }
+      ];
+
+      const root = document.getElementById('preview-root');
+
+      function cloneSvg(conceptId, sizePx, stateKey, isInteractive = false) {
+        const tpl = document.getElementById(`tpl-${conceptId}`);
+        const svg = tpl.content.firstElementChild.cloneNode(true);
+        if (stateKey === 'thinking') svg.classList.add('is-thinking');
+        if (stateKey === 'handoff') svg.classList.add('is-handoff');
+        if (isInteractive) svg.dataset.liveMascot = 'true';
+
+        const slot = document.createElement('span');
+        slot.className = 'mascot-slot';
+        slot.style.width = `${sizePx}px`;
+        slot.style.height = `${sizePx}px`;
+        slot.append(svg);
+        return slot;
+      }
+
+      function buildSurfacePanel(conceptId, mode) {
+        const panel = document.createElement('div');
+        panel.className = `surface-panel surface-${mode}`;
+
+        const heading = document.createElement('div');
+        heading.className = 'surface-title';
+        heading.innerHTML = mode === 'light'
+          ? '<span>Light surface</span><span>#ffffff · default tokens</span>'
+          : '<span>Dark surface</span><span>#161922 · dark-mode tokens</span>';
+        panel.append(heading);
+
+        for (const state of STATES) {
+          const row = document.createElement('div');
+          row.className = 'state-row';
+
+          const lbl = document.createElement('div');
+          lbl.className = 'state-row-label';
+          lbl.textContent = state.label;
+
+          const strip = document.createElement('div');
+          strip.className = 'size-strip';
+          for (const sz of SIZES) {
+            const cell = document.createElement('div');
+            cell.className = 'size-cell';
+            cell.append(cloneSvg(conceptId, sz, state.key, false));
+            const tag = document.createElement('code');
+            tag.textContent = `${sz}px`;
+            cell.append(tag);
+            strip.append(cell);
+          }
+
+          row.append(lbl, strip);
+          panel.append(row);
+        }
+
+        return panel;
+      }
+
+      function buildConceptSection(concept) {
+        const section = document.createElement('section');
+        section.className = 'concept-card';
+
+        const head = document.createElement('div');
+        head.className = 'concept-head';
+        head.innerHTML = `
+          <h2>${concept.title}</h2>
+          <span class="concept-file">${concept.file}</span>
+          <p class="concept-caption">${concept.caption}</p>
+        `;
+        section.append(head);
+
+        // 1. Scale & State Matrix (Light vs Dark)
+        const matrixWrap = document.createElement('div');
+        const matrixLabel = document.createElement('p');
+        matrixLabel.className = 'section-label';
+        matrixLabel.textContent = 'Sizes (28 / 36 / 56 / 120 px) & States on Light / Dark Backgrounds';
+
+        const surfaceGrid = document.createElement('div');
+        surfaceGrid.className = 'surface-grid';
+        surfaceGrid.append(
+          buildSurfacePanel(concept.id, 'light'),
+          buildSurfacePanel(concept.id, 'dark')
+        );
+        matrixWrap.append(matrixLabel, surfaceGrid);
+        section.append(matrixWrap);
+
+        // 2. Widget Context Mockups (LTR Turkish)
+        const widgetWrap = document.createElement('div');
+        const widgetLabel = document.createElement('p');
+        widgetLabel.className = 'section-label';
+        widgetLabel.textContent = 'Widget Context (LTR — Turkish · switches with top Idle / Thinking / Handoff toggle)';
+
+        const widgetGrid = document.createElement('div');
+        widgetGrid.className = 'widget-grid';
+
+        // Launcher Mock Box
+        const launcherBox = document.createElement('div');
+        launcherBox.className = 'mock-box';
+        const lTitle = document.createElement('div');
+        lTitle.className = 'state-row-label';
+        lTitle.textContent = 'Launcher buttons (burgundy gradient pill & 56 px mascot)';
+
+        const launcherSamples = document.createElement('div');
+        launcherSamples.className = 'launcher-samples';
+
+        // Compact pill launcher (36px mascot + "Asistan")
+        const pillBtn = document.createElement('div');
+        pillBtn.className = 'mock-launcher';
+        pillBtn.append(cloneSvg(concept.id, 36, 'idle', true));
+        const pillText = document.createElement('span');
+        pillText.textContent = 'Asistan';
+        pillBtn.append(pillText);
+
+        // Large pill launcher (56px mascot + "Asistan")
+        const pillLg = document.createElement('div');
+        pillLg.className = 'mock-launcher mock-launcher-badge';
+        pillLg.append(cloneSvg(concept.id, 56, 'idle', true));
+        const pillLgText = document.createElement('span');
+        pillLgText.textContent = 'Asistan';
+        pillLg.append(pillLgText);
+
+        // Circular 56px launcher orb
+        const orbWrap = document.createElement('div');
+        orbWrap.className = 'mock-launcher-circle';
+        const orb = document.createElement('div');
+        orb.className = 'mock-launcher-orb';
+        orb.append(cloneSvg(concept.id, 56, 'idle', true));
+        const orbCap = document.createElement('span');
+        orbCap.textContent = 'Asistan (56px)';
+        orbWrap.append(orb, orbCap);
+
+        launcherSamples.append(pillBtn, pillLg, orbWrap);
+        launcherBox.append(lTitle, launcherSamples);
+
+        // Panel Header + Assistant Bubble Mock Box
+        const panelBox = document.createElement('div');
+        panelBox.className = 'mock-panel';
+
+        const header = document.createElement('div');
+        header.className = 'mock-header';
+        const headerBrand = document.createElement('div');
+        headerBrand.className = 'mock-header-brand';
+        headerBrand.append(cloneSvg(concept.id, 36, 'idle', true));
+        const hTitle = document.createElement('h3');
+        hTitle.className = 'mock-header-title';
+        hTitle.textContent = 'Uluslararası Ofis Asistanı';
+        headerBrand.append(hTitle);
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'mock-close';
+        closeBtn.setAttribute('aria-hidden', 'true');
+        closeBtn.textContent = '✕';
+        header.append(headerBrand, closeBtn);
+
+        const notice = document.createElement('p');
+        notice.className = 'mock-notice';
+        notice.textContent = 'Yapay zekâ hata yapabilir; resmi karar Uluslararası Ofise aittir';
+
+        const log = document.createElement('div');
+        log.className = 'mock-log';
+        const msgRow = document.createElement('div');
+        msgRow.className = 'mock-msg-row';
+        msgRow.append(cloneSvg(concept.id, 28, 'idle', true));
+
+        const msgBody = document.createElement('div');
+        msgBody.className = 'mock-msg-body';
+        const bubble = document.createElement('p');
+        bubble.className = 'mock-bubble';
+        bubble.textContent = 'Merhaba! Başvuru süreci, gerekli belgeler veya başvuru durumunuz hakkında soru sorabilirsiniz.';
+        const actionBtn = document.createElement('span');
+        actionBtn.className = 'mock-action-btn';
+        actionBtn.textContent = 'Soru formuna git';
+        msgBody.append(bubble, actionBtn);
+        msgRow.append(msgBody);
+        log.append(msgRow);
+
+        panelBox.append(header, notice, log);
+
+        widgetGrid.append(launcherBox, panelBox);
+        widgetWrap.append(widgetLabel, widgetGrid);
+        section.append(widgetWrap);
+
+        // 3. RTL Sample Row (Arabic)
+        const rtlWrap = document.createElement('div');
+        const rtlLabel = document.createElement('p');
+        rtlLabel.className = 'section-label';
+        rtlLabel.textContent = 'RTL Sample Row (dir="rtl" · Arabic "المساعد")';
+
+        const rtlBox = document.createElement('div');
+        rtlBox.className = 'rtl-box';
+
+        const rtlInner = document.createElement('div');
+        rtlInner.className = 'rtl-grid';
+        rtlInner.setAttribute('dir', 'rtl');
+        rtlInner.setAttribute('lang', 'ar');
+
+        const arLauncher = document.createElement('div');
+        arLauncher.className = 'mock-launcher';
+        arLauncher.append(cloneSvg(concept.id, 36, 'idle', true));
+        const arLauncherText = document.createElement('span');
+        arLauncherText.textContent = 'المساعد';
+        arLauncher.append(arLauncherText);
+
+        const arPanel = document.createElement('div');
+        arPanel.className = 'mock-panel';
+
+        const arHeader = document.createElement('div');
+        arHeader.className = 'mock-header';
+        const arHeaderBrand = document.createElement('div');
+        arHeaderBrand.className = 'mock-header-brand';
+        arHeaderBrand.append(cloneSvg(concept.id, 36, 'idle', true));
+        const arTitle = document.createElement('h3');
+        arTitle.className = 'mock-header-title';
+        arTitle.textContent = 'مساعد المكتب الدولي';
+        arHeaderBrand.append(arTitle);
+        const arClose = document.createElement('span');
+        arClose.className = 'mock-close';
+        arClose.setAttribute('aria-hidden', 'true');
+        arClose.textContent = '✕';
+        arHeader.append(arHeaderBrand, arClose);
+
+        const arLog = document.createElement('div');
+        arLog.className = 'mock-log';
+        const arMsgRow = document.createElement('div');
+        arMsgRow.className = 'mock-msg-row';
+        arMsgRow.append(cloneSvg(concept.id, 28, 'idle', true));
+        const arMsgBody = document.createElement('div');
+        arMsgBody.className = 'mock-msg-body';
+        const arBubble = document.createElement('p');
+        arBubble.className = 'mock-bubble';
+        arBubble.textContent = 'مرحباً! يمكنك السؤال عن إجراءات التقديم أو المستندات المطلوبة أو حالة طلبك.';
+        arMsgBody.append(arBubble);
+        arMsgRow.append(arMsgBody);
+        arLog.append(arMsgRow);
+
+        arPanel.append(arHeader, arLog);
+        rtlInner.append(arLauncher, arPanel);
+        rtlBox.append(rtlInner);
+        rtlWrap.append(rtlLabel, rtlBox);
+        section.append(rtlWrap);
+
+        return section;
+      }
+
+      for (const concept of CONCEPTS) {
+        root.append(buildConceptSection(concept));
+      }
+
+      // Interactive state switcher for all widget & RTL mockups
+      const stateButtons = [...document.querySelectorAll('[data-state-btn]')];
+      function setLiveState(nextState) {
+        for (const btn of stateButtons) {
+          btn.setAttribute('aria-pressed', String(btn.dataset.stateBtn === nextState));
+        }
+        for (const svg of document.querySelectorAll('svg[data-live-mascot="true"]')) {
+          svg.classList.toggle('is-thinking', nextState === 'thinking');
+          svg.classList.toggle('is-handoff', nextState === 'handoff');
+        }
+      }
+      for (const btn of stateButtons) {
+        btn.addEventListener('click', () => setLiveState(btn.dataset.stateBtn));
+      }
+
+      // Dark mode toggle (class on body)
+      const darkBtn = document.getElementById('toggle-dark');
+      darkBtn.addEventListener('click', () => {
+        const next = !document.body.classList.contains('is-dark');
+        document.body.classList.toggle('is-dark', next);
+        darkBtn.setAttribute('aria-pressed', String(next));
+      });
+
+      // Reduced motion preview toggle (class on body)
+      const motionBtn = document.getElementById('toggle-motion');
+      motionBtn.addEventListener('click', () => {
+        const next = !document.body.classList.contains('is-reduced-motion');
+        document.body.classList.toggle('is-reduced-motion', next);
+        motionBtn.setAttribute('aria-pressed', String(next));
+      });
+    })();
+  </script>
+</body>
+</html>

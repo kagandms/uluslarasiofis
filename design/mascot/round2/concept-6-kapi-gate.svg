@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="mascot-svg mascot-gate" aria-hidden="true" focusable="false">
+  <title>Kapı — Welcoming Arched Gate Mascot</title>
+  <style>
+    .mascot-gate {
+      --m-primary: var(--public-burgundy, #7e1830);
+      --m-primary-light: var(--public-burgundy-light, #9a203d);
+      --m-outline: var(--mascot-outline, var(--public-burgundy-hover, #641126));
+      --m-soft: var(--public-burgundy-soft, #fbf2f4);
+      --m-border: var(--public-burgundy-border, #e2c0c8);
+      --m-stone: var(--mascot-stone, #f6eef0);
+      --m-glow: var(--mascot-glow, #fff6ea);
+      --m-surface: var(--mascot-surface, #fff9fa);
+      --m-card: var(--mascot-card, #ffffff);
+      --m-ink: var(--mascot-ink, #241b22);
+      --m-accent: var(--mascot-accent, #d89b27);
+    }
+    .mascot-gate #state-thinking,
+    .mascot-gate #state-handoff { display: none; }
+    .mascot-gate.is-thinking #state-idle,
+    .mascot-gate.is-thinking #state-handoff { display: none; }
+    .mascot-gate.is-thinking #state-thinking { display: inline; }
+    .mascot-gate.is-handoff #state-idle,
+    .mascot-gate.is-handoff #state-thinking { display: none; }
+    .mascot-gate.is-handoff #state-handoff { display: inline; }
+    .mascot-gate .gate-dot {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: gateDotBob 1.35s ease-in-out infinite;
+    }
+    .mascot-gate .gate-dot-2 { animation-delay: 0.2s; }
+    .mascot-gate .gate-dot-3 { animation-delay: 0.4s; }
+    @keyframes gateDotBob {
+      0%, 80%, 100% { opacity: 0.35; transform: translateY(0); }
+      40% { opacity: 1; transform: translateY(-2px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .mascot-gate .gate-dot { animation: none; opacity: 1; transform: none; }
+    }
+  </style>
+  <g class="gate-base">
+    <path d="M11 52 L11 27 A21 21 0 0 1 53 27 L53 52 Z" fill="var(--m-stone)" stroke="var(--m-outline)" stroke-width="2.4" stroke-linejoin="round"/>
+    <rect x="8.5" y="25.5" width="7" height="3.6" rx="1.4" fill="var(--m-surface)" stroke="var(--m-outline)" stroke-width="1.8"/>
+    <rect x="48.5" y="25.5" width="7" height="3.6" rx="1.4" fill="var(--m-surface)" stroke="var(--m-outline)" stroke-width="1.8"/>
+    <path d="M28 5.4 L36 5.4 L34.6 12.2 L29.4 12.2 Z" fill="var(--m-primary)" stroke="var(--m-outline)" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M16.8 52 L16.8 27.5 A15.2 15.2 0 0 1 47.2 27.5 L47.2 52 Z" fill="var(--m-card)" stroke="var(--m-primary)" stroke-width="2.2" stroke-linejoin="round"/>
+    <rect x="7" y="51.5" width="50" height="5" rx="2.4" fill="var(--m-surface)" stroke="var(--m-outline)" stroke-width="2.1"/>
+    <line x1="17" y1="54" x2="47" y2="54" stroke="var(--m-border)" stroke-width="1.8" stroke-linecap="round"/>
+  </g>
+  <g id="state-idle">
+    <path d="M16.8 51.5 L16.8 27.5 C16.8 22.2, 19.2 18.2, 21.8 16.2 L21.8 49.8 Z" fill="var(--m-primary)" stroke="var(--m-outline)" stroke-width="1.7" stroke-linejoin="round"/>
+    <path d="M47.2 51.5 L47.2 27.5 C47.2 22.2, 44.8 18.2, 42.2 16.2 L42.2 49.8 Z" fill="var(--m-primary)" stroke="var(--m-outline)" stroke-width="1.7" stroke-linejoin="round"/>
+    <circle cx="20.1" cy="35.8" r="1.15" fill="var(--m-accent)"/>
+    <circle cx="43.9" cy="35.8" r="1.15" fill="var(--m-accent)"/>
+    <circle cx="24.6" cy="34.2" r="1.7" fill="var(--m-border)" opacity="0.75"/>
+    <circle cx="39.4" cy="34.2" r="1.7" fill="var(--m-border)" opacity="0.75"/>
+    <circle cx="26.5" cy="29.4" r="2.6" fill="var(--m-ink)"/>
+    <circle cx="37.5" cy="29.4" r="2.6" fill="var(--m-ink)"/>
+    <circle cx="27.3" cy="28.5" r="0.9" fill="#ffffff"/>
+    <circle cx="38.3" cy="28.5" r="0.9" fill="#ffffff"/>
+    <path d="M27.6 37 Q32 41.2 36.4 37" fill="none" stroke="var(--m-primary)" stroke-width="2.4" stroke-linecap="round"/>
+  </g>
+  <g id="state-thinking">
+    <path d="M16.8 51.5 L16.8 27.5 C16.8 22.2, 19.2 18.2, 21.8 16.2 L21.8 49.8 Z" fill="var(--m-primary)" stroke="var(--m-outline)" stroke-width="1.7" stroke-linejoin="round"/>
+    <path d="M47.2 51.5 L47.2 27.5 C47.2 22.2, 44.8 18.2, 42.2 16.2 L42.2 49.8 Z" fill="var(--m-primary)" stroke="var(--m-outline)" stroke-width="1.7" stroke-linejoin="round"/>
+    <circle cx="20.1" cy="35.8" r="1.15" fill="var(--m-accent)"/>
+    <circle cx="43.9" cy="35.8" r="1.15" fill="var(--m-accent)"/>
+    <circle cx="26.5" cy="27.2" r="2.5" fill="var(--m-ink)"/>
+    <circle cx="37.5" cy="27.2" r="2.5" fill="var(--m-ink)"/>
+    <circle cx="27.3" cy="26.3" r="0.85" fill="#ffffff"/>
+    <circle cx="38.3" cy="26.3" r="0.85" fill="#ffffff"/>
+    <circle class="gate-dot gate-dot-1" cx="25.2" cy="39.4" r="2.1" fill="var(--m-primary)"/>
+    <circle class="gate-dot gate-dot-2" cx="32" cy="39.4" r="2.1" fill="var(--m-primary)"/>
+    <circle class="gate-dot gate-dot-3" cx="38.8" cy="39.4" r="2.1" fill="var(--m-primary)"/>
+  </g>
+  <g id="state-handoff">
+    <path d="M18 51.5 L18 27.8 A14 14 0 0 1 46 27.8 L46 51.5 Z" fill="var(--m-glow)"/>
+    <path d="M16.8 26.5 L16.8 51.5 L8.4 54.2 L8.4 29.2 Z" fill="var(--m-primary)" stroke="var(--m-outline)" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M47.2 26.5 L47.2 51.5 L55.6 54.2 L55.6 29.2 Z" fill="var(--m-primary)" stroke="var(--m-outline)" stroke-width="1.8" stroke-linejoin="round"/>
+    <circle cx="11.2" cy="41.2" r="1.25" fill="var(--m-accent)"/>
+    <circle cx="52.8" cy="41.2" r="1.25" fill="var(--m-accent)"/>
+    <circle cx="26.5" cy="31.2" r="2.6" fill="var(--m-ink)"/>
+    <circle cx="37.5" cy="31.2" r="2.6" fill="var(--m-ink)"/>
+    <circle cx="27.3" cy="30.3" r="0.9" fill="#ffffff"/>
+    <circle cx="38.3" cy="30.3" r="0.9" fill="#ffffff"/>
+    <path d="M27.6 38.4 Q32 42 36.4 38.4" fill="none" stroke="var(--m-primary)" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M22.5 51.5 L32 61.5 L41.5 51.5 Z" fill="var(--m-card)" stroke="var(--m-primary)" stroke-width="2.3" stroke-linejoin="round"/>
+    <path d="M28.2 53.8 L32 57.6 L35.8 53.8" fill="none" stroke="var(--m-primary)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
