@@ -72,6 +72,192 @@ export const CHATBOT_FIXED_TEXTS = Object.freeze({
     })
 });
 
+const UNDERSTOOD_FACTS_TEMPLATE = Object.freeze({
+    tr: Object.freeze({
+        prefix: 'Anladığım bilgiler: ',
+        separator: ' · ',
+        suffix: '. Yanlışsa lütfen düzeltin.'
+    }),
+    en: Object.freeze({
+        prefix: 'Understood details: ',
+        separator: ' · ',
+        suffix: '. Please correct me if anything is wrong.'
+    }),
+    ru: Object.freeze({
+        prefix: 'Как я понял(а): ',
+        separator: ' · ',
+        suffix: '. Если что-то неверно, пожалуйста, поправьте.'
+    }),
+    tk: Object.freeze({
+        prefix: 'Düşünen maglumatlarym: ',
+        separator: ' · ',
+        suffix: '. Nädogry bolsa, düzediň.'
+    }),
+    ar: Object.freeze({
+        prefix: 'المعلومات التي فهمتها: ',
+        separator: ' · ',
+        suffix: '. إذا كان هناك خطأ يرجى التصحيح.'
+    })
+});
+
+const UNDERSTOOD_FACT_LABELS = Object.freeze({
+    tr: Object.freeze({
+        application_type: Object.freeze({
+            initial: 'ilk başvuru',
+            renewal: 'uzatma başvurusu',
+            transition: 'geçiş başvurusu'
+        }),
+        is_under_18: Object.freeze({
+            true: '18 yaşından küçük',
+            false: '18 yaşından büyük'
+        }),
+        accommodation_type: Object.freeze({
+            dormitory: 'yurtta kalıyor',
+            rental_contract: 'kira sözleşmesi ile kalıyor',
+            own_home: 'kendi evinde kalıyor',
+            hotel: 'otelde kalıyor',
+            undertaking: 'taahhütname ile kalıyor',
+            residence_certificate: 'adres kaydı ile kalıyor'
+        }),
+        host_is_married: Object.freeze({
+            yes: 'taahhüt veren evli',
+            no: 'taahhüt veren evli değil'
+        }),
+        host_is_turkish: Object.freeze({
+            yes: 'taahhüt veren Türk vatandaşı',
+            no: 'taahhüt veren Türk vatandaşı değil'
+        }),
+        fingerprint_status: Object.freeze({
+            registered: 'parmak izi kayıtlı',
+            not_registered: 'parmak izi kayıtlı değil'
+        })
+    }),
+    en: Object.freeze({
+        application_type: Object.freeze({
+            initial: 'initial application',
+            renewal: 'renewal application',
+            transition: 'transition application'
+        }),
+        is_under_18: Object.freeze({
+            true: 'under 18',
+            false: '18 or older'
+        }),
+        accommodation_type: Object.freeze({
+            dormitory: 'staying in a dormitory',
+            rental_contract: 'staying with a rental contract',
+            own_home: 'staying in own home',
+            hotel: 'staying at a hotel',
+            undertaking: 'staying with a host via undertaking',
+            residence_certificate: 'using a registered address'
+        }),
+        host_is_married: Object.freeze({
+            yes: 'host is married',
+            no: 'host is not married'
+        }),
+        host_is_turkish: Object.freeze({
+            yes: 'host is a Turkish citizen',
+            no: 'host is not a Turkish citizen'
+        }),
+        fingerprint_status: Object.freeze({
+            registered: 'fingerprints registered',
+            not_registered: 'fingerprints not registered'
+        })
+    }),
+    ru: Object.freeze({
+        application_type: Object.freeze({
+            initial: 'первичная заявка',
+            renewal: 'продление',
+            transition: 'переход'
+        }),
+        is_under_18: Object.freeze({
+            true: 'младше 18 лет',
+            false: '18 лет или старше'
+        }),
+        accommodation_type: Object.freeze({
+            dormitory: 'проживание в общежитии',
+            rental_contract: 'арендованное жильё по договору',
+            own_home: 'собственное жильё',
+            hotel: 'проживание в отеле',
+            undertaking: 'у принимающего лица по обязательству',
+            residence_certificate: 'регистрация по адресу'
+        }),
+        host_is_married: Object.freeze({
+            yes: 'принимающее лицо в браке',
+            no: 'принимающее лицо не в браке'
+        }),
+        host_is_turkish: Object.freeze({
+            yes: 'принимающее лицо — гражданин Турции',
+            no: 'принимающее лицо не гражданин Турции'
+        }),
+        fingerprint_status: Object.freeze({
+            registered: 'отпечатки пальцев зарегистрированы',
+            not_registered: 'отпечатки пальцев не зарегистрированы'
+        })
+    }),
+    tk: Object.freeze({
+        application_type: Object.freeze({
+            initial: 'ilkinji arza',
+            renewal: 'uzaltma arzasy',
+            transition: 'geçiş arzasy'
+        }),
+        is_under_18: Object.freeze({
+            true: '18 ýaşdan kiçi',
+            false: '18 ýaş ýa-da uly'
+        }),
+        accommodation_type: Object.freeze({
+            dormitory: 'umumy ýaşaýyş jaýynda galýar',
+            rental_contract: 'kärende şertnamasy bilen galýar',
+            own_home: 'öz öýünde galýar',
+            hotel: 'myhmanhanada galýar',
+            undertaking: 'borçnama bilen galýar',
+            residence_certificate: 'hasaba alnan salgy bilen'
+        }),
+        host_is_married: Object.freeze({
+            yes: 'borçnama berýän öýlenen',
+            no: 'borçnama berýän öýlenmedik'
+        }),
+        host_is_turkish: Object.freeze({
+            yes: 'borçnama berýän Türkiýäniň raýaty',
+            no: 'borçnama berýän Türkiýäniň raýaty däl'
+        }),
+        fingerprint_status: Object.freeze({
+            registered: 'barmak yzy hasaba alnan',
+            not_registered: 'barmak yzy hasaba alynmadyk'
+        })
+    }),
+    ar: Object.freeze({
+        application_type: Object.freeze({
+            initial: 'طلب أولي',
+            renewal: 'طلب تمديد',
+            transition: 'طلب انتقال'
+        }),
+        is_under_18: Object.freeze({
+            true: 'أقل من 18 سنة',
+            false: '18 سنة أو أكثر'
+        }),
+        accommodation_type: Object.freeze({
+            dormitory: 'السكن في سكن طلابي',
+            rental_contract: 'السكن بعقد إيجار',
+            own_home: 'السكن في منزل مملوك',
+            hotel: 'السكن في فندق',
+            undertaking: 'السكن لدى مضيف بتعهد',
+            residence_certificate: 'عنوان مسجل'
+        }),
+        host_is_married: Object.freeze({
+            yes: 'مقدم التعهد متزوج',
+            no: 'مقدم التعهد غير متزوج'
+        }),
+        host_is_turkish: Object.freeze({
+            yes: 'مقدم التعهد مواطن تركي',
+            no: 'مقدم التعهد غير تركي'
+        }),
+        fingerprint_status: Object.freeze({
+            registered: 'البصمات مسجلة',
+            not_registered: 'البصمات غير مسجلة'
+        })
+    })
+});
+
 const MISSING_DOCUMENT_FIELD_ORDER = Object.freeze([
     'application_type',
     'is_under_18',
@@ -162,6 +348,47 @@ export function buildMissingDocumentsQuestion(missingFields, language = 'tr') {
     const separator = resolvedLanguage === 'ar' ? '، ' : ', ';
     const questionMark = resolvedLanguage === 'ar' ? '؟' : '?';
     return `${getChatbotFixedText('missingDocumentsIntro', resolvedLanguage)}${parts.join(separator)}${questionMark}`;
+}
+
+/**
+ * Builds the fixed localized one-line summary of the facts used for a deterministic document list,
+ * inviting the student to correct any misunderstood detail.
+ * @param {object|null|undefined} facts Facts used for `get_required_documents`.
+ * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
+ * @returns {string} Localized summary line, or empty string when no valid facts were supplied.
+ */
+export function buildUnderstoodFactsLine(facts, language = 'tr') {
+    if (!facts || typeof facts !== 'object') return '';
+    const resolvedLanguage = resolveLanguage(language);
+    const template = UNDERSTOOD_FACTS_TEMPLATE[resolvedLanguage];
+    const labels = UNDERSTOOD_FACT_LABELS[resolvedLanguage];
+    const parts = [];
+
+    if (typeof facts.application_type === 'string' && Object.hasOwn(labels.application_type, facts.application_type)) {
+        parts.push(labels.application_type[facts.application_type]);
+    }
+    if (typeof facts.is_under_18 === 'boolean') {
+        parts.push(labels.is_under_18[facts.is_under_18 ? 'true' : 'false']);
+    }
+    if (typeof facts.accommodation_type === 'string' && Object.hasOwn(labels.accommodation_type, facts.accommodation_type)) {
+        parts.push(labels.accommodation_type[facts.accommodation_type]);
+    }
+    if (facts.accommodation_type === 'undertaking') {
+        if (typeof facts.host_is_married === 'string' && Object.hasOwn(labels.host_is_married, facts.host_is_married)) {
+            parts.push(labels.host_is_married[facts.host_is_married]);
+        }
+        if (typeof facts.host_is_turkish === 'string' && Object.hasOwn(labels.host_is_turkish, facts.host_is_turkish)) {
+            parts.push(labels.host_is_turkish[facts.host_is_turkish]);
+        }
+    }
+    if (facts.application_type === 'transition') {
+        if (typeof facts.fingerprint_status === 'string' && Object.hasOwn(labels.fingerprint_status, facts.fingerprint_status)) {
+            parts.push(labels.fingerprint_status[facts.fingerprint_status]);
+        }
+    }
+
+    if (parts.length === 0) return '';
+    return `${template.prefix}${parts.join(template.separator)}${template.suffix}`;
 }
 
 /**
