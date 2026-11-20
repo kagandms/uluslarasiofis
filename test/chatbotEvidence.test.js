@@ -1791,3 +1791,315 @@ test('round 8 fix 4: comma-terminated age phrases, cross-turn host context, and 
         assert.deepEqual(result.__uncertain, []);
     }
 });
+
+test('R3 finding 1: split positive/negative quote stems, token-start stem boundaries, transition перевод context, and age context/negation in verifyQuotedFact', () => {
+    // 1. Non-Turkish citizen / foreign host quotes must not verify host_is_turkish: 'yes', and verify 'no'
+    for (const item of [
+        { lang: 'en', text: 'My host is a Syrian citizen' },
+        { lang: 'tr', text: 'Ev sahibim yabancı' },
+        { lang: 'ru', text: 'Хозяин гражданин Казахстана' },
+        { lang: 'ar', text: 'المضيف مواطن سوري' }
+    ]) {
+        assert.equal(
+            verifyQuotedFact('host_is_turkish', 'yes', item.text, [item.text], item.lang),
+            false,
+            `Expected host_is_turkish=yes to be rejected for: ${item.text}`
+        );
+        assert.equal(
+            verifyQuotedFact('host_is_turkish', 'no', item.text, [item.text], item.lang),
+            true,
+            `Expected host_is_turkish=no to be accepted for: ${item.text}`
+        );
+    }
+
+    // 2. Positive spouse stem ('wife') must not verify host_is_married: 'no'
+    assert.equal(
+        verifyQuotedFact('host_is_married', 'no', 'I stay with my uncle and his wife', ['I stay with my uncle and his wife'], 'en'),
+        false
+    );
+    assert.equal(
+        verifyQuotedFact('host_is_married', 'yes', 'I stay with my uncle and his wife', ['I stay with my uncle and his wife'], 'en'),
+        true
+    );
+
+    // 3. Biometric photos must not verify fingerprint_status for either registered or not_registered
+    for (const item of [
+        { lang: 'tr', text: 'Biyometrik fotoğrafım hazır' },
+        { lang: 'en', text: 'I have biometric photos' },
+        { lang: 'ru', text: 'Биометрическое фото готово' }
+    ]) {
+        assert.equal(
+            verifyQuotedFact('fingerprint_status', 'registered', item.text, [item.text], item.lang),
+            false,
+            `Biometric photo must not verify registered: ${item.text}`
+        );
+        assert.equal(
+            verifyQuotedFact('fingerprint_status', 'not_registered', item.text, [item.text], item.lang),
+            false,
+            `Biometric photo must not verify not_registered: ${item.text}`
+        );
+    }
+
+    // Bare fingerprint mention without negative stem or negation must not verify not_registered
+    assert.equal(
+        verifyQuotedFact('fingerprint_status', 'not_registered', 'parmak izi randevusu', ['parmak izi randevusu aldım'], 'tr'),
+        false
+    );
+
+    // 4. Token-start stem matching: substrings inside unrelated words must never match
+    for (const item of [
+        { fact: 'accommodation_type', value: 'rental_contract', lang: 'en', text: 'I live with my parents' },
+        { fact: 'accommodation_type', value: 'rental_contract', lang: 'en', text: 'my current passport' },
+        { fact: 'accommodation_type', value: 'rental_contract', lang: 'en', text: 'different documents' },
+        { fact: 'accommodation_type', value: 'hotel', lang: 'ru', text: 'Я хотел узнать какие документы нужны' },
+        { fact: 'accommodation_type', value: 'undertaking', lang: 'ru', text: 'Я поступил в университет' },
+        { fact: 'accommodation_type', value: 'undertaking', lang: 'ru', text: 'инженерный факультет' },
+        { fact: 'accommodation_type', value: 'undertaking', lang: 'ar', text: 'عمري 20' },
+        { fact: 'accommodation_type', value: 'undertaking', lang: 'ar', text: 'نعم' },
+        { fact: 'accommodation_type', value: 'undertaking', lang: 'ar', text: 'عندي سؤال' },
+        { fact: 'accommodation_type', value: 'own_home', lang: 'ar', text: 'المملكة العربية السعودية' },
+        { fact: 'application_type', value: 'transition', lang: 'ru', text: 'нотариальный перевод паспорта' }
+    ]) {
+        assert.equal(
+            verifyQuotedFact(item.fact, item.value, item.text, [item.text], item.lang),
+            false,
+            `Expected token-start rejection for ${item.fact}=${item.value} on: ${item.text}`
+        );
+    }
+
+    // Russian 'перевод' with transition context still verifies transition
+    assert.equal(
+        verifyQuotedFact('application_type', 'transition', 'перевод ВНЖ на студенческий', ['перевод ВНЖ на студенческий'], 'ru'),
+        true
+    );
+
+    // 5. Age from quotes requires age context and applies negation window to is_under_18=false
+    for (const item of [
+        { value: true, lang: 'tr', text: '1. sınıf öğrencisiyim' },
+        { value: true, lang: 'tr', text: '2 belge' },
+        { value: false, lang: 'tr', text: "Randevum 25 Kasım'da" },
+        { value: false, lang: 'tr', text: '20 yaşında değilim' },
+        { value: false, lang: 'en', text: 'I am not 20' },
+        { value: false, lang: 'ru', text: 'Мне не 20 лет' }
+    ]) {
+        assert.equal(
+            verifyQuotedFact('is_under_18', item.value, item.text, [item.text], item.lang),
+            false,
+            `Expected age quote rejection for is_under_18=${item.value} on: ${item.text}`
+        );
+    }
+
+    // Explicit double-negative adult phrases still verify is_under_18=false
+    assert.equal(
+        verifyQuotedFact('is_under_18', false, '18 yaşından küçük değilim', ['18 yaşından küçük değilim'], 'tr'),
+        true
+    );
+    assert.equal(
+        verifyQuotedFact('is_under_18', false, 'I am not under 18', ['I am not under 18'], 'en'),
+        true
+    );
+});
+
+test('R3 finding 2: informational WH/document questions and comma-split yes/no questions yield no facts', () => {
+    const infoQuestions = [
+        { lang: 'tr', text: 'Taahhütname nedir?', uncertainKey: 'accommodation_type' },
+        { lang: 'tr', text: 'Uzatma başvurusu nasıl yapılır?', uncertainKey: 'application_type' },
+        { lang: 'tr', text: 'Yurt belgesi nereden alınır?', uncertainKey: 'accommodation_type' }
+    ];
+    for (const item of infoQuestions) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.deepEqual(result, {}, `Expected no facts for informational question: ${item.text}`);
+        assert.ok(result.__uncertain.includes(item.uncertainKey), `Expected ${item.uncertainKey} in __uncertain for: ${item.text}`);
+    }
+
+    const combinedInfoTurn = extractSupportedDocumentFacts(
+        ['How does renewal work, where is the dormitory, and what documents are needed if under 18?'],
+        'en'
+    );
+    assert.deepEqual(combinedInfoTurn, {});
+    assert.ok(combinedInfoTurn.__uncertain.includes('application_type'));
+    assert.ok(combinedInfoTurn.__uncertain.includes('accommodation_type'));
+    assert.ok(combinedInfoTurn.__uncertain.includes('is_under_18'));
+
+    const commaSplitQuestions = [
+        {
+            lang: 'en',
+            text: 'Do I choose initial application, is 17 under 18, and is dormitory valid?',
+            uncertainKeys: ['application_type', 'is_under_18', 'accommodation_type']
+        },
+        {
+            lang: 'en',
+            text: 'Are you asking if I live in a dorm, or which documents I need?',
+            uncertainKeys: ['accommodation_type']
+        },
+        {
+            lang: 'tr',
+            text: 'İlk başvuru, 19 yaş, yurt mu?',
+            uncertainKeys: ['application_type', 'accommodation_type']
+        },
+        {
+            lang: 'en',
+            text: 'Please share: whether you are under 18 (yes / no), and your accommodation type.',
+            uncertainKeys: ['is_under_18']
+        }
+    ];
+    for (const item of commaSplitQuestions) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.deepEqual(result, {}, `Expected no facts for comma-split question: ${item.text}`);
+        for (const key of item.uncertainKeys) {
+            assert.ok(result.__uncertain.includes(key), `Expected ${key} in __uncertain for: ${item.text}`);
+        }
+    }
+});
+
+test('R3 finding 3: normalizeForEvidence strips Unicode format characters (\\p{Cf}) so zero-width/soft-hyphen cannot bypass negation', () => {
+    assert.equal(normalizeForEvidence('yurtta de\u200Bğil'), 'yurtta degil');
+    assert.equal(normalizeForEvidence('yurtta kalmı\u00ADyorum'), 'yurtta kalmiyorum');
+    assert.equal(normalizeForEvidence('\uFEFFuzat\u200C\u200D\u2060mıyorum'), 'uzatmiyorum');
+
+    const zwspDorm = extractSupportedDocumentFacts(['yurtta de\u200Bğil'], 'tr');
+    assert.deepEqual(zwspDorm, {});
+    assert.deepEqual(zwspDorm.__uncertain, ['accommodation_type']);
+    assert.equal(hasEvidenceRisk(['yurtta de\u200Bğil'], 'tr'), true);
+
+    const shyDorm = extractSupportedDocumentFacts(['yurtta kalmı\u00ADyorum'], 'tr');
+    assert.deepEqual(shyDorm, {});
+    assert.deepEqual(shyDorm.__uncertain, ['accommodation_type']);
+    assert.equal(hasEvidenceRisk(['yurtta kalmı\u00ADyorum'], 'tr'), true);
+
+    const zwspRenewal = extractSupportedDocumentFacts(['uzat\u200Bmıyorum'], 'tr');
+    assert.deepEqual(zwspRenewal, {});
+    assert.deepEqual(zwspRenewal.__uncertain, ['application_type']);
+    assert.equal(hasEvidenceRisk(['uzat\u200Bmıyorum'], 'tr'), true);
+});
+
+test('R3 finding 6: student self-descriptions (Türk\'üm, моя жена, عندي زوجة, eşim, cross-turn o zaman/o belge/ما هو) never misattribute to host', () => {
+    assert.equal(normalizeForEvidence("Türk'üm"), 'turkum');
+    assert.equal(normalizeForEvidence('Türk\u2019üm'), 'turkum');
+    assert.equal(normalizeForEvidence("TC'liyim"), 'tcliyim');
+
+    const trApostropheTurns = ["Akrabamın yanında kalıyorum, Türk'üm"];
+    const trApostropheFacts = extractSupportedDocumentFacts(trApostropheTurns, 'tr');
+    assert.deepEqual(trApostropheFacts, { accommodation_type: 'undertaking' });
+    assert.equal(trApostropheFacts.host_is_turkish, undefined);
+    assert.equal(verifyQuotedFact('host_is_turkish', 'yes', "Türk'üm", trApostropheTurns, 'tr'), false);
+
+    const ruWifeTurns = ['Живу у дяди, моя жена тоже студентка'];
+    const ruWifeFacts = extractSupportedDocumentFacts(ruWifeTurns, 'ru');
+    assert.deepEqual(ruWifeFacts, { accommodation_type: 'undertaking' });
+    assert.equal(ruWifeFacts.host_is_married, undefined);
+    assert.equal(verifyQuotedFact('host_is_married', 'yes', 'моя жена', ruWifeTurns, 'ru'), false);
+
+    const arWifeTurns = ['اسكن عند قريبي، عندي زوجة'];
+    const arWifeFacts = extractSupportedDocumentFacts(arWifeTurns, 'ar');
+    assert.deepEqual(arWifeFacts, { accommodation_type: 'undertaking' });
+    assert.equal(arWifeFacts.host_is_married, undefined);
+    assert.equal(verifyQuotedFact('host_is_married', 'yes', 'عندي زوجة', arWifeTurns, 'ar'), false);
+
+    const trSpouseTurns = ['Akrabamın yanında kalıyorum, eşim de öğrenci'];
+    const trSpouseFacts = extractSupportedDocumentFacts(trSpouseTurns, 'tr');
+    assert.deepEqual(trSpouseFacts, { accommodation_type: 'undertaking' });
+    assert.equal(trSpouseFacts.host_is_married, undefined);
+    assert.equal(verifyQuotedFact('host_is_married', 'yes', 'eşim', trSpouseTurns, 'tr'), false);
+
+    // Cross-turn Turkish demonstrative 'o' before non-host nouns and Arabic copula 'ما هو'
+    for (const turns of [
+        ['Akrabamın yanında kalıyorum', "O zaman Türk'üm ve bekarım"],
+        ['Akrabamın yanında kalıyorum', 'O yüzden ben bekarım'],
+        ['Akrabamın yanında kalıyorum', 'O belge hazır, evliyim'],
+        ['Akrabamın yanında kalıyorum', 'O evrak tamam, Türk vatandaşıyım'],
+        ['Akrabamın yanında kalıyorum', 'O konu hakkında, bekarım'],
+        ['Akrabamın yanında kalıyorum', 'O durumda evliyim'],
+        ['Akrabamın yanında kalıyorum', 'O halde bekarım']
+    ]) {
+        const result = extractSupportedDocumentFacts(turns, 'tr');
+        assert.equal(result.host_is_married, undefined, `Unexpected host_is_married for: ${turns.join(' | ')}`);
+        assert.equal(result.host_is_turkish, undefined, `Unexpected host_is_turkish for: ${turns.join(' | ')}`);
+    }
+
+    const arCrossTurnCopula = ['أسكن عند قريبي', 'ما هو المطلوب؟ عندي زوجة'];
+    const arCrossTurnFacts = extractSupportedDocumentFacts(arCrossTurnCopula, 'ar');
+    assert.equal(arCrossTurnFacts.host_is_married, undefined);
+    assert.equal(verifyQuotedFact('host_is_married', 'yes', 'عندي زوجة', arCrossTurnCopula, 'ar'), false);
+});
+
+test('R3 finding 7: Turkmen ýanynda counts as undertaking only after a person word, never after places or objects', () => {
+    const schoolNextToDorm = extractSupportedDocumentFacts(
+        ['Mekdebiň ýanynda umumy ýaşaýyş jaýynda ýaşaýaryn'],
+        'tk'
+    );
+    assert.deepEqual(schoolNextToDorm, { accommodation_type: 'dormitory' });
+    assert.deepEqual(schoolNextToDorm.__uncertain, []);
+
+    const besidesPassport = extractSupportedDocumentFacts(
+        ['Pasportumyň ýanynda näme resminama gerek?'],
+        'tk'
+    );
+    assert.deepEqual(besidesPassport, {});
+    assert.deepEqual(besidesPassport.__uncertain, []);
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'undertaking', 'Pasportumyň ýanynda', ['Pasportumyň ýanynda näme resminama gerek?'], 'tk'),
+        false
+    );
+
+    for (const text of [
+        'dostumyň ýanynda ýaşaýaryn',
+        'tanyşyň ýanynda ýaşaýaryn',
+        'garyndaşymyň ýanynda ýaşaýaryn',
+        'daýzamyň ýanynda ýaşaýaryn',
+        'daýymyň ýanynda ýaşaýaryn',
+        'bir adamyň ýanynda galýaryn'
+    ]) {
+        const res = extractSupportedDocumentFacts([text], 'tk');
+        assert.equal(res.accommodation_type, 'undertaking', `Expected undertaking for: ${text}`);
+    }
+});
+
+test('R3 finding 8: accommodation followed by contrast/correction marker, move-out verb, or second stay location goes to __uncertain', () => {
+    const blindMoveOut = 'Merhaba, ilk başvurumu yapacağım, 19 yaşındayım. Yurtta kalıyorum ama aslında geçen hafta çıktım, şu an bir arkadaşın evindeyim, kira sözleşmesi de yok. Hangi belgeler lazım?';
+    const blindResult = extractSupportedDocumentFacts([blindMoveOut], 'tr');
+    assert.deepEqual(blindResult, {
+        application_type: 'initial',
+        is_under_18: false
+    });
+    assert.equal(blindResult.accommodation_type, undefined);
+    assert.deepEqual(blindResult.__uncertain, ['accommodation_type']);
+    assert.equal(hasEvidenceRisk([blindMoveOut], 'tr'), true);
+    assert.equal(
+        verifyQuotedFact('accommodation_type', 'dormitory', 'Yurtta kalıyorum', [blindMoveOut], 'tr'),
+        false
+    );
+
+    const moveOutCases = [
+        // tr
+        { lang: 'tr', text: 'Yurtta kalıyorum ama geçen hafta çıktım' },
+        { lang: 'tr', text: 'Yurtta kalıyordum, fakat taşındım' },
+        { lang: 'tr', text: 'Otelde kalıyordum, ancak ayrıldım' },
+        { lang: 'tr', text: 'Yurtta kalıyordum, şu an arkadaşın evindeyim' },
+        // en
+        { lang: 'en', text: 'I live in a dorm, but actually I moved out last week' },
+        { lang: 'en', text: 'I was in a dorm, I left and now I am at a friend\'s place' },
+        { lang: 'en', text: 'I stayed at a hotel, not anymore, moved to a friend\'s house' },
+        // ru
+        { lang: 'ru', text: 'Жил в общежитии, но на самом деле на прошлой неделе съехал' },
+        { lang: 'ru', text: 'Жила в общежитии, переехала, сейчас у друга' },
+        { lang: 'ru', text: 'Жил в отеле, уже не там' },
+        // tk
+        { lang: 'tk', text: 'Umumy ýaşaýyş jaýynda galýaryn, ýöne geçen hepde çykdym' },
+        { lang: 'tk', text: 'Umumy ýaşaýyş jaýynda galýardym, emma göçdüm, häzir dostumyň öýünde' },
+        // ar
+        { lang: 'ar', text: 'أسكن في السكن الطلابي لكن طلعت الأسبوع الماضي' },
+        { lang: 'ar', text: 'كنت في السكن الطلابي بس انتقلت وحاليا أنا عند صديق' },
+        { lang: 'ar', text: 'كنت أسكن في فندق، الآن عند صديق' }
+    ];
+
+    for (const item of moveOutCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.equal(result.accommodation_type, undefined, `Expected no accommodation_type for ${item.lang}: ${item.text}`);
+        assert.ok(
+            result.__uncertain.includes('accommodation_type'),
+            `Expected accommodation_type in __uncertain for ${item.lang}: ${item.text}`
+        );
+        assert.equal(hasEvidenceRisk([item.text], item.lang), true, `Expected hasEvidenceRisk=true for ${item.lang}: ${item.text}`);
+    }
+});
