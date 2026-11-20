@@ -1,12 +1,15 @@
 import { CHATBOT_MESSAGES } from './i18n/chatbot-messages.js';
 import { INQUIRY_MESSAGES } from './i18n/inquiry-messages.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
+import { createTopi, ensureTopiStyles, setTopiState } from './topiMascot.js';
 
 export const CHATBOT_PILOT_QUERY_GATE = 'bot';
 
 const CHAT_ENDPOINT = '/api/public/chat';
 const MAX_MESSAGES_IN_REQUEST = 10;
 const MAX_MESSAGE_LENGTH = 500;
+const HELLO_DURATION_MS = 2400;
+const REPLY_STATE_DURATION_MS = 4000;
 const activeControllers = new WeakMap();
 
 function normalizeLocale(locale) {
@@ -67,23 +70,22 @@ function getFocusableElements(container) {
     );
 }
 
-function createLauncherIcon(document) {
-    const svgNs = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(svgNs, 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('width', '18');
-    svg.setAttribute('height', '18');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('stroke', 'currentColor');
-    svg.setAttribute('stroke-width', '2');
-    svg.setAttribute('stroke-linecap', 'round');
-    svg.setAttribute('stroke-linejoin', 'round');
-    svg.setAttribute('aria-hidden', 'true');
-
-    const path = document.createElementNS(svgNs, 'path');
-    path.setAttribute('d', 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z');
-    svg.append(path);
-    return svg;
+function resolveReplyMascotState(actions) {
+    if (!Array.isArray(actions)) return 'understood';
+    if (actions.some((action) => action && typeof action === 'object' && action.type === 'inquiry')) {
+        return 'handoff';
+    }
+    if (actions.some((action) => (
+        action
+        && typeof action === 'object'
+        && (
+            action.type === 'tracking'
+            || (action.type === 'link' && action.label_key === 'chatbotOpenTracking')
+        )
+    ))) {
+        return 'checking';
+    }
+    return 'understood';
 }
 
 /**
@@ -102,11 +104,15 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
     const existing = activeControllers.get(mountTarget);
     if (existing) existing.destroy();
 
+    ensureTopiStyles(document);
+
     let activeLocale = normalizeLocale(locale || document.documentElement?.lang);
     let isOpen = false;
     let isSending = false;
     let destroyed = false;
     let hasValidationError = false;
+    let hasGreeted = false;
+    let mascotResetTimer = null;
     let conversationHistory = [];
     const localizedLogBindings = [];
 
@@ -119,10 +125,10 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
     launcherButton.className = 'chatbot-launcher';
     launcherButton.setAttribute('aria-expanded', 'false');
     launcherButton.setAttribute('aria-controls', 'home-chatbot-panel');
-    const launcherIcon = createLauncherIcon(document);
+    const launcherTopi = createTopi(document, { state: 'idle', size: 32 });
     const launcherText = document.createElement('span');
     launcherText.className = 'chatbot-launcher-text';
-    launcherButton.append(launcherIcon, launcherText);
+    launcherButton.append(launcherTopi, launcherText);
 
     const panel = document.createElement('section');
     panel.id = 'home-chatbot-panel';
@@ -134,14 +140,26 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
 
     const header = document.createElement('div');
     header.className = 'chatbot-header';
+    const headerBrand = document.createElement('div');
+    headerBrand.className = 'chatbot-header-brand';
+    const headerTopi = createTopi(document, { state: 'idle', size: 36 });
     const title = document.createElement('h2');
     title.id = 'chatbot-panel-title';
     title.className = 'chatbot-title';
+    const titleName = document.createElement('span');
+    titleName.className = 'chatbot-title-name';
+    const titleSep = document.createElement('span');
+    titleSep.className = 'chatbot-title-sep chatbot-sr-only';
+    titleSep.textContent = ' · ';
+    const titleText = document.createElement('span');
+    titleText.className = 'chatbot-title-text';
+    title.append(titleName, titleSep, titleText);
+    headerBrand.append(headerTopi, title);
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'chatbot-close';
     closeButton.textContent = '✕';
-    header.append(title, closeButton);
+    header.append(headerBrand, closeButton);
 
     const notice = document.createElement('p');
     notice.className = 'chatbot-notice';
@@ -219,6 +237,29 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         log.scrollTop = log.scrollHeight;
     }
 
+    function clearMascotTimer() {
+        if (mascotResetTimer !== null) {
+            globalThis.clearTimeout(mascotResetTimer);
+            mascotResetTimer = null;
+        }
+    }
+
+    function setMascotState(state) {
+        const launcherState = (!isOpen && state !== 'thinking') ? 'idle' : state;
+        setTopiState(headerTopi, state);
+        setTopiState(launcherTopi, launcherState);
+    }
+
+    function scheduleMascotIdle(delayMs) {
+        clearMascotTimer();
+        mascotResetTimer = globalThis.setTimeout(() => {
+            mascotResetTimer = null;
+            if (!destroyed && !isSending) {
+                setMascotState('idle');
+            }
+        }, delayMs);
+    }
+
     function updateInputMeta() {
         const length = input.value.length;
         const overLimit = length > MAX_MESSAGE_LENGTH;
@@ -240,7 +281,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         }
     }
 
-    function appendMessage({ role, text = '', textKey = '', actions = [], isError = false }) {
+    function appendMessage({ role, text = '', textKey = '', actions = [], isError = false, mascotState = 'idle' }) {
         const wrapper = document.createElement('div');
         wrapper.className = `chatbot-message chatbot-message-${isError ? 'error' : role}`;
 
@@ -249,6 +290,16 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         const roleKey = role === 'user' ? 'userRoleLabel' : 'assistantRoleLabel';
         roleLabel.textContent = `${readChatbotMessages(activeLocale)[roleKey]}: `;
         localizedLogBindings.push({ element: roleLabel, type: 'role', key: roleKey });
+
+        const isAssistant = role !== 'user';
+        const contentContainer = isAssistant ? document.createElement('div') : wrapper;
+        if (isAssistant) {
+            contentContainer.className = 'chatbot-message-body';
+            const avatar = createTopi(document, { state: mascotState, calm: true, size: 28 });
+            wrapper.append(roleLabel, avatar, contentContainer);
+        } else {
+            wrapper.append(roleLabel);
+        }
 
         const bubble = document.createElement('p');
         bubble.className = 'chatbot-bubble';
@@ -260,7 +311,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
             bubble.textContent = String(text);
         }
 
-        wrapper.append(roleLabel, bubble);
+        contentContainer.append(bubble);
 
         if (Array.isArray(actions) && actions.length > 0) {
             const actionRow = document.createElement('div');
@@ -297,7 +348,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
             }
 
             if (actionRow.childElementCount > 0) {
-                wrapper.append(actionRow);
+                contentContainer.append(actionRow);
             }
         }
 
@@ -318,7 +369,8 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
 
         launcherText.textContent = messages.launcherLabel;
         launcherButton.setAttribute('aria-label', messages.launcherAriaLabel);
-        title.textContent = messages.panelTitle;
+        titleName.textContent = messages.panelName;
+        titleText.textContent = messages.panelTitle;
         closeButton.setAttribute('aria-label', messages.closeLabel);
         notice.textContent = messages.noticeText;
         log.setAttribute('aria-label', messages.logAriaLabel);
@@ -360,6 +412,8 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         }
         if (pending) {
             panel.setAttribute('aria-busy', 'true');
+            clearMascotTimer();
+            setMascotState('thinking');
         } else {
             panel.removeAttribute('aria-busy');
         }
@@ -371,6 +425,15 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         panel.hidden = false;
         launcherButton.setAttribute('aria-expanded', 'true');
         document.addEventListener('keydown', handleDocumentKeydown);
+        if (!hasGreeted) {
+            hasGreeted = true;
+            if (!isSending && !prefersReducedMotion(document)) {
+                setMascotState('hello');
+                scheduleMascotIdle(HELLO_DURATION_MS);
+            }
+        } else if (isSending) {
+            setMascotState('thinking');
+        }
         if (!input.disabled) {
             input.focus();
         } else {
@@ -384,6 +447,8 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         panel.hidden = true;
         launcherButton.setAttribute('aria-expanded', 'false');
         document.removeEventListener('keydown', handleDocumentKeydown);
+        clearMascotTimer();
+        setMascotState(isSending ? 'thinking' : 'idle');
         if (restoreFocus) {
             launcherButton.focus();
         }
@@ -461,8 +526,11 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
                 role: 'assistant',
                 textKey: 'unavailableMessage',
                 actions: [{ type: 'inquiry' }],
-                isError: true
+                isError: true,
+                mascotState: 'handoff'
             });
+            setMascotState('handoff');
+            scheduleMascotIdle(REPLY_STATE_DURATION_MS);
             return;
         }
 
@@ -485,12 +553,15 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
                 if (typeof payload?.reply === 'string' && payload.reply.trim().length > 0) {
                     const replyText = payload.reply;
                     const actions = Array.isArray(payload.actions) ? payload.actions : [];
+                    const replyState = resolveReplyMascotState(actions);
                     conversationHistory = [
                         ...conversationHistory,
                         nextUserMessage,
                         { role: 'assistant', content: replyText.trim().slice(0, MAX_MESSAGE_LENGTH) }
                     ].slice(-MAX_MESSAGES_IN_REQUEST);
-                    appendMessage({ role: 'assistant', text: replyText, actions });
+                    appendMessage({ role: 'assistant', text: replyText, actions, mascotState: replyState });
+                    setMascotState(replyState);
+                    scheduleMascotIdle(REPLY_STATE_DURATION_MS);
                     return;
                 }
             }
@@ -498,20 +569,29 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
             const errorKey = (response.status === 400 || response.status === 413)
                 ? 'badRequestMessage'
                 : 'unavailableMessage';
+            const errorState = (response.status === 503 || response.status === 429)
+                ? 'sleepy'
+                : 'handoff';
             appendMessage({
                 role: 'assistant',
                 textKey: errorKey,
                 actions: [{ type: 'inquiry' }],
-                isError: true
+                isError: true,
+                mascotState: errorState
             });
+            setMascotState(errorState);
+            scheduleMascotIdle(REPLY_STATE_DURATION_MS);
         } catch {
             if (destroyed) return;
             appendMessage({
                 role: 'assistant',
                 textKey: 'unavailableMessage',
                 actions: [{ type: 'inquiry' }],
-                isError: true
+                isError: true,
+                mascotState: 'handoff'
             });
+            setMascotState('handoff');
+            scheduleMascotIdle(REPLY_STATE_DURATION_MS);
         } finally {
             if (!destroyed) setSendingState(false);
         }
@@ -563,7 +643,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
 
     document.addEventListener('public:locale-changed', handleLocaleChanged);
 
-    appendMessage({ role: 'assistant', textKey: 'welcomeMessage' });
+    appendMessage({ role: 'assistant', textKey: 'welcomeMessage', mascotState: 'idle' });
     applyLocale(activeLocale);
     updateInputMeta();
 
@@ -575,6 +655,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         },
         destroy() {
             destroyed = true;
+            clearMascotTimer();
             document.removeEventListener('keydown', handleDocumentKeydown);
             document.removeEventListener('public:locale-changed', handleLocaleChanged);
             mountTarget.replaceChildren();

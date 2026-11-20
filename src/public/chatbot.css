@@ -14,6 +14,18 @@
     white-space: nowrap;
 }
 
+.topi {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+}
+
+.topi svg {
+    display: block;
+}
+
 .chatbot-launcher {
     position: fixed;
     inset-block-end: 1.25rem;
@@ -22,8 +34,10 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    max-inline-size: calc(100vw - 1.8rem);
     min-height: 3rem;
-    padding: 0.65rem 1.1rem;
+    padding-block: 0.45rem;
+    padding-inline: 0.6rem 1.05rem;
     border: 1px solid var(--public-burgundy, #7e1830);
     border-radius: 999px;
     background: linear-gradient(135deg, var(--public-burgundy, #7e1830) 0%, var(--public-burgundy-light, #9a203d) 100%);
@@ -34,6 +48,11 @@
     cursor: pointer;
     box-shadow: 0 8px 24px rgba(126, 24, 48, 0.28);
     transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.chatbot-launcher .topi svg {
+    inline-size: 2rem;
+    block-size: 2rem;
 }
 
 .chatbot-launcher:hover {
@@ -82,19 +101,48 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 0.9rem 1rem;
+    padding: 0.75rem 1rem;
     background: var(--public-burgundy, #7e1830);
     color: #fff;
     flex-shrink: 0;
 }
 
+.chatbot-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+}
+
+.chatbot-header .topi svg {
+    inline-size: 2.25rem;
+    block-size: 2.25rem;
+}
+
 .chatbot-title {
     margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.08rem;
     font-size: 1rem;
     font-weight: 700;
-    line-height: 1.3;
+    line-height: 1.25;
     min-width: 0;
     overflow-wrap: anywhere;
+}
+
+.chatbot-title-name {
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+    opacity: 0.9;
+}
+
+.chatbot-title-text {
+    font-size: 0.96rem;
+    font-weight: 700;
+    line-height: 1.25;
 }
 
 .chatbot-close {
@@ -160,6 +208,23 @@
 .chatbot-message-assistant,
 .chatbot-message-error {
     align-self: flex-start;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.5rem;
+    max-inline-size: 92%;
+}
+
+.chatbot-message-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.chatbot-message .topi svg {
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
 }
 
 .chatbot-bubble {
@@ -203,6 +268,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    max-inline-size: 100%;
     min-block-size: 2.1rem;
     padding: 0.35rem 0.75rem;
     border: 1px solid var(--public-burgundy, #7e1830);

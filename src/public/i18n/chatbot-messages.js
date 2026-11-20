@@ -3,6 +3,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
     tr: Object.freeze({
         launcherLabel: 'Asistan',
         launcherAriaLabel: 'Yardım asistanını aç',
+        panelName: 'Topi',
         panelTitle: 'Uluslararası Ofis Asistanı',
         closeLabel: 'Sohbeti kapat',
         noticeText: 'Yapay zekâ hata yapabilir; resmi karar Uluslararası Ofise aittir',
@@ -27,6 +28,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
     en: Object.freeze({
         launcherLabel: 'Assistant',
         launcherAriaLabel: 'Open help assistant',
+        panelName: 'Topi',
         panelTitle: 'International Office Assistant',
         closeLabel: 'Close chat',
         noticeText: 'AI can make mistakes; the official decision belongs to the International Office.',
@@ -51,6 +53,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
     ru: Object.freeze({
         launcherLabel: 'Ассистент',
         launcherAriaLabel: 'Открыть помощника',
+        panelName: 'Топи',
         panelTitle: 'Ассистент международного офиса',
         closeLabel: 'Закрыть чат',
         noticeText: 'ИИ может ошибаться; официальное решение принимает Международный офис.',
@@ -75,6 +78,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
     tk: Object.freeze({
         launcherLabel: 'Kömekçi',
         launcherAriaLabel: 'Kömekçini aç',
+        panelName: 'Topi',
         panelTitle: 'Halkara ofis kömekçisi',
         closeLabel: 'Söhbeti ýap',
         noticeText: 'Emeli aň ýalňyşyp biler; resmi karar Halkara ofise degişlidir.',
@@ -99,6 +103,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
     ar: Object.freeze({
         launcherLabel: 'المساعد',
         launcherAriaLabel: 'فتح المساعد',
+        panelName: 'توبي',
         panelTitle: 'مساعد المكتب الدولي',
         closeLabel: 'إغلاق المحادثة',
         noticeText: 'قد يرتكب الذكاء الاصطناعي أخطاءً؛ القرار الرسمي يعود إلى المكتب الدولي.',

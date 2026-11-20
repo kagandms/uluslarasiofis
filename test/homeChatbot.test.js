@@ -188,7 +188,10 @@ test('quick-reply chips and fixed notice are localized and update on public:loca
         CHATBOT_MESSAGES.ar.chipInquiry
     ]);
     assert.equal(panel.querySelector('.chatbot-notice').textContent.trim(), CHATBOT_MESSAGES.ar.noticeText);
-    assert.equal(panel.querySelector('.chatbot-title').textContent.trim(), CHATBOT_MESSAGES.ar.panelTitle);
+    assert.equal(
+        panel.querySelector('.chatbot-title').textContent.trim(),
+        `${CHATBOT_MESSAGES.ar.panelName} · ${CHATBOT_MESSAGES.ar.panelTitle}`
+    );
 
     doc.documentElement.lang = 'en';
     doc.documentElement.dir = 'ltr';
@@ -602,4 +605,186 @@ test('resolveSafeHref only renders same-origin path link actions and drops unsaf
         assert.equal(msg.querySelector('a'), null, `Expected no anchor for ${JSON.stringify(unsafeHref)}`);
         assert.equal(msg.querySelector('.chatbot-actions'), null, `Expected action row dropped for ${JSON.stringify(unsafeHref)}`);
     }
+});
+
+test('Topi appears in launcher, header (all five locales), and assistant/error avatars with calm modifier', async (context) => {
+    const html = await readWorkspaceFile('index.html');
+    const { doc, controller } = mountChatbotDom(context, html, { locale: 'tr' });
+
+    assert.equal(doc.head.querySelectorAll('#topi-mascot-styles').length, 1);
+
+    const launcher = doc.getElementById('home-chatbot-launcher');
+    const panel = doc.getElementById('home-chatbot-panel');
+    const launcherTopiSvg = launcher.querySelector('.topi svg.mascot-cat');
+    const headerTopiSvg = panel.querySelector('.chatbot-header .topi svg.mascot-cat');
+
+    assert.ok(launcherTopiSvg);
+    assert.equal(launcherTopiSvg.getAttribute('width'), '32');
+    assert.ok(headerTopiSvg);
+    assert.equal(headerTopiSvg.getAttribute('width'), '36');
+
+    const welcomeMsg = panel.querySelector('.chatbot-message-assistant');
+    assert.ok(welcomeMsg);
+    const welcomeAvatarSvg = welcomeMsg.querySelector('.topi svg.mascot-cat');
+    assert.ok(welcomeAvatarSvg);
+    assert.equal(welcomeAvatarSvg.getAttribute('width'), '28');
+    assert.equal(welcomeAvatarSvg.classList.contains('is-calm'), true);
+
+    const titleEl = doc.getElementById('chatbot-panel-title');
+    for (const locale of SUPPORTED_LOCALES) {
+        controller.setLocale(locale);
+        assert.equal(
+            titleEl.textContent.trim(),
+            `${CHATBOT_MESSAGES[locale].panelName} · ${CHATBOT_MESSAGES[locale].panelTitle}`
+        );
+        assert.equal(panel.querySelector('.chatbot-title-name').textContent.trim(), CHATBOT_MESSAGES[locale].panelName);
+        assert.equal(panel.querySelector('.chatbot-title-text').textContent.trim(), CHATBOT_MESSAGES[locale].panelTitle);
+    }
+});
+
+test('Topi state machine maps thinking, understood, checking, handoff, sleepy, and excludes user avatars', async (context) => {
+    context.mock.timers.enable({ apis: ['setTimeout'] });
+    context.after(() => context.mock.timers.reset());
+
+    const html = await readWorkspaceFile('index.html');
+    let resolvePending = null;
+    const queuedHandlers = [
+        () => new Promise((resolvePromise) => { resolvePending = resolvePromise; }),
+        () => Promise.resolve(createJsonResponse({
+            reply: 'Başvuru durumu özetiniz hazır.',
+            actions: [{ type: 'link', href: '/basvurum/', label_key: 'chatbotOpenTracking' }]
+        }, 200)),
+        () => Promise.resolve(createJsonResponse({
+            reply: 'Soru formunu kullanabilirsiniz.',
+            actions: [{ type: 'inquiry' }]
+        }, 200)),
+        () => Promise.resolve(createJsonResponse({ error: { code: 'CHATBOT_UNAVAILABLE' } }, 503)),
+        () => Promise.reject(new Error('network failure'))
+    ];
+
+    const { dom, doc } = mountChatbotDom(context, html, {
+        locale: 'tr',
+        fetcher: () => queuedHandlers.shift()()
+    });
+
+    const launcher = doc.getElementById('home-chatbot-launcher');
+    const panel = doc.getElementById('home-chatbot-panel');
+    const input = doc.getElementById('chatbot-input');
+    const form = panel.querySelector('.chatbot-composer');
+    const launcherSvg = () => launcher.querySelector('.topi svg.mascot-cat');
+    const headerSvg = () => panel.querySelector('.chatbot-header .topi svg.mascot-cat');
+
+    launcher.click();
+    // Advance past initial hello greeting so header is back to idle.
+    context.mock.timers.tick(2400);
+    assert.equal(headerSvg().classList.contains('is-hello'), false);
+
+    // 1) Pending request -> thinking; closing panel keeps launcher in thinking while in flight.
+    input.value = 'Belgeler neler?';
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(headerSvg().classList.contains('is-thinking'), true);
+    assert.equal(launcherSvg().classList.contains('is-thinking'), true);
+
+    panel.querySelector('.chatbot-close').click();
+    assert.equal(panel.hidden, true);
+    assert.equal(launcherSvg().classList.contains('is-thinking'), true);
+
+    // Plain reply while closed -> header gets understood, launcher returns to idle.
+    resolvePending(createJsonResponse({ reply: 'Pasaport ve öğrenci belgesi.', actions: [] }, 200));
+    await flushPromises();
+    assert.equal(headerSvg().classList.contains('is-understood'), true);
+    assert.equal(launcherSvg().classList.contains('is-idle'), false);
+    assert.equal(launcherSvg().classList.contains('is-thinking'), false);
+    assert.equal(launcherSvg().classList.contains('is-understood'), false);
+
+    const userMessages = panel.querySelectorAll('.chatbot-message-user');
+    assert.equal(userMessages.length, 1);
+    assert.equal(userMessages[0].querySelector('.topi'), null);
+
+    const assistantMessages = [...panel.querySelectorAll('.chatbot-message-assistant')];
+    const lastReplyAvatar = assistantMessages.at(-1).querySelector('.topi svg.mascot-cat');
+    assert.equal(lastReplyAvatar.classList.contains('is-understood'), true);
+    assert.equal(lastReplyAvatar.classList.contains('is-calm'), true);
+
+    // Reopen and let 4s reply timer reset header to idle.
+    launcher.click();
+    context.mock.timers.tick(4000);
+    assert.equal(headerSvg().classList.contains('is-understood'), false);
+
+    // 2) Status tracking reply -> checking
+    input.value = 'ITU-2026-1234';
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
+    assert.equal(headerSvg().classList.contains('is-checking'), true);
+    const checkingAvatar = [...panel.querySelectorAll('.chatbot-message-assistant')].at(-1).querySelector('.topi svg.mascot-cat');
+    assert.equal(checkingAvatar.classList.contains('is-checking'), true);
+    assert.equal(checkingAvatar.classList.contains('is-calm'), true);
+
+    // 3) Inquiry action -> handoff
+    input.value = 'Ofise yazmak istiyorum';
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
+    assert.equal(headerSvg().classList.contains('is-handoff'), true);
+    const handoffAvatar = [...panel.querySelectorAll('.chatbot-message-assistant')].at(-1).querySelector('.topi svg.mascot-cat');
+    assert.equal(handoffAvatar.classList.contains('is-handoff'), true);
+    assert.equal(handoffAvatar.classList.contains('is-calm'), true);
+
+    // 4) HTTP 503 -> sleepy
+    input.value = 'Servis testi';
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
+    assert.equal(headerSvg().classList.contains('is-sleepy'), true);
+    const sleepyErrorAvatar = [...panel.querySelectorAll('.chatbot-message-error')].at(-1).querySelector('.topi svg.mascot-cat');
+    assert.equal(sleepyErrorAvatar.classList.contains('is-sleepy'), true);
+    assert.equal(sleepyErrorAvatar.classList.contains('is-calm'), true);
+
+    // 5) Network error -> handoff
+    input.value = 'Ağ hatası testi';
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
+    assert.equal(headerSvg().classList.contains('is-handoff'), true);
+    const netErrorAvatar = [...panel.querySelectorAll('.chatbot-message-error')].at(-1).querySelector('.topi svg.mascot-cat');
+    assert.equal(netErrorAvatar.classList.contains('is-handoff'), true);
+    assert.equal(netErrorAvatar.classList.contains('is-calm'), true);
+});
+
+test('Topi plays hello once on first open, resets after 2.4s, and skips hello when prefers-reduced-motion is active', async (context) => {
+    context.mock.timers.enable({ apis: ['setTimeout'] });
+    context.after(() => context.mock.timers.reset());
+
+    const html = await readWorkspaceFile('index.html');
+    const { doc } = mountChatbotDom(context, html, { locale: 'tr' });
+
+    const launcher = doc.getElementById('home-chatbot-launcher');
+    const panel = doc.getElementById('home-chatbot-panel');
+    const headerSvg = panel.querySelector('.chatbot-header .topi svg.mascot-cat');
+
+    assert.equal(headerSvg.classList.contains('is-hello'), false);
+
+    launcher.click();
+    assert.equal(headerSvg.classList.contains('is-hello'), true);
+
+    context.mock.timers.tick(2400);
+    assert.equal(headerSvg.classList.contains('is-hello'), false);
+
+    // Closing and reopening does not replay hello.
+    panel.querySelector('.chatbot-close').click();
+    launcher.click();
+    assert.equal(headerSvg.classList.contains('is-hello'), false);
+
+    // Reduced motion suppresses hello completely.
+    const reducedDom = new JSDOM(html, { url: 'https://portal.test/?bot=1' });
+    context.after(() => reducedDom.window.close());
+    reducedDom.window.matchMedia = (query) => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        addEventListener() {},
+        removeEventListener() {}
+    });
+    const reducedController = initHomeChatbot({ locale: 'tr', root: reducedDom.window.document });
+    context.after(() => reducedController.destroy());
+
+    reducedDom.window.document.getElementById('home-chatbot-launcher').click();
+    const reducedHeaderSvg = reducedDom.window.document.querySelector('#home-chatbot-panel .chatbot-header .topi svg.mascot-cat');
+    assert.equal(reducedHeaderSvg.classList.contains('is-hello'), false);
 });
