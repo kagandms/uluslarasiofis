@@ -138,10 +138,8 @@ export function createTopi(document, { state = 'idle', calm = false, size = 28 }
     }
 
     const parsed = new Parser().parseFromString(TOPI_SVG_SOURCE, 'image/svg+xml');
+    parsed.documentElement.querySelector('style')?.remove();
     const svg = document.importNode(parsed.documentElement, true);
-
-    const inlineStyle = svg.querySelector('style');
-    if (inlineStyle) inlineStyle.remove();
 
     namespaceSvgIds(svg);
 
