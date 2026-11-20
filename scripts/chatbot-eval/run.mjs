@@ -19,6 +19,7 @@ import {
 } from '../../src/server/domain/chatbotKnowledge.js';
 import {
     CHATBOT_REFUSAL_MARKER,
+    buildUnderstoodFactsLine,
     getChatbotFixedText
 } from '../../src/server/domain/chatbotPrompt.js';
 import {
@@ -365,12 +366,111 @@ function isStatusSummaryReply(reply, language) {
     return validLabels.some((label) => reply.startsWith(`${prefix}${label}.`));
 }
 
+const understoodTemplateCache = new Map();
+
+function commonPrefixLength(strings) {
+    if (strings.length === 0) return 0;
+    const minLen = Math.min(...strings.map((s) => s.length));
+    let i = 0;
+    while (i < minLen && strings.every((s) => s[i] === strings[0][i])) {
+        i += 1;
+    }
+    return i;
+}
+
+function commonSuffixLength(strings) {
+    if (strings.length === 0) return 0;
+    const minLen = Math.min(...strings.map((s) => s.length));
+    let i = 0;
+    while (i < minLen && strings.every((s) => s[s.length - 1 - i] === strings[0][strings[0].length - 1 - i])) {
+        i += 1;
+    }
+    return i;
+}
+
+function getUnderstoodFactsTemplate(language) {
+    const cached = understoodTemplateCache.get(language);
+    if (cached) return cached;
+
+    const sample1 = buildUnderstoodFactsLine({ application_type: 'initial' }, language);
+    const sample2 = buildUnderstoodFactsLine({ is_under_18: true }, language);
+    const sample3 = buildUnderstoodFactsLine({ accommodation_type: 'hotel' }, language);
+
+    const prefixLen = commonPrefixLength([sample1, sample2, sample3]);
+    const prefix = sample1.slice(0, prefixLen);
+    const tails = [sample1.slice(prefixLen), sample2.slice(prefixLen), sample3.slice(prefixLen)];
+    const suffixLen = commonSuffixLength(tails);
+    const suffix = suffixLen > 0 ? sample1.slice(sample1.length - suffixLen) : '';
+
+    const template = { prefix, suffix };
+    understoodTemplateCache.set(language, template);
+    return template;
+}
+
+function extractUnderstoodFactsLine(reply, language) {
+    if (typeof reply !== 'string') return { understoodLine: null, body: '' };
+    const normalized = reply.replace(/\r\n/g, '\n').trim();
+    if (!normalized) return { understoodLine: null, body: '' };
+
+    const { prefix, suffix } = getUnderstoodFactsTemplate(language);
+    const firstNewlineIdx = normalized.indexOf('\n');
+    const firstLine = (firstNewlineIdx === -1 ? normalized : normalized.slice(0, firstNewlineIdx)).trim();
+    if (
+        !firstLine.startsWith(prefix)
+        || !firstLine.endsWith(suffix)
+        || firstLine.length <= prefix.length + suffix.length
+    ) {
+        return { understoodLine: null, body: normalized };
+    }
+    if (firstNewlineIdx === -1) {
+        return { understoodLine: firstLine, body: '' };
+    }
+    const afterFirstLine = normalized.slice(firstNewlineIdx);
+    const blankLineMatch = /^\n[ \t]*\n/.exec(afterFirstLine);
+    const body = blankLineMatch
+        ? afterFirstLine.slice(blankLineMatch[0].length).trim()
+        : afterFirstLine.trim();
+    return { understoodLine: firstLine, body };
+}
+
+function buildExpectedUnderstoodFacts(expect) {
+    const rawAccommodation = expect.accommodation ?? expect.accommodation_type;
+    const accommodationType = rawAccommodation === 'rental'
+        ? 'rental_contract'
+        : (rawAccommodation || undefined);
+    const rawUnder18 = expect.under_18 ?? expect.is_under_18;
+    const facts = {};
+    if (typeof expect.application_type === 'string') {
+        facts.application_type = expect.application_type;
+    }
+    if (typeof rawUnder18 === 'boolean') {
+        facts.is_under_18 = rawUnder18;
+    }
+    if (typeof accommodationType === 'string') {
+        facts.accommodation_type = accommodationType;
+    }
+    if (typeof expect.host_is_married === 'string') {
+        facts.host_is_married = expect.host_is_married;
+    }
+    if (typeof expect.host_is_turkish === 'string') {
+        facts.host_is_turkish = expect.host_is_turkish;
+    }
+    if (typeof expect.fingerprint_status === 'string') {
+        facts.fingerprint_status = expect.fingerprint_status;
+    }
+    return facts;
+}
+
 function classifyReply(reply, language, httpStatus) {
     if (httpStatus !== 200 || typeof reply !== 'string') {
         return `http_error:${httpStatus}`;
     }
-    const trimmed = reply.trim();
-    if (!trimmed) return 'empty';
+    const rawTrimmed = reply.trim();
+    if (!rawTrimmed) return 'empty';
+
+    const { understoodLine, body } = extractUnderstoodFactsLine(rawTrimmed, language);
+    const trimmed = body;
+    if (!trimmed) return understoodLine ? 'other_text' : 'empty';
 
     for (const lang of CHATBOT_LANGUAGES) {
         if (trimmed === getChatbotFixedText('dailyLimit', lang)) return 'daily_limit';
@@ -515,7 +615,10 @@ function evaluateCaseOutcome({ testCase, inputMessages, reply, actions, classifi
             reason = `Expected documents reply, got ${classification}`;
             break;
         }
-        const returnedTitles = parseDocumentBulletTitles(reply, language);
+        const { understoodLine, body } = extractUnderstoodFactsLine(reply, language);
+        const expectedUnderstoodLine = buildUnderstoodFactsLine(buildExpectedUnderstoodFacts(expect), language);
+        const understoodFactsMismatch = Boolean(expectedUnderstoodLine) && understoodLine !== expectedUnderstoodLine;
+        const returnedTitles = parseDocumentBulletTitles(body, language);
         const returnedSet = new Set(returnedTitles);
         const expectedSet = new Set(expectedTitles);
 
@@ -523,17 +626,22 @@ function evaluateCaseOutcome({ testCase, inputMessages, reply, actions, classifi
         const extraCatalog = returnedTitles.filter((t) => fullCatalogTitles.has(t) && !expectedSet.has(t));
         const extraUnknown = returnedTitles.filter((t) => !fullCatalogTitles.has(t));
 
-        if (missing.length === 0 && extraCatalog.length === 0 && extraUnknown.length === 0) {
-            passed = true;
-            reason = `Matched all ${expectedTitles.length} expected documents`;
-        } else {
+        if (missing.length > 0 || extraCatalog.length > 0 || extraUnknown.length > 0) {
             passed = false;
             wrongDocument = true;
             const parts = [];
             if (missing.length) parts.push(`missing=${missing.length}`);
             if (extraCatalog.length) parts.push(`extra_catalog=${extraCatalog.length}`);
             if (extraUnknown.length) parts.push(`extra_unknown=${extraUnknown.length}`);
+            if (understoodFactsMismatch) parts.push('understood facts mismatch');
             reason = `Document mismatch (${parts.join(', ')})`;
+        } else if (understoodFactsMismatch) {
+            passed = false;
+            wrongDocument = true;
+            reason = 'understood facts mismatch';
+        } else {
+            passed = true;
+            reason = `Matched all ${expectedTitles.length} expected documents`;
         }
         break;
     }
