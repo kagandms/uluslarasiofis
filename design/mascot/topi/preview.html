@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Topi — Uluslararası Ofis Asistanı (Mascot Preview)</title>
+  <style>
+    :root {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --public-burgundy-shadow: rgba(126, 24, 48, 0.24);
+
+      --page-bg: #f6f7f9;
+      --page-surface: #ffffff;
+      --page-surface-alt: #f8f9fb;
+      --page-border: #e2e6ee;
+      --page-text: #20232a;
+      --page-muted: #59616d;
+      --chat-log-bg: #fcfcfd;
+      --notice-bg: #f8f9fb;
+      --notice-text: #4a5260;
+
+      --mascot-outline: #641126;
+      --mascot-coat: #f6efe9;
+      --mascot-mark: #c7bec2;
+      --mascot-surface: #fffbf8;
+      --mascot-card: #ffffff;
+      --mascot-ink: #241b22;
+      --mascot-accent: #d89b27;
+
+      color-scheme: light;
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body.is-dark {
+      --public-burgundy: #c6395c;
+      --public-burgundy-hover: #9f2745;
+      --public-burgundy-light: #dc5073;
+      --public-burgundy-soft: #311a23;
+      --public-burgundy-border: #783c4d;
+      --public-burgundy-shadow: rgba(0, 0, 0, 0.45);
+
+      --page-bg: #11141b;
+      --page-surface: #1a1f2a;
+      --page-surface-alt: #212736;
+      --page-border: #2f3748;
+      --page-text: #eef1f6;
+      --page-muted: #a6b0c2;
+      --chat-log-bg: #161a24;
+      --notice-bg: #1f2432;
+      --notice-text: #b8c2d4;
+
+      --mascot-outline: #8d2a44;
+      --mascot-coat: #f4ece5;
+      --mascot-mark: #c4babf;
+      --mascot-surface: #f8eff2;
+      --mascot-card: #ffffff;
+      --mascot-ink: #1e161c;
+      --mascot-accent: #e5a934;
+
+      color-scheme: dark;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--page-bg);
+      color: var(--page-text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body.is-reduced-motion *,
+    body.is-reduced-motion svg * {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    body.is-reduced-motion svg .td {
+      opacity: 1 !important;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      border-bottom: 1px solid var(--page-border);
+      background: var(--page-surface);
+    }
+
+    .topbar-inner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.65rem 1rem;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0.75rem 1rem;
+    }
+
+    .brand-head h1 {
+      margin: 0;
+      font-size: 1.08rem;
+      line-height: 1.25;
+      color: var(--public-burgundy);
+    }
+
+    .brand-head p {
+      margin: 0.15rem 0 0;
+      font-size: 0.78rem;
+      color: var(--page-muted);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .control-group {
+      display: flex;
+      flex-wrap: wrap;
+      padding: 0.18rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.6rem;
+      background: var(--page-surface-alt);
+      gap: 0.18rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.3rem;
+      min-height: 2rem;
+      padding: 0.28rem 0.62rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.45rem;
+      background: var(--page-surface);
+      color: var(--page-text);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .control-group .btn {
+      border-color: transparent;
+      background: transparent;
+    }
+
+    .btn[aria-pressed="true"],
+    .control-group .btn[aria-pressed="true"] {
+      border-color: var(--public-burgundy);
+      background: var(--public-burgundy);
+      color: #ffffff;
+    }
+
+    .btn:focus-visible {
+      outline: 2px solid var(--public-burgundy);
+      outline-offset: 2px;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 1.15rem 1rem 3rem;
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    .card {
+      border: 1px solid var(--page-border);
+      border-top: 4px solid var(--public-burgundy);
+      border-radius: 1rem;
+      background: var(--page-surface);
+      padding: 1.15rem;
+      display: grid;
+      gap: 1.1rem;
+    }
+
+    .card-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.35rem 1rem;
+      border-bottom: 1px solid var(--page-border);
+      padding-bottom: 0.75rem;
+    }
+
+    .card-head h2 {
+      margin: 0;
+      font-size: 1.16rem;
+      color: var(--public-burgundy);
+    }
+
+    .pill-tag {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.74rem;
+      padding: 0.16rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid var(--public-burgundy-border);
+      background: var(--public-burgundy-soft);
+      color: var(--public-burgundy);
+    }
+
+    .card-caption {
+      margin: 0.25rem 0 0;
+      color: var(--page-muted);
+      font-size: 0.88rem;
+      flex-basis: 100%;
+    }
+
+    .section-label {
+      margin: 0 0 0.55rem;
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--page-muted);
+    }
+
+    .surface-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .surface-panel {
+      border-radius: 0.85rem;
+      padding: 0.9rem;
+      display: grid;
+      gap: 0.7rem;
+      min-width: 0;
+    }
+
+    .surface-light {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #641126;
+      --mascot-coat: #f6efe9;
+      --mascot-mark: #c7bec2;
+      --mascot-surface: #fffbf8;
+      --mascot-card: #ffffff;
+      --mascot-ink: #241b22;
+      --mascot-accent: #d89b27;
+      background: #ffffff;
+      color: #20232a;
+      border: 1px solid #d9dde5;
+    }
+
+    .surface-dark {
+      --public-burgundy: #c6395c;
+      --public-burgundy-hover: #9f2745;
+      --public-burgundy-light: #dc5073;
+      --public-burgundy-soft: #311a23;
+      --public-burgundy-border: #783c4d;
+      --mascot-outline: #8d2a44;
+      --mascot-coat: #f4ece5;
+      --mascot-mark: #c4babf;
+      --mascot-surface: #f8eff2;
+      --mascot-card: #ffffff;
+      --mascot-ink: #1e161c;
+      --mascot-accent: #e5a934;
+      background: #161922;
+      color: #eef1f6;
+      border: 1px solid #2f3748;
+    }
+
+    .surface-burgundy {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      --mascot-coat: #f6efe9;
+      --mascot-mark: #c7bec2;
+      --mascot-surface: #fffbf8;
+      --mascot-card: #ffffff;
+      --mascot-ink: #241b22;
+      --mascot-accent: #d89b27;
+      background: linear-gradient(135deg, #7e1830 0%, #9a203d 100%);
+      color: #ffffff;
+      border: 1px solid #7e1830;
+    }
+
+    .surface-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    .surface-title span:last-child {
+      font-weight: 500;
+      opacity: 0.78;
+      font-size: 0.72rem;
+    }
+
+    .state-row {
+      display: grid;
+      gap: 0.45rem;
+      padding-top: 0.6rem;
+      border-top: 1px solid rgba(128, 136, 154, 0.24);
+    }
+
+    .state-row-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.25rem 0.6rem;
+    }
+
+    .state-row-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .state-row-note {
+      font-size: 0.72rem;
+      opacity: 0.76;
+    }
+
+    .size-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.65rem 0.9rem;
+    }
+
+    .size-cell {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.22rem;
+    }
+
+    .size-cell code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.68rem;
+      opacity: 0.76;
+    }
+
+    .burgundy-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1rem;
+      align-items: center;
+      padding-top: 0.45rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.22);
+    }
+
+    .burgundy-item {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+      min-width: 68px;
+    }
+
+    .burgundy-item span {
+      font-size: 0.7rem;
+      font-weight: 600;
+      opacity: 0.92;
+    }
+
+    .mascot-slot {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .mascot-slot svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Widget Context */
+    .widget-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .mock-box {
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      background: var(--page-surface-alt);
+      padding: 0.9rem;
+      display: grid;
+      gap: 0.8rem;
+      min-width: 0;
+    }
+
+    .launcher-samples {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .mock-launcher {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-height: 3.15rem;
+      padding: 0.4rem 1.05rem 0.4rem 0.55rem;
+      border: 1px solid #7e1830;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #7e1830 0%, #9a203d 100%);
+      color: #ffffff;
+      font: inherit;
+      font-size: 0.92rem;
+      font-weight: 700;
+      box-shadow: 0 8px 22px rgba(126, 24, 48, 0.26);
+    }
+
+    .mock-launcher-lg {
+      min-height: 4rem;
+      padding: 0.35rem 1.15rem 0.35rem 0.45rem;
+    }
+
+    .mock-launcher-orb-wrap {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .mock-launcher-orb {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: 1px solid #7e1830;
+      background: linear-gradient(135deg, #7e1830 0%, #9a203d 100%);
+      box-shadow: 0 8px 22px rgba(126, 24, 48, 0.26);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mock-launcher-orb-wrap span {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--page-muted);
+    }
+
+    .mock-panel {
+      border: 1px solid var(--page-border);
+      border-radius: 1rem;
+      background: var(--page-surface);
+      overflow: hidden;
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.1);
+    }
+
+    .mock-header {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      padding: 0.65rem 0.85rem;
+      background: #7e1830;
+      color: #ffffff;
+    }
+
+    .mock-header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      min-width: 0;
+    }
+
+    .mock-header-title {
+      margin: 0;
+      font-size: 0.94rem;
+      font-weight: 700;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .mock-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.9rem;
+      height: 1.9rem;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 0.45rem;
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+
+    .mock-notice {
+      margin: 0;
+      padding: 0.42rem 0.85rem;
+      border-bottom: 1px solid var(--page-border);
+      background: var(--notice-bg);
+      color: var(--notice-text);
+      font-size: 0.72rem;
+    }
+
+    .mock-log {
+      padding: 0.8rem;
+      background: var(--chat-log-bg);
+      display: grid;
+      gap: 0.7rem;
+    }
+
+    .mock-msg-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.5rem;
+      min-width: 0;
+    }
+
+    .mock-msg-body {
+      display: grid;
+      gap: 0.35rem;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .mock-state-badge {
+      width: fit-content;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.08rem 0.42rem;
+      border-radius: 999px;
+      border: 1px solid var(--public-burgundy-border);
+      background: var(--public-burgundy-soft);
+      color: var(--public-burgundy);
+    }
+
+    .mock-bubble {
+      margin: 0;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      border-end-start-radius: 0.25rem;
+      background: var(--page-surface);
+      color: var(--page-text);
+      font-size: 0.84rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .mock-action-btn {
+      width: fit-content;
+      padding: 0.28rem 0.65rem;
+      border: 1px solid var(--public-burgundy);
+      border-radius: 0.48rem;
+      background: var(--page-surface);
+      color: var(--public-burgundy);
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+
+    .rtl-box {
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      background: var(--page-surface-alt);
+      padding: 0.9rem;
+    }
+
+    .rtl-grid {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 0.85rem;
+      align-items: start;
+    }
+
+    .rtl-box [dir="rtl"] .mock-launcher {
+      padding: 0.4rem 0.55rem 0.4rem 1.05rem;
+    }
+
+    /* Mapping Table */
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--page-border);
+      border-radius: 0.75rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 560px;
+      font-size: 0.84rem;
+    }
+
+    th, td {
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--page-border);
+      vertical-align: middle;
+    }
+
+    th {
+      background: var(--page-surface-alt);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--page-muted);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    td code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 0.3rem;
+      background: var(--public-burgundy-soft);
+      color: var(--public-burgundy);
+    }
+
+    @media (max-width: 860px) {
+      .surface-grid,
+      .widget-grid,
+      .rtl-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 0.85rem;
+      }
+      .surface-panel,
+      .mock-box,
+      .rtl-box {
+        padding: 0.72rem;
+      }
+      .size-strip {
+        gap: 0.55rem 0.65rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-head">
+        <h1>Topi · Uluslararası Ofis Asistanı</h1>
+        <p>Round 3 final character preview (2026-11-20) · 7 states · Topkapı emblem card · Offline</p>
+      </div>
+      <div class="controls">
+        <div class="control-group" role="group" aria-label="Live preview state">
+          <button type="button" class="btn" data-state-btn="idle" aria-pressed="true">Idle</button>
+          <button type="button" class="btn" data-state-btn="thinking" aria-pressed="false">Thinking</button>
+          <button type="button" class="btn" data-state-btn="understood" aria-pressed="false">Understood</button>
+          <button type="button" class="btn" data-state-btn="handoff" aria-pressed="false">Handoff</button>
+          <button type="button" class="btn" data-state-btn="checking" aria-pressed="false">Checking</button>
+          <button type="button" class="btn" data-state-btn="confused" aria-pressed="false">Confused</button>
+          <button type="button" class="btn" data-state-btn="sleepy" aria-pressed="false">Sleepy</button>
+        </div>
+        <button type="button" class="btn" id="toggle-dark" aria-pressed="false">Dark mode</button>
+        <button type="button" class="btn" id="toggle-motion" aria-pressed="false">Reduced motion</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- 1. All 7 States x 4 Sizes on Light / Dark / Burgundy -->
+    <section class="card">
+      <div class="card-head">
+        <h2>All 7 States at 28 / 36 / 56 / 120 px</h2>
+        <span class="pill-tag">topi-cat.svg</span>
+        <p class="card-caption">Inspect legibility at avatar (28 px), header (36 px), launcher (56 px), and zoomed detail (120 px). Verify the two mirrored burgundy T-blocks and center gap on the chest card at 56 px and 120 px.</p>
+      </div>
+
+      <div class="surface-grid">
+        <div class="surface-panel surface-light" id="matrix-light">
+          <div class="surface-title">
+            <span>Light background</span>
+            <span>#ffffff · default tokens</span>
+          </div>
+        </div>
+        <div class="surface-panel surface-dark" id="matrix-dark">
+          <div class="surface-title">
+            <span>Dark background</span>
+            <span>#161922 · dark-mode tokens</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="surface-panel surface-burgundy">
+        <div class="surface-title">
+          <span>Burgundy launcher / header surface (56 px &amp; 36 px)</span>
+          <span>#7e1830 → #9a203d</span>
+        </div>
+        <div class="burgundy-strip" id="matrix-burgundy"></div>
+      </div>
+    </section>
+
+    <!-- 2. Widget Context (LTR Turkish) -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Widget Context (LTR — Turkish)</h2>
+        <span class="pill-tag">Launcher + Panel Header + All 7 Bubbles</span>
+        <p class="card-caption">The launcher buttons and panel header switch live with the top state bar. Inside the mock chat log, every state is shown with its 28 px message avatar beside a realistic reply.</p>
+      </div>
+
+      <div class="widget-grid">
+        <div class="mock-box">
+          <div class="section-label">Launcher button "Asistan" (switches with top bar)</div>
+          <div class="launcher-samples">
+            <div class="mock-launcher" id="launcher-pill-sm"></div>
+            <div class="mock-launcher mock-launcher-lg" id="launcher-pill-lg"></div>
+            <div class="mock-launcher-orb-wrap">
+              <div class="mock-launcher-orb" id="launcher-orb"></div>
+              <span>Asistan (56px)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mock-panel">
+          <div class="mock-header">
+            <div class="mock-header-brand" id="panel-header-brand"></div>
+            <span class="mock-close" aria-hidden="true">✕</span>
+          </div>
+          <p class="mock-notice">Yapay zekâ hata yapabilir; resmi karar Uluslararası Ofise aittir.</p>
+          <div class="mock-log" id="mock-chat-log"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. RTL Sample (Arabic) -->
+    <section class="card">
+      <div class="card-head">
+        <h2>RTL Sample (Arabic · dir="rtl")</h2>
+        <span class="pill-tag">توبي · مساعد المكتب الدولي</span>
+        <p class="card-caption">Verifies character orientation, emblem badge, and layout spacing inside right-to-left Arabic UI. Launcher and header respond to the top state bar.</p>
+      </div>
+
+      <div class="rtl-box">
+        <div class="rtl-grid" dir="rtl" lang="ar">
+          <div class="mock-launcher" id="rtl-launcher"></div>
+          <div class="mock-panel">
+            <div class="mock-header">
+              <div class="mock-header-brand" id="rtl-header-brand"></div>
+              <span class="mock-close" aria-hidden="true">✕</span>
+            </div>
+            <div class="mock-log" id="rtl-chat-log"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Reply-to-State Mapping Table -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Which Reply Triggers Which State</h2>
+        <span class="pill-tag">Widget Integration Contract</span>
+        <p class="card-caption">Deterministic mapping from assistant response state to root SVG modifier class on <code>&lt;svg class="mascot-svg mascot-cat"&gt;</code>.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Preview</th>
+              <th>State</th>
+              <th>Root class</th>
+              <th>Visual cue</th>
+              <th>Triggered by</th>
+            </tr>
+          </thead>
+          <tbody id="mapping-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Inline SVG template (verbatim copy of topi-cat.svg) -->
+  <template id="tpl-topi">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="mascot-svg mascot-cat" aria-hidden="true" focusable="false">
+<title>Topi</title>
+<style>.mascot-cat{--p:var(--public-burgundy,#7e1830);--pl:var(--public-burgundy-light,#9a203d);--o:var(--mascot-outline,var(--public-burgundy-hover,#641126));--s:var(--public-burgundy-soft,#fbf2f4);--b:var(--public-burgundy-border,#e2c0c8);--c:var(--mascot-coat,#f6efe9);--m:var(--mascot-mark,#c7bec2);--sf:var(--mascot-surface,#fffbf8);--cd:var(--mascot-card,#fff);--i:var(--mascot-ink,#241b22);--a:var(--mascot-accent,#d89b27)}.mascot-cat .st{display:none}.mascot-cat #state-idle,.mascot-cat.is-thinking #state-thinking,.mascot-cat.is-understood #state-understood,.mascot-cat.is-handoff #state-handoff,.mascot-cat.is-checking #state-checking,.mascot-cat.is-confused #state-confused,.mascot-cat.is-sleepy #state-sleepy,.mascot-cat.is-sleepy .t-ts{display:inline}.mascot-cat.is-thinking #state-idle,.mascot-cat.is-understood #state-idle,.mascot-cat.is-handoff #state-idle,.mascot-cat.is-checking #state-idle,.mascot-cat.is-confused #state-idle,.mascot-cat.is-sleepy #state-idle,.mascot-cat.is-confused .t-hs,.mascot-cat.is-sleepy .t-hs,.mascot-cat.is-sleepy .t-tl{display:none}.mascot-cat .so{fill:var(--sf);stroke:var(--o);stroke-width:2;stroke-linejoin:round}.mascot-cat .cp{fill:var(--cd);stroke:var(--p);stroke-width:1.7}.mascot-cat .ik{fill:none;stroke:var(--i);stroke-linecap:round;stroke-linejoin:round}.mascot-cat .ps{fill:none;stroke:var(--p);stroke-linecap:round;stroke-linejoin:round}.mascot-cat .tb{transform-origin:32px 27px;animation:tBlink 5.4s ease-in-out infinite}.mascot-cat.is-thinking .t-tl{transform-origin:17.5px 52.5px;animation:tSway 2.2s ease-in-out infinite}.mascot-cat .td{animation:tDot 1.35s ease-in-out infinite}.mascot-cat .td2{animation-delay:.2s}.mascot-cat .td3{animation-delay:.4s}@keyframes tBlink{0%,91%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}@keyframes tSway{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(9deg)}}@keyframes tDot{0%,80%,100%{opacity:.3}40%{opacity:1}}@media(prefers-reduced-motion:reduce){.mascot-cat .tb,.mascot-cat.is-thinking .t-tl,.mascot-cat .td{animation:none}.mascot-cat .td{opacity:1}}</style>
+<defs>
+<g id="emblem"><path fill="#444444" d="M118 8h129v18H118zm151 0h132v18H269z"/><path fill="#8b1328" d="M35 37H247V475H118V255H35ZM269 37H460V255H401V475H269Z"/></g>
+<path id="t-t1" d="M17.5 52.5C9.5 53 7.5 46.5 10.5 42.5" fill="none" stroke-linecap="round"/>
+<path id="t-t2" d="M17.5 53.8C9.8 53.8 8.2 58.6 13.5 59.2" fill="none" stroke-linecap="round"/>
+<g id="t-tail"><use href="#t-t1" stroke="var(--o)" stroke-width="6.4"/><use href="#t-t1" stroke="var(--c)" stroke-width="2.6"/></g>
+<g id="t-body"><path d="M16.5 40C14.5 48.5 16.5 59.2 23 59.2H41C47.5 59.2 49.5 48.5 47.5 40Z" fill="var(--c)" stroke="var(--o)" stroke-width="2.3" stroke-linejoin="round"/><ellipse cx="32" cy="50" rx="10.4" ry="7.2" fill="var(--sf)"/><path d="M19.5 41.2Q32 45.2 44.5 41.2" fill="none" stroke="var(--p)" stroke-width="3.2" stroke-linecap="round"/><circle cx="32" cy="44.1" r="1.3" fill="var(--a)" stroke="var(--o)" stroke-width=".9"/><rect x="24" y="44.8" width="16" height="15.4" rx="2" fill="var(--cd)" stroke="var(--p)" stroke-width="1.4"/><use href="#emblem" transform="translate(25.4 46.1) scale(.0265)"/></g>
+<g id="t-head"><path d="M14.8 23.3L14.4 12.2C14.3 9.8 17 8.9 19.1 10.4L25.6 15C29.6 14.1 34.4 14.1 38.4 15L44.9 10.4C47 8.9 49.7 9.8 49.6 12.2L49.2 23.3C52 26.4 52.5 31.2 50.2 35.2 47.2 40.2 40.4 42.4 32 42.4 23.6 42.4 16.8 40.2 13.8 35.2 11.5 31.2 12 26.4 14.8 23.3Z" fill="var(--c)" stroke="var(--o)" stroke-width="2.3" stroke-linejoin="round"/><path d="M17.2 19.6L17.1 13 22.2 16.6ZM46.8 19.6L46.9 13 41.8 16.6Z" fill="var(--b)"/><rect x="30.6" y="15" width="2.8" height="5" rx="1.4" fill="var(--m)"/><rect x="26.2" y="15.6" width="2.4" height="3.8" rx="1.2" fill="var(--m)"/><rect x="35.4" y="15.6" width="2.4" height="3.8" rx="1.2" fill="var(--m)"/><path d="M10.2 30.6L16.4 31.3M11.2 34.6L16.8 33.9M53.8 30.6L47.6 31.3M52.8 34.6L47.2 33.9" stroke="var(--o)" stroke-width="1.6" stroke-linecap="round"/><ellipse cx="32" cy="33.8" rx="7.6" ry="4.6" fill="var(--sf)"/><path d="M30.1 31Q32 30.2 33.9 31L32 33.2Z" fill="var(--pl)"/></g>
+<ellipse id="t-paw" rx="4" ry="2.6" fill="var(--sf)" stroke="var(--o)" stroke-width="2"/>
+<path id="t-smile" d="M28.4 34.8Q30.2 36.8 32 34.8 33.8 36.8 35.6 34.8" fill="none" stroke="var(--i)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+<g id="t-eyes"><circle cx="23.5" cy="27" r="2.8" fill="var(--i)"/><circle cx="40.5" cy="27" r="2.8" fill="var(--i)"/><circle cx="24.4" cy="26.1" r=".9" fill="#fff"/><circle cx="41.4" cy="26.1" r=".9" fill="#fff"/></g>
+</defs>
+<g class="t-base"><g class="t-tl"><use href="#t-tail"/></g><g class="t-ts st"><use href="#t-t2" stroke="var(--o)" stroke-width="5.8"/><use href="#t-t2" stroke="var(--c)" stroke-width="2.4"/></g><use href="#t-body"/><use href="#t-head" class="t-hs"/></g>
+<g id="state-idle"><g class="tb"><use href="#t-eyes"/></g><use href="#t-smile"/><use href="#t-paw" x="18.5" y="58.2"/><use href="#t-paw" x="45.5" y="58.2"/></g>
+<g id="state-thinking" class="st"><use href="#t-eyes" x=".9" y="-1.2"/><path d="M29.8 35.6Q32 34.8 34.2 35.6" class="ik" stroke-width="1.7"/><use href="#t-paw" x="18.5" y="58.2"/><path d="M42.8 48.2C46.6 45.2 51 46.8 49.8 51.2 48.6 54.4 43.4 54.5 42.2 51.4Z" class="so"/><rect x="42.5" y="1.4" width="19.8" height="8.8" rx="4.4" class="cp"/><circle class="td" cx="47.7" cy="5.8" r="1.4" fill="var(--p)"/><circle class="td td2" cx="52.4" cy="5.8" r="1.4" fill="var(--p)"/><circle class="td td3" cx="57.1" cy="5.8" r="1.4" fill="var(--p)"/></g>
+<g id="state-understood" class="st"><path d="M20.4 27.6Q23.5 23.4 26.6 27.6M37.4 27.6Q40.5 23.4 43.6 27.6" class="ik" stroke-width="2.2"/><circle cx="18.2" cy="31" r="2" fill="var(--b)" opacity=".85"/><circle cx="45.8" cy="31" r="2" fill="var(--b)" opacity=".85"/><use href="#t-smile"/><use href="#t-paw" x="18.5" y="58.2"/><path d="M45.8 51.5C49.8 50.8 55.6 47.4 56.2 42.8 56.6 39.8 53.6 38.4 51.3 40.2 49.4 41.8 47.8 45.4 45.6 48.2Z" class="so"/><circle cx="53.1" cy="42.8" r="1.3" fill="var(--b)"/><path d="M55.8 7.4L57.2 11 60.8 12.4 57.2 13.8 55.8 17.4 54.4 13.8 50.8 12.4 54.4 11Z" fill="var(--a)" stroke="var(--o)" stroke-width="1.2" stroke-linejoin="round"/><circle cx="60.4" cy="7.2" r="1.2" fill="var(--a)"/></g>
+<g id="state-handoff" class="st"><use href="#t-eyes" y="1.2"/><use href="#t-smile"/><use href="#t-paw" x="18.5" y="58.2"/><path d="M43.5 49.5C48.8 48.5 52.2 52 50 56 48.4 58.6 44 57.5 43.2 53.8Z" class="so"/><circle cx="54.2" cy="56.2" r="5.8" class="cp"/><path d="M51.4 55L54.2 58.2 57 55" class="ps" stroke-width="2.3"/></g>
+<g id="state-checking" class="st"><use href="#t-eyes" x=".8" y=".8"/><path d="M29.4 35.2Q32 36.4 34.6 35.2" class="ik" stroke-width="1.7"/><use href="#t-paw" x="18.5" y="58.2"/><rect x="47.5" y="42.2" width="13.6" height="16.8" rx="1.8" fill="var(--cd)" stroke="var(--o)" stroke-width="1.8"/><path d="M50.5 46.6H58.1M50.5 50.4H56.5M50.5 54.2H54.9" stroke="var(--b)" stroke-width="1.6" stroke-linecap="round"/><path d="M49.6 51.8L45.2 56.8" stroke="var(--o)" stroke-width="2.9" stroke-linecap="round"/><circle cx="53" cy="48.2" r="5" fill="var(--s)" fill-opacity=".75" stroke="var(--p)" stroke-width="2.1"/><path d="M50.7 46.4A3.2 3.2 0 0 1 53.2 45" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><ellipse cx="45.8" cy="56.6" rx="3.7" ry="2.5" class="so"/></g>
+<g id="state-confused" class="st"><g transform="rotate(-7 32 30)"><use href="#t-head"/><use href="#t-eyes" y=".2"/><path d="M20.2 22.8Q23.5 21.4 26.2 22.8M37.8 22.8Q40.5 21.4 43.8 22.8" fill="none" stroke="var(--o)" stroke-width="1.5" stroke-linecap="round"/><path d="M29.6 35.6Q32 34.4 34.4 35.6" class="ik" stroke-width="1.7"/></g><use href="#t-paw" x="18.5" y="58.2"/><use href="#t-paw" x="45.5" y="58.2"/><circle cx="55.5" cy="9.2" r="6.8" class="cp"/><path d="M53.4 7.5C53.4 5.9 54.7 5.1 55.8 5.2 57.1 5.3 57.8 6.2 57.7 7.3 57.6 8.5 55.8 8.8 55.7 10" class="ps" stroke-width="2"/><circle cx="55.7" cy="12.6" r="1.1" fill="var(--p)"/></g>
+<g id="state-sleepy" class="st"><g transform="translate(0 2.4)"><use href="#t-head"/><path d="M20.4 27Q23.5 30 26.6 27M37.4 27Q40.5 30 43.6 27" class="ik" stroke-width="2.1"/><path d="M30.4 35.4Q32 36.2 33.6 35.4" class="ik" stroke-width="1.5"/></g><use href="#t-paw" x="18.8" y="58.4"/><use href="#t-paw" x="45.2" y="58.4"/><rect x="45.6" y="1.2" width="16.8" height="10.4" rx="5.2" class="cp"/><path d="M48.8 6H52.2L48.8 9.2H52.2M54.2 3.7H59L54.2 8.5H59" class="ps" stroke-width="1.7"/></g>
+</svg>
+  </template>
+
+  <script>
+    (() => {
+      const SIZES = [28, 36, 56, 120];
+      const STATES = [
+        {
+          key: 'idle',
+          cls: '(default)',
+          label: '1 · Idle',
+          cue: 'Calm greeting face, slow eye blink (disabled under reduced motion)',
+          trigger: 'Default / welcome message',
+          bubbleTr: 'Merhaba! Ben Topi. Başvuru süreci, gerekli belgeler veya başvuru durumunuz hakkında soru sorabilirsiniz.'
+        },
+        {
+          key: 'thinking',
+          cls: '.is-thinking',
+          label: '2 · Thinking',
+          cue: 'Tail sways slowly, three pulsing dots pill (static dots under reduced motion)',
+          trigger: 'Request in flight',
+          bubbleTr: 'Yanıtınız hazırlanıyor…'
+        },
+        {
+          key: 'understood',
+          cls: '.is-understood',
+          label: '3 · Understood',
+          cue: 'Content closed-eye smile, raised paw ("tamam / got it"), static gold sparkle',
+          trigger: 'Deterministic document list or knowledge answer',
+          bubbleTr: 'İkamet izni için gerekli belgeler: pasaport fotokopisi, öğrenci belgesi, sağlık sigortası ve 4 biyometrik fotoğraf.'
+        },
+        {
+          key: 'handoff',
+          cls: '.is-handoff',
+          label: '4 · Handoff',
+          cue: 'Friendly downward gaze, paw pointing down toward chevron badge',
+          trigger: 'Reply with the inquiry action or fingerprint redirect',
+          bubbleTr: 'Bu konu için ekibimizin dosyanızı doğrudan incelemesi gerekiyor. Aşağıdaki soru formundan bize yazabilirsiniz.',
+          actionTr: 'Soru formuna git'
+        },
+        {
+          key: 'checking',
+          cls: '.is-checking',
+          label: '5 · Checking',
+          cue: 'Focused gaze, magnifying glass held over a small document/file',
+          trigger: 'Application status summary',
+          bubbleTr: 'Başvuru özeti: Belgeleriniz Uluslararası Ofis tarafından inceleniyor. Şu an eksik belge görünmüyor.'
+        },
+        {
+          key: 'confused',
+          cls: '.is-confused',
+          label: '6 · Confused',
+          cue: 'Polite -7° head tilt, kind eyes, small "?" bubble',
+          trigger: 'Refusal or fallback menu',
+          bubbleTr: 'Bu konuda resmi yönlendirme yapamıyorum. Aşağıdaki konu başlıklarından birini seçebilir veya ofisimize yazabilirsiniz.'
+        },
+        {
+          key: 'sleepy',
+          cls: '.is-sleepy',
+          label: '7 · Sleepy',
+          cue: 'Lowered head, peacefully closed eyes, tucked tail, "z z" bubble',
+          trigger: 'HTTP 503 / daily limit reached',
+          bubbleTr: 'Günlük yanıt sınırına ulaşıldı veya servis şu an kullanılamıyor. Lütfen biraz sonra tekrar deneyin.'
+        }
+      ];
+
+      const STATE_CLASSES = STATES.filter((s) => s.key !== 'idle').map((s) => `is-${s.key}`);
+      const tpl = document.getElementById('tpl-topi');
+      let cloneSeq = 0;
+
+      function createTopi(sizePx, stateKey, isLive = false) {
+        const slot = document.createElement('span');
+        slot.className = 'mascot-slot';
+        slot.style.width = `${sizePx}px`;
+        slot.style.height = `${sizePx}px`;
+
+        const svg = tpl.content.firstElementChild.cloneNode(true);
+        const suffix = `-n${++cloneSeq}`;
+
+        // Namespace <defs> IDs per inline instance so multiple copies share zero duplicate IDs in DOM
+        const idMap = new Map();
+        for (const el of svg.querySelectorAll('defs [id]')) {
+          const oldId = el.getAttribute('id');
+          const newId = `${oldId}${suffix}`;
+          idMap.set(`#${oldId}`, `#${newId}`);
+          el.setAttribute('id', newId);
+        }
+        for (const useEl of svg.querySelectorAll('use[href]')) {
+          const ref = useEl.getAttribute('href');
+          if (idMap.has(ref)) useEl.setAttribute('href', idMap.get(ref));
+        }
+
+        if (stateKey !== 'idle') svg.classList.add(`is-${stateKey}`);
+        if (isLive) svg.dataset.liveMascot = 'true';
+
+        slot.append(svg);
+        return slot;
+      }
+
+      // 1. Light & Dark matrices
+      function populateMatrix(containerId) {
+        const panel = document.getElementById(containerId);
+        for (const st of STATES) {
+          const row = document.createElement('div');
+          row.className = 'state-row';
+
+          const head = document.createElement('div');
+          head.className = 'state-row-head';
+          const lbl = document.createElement('span');
+          lbl.className = 'state-row-label';
+          lbl.textContent = `${st.label} (${st.cls})`;
+          const note = document.createElement('span');
+          note.className = 'state-row-note';
+          note.textContent = st.trigger;
+          head.append(lbl, note);
+
+          const strip = document.createElement('div');
+          strip.className = 'size-strip';
+          for (const sz of SIZES) {
+            const cell = document.createElement('div');
+            cell.className = 'size-cell';
+            cell.append(createTopi(sz, st.key, false));
+            const tag = document.createElement('code');
+            tag.textContent = `${sz}px`;
+            cell.append(tag);
+            strip.append(cell);
+          }
+
+          row.append(head, strip);
+          panel.append(row);
+        }
+      }
+
+      populateMatrix('matrix-light');
+      populateMatrix('matrix-dark');
+
+      // Burgundy strip
+      const burgundyStrip = document.getElementById('matrix-burgundy');
+      for (const st of STATES) {
+        const item = document.createElement('div');
+        item.className = 'burgundy-item';
+        item.append(createTopi(56, st.key, false), createTopi(36, st.key, false));
+        const cap = document.createElement('span');
+        cap.textContent = st.key;
+        item.append(cap);
+        burgundyStrip.append(item);
+      }
+
+      // 2. LTR Widget Mockups
+      const launcherSm = document.getElementById('launcher-pill-sm');
+      launcherSm.append(createTopi(36, 'idle', true));
+      const smTxt = document.createElement('span');
+      smTxt.textContent = 'Asistan';
+      launcherSm.append(smTxt);
+
+      const launcherLg = document.getElementById('launcher-pill-lg');
+      launcherLg.append(createTopi(56, 'idle', true));
+      const lgTxt = document.createElement('span');
+      lgTxt.textContent = 'Asistan';
+      launcherLg.append(lgTxt);
+
+      document.getElementById('launcher-orb').append(createTopi(56, 'idle', true));
+
+      const panelBrand = document.getElementById('panel-header-brand');
+      panelBrand.append(createTopi(36, 'idle', true));
+      const panelTitle = document.createElement('h3');
+      panelTitle.className = 'mock-header-title';
+      panelTitle.textContent = 'Topi · Uluslararası Ofis Asistanı';
+      panelBrand.append(panelTitle);
+
+      const chatLog = document.getElementById('mock-chat-log');
+      for (const st of STATES) {
+        const row = document.createElement('div');
+        row.className = 'mock-msg-row';
+        row.append(createTopi(28, st.key, false));
+
+        const body = document.createElement('div');
+        body.className = 'mock-msg-body';
+
+        const badge = document.createElement('span');
+        badge.className = 'mock-state-badge';
+        badge.textContent = `${st.key} · ${st.cls}`;
+
+        const bubble = document.createElement('p');
+        bubble.className = 'mock-bubble';
+        bubble.textContent = st.bubbleTr;
+
+        body.append(badge, bubble);
+        if (st.actionTr) {
+          const btn = document.createElement('span');
+          btn.className = 'mock-action-btn';
+          btn.textContent = st.actionTr;
+          body.append(btn);
+        }
+
+        row.append(body);
+        chatLog.append(row);
+      }
+
+      // 3. RTL Arabic Sample
+      const rtlLauncher = document.getElementById('rtl-launcher');
+      rtlLauncher.append(createTopi(36, 'idle', true));
+      const rtlLauncherTxt = document.createElement('span');
+      rtlLauncherTxt.textContent = 'المساعد';
+      rtlLauncher.append(rtlLauncherTxt);
+
+      const rtlBrand = document.getElementById('rtl-header-brand');
+      rtlBrand.append(createTopi(36, 'idle', true));
+      const rtlTitle = document.createElement('h3');
+      rtlTitle.className = 'mock-header-title';
+      rtlTitle.textContent = 'توبي · مساعد المكتب الدولي';
+      rtlBrand.append(rtlTitle);
+
+      const rtlLog = document.getElementById('rtl-chat-log');
+      const rtlMessages = [
+        {
+          state: 'idle',
+          text: 'مرحباً! أنا توبي. يمكنك السؤال عن إجراءات التقديم أو المستندات المطلوبة أو حالة طلبك.'
+        },
+        {
+          state: 'understood',
+          text: 'المستندات المطلوبة لتصريح الإقامة: نسخة جواز السفر، شهادة الطالب، التأمين الصحي و4 صور بيومترية.'
+        },
+        {
+          state: 'handoff',
+          text: 'يحتاج فريقنا لمراجعة ملفك مباشرةً. يمكنك إرسال استفسارك عبر النموذج أدناه.',
+          action: 'الانتقال إلى نموذج الاستفسار'
+        }
+      ];
+
+      for (const msg of rtlMessages) {
+        const row = document.createElement('div');
+        row.className = 'mock-msg-row';
+        row.append(createTopi(28, msg.state, false));
+        const body = document.createElement('div');
+        body.className = 'mock-msg-body';
+        const bubble = document.createElement('p');
+        bubble.className = 'mock-bubble';
+        bubble.textContent = msg.text;
+        body.append(bubble);
+        if (msg.action) {
+          const btn = document.createElement('span');
+          btn.className = 'mock-action-btn';
+          btn.textContent = msg.action;
+          body.append(btn);
+        }
+        row.append(body);
+        rtlLog.append(row);
+      }
+
+      // 4. Trigger Mapping Table
+      const tbody = document.getElementById('mapping-tbody');
+      for (const st of STATES) {
+        const tr = document.createElement('tr');
+        const tdIcon = document.createElement('td');
+        tdIcon.append(createTopi(36, st.key, false));
+
+        const tdName = document.createElement('td');
+        tdName.innerHTML = `<strong>${st.key}</strong>`;
+
+        const tdCls = document.createElement('td');
+        tdCls.innerHTML = `<code>${st.cls}</code>`;
+
+        const tdCue = document.createElement('td');
+        tdCue.textContent = st.cue;
+
+        const tdTrigger = document.createElement('td');
+        tdTrigger.textContent = st.trigger;
+
+        tr.append(tdIcon, tdName, tdCls, tdCue, tdTrigger);
+        tbody.append(tr);
+      }
+
+      // Interactive top bar controls
+      const stateButtons = [...document.querySelectorAll('[data-state-btn]')];
+      function setLiveState(nextState) {
+        for (const btn of stateButtons) {
+          btn.setAttribute('aria-pressed', String(btn.dataset.stateBtn === nextState));
+        }
+        for (const svg of document.querySelectorAll('svg[data-live-mascot="true"]')) {
+          for (const cls of STATE_CLASSES) svg.classList.remove(cls);
+          if (nextState !== 'idle') svg.classList.add(`is-${nextState}`);
+        }
+      }
+      for (const btn of stateButtons) {
+        btn.addEventListener('click', () => setLiveState(btn.dataset.stateBtn));
+      }
+
+      const darkBtn = document.getElementById('toggle-dark');
+      darkBtn.addEventListener('click', () => {
+        const next = !document.body.classList.contains('is-dark');
+        document.body.classList.toggle('is-dark', next);
+        darkBtn.setAttribute('aria-pressed', String(next));
+      });
+
+      const motionBtn = document.getElementById('toggle-motion');
+      motionBtn.addEventListener('click', () => {
+        const next = !document.body.classList.contains('is-reduced-motion');
+        document.body.classList.toggle('is-reduced-motion', next);
+        motionBtn.setAttribute('aria-pressed', String(next));
+      });
+    })();
+  </script>
+</body>
+</html>
