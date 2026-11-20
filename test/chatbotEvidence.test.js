@@ -2103,3 +2103,121 @@ test('R3 finding 8: accommodation followed by contrast/correction marker, move-o
         assert.equal(hasEvidenceRisk([item.text], item.lang), true, `Expected hasEvidenceRisk=true for ${item.lang}: ${item.text}`);
     }
 });
+
+test('recency: newer user turns override older facts, within-turn conflicts stay uncertain, risk and quote verification follow recency, and older host facts require undertaking', () => {
+    // 1. 3-turn scenario change: turns 2+3 override turn 1 without turning facts uncertain.
+    const threeTurnScenario = [
+        'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekiyor?',
+        'Uzatma başvurusu, 17 yaşındayım, bir akrabamın yanında kalıyorum',
+        'Akrabam evli ve Türk vatandaşı, taahhütname verecek'
+    ];
+    const threeTurnFacts = extractSupportedDocumentFacts(threeTurnScenario, 'tr');
+    assert.deepEqual(threeTurnFacts, {
+        application_type: 'renewal',
+        is_under_18: true,
+        accommodation_type: 'undertaking',
+        host_is_married: 'yes',
+        host_is_turkish: 'yes'
+    });
+    assert.deepEqual(threeTurnFacts.__uncertain, []);
+    assert.equal(hasEvidenceRisk(threeTurnScenario, 'tr'), false);
+
+    // Older quotes must not override newer turns' values; newer quotes verify.
+    assert.equal(verifyQuotedFact('application_type', 'initial', 'İlk başvuru', threeTurnScenario, 'tr'), false);
+    assert.equal(verifyQuotedFact('application_type', 'renewal', 'Uzatma başvurusu', threeTurnScenario, 'tr'), true);
+    assert.equal(verifyQuotedFact('is_under_18', false, '20 yaşındayım', threeTurnScenario, 'tr'), false);
+    assert.equal(verifyQuotedFact('is_under_18', true, '17 yaşındayım', threeTurnScenario, 'tr'), true);
+    assert.equal(verifyQuotedFact('accommodation_type', 'dormitory', 'yurtta kalıyorum', threeTurnScenario, 'tr'), false);
+    assert.equal(verifyQuotedFact('accommodation_type', 'undertaking', 'taahhütname verecek', threeTurnScenario, 'tr'), true);
+    assert.equal(verifyQuotedFact('host_is_married', 'yes', 'Akrabam evli', threeTurnScenario, 'tr'), true);
+    assert.equal(verifyQuotedFact('host_is_turkish', 'yes', 'Akrabam evli ve Türk vatandaşı', threeTurnScenario, 'tr'), true);
+
+    // 2. 2-turn age-only update keeps unchanged facts from turn 1 and overrides only age.
+    const twoTurnAgeChange = [
+        'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, hangi belgeler gerekiyor?',
+        'aslında 17 yaşındayım'
+    ];
+    const twoTurnFacts = extractSupportedDocumentFacts(twoTurnAgeChange, 'tr');
+    assert.deepEqual(twoTurnFacts, {
+        application_type: 'initial',
+        is_under_18: true,
+        accommodation_type: 'dormitory'
+    });
+    assert.deepEqual(twoTurnFacts.__uncertain, []);
+    assert.equal(hasEvidenceRisk(twoTurnAgeChange, 'tr'), false);
+    assert.equal(verifyQuotedFact('is_under_18', false, '20 yaşındayım', twoTurnAgeChange, 'tr'), false);
+    assert.equal(verifyQuotedFact('is_under_18', true, '17 yaşındayım', twoTurnAgeChange, 'tr'), true);
+
+    // 3. Within-turn conflicts remain uncertain while within-turn negated corrections still resolve.
+    const sameTurnAppConflict = extractSupportedDocumentFacts(['İlk başvuru ve uzatma başvurusu'], 'tr');
+    assert.equal(sameTurnAppConflict.application_type, undefined);
+    assert.deepEqual(sameTurnAppConflict.__uncertain, ['application_type']);
+    assert.equal(hasEvidenceRisk(['İlk başvuru ve uzatma başvurusu'], 'tr'), true);
+
+    const sameTurnAgeConflict = extractSupportedDocumentFacts(['17 yaşındayım ve 20 yaşındayım'], 'tr');
+    assert.equal(sameTurnAgeConflict.is_under_18, undefined);
+    assert.deepEqual(sameTurnAgeConflict.__uncertain, ['is_under_18']);
+
+    const sameTurnAccomConflict = extractSupportedDocumentFacts(['Yurtta ve otelde kalıyorum'], 'tr');
+    assert.equal(sameTurnAccomConflict.accommodation_type, undefined);
+    assert.deepEqual(sameTurnAccomConflict.__uncertain, ['accommodation_type']);
+
+    const sameTurnCorrection = extractSupportedDocumentFacts(['İlk başvuru değil, uzatma başvurusu'], 'tr');
+    assert.deepEqual(sameTurnCorrection, { application_type: 'renewal' });
+    assert.deepEqual(sameTurnCorrection.__uncertain, []);
+
+    // 4. hasEvidenceRisk only considers turns whose facts are actually used.
+    const supersededNegationTurns = [
+        'İlk başvuru, 20 yaşındayım, yurtta kalmıyorum',
+        'Uzatma başvurusu, 17 yaşındayım, otelde kalıyorum'
+    ];
+    const supersededFacts = extractSupportedDocumentFacts(supersededNegationTurns, 'tr');
+    assert.deepEqual(supersededFacts, {
+        application_type: 'renewal',
+        is_under_18: true,
+        accommodation_type: 'hotel'
+    });
+    assert.deepEqual(supersededFacts.__uncertain, []);
+    assert.equal(hasEvidenceRisk(supersededNegationTurns, 'tr'), false);
+
+    const retainedNegationTurns = [
+        'İlk başvuru, 20 yaşındayım, yurtta kalmıyorum',
+        'Kira sözleşmesi ile kalıyorum'
+    ];
+    const retainedFacts = extractSupportedDocumentFacts(retainedNegationTurns, 'tr');
+    assert.deepEqual(retainedFacts, {
+        application_type: 'initial',
+        is_under_18: false,
+        accommodation_type: 'rental_contract'
+    });
+    assert.deepEqual(retainedFacts.__uncertain, []);
+    assert.equal(hasEvidenceRisk(retainedNegationTurns, 'tr'), true);
+
+    // 5. Host facts from an older turn stay valid while accommodation is undertaking, and are dropped when accommodation changes.
+    const stillUndertakingTurns = [
+        'Akrabamın yanında kalıyorum, akrabam evli ve Türk vatandaşı',
+        'Uzatma başvurusu, 17 yaşındayım'
+    ];
+    assert.deepEqual(extractSupportedDocumentFacts(stillUndertakingTurns, 'tr'), {
+        application_type: 'renewal',
+        is_under_18: true,
+        accommodation_type: 'undertaking',
+        host_is_married: 'yes',
+        host_is_turkish: 'yes'
+    });
+
+    const leftUndertakingTurns = [
+        'Akrabamın yanında kalıyorum, akrabam evli değil ve Türk vatandaşı değil',
+        'İlk başvuru, 20 yaşındayım, yurtta kalıyorum'
+    ];
+    const leftUndertakingFacts = extractSupportedDocumentFacts(leftUndertakingTurns, 'tr');
+    assert.deepEqual(leftUndertakingFacts, {
+        application_type: 'initial',
+        is_under_18: false,
+        accommodation_type: 'dormitory'
+    });
+    assert.deepEqual(leftUndertakingFacts.__uncertain, []);
+    assert.equal(hasEvidenceRisk(leftUndertakingTurns, 'tr'), false);
+    assert.equal(verifyQuotedFact('host_is_married', 'no', 'akrabam evli değil', leftUndertakingTurns, 'tr'), false);
+    assert.equal(verifyQuotedFact('host_is_turkish', 'no', 'Türk vatandaşı değil', leftUndertakingTurns, 'tr'), false);
+});

@@ -1335,19 +1335,23 @@ function annotateTurnHostContext(turnClauses, prevTurnHasDirectHost = false) {
     return turnClauses;
 }
 
-function parseTurnsIntoClauses(turns, language = 'tr') {
-    const allClauses = [];
+function parseTurnsByTurn(turns, language = 'tr') {
+    const parsedTurns = [];
     let prevTurnHasDirectHost = false;
     for (let turnIndex = 0; turnIndex < turns.length; turnIndex += 1) {
         const normalizedTurn = normalizeForEvidence(turns[turnIndex]);
         const turnClauses = annotateTurnHostContext(parseClauses(normalizedTurn, language), prevTurnHasDirectHost);
         for (const clause of turnClauses) {
             clause.turnIndex = turnIndex;
-            allClauses.push(clause);
         }
+        parsedTurns.push({
+            turnIndex,
+            normalizedTurn,
+            clauses: turnClauses
+        });
         prevTurnHasDirectHost = turnClauses.some((clause) => clause.directHostMatches.length > 0);
     }
-    return allClauses;
+    return parsedTurns;
 }
 
 function isStudentSelfDescriptionClause(clause) {
@@ -1505,8 +1509,110 @@ function attachUncertainKey(target, uncertainKeys) {
     return target;
 }
 
+function resolveFactByRecency(parsedTurns, detectForTurn) {
+    for (let index = parsedTurns.length - 1; index >= 0; index -= 1) {
+        const result = detectForTurn(parsedTurns[index].clauses);
+        if (result.uncertain || result.value !== undefined) {
+            return {
+                value: result.value,
+                uncertain: Boolean(result.uncertain),
+                turnIndex: parsedTurns[index].turnIndex
+            };
+        }
+    }
+    return { value: undefined, uncertain: false, turnIndex: null };
+}
+
+function analyzeDocumentEvidence(turns, resolvedLanguage) {
+    // Parse clauses per turn so adjacency, conflict, and recency rules operate cleanly across separate turns.
+    const parsedTurns = parseTurnsByTurn(turns, resolvedLanguage);
+    const hostByTurn = parsedTurns.map((turn) => detectHostFacts(turn.clauses, resolvedLanguage));
+
+    const applicationType = resolveFactByRecency(
+        parsedTurns,
+        (clauses) => detectApplicationType(clauses, resolvedLanguage)
+    );
+    const isUnder18 = resolveFactByRecency(
+        parsedTurns,
+        (clauses) => detectUnder18(clauses, resolvedLanguage)
+    );
+    const accommodationType = resolveFactByRecency(
+        parsedTurns,
+        (clauses) => detectAccommodationType(clauses, resolvedLanguage)
+    );
+
+    const resolveHostField = (field) => {
+        for (let index = parsedTurns.length - 1; index >= 0; index -= 1) {
+            const result = hostByTurn[index][field];
+            if (result.uncertain || result.value !== undefined) {
+                return {
+                    value: result.value,
+                    uncertain: Boolean(result.uncertain),
+                    turnIndex: parsedTurns[index].turnIndex
+                };
+            }
+        }
+        return { value: undefined, uncertain: false, turnIndex: null };
+    };
+
+    let hostIsMarried = resolveHostField('married');
+    let hostIsTurkish = resolveHostField('turkish');
+
+    // Host facts from an older turn stay valid only while the accommodation used is still 'undertaking'.
+    if (accommodationType.turnIndex !== null && accommodationType.value !== 'undertaking') {
+        if (hostIsMarried.turnIndex !== null && hostIsMarried.turnIndex < accommodationType.turnIndex) {
+            hostIsMarried = { value: undefined, uncertain: false, turnIndex: null };
+        }
+        if (hostIsTurkish.turnIndex !== null && hostIsTurkish.turnIndex < accommodationType.turnIndex) {
+            hostIsTurkish = { value: undefined, uncertain: false, turnIndex: null };
+        }
+    }
+
+    const fingerprintStatus = resolveFactByRecency(
+        parsedTurns,
+        (clauses) => detectFingerprintStatus(clauses, resolvedLanguage)
+    );
+
+    const supported = {};
+    const uncertain = [];
+    const usedTurnIndices = new Set();
+    const recordFact = (key, factResult) => {
+        if (factResult.turnIndex !== null) {
+            usedTurnIndices.add(factResult.turnIndex);
+        }
+        if (factResult.uncertain) {
+            uncertain.push(key);
+        } else if (factResult.value !== undefined) {
+            supported[key] = factResult.value;
+        }
+    };
+
+    recordFact('application_type', applicationType);
+    recordFact('is_under_18', isUnder18);
+    recordFact('accommodation_type', accommodationType);
+    recordFact('host_is_married', hostIsMarried);
+    recordFact('host_is_turkish', hostIsTurkish);
+    recordFact('fingerprint_status', fingerprintStatus);
+
+    return {
+        parsedTurns,
+        supported: attachUncertainKey(supported, uncertain),
+        factSources: {
+            application_type: applicationType,
+            is_under_18: isUnder18,
+            accommodation_type: accommodationType,
+            host_is_married: hostIsMarried,
+            host_is_turkish: hostIsTurkish,
+            fingerprint_status: fingerprintStatus
+        },
+        usedTurnIndices
+    };
+}
+
 /**
  * Extracts only the document-policy facts clearly supported by the student's own user turns.
+ * Resolves each fact from the most recent user turn that states it; older-turn values apply only when
+ * no newer turn states that fact, and within-turn conflicts/negations/questions remain uncertain.
  * Conservative by design: ambiguous, negated, or questioned facts are omitted and listed on
  * the non-enumerable `__uncertain` property so the server asks instead of guessing.
  * @param {string[]|string} userTurns All user turn contents in chronological order.
@@ -1520,41 +1626,13 @@ export function extractSupportedDocumentFacts(userTurns, language = 'tr') {
         : (typeof userTurns === 'string' ? [userTurns] : []);
     if (turns.length === 0) return attachUncertainKey({}, []);
 
-    // Parse clauses per turn so adjacency and pronoun-host-context rules never bridge across separate turns.
-    const clauses = parseTurnsIntoClauses(turns, resolvedLanguage);
-
-    const supported = {};
-    const uncertain = [];
-
-    const applicationType = detectApplicationType(clauses, resolvedLanguage);
-    if (applicationType.uncertain) uncertain.push('application_type');
-    else if (applicationType.value) supported.application_type = applicationType.value;
-
-    const isUnder18 = detectUnder18(clauses, resolvedLanguage);
-    if (isUnder18.uncertain) uncertain.push('is_under_18');
-    else if (typeof isUnder18.value === 'boolean') supported.is_under_18 = isUnder18.value;
-
-    const accommodationType = detectAccommodationType(clauses, resolvedLanguage);
-    if (accommodationType.uncertain) uncertain.push('accommodation_type');
-    else if (accommodationType.value) supported.accommodation_type = accommodationType.value;
-
-    const hostFacts = detectHostFacts(clauses, resolvedLanguage);
-    if (hostFacts.married.uncertain) uncertain.push('host_is_married');
-    else if (hostFacts.married.value) supported.host_is_married = hostFacts.married.value;
-
-    if (hostFacts.turkish.uncertain) uncertain.push('host_is_turkish');
-    else if (hostFacts.turkish.value) supported.host_is_turkish = hostFacts.turkish.value;
-
-    const fingerprintStatus = detectFingerprintStatus(clauses, resolvedLanguage);
-    if (fingerprintStatus.uncertain) uncertain.push('fingerprint_status');
-    else if (fingerprintStatus.value) supported.fingerprint_status = fingerprintStatus.value;
-
-    return attachUncertainKey(supported, uncertain);
+    return analyzeDocumentEvidence(turns, resolvedLanguage).supported;
 }
 
 /**
- * Returns true when the student turns contain any negation word from the evidence lexicons
- * anywhere in the text, or when `extractSupportedDocumentFacts` flagged any `__uncertain` fact.
+ * Returns true when `extractSupportedDocumentFacts` flagged any `__uncertain` fact, or when
+ * the turns whose facts are actually used (or the latest turn if no facts were extracted)
+ * contain any negation word from the evidence lexicons.
  * @param {string[]|string} userTurns All user turn contents in chronological order.
  * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
  * @returns {boolean} True if evidence carries negation or uncertainty risk.
@@ -1566,14 +1644,23 @@ export function hasEvidenceRisk(userTurns, language = 'tr') {
         : (typeof userTurns === 'string' ? [userTurns] : []);
     if (turns.length === 0) return false;
 
-    const supported = extractSupportedDocumentFacts(turns, resolvedLanguage);
+    const { supported, parsedTurns, usedTurnIndices } = analyzeDocumentEvidence(turns, resolvedLanguage);
     if (Array.isArray(supported.__uncertain) && supported.__uncertain.length > 0) {
         return true;
     }
 
-    const normalizedText = turns.map(normalizeForEvidence).join('\n');
-    const tokens = tokenizeClause(normalizedText, resolvedLanguage);
-    return tokens.some((token) => token.isNegation);
+    if (usedTurnIndices.size > 0) {
+        for (const turnIndex of usedTurnIndices) {
+            const turn = parsedTurns[turnIndex];
+            if (turn && turn.clauses.some((clause) => clause.tokens.some((token) => token.isNegation))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    const lastTurn = parsedTurns[parsedTurns.length - 1];
+    return Boolean(lastTurn && lastTurn.clauses.some((clause) => clause.tokens.some((token) => token.isNegation)));
 }
 
 function isPlainObject(value) {
@@ -1731,8 +1818,8 @@ export function verifyQuotedFact(fact, value, quote, userTurns, language = 'tr')
     const quoteTokens = tokenizeClause(normalizedQuote, resolvedLanguage);
     if (quoteTokens.length === 0) return false;
 
-    // Rule d: Lexicon veto — reject if extractSupportedDocumentFacts has a different value or lists the fact in __uncertain.
-    const supported = extractSupportedDocumentFacts(turns, resolvedLanguage);
+    // Rule d: Lexicon recency veto — reject if the most-recent resolved fact has a different value or is in __uncertain.
+    const { supported, parsedTurns, factSources } = analyzeDocumentEvidence(turns, resolvedLanguage);
     const uncertainKeys = Array.isArray(supported.__uncertain) ? supported.__uncertain : [];
     if (uncertainKeys.includes(fact)) return false;
     if (Object.hasOwn(supported, fact) && supported[fact] !== undefined && supported[fact] !== value) {
@@ -1753,20 +1840,21 @@ export function verifyQuotedFact(fact, value, quote, userTurns, language = 'tr')
     const isHostFact = fact === 'host_is_married' || fact === 'host_is_turkish';
     const isFingerprintFact = fact === 'fingerprint_status';
     const fpNegativeOnlyStems = getFingerprintNegativeOnlyStems(resolvedLanguage);
-
-    const normalizedTurns = turns.map(normalizeForEvidence);
-    const turnHasDirectHostFlags = normalizedTurns.map(
-        (normalizedTurn) => findAllMatches(normalizedTurn, HOST_CONTEXT_PATTERNS).length > 0
+    const accommodationSource = factSources.accommodation_type;
+    const accommodationBlocksOlderHost = (
+        isHostFact
+        && accommodationSource.turnIndex !== null
+        && accommodationSource.value !== 'undertaking'
     );
 
     // Rule a, b, c (clause duration), e (yes/no question), g (host context & student self-description):
-    // quote must occur in normalized user turns and pass clause checks.
-    for (let turnIndex = 0; turnIndex < normalizedTurns.length; turnIndex += 1) {
-        const normalizedTurn = normalizedTurns[turnIndex];
+    // quote must occur in normalized user turns and pass clause checks (newest turn first).
+    for (let turnIndex = parsedTurns.length - 1; turnIndex >= 0; turnIndex -= 1) {
+        if (accommodationBlocksOlderHost && turnIndex < accommodationSource.turnIndex) {
+            continue;
+        }
+        const { normalizedTurn, clauses } = parsedTurns[turnIndex];
         if (!normalizedTurn.includes(normalizedQuote)) continue;
-
-        const prevTurnHasDirectHost = turnIndex > 0 && turnHasDirectHostFlags[turnIndex - 1];
-        const clauses = annotateTurnHostContext(parseClauses(normalizedTurn, resolvedLanguage), prevTurnHasDirectHost);
         let searchFrom = 0;
         while (searchFrom <= normalizedTurn.length - normalizedQuote.length) {
             const quoteStart = normalizedTurn.indexOf(normalizedQuote, searchFrom);
