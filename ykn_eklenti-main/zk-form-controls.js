@@ -1,5 +1,5 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.124') return;
+    if (window.YknZkForm?.version === '1.2.134') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
     const COUNTRY_ALIAS_GROUPS = [
@@ -60,14 +60,18 @@
             .replace(/[^a-z0-9]/g, '');
     }
 
-    function isVisible(control) {
-        if (!control?.isConnected || control.disabled) return false;
+    function isElementVisible(control) {
+        if (!control?.isConnected) return false;
         for (let ancestor = control; ancestor; ancestor = ancestor.parentElement) {
             const style = ancestor.ownerDocument?.defaultView?.getComputedStyle?.(ancestor);
             if (ancestor.hidden || ancestor.getAttribute('aria-hidden') === 'true'
                 || style?.display === 'none' || style?.visibility === 'hidden') return false;
         }
         return true;
+    }
+
+    function isVisible(control) {
+        return Boolean(control && !control.disabled && isElementVisible(control));
     }
 
     function collectDocuments(root = document) {
@@ -610,6 +614,106 @@
         return { success: true, freshResponse: queryObserver.hasResponse() };
     }
 
+    const GOCNET_FORM_BUTTON_SELECTOR = 'button, .z-button, input[type="button"], input[type="submit"]';
+    const GOCNET_FORM_INPUT_SELECTOR = 'input:not([type]), input[type="text"]';
+
+    function isGocnetFormQueryButton(button) {
+        return isElementVisible(button)
+            && normalizeCompact(String(button.textContent || button.value || '').replace(/^\W+/, '')) === 'basvurusorgula';
+    }
+
+    function findGocnetFormTargets(documents) {
+        const seenScopeInputs = new Set();
+        let totalButtons = 0;
+        const targets = [];
+        for (const targetDocument of documents) {
+            const rawButtons = Array.from(targetDocument.querySelectorAll(GOCNET_FORM_BUTTON_SELECTOR))
+                .filter(isGocnetFormQueryButton);
+            const buttons = rawButtons.filter((candidate) =>
+                !rawButtons.some((other) => other !== candidate && other.contains(candidate)));
+            totalButtons += buttons.length;
+            for (const button of buttons) {
+                let scope = null;
+                let scopeInputs = [];
+                for (let current = button.parentElement, depth = 0; current && depth < 7;
+                    current = current.parentElement, depth += 1) {
+                    const inputs = Array.from(current.querySelectorAll(GOCNET_FORM_INPUT_SELECTOR))
+                        .filter(isElementVisible);
+                    if (inputs.length > 0) {
+                        scope = current;
+                        scopeInputs = inputs;
+                        break;
+                    }
+                }
+                if (!scope) continue;
+                for (const input of scopeInputs) seenScopeInputs.add(input);
+                if (scopeInputs.length !== 1) continue;
+                if (!normalizeCompact(scope.textContent).includes('eikametbasvuruno')) continue;
+                let hasHeading = false;
+                for (let headingScope = scope, headingDepth = 0; headingScope && headingDepth <= 7;
+                    headingScope = headingScope.parentElement, headingDepth += 1) {
+                    if (normalizeCompact(headingScope.textContent).includes('1eikametbasvurusorgulama')) {
+                        hasHeading = true;
+                        break;
+                    }
+                }
+                if (hasHeading) targets.push({ targetDocument, input: scopeInputs[0], button });
+            }
+        }
+        return { targets, totalInputs: seenScopeInputs.size, totalButtons };
+    }
+
+    async function queryGocnetForm(options) {
+        if (!/^20\d{2}-\d{2}-\d{5,8}$/.test(options.applicationNumber || '')
+            || typeof options.requestId !== 'string' || options.requestId.length < 1 || options.requestId.length > 128) {
+            throw new Error('bad_input');
+        }
+        await waitForIdle();
+        const documents = collectDocuments();
+        const hasOpenDialog = documents.some((targetDocument) =>
+            Array.from(targetDocument.querySelectorAll('[role="dialog"], .z-window-modal')).some(isElementVisible));
+        if (hasOpenDialog) {
+            throw new Error('form_dialog_already_open');
+        }
+        const { targets, totalInputs, totalButtons } = findGocnetFormTargets(documents);
+        if (targets.length === 0) {
+            throw new Error(`form_controls_missing (inputs: ${totalInputs}, buttons: ${totalButtons})`);
+        }
+        if (targets.length > 1) {
+            throw new Error(`form_controls_ambiguous (targets: ${targets.length})`);
+        }
+        const target = targets[0];
+        const buttonDisabled = Boolean(target.button.disabled
+            || Array.from(target.button.querySelectorAll?.('button, input') || []).some((child) => child.disabled));
+        if (target.input.disabled || target.input.readOnly || buttonDisabled) {
+            throw new Error('form_controls_disabled');
+        }
+        const targetWindow = target.targetDocument.defaultView;
+        const inputWidget = findZkWidget(target.input, targetWindow);
+        const buttonWidget = findZkWidget(target.button, targetWindow);
+        if (!inputWidget?.setValue || !inputWidget?.fire || !buttonWidget?.fire) {
+            throw new Error('form_zk_widget_missing');
+        }
+        const valueObserver = observeResponse(targetWindow);
+        try {
+            inputWidget.setValue(options.applicationNumber);
+            inputWidget.fire('onChange', { value: options.applicationNumber }, { toServer: true });
+            flushDeferredSelections(targetWindow);
+            await waitForResponse(valueObserver);
+            await waitForIdle();
+        } finally { valueObserver.dispose(); }
+        if (target.input.value !== options.applicationNumber || inputWidget.getValue?.() !== options.applicationNumber) {
+            throw new Error('form_value_not_retained');
+        }
+        const queryObserver = observeResponse(targetWindow);
+        try {
+            buttonWidget.fire('onClick', null, { toServer: true });
+            await waitForResponse(queryObserver);
+            await waitForIdle();
+        } finally { queryObserver.dispose(); }
+        return { success: true, freshResponse: queryObserver.hasResponse() };
+    }
+
     function isSelectionRetained(target) {
         const group = target?.widget?.getRadiogroup?.();
         const hasSelection = target?.radio.checked && target.widget?.isChecked?.() === true
@@ -763,6 +867,7 @@
     async function execute(options) {
         try {
             if (options.action === 'queryGocnetRecords') return await queryGocnetRecords(options);
+            if (options.action === 'queryGocnetForm') return await queryGocnetForm(options);
             if (options.action === 'setGocnetPhone') return await setGocnetPhone(options);
             if (options.action === 'waitForIdle') return await settleAndSyncSearch(options);
             if (options.action === 'verifyRadio') {
@@ -777,10 +882,10 @@
             return { success: false, verified: false };
         } catch (error) {
             console.warn('[YKN] ZK operation could not be verified.', { action: options.action, errorName: error?.name || 'Error' });
-            return { success: false, verified: false, error: options.action === 'queryGocnetRecords' && typeof error?.message === 'string'
+            return { success: false, verified: false, error: ['queryGocnetRecords', 'queryGocnetForm'].includes(options.action) && typeof error?.message === 'string'
                 ? error.message.slice(0, 200) : 'YÖKSİS seçimi veya sunucu güncellemesi doğrulanamadı.' };
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.124', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.134', execute });
 })();

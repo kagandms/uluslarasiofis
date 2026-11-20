@@ -2408,12 +2408,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             && ['nationality', 'birthNationality', 'birthCountry', 'issuerCountry'].includes(command.field)
             && typeof command.value === 'string' && command.value.trim().length > 0 && command.value.length <= 100
             && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 160;
-        const isGocnetHistoryQuery = command.action === 'queryGocnetRecords'
+        const isGocnetQuery = ['queryGocnetRecords', 'queryGocnetForm'].includes(command.action)
             && typeof command.applicationNumber === 'string' && /^20\d{2}-\d{2}-\d{5,8}$/.test(command.applicationNumber)
             && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 128;
         const isGocnetPhoneCommand = command.action === 'setGocnetPhone' && /^5\d{9}$/.test(command.phoneNational || '')
             && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 128;
-        const validCommand = isGocnetHistoryQuery || isGocnetPhoneCommand || isCountryCommand || command.action === 'waitForIdle' || (['selectRadio', 'verifyRadio'].includes(command.action)
+        const validCommand = isGocnetQuery || isGocnetPhoneCommand || isCountryCommand || command.action === 'waitForIdle' || (['selectRadio', 'verifyRadio'].includes(command.action)
             && allowedValues.includes(command.value) && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 160);
         if (!isYoksisUrl(sender?.tab?.url || '') || sender.frameId !== 0 || !validCommand) {
             sendResponse({ success: false, verified: false, error: 'YÖKSİS komutu doğrulanamadı.' });

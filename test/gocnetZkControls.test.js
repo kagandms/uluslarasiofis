@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import { test } from 'node:test';
 
 const source = readFileSync(new URL('../ykn_eklenti-main/zk-form-controls.js', import.meta.url), 'utf8');
+const queryFormFixture = readFileSync(new URL('./fixtures/gocnet-transfer/query-form.html', import.meta.url), 'utf8');
 const applicationNumber = '2099-01-0000001';
 
 function createHarness() {
@@ -73,4 +74,245 @@ test('GöçNet history query accepts the real YÖKSİS "Tümü" option whose val
     assert.deepEqual(JSON.parse(JSON.stringify(result)), { success: true, freshResponse: true });
     assert.equal(harness.listQueries(), 1);
     harness.dom.window.close();
+});
+
+function createFormHarness({
+    html = `<section>
+        <h2>1. E-İkamet Başvuru Sorgulama</h2>
+        <label>E-İkamet Başvuru No: <input type="text" data-widget="form-number"></label>
+        <button class="z-button" data-widget="form-query">🔍 Başvuru Sorgula</button>
+    </section>`,
+    retainValue = true,
+    hasInputWidget = true,
+    hasButtonWidget = true
+} = {}) {
+    const dom = new JSDOM(html, { runScripts: 'outside-only' });
+    const { window } = dom;
+    const observers = new Set();
+    const calls = [];
+    const widgetFor = (element) => {
+        const kind = element?.getAttribute?.('data-widget');
+        if (kind === 'form-number' && hasInputWidget) {
+            return {
+                value: '',
+                setValue(value) {
+                    calls.push(['input.setValue', value]);
+                    if (retainValue) {
+                        element.value = value;
+                        this.value = value;
+                    }
+                },
+                getValue() { return this.value; },
+                fire(name, data, opts) {
+                    calls.push(['input.fire', name, data, opts]);
+                    if (name === 'onChange') {
+                        for (const watcher of [...observers]) watcher.onResponse();
+                    }
+                }
+            };
+        }
+        if (kind === 'form-query' && hasButtonWidget) {
+            return {
+                fire(name, data, opts) {
+                    calls.push(['button.fire', name, data, opts]);
+                    if (name === 'onClick') {
+                        for (const watcher of [...observers]) watcher.onResponse();
+                    }
+                }
+            };
+        }
+        return null;
+    };
+    window.zk = { Widget: { $: widgetFor }, Desktop: { all: {} } };
+    window.zAu = { processing: () => false, getAuRequests: () => [] };
+    window.zWatch = {
+        listen({ onResponse }) { observers.add(onResponse); },
+        unlisten({ onResponse }) { observers.delete(onResponse); }
+    };
+    vm.runInContext(source, dom.getInternalVMContext());
+    return { dom, calls, observerCount: () => observers.size };
+}
+
+test('queryGocnetForm sets the value via ZK widget, fires onChange then onClick toServer, and returns freshResponse true', async () => {
+    const harness = createFormHarness();
+    const result = await harness.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-test-1'
+    });
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), { success: true, freshResponse: true });
+    assert.equal(harness.dom.window.document.querySelector('[data-widget="form-number"]').value, applicationNumber);
+    assert.deepEqual(JSON.parse(JSON.stringify(harness.calls)), [
+        ['input.setValue', applicationNumber],
+        ['input.fire', 'onChange', { value: applicationNumber }, { toServer: true }],
+        ['button.fire', 'onClick', null, { toServer: true }]
+    ]);
+    assert.equal(harness.observerCount(), 0);
+    harness.dom.window.close();
+});
+
+test('queryGocnetForm reports reason-coded errors for missing, ambiguous, or disabled controls and open dialogs', async () => {
+    const missingInput = createFormHarness({
+        html: `<section><h2>1. E-İkamet Başvuru Sorgulama</h2><button class="z-button" data-widget="form-query">Başvuru Sorgula</button></section>`
+    });
+    const missingResult = await missingInput.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-missing'
+    });
+    assert.equal(missingResult.success, false);
+    assert.match(missingResult.error, /^form_controls_missing \(inputs: 0, buttons: 1\)/);
+    missingInput.dom.window.close();
+
+    const twoInputsSameScope = createFormHarness({
+        html: `<section>
+            <h2>1. E-İkamet Başvuru Sorgulama</h2>
+            <label>E-İkamet Başvuru No: <input type="text" data-widget="form-number"></label>
+            <label>E-İkamet Başvuru No: <input type="text" data-widget="form-number"></label>
+            <button class="z-button" data-widget="form-query">Başvuru Sorgula</button>
+        </section>`
+    });
+    const twoInputsResult = await twoInputsSameScope.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-two-inputs'
+    });
+    assert.equal(twoInputsResult.success, false);
+    assert.match(twoInputsResult.error, /^form_controls_missing \(inputs: 2, buttons: 1\)/);
+    assert.equal(twoInputsSameScope.calls.length, 0);
+    twoInputsSameScope.dom.window.close();
+
+    const ambiguous = createFormHarness({
+        html: `<main>
+            <section>
+                <h2>1. E-İkamet Başvuru Sorgulama</h2>
+                <label>E-İkamet Başvuru No: <input type="text" data-widget="form-number"></label>
+                <button class="z-button" data-widget="form-query">Başvuru Sorgula</button>
+            </section>
+            <section>
+                <h2>1. E-İkamet Başvuru Sorgulama</h2>
+                <label>E-İkamet Başvuru No: <input type="text" data-widget="form-number"></label>
+                <button class="z-button" data-widget="form-query">Başvuru Sorgula</button>
+            </section>
+        </main>`
+    });
+    const ambiguousResult = await ambiguous.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-ambiguous'
+    });
+    assert.equal(ambiguousResult.success, false);
+    assert.match(ambiguousResult.error, /^form_controls_ambiguous \(targets: 2\)/);
+    assert.equal(ambiguous.calls.length, 0);
+    ambiguous.dom.window.close();
+
+    const disabled = createFormHarness();
+    disabled.dom.window.document.querySelector('[data-widget="form-query"]').disabled = true;
+    const disabledResult = await disabled.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-disabled'
+    });
+    assert.equal(disabledResult.success, false);
+    assert.equal(disabledResult.error, 'form_controls_disabled');
+    assert.equal(disabled.calls.length, 0);
+    disabled.dom.window.close();
+
+    const openDialog = createFormHarness({
+        html: `<main>
+            <section><h2>1. E-İkamet Başvuru Sorgulama</h2><label>E-İkamet Başvuru No: <input type="text" data-widget="form-number"></label><button class="z-button" data-widget="form-query">Başvuru Sorgula</button></section>
+            <div role="dialog"><h2>Açık Pencere</h2></div>
+        </main>`
+    });
+    const dialogResult = await openDialog.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-dialog'
+    });
+    assert.equal(dialogResult.success, false);
+    assert.equal(dialogResult.error, 'form_dialog_already_open');
+    openDialog.dom.window.close();
+});
+
+test('queryGocnetForm reports form_zk_widget_missing and form_value_not_retained without clicking query', async () => {
+    const missingWidget = createFormHarness({ hasButtonWidget: false });
+    const widgetResult = await missingWidget.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-no-widget'
+    });
+    assert.equal(widgetResult.success, false);
+    assert.equal(widgetResult.error, 'form_zk_widget_missing');
+    assert.equal(missingWidget.calls.length, 0);
+    missingWidget.dom.window.close();
+
+    const notRetained = createFormHarness({ retainValue: false });
+    const retainedResult = await notRetained.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-not-retained'
+    });
+    assert.equal(retainedResult.success, false);
+    assert.equal(retainedResult.error, 'form_value_not_retained');
+    assert.equal(notRetained.calls.some(([entry]) => entry === 'button.fire'), false);
+    notRetained.dom.window.close();
+});
+
+test('queryGocnetForm finds the single target inside query-form.html and nested ZK groupboxes with unrelated inputs', async () => {
+    const fixtureHarness = createFormHarness({ html: queryFormFixture });
+    fixtureHarness.dom.window.document.querySelector('section input').setAttribute('data-widget', 'form-number');
+    fixtureHarness.dom.window.document.querySelector('section button').setAttribute('data-widget', 'form-query');
+    const fixtureResult = await fixtureHarness.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-rich-fixture'
+    });
+    assert.deepEqual(JSON.parse(JSON.stringify(fixtureResult)), { success: true, freshResponse: true });
+    assert.equal(fixtureHarness.dom.window.document.querySelector('section input').value, applicationNumber);
+    assert.equal(fixtureHarness.dom.window.document.querySelector('input[placeholder="5XXXXXXXXX"]').value, '');
+    fixtureHarness.dom.window.close();
+
+    const nestedZkHarness = createFormHarness({
+        html: `<div class="z-window">
+            <div class="z-window-cnt">
+                <div class="z-groupbox">
+                    <div class="z-groupbox-header"><div class="z-caption">1. E-İkamet Başvuru Sorgulama</div></div>
+                    <div class="z-groupbox-cnt">
+                        <table><tbody><tr>
+                            <td><span>E-İkamet Başvuru No:</span></td>
+                            <td><input type="text" data-widget="form-number"></td>
+                            <td><span class="z-button" data-widget="form-query"><button type="button">🔍 Başvuru Sorgula</button></span></td>
+                        </tr></tbody></table>
+                    </div>
+                </div>
+                <div class="z-groupbox">
+                    <div class="z-groupbox-header"><div class="z-caption">2. Öğrenci Bilgileri</div></div>
+                    <div class="z-groupbox-cnt">
+                        <label>Öğrenci No: <input type="text"></label>
+                        <label>Telefon: <input type="text" placeholder="5XXXXXXXXX"></label>
+                    </div>
+                </div>
+            </div>
+        </div>`
+    });
+    const nestedResult = await nestedZkHarness.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-nested-zk'
+    });
+    assert.deepEqual(JSON.parse(JSON.stringify(nestedResult)), { success: true, freshResponse: true });
+    assert.deepEqual(JSON.parse(JSON.stringify(nestedZkHarness.calls)), [
+        ['input.setValue', applicationNumber],
+        ['input.fire', 'onChange', { value: applicationNumber }, { toServer: true }],
+        ['button.fire', 'onClick', null, { toServer: true }]
+    ]);
+    nestedZkHarness.dom.window.close();
+});
+
+test('queryGocnetForm fails with form_controls_ambiguous when two separate Başvuru Sorgula blocks exist', async () => {
+    const duplicateHarness = createFormHarness({
+        html: `<main>
+            <div class="z-groupbox">
+                <div class="z-groupbox-header"><div class="z-caption">1. E-İkamet Başvuru Sorgulama</div></div>
+                <div class="z-groupbox-cnt">
+                    <label>E-İkamet Başvuru No: <input type="text" data-widget="form-number"></label>
+                    <button class="z-button" data-widget="form-query">Başvuru Sorgula</button>
+                </div>
+            </div>
+            <div class="z-groupbox">
+                <div class="z-groupbox-header"><div class="z-caption">1. E-İkamet Başvuru Sorgulama</div></div>
+                <div class="z-groupbox-cnt">
+                    <label>E-İkamet Başvuru No: <input type="text" data-widget="form-number"></label>
+                    <button class="z-button" data-widget="form-query">Başvuru Sorgula</button>
+                </div>
+            </div>
+        </main>`
+    });
+    const result = await duplicateHarness.dom.window.YknZkForm.execute({
+        action: 'queryGocnetForm', applicationNumber, requestId: 'form-two-blocks'
+    });
+    assert.equal(result.success, false);
+    assert.equal(result.error, 'form_controls_ambiguous (targets: 2)');
+    assert.equal(duplicateHarness.calls.length, 0);
+    duplicateHarness.dom.window.close();
 });
