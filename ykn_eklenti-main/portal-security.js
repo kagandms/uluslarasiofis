@@ -154,7 +154,7 @@
                 && typeof request.passportNumber === 'string' && request.passportNumber.length <= 64
                 && typeof request.firstName === 'string' && request.firstName.length <= 120
                 && typeof request.lastName === 'string' && request.lastName.length <= 120
-                && typeof request.phoneNational === 'string' && /^5\d{9}$/.test(request.phoneNational);
+                && typeof request.phoneNational === 'string' && /^\d{7,10}$/.test(request.phoneNational);
             return typeof request.recordId === 'string' && /^\d{1,12}$/.test(request.recordId)
                 && typeof request.pdfSha256 === 'string' && /^[a-f0-9]{64}$/.test(request.pdfSha256)
                 && typeof request.pdfBase64 === 'string' && request.pdfBase64.length > 0

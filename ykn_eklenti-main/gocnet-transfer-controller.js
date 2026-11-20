@@ -9,7 +9,9 @@ const QUERY_RESULT_MESSAGES = Object.freeze({
     existing_record: ['sorgulama başarılı (db kaydı yüklendi)', 'başvuru sorgulama başarılı.',
         'öğrenci demografik bilgileri ve daha önceden kaydedilmiş veriler veritabanından forma yüklendi.'],
     student_data_filled: ['sorgulama başarılı (yöksis verileri dolduruldu)',
-        'başvuru sorgulama başarılı.', 'yöksis veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.']
+        'başvuru sorgulama başarılı.',
+        'yöksis veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form',
+        'otomatik dolduruldu.']
 });
 let queryInProgress = false;
 const transferContexts = new Map();
@@ -27,46 +29,79 @@ function isVisible(element) {
     return true;
 }
 
+const QUERY_BUTTON_SELECTOR = 'button, .z-button, input[type="button"], input[type="submit"]';
+const QUERY_TEXT_INPUT_SELECTOR = 'input:not([type]), input[type="text"]';
+
 function isExactSearchField(document, applicationNumber) {
     return findQueryControls(document)?.input.value === applicationNumber;
 }
 
+function isQueryButton(button) {
+    return isVisible(button)
+        && normalizeIdentity(String(button.textContent || button.value || '').replace(/^\W+/, '')) === 'basvurusorgula';
+}
+
+function isButtonDisabled(button) {
+    return Boolean(button?.disabled
+        || [...(button?.querySelectorAll?.('button, input') || [])].some((child) => child.disabled));
+}
+
 function findQueryControls(rootDocument) {
-    const inputs = [...rootDocument.querySelectorAll('input:not([type]), input[type="text"]')].filter(isVisible);
-    const labeledInputs = inputs.filter((input) => {
-        for (let parent = input.parentElement, depth = 0; parent && depth < 7; parent = parent.parentElement, depth += 1) {
-            const text = normalizeText(parent.textContent);
-            if (text.includes('1. e-ikamet başvuru sorgulama') && text.includes(QUERY_LABEL)) return true;
+    if (!rootDocument) return null;
+    const rawButtons = [...rootDocument.querySelectorAll(QUERY_BUTTON_SELECTOR)].filter(isQueryButton);
+    const buttons = rawButtons.filter((candidate) => !rawButtons.some((other) => other !== candidate && other.contains(candidate)));
+    const targets = [];
+    for (const button of buttons) {
+        let scope = null;
+        let scopeInputs = [];
+        for (let current = button.parentElement, depth = 0; current && depth < 7; current = current.parentElement, depth += 1) {
+            const inputs = [...current.querySelectorAll(QUERY_TEXT_INPUT_SELECTOR)].filter(isVisible);
+            if (inputs.length > 0) {
+                scope = current;
+                scopeInputs = inputs;
+                break;
+            }
         }
-        return false;
-    });
-    if (labeledInputs.length !== 1) return null;
-    const input = labeledInputs[0];
-    for (let scope = input.parentElement, depth = 0; scope && depth < 7; scope = scope.parentElement, depth += 1) {
-        const text = normalizeText(scope.textContent);
-        if (!text.includes('1. e-ikamet başvuru sorgulama') || !text.includes(QUERY_LABEL)) continue;
-        const buttons = [...scope.querySelectorAll('button, input[type="button"], input[type="submit"]')]
-            .filter((button) => isVisible(button) && normalizeText(button.textContent || button.value) === 'başvuru sorgula');
-        if (buttons.length === 1) return { input, button: buttons[0] };
-        if (buttons.length > 1) return null;
+        if (!scope || scopeInputs.length !== 1) continue;
+        if (!normalizeIdentity(scope.textContent).includes('eikametbasvuruno')) continue;
+        let hasHeading = false;
+        for (let headingScope = scope, headingDepth = 0; headingScope && headingDepth <= 7;
+            headingScope = headingScope.parentElement, headingDepth += 1) {
+            if (normalizeIdentity(headingScope.textContent).includes('1eikametbasvurusorgulama')) {
+                hasHeading = true;
+                break;
+            }
+        }
+        if (hasHeading) targets.push({ input: scopeInputs[0], button });
     }
-    return null;
+    return targets.length === 1 ? targets[0] : null;
 }
 
 function hasVisibleDialog(rootDocument) {
     return [...rootDocument.querySelectorAll('[role="dialog"], .z-window-modal')].some(isVisible);
 }
 
+function readSanitizedDialogHeader(dialog) {
+    const headerNode = dialog.querySelector('.z-window-header') || dialog.querySelector('h1, h2, h3, h4, h5');
+    if (!headerNode) return '';
+    return normalizeText(headerNode.textContent)
+        .replace(/[^\p{L}\p{N} .,:\-!/()]/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 40)
+        .trim();
+}
+
 function waitForQueryResult(rootDocument, applicationNumber, signal, timeoutMs) {
     return new Promise((resolve) => {
         const Observer = rootDocument.defaultView?.MutationObserver;
         if (!Observer || !rootDocument.documentElement) {
-            resolve('unknown');
+            resolve(noteReason('bad_input'));
             return;
         }
         let settled = false;
         const observer = new Observer(check);
-        const timer = rootDocument.defaultView.setTimeout(() => finish('unknown'), timeoutMs);
+        const timer = rootDocument.defaultView.setTimeout(() => finish(noteReason('form_result_timeout')), timeoutMs);
         const finish = (result) => {
             if (settled) return;
             settled = true;
@@ -75,15 +110,29 @@ function waitForQueryResult(rootDocument, applicationNumber, signal, timeoutMs) 
             signal?.removeEventListener('abort', abort);
             resolve(result);
         };
-        const abort = () => finish('unknown');
+        const abort = () => finish(noteReason('form_result_aborted'));
         function check() {
+            const dialogs = [...rootDocument.querySelectorAll('[role="dialog"], .z-window-modal')].filter(isVisible);
+            if (!dialogs.length) return;
             const result = readGocnetQueryResult(rootDocument, applicationNumber);
-            if (result !== 'unknown') finish(result);
-            else if (hasVisibleDialog(rootDocument)) finish('unknown');
+            if (result !== 'unknown') {
+                finish(result);
+                return;
+            }
+            if (!isExactSearchField(rootDocument, applicationNumber)) {
+                finish(noteReason('form_search_value_mismatch'));
+                return;
+            }
+            if (dialogs.length > 1) {
+                finish(noteReason('form_result_multiple_dialogs'));
+                return;
+            }
+            const header = readSanitizedDialogHeader(dialogs[0]);
+            finish(noteReason(header ? `form_result_unrecognized: ${header}` : 'form_result_unrecognized'));
         }
         observer.observe(rootDocument.documentElement, { childList: true, subtree: true, attributes: true, characterData: true });
         signal?.addEventListener('abort', abort, { once: true });
-        if (signal?.aborted) finish('unknown');
+        if (signal?.aborted) abort();
         else check();
     });
 }
@@ -143,7 +192,7 @@ async function saveGocnetRecord(rootDocument, request) {
     if (identityState !== 'verified') return { state: identityState };
     const phone = findGocnetPhoneInput(rootDocument);
     const button = findGocnetSaveButton(rootDocument);
-    if (!phone || phone.value !== request.phoneNational || !/^5\d{9}$/.test(phone.value) || !button) return { state: 'unknown' };
+    if (!phone || phone.value !== request.phoneNational || !/^\d{7,10}$/.test(phone.value) || !button) return { state: 'unknown' };
     queryInProgress = true;
     try {
         const resultPromise = waitForTransferResult(rootDocument, readGocnetSaveResult);
@@ -358,12 +407,71 @@ function readGocnetRecordListResult(rootDocument, { applicationNumber, freshResp
         ? 'no_match' : noteReason('empty_state_missing');
 }
 
+// Form komutu neden kodlarını ilk sırada koruyarak portalın hata kaynağını ayırmasını sağlar.
+function formatFormCommandFailureReason(error) {
+    const text = String(error || '').slice(0, 110);
+    return /^(?:bad_input|form_dialog_already_open|form_controls_missing|form_controls_ambiguous|form_controls_disabled|form_zk_widget_missing|form_value_not_retained|form_value_no_response|form_click_no_response)\b/.test(text)
+        ? text
+        : (text ? `form_command_failed: ${text}` : 'form_command_failed');
+}
+
 /** Performs one read-only exact-number lookup; every unrecognized result fails closed. */
-async function queryGocnetRegistration(rootDocument, applicationNumber, { signal, timeoutMs = 20_000 } = {}) {
-    if (!rootDocument || signal?.aborted || !/^20\d{2}-\d{2}-\d{5,8}$/.test(applicationNumber)
-        || hasVisibleDialog(rootDocument)) return 'unknown';
+async function queryGocnetRegistration(rootDocument, applicationNumber, { signal, timeoutMs = 20_000, requestId } = {}) {
+    lastReason = '';
+    if (!rootDocument || typeof applicationNumber !== 'string' || !/^20\d{2}-\d{2}-\d{5,8}$/.test(applicationNumber)) {
+        return noteReason('bad_input');
+    }
+    if (signal?.aborted) return noteReason('form_result_aborted');
+    if (hasVisibleDialog(rootDocument)) return noteReason('form_dialog_already_open');
+
+    if (typeof chrome !== 'undefined' && typeof chrome.runtime?.sendMessage === 'function') {
+        if (typeof requestId !== 'string' || requestId.length < 1 || requestId.length > 128) {
+            return noteReason('bad_input');
+        }
+        const AbortCtor = rootDocument.defaultView?.AbortController || globalThis.AbortController;
+        const waitController = AbortCtor ? new AbortCtor() : null;
+        const onParentAbort = () => waitController?.abort();
+        signal?.addEventListener('abort', onParentAbort, { once: true });
+        const resultPromise = waitForQueryResult(rootDocument, applicationNumber, waitController?.signal || signal, timeoutMs);
+        try {
+            const response = await chrome.runtime.sendMessage({
+                action: 'YOKSIS_ZK_COMMAND',
+                command: { action: 'queryGocnetForm', applicationNumber, requestId }
+            });
+            if (signal?.aborted) {
+                waitController?.abort();
+                await resultPromise.catch(() => {});
+                return noteReason('form_result_aborted');
+            }
+            if (response?.success !== true || response.freshResponse !== true) {
+                const reason = response?.success === true
+                    ? 'form_command_stale'
+                    : formatFormCommandFailureReason(response?.error);
+                if (response?.success !== true && /^form_click_no_response\b/.test(reason)) {
+                    const waited = await resultPromise;
+                    if (waited !== 'unknown') return waited;
+                    const waiterReason = lastReason && lastReason !== 'form_result_timeout' ? lastReason : '';
+                    return noteReason(waiterReason || reason);
+                }
+                waitController?.abort();
+                await resultPromise.catch(() => {});
+                return noteReason(reason);
+            }
+            return await resultPromise;
+        } catch {
+            waitController?.abort();
+            await resultPromise.catch(() => {});
+            return noteReason(signal?.aborted ? 'form_result_aborted' : 'form_command_failed');
+        } finally {
+            signal?.removeEventListener('abort', onParentAbort);
+        }
+    }
+
     let controls = findQueryControls(rootDocument);
-    if (!controls || controls.input.disabled || controls.input.readOnly || controls.button.disabled) return 'unknown';
+    if (!controls) return noteReason('form_controls_missing');
+    if (controls.input.disabled || controls.input.readOnly || isButtonDisabled(controls.button)) {
+        return noteReason('form_controls_disabled');
+    }
     const view = rootDocument.defaultView;
     const setter = Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, 'value')?.set;
     if (setter) setter.call(controls.input, applicationNumber);
@@ -372,10 +480,16 @@ async function queryGocnetRegistration(rootDocument, applicationNumber, { signal
     controls.input.dispatchEvent(new view.Event('change', { bubbles: true }));
 
     controls = findQueryControls(rootDocument);
-    if (!controls || controls.input.disabled || controls.input.readOnly || controls.button.disabled
-        || controls.input.value !== applicationNumber || signal?.aborted || hasVisibleDialog(rootDocument)) return 'unknown';
+    if (!controls) return noteReason('form_controls_missing');
+    if (controls.input.disabled || controls.input.readOnly || isButtonDisabled(controls.button)) {
+        return noteReason('form_controls_disabled');
+    }
+    if (controls.input.value !== applicationNumber) return noteReason('form_value_not_retained');
+    if (signal?.aborted) return noteReason('form_result_aborted');
+    if (hasVisibleDialog(rootDocument)) return noteReason('form_dialog_already_open');
     const resultPromise = waitForQueryResult(rootDocument, applicationNumber, signal, timeoutMs);
-    controls.button.click();
+    const clickable = controls.button.querySelector?.('button, input[type="button"], input[type="submit"]') || controls.button;
+    clickable.click();
     return resultPromise;
 }
 
@@ -453,6 +567,7 @@ function dispatchGocnetPdfUpload(rootDocument, pdfFile) {
 globalThis.YoksisGocnetTransferController = Object.freeze({
     dispatchGocnetPdfUpload,
     findGocnetApplicationDocumentUploadTarget,
+    getLastReason: () => lastReason,
     queryGocnetRegistration,
     queryGocnetRecordList,
     readGocnetUploadResult,
@@ -467,33 +582,47 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
             || !Number.isInteger(request.portalTabId) || request.portalTabId < 0
             || (request.applicationNumber !== undefined && (typeof request.applicationNumber !== 'string'
                 || !/^20\d{2}-\d{2}-\d{5,8}$/.test(request.applicationNumber)))) return false;
-        if (queryInProgress || globalThis.YoksisDocumentAuditController?.isActive?.()) {
-            sendResponse({ requestId: request.requestId, state: 'unknown' });
+        if (queryInProgress) {
+            sendResponse({ requestId: request.requestId, state: 'unknown', reason: 'controller_busy' });
+            return false;
+        }
+        if (globalThis.YoksisDocumentAuditController?.isActive?.()) {
+            sendResponse({ requestId: request.requestId, state: 'unknown', reason: 'document_audit_active' });
             return false;
         }
         if (request.action === 'YOKSIS_GOCNET_QUERY' && ['form', 'history'].includes(request.phase || 'form')
             && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request.attemptId || '')) {
             queryInProgress = true;
+            lastReason = '';
             const query = request.phase === 'history'
                 ? queryGocnetRecordList(document, request.applicationNumber, request.requestId)
-                : queryGocnetRegistration(document, request.applicationNumber);
+                : queryGocnetRegistration(document, request.applicationNumber, { requestId: request.requestId, timeoutMs: 120_000 });
             void query
                 .then((state) => {
-                    if (state === 'student_data_filled' && acknowledgeGocnetQuery(document, request.applicationNumber)) transferContexts.set(request.attemptId, {
-                        applicationNumber: request.applicationNumber, state
-                    });
-                    const out = state === 'student_data_filled' && !transferContexts.has(request.attemptId) ? 'unknown' : state;
-                    sendResponse({ requestId: request.requestId, state: out, ...(out === 'unknown' && lastReason ? { reason: lastReason } : {}) });
+                    if (state === 'student_data_filled' && acknowledgeGocnetQuery(document, request.applicationNumber)) {
+                        transferContexts.set(request.attemptId, {
+                            applicationNumber: request.applicationNumber, state
+                        });
+                    }
+                    const ackFailed = state === 'student_data_filled' && !transferContexts.has(request.attemptId);
+                    const out = ackFailed ? 'unknown' : state;
+                    const reason = ackFailed ? 'form_ack_failed' : lastReason;
                     lastReason = '';
+                    queryInProgress = false;
+                    sendResponse({ requestId: request.requestId, state: out, ...(out === 'unknown' && reason ? { reason } : {}) });
                 })
-                .catch(() => sendResponse({ requestId: request.requestId, state: 'unknown' }))
+                .catch(() => {
+                    lastReason = '';
+                    queryInProgress = false;
+                    sendResponse({ requestId: request.requestId, state: 'unknown', reason: 'form_query_exception' });
+                })
                 .finally(() => { queryInProgress = false; });
             return true;
         }
         if (request.action === 'YOKSIS_GOCNET_SAVE' && request.applicationNumber
             && typeof request.studentNumber === 'string' && typeof request.passportNumber === 'string'
             && typeof request.firstName === 'string' && typeof request.lastName === 'string'
-            && /^5\d{9}$/.test(request.phoneNational || '')) {
+            && /^\d{7,10}$/.test(request.phoneNational || '')) {
             void saveGocnetRecord(document, request)
                 .then((result) => sendResponse({ requestId: request.requestId, ...result }))
                 .catch(() => sendResponse({ requestId: request.requestId, state: 'unknown' }));

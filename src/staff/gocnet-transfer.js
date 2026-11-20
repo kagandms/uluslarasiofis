@@ -45,8 +45,27 @@ export function normalizeTurkishMobilePhone(value) {
     return phone.nationalNumber;
 }
 
+/** Normalizes any valid contact phone into 7..10 digits for GöçNet's maxlength=10 field. */
+export function normalizeGocnetPhone(value) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const turkishMobile = normalizeTurkishMobilePhone(trimmed);
+    if (turkishMobile) return turkishMobile;
+    const parsed = parsePhoneNumberFromString(trimmed, { extract: false });
+    if (parsed?.isValid() && /^\d{7,10}$/.test(parsed.nationalNumber)) {
+        return parsed.nationalNumber;
+    }
+    let digits = trimmed.replace(/\D/g, '');
+    if (digits.startsWith('00')) digits = digits.slice(2);
+    if (digits.length >= 11) digits = digits.slice(-10);
+    if (!/^\d{7,10}$/.test(digits) || /^(\d)\1+$/.test(digits)) return null;
+    return digits;
+}
+
 export function resolveTurkishMobilePhone(applicationPhone, correction = '') {
-    return normalizeTurkishMobilePhone(correction.trim() ? correction : applicationPhone);
+    const candidate = typeof correction === 'string' && correction.trim() ? correction : applicationPhone;
+    return normalizeGocnetPhone(candidate);
 }
 
 function readOcrText(payload) {
