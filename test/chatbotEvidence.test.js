@@ -10,6 +10,7 @@ import {
     normalizeForEvidence,
     verifyQuotedFact
 } from '../src/server/domain/chatbotEvidence.js';
+import { executeChatbotTool } from '../src/server/domain/chatbotTools.js';
 import {
     CHATBOT_ROUTE_NORMALIZED_PATTERNS,
     isAskingWhichDocumentsAreNeeded,
@@ -1396,6 +1397,230 @@ test('verifyQuotedFact verifies the three blind evaluation examples, substring b
     );
     assert.equal(
         verifyQuotedFact('fingerprint_status', 'registered', 'teyzemde kaliyorum', ['teyzemde kaliyorum'], 'tr'),
+        false
+    );
+});
+
+test('host context and student self-description guard: wrong-list self-descriptions leave host facts missing while kinship words and third-person host pronouns are accepted', () => {
+    // 1. Defect 1a (Turkish): student self-description ('Ben bekarım', 'yabancı vatandaşım') must not satisfy host facts
+    const trWrongListTurns = [
+        'İlk başvuru, 20 yaşındayım. Ben bekarım, yabancı vatandaşım, akrabamın yanında taahhütname ile kalıyorum. Belgeler neler?'
+    ];
+    assert.deepEqual(extractSupportedDocumentFacts(trWrongListTurns, 'tr'), {
+        application_type: 'initial',
+        is_under_18: false,
+        accommodation_type: 'undertaking'
+    });
+    assert.equal(verifyQuotedFact('host_is_married', 'no', 'Ben bekarım', trWrongListTurns, 'tr'), false);
+    assert.equal(verifyQuotedFact('host_is_married', 'no', 'bekarım', trWrongListTurns, 'tr'), false);
+    assert.equal(verifyQuotedFact('host_is_turkish', 'no', 'yabancı vatandaşım', trWrongListTurns, 'tr'), false);
+    assert.equal(
+        verifyQuotedFact('host_is_turkish', 'no', 'yabancı vatandaşım, akrabamın yanında', trWrongListTurns, 'tr'),
+        false
+    );
+
+    const trFiltered = filterDocumentArgsByEvidence(
+        {
+            application_type: 'initial',
+            is_under_18: false,
+            accommodation_type: 'undertaking',
+            host_is_married: 'no',
+            host_is_turkish: 'no',
+            quotes: {
+                application_type: 'İlk başvuru',
+                is_under_18: '20 yaşındayım',
+                accommodation_type: 'akrabamın yanında taahhütname ile kalıyorum',
+                host_is_married: 'Ben bekarım',
+                host_is_turkish: 'yabancı vatandaşım'
+            }
+        },
+        trWrongListTurns,
+        'tr'
+    );
+    assert.equal(Object.hasOwn(trFiltered, 'host_is_married'), false);
+    assert.equal(Object.hasOwn(trFiltered, 'host_is_turkish'), false);
+    assert.deepEqual(executeChatbotTool('get_required_documents', trFiltered, { language: 'tr' }), {
+        missing: ['host_is_married', 'host_is_turkish']
+    });
+
+    // 2. Defect 1b (Russian): student self-description ('Я холост', 'не гражданин Турции') must not satisfy host facts
+    const ruWrongListTurns = [
+        'Первичная подача, мне 21 год. Я холост и не гражданин Турции, живу у родственника по обязательству. Какие документы нужны?'
+    ];
+    assert.deepEqual(extractSupportedDocumentFacts(ruWrongListTurns, 'ru'), {
+        application_type: 'initial',
+        is_under_18: false,
+        accommodation_type: 'undertaking'
+    });
+    assert.equal(verifyQuotedFact('host_is_married', 'no', 'Я холост', ruWrongListTurns, 'ru'), false);
+    assert.equal(verifyQuotedFact('host_is_married', 'no', 'холост', ruWrongListTurns, 'ru'), false);
+    assert.equal(verifyQuotedFact('host_is_turkish', 'no', 'не гражданин Турции', ruWrongListTurns, 'ru'), false);
+
+    const ruFiltered = filterDocumentArgsByEvidence(
+        {
+            application_type: 'initial',
+            is_under_18: false,
+            accommodation_type: 'undertaking',
+            host_is_married: 'no',
+            host_is_turkish: 'no',
+            quotes: {
+                application_type: 'Первичная подача',
+                is_under_18: 'мне 21 год',
+                accommodation_type: 'живу у родственника по обязательству',
+                host_is_married: 'Я холост',
+                host_is_turkish: 'не гражданин Турции'
+            }
+        },
+        ruWrongListTurns,
+        'ru'
+    );
+    assert.equal(Object.hasOwn(ruFiltered, 'host_is_married'), false);
+    assert.equal(Object.hasOwn(ruFiltered, 'host_is_turkish'), false);
+    assert.deepEqual(executeChatbotTool('get_required_documents', ruFiltered, { language: 'ru' }), {
+        missing: ['host_is_married', 'host_is_turkish']
+    });
+
+    // Student self-description immediately following a host clause is still rejected across all five languages
+    for (const item of [
+        {
+            lang: 'tr',
+            turns: ['Akrabamın yanında kalıyorum, ben bekarım, yabancı vatandaşım'],
+            marriedQuote: 'ben bekarım',
+            turkishQuote: 'yabancı vatandaşım'
+        },
+        {
+            lang: 'en',
+            turns: ['I live with my relative, I am single and not a Turkish citizen'],
+            marriedQuote: 'I am single',
+            turkishQuote: 'not a Turkish citizen'
+        },
+        {
+            lang: 'ru',
+            turns: ['Живу у родственника, я холост и не гражданин Турции'],
+            marriedQuote: 'я холост',
+            turkishQuote: 'не гражданин Турции'
+        },
+        {
+            lang: 'tk',
+            turns: ['Garyndaşymyň ýanynda ýaşaýaryn, men öýlenmedik, daşary ýurtly'],
+            marriedQuote: 'men öýlenmedik',
+            turkishQuote: 'men öýlenmedik'
+        },
+        {
+            lang: 'ar',
+            turns: ['أسكن عند قريبي، أنا أعزب وغير تركي'],
+            marriedQuote: 'أنا أعزب',
+            turkishQuote: 'غير تركي'
+        }
+    ]) {
+        const extracted = extractSupportedDocumentFacts(item.turns, item.lang);
+        assert.equal(extracted.host_is_married, undefined, `Expected no host_is_married for ${item.lang}`);
+        assert.equal(extracted.host_is_turkish, undefined, `Expected no host_is_turkish for ${item.lang}`);
+        assert.equal(
+            verifyQuotedFact('host_is_married', 'no', item.marriedQuote, item.turns, item.lang),
+            false,
+            `Expected married quote rejection for ${item.lang}`
+        );
+        assert.equal(
+            verifyQuotedFact('host_is_turkish', 'no', item.turkishQuote, item.turns, item.lang),
+            false,
+            `Expected turkish quote rejection for ${item.lang}`
+        );
+    }
+
+    // 3. Defect 2a (Turkish kinship host context): 'teyzem Türk vatandaşı ve evli'
+    const trAuntTurns = [
+        'Teyzemin evinde kalıyorum, teyzem Türk vatandaşı ve evli, noterden taahhütname verecek'
+    ];
+    assert.deepEqual(extractSupportedDocumentFacts(trAuntTurns, 'tr'), {
+        accommodation_type: 'undertaking',
+        host_is_married: 'yes',
+        host_is_turkish: 'yes'
+    });
+    assert.equal(
+        verifyQuotedFact('host_is_married', 'yes', 'teyzem Türk vatandaşı ve evli', trAuntTurns, 'tr'),
+        true
+    );
+    assert.equal(
+        verifyQuotedFact('host_is_turkish', 'yes', 'teyzem Türk vatandaşı ve evli', trAuntTurns, 'tr'),
+        true
+    );
+
+    // 4. Defect 2b (English kinship + third-person pronoun host context): "he's a Turkish citizen and married"
+    const enUncleTurns = [
+        "I'm staying at my uncle's place, he's a Turkish citizen and married, he'll sign the notarized undertaking"
+    ];
+    assert.deepEqual(extractSupportedDocumentFacts(enUncleTurns, 'en'), {
+        accommodation_type: 'undertaking',
+        host_is_married: 'yes',
+        host_is_turkish: 'yes'
+    });
+    assert.equal(
+        verifyQuotedFact('host_is_married', 'yes', "he's a Turkish citizen and married", enUncleTurns, 'en'),
+        true
+    );
+    assert.equal(
+        verifyQuotedFact('host_is_turkish', 'yes', "he's a Turkish citizen and married", enUncleTurns, 'en'),
+        true
+    );
+
+    // 5. Kinship words + third-person pronouns across tr/en/ru/tk/ar when a host word appears earlier in the same turn
+    for (const item of [
+        {
+            lang: 'tr',
+            turns: ['Teyzemin evinde kalıyorum, o Türk vatandaşı ve evli'],
+            quote: 'o Türk vatandaşı ve evli'
+        },
+        {
+            lang: 'en',
+            turns: ["I'm staying with my aunt, she is a Turkish citizen and married"],
+            quote: 'she is a Turkish citizen and married'
+        },
+        {
+            lang: 'ru',
+            turns: ['Живу у тёти, она гражданка Турции и замужем'],
+            quote: 'она гражданка Турции и замужем'
+        },
+        {
+            lang: 'ru',
+            turns: ['Живу у дяди, он гражданин Турции и женат'],
+            quote: 'он гражданин Турции и женат'
+        },
+        {
+            lang: 'tk',
+            turns: ['Daýzamyň öýünde ýaşaýaryn, ol Türkiýäniň raýaty we durmuşa çykan'],
+            quote: 'ol Türkiýäniň raýaty we durmuşa çykan'
+        },
+        {
+            lang: 'ar',
+            turns: ['أسكن عند خالي، هو مواطن تركي ومتزوج'],
+            quote: 'هو مواطن تركي ومتزوج'
+        },
+        {
+            lang: 'ar',
+            turns: ['أسكن عند عمتي، هي مواطنة تركية ومتزوجة'],
+            quote: 'هي مواطنة تركية ومتزوجة'
+        }
+    ]) {
+        const extracted = extractSupportedDocumentFacts(item.turns, item.lang);
+        assert.equal(extracted.host_is_married, 'yes', `Expected host_is_married=yes for ${item.lang}: ${item.turns[0]}`);
+        assert.equal(extracted.host_is_turkish, 'yes', `Expected host_is_turkish=yes for ${item.lang}: ${item.turns[0]}`);
+        assert.equal(
+            verifyQuotedFact('host_is_married', 'yes', item.quote, item.turns, item.lang),
+            true,
+            `Expected verifyQuotedFact married=true for ${item.lang}: ${item.quote}`
+        );
+        assert.equal(
+            verifyQuotedFact('host_is_turkish', 'yes', item.quote, item.turns, item.lang),
+            true,
+            `Expected verifyQuotedFact turkish=true for ${item.lang}: ${item.quote}`
+        );
+    }
+
+    // Third-person pronoun without an earlier host word in the same turn does not count as host context
+    assert.equal(extractSupportedDocumentFacts(['He is a Turkish citizen and married'], 'en').host_is_married, undefined);
+    assert.equal(
+        verifyQuotedFact('host_is_married', 'yes', 'He is a Turkish citizen and married', ['He is a Turkish citizen and married'], 'en'),
         false
     );
 });
