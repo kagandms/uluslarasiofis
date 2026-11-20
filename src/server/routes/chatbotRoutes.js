@@ -109,16 +109,22 @@ const HOW_TO_OR_WHAT_IS_PATTERNS = Object.freeze([
 
 const FIRST_PERSON_STATUS_PHRASE_PATTERNS = Object.freeze([
     /(?:^|[^\p{L}])(?:basvurum[\p{L}\p{N}]*|dosyam[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:yukledigim|gonderdigim|verdigim|ekledigim|ilettigim)\s+(?:[\p{L}\p{N}]+\s+){0,2}(?:dosya|belge|evrak|basvuru)[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])my\s+(?:applications?|file(?!\s+size)s?)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:the\s+|my\s+)?(?:files?|applications?|documents?|docs)\s+(?:that\s+|which\s+)?i\s+(?:uploaded|sent|submitted)(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:мо(?:я|еи|ю)\s+заявк[\p{L}\p{N}]*|мо(?:е|его|ему|им|ем)\s+(?:дел(?:о|а|у|ом|е)|заявлен[\p{L}\p{N}]*))(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:документ[\p{L}\p{N}]*|фаил[\p{L}\p{N}]*|дел[\p{L}\p{N}]*|заявк[\p{L}\p{N}]*|заявлен[\p{L}\p{N}]*),?\s+котор(?:ыи|ую|ое|ые)\s+я\s+(?:отправил[\p{L}\p{N}]*|загрузил[\p{L}\p{N}]*|подал[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])arzam[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?:و|ف|ب|ل)?(?:طلبي|ملفي)(?:[^\p{L}]|$)/u
+    /(?:^|[^\p{L}])(?:yuklan|iberen|tabsyran|beren)\s+(?:[\p{L}\p{N}]+\s+){0,2}(?:fayl|arza|resminama|dosye)[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:و|ف|ب|ل)?(?:طلبي|ملفي)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:(?:ملف|طلب|مستند)\s+الذي|(?:مستندات|وثايق)\s+التي)\s+(?:ارسلته|ارسلتها|رفعته|رفعتها|قدمته|قدمتها)(?:[^\p{L}]|$)/u
 ]);
 
 const DOCUMENT_KEYWORD_PATTERNS = Object.freeze([
     /belge[\p{L}\p{N}]*/u,
     /evrak[\p{L}\p{N}]*/u,
     /document[\p{L}\p{N}]*/u,
+    /dokument[\p{L}\p{N}]*/u,
     /(?:^|[^\p{L}])docs?(?:[^\p{L}]|$)/u,
     /документ[\p{L}\p{N}]*/u,
     /resminama[\p{L}\p{N}]*/u,
@@ -251,6 +257,14 @@ const HANDOFF_PATTERNS = Object.freeze([
     ...OFFICE_HANDOFF_PATTERNS
 ]);
 
+const PROMPT_OVERRIDE_MARKER_PATTERNS = Object.freeze([
+    /(?:^|[^\p{L}])(?:kurallar[\p{L}\p{N}]*|talimatlar[\p{L}\p{N}]*)\s*(?:unut|yoksay|ihmal)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:system\s+override|(?:ignore|disregard|forget)\s+(?:all\s+|previous\s+)?(?:rules|restrictions|instructions))(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:игнорируи|забудь)\s+(?:[\p{L}\p{N}]+\s+){0,2}(?:правила|инструкци[\p{L}\p{N}]*|ограничени[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:gor[\p{L}\p{N}]*|duzgun[\p{L}\p{N}]*|gorkezme[\p{L}\p{N}]*)\s*(?:yatdan\s+cykar|unut)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:تجاهل|انسي|انس)\s+(?:كل\s+|جميع\s+)?(?:ال)?(?:قواعد|تعليمات|قيود)(?:[^\p{L}]|$)/u
+]);
+
 export const CHATBOT_ROUTE_NORMALIZED_PATTERNS = Object.freeze({
     STATUS_RULES_BY_LANGUAGE,
     STANDALONE_STATUS_PHRASES,
@@ -262,7 +276,8 @@ export const CHATBOT_ROUTE_NORMALIZED_PATTERNS = Object.freeze({
     OTHER_STUDENTS_DATA_RULES_BY_LANGUAGE,
     EXPLICIT_HANDOFF_PATTERNS,
     OFFICE_HANDOFF_PATTERNS,
-    HANDOFF_PATTERNS
+    HANDOFF_PATTERNS,
+    PROMPT_OVERRIDE_MARKER_PATTERNS
 });
 
 const DOCUMENT_FACT_KEYS = Object.freeze([
@@ -516,18 +531,28 @@ export function isAskingWhichDocumentsAreNeeded(messageContent) {
     return DOCUMENT_LIST_INTENT_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
+function hasPromptOverrideMarker(messageContent) {
+    if (typeof messageContent !== 'string') return false;
+    const normalized = evidence.normalizeForEvidence(messageContent);
+    return PROMPT_OVERRIDE_MARKER_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 export function isStatusQuestionWithoutReference(messageContent) {
     if (typeof messageContent !== 'string') return false;
     if (hasExplicitPersonComplaintUrgentHandoff(messageContent)) {
         return false;
     }
-    if (hasDocumentKeyword(messageContent)) {
+    if (isVeryShortDocumentQuestion(messageContent) || isAskingWhichDocumentsAreNeeded(messageContent)) {
         return false;
     }
     const normalized = evidence.normalizeForEvidence(messageContent);
+    const hasFirstPersonStatusContext = FIRST_PERSON_STATUS_PHRASE_PATTERNS.some((pattern) => pattern.test(normalized));
+    if (hasDocumentKeyword(messageContent) && !hasFirstPersonStatusContext) {
+        return false;
+    }
     if (
         HOW_TO_OR_WHAT_IS_PATTERNS.some((pattern) => pattern.test(normalized))
-        && !FIRST_PERSON_STATUS_PHRASE_PATTERNS.some((pattern) => pattern.test(normalized))
+        && !hasFirstPersonStatusContext
     ) {
         return false;
     }
@@ -536,7 +561,7 @@ export function isStatusQuestionWithoutReference(messageContent) {
     }
     return Object.values(STATUS_RULES_BY_LANGUAGE).some(({ status, application }) =>
         status.some((pattern) => pattern.test(normalized))
-        && application.some((pattern) => pattern.test(normalized))
+        && (hasFirstPersonStatusContext || application.some((pattern) => pattern.test(normalized)))
     );
 }
 
@@ -646,13 +671,8 @@ function readSupportedDocumentFacts(userTurns, language) {
     return { facts, uncertainKeys };
 }
 
-function resolveToolDocumentArgs(rawArgs, userTurns, language, { evidenceRisk, supportedFacts, uncertainKeys }) {
+function resolveToolDocumentArgs(rawArgs, { supportedFacts, uncertainKeys }) {
     if (!isPlainObject(rawArgs)) return rawArgs;
-
-    const baseArgs = typeof evidence.filterDocumentArgsByEvidence === 'function'
-        ? evidence.filterDocumentArgsByEvidence(rawArgs, userTurns, language)
-        : { ...rawArgs };
-    if (!isPlainObject(baseArgs)) return baseArgs;
 
     const resolved = {};
     for (const key of DOCUMENT_FACT_KEYS) {
@@ -663,17 +683,7 @@ function resolveToolDocumentArgs(rawArgs, userTurns, language, { evidenceRisk, s
         }
         if (uncertainKeys.has(key)) continue;
 
-        if (evidenceRisk) {
-            if (hasRawValue && Object.hasOwn(supportedFacts, key) && rawArgs[key] === supportedFacts[key]) {
-                resolved[key] = supportedFacts[key];
-            }
-            continue;
-        }
-
-        const hasBaseValue = Object.hasOwn(baseArgs, key) && baseArgs[key] !== undefined && baseArgs[key] !== null;
         if (Object.hasOwn(supportedFacts, key) && (!hasRawValue || rawArgs[key] === supportedFacts[key])) {
-            resolved[key] = supportedFacts[key];
-        } else if (hasBaseValue && baseArgs[key] === supportedFacts[key]) {
             resolved[key] = supportedFacts[key];
         }
     }
@@ -696,6 +706,16 @@ function renderDocumentToolReply(toolOutput, language, handoffRequested = false,
         reply: buildMissingDocumentsQuestion(toolOutput?.missing || [], language),
         actions
     });
+}
+
+function renderListIntentFallbackReply(supportedFacts, language, handoffRequested, allowDeterministicEvidence) {
+    const docOutput = resolveEvidenceDocumentOutput(supportedFacts, language);
+    return renderDocumentToolReply(
+        docOutput,
+        language,
+        handoffRequested,
+        allowDeterministicEvidence
+    );
 }
 
 function outcomeForError(error) {
@@ -794,10 +814,22 @@ export async function handlePublicChat(request, environment, requestId) {
         const allowDeterministicEvidence = !evidenceRisk && uncertainKeys.size === 0;
         const isAnsweringMissingFacts = isAnsweringMissingFactsQuestion(previousAssistantMessage, validated.language);
         const isShortDocumentQuery = isVeryShortDocumentQuestion(lastUserMessage);
+        const { facts: lastTurnFacts, uncertainKeys: lastTurnUncertainKeys } = readSupportedDocumentFacts(
+            [lastUserMessage],
+            validated.language
+        );
+        const lastTurnHasDocumentFact = Object.keys(lastTurnFacts).length > 0 || lastTurnUncertainKeys.size > 0;
+        const previousTwoUserTurns = userTurns.slice(0, -1).slice(-2);
+        const previousTurnHadDocumentIntent = previousTwoUserTurns.some((turn) =>
+            isVeryShortDocumentQuestion(turn)
+            || isAskingWhichDocumentsAreNeeded(turn)
+            || hasDocumentKeyword(turn)
+        );
         const hasDocumentListIntent =
             isAnsweringMissingFacts
             || isShortDocumentQuery
-            || isAskingWhichDocumentsAreNeeded(lastUserMessage);
+            || isAskingWhichDocumentsAreNeeded(lastUserMessage)
+            || (lastTurnHasDocumentFact && previousTurnHadDocumentIntent);
 
         if (allowDeterministicEvidence && isShortDocumentQuery) {
             const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
@@ -871,10 +903,9 @@ export async function handlePublicChat(request, environment, requestId) {
                 });
             } catch (error) {
                 if (hasDocumentListIntent) {
-                    const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
                     outcome = 'ok';
-                    return renderDocumentToolReply(
-                        docOutput,
+                    return renderListIntentFallbackReply(
+                        supportedFacts,
                         validated.language,
                         handoffRequested,
                         allowDeterministicEvidence
@@ -917,8 +948,7 @@ export async function handlePublicChat(request, environment, requestId) {
                 let toolPayload;
                 try {
                     const effectiveArgs = call.name === 'get_required_documents'
-                        ? resolveToolDocumentArgs(call.arguments, userTurns, validated.language, {
-                            evidenceRisk,
+                        ? resolveToolDocumentArgs(call.arguments, {
                             supportedFacts,
                             uncertainKeys
                         })
@@ -975,6 +1005,15 @@ export async function handlePublicChat(request, environment, requestId) {
         }
 
         if (exhaustedModelCalls) {
+            if (hasDocumentListIntent) {
+                outcome = 'ok';
+                return renderListIntentFallbackReply(
+                    supportedFacts,
+                    validated.language,
+                    handoffRequested,
+                    allowDeterministicEvidence
+                );
+            }
             outcome = 'fallback';
             return routeResult({
                 reply: getChatbotFixedText('fallback', validated.language),
@@ -1019,6 +1058,15 @@ export async function handlePublicChat(request, environment, requestId) {
 
         const trimmedText = typeof finalText === 'string' ? finalText.trim() : '';
         if (!trimmedText || [...trimmedText].length > CHATBOT_MAX_REPLY_CHARS) {
+            if (hasDocumentListIntent) {
+                outcome = 'ok';
+                return renderListIntentFallbackReply(
+                    supportedFacts,
+                    validated.language,
+                    handoffRequested,
+                    allowDeterministicEvidence
+                );
+            }
             outcome = 'fallback';
             return routeResult({
                 reply: getChatbotFixedText('fallback', validated.language),
@@ -1027,6 +1075,15 @@ export async function handlePublicChat(request, environment, requestId) {
         }
 
         if (trimmedText === CHATBOT_REFUSAL_MARKER || trimmedText.includes(CHATBOT_REFUSAL_MARKER)) {
+            if (hasDocumentListIntent && !hasPromptOverrideMarker(lastUserMessage)) {
+                outcome = 'ok';
+                return renderListIntentFallbackReply(
+                    supportedFacts,
+                    validated.language,
+                    handoffRequested,
+                    allowDeterministicEvidence
+                );
+            }
             outcome = 'refusal';
             return routeResult({
                 reply: getChatbotFixedText('refusal', validated.language),
@@ -1035,10 +1092,9 @@ export async function handlePublicChat(request, environment, requestId) {
         }
 
         if (looksLikeProseDocumentReply(trimmedText, validated.language) || hasDocumentListIntent) {
-            const docOutput = resolveEvidenceDocumentOutput(supportedFacts, validated.language);
             outcome = 'ok';
-            return renderDocumentToolReply(
-                docOutput,
+            return renderListIntentFallbackReply(
+                supportedFacts,
                 validated.language,
                 handoffRequested,
                 allowDeterministicEvidence

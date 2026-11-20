@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
     EVIDENCE_PATTERN_LISTS,
@@ -990,4 +991,145 @@ test('corrective E: yes/no question marks route facts to __uncertain while WH-qu
         assert.deepEqual(result, {});
         assert.deepEqual(result.__uncertain, [item.uncertainKey]);
     }
+});
+
+test('round 5 fix 4: Turkish adult age/polite requests and Russian standalone age extract cleanly without matching durations', () => {
+    const trAdultPhrases = ['yaşım 19', '19 yaşım', '18den büyüğüm', '18 yaşından büyüğüm'];
+    for (const phrase of trAdultPhrases) {
+        const result = extractSupportedDocumentFacts([phrase], 'tr');
+        assert.equal(result.is_under_18, false, `Expected is_under_18=false for: ${phrase}`);
+        assert.deepEqual(result.__uncertain, [], `Expected empty __uncertain for: ${phrase}`);
+    }
+
+    const ramblingTr = extractSupportedDocumentFacts(
+        ['selam kanka ya ben yeni geldim istanbula ilk kez ikamet basvurusu yapicam yaşım 19 falan oldu yani 18den buyugum su an kira sozlesmesi yaptik arkadasla evde kaliyoruz bana tam olarak hangi belgeler lazim soyler misin cok karisik geldi'],
+        'tr'
+    );
+    assert.deepEqual(ramblingTr, {
+        application_type: 'initial',
+        is_under_18: false,
+        accommodation_type: 'rental_contract'
+    });
+    assert.deepEqual(ramblingTr.__uncertain, []);
+
+    const politeCases = [
+        {
+            lang: 'tr',
+            text: 'İlk başvuru yapacağım, hangi belgeler lazım yardımcı olur musun?',
+            expected: { application_type: 'initial' }
+        },
+        {
+            lang: 'tr',
+            text: 'Uzatma için gerekli belgeleri açıklar mısın?',
+            expected: { application_type: 'renewal' }
+        },
+        {
+            lang: 'en',
+            text: 'Can you tell me what documents I need for an initial application?',
+            expected: { application_type: 'initial' }
+        },
+        {
+            lang: 'en',
+            text: 'Could you list the required documents for a renewal application?',
+            expected: { application_type: 'renewal' }
+        }
+    ];
+    for (const item of politeCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.deepEqual(result, item.expected, `Failed polite request for ${item.lang}: ${item.text}`);
+        assert.deepEqual(result.__uncertain, []);
+    }
+
+    const ruStandaloneCases = [
+        { text: 'Первичная заявка, 19 лет, живу в общежитии', expected: { application_type: 'initial', is_under_18: false, accommodation_type: 'dormitory' } },
+        { text: '19 лет, первичная заявка', expected: { application_type: 'initial', is_under_18: false } },
+        { text: '19 лет первичная заявка', expected: { application_type: 'initial', is_under_18: false } }
+    ];
+    for (const item of ruStandaloneCases) {
+        const result = extractSupportedDocumentFacts([item.text], 'ru');
+        assert.deepEqual(result, item.expected, `Failed Russian standalone age: ${item.text}`);
+        assert.deepEqual(result.__uncertain, []);
+    }
+
+    const ruDurationCases = [
+        'живу в общежитии 2 года',
+        'за 2 года',
+        'уже 3 года здесь',
+        'живу в общежитии 15 лет',
+        'за 15 лет',
+        'уже 15 лет здесь'
+    ];
+    for (const text of ruDurationCases) {
+        const result = extractSupportedDocumentFacts([text], 'ru');
+        assert.equal(result.is_under_18, undefined, `Duration must not set is_under_18: ${text}`);
+    }
+});
+
+test('round 5 fix 5: first-person relative uploaded/sent forms override how-to exclusion for statusNeedsReference', () => {
+    assert.equal(
+        isStatusQuestionWithoutReference('Geçen hafta yüklediğim dosyayı kontrol ettiler mi, ne zaman biter?'),
+        true
+    );
+    assert.equal(
+        isStatusQuestionWithoutReference('Yüklediğim belgeyi kontrol ettiler mi, ne zaman onaylanır?'),
+        true
+    );
+    assert.equal(
+        isStatusQuestionWithoutReference('The file I uploaded was checked, when will it finish?'),
+        true
+    );
+    assert.equal(
+        isStatusQuestionWithoutReference('Документы которые я отправил проверили, когда будет готово?'),
+        true
+    );
+    assert.equal(
+        isStatusQuestionWithoutReference('iberen faýlym barlandymy, haçan gutarar?'),
+        true
+    );
+    assert.equal(
+        isStatusQuestionWithoutReference('الملف الذي أرسلته تمت مراجعته، متى ينتهي؟'),
+        true
+    );
+    assert.equal(
+        isStatusQuestionWithoutReference('Yüklediğim belgeyi nasıl değiştirebilirim?'),
+        false
+    );
+});
+
+test('round 5 fix 6: eval runner supports --cases <path> resolved from cwd with default cases.json and documents it in --help', () => {
+    const runnerSource = readFileSync(new URL('../scripts/chatbot-eval/run.mjs', import.meta.url), 'utf8');
+    assert.match(runnerSource, /--cases <path>/);
+    assert.match(runnerSource, /token === '--cases'/);
+    assert.match(runnerSource, /resolve\(process\.cwd\(\), args\.cases\)/);
+    assert.match(runnerSource, /const CASES_PATH = resolve\(SCRIPT_DIR, 'cases\.json'\)/);
+});
+
+test('document-keyword questions with typos or no WH-word preserve facts as statements while yes/no fact questions stay uncertain', () => {
+    const trTypo = extractSupportedDocumentFacts(['ilk basvuru icin belgeler nelr?'], 'tr');
+    assert.deepEqual(trTypo, { application_type: 'initial' });
+    assert.deepEqual(trTypo.__uncertain, []);
+
+    const docKeywordCases = [
+        { lang: 'tr', text: 'uzatma evraklari nelerdr?', expected: { application_type: 'renewal' } },
+        { lang: 'tr', text: 'ilk basvuru dokuman list?', expected: { application_type: 'initial' } },
+        { lang: 'en', text: 'initial application paperwork?', expected: { application_type: 'initial' } },
+        { lang: 'en', text: 'renewal docs pls?', expected: { application_type: 'renewal' } },
+        { lang: 'ru', text: 'продление бумаги?', expected: { application_type: 'renewal' } },
+        { lang: 'tk', text: 'uzatma dokumentler?', expected: { application_type: 'renewal' } },
+        { lang: 'ar', text: 'أوراق التمديد؟', expected: { application_type: 'renewal' } },
+        { lang: 'ar', text: 'وثائق الطلب الأولي؟', expected: { application_type: 'initial' } }
+    ];
+    for (const item of docKeywordCases) {
+        const result = extractSupportedDocumentFacts([item.text], item.lang);
+        assert.deepEqual(result, item.expected, `Failed document-keyword question for ${item.lang}: ${item.text}`);
+        assert.deepEqual(result.__uncertain, [], `Expected empty __uncertain for ${item.lang}: ${item.text}`);
+    }
+
+    const trFpQuestion = extractSupportedDocumentFacts(['Parmak izim kayıtlı mı?'], 'tr');
+    assert.deepEqual(trFpQuestion, {});
+    assert.deepEqual(trFpQuestion.__uncertain, ['fingerprint_status']);
+
+    const ruFpQuestion = extractSupportedDocumentFacts(['Мои отпечатки пальцев зарегистрированы?'], 'ru');
+    assert.deepEqual(ruFpQuestion, {});
+    assert.deepEqual(ruFpQuestion.__uncertain, ['fingerprint_status']);
 });

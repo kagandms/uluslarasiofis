@@ -2883,3 +2883,324 @@ test('corrective D: list intent vs document how-to routing across examples', asy
         );
     }
 });
+
+test('round 5 fix 1: risk path accepts evidence facts when model omits them, rejects only disagreements or unsupported facts', async () => {
+    const question = 'Başvurum geçiş başvurusu olacak, 20 yaşındayım, öğrenci yurdunda kalıyorum ve Göç İdaresinde parmak izi kaydım yok; gereken belgeler neler?';
+    const expectedPolicies = listApplicationDocumentPolicies({
+        application_type: 'renewal',
+        application_route: 'transition',
+        is_under_18: 0,
+        address_evidence_type: 'dormitory',
+        accommodation_type: 'dormitory',
+        host_is_married: null,
+        host_is_turkish: null,
+        fingerprint_status: 'not_registered',
+        fingerprint_code: null
+    });
+    const trMessages = { ...SESSION3_MESSAGES.tr, ...PUBLIC_MESSAGES.tr };
+    const expectedList = expectedPolicies
+        .map((policy) => `- ${trMessages[policy.label_key]}${policy.required === false ? ' (isteğe bağlı)' : ''}`)
+        .join('\n');
+    const expectedReply = `${getChatbotFixedText('documentListIntro', 'tr')}\n\n${expectedList}\n\n${getChatbotFixedText('documentListClosing', 'tr')}`;
+
+    // 1. Model omits is_under_18 while evidence has it (not in __uncertain) -> returns full document list.
+    const omitIsUnder18Env = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'transition',
+                    accommodation_type: 'dormitory',
+                    fingerprint_status: 'not_registered'
+                }
+            }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const omitResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: question }],
+            language: 'tr'
+        }), { address: '198.51.107.10' }),
+        omitIsUnder18Env.environment,
+        {}
+    );
+    const omitPayload = await omitResponse.json();
+    assert.equal(omitResponse.status, 200);
+    assert.equal(omitIsUnder18Env.fakeAi.callCount, 1);
+    assert.equal(omitPayload.reply, expectedReply);
+
+    // 2. Model disagrees with evidence (is_under_18: true vs evidence false) -> asks missing-facts question for is_under_18.
+    const disagreeEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'transition',
+                    is_under_18: true,
+                    accommodation_type: 'dormitory',
+                    fingerprint_status: 'not_registered'
+                }
+            }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const disagreeResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: question }],
+            language: 'tr'
+        }), { address: '198.51.107.11' }),
+        disagreeEnv.environment,
+        {}
+    );
+    const disagreePayload = await disagreeResponse.json();
+    assert.equal(disagreeResponse.status, 200);
+    assert.equal(disagreeEnv.fakeAi.callCount, 1);
+    assert.equal(disagreePayload.reply, buildMissingDocumentsQuestion(['is_under_18'], 'tr'));
+
+    // 3. Model supplies is_under_18 without evidence -> never used, asks missing-facts question.
+    const noEvidenceEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    application_type: 'transition',
+                    is_under_18: false,
+                    accommodation_type: 'dormitory',
+                    fingerprint_status: 'not_registered'
+                }
+            }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const noEvidenceResponse = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Başvurum geçiş başvurusu olacak, öğrenci yurdunda kalıyorum ve Göç İdaresinde parmak izi kaydım yok; gereken belgeler neler?' }],
+            language: 'tr'
+        }), { address: '198.51.107.12' }),
+        noEvidenceEnv.environment,
+        {}
+    );
+    const noEvidencePayload = await noEvidenceResponse.json();
+    assert.equal(noEvidenceResponse.status, 200);
+    assert.equal(noEvidencePayload.reply, buildMissingDocumentsQuestion(['is_under_18'], 'tr'));
+});
+
+test('round 5 fix 2: list intent carries across model-written assistant questions when last turn has document fact, never when it has none', async () => {
+    const optionalSuffix = {
+        tr: ' (isteğe bağlı)',
+        en: ' (optional)',
+        ru: ' (необязательно)',
+        tk: ' (hökmany däl)',
+        ar: ' (اختياري)'
+    };
+    const buildList = (language, policyInput) => {
+        const messages = { ...SESSION3_MESSAGES[language], ...PUBLIC_MESSAGES[language] };
+        const list = listApplicationDocumentPolicies(policyInput)
+            .map((policy) => `- ${messages[policy.label_key]}${policy.required === false ? optionalSuffix[language] : ''}`)
+            .join('\n');
+        return `${getChatbotFixedText('documentListIntro', language)}\n\n${list}\n\n${getChatbotFixedText('documentListClosing', language)}`;
+    };
+
+    // 1. Arabic multi-turn with model-written assistant question returns deterministic list without fallback.
+    const arEnv = createEnvironment(new Error('Complete multi-turn list intent should resolve deterministically.'));
+    const arRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'ما هي المستندات المطلوبة لتمديد إقامة الطالب؟' },
+                { role: 'assistant', content: 'يرجى توضيح عمرك ومكان سكنك.' },
+                { role: 'user', content: 'عمري 21 سنة وأقيم في السكن الطلابي.' }
+            ],
+            language: 'ar'
+        }), { address: '198.51.107.20' }),
+        arEnv.environment,
+        {}
+    );
+    const arPayload = await arRes.json();
+    assert.equal(arRes.status, 200);
+    assert.equal(arEnv.fakeAi.callCount, 0);
+    assert.equal(arPayload.reply, buildList('ar', {
+        application_type: 'renewal',
+        application_route: 'standard',
+        is_under_18: 0,
+        address_evidence_type: 'dormitory',
+        accommodation_type: 'dormitory',
+        host_is_married: null,
+        host_is_turkish: null,
+        fingerprint_status: null,
+        fingerprint_code: null
+    }));
+
+    // 2. Turkish multi-turn with typo in turn 1 ("belgeler nelr?") + model-written assistant question.
+    const trEnv = createEnvironment(new Error('Complete multi-turn list intent should resolve deterministically.'));
+    const trRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'ilk basvuru icin belgeler nelr?' },
+                { role: 'assistant', content: 'Lütfen 18 yaşından küçük olup olmadığınızı ve nerede kaldığınızı belirtin.' },
+                { role: 'user', content: '20 yasindayim ve dormitory de yani yurtta kaliyorum' }
+            ],
+            language: 'tr'
+        }), { address: '198.51.107.21' }),
+        trEnv.environment,
+        {}
+    );
+    const trPayload = await trRes.json();
+    assert.equal(trRes.status, 200);
+    assert.equal(trEnv.fakeAi.callCount, 0);
+    assert.equal(trPayload.reply, buildList('tr', {
+        application_type: 'initial',
+        application_route: 'standard',
+        is_under_18: 0,
+        address_evidence_type: 'dormitory',
+        accommodation_type: 'dormitory',
+        host_is_married: null,
+        host_is_turkish: null,
+        fingerprint_status: null,
+        fingerprint_code: null
+    }));
+
+    // 3. English multi-turn transition + model-written assistant question + omitted turn-1 facts in tool call.
+    const enEnv = createEnvironment([
+        {
+            response: '',
+            tool_calls: [{
+                name: 'get_required_documents',
+                arguments: {
+                    accommodation_type: 'dormitory',
+                    fingerprint_status: 'not_registered'
+                }
+            }]
+        },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const enRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'I am switching to a student residence permit (transition) and I am 20.' },
+                { role: 'assistant', content: 'To give you the exact document list, could you let me know your accommodation type and whether your fingerprints are registered with the Migration Authority?' },
+                { role: 'user', content: 'I stay in a student dormitory and my fingerprints are not registered yet.' }
+            ],
+            language: 'en'
+        }), { address: '198.51.107.22' }),
+        enEnv.environment,
+        {}
+    );
+    const enPayload = await enRes.json();
+    assert.equal(enRes.status, 200);
+    assert.equal(enEnv.fakeAi.callCount, 1);
+    assert.equal(enPayload.reply, buildList('en', {
+        application_type: 'renewal',
+        application_route: 'transition',
+        is_under_18: 0,
+        address_evidence_type: 'dormitory',
+        accommodation_type: 'dormitory',
+        host_is_married: null,
+        host_is_turkish: null,
+        fingerprint_status: 'not_registered',
+        fingerprint_code: null
+    }));
+
+    // 4. Last turn with no document fact ('Ofis saat kaçta açık?') never inherits list intent.
+    const hoursEnv = createEnvironment([
+        { response: '', tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'office_hours' } }] },
+        new Error('A 2nd model call must never execute.')
+    ]);
+    const hoursRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [
+                { role: 'user', content: 'İlk başvuru için hangi belgeler lazım?' },
+                { role: 'assistant', content: 'Yaşınızı ve nerede kaldığınızı belirtir misiniz?' },
+                { role: 'user', content: 'Ofis saat kaçta açık?' }
+            ],
+            language: 'tr'
+        }), { address: '198.51.107.23' }),
+        hoursEnv.environment,
+        {}
+    );
+    const hoursPayload = await hoursRes.json();
+    assert.equal(hoursRes.status, 200);
+    assert.equal(hoursEnv.fakeAi.callCount, 1);
+    assert.equal(hoursPayload.reply, readKnowledge('office_hours', 'tr').text);
+});
+
+test('round 5 fix 3: list intent never ends in fallback across model text, refusal marker, empty, invalid tool, timeout, and wrong-script replies', async (t) => {
+    const query = 'Первичная подача, мне не 18 лет, живу в общежитии. Какие документы нужны?';
+    const expectedMissingReply = buildMissingDocumentsQuestion(['is_under_18'], 'ru');
+
+    const scenarios = [
+        { name: 'model_text', script: { response: 'Пожалуйста, уточните возраст.' } },
+        { name: 'refusal_marker', script: { response: CHATBOT_REFUSAL_MARKER } },
+        { name: 'empty', script: { response: '   ' } },
+        {
+            name: 'invalid_tool',
+            script: [
+                { response: '', tool_calls: [{ name: 'unknown_tool', arguments: {} }] },
+                { response: '', tool_calls: [{ name: 'unknown_tool', arguments: {} }] }
+            ]
+        },
+        { name: 'wrong_script_fallback', script: { response: 'Your input is not sufficient.' } }
+    ];
+
+    for (let index = 0; index < scenarios.length; index += 1) {
+        const scenario = scenarios[index];
+        const { environment } = createEnvironment(scenario.script);
+        const res = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: query }],
+                language: 'ru'
+            }), { address: `198.51.107.${40 + index}` }),
+            environment,
+            {}
+        );
+        const payload = await res.json();
+        assert.equal(res.status, 200, `Unexpected status for ${scenario.name}`);
+        assert.equal(payload.reply, expectedMissingReply, `Failed non-fallback check for ${scenario.name}`);
+        assert.notEqual(payload.reply, getChatbotFixedText('fallback', 'ru'));
+    }
+
+    const controller = new AbortController();
+    t.mock.method(AbortSignal, 'timeout', () => controller.signal);
+    const timeoutEnv = createEnvironment((_model, _input, options) => new Promise((_resolve, reject) => {
+        const timer = setTimeout(() => {
+            controller.abort(new DOMException('Request timed out.', 'TimeoutError'));
+        }, 10);
+        options.signal.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(options.signal.reason || new DOMException('Aborted', 'AbortError'));
+        }, { once: true });
+    }));
+    const timeoutRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: query }],
+            language: 'ru'
+        }), { address: '198.51.107.50' }),
+        timeoutEnv.environment,
+        {}
+    );
+    const timeoutPayload = await timeoutRes.json();
+    assert.equal(timeoutRes.status, 200);
+    assert.equal(timeoutPayload.reply, expectedMissingReply);
+});
+
+test('round 5 fix 5: first-person relative uploaded-file status question returns statusNeedsReference with 0 model calls', async () => {
+    const { fakeAi, environment } = createEnvironment(
+        new Error('Model must not be called for first-person uploaded-file status questions.')
+    );
+    const res = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Geçen hafta yüklediğim dosyayı kontrol ettiler mi, ne zaman biter?' }],
+            language: 'tr'
+        }), { address: '198.51.107.60' }),
+        environment,
+        {}
+    );
+    const payload = await res.json();
+    assert.equal(res.status, 200);
+    assert.equal(fakeAi.callCount, 0);
+    assert.equal(payload.reply, getChatbotFixedText('statusNeedsReference', 'tr'));
+    assert.deepEqual(payload.actions, []);
+});

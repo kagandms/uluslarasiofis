@@ -152,6 +152,7 @@ Options (or env vars):
   EVAL_REFERENCE=<ref>      Real local ITU-XXXX-XXXX reference for status_lookup cases
   --base-url <url>          Override BASE_URL
   --reference <ref>         Override EVAL_REFERENCE
+  --cases <path>            Cases JSON path (default: cases.json next to this script; relative paths resolve from CWD)
   --only <cat_or_id>        Comma-separated category or case ID filter
   --limit <N>               Run at most N matching cases
   --offset <N>              Skip first N matching cases (useful after daily_limit reset)
@@ -165,6 +166,7 @@ function parseCliArgs(argv) {
     const args = {
         baseUrl: process.env.BASE_URL || 'http://localhost:5177',
         evalReference: process.env.EVAL_REFERENCE || '',
+        cases: null,
         only: null,
         limit: null,
         offset: 0,
@@ -189,6 +191,12 @@ function parseCliArgs(argv) {
             args.baseUrl = nextValue();
         } else if (token === '--reference') {
             args.evalReference = nextValue();
+        } else if (token === '--cases') {
+            const rawCases = nextValue();
+            if (!rawCases.trim()) {
+                throw new Error('--cases must be a non-empty file path.');
+            }
+            args.cases = rawCases;
         } else if (token === '--only') {
             args.only = nextValue();
         } else if (token === '--limit') {
@@ -863,7 +871,8 @@ async function main() {
     }
     const evalReference = args.evalReference ? normalizeApplicationReference(args.evalReference) : '';
 
-    const allCases = JSON.parse(readFileSync(CASES_PATH, 'utf8'));
+    const casesPath = args.cases ? resolve(process.cwd(), args.cases) : CASES_PATH;
+    const allCases = JSON.parse(readFileSync(casesPath, 'utf8'));
     let selectedCases = allCases;
 
     if (args.only) {

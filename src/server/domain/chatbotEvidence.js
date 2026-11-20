@@ -181,8 +181,8 @@ const UNDER_18_PHRASES = Object.freeze([
 ]);
 
 const ADULT_PHRASES = Object.freeze([
-    /(?<![\p{L}\p{N}])18\s*(?:(?:yasindan|yastan|den|dan)?\s*kucuk|(?:yas)?\s*alti(?:nda)?)\s*degil[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
-    /(?<![\p{L}\p{N}])18\s*(?:yasindan|yastan|den|dan)?\s*buyu[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])18\s*(?:(?:yasindan|yastan|'?den|'?dan)?\s*kucuk|(?:yas)?\s*alti(?:nda)?)\s*degil[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])18\s*(?:yasindan|yastan|'?den|'?dan)?\s*buyu[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])18\s*(?:yas\s*)?(?:ve\s*)?uzeri[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])(?:resitim|yetiskin[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
     /(?<![\p{L}\p{N}])not\s+(?:(?:under|below|less\s+than|younger\s+than)\s+18|(?:a\s+)?minor)(?![\p{L}\p{N}])/u,
@@ -207,9 +207,13 @@ const NUMERIC_AGE_PATTERNS = Object.freeze([
     // ru explicit age statements ("мне [уже|исполнилось] N лет/года/год" or "N лет/года/год от роду")
     /(?<![\p{L}\p{N}])мне(?:\s+еще)?(?:\s+не)?(?:\s+уже)?(?:\s+исполнилось)?\s+(1[4-9]|[2-9]\d)\s*(?:лет|года|год)(?![\p{L}\p{N}])/gu,
     /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:лет|года|год)\s+от\s+роду(?![\p{L}\p{N}])/gu,
+    // ru standalone age phrase between clause delimiters (e.g. ", 19 лет,")
+    /^\s*(?:не\s+)?(1[4-9]|[2-9]\d)\s*(?:лет|года|год)\s*[!?;,.\n\r\u061f\u061b\u060c]*$/gu,
     // tr / tk / en / ar prefix age ("yaşım N", "ýaşym N", "age N", "عمري/عمر/سني N [سنة/عاماً]")
     /(?<![\p{L}\p{N}])(?:yasim|yasym|age|omri|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:عمري|عمر|سني))\s*[:=]?\s*(?:(?:degil[\p{L}\p{N}]*|not|ليس|ليست|لست|غير|مش)\s+)?(1[4-9]|[2-9]\d)(?:\s*(?:سنه|سنوات|عاما|عام|sana))?(?![\p{L}\p{N}])/gu
 ]);
+
+const RUSSIAN_START_AGE_PATTERN = /^\s*(?:не\s+)?(1[4-9]|[2-9]\d)\s*(?:лет|года|год)(?!\s*(?:назад|спустя|подряд|здесь|живу|прожил[\p{L}\p{N}]*))(?![\p{L}\p{N}])/gu;
 
 const DURATION_PREFIX_WORDS = Object.freeze([
     /^for$/u, /^since$/u, /^during$/u, /^за$/u, /^на$/u, /^уже$/u,
@@ -317,6 +321,24 @@ const WH_WORDS_BY_LANGUAGE = Object.freeze({
 });
 const TURKMEN_NON_NAME_WH_PATTERN = /(?<![\p{L}\p{N}])(?:haysy|nahili|nirede|hacan|nace)(?![\p{L}\p{N}])/u;
 const ELLIPTICAL_DOCUMENT_REQUEST_PATTERN = /(?:^(?:belge[\p{L}\p{N}]*|evrak[\p{L}\p{N}]*|documents?|docs?|документ[\p{L}\p{N}]*|resminama[\p{L}\p{N}]*|(?:ال)?(?:مستندات|وثايق))\s+(?:for|icin|ucin|для|ل[\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:belge[\p{L}\p{N}]*|evrak[\p{L}\p{N}]*|documents?|docs?|документ[\p{L}\p{N}]*|resminama[\p{L}\p{N}]*|(?:ال)?(?:مستندات|وثايق))\s*[?\u061f]$)/u;
+const DOCUMENT_KEYWORD_PATTERNS = Object.freeze([
+    /(?<![\p{L}\p{N}])(?:belge[\p{L}\p{N}]*|evrak[\p{L}\p{N}]*|dokuman[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:documents?|docs?|paperwork)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:документ[\p{L}\p{N}]*|бумаг[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:resminama[\p{L}\p{N}]*|dokument[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:مستند[\p{L}\p{N}]*|وثايق[\p{L}\p{N}]*|وثيقه[\p{L}\p{N}]*|اوراق[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u
+]);
+const POLITE_REQUEST_PATTERNS_BY_LANGUAGE = Object.freeze({
+    tr: /(?<![\p{L}\p{N}])(?:soyle(?:r|yebilir)\s+misin(?:iz)?|yardimci\s+ol(?:ur|abilir)\s+m[iu]s[iu]n(?:[iu]z)?|acikla(?:r|yabilir)\s+misin(?:iz)?)(?![\p{L}\p{N}])/gu,
+    en: /(?<![\p{L}\p{N}])(?:can|could)\s+you\s+(?:please\s+)?(?:tell\s+me|list)(?![\p{L}\p{N}])/gu
+});
+const LIST_INTENT_PHRASE_PATTERNS = Object.freeze([
+    /(?<![\p{L}\p{N}])(?:hangi\s+(?:belge|evrak)[\p{L}\p{N}]*|(?:belge|evrak)[\p{L}\p{N}]*\s+neler|ne(?:ler)?\s+gerek[\p{L}\p{N}]*|gerekli\s+(?:belge|evrak)[\p{L}\p{N}]*|(?:belge|evrak)[\p{L}\p{N}]*\s+listesi|lazim)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:(?:which|what)\s+(?:[\p{L}\p{N}]+\s+){0,2}(?:documents?|docs)(?!\s+(?:format|size|types?))|required\s+(?:documents?|docs)|(?:documents?|docs)\s+(?:are\s+)?(?:required|needed)|(?:document|documents|doc|docs)\s+list|list\s+(?:of\s+|the\s+)?(?:required\s+)?(?:documents?|docs)|do\s+i\s+need(?!\s+to\s+(?:upload|resubmit|replace|scan|convert|compress|resize)))(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:какие\s+(?:[\p{L}\p{N}]+\s+){0,2}документ[\p{L}\p{N}]*|список\s+(?:[\p{L}\p{N}]+\s+){0,2}документ[\p{L}\p{N}]*|необходим[\p{L}\p{N}]*\s+документ[\p{L}\p{N}]*|нужн[\p{L}\p{N}]*\s+документ[\p{L}\p{N}]*|документ[\p{L}\p{N}]*\s+(?:[\p{L}\p{N}]+\s+){0,2}нужн[\p{L}\p{N}]*|что\s+нужно)(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:haysy\s+(?:[\p{L}\p{N}]+\s+){0,2}resminama[\p{L}\p{N}]*|name\s+(?:resminama[\p{L}\p{N}]*\s+)?gerek|gerekli\s+resminama[\p{L}\p{N}]*|resminama[\p{L}\p{N}]*\s+(?:gerek|sanaw[\p{L}\p{N}]*))(?![\p{L}\p{N}])/u,
+    /(?<![\p{L}\p{N}])(?:ما\s+(?:هي\s+)?(?:المستندات|الوثايق|مستندات|وثايق)|(?:المستندات|الوثايق)\s+المطلوب[\p{L}\p{N}]*|قايمه\s+(?:المستندات|الوثايق))(?![\p{L}\p{N}])/u
+]);
 
 export const EVIDENCE_PATTERN_LISTS = Object.freeze({
     NEGATION_LEXICON_BY_LANGUAGE,
@@ -330,6 +352,7 @@ export const EVIDENCE_PATTERN_LISTS = Object.freeze({
     ADULT_PHRASES,
     EXPLICIT_DOUBLE_NEG_ADULT_PATTERN,
     NUMERIC_AGE_PATTERNS,
+    RUSSIAN_START_AGE_PATTERN,
     DURATION_PREFIX_WORDS,
     DURATION_SUFFIX_WORDS,
     HOST_CONTEXT_PATTERNS,
@@ -345,7 +368,10 @@ export const EVIDENCE_PATTERN_LISTS = Object.freeze({
     ENGLISH_AUX_QUESTION_PATTERN,
     WH_WORDS_BY_LANGUAGE,
     TURKMEN_NON_NAME_WH_PATTERN,
-    ELLIPTICAL_DOCUMENT_REQUEST_PATTERN
+    ELLIPTICAL_DOCUMENT_REQUEST_PATTERN,
+    DOCUMENT_KEYWORD_PATTERNS,
+    POLITE_REQUEST_PATTERNS_BY_LANGUAGE,
+    LIST_INTENT_PHRASE_PATTERNS
 });
 
 function isNegationToken(cleanToken) {
@@ -431,10 +457,26 @@ function hasWhQuestionWord(clauseText, language = 'tr') {
     return false;
 }
 
+function hasListIntentPhrase(clauseText) {
+    return LIST_INTENT_PHRASE_PATTERNS.some((pattern) => pattern.test(clauseText));
+}
+
+function hasDocumentKeyword(clauseText) {
+    return DOCUMENT_KEYWORD_PATTERNS.some((pattern) => pattern.test(clauseText));
+}
+
 function isYesNoQuestionClause(clauseText, language = 'tr') {
+    const hasWhOrList = hasWhQuestionWord(clauseText, language) || hasListIntentPhrase(clauseText);
+    let candidate = clauseText;
+    if (hasWhOrList) {
+        const politePattern = POLITE_REQUEST_PATTERNS_BY_LANGUAGE[language];
+        if (politePattern) {
+            candidate = clauseText.replace(new RegExp(politePattern.source, 'gu'), ' ');
+        }
+    }
     const particlePattern = YESNO_QUESTION_PARTICLES_BY_LANGUAGE[language];
-    if (particlePattern && particlePattern.test(clauseText)) return true;
-    const trimmed = clauseText.trim();
+    if (particlePattern && particlePattern.test(candidate)) return true;
+    const trimmed = candidate.trim();
     return /[?\u061f]$/u.test(trimmed) && ENGLISH_AUX_QUESTION_PATTERN.test(trimmed);
 }
 
@@ -443,7 +485,9 @@ function isQuestionClause(clauseText, language = 'tr') {
     const trimmed = clauseText.trim();
     if (!/[?\u061f]$/u.test(trimmed)) return false;
     if (hasWhQuestionWord(trimmed, language)) return false;
+    if (hasListIntentPhrase(trimmed)) return false;
     if (ELLIPTICAL_DOCUMENT_REQUEST_PATTERN.test(trimmed)) return false;
+    if (hasDocumentKeyword(trimmed)) return false;
     return true;
 }
 
@@ -561,7 +605,8 @@ function detectUnder18(clauses, language) {
     let adultMatched = false;
     let uncertain = false;
 
-    for (const clause of clauses) {
+    for (let clauseIndex = 0; clauseIndex < clauses.length; clauseIndex += 1) {
+        const clause = clauses[clauseIndex];
         const isQuestion = isQuestionClause(clause.text, language);
 
         const adultMatches = findAllMatches(clause.text, ADULT_PHRASES);
@@ -591,8 +636,12 @@ function detectUnder18(clauses, language) {
         }
 
         const maskedText = maskSpans(textWithoutAdult, under18Matches);
+        const numericMatches = findAllMatches(maskedText, NUMERIC_AGE_PATTERNS);
+        if (clauseIndex === 0 && numericMatches.length === 0) {
+            numericMatches.push(...findAllMatches(maskedText, [RUSSIAN_START_AGE_PATTERN]));
+        }
 
-        for (const match of findAllMatches(maskedText, NUMERIC_AGE_PATTERNS)) {
+        for (const match of numericMatches) {
             const parsed = Number.parseInt(match.group1, 10);
             if (!Number.isInteger(parsed) || parsed < 14 || parsed > 99) continue;
             if (isDurationNumericMatch(clause, match.start, match.end)) continue;
