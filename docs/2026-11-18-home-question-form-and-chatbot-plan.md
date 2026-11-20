@@ -539,7 +539,7 @@ below. **Nothing is pushed, nothing is merged into `production`, nothing is publ
    `git worktree list`, `git status` in the main folder and in
    `…-wt-chatbot-status`. Expect: main folder on `production`; an untracked
    `docs/2026-11-20-cloudflare-analitik-raporu-ve-yapilacaklar.md` that belongs to **another
-   session — do not touch it**; integration worktree clean at `5f6bd50`.
+   session — do not touch it**; integration worktree clean at `61295ee` (as of 2026-11-20).
 2. `agy -p "/usage"` (2026-11-19 end: Gemini weekly ~70%, Argon weekly ~96%, Claude/GPT group ~100%).
    If agy asks for Google sign-in, the **owner** must run `agy` in a terminal and sign in.
 3. Start the local server for the integration worktree with the Claude preview config
@@ -547,7 +547,7 @@ below. **Nothing is pushed, nothing is merged into `production`, nothing is publ
    `npm --prefix "…-wt-chatbot-status" run dev -- --port 5177 --strictPort`.
    If the page is half-loaded or the form is missing after a file change, restart the server
    (vite occasionally hangs while restarting).
-4. Continue with **section 5, step R1** (the interrupted round-5 corrective task).
+4. Read **section 4b** (state at end of 2026-11-20), then continue with **section 5 from R4**.
 
 ## 1. Branches, worktrees and what each contains
 
@@ -660,28 +660,53 @@ durations, curly apostrophes, self-vs-host, homographs, reference hijack, how-to
 roommate refusal, budget order) are fixed and merged. Both found no SQL injection, no XSS, no
 authorization gap, no PII in logs, no ReDoS.
 
-## 4b. Progress on 2026-11-20 (interim; update at end of day)
+## 4b. Progress on 2026-11-20 (end of day — START HERE NEXT TIME)
 
-- R1 done (`fac0469`): evidence facts usable in the risk path, list intent across turns, no fallback
-  for list requests, lexicon gaps, `run.mjs --cases`. Blind set merged (`f41e873`); the
-  orchestrator's relabel of `blind-en-documents-04` was wrong and reverted (`0f47ec9`).
-- Blind run 1: 101/130 (77.7%) — lexicon-only extraction did not generalize. **Owner approved an
-  architecture change:** quote-grounded model extraction verified by the server (`ca461bf`, `4d9be36`:
-  `verifyQuotedFact`, relevance stems), host-context fix (`2ca347f`), blind-eval routing fixes
-  (`64f834e`), round-8 fixes incl. 12 s model timeout / 15 s deadline (`f332f82`).
-- Results at `f332f82`: blind 123/130 (94.6%), full 212/217 (97.7%), 0 HTTP errors; one blind wrong
-  list remained ('yurtta kalıyorum ama aslında çıktım …').
-- R3 security re-review (Argon, read-only) found 7 confirmed issues (substring stems, bare numbers as
-  ages, WH-questions treated as statements, zero-width characters, sticky list intent, injection
-  false positives / last-turn-only checks, self-vs-host edge cases). Fixes running on
-  `task/chatbot-r3-evidence` (Argon) and `task/chatbot-r3-routing` (Hydrogen), plus a new safety
-  net: every document list starts with an "Anladığım bilgiler: …" line the student can correct.
-- Owner notes 2026-11-20: use Neon/Argon (not agy Claude) for escalation; add an office mascot
-  before going live (R7b below).
+**Integration branch `task/home-chatbot-status` is at `61295ee`** (worktree `…-wt-chatbot-status`):
+1843 tests pass, build green. Nothing merged to `production`, nothing pushed or published.
+
+What happened today (all implemented by agy, reviewed by the orchestrator):
+- R1 done (`fac0469`). Blind set merged (`f41e873`); the orchestrator's relabel of
+  `blind-en-documents-04` was a misreading and was reverted (`0f47ec9`).
+- Blind run 1 = 101/130 (77.7%): lexicon-only extraction did not generalize to real student language.
+  **Owner approved an architecture change: quote-grounded extraction.** The model passes each
+  document fact with a verbatim quote; `verifyQuotedFact` in `chatbotEvidence.js` accepts it only if
+  the quote is in a user turn, not negated, not inside a yes/no question, contains a relevant
+  token-start stem for the claimed value (`QUOTED_FACT_VALUE_STEMS`, split polarity), carries an age
+  with age context, respects host context (no self-description), and does not contradict the lexicon.
+  Commits: `ca461bf`, `4d9be36`, `2ca347f`, `64f834e`, `f332f82`.
+- R3 security re-review (Argon, read-only) — 7 confirmed findings, all fixed: `990efbf` (evidence:
+  token-start stems, age context, list-only exemption for '?' clauses, `\p{Cf}` stripping, Turkish
+  apostrophes, possessive self-description, Turkmen ýanynda, contrast/move-out markers) and
+  `de0c231` (routing: sticky list intent, injection false positives, checks over all user turns).
+- **Safety net:** every deterministic document list now starts with an "understood facts" line
+  (tr "Anladığım bilgiler: … Yanlışsa lütfen düzeltin.", 5 languages) — `de0c231`; the eval runner
+  checks it (`2c6f2a9`).
+- Tool calls emitted by the model as JSON text are converted/never shown (`61295ee`).
+- Model timeout 12 s per call, 15 s per request (`f332f82`).
+
+Final evaluation at `61295ee` (real Workers AI, local):
+
+| Set | Pass | Wrong document lists | Fallback | HTTP errors |
+| --- | --- | --- | --- | --- |
+| Blind (130, written without seeing the code) | 123 (94.6%) | 0 | 0 | 0 |
+| Full (217) | 212 (97.7%) | 0 | 0 | 0 |
+
+Remaining eval misses are benign: an extra age question ('just turned 18 last month', a parent
+writing 'He is 16', birth year '2004 doğumluyum'), a legal-guarantee request handed off instead of
+refused, an injection inside a document question answered with the missing-facts question, an
+Arabizi status question routed to handoff. No wrong list, no data leak.
+
+**Separate task (other session, 2026-11-20): GöçNet `controller_unknown` fix** on branch
+`task/gocnet-form-query`, commit `0be0542`, extension 1.2.134 — not merged, not pushed, not yet tried
+on the real YÖKSİS page. Its own session holds the details.
+
+Owner notes 2026-11-20: escalate agy work to Gemini Neon/Argon (not agy Claude); add an office
+mascot before going live (R7b).
 
 ## 5. Remaining work, in order
 
-- [ ] **R1 — Round-5 corrective task (interrupted, nothing written).** Re-send to one agy agent in
+- [x] **R1 — DONE 2026-11-20 (`fac0469`).** Round-5 corrective task. Re-send to one agy agent in
   `wt-chatbot-status` (owns `chatbotRoutes.js`, `chatbotEvidence.js`, `test/chatbotApi.test.js`,
   `test/chatbotEvidence.test.js`, `scripts/chatbot-eval/run.mjs`). Start every prompt with
   "You cannot run ANY shell command". Content (all verified on 2026-11-19):
@@ -703,15 +728,16 @@ authorization gap, no PII in logs, no ReDoS.
      (first-person relative forms count as first-person status context).
   6. `run.mjs --cases <path>` option.
   Then: `npm test`, build, commit, restart server, run cases.json (round 6).
-- [ ] **R2 — Blind evaluation.** Merge `task/chatbot-eval` (`0964cce`) into the integration branch,
+- [x] **R2 — DONE 2026-11-20** (blind 94.6%, wrong lists 0; see 4b). Blind evaluation. Merge `task/chatbot-eval` (`0964cce`) into the integration branch,
   run `run.mjs --cases scripts/chatbot-eval/blind-cases.json`, report pass rate, fallback rate, wrong
   documents (must be 0), refusal false positives, safety failures per language. Check a sample of
   blind expectations by hand against `documentPolicy.js` before trusting the numbers (the writer
   could not run anything). Send failures back to an agent with exact sentences; repeat until wrong
   documents = 0 and pass ≥ 90%.
-- [ ] **R3 — Third security re-review** (read-only, `--mode plan`, Argon) of the final
+- [x] **R3 — DONE 2026-11-20** (7 findings fixed; see 4b). Third security re-review (read-only, `--mode plan`, Argon) of the final
   `chatbotEvidence.js`/`chatbotRoutes.js` after R1–R2.
-- [ ] **R4 — Owner local test of C (chatbot)** with the C checklist (items 1–19 given on
+- [ ] **R4 — Owner local test of C (chatbot)** — re-test after the 2026-11-20 redesign (quote-grounded
+  facts, "Anladığım bilgiler" line, injection/other-person refusals), with the C checklist (items 1–19 given on
   2026-11-19); B and A already passed. Owner reported earlier: C6 (two references) worked when
   re-tested by the orchestrator; C9 timeouts and C10 office hours are fixed.
 - [ ] **R5 — Office approval of the 13 DRAFT knowledge texts** in `chatbotKnowledge.js` (tr shown
