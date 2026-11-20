@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'node:test';
+import { ACCOMMODATION_TYPES } from '../src/shared/document-conditions.js';
+import { PUBLIC_MESSAGES } from '../src/public/i18n/messages.js';
+import { listApplicationDocumentPolicies, listPublicDocumentOverview } from '../src/server/domain/documentPolicy.js';
+import { listCatalogDocumentTitles } from '../src/server/domain/chatbotTools.js';
 import { ApiError } from '../src/server/domain/errors.js';
 import {
     CHATBOT_LANGUAGES,
@@ -142,6 +146,256 @@ test('knowledge texts contain no phone numbers, e-mail addresses other than KVKK
             for (const email of emails) {
                 assert.equal(email, kvkkEmail, `${topic}/${language} must only use the KVKK address, found ${email}`);
             }
+        }
+    }
+});
+
+test('application_types states no required documents and contains no catalog document titles in any language', () => {
+    const legacyDocumentKeys = [
+        'documentVisa',
+        'documentResidenceCard',
+        'documentAddressHotelReceipt',
+        'documentHostIdentityCopy'
+    ];
+
+    for (const language of CHATBOT_LANGUAGES) {
+        const { text } = readKnowledge('application_types', language);
+        const normalizedText = text.toLocaleLowerCase(language);
+        const catalogTitles = listCatalogDocumentTitles(language);
+        assert.ok(catalogTitles.length >= 20, `Expected catalog titles for ${language}`);
+
+        for (const title of catalogTitles) {
+            assert.equal(
+                normalizedText.includes(title.toLocaleLowerCase(language)),
+                false,
+                `application_types/${language} must not mention catalog document "${title}"`
+            );
+        }
+
+        for (const key of legacyDocumentKeys) {
+            const legacyTitle = PUBLIC_MESSAGES[language]?.[key];
+            if (!legacyTitle) continue;
+            assert.equal(
+                normalizedText.includes(legacyTitle.toLocaleLowerCase(language)),
+                false,
+                `application_types/${language} must not mention legacy document "${legacyTitle}"`
+            );
+        }
+    }
+});
+
+test('address_evidence mentions only documents present in the policy list for some accommodation type', () => {
+    const overviewByCode = new Map(listPublicDocumentOverview().map((entry) => [entry.code, entry]));
+    const policiesByAccommodation = new Map();
+    const allAccommodationPolicyCodes = new Set();
+
+    for (const accommodationType of ACCOMMODATION_TYPES) {
+        const policies = listApplicationDocumentPolicies({
+            application_type: 'initial',
+            application_route: 'standard',
+            is_under_18: 0,
+            address_evidence_type: accommodationType,
+            accommodation_type: accommodationType !== 'residence_certificate' ? accommodationType : null,
+            host_is_married: accommodationType === 'undertaking' ? 'yes' : null,
+            host_is_turkish: accommodationType === 'undertaking' ? 'yes' : null
+        }).filter((policy) => overviewByCode.get(policy.code)?.address_evidence_type === accommodationType);
+
+        const codes = new Set(policies.map((policy) => policy.code));
+        policiesByAccommodation.set(accommodationType, codes);
+        for (const code of codes) {
+            allAccommodationPolicyCodes.add(code);
+        }
+    }
+
+    const nonAccommodationKeys = listPublicDocumentOverview()
+        .filter((entry) => !entry.address_evidence_type)
+        .map((entry) => entry.label_key);
+    const forbiddenKeys = [
+        ...nonAccommodationKeys,
+        'documentVisa',
+        'documentResidenceCard',
+        'documentAddressHotelReceipt',
+        'documentHostIdentityCopy',
+        'documentMinorFamilyEvidence',
+        'documentParentPermitCopy',
+        'documentBirthCertificateUnder18'
+    ];
+
+    const clauseExpectations = [
+        {
+            accommodationType: 'rental_contract',
+            mentions: {
+                tr: [['kira sözleşmesi', 'address_rental_contract']],
+                en: [['rental contract', 'address_rental_contract']],
+                ru: [['договор аренды', 'address_rental_contract']],
+                tk: [['kärende şertnamasy', 'address_rental_contract']],
+                ar: [['عقد إيجار', 'address_rental_contract']]
+            }
+        },
+        {
+            accommodationType: 'own_home',
+            mentions: {
+                tr: [
+                    ['tapu fotokopisi', 'address_title_deed'],
+                    ['numarataj belgesi', 'address_numbering'],
+                    ['dask', 'address_dask']
+                ],
+                en: [
+                    ['title deed copy', 'address_title_deed'],
+                    ['numbering document', 'address_numbering'],
+                    ['dask', 'address_dask']
+                ],
+                ru: [
+                    ['копия документа о собственности', 'address_title_deed'],
+                    ['нумерация адреса', 'address_numbering'],
+                    ['dask', 'address_dask']
+                ],
+                tk: [
+                    ['eýeçilik nusgasy', 'address_title_deed'],
+                    ['belgilenme resminamasy', 'address_numbering'],
+                    ['dask', 'address_dask']
+                ],
+                ar: [
+                    ['نسخة سند الملكية', 'address_title_deed'],
+                    ['ترقيم العنوان', 'address_numbering'],
+                    ['dask', 'address_dask']
+                ]
+            }
+        },
+        {
+            accommodationType: 'dormitory',
+            mentions: {
+                tr: [
+                    ['yurtta kalış belgesi', 'address_dormitory'],
+                    ['yurdun vergi levhası', 'dormitory_tax_certificate'],
+                    ['imza sirküleri', 'dormitory_signature_circular']
+                ],
+                en: [
+                    ['dormitory residence document', 'address_dormitory'],
+                    ['tax certificate', 'dormitory_tax_certificate'],
+                    ['signature circular', 'dormitory_signature_circular']
+                ],
+                ru: [
+                    ['справка о проживании', 'address_dormitory'],
+                    ['налоговое свидетельство', 'dormitory_tax_certificate'],
+                    ['циркуляр подписей', 'dormitory_signature_circular']
+                ],
+                tk: [
+                    ['galýanlyk resminamasy', 'address_dormitory'],
+                    ['salgyt şahadatnamasy', 'dormitory_tax_certificate'],
+                    ['gol nusgalary', 'dormitory_signature_circular']
+                ],
+                ar: [
+                    ['إثبات الإقامة', 'address_dormitory'],
+                    ['الشهادة الضريبية', 'dormitory_tax_certificate'],
+                    ['تعميم التوقيعات', 'dormitory_signature_circular']
+                ]
+            }
+        },
+        {
+            accommodationType: 'hotel',
+            mentions: {
+                tr: [['konaklama belgesi', 'address_hotel']],
+                en: [['accommodation document', 'address_hotel']],
+                ru: [['подтверждение проживания', 'address_hotel']],
+                tk: [['galýan ýeri we seneleri görkezýän resminama', 'address_hotel']],
+                ar: [['وثيقة الإقامة', 'address_hotel']]
+            }
+        },
+        {
+            accommodationType: 'undertaking',
+            mentions: {
+                tr: [
+                    ['noter onaylı taahhütname', 'address_undertaking'],
+                    ['eşinin de taahhütnamesi', 'host_spouse_undertaking'],
+                    ['yerleşim yeri belgesi', 'host_residence_certificate'],
+                    ['adına fatura', 'home_utility_bill'],
+                    ['vukuatlı nüfus kayıt örneği', 'host_population_record']
+                ],
+                en: [
+                    ['notarized undertaking', 'address_undertaking'],
+                    ['spouse’s', 'host_spouse_undertaking'],
+                    ['host’s address certificate', 'host_residence_certificate'],
+                    ['utility bill', 'home_utility_bill'],
+                    ['detailed population record', 'host_population_record']
+                ],
+                ru: [
+                    ['нотариальное обязательство', 'address_undertaking'],
+                    ['супруга', 'host_spouse_undertaking'],
+                    ['справка о месте жительства', 'host_residence_certificate'],
+                    ['счёт', 'home_utility_bill'],
+                    ['выписка реестра населения', 'host_population_record']
+                ],
+                tk: [
+                    ['notarial borçnama', 'address_undertaking'],
+                    ['ýanýoldaşynyňky', 'host_spouse_undertaking'],
+                    ['ýaşaýan ýeri şahadatnamasy', 'host_residence_certificate'],
+                    ['töleg hasaby', 'home_utility_bill'],
+                    ['giňişleýin ilat ýazgysy', 'host_population_record']
+                ],
+                ar: [
+                    ['تعهد موثق', 'address_undertaking'],
+                    ['من زوجه', 'host_spouse_undertaking'],
+                    ['شهادة محل إقامته', 'host_residence_certificate'],
+                    ['فاتورة باسمه', 'home_utility_bill'],
+                    ['قيد نفوس مفصل', 'host_population_record']
+                ]
+            }
+        },
+        {
+            accommodationType: 'residence_certificate',
+            mentions: {
+                tr: [['yerleşim yeri belgesi', 'address_residence_certificate']],
+                en: [['residence certificate', 'address_residence_certificate']],
+                ru: [['справка о месте жительства', 'address_residence_certificate']],
+                tk: [['ýaşaýan ýeri şahadatnamasy', 'address_residence_certificate']],
+                ar: [['شهادة محل الإقامة', 'address_residence_certificate']]
+            }
+        }
+    ];
+
+    for (const language of CHATBOT_LANGUAGES) {
+        const { text } = readKnowledge('address_evidence', language);
+        const normalizedText = text.toLocaleLowerCase(language);
+
+        for (const key of forbiddenKeys) {
+            const title = PUBLIC_MESSAGES[language]?.[key];
+            if (!title) continue;
+            assert.equal(
+                normalizedText.includes(title.toLocaleLowerCase(language)),
+                false,
+                `address_evidence/${language} must not mention non-accommodation document "${title}"`
+            );
+        }
+
+        const clauses = [...text.matchAll(/([1-6])\)\s*([^.]+)\./g)];
+        assert.equal(clauses.length, 6, `address_evidence/${language} must list 6 numbered options`);
+
+        for (let index = 0; index < clauseExpectations.length; index += 1) {
+            const { accommodationType, mentions } = clauseExpectations[index];
+            const clauseNumber = Number(clauses[index][1]);
+            assert.equal(clauseNumber, index + 1);
+            const clauseText = clauses[index][2].toLocaleLowerCase(language);
+            const expectedCodes = policiesByAccommodation.get(accommodationType);
+            const matchedCodes = new Set();
+
+            for (const [phrase, code] of mentions[language]) {
+                assert.ok(
+                    clauseText.includes(phrase.toLocaleLowerCase(language)),
+                    `address_evidence/${language} option ${index + 1} (${accommodationType}) should mention "${phrase}"`
+                );
+                assert.ok(
+                    allAccommodationPolicyCodes.has(code) && expectedCodes.has(code),
+                    `Document "${phrase}" (${code}) must appear in policy list for ${accommodationType}`
+                );
+                matchedCodes.add(code);
+            }
+
+            assert.deepEqual(
+                [...matchedCodes].sort(),
+                [...expectedCodes].sort(),
+                `address_evidence/${language} option ${index + 1} (${accommodationType}) must cover exact policy documents`
+            );
         }
     }
 });
